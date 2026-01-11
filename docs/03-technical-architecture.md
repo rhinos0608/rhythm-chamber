@@ -40,6 +40,17 @@ Your "backend":
 
 ---
 
+## Configuration & Persistence
+
+The app uses a layered configuration system:
+
+1.  **Defaults**: `config.js` provides baseline values (placeholders).
+2.  **Overrides**: `localStorage` stores user-configured settings (API keys, models).
+3.  **UI**: An in-app settings modal allows users to modify these without editing files.
+4.  **Priority**: `config.js` > `localStorage` (if `config.js` has non-placeholder values).
+
+---
+
 ## File Structure (Current)
 
 ```
@@ -60,6 +71,7 @@ rhythm-chamber/
 │   ├── chat.js             # OpenRouter chat integration
 │   ├── prompts.js          # Editable prompt templates
 │   ├── storage.js          # IndexedDB wrapper
+│   ├── settings.js         # Settings management & UI
 │   └── cards.js            # Shareable card generation
 ├── workers/
 │   └── parser-worker.js    # Web Worker for .zip parsing

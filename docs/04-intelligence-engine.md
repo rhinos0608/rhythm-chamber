@@ -113,6 +113,17 @@ def classify_personality(streams):
     return max(scores, key=scores.get)
 ```
 
+### Transparency & Explainability
+
+We show the user *why* they got a specific result using a point-based breakdown.
+
+**Evidence Generation:**
+Each test (Comfort Ratio, Eras, etc.) returns:
+- **Points**: How much it contributes to a personality type (e.g., +3).
+- **Label**: Human-readable explanation (e.g., "Comfort ratio: 65 plays/artist").
+
+This `breakdown` array is passed to the UI to generate the "How did we detect this?" explainer, ensuring the user sees exactly what behaviors led to their classification.
+
 ---
 
 ## Life Event Detection
