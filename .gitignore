@@ -1,0 +1,24 @@
+# API Keys and Secrets
+js/config.js
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+npm-debug.log*
+
+# Dependencies (if added later)
+node_modules/
+
+# Build outputs (if added later)
+dist/
+build/
