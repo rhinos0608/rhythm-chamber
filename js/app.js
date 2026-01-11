@@ -247,8 +247,11 @@ async function processFile(file) {
     // Use Web Worker for parsing (keeps UI responsive)
     const worker = new Worker('js/parser-worker.js');
 
+    // Clear any previous partial saves before new parsing session
+    Storage.clearStreams();
+
     worker.onmessage = async (e) => {
-        const { type, message, streams, chunks, stats, error } = e.data;
+        const { type, message, streams, chunks, stats, error, partialStreams, fileIndex, totalFiles } = e.data;
 
         if (type === 'progress') {
             progressText.textContent = message;
@@ -259,6 +262,17 @@ async function processFile(file) {
             progressText.textContent = `Error: ${error}`;
             setTimeout(() => showUpload(), 3000);
             worker.terminate();
+        }
+
+        // Handle incremental saves from partial data
+        if (type === 'partial') {
+            try {
+                // Save partial streams incrementally (crash-safe)
+                await Storage.appendStreams(partialStreams);
+                progressText.textContent = `Parsing file ${fileIndex}/${totalFiles}... (${e.data.streamCount.toLocaleString()} streams)`;
+            } catch (err) {
+                console.warn('Failed to save partial streams:', err);
+            }
         }
 
         if (type === 'complete') {
@@ -279,7 +293,7 @@ async function processFile(file) {
                 appState.personality = Personality.classifyPersonality(appState.patterns);
                 appState.personality.summary = appState.patterns.summary;
 
-                // Save to IndexedDB
+                // Save final complete data to IndexedDB
                 progressText.textContent = 'Saving...';
                 await Storage.saveStreams(streams);
                 await Storage.saveChunks(chunks);
@@ -346,12 +360,106 @@ function showReveal() {
     document.getElementById('personality-name').textContent = p.name;
     document.getElementById('personality-description').textContent = p.description;
 
+    // Data Stats
+    const streams = appState.streams || [];
+    const summary = appState.patterns?.summary || {};
+    document.getElementById('stream-count').textContent = streams.length.toLocaleString();
+
+    if (summary.dateRange) {
+        document.getElementById('date-range-start').textContent = summary.dateRange.start;
+        document.getElementById('date-range-end').textContent = summary.dateRange.end;
+    }
+
     // Evidence
     const evidenceItems = document.getElementById('evidence-items');
     evidenceItems.innerHTML = p.allEvidence.map(e => `<li>${e}</li>`).join('');
 
+    // Score Breakdown (Detection Explainer)
+    populateScoreBreakdown(p);
+
     // Init chat context with streams data for queries
     Chat.initChat(p, appState.patterns, appState.patterns.summary, appState.streams);
+}
+
+/**
+ * Populate the "How did we detect this?" explainer
+ */
+function populateScoreBreakdown(personality) {
+    const scoreBreakdown = document.getElementById('score-breakdown');
+    const scoreTotal = document.getElementById('score-total');
+
+    if (!personality.scores) {
+        // Hide explainer if no scores available
+        document.getElementById('detection-explainer').style.display = 'none';
+        return;
+    }
+
+    const patterns = appState.patterns || {};
+    const scores = personality.scores;
+    const breakdownItems = [];
+
+    // Map each scored pattern to a human-readable explanation
+    if (patterns.eras?.hasEras) {
+        breakdownItems.push({
+            label: `Eras: ${patterns.eras.count || 0} detected`,
+            points: 3,
+            active: true
+        });
+    } else {
+        breakdownItems.push({ label: 'Eras: No distinct periods found', points: 0, active: false });
+    }
+
+    if (patterns.comfortDiscovery) {
+        const ratio = patterns.comfortDiscovery.ratio || 0;
+        breakdownItems.push({
+            label: `Comfort ratio: ${ratio.toFixed(0)} plays/artist`,
+            points: ratio > 50 ? 3 : (ratio < 10 ? 3 : 0),
+            active: ratio > 50 || ratio < 10
+        });
+    }
+
+    if (patterns.timePatterns?.isMoodEngineer) {
+        breakdownItems.push({
+            label: 'Time patterns: Morning ≠ Evening',
+            points: 3,
+            active: true
+        });
+    } else {
+        breakdownItems.push({ label: 'Time patterns: Consistent throughout day', points: 0, active: false });
+    }
+
+    if (patterns.socialPatterns?.isSocialChameleon) {
+        breakdownItems.push({
+            label: 'Social patterns: Weekday ≠ Weekend',
+            points: 2,
+            active: true
+        });
+    }
+
+    if (patterns.ghostedArtists?.hasGhosted) {
+        breakdownItems.push({
+            label: `Ghosted artists: ${patterns.ghostedArtists.ghosted?.length || 0} detected`,
+            points: 2,
+            active: true
+        });
+    }
+
+    if (patterns.moodSearching?.hasMoodSearching) {
+        breakdownItems.push({
+            label: `Mood searching: ${patterns.moodSearching.sessions || 0} rapid-skip sessions`,
+            points: 2,
+            active: true
+        });
+    }
+
+    // Generate HTML
+    scoreBreakdown.innerHTML = breakdownItems.map(item =>
+        `<li class="${item.active ? 'score-positive' : 'score-zero'}">${item.label} (${item.active ? '+' + item.points : '0'} points)</li>`
+    ).join('');
+
+    // Calculate total
+    const totalPoints = Object.values(scores).reduce((a, b) => a + b, 0);
+    scoreTotal.textContent = `Total: ${totalPoints} points → ${personality.name}`;
 }
 
 function showLiteReveal() {

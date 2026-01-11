@@ -1,22 +1,10 @@
 /**
  * Settings Module for Rhythm Chamber
  * 
- * Handles in-app configuration for AI and Spotify settings.
- * Settings are persisted in localStorage.
+ * Handles in-app configuration display for AI and Spotify settings.
+ * The source of truth is config.js - this module provides a UI to view
+ * and optionally override those settings via localStorage.
  */
-
-// Default settings (used if no config.js or localStorage settings exist)
-const DEFAULT_SETTINGS = {
-    openrouter: {
-        apiKey: '',
-        model: 'mistralai/mistral-7b-instruct:free',
-        maxTokens: 1000,
-        temperature: 0.7
-    },
-    spotify: {
-        clientId: ''
-    }
-};
 
 // Available models for the dropdown
 const AVAILABLE_MODELS = [
@@ -29,41 +17,58 @@ const AVAILABLE_MODELS = [
 ];
 
 /**
- * Get current settings (merges config.js defaults with localStorage overrides)
+ * Get current settings - reads directly from window.Config (source of truth)
+ * Falls back to localStorage overrides only if config.js values are missing
  */
 function getSettings() {
-    // Start with defaults
-    let settings = { ...DEFAULT_SETTINGS };
+    // Read directly from config.js as the source of truth
+    const configOpenrouter = window.Config?.openrouter || {};
+    const configSpotify = window.Config?.spotify || {};
 
-    // Merge config.js values if they exist
-    if (window.Config?.openrouter) {
-        settings.openrouter = {
-            ...settings.openrouter,
-            apiKey: window.Config.openrouter.apiKey || '',
-            model: window.Config.openrouter.model || DEFAULT_SETTINGS.openrouter.model,
-            maxTokens: window.Config.openrouter.maxTokens || DEFAULT_SETTINGS.openrouter.maxTokens,
-            temperature: window.Config.openrouter.temperature || DEFAULT_SETTINGS.openrouter.temperature
-        };
-    }
+    // Build settings object from config.js
+    const settings = {
+        openrouter: {
+            apiKey: configOpenrouter.apiKey || '',
+            model: configOpenrouter.model || 'mistralai/mistral-7b-instruct:free',
+            maxTokens: configOpenrouter.maxTokens || 1000,
+            temperature: configOpenrouter.temperature ?? 0.7
+        },
+        spotify: {
+            clientId: configSpotify.clientId || ''
+        }
+    };
 
-    if (window.Config?.spotify) {
-        settings.spotify = {
-            ...settings.spotify,
-            clientId: window.Config.spotify.clientId || ''
-        };
-    }
-
-    // Override with localStorage values (user preferences take priority)
+    // Only apply localStorage overrides for fields that are empty/placeholder in config.js
     const stored = localStorage.getItem('rhythm_chamber_settings');
     if (stored) {
         try {
             const parsed = JSON.parse(stored);
-            // Deep merge
-            if (parsed.openrouter) {
-                settings.openrouter = { ...settings.openrouter, ...parsed.openrouter };
+
+            // Only use localStorage API key if config.js has placeholder or empty
+            if (parsed.openrouter?.apiKey &&
+                (!settings.openrouter.apiKey || settings.openrouter.apiKey === 'your-api-key-here')) {
+                settings.openrouter.apiKey = parsed.openrouter.apiKey;
             }
-            if (parsed.spotify) {
-                settings.spotify = { ...settings.spotify, ...parsed.spotify };
+
+            // Only use localStorage model if user explicitly changed it
+            if (parsed.openrouter?.model) {
+                settings.openrouter.model = parsed.openrouter.model;
+            }
+
+            // Only use localStorage maxTokens if user explicitly changed it
+            if (parsed.openrouter?.maxTokens) {
+                settings.openrouter.maxTokens = parsed.openrouter.maxTokens;
+            }
+
+            // Only use localStorage temperature if user explicitly changed it
+            if (parsed.openrouter?.temperature !== undefined) {
+                settings.openrouter.temperature = parsed.openrouter.temperature;
+            }
+
+            // Only use localStorage Spotify client ID if config.js has placeholder or empty
+            if (parsed.spotify?.clientId &&
+                (!settings.spotify.clientId || settings.spotify.clientId === 'your-spotify-client-id')) {
+                settings.spotify.clientId = parsed.spotify.clientId;
             }
         } catch (e) {
             console.error('Failed to parse stored settings:', e);
@@ -74,7 +79,9 @@ function getSettings() {
 }
 
 /**
- * Save settings to localStorage
+ * Save user overrides to localStorage
+ * Note: This does NOT modify config.js - it stores overrides that will
+ * be applied on next getSettings() call
  */
 function saveSettings(settings) {
     localStorage.setItem('rhythm_chamber_settings', JSON.stringify(settings));
@@ -84,8 +91,11 @@ function saveSettings(settings) {
         if (settings.openrouter) {
             window.Config.openrouter = {
                 ...window.Config.openrouter,
-                ...settings.openrouter,
-                apiUrl: 'https://openrouter.ai/api/v1/chat/completions'
+                apiKey: settings.openrouter.apiKey || window.Config.openrouter?.apiKey,
+                model: settings.openrouter.model,
+                maxTokens: settings.openrouter.maxTokens,
+                temperature: settings.openrouter.temperature,
+                apiUrl: window.Config.openrouter?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions'
             };
         }
         if (settings.spotify?.clientId) {
@@ -95,10 +105,12 @@ function saveSettings(settings) {
             };
         }
     }
+
+    console.log('Settings saved and applied to runtime Config');
 }
 
 /**
- * Clear all stored settings
+ * Clear all stored setting overrides
  */
 function clearSettings() {
     localStorage.removeItem('rhythm_chamber_settings');
@@ -118,18 +130,18 @@ function getSetting(path) {
 }
 
 /**
- * Check if API key is configured
+ * Check if API key is configured (in config.js or localStorage)
  */
 function hasApiKey() {
-    const key = getSetting('openrouter.apiKey');
+    const key = window.Config?.openrouter?.apiKey;
     return key && key !== '' && key !== 'your-api-key-here';
 }
 
 /**
- * Check if Spotify is configured
+ * Check if Spotify is configured (in config.js or localStorage)
  */
 function hasSpotifyConfig() {
-    const clientId = getSetting('spotify.clientId');
+    const clientId = window.Config?.spotify?.clientId;
     return clientId && clientId !== '' && clientId !== 'your-spotify-client-id';
 }
 
@@ -144,6 +156,15 @@ function showSettingsModal() {
     }
 
     const settings = getSettings();
+
+    // Determine if API key is from config.js (show masked) or needs to be entered
+    const hasConfigKey = window.Config?.openrouter?.apiKey &&
+        window.Config.openrouter.apiKey !== 'your-api-key-here';
+    const apiKeyDisplay = hasConfigKey ? settings.openrouter.apiKey : '';
+
+    const hasConfigSpotify = window.Config?.spotify?.clientId &&
+        window.Config.spotify.clientId !== 'your-spotify-client-id';
+    const spotifyDisplay = hasConfigSpotify ? settings.spotify.clientId : '';
 
     const modal = document.createElement('div');
     modal.id = 'settings-modal';
@@ -160,13 +181,18 @@ function showSettingsModal() {
                 <!-- AI Settings Section -->
                 <div class="settings-section">
                     <h3>🤖 AI Chat Settings</h3>
-                    <p class="settings-description">Configure your OpenRouter API key to enable AI chat. Get a free key at <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a></p>
+                    <p class="settings-description">
+                        ${hasConfigKey
+            ? '✅ API key configured in config.js'
+            : 'Configure your OpenRouter API key. Get a free key at <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a>'}
+                    </p>
                     
                     <div class="settings-field">
-                        <label for="setting-api-key">API Key</label>
+                        <label for="setting-api-key">API Key ${hasConfigKey ? '(from config.js)' : ''}</label>
                         <input type="password" id="setting-api-key" 
-                               value="${settings.openrouter.apiKey === 'your-api-key-here' ? '' : settings.openrouter.apiKey}" 
-                               placeholder="sk-or-v1-..." 
+                               value="${apiKeyDisplay}" 
+                               placeholder="${hasConfigKey ? '••••••••••••••••' : 'sk-or-v1-...'}" 
+                               ${hasConfigKey ? 'readonly' : ''}
                                autocomplete="off">
                         <button class="btn-show-password" onclick="Settings.togglePasswordVisibility('setting-api-key', this)">Show</button>
                     </div>
@@ -204,13 +230,18 @@ function showSettingsModal() {
                 <!-- Spotify Settings Section -->
                 <div class="settings-section">
                     <h3>🎵 Spotify Settings</h3>
-                    <p class="settings-description">For Quick Snapshot, add your Spotify Client ID from <a href="https://developer.spotify.com/dashboard" target="_blank">developer.spotify.com</a></p>
+                    <p class="settings-description">
+                        ${hasConfigSpotify
+            ? '✅ Spotify configured in config.js'
+            : 'For Quick Snapshot, add your Spotify Client ID from <a href="https://developer.spotify.com/dashboard" target="_blank">developer.spotify.com</a>'}
+                    </p>
                     
                     <div class="settings-field">
-                        <label for="setting-spotify-client-id">Client ID</label>
+                        <label for="setting-spotify-client-id">Client ID ${hasConfigSpotify ? '(from config.js)' : ''}</label>
                         <input type="text" id="setting-spotify-client-id" 
-                               value="${settings.spotify.clientId === 'your-spotify-client-id' ? '' : settings.spotify.clientId}" 
-                               placeholder="Enter your Spotify Client ID"
+                               value="${spotifyDisplay}" 
+                               placeholder="${hasConfigSpotify ? 'Configured' : 'Enter your Spotify Client ID'}"
+                               ${hasConfigSpotify ? 'readonly' : ''}
                                autocomplete="off">
                     </div>
                     
@@ -222,8 +253,8 @@ function showSettingsModal() {
             </div>
             
             <div class="settings-footer">
-                <button class="btn btn-secondary" onclick="Settings.hideSettingsModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="Settings.saveFromModal()">Save Settings</button>
+                <button class="btn btn-secondary" onclick="Settings.hideSettingsModal()">Close</button>
+                <button class="btn btn-primary" onclick="Settings.saveFromModal()">Save Changes</button>
             </div>
         </div>
     `;
@@ -239,20 +270,12 @@ function showSettingsModal() {
         tempValue.textContent = `${val} (${label})`;
     });
 
-    // Add enter key listener for quick save
+    // Add escape key listener
     modal.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             hideSettingsModal();
         }
     });
-
-    // Focus on API key field if empty
-    setTimeout(() => {
-        const apiKeyInput = document.getElementById('setting-api-key');
-        if (!apiKeyInput.value) {
-            apiKeyInput.focus();
-        }
-    }, 100);
 }
 
 /**
@@ -270,34 +293,40 @@ function hideSettingsModal() {
  * Save settings from the modal form
  */
 function saveFromModal() {
-    const apiKey = document.getElementById('setting-api-key').value.trim();
+    const apiKeyInput = document.getElementById('setting-api-key');
     const model = document.getElementById('setting-model').value;
     const maxTokens = parseInt(document.getElementById('setting-max-tokens').value) || 1000;
     const temperature = parseFloat(document.getElementById('setting-temperature').value) || 0.7;
-    const spotifyClientId = document.getElementById('setting-spotify-client-id').value.trim();
+    const spotifyInput = document.getElementById('setting-spotify-client-id');
+
+    // Only save API key if user actually entered one (field not readonly)
+    const apiKey = apiKeyInput.readOnly ? null : apiKeyInput.value.trim();
+    const spotifyClientId = spotifyInput.readOnly ? null : spotifyInput.value.trim();
 
     const settings = {
         openrouter: {
-            apiKey: apiKey || '',
             model,
             maxTokens: Math.min(Math.max(maxTokens, 100), 4000),
             temperature: Math.min(Math.max(temperature, 0), 1)
         },
-        spotify: {
-            clientId: spotifyClientId || ''
-        }
+        spotify: {}
     };
+
+    // Only include API key in saved settings if user provided one
+    if (apiKey) {
+        settings.openrouter.apiKey = apiKey;
+    }
+
+    // Only include Spotify client ID if user provided one
+    if (spotifyClientId) {
+        settings.spotify.clientId = spotifyClientId;
+    }
 
     saveSettings(settings);
     hideSettingsModal();
 
     // Show confirmation
     showToast('Settings saved!');
-
-    // Update Spotify button state if on app page
-    if (typeof setupSpotifyButton === 'function') {
-        setupSpotifyButton();
-    }
 }
 
 /**
@@ -344,47 +373,6 @@ function showToast(message, duration = 2000) {
     }, duration);
 }
 
-/**
- * Apply stored settings to runtime Config on page load
- */
-function applyStoredSettings() {
-    const stored = localStorage.getItem('rhythm_chamber_settings');
-    if (!stored) return;
-
-    try {
-        const parsed = JSON.parse(stored);
-
-        // Ensure Config object exists
-        if (!window.Config) {
-            window.Config = { openrouter: {}, spotify: {}, app: {} };
-        }
-
-        // Apply OpenRouter settings
-        if (parsed.openrouter) {
-            window.Config.openrouter = {
-                apiUrl: 'https://openrouter.ai/api/v1/chat/completions',
-                ...window.Config.openrouter,
-                ...parsed.openrouter
-            };
-        }
-
-        // Apply Spotify settings
-        if (parsed.spotify?.clientId) {
-            window.Config.spotify = {
-                ...window.Config.spotify,
-                clientId: parsed.spotify.clientId
-            };
-        }
-
-        console.log('Settings applied from localStorage');
-    } catch (e) {
-        console.error('Failed to apply stored settings:', e);
-    }
-}
-
-// Apply settings immediately when script loads
-applyStoredSettings();
-
 // Public API
 window.Settings = {
     getSettings,
@@ -399,6 +387,5 @@ window.Settings = {
     togglePasswordVisibility,
     copyToClipboard,
     showToast,
-    applyStoredSettings,
     AVAILABLE_MODELS
 };

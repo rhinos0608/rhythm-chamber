@@ -72,12 +72,27 @@
                         Your patterns show distinct "emotional eras."
                     </p>
 
+                    <!-- Data Stats -->
+                    <p class="data-stats" id="data-stats">
+                        Analyzed <strong id="stream-count">0</strong> streams
+                        from <span id="date-range-start">-</span> to <span id="date-range-end">-</span>
+                    </p>
+
                     <div class="evidence-list" id="evidence-list">
                         <h4>Detected Patterns</h4>
                         <ul id="evidence-items">
                             <!-- Dynamically populated -->
                         </ul>
                     </div>
+
+                    <!-- Detection Explainer -->
+                    <details class="detection-explainer" id="detection-explainer">
+                        <summary>How did we detect this?</summary>
+                        <ul id="score-breakdown">
+                            <!-- Dynamically populated -->
+                        </ul>
+                        <p class="score-total" id="score-total">Total: 0 points → Type</p>
+                    </details>
 
                     <div class="reveal-actions">
                         <button class="btn btn-primary" id="explore-chat-btn">

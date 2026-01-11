@@ -93,7 +93,7 @@ async function parseZipFile(file) {
 
     postProgress(`Found ${streamingFiles.length} history files...`);
 
-    // Parse all streaming history files
+    // Parse all streaming history files with incremental saving
     let allStreams = [];
 
     for (let i = 0; i < streamingFiles.length; i++) {
@@ -105,6 +105,16 @@ async function parseZipFile(file) {
 
         const normalized = data.map(stream => normalizeStream(stream, path));
         allStreams = allStreams.concat(normalized);
+
+        // Send partial update for incremental saving
+        // This allows main thread to cache data in case of crash
+        self.postMessage({
+            type: 'partial',
+            fileIndex: i + 1,
+            totalFiles: streamingFiles.length,
+            streamCount: allStreams.length,
+            partialStreams: normalized // Just the new streams from this file
+        });
     }
 
     postProgress('Sorting and deduplicating...');
