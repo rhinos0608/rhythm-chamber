@@ -93,7 +93,7 @@ function handleDrop(e) {
     e.preventDefault();
     uploadZone.classList.remove('drag-over');
     const file = e.dataTransfer.files[0];
-    if (file?.name.endsWith('.zip')) {
+    if (file?.name.endsWith('.zip') || file?.name.endsWith('.json')) {
         processFile(file);
     }
 }

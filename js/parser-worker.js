@@ -11,7 +11,12 @@ self.onmessage = async (e) => {
 
     if (type === 'parse') {
         try {
-            await parseSpotifyExport(file);
+            // Detect file type
+            if (file.name.endsWith('.json')) {
+                await parseJsonFile(file);
+            } else {
+                await parseZipFile(file);
+            }
         } catch (error) {
             self.postMessage({ type: 'error', error: error.message });
         }
@@ -19,9 +24,54 @@ self.onmessage = async (e) => {
 };
 
 /**
+ * Parse a direct JSON file (streaming history array)
+ */
+async function parseJsonFile(file) {
+    postProgress('Reading JSON file...');
+
+    const text = await file.text();
+    const data = JSON.parse(text);
+
+    if (!Array.isArray(data)) {
+        throw new Error('JSON file must contain an array of streams.');
+    }
+
+    postProgress(`Found ${data.length} streams...`);
+
+    const normalized = data.map(stream => normalizeStream(stream, file.name));
+
+    postProgress('Sorting and deduplicating...');
+    normalized.sort((a, b) => new Date(a.playedAt) - new Date(b.playedAt));
+
+    const seen = new Set();
+    const deduped = normalized.filter(stream => {
+        const key = `${stream.playedAt}-${stream.trackName}-${stream.artistName}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+
+    postProgress('Enriching stream data...');
+    const enriched = enrichStreams(deduped);
+
+    postProgress('Generating chunks...');
+    const chunks = generateChunks(enriched);
+
+    self.postMessage({
+        type: 'complete',
+        streams: enriched,
+        chunks,
+        stats: {
+            totalStreams: enriched.length,
+            fileCount: 1
+        }
+    });
+}
+
+/**
  * Parse a Spotify data export .zip file
  */
-async function parseSpotifyExport(file) {
+async function parseZipFile(file) {
     postProgress('Extracting archive...');
 
     const zip = await JSZip.loadAsync(file);
