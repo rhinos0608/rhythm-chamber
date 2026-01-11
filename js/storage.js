@@ -16,6 +16,9 @@ const STORES = {
 
 let db = null;
 
+// Event listener registry for storage updates
+const updateListeners = [];
+
 /**
  * Initialize the database
  */
@@ -141,7 +144,10 @@ const Storage = {
 
   // Streams
   async saveStreams(streams) {
-    return put(STORES.STREAMS, { id: 'all', data: streams, savedAt: new Date().toISOString() });
+    const result = await put(STORES.STREAMS, { id: 'all', data: streams, savedAt: new Date().toISOString() });
+    // Notify listeners of update
+    this._notifyUpdate('streams', streams.length);
+    return result;
   },
 
   async getStreams() {
@@ -156,14 +162,19 @@ const Storage = {
   async appendStreams(newStreams) {
     const existing = await this.getStreams() || [];
     const merged = [...existing, ...newStreams];
-    return this.saveStreams(merged);
+    const result = await put(STORES.STREAMS, { id: 'all', data: merged, savedAt: new Date().toISOString() });
+    // Notify listeners of update
+    this._notifyUpdate('streams', merged.length);
+    return result;
   },
 
   /**
    * Clear only streams (for fresh parsing)
    */
   async clearStreams() {
-    return clear(STORES.STREAMS);
+    const result = await clear(STORES.STREAMS);
+    this._notifyUpdate('streams', 0);
+    return result;
   },
 
   // Chunks
@@ -202,6 +213,54 @@ const Storage = {
   async hasData() {
     const streams = await this.getStreams();
     return streams !== null && streams.length > 0;
+  },
+
+  /**
+   * Get hash of current data (for staleness detection)
+   */
+  async getDataHash() {
+    const streams = await this.getStreams();
+    if (!streams || streams.length === 0) return null;
+
+    // Simple hash based on count and timestamps
+    const count = streams.length;
+    const firstTs = streams[0]?.ts || '';
+    const lastTs = streams[streams.length - 1]?.ts || '';
+    return `${count}-${firstTs.slice(0, 10)}-${lastTs.slice(0, 10)}`;
+  },
+
+  /**
+   * Register a listener for storage updates
+   * @param {Function} callback - (event: {type: string, count: number}) => void
+   */
+  onUpdate(callback) {
+    if (typeof callback === 'function') {
+      updateListeners.push(callback);
+    }
+  },
+
+  /**
+   * Remove an update listener
+   */
+  offUpdate(callback) {
+    const index = updateListeners.indexOf(callback);
+    if (index > -1) {
+      updateListeners.splice(index, 1);
+    }
+  },
+
+  /**
+   * Internal: Notify all listeners of update
+   */
+  _notifyUpdate(type, count) {
+    const event = { type, count, timestamp: Date.now() };
+    updateListeners.forEach(cb => {
+      try {
+        cb(event);
+      } catch (e) {
+        console.error('[Storage] Error in update listener:', e);
+      }
+    });
   }
 };
 

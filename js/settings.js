@@ -285,8 +285,15 @@ function showSettingsModal() {
                             <button class="btn btn-primary" id="generate-embeddings-btn" onclick="Settings.generateEmbeddings()">
                                 ${window.RAG?.isConfigured() ? '🔄 Regenerate Embeddings' : '⚡ Generate Embeddings'}
                             </button>
+                            ${window.RAG?.getCheckpoint?.() ? `
+                                <button class="btn btn-secondary" id="resume-embeddings-btn" onclick="Settings.resumeEmbeddings()">
+                                    ▶️ Resume
+                                </button>
+                            ` : ''}
                             ${window.RAG?.isConfigured() ? `
                                 <span class="settings-hint success">✓ ${window.RAG.getConfig()?.chunksCount || 0} chunks indexed</span>
+                            ` : window.RAG?.getCheckpoint?.() ? `
+                                <span class="settings-hint warning">⚠️ Interrupted - click Resume to continue</span>
                             ` : `
                                 <span class="settings-hint">Required after adding your Qdrant credentials</span>
                             `}
@@ -451,8 +458,9 @@ function showToast(message, duration = 2000) {
 
 /**
  * Generate embeddings with progress UI
+ * @param {boolean} resume - Whether to resume from checkpoint
  */
-async function generateEmbeddings() {
+async function generateEmbeddings(resume = false) {
     if (!window.RAG) {
         showToast('RAG module not loaded');
         return;
@@ -480,21 +488,32 @@ async function generateEmbeddings() {
     const progressFill = document.getElementById('progress-fill');
     const progressText = document.getElementById('progress-text');
     const generateBtn = document.getElementById('generate-embeddings-btn');
+    const resumeBtn = document.getElementById('resume-embeddings-btn');
 
     if (progressContainer) progressContainer.style.display = 'block';
     if (generateBtn) generateBtn.disabled = true;
+    if (resumeBtn) resumeBtn.disabled = true;
 
     try {
         // Test connection first
         progressText.textContent = 'Testing Qdrant connection...';
-        await window.RAG.testConnection();
+
+        try {
+            await window.RAG.testConnection();
+        } catch (connErr) {
+            showToast('Qdrant connection failed: ' + connErr.message);
+            if (progressContainer) progressContainer.style.display = 'none';
+            if (generateBtn) generateBtn.disabled = false;
+            if (resumeBtn) resumeBtn.disabled = false;
+            return;
+        }
 
         // Generate embeddings with progress callback
         await window.RAG.generateEmbeddings((current, total, message) => {
             const percent = Math.round((current / total) * 100);
             if (progressFill) progressFill.style.width = `${percent}%`;
             if (progressText) progressText.textContent = message;
-        });
+        }, { resume });
 
         showToast('🎉 Embeddings generated successfully!');
 
@@ -506,10 +525,33 @@ async function generateEmbeddings() {
 
     } catch (err) {
         console.error('Embedding generation error:', err);
-        showToast('Error: ' + err.message);
+
+        // Check if we have a checkpoint for resume
+        const checkpoint = window.RAG.getCheckpoint?.();
+        if (checkpoint && checkpoint.processed > 0) {
+            showToast(`Error at ${checkpoint.processed}/${checkpoint.totalChunks}: ${err.message}. Click Resume to continue.`);
+        } else {
+            showToast('Error: ' + err.message);
+        }
+
         if (progressContainer) progressContainer.style.display = 'none';
         if (generateBtn) generateBtn.disabled = false;
+
+        // Check if we need to show resume button
+        if (window.RAG.getCheckpoint?.()) {
+            if (resumeBtn) {
+                resumeBtn.style.display = 'inline-block';
+                resumeBtn.disabled = false;
+            }
+        }
     }
+}
+
+/**
+ * Resume embedding generation from checkpoint
+ */
+function resumeEmbeddings() {
+    generateEmbeddings(true);
 }
 
 // Public API
@@ -527,5 +569,6 @@ window.Settings = {
     copyToClipboard,
     showToast,
     generateEmbeddings,
+    resumeEmbeddings,
     AVAILABLE_MODELS
 };

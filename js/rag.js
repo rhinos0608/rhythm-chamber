@@ -6,9 +6,11 @@
  */
 
 const RAG_STORAGE_KEY = 'rhythm_chamber_rag';
+const RAG_CHECKPOINT_KEY = 'rhythm_chamber_rag_checkpoint';
 const COLLECTION_NAME = 'rhythm_chamber';
 const EMBEDDING_MODEL = 'qwen/qwen3-embedding-8b';
 const EMBEDDING_DIMENSIONS = 4096; // qwen3-embedding-8b output dimension
+const API_TIMEOUT_MS = 60000; // 60 second timeout
 
 /**
  * Get RAG configuration from localStorage
@@ -50,6 +52,48 @@ function hasCredentials() {
 }
 
 /**
+ * Check if embeddings are stale (data changed since generation)
+ */
+async function isStale() {
+    const config = getConfig();
+    if (!config?.embeddingsGenerated || !config?.dataHash) {
+        return true;
+    }
+
+    const currentHash = await window.Storage?.getDataHash?.();
+    return currentHash !== config.dataHash;
+}
+
+/**
+ * Get checkpoint for resume
+ */
+function getCheckpoint() {
+    try {
+        const stored = localStorage.getItem(RAG_CHECKPOINT_KEY);
+        return stored ? JSON.parse(stored) : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+/**
+ * Save checkpoint for resume
+ */
+function saveCheckpoint(data) {
+    localStorage.setItem(RAG_CHECKPOINT_KEY, JSON.stringify({
+        ...data,
+        timestamp: Date.now()
+    }));
+}
+
+/**
+ * Clear checkpoint after completion
+ */
+function clearCheckpoint() {
+    localStorage.removeItem(RAG_CHECKPOINT_KEY);
+}
+
+/**
  * Get embedding for text using OpenRouter API
  * @param {string|string[]} input - Text or array of texts to embed
  * @returns {Promise<number[]|number[][]>} Embedding vector(s)
@@ -61,7 +105,9 @@ async function getEmbedding(input) {
         throw new Error('OpenRouter API key not configured');
     }
 
-    const response = await fetch('https://openrouter.ai/api/v1/embeddings', {
+    // Use timeout wrapper if available
+    const fetchFn = window.Utils?.fetchWithTimeout || fetch;
+    const response = await fetchFn('https://openrouter.ai/api/v1/embeddings', {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${apiKey}`,
@@ -73,7 +119,7 @@ async function getEmbedding(input) {
             model: EMBEDDING_MODEL,
             input: Array.isArray(input) ? input : [input]
         })
-    });
+    }, API_TIMEOUT_MS);
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({}));
@@ -218,7 +264,7 @@ async function search(query, limit = 5) {
  * Generate embeddings for all streaming data chunks
  * @param {Function} onProgress - Progress callback (current, total, message)
  */
-async function generateEmbeddings(onProgress = () => { }) {
+async function generateEmbeddings(onProgress = () => { }, options = {}) {
     if (!Payments.isPremium()) {
         throw new Error('Premium subscription required');
     }
@@ -228,11 +274,17 @@ async function generateEmbeddings(onProgress = () => { }) {
         throw new Error('Please configure your Qdrant credentials first');
     }
 
+    const { resume = false } = options;
+    const checkpoint = resume ? getCheckpoint() : null;
+
     // Get streaming data
     const streams = await Storage.getStreams();
     if (!streams || streams.length === 0) {
         throw new Error('No streaming data found. Please upload your Spotify data first.');
     }
+
+    // Calculate data hash for staleness detection
+    const dataHash = await window.Storage?.getDataHash?.() || 'unknown';
 
     onProgress(0, 100, 'Preparing data...');
 
@@ -240,16 +292,29 @@ async function generateEmbeddings(onProgress = () => { }) {
     const chunks = createChunks(streams);
     const totalChunks = chunks.length;
 
-    onProgress(0, totalChunks, `Processing ${totalChunks} chunks...`);
+    // Calculate time estimate (roughly 0.3s per chunk with batching)
+    const estimatedSeconds = Math.ceil(totalChunks * 0.03); // ~30ms per chunk in batch
+    const estimateText = window.Utils?.formatDuration?.(estimatedSeconds) || `~${estimatedSeconds}s`;
+
+    // Determine starting point
+    let startBatch = 0;
+    if (checkpoint && checkpoint.totalChunks === totalChunks) {
+        startBatch = checkpoint.lastBatch + 1;
+        onProgress(checkpoint.processed, totalChunks,
+            `Resuming from batch ${startBatch}... (${estimateText} remaining)`);
+    } else {
+        onProgress(0, totalChunks, `Processing ${totalChunks} chunks... (Est: ${estimateText})`);
+    }
 
     // Ensure collection exists
     await ensureCollection();
 
     // Process in batches to avoid rate limits
     const BATCH_SIZE = 10;
-    let processed = 0;
+    let processed = checkpoint?.processed || 0;
 
-    for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+    for (let i = startBatch * BATCH_SIZE; i < chunks.length; i += BATCH_SIZE) {
+        const batchIndex = Math.floor(i / BATCH_SIZE);
         const batch = chunks.slice(i, i + BATCH_SIZE);
         const texts = batch.map(c => c.text);
 
@@ -272,11 +337,28 @@ async function generateEmbeddings(onProgress = () => { }) {
             await upsertPoints(points);
 
             processed += batch.length;
+
+            // Save checkpoint after each batch
+            saveCheckpoint({
+                lastBatch: batchIndex,
+                processed,
+                totalChunks,
+                dataHash
+            });
+
             onProgress(processed, totalChunks, `Processed ${processed}/${totalChunks} chunks...`);
 
         } catch (err) {
             console.error('Batch processing error:', err);
-            throw new Error(`Failed at chunk ${i}: ${err.message}`);
+            // Save checkpoint so user can resume
+            saveCheckpoint({
+                lastBatch: batchIndex - 1,
+                processed,
+                totalChunks,
+                dataHash,
+                error: err.message
+            });
+            throw new Error(`Failed at batch ${batchIndex}: ${err.message}. You can resume from Settings.`);
         }
 
         // Small delay to avoid rate limits
@@ -285,12 +367,16 @@ async function generateEmbeddings(onProgress = () => { }) {
         }
     }
 
-    // Mark embeddings as generated
+    // Clear checkpoint and mark complete
+    clearCheckpoint();
+
+    // Mark embeddings as generated with data hash
     saveConfig({
         ...config,
         embeddingsGenerated: true,
         chunksCount: totalChunks,
-        generatedAt: new Date().toISOString()
+        generatedAt: new Date().toISOString(),
+        dataHash: dataHash
     });
 
     onProgress(totalChunks, totalChunks, '✓ Embeddings generated successfully!');
@@ -459,6 +545,9 @@ window.RAG = {
     saveConfig,
     isConfigured,
     hasCredentials,
+    isStale,
+    getCheckpoint,
+    clearCheckpoint,
     getEmbedding,
     testConnection,
     ensureCollection,

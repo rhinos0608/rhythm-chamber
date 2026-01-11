@@ -6,6 +6,8 @@
  * Data queries are handled by data-query.js
  */
 
+const CONVERSATION_STORAGE_KEY = 'rhythm_chamber_conversation';
+
 let conversationHistory = [];
 let userContext = null;
 let streamsData = null;  // Actual streaming data for queries
@@ -23,9 +25,57 @@ function initChat(personality, patterns, summary, streams = null) {
     // Store streams for data queries
     streamsData = streams;
 
-    conversationHistory = [];
+    // Restore conversation from session if exists
+    try {
+        const saved = sessionStorage.getItem(CONVERSATION_STORAGE_KEY);
+        if (saved) {
+            conversationHistory = JSON.parse(saved);
+            console.log('[Chat] Restored', conversationHistory.length, 'messages from session');
+        } else {
+            conversationHistory = [];
+        }
+    } catch (e) {
+        console.warn('[Chat] Failed to restore conversation:', e);
+        conversationHistory = [];
+    }
+
+    // Register for storage updates to refresh data
+    if (window.Storage?.onUpdate) {
+        window.Storage.onUpdate(handleStorageUpdate);
+    }
 
     return buildSystemPrompt();
+}
+
+/**
+ * Handle storage updates (new data uploaded)
+ */
+async function handleStorageUpdate(event) {
+    if (event.type === 'streams' && event.count > 0) {
+        console.log('[Chat] Data updated, refreshing streams...');
+        streamsData = await window.Storage.getStreams();
+    }
+}
+
+/**
+ * Save conversation to session
+ */
+function saveConversation() {
+    try {
+        // Only save last 50 messages to prevent storage bloat
+        const toSave = conversationHistory.slice(-50);
+        sessionStorage.setItem(CONVERSATION_STORAGE_KEY, JSON.stringify(toSave));
+    } catch (e) {
+        console.warn('[Chat] Failed to save conversation:', e);
+    }
+}
+
+/**
+ * Clear conversation history
+ */
+function clearConversation() {
+    conversationHistory = [];
+    sessionStorage.removeItem(CONVERSATION_STORAGE_KEY);
 }
 
 /**
@@ -339,6 +389,9 @@ async function sendMessage(message, apiKey = null) {
             content: assistantContent
         });
 
+        // Save conversation to session storage
+        saveConversation();
+
         return assistantContent;
 
     } catch (error) {
@@ -350,6 +403,7 @@ async function sendMessage(message, apiKey = null) {
             role: 'assistant',
             content: fallbackResponse
         });
+        saveConversation();
         return fallbackResponse;
     }
 }
@@ -474,10 +528,11 @@ function generateFallbackResponse(message, queryContext) {
 }
 
 /**
- * Clear conversation history
+ * Clear conversation history (also clears session storage)
  */
 function clearHistory() {
     conversationHistory = [];
+    sessionStorage.removeItem(CONVERSATION_STORAGE_KEY);
 }
 
 /**
@@ -499,6 +554,7 @@ window.Chat = {
     initChat,
     sendMessage,
     clearHistory,
+    clearConversation,
     getHistory,
     setStreamsData
 };

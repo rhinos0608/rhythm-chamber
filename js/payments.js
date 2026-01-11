@@ -38,6 +38,12 @@ function isPremium() {
         // Check if premium is active
         if (!data.active) return false;
 
+        // Validate integrity signature exists (basic tamper check)
+        if (!data.signature) {
+            console.warn('Premium data missing signature - may be tampered');
+            // Still allow for backwards compatibility, but log it
+        }
+
         // For subscriptions, check expiry (with 3-day grace period)
         if (data.plan === 'monthly' && data.expiresAt) {
             const expiry = new Date(data.expiresAt);
@@ -165,13 +171,24 @@ function handlePaymentReturn() {
  * Activate premium access
  * @param {string} plan - 'lifetime' or 'monthly'
  */
-function activatePremium(plan = 'lifetime') {
+function activatePremium(plan = 'lifetime', transactionId = null) {
     const now = new Date();
+    const timestamp = now.getTime();
+
+    // Generate integrity signature (makes manual spoofing require knowledge of structure)
+    const signatureData = {
+        plan,
+        timestamp,
+        transactionId: transactionId || 'stripe_' + timestamp,
+        version: 1
+    };
+    const signature = btoa(JSON.stringify(signatureData));
 
     const premiumData = {
         active: true,
         plan: plan,
         activatedAt: now.toISOString(),
+        signature: signature,
         // For monthly, set expiry to 35 days (with buffer)
         expiresAt: plan === 'monthly'
             ? new Date(now.getTime() + 35 * 24 * 60 * 60 * 1000).toISOString()
@@ -179,7 +196,7 @@ function activatePremium(plan = 'lifetime') {
     };
 
     localStorage.setItem(PREMIUM_STORAGE_KEY, JSON.stringify(premiumData));
-    console.log('Premium activated:', premiumData);
+    console.log('Premium activated:', { plan, activatedAt: premiumData.activatedAt });
 }
 
 /**

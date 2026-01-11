@@ -1,7 +1,7 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Last updated:** 2026-01-12 09:27 AEDT  
-> **Status:** MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search Premium
+> **Last updated:** 2026-01-12 09:51 AEDT  
+> **Status:** MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search Premium + HNW Fixes
 
 ---
 
@@ -74,6 +74,9 @@ rhythm-chamber/
 ├── docs/
 │   ├── 01-06 product docs
 │   └── API_SETUP.md        # OpenRouter setup guide
+├── js/
+│   ├── utils.js            # Timeout/retry utilities
+│   └── (other files as above)
 └── .gitignore              # Protects config.js
 ```
 
@@ -214,6 +217,27 @@ npx http-server -p 8080 -c-1
 - Centralized scoring breakdown in `personality.js` (no duplicated logic)
 - config.js fields shown as readonly in settings modal
 - Incremental saves via worker `partial` messages + `appendStreams()`
+
+---
+
+### Session 7 — 2026-01-12 (HNW Diagnostic Fixes)
+
+**What was done:**
+1. Applied Hierarchy-Network-Wave diagnostic analysis to identify system vulnerabilities
+2. Added payment integrity signature to `activatePremium()` in payments.js
+3. Implemented checkpoint/resume for embedding generation in rag.js
+4. Added storage event emitter pattern in storage.js with data hash tracking
+5. Implemented conversation persistence in chat.js with session storage
+6. Added data refresh listener in chat.js for new uploads
+7. Created utils.js with `fetchWithTimeout()` and `fetchWithRetry()` utilities
+8. Added Qdrant connection pre-test in settings.js
+9. Added resume button for interrupted embedding generation
+10. Implemented staleness detection for vector embeddings
+
+**Key fixes:**
+- **Critical**: Payment bypass mitigation, CORS pre-test, resume on failure
+- **High**: Data refresh on upload, API timeouts, conversation persistence
+- **Medium**: Vector staleness, time estimates, utility functions
 
 ---
 
