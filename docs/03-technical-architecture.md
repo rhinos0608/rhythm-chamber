@@ -58,20 +58,23 @@ rhythm-chamber/
 ├── index.html              # Landing page
 ├── app.html                # Main analyzer app
 ├── css/
-│   └── styles.css          # All styles including Spotify theme
+│   └── styles.css          # All styles including premium/Stripe theme
 ├── js/
 │   ├── config.js           # API keys (gitignored)
-│   ├── config.example.js   # Config template
+│   ├── config.example.js   # Config template (+ Stripe keys)
 │   ├── app.js              # Main application controller
 │   ├── spotify.js          # Spotify OAuth PKCE + API calls
+│   ├── payments.js         # Stripe Checkout + premium status
+│   ├── rag.js              # Embeddings + Qdrant vector search
 │   ├── parser.js           # .zip file parsing
 │   ├── patterns.js         # Pattern detection algorithms
 │   ├── personality.js      # Personality classification
 │   ├── data-query.js       # Chat data query utilities
-│   ├── chat.js             # OpenRouter chat integration
+│   ├── functions.js        # LLM function schemas + executors
+│   ├── chat.js             # OpenRouter chat + function calling + RAG
 │   ├── prompts.js          # Editable prompt templates
 │   ├── storage.js          # IndexedDB wrapper
-│   ├── settings.js         # Settings management & UI
+│   ├── settings.js         # Settings management & premium UI
 │   └── cards.js            # Shareable card generation
 ├── workers/
 │   └── parser-worker.js    # Web Worker for .zip parsing
@@ -168,52 +171,134 @@ const response = await fetch('https://accounts.spotify.com/api/token', {
 
 ---
 
-## Chat Architecture: Data-Aware Responses
+## Chat Architecture: Function Calling
 
-The chat system can now query actual streaming data to answer specific questions.
+The chat system uses **OpenAI-style function calling** to dynamically query user streaming data.
 
-```javascript
-// js/data-query.js - Query utilities
+### Function Calling Flow
 
-// Query by time period
-DataQuery.queryByTimePeriod(streams, { year: 2023, month: 3 });
-// Returns: { totalPlays, totalHours, topArtists, topTracks, ... }
-
-// Query by artist
-DataQuery.findPeakListeningPeriod(streams, 'Taylor Swift');
-// Returns: { totalPlays, peakPeriod, firstListen, lastListen, monthlyBreakdown }
-
-// Compare periods
-DataQuery.comparePeriods(streams, { year: 2022 }, { year: 2023 });
-// Returns: { period1, period2, newArtists, droppedArtists, hoursChange }
+```mermaid
+flowchart LR
+    A[User: 'My top artists from 2020?'] --> B[LLM + Tools]
+    B --> C{Needs data?}
+    C -->|Yes| D["tool_call: get_top_artists(year=2020)"]
+    D --> E[Execute against DataQuery]
+    E --> F[Return JSON result]
+    F --> G[Follow-up API call]
+    G --> H[LLM generates response]
+    C -->|No| H
 ```
 
-### Dynamic Context Injection
+### Available Functions (js/functions.js)
+
+| Function | Description | Parameters |
+|----------|-------------|------------|
+| `get_top_artists` | Top N artists for a period | year, month?, limit? |
+| `get_top_tracks` | Top N tracks for a period | year, month?, limit? |
+| `get_artist_history` | Full history for an artist | artist_name |
+| `get_listening_stats` | Stats for a period | year?, month? |
+| `compare_periods` | Compare two years | year1, year2 |
+| `search_tracks` | Search for a track | track_name |
+
+### Example Request/Response
 
 ```javascript
-// js/chat.js - System prompt with query context
+// User asks: "Show me my top 10 artists from 2020"
 
-function buildSystemPrompt(queryContext = null) {
-  let prompt = baseTemplate
-    .replace('{{personality_name}}', personality.name)
-    .replace('{{evidence}}', evidenceText);
-  
-  // Inject relevant data based on user's question
-  if (queryContext) {
-    prompt += `\n\nRELEVANT DATA FOR THIS QUERY:\n${queryContext}`;
-  }
-  
-  return prompt;
+// 1. LLM responds with tool_call:
+{
+  tool_calls: [{
+    id: "call_123",
+    function: {
+      name: "get_top_artists",
+      arguments: '{"year": 2020, "limit": 10}'
+    }
+  }]
 }
 
-// When user asks "What was I listening to in March 2023?"
-// The system automatically queries the data and injects:
-// - Total plays: 1,247
-// - Top Artist: Taylor Swift (89 plays)
-// - Top Tracks: "Anti-Hero", "Lavender Haze", ...
+// 2. Function executes and returns:
+{
+  period: "2020",
+  total_plays: 8234,
+  top_artists: [
+    { rank: 1, name: "Taylor Swift", plays: 847 },
+    { rank: 2, name: "The National", plays: 621 },
+    // ... 8 more
+  ]
+}
+
+// 3. LLM generates final response using real data
+```
+
+### Legacy: Context Injection (Fallback)
+
+When function calling is unavailable (no API key, free models that don't support tools), the system falls back to regex-based context injection:
+
+```javascript
+// js/chat.js - generateQueryContext()
+// Parses user message with regex, queries data, injects into prompt
+// Less reliable but works without function calling support
 ```
 
 ---
+
+## Semantic Search (Premium Feature)
+
+### Architecture Overview
+
+Premium users can enable RAG-powered semantic search using their own Qdrant Cloud cluster:
+
+```mermaid
+flowchart LR
+    A[User Query] --> B[Generate Embedding]
+    B --> C[Search Qdrant]
+    C --> D[Get Top 3 Chunks]
+    D --> E[Inject into System Prompt]
+    E --> F[LLM Response]
+```
+
+### Components
+
+| Module | Purpose |
+|--------|---------|
+| `payments.js` | Stripe Checkout, premium status in localStorage |
+| `rag.js` | Embeddings API, Qdrant client, chunking logic |
+
+### Embedding Generation
+
+```javascript
+// js/rag.js - generateEmbeddings()
+// 1. Load all streams from IndexedDB
+// 2. Create chunks (monthly summaries + artist profiles)
+// 3. Generate embeddings via OpenRouter (qwen/qwen3-embedding-8b)
+// 4. Upsert to user's Qdrant cluster
+// 5. Store config + status in localStorage
+```
+
+### Chunk Types
+
+| Type | Content |
+|------|---------|
+| `monthly_summary` | Month listening stats, top 10 artists/tracks |
+| `artist_profile` | Artist history, play count, first/last listen, top tracks |
+
+### Chat Integration
+
+```javascript
+// In chat.js sendMessage()
+if (window.RAG?.isConfigured()) {
+    semanticContext = await window.RAG.getSemanticContext(message, 3);
+    // Injects top 3 matching chunks into system prompt
+}
+```
+
+### User Setup Flow
+
+1. Complete Stripe Checkout → Premium activated
+2. Create free Qdrant Cloud cluster
+3. Enter Qdrant URL + API key in Settings
+4. Click "Generate Embeddings" → Progress bar
+5. Semantic search now active in chat
 
 ## Storage: IndexedDB + localStorage
 

@@ -199,13 +199,17 @@ function showSettingsModal() {
                     
                     <div class="settings-field">
                         <label for="setting-model">Model</label>
-                        <select id="setting-model">
+                        <input type="text" id="setting-model" 
+                               list="model-options"
+                               value="${settings.openrouter.model}" 
+                               placeholder="e.g., anthropic/claude-3.5-sonnet"
+                               autocomplete="off">
+                        <datalist id="model-options">
                             ${AVAILABLE_MODELS.map(m => `
-                                <option value="${m.id}" ${settings.openrouter.model === m.id ? 'selected' : ''}>
-                                    ${m.name}
-                                </option>
+                                <option value="${m.id}">${m.name}</option>
                             `).join('')}
-                        </select>
+                        </datalist>
+                        <span class="settings-hint">Select a preset or enter any <a href="https://openrouter.ai/models" target="_blank">OpenRouter model ID</a></span>
                     </div>
                     
                     <div class="settings-row">
@@ -249,6 +253,62 @@ function showSettingsModal() {
                         <strong>Redirect URI:</strong> <code>${window.location.origin}/app.html</code>
                         <button class="btn-copy" onclick="Settings.copyToClipboard('${window.location.origin}/app.html', this)">Copy</button>
                     </div>
+                </div>
+                
+                <!-- Premium Semantic Search Section -->
+                <div class="settings-section premium-section">
+                    <h3>🚀 Semantic Search ${window.Payments?.isPremium() ? '<span class="premium-badge">Premium</span>' : ''}</h3>
+                    ${window.Payments?.isPremium() ? `
+                        <p class="settings-description">
+                            RAG-powered semantic search using your own Qdrant cluster.
+                        </p>
+                        
+                        <div class="settings-field">
+                            <label for="setting-qdrant-url">Qdrant Cluster URL</label>
+                            <input type="text" id="setting-qdrant-url" 
+                                   value="${window.RAG?.getConfig()?.qdrantUrl || ''}" 
+                                   placeholder="https://xyz-abc.cloud.qdrant.io:6333"
+                                   autocomplete="off">
+                            <span class="settings-hint">Get a free cluster at <a href="https://cloud.qdrant.io" target="_blank">cloud.qdrant.io</a></span>
+                        </div>
+                        
+                        <div class="settings-field">
+                            <label for="setting-qdrant-key">Qdrant API Key</label>
+                            <input type="password" id="setting-qdrant-key" 
+                                   value="${window.RAG?.getConfig()?.qdrantApiKey || ''}" 
+                                   placeholder="Enter your Qdrant API key"
+                                   autocomplete="off">
+                            <button class="btn-show-password" onclick="Settings.togglePasswordVisibility('setting-qdrant-key', this)">Show</button>
+                        </div>
+                        
+                        <div class="settings-field">
+                            <button class="btn btn-primary" id="generate-embeddings-btn" onclick="Settings.generateEmbeddings()">
+                                ${window.RAG?.isConfigured() ? '🔄 Regenerate Embeddings' : '⚡ Generate Embeddings'}
+                            </button>
+                            ${window.RAG?.isConfigured() ? `
+                                <span class="settings-hint success">✓ ${window.RAG.getConfig()?.chunksCount || 0} chunks indexed</span>
+                            ` : `
+                                <span class="settings-hint">Required after adding your Qdrant credentials</span>
+                            `}
+                        </div>
+                        
+                        <div id="embedding-progress" class="embedding-progress" style="display: none;">
+                            <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+                            <span class="progress-text" id="progress-text">Processing...</span>
+                        </div>
+                    ` : `
+                        <p class="settings-description">
+                            Ask natural questions about your listening history with AI-powered semantic search.
+                            Requires your own Qdrant cluster (free tier available).
+                        </p>
+                        
+                        <div class="premium-cta">
+                            <button class="btn btn-primary" onclick="Payments.showUpgradeModal()">
+                                🚀 Upgrade for $5
+                            </button>
+                            <span class="settings-hint">One-time payment, lifetime access</span>
+                        </div>
+                    `}
                 </div>
             </div>
             
@@ -323,6 +383,22 @@ function saveFromModal() {
     }
 
     saveSettings(settings);
+
+    // Save Qdrant settings for premium users
+    if (window.Payments?.isPremium() && window.RAG) {
+        const qdrantUrl = document.getElementById('setting-qdrant-url')?.value?.trim();
+        const qdrantKey = document.getElementById('setting-qdrant-key')?.value?.trim();
+
+        if (qdrantUrl || qdrantKey) {
+            const ragConfig = window.RAG.getConfig() || {};
+            window.RAG.saveConfig({
+                ...ragConfig,
+                qdrantUrl: qdrantUrl || ragConfig.qdrantUrl,
+                qdrantApiKey: qdrantKey || ragConfig.qdrantApiKey
+            });
+        }
+    }
+
     hideSettingsModal();
 
     // Show confirmation
@@ -373,6 +449,69 @@ function showToast(message, duration = 2000) {
     }, duration);
 }
 
+/**
+ * Generate embeddings with progress UI
+ */
+async function generateEmbeddings() {
+    if (!window.RAG) {
+        showToast('RAG module not loaded');
+        return;
+    }
+
+    // First save any unsaved Qdrant settings
+    const qdrantUrl = document.getElementById('setting-qdrant-url')?.value?.trim();
+    const qdrantKey = document.getElementById('setting-qdrant-key')?.value?.trim();
+
+    if (!qdrantUrl || !qdrantKey) {
+        showToast('Please enter your Qdrant URL and API key first');
+        return;
+    }
+
+    // Save credentials
+    const ragConfig = window.RAG.getConfig() || {};
+    window.RAG.saveConfig({
+        ...ragConfig,
+        qdrantUrl,
+        qdrantApiKey: qdrantKey
+    });
+
+    // Show progress UI
+    const progressContainer = document.getElementById('embedding-progress');
+    const progressFill = document.getElementById('progress-fill');
+    const progressText = document.getElementById('progress-text');
+    const generateBtn = document.getElementById('generate-embeddings-btn');
+
+    if (progressContainer) progressContainer.style.display = 'block';
+    if (generateBtn) generateBtn.disabled = true;
+
+    try {
+        // Test connection first
+        progressText.textContent = 'Testing Qdrant connection...';
+        await window.RAG.testConnection();
+
+        // Generate embeddings with progress callback
+        await window.RAG.generateEmbeddings((current, total, message) => {
+            const percent = Math.round((current / total) * 100);
+            if (progressFill) progressFill.style.width = `${percent}%`;
+            if (progressText) progressText.textContent = message;
+        });
+
+        showToast('🎉 Embeddings generated successfully!');
+
+        // Refresh the modal to show updated status
+        setTimeout(() => {
+            hideSettingsModal();
+            showSettingsModal();
+        }, 1500);
+
+    } catch (err) {
+        console.error('Embedding generation error:', err);
+        showToast('Error: ' + err.message);
+        if (progressContainer) progressContainer.style.display = 'none';
+        if (generateBtn) generateBtn.disabled = false;
+    }
+}
+
 // Public API
 window.Settings = {
     getSettings,
@@ -387,5 +526,6 @@ window.Settings = {
     togglePasswordVisibility,
     copyToClipboard,
     showToast,
+    generateEmbeddings,
     AVAILABLE_MODELS
 };

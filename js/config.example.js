@@ -39,6 +39,17 @@ const Config = {
         ]
     },
 
+    // Stripe Configuration (for Premium features)
+    // Get your keys from: https://dashboard.stripe.com/apikeys
+    // Create products/prices at: https://dashboard.stripe.com/products
+    stripe: {
+        publishableKey: 'pk_test_your-publishable-key',
+        prices: {
+            lifetime: 'price_lifetime_id',  // $5 one-time payment
+            monthly: 'price_monthly_id'     // $2/month subscription
+        }
+    },
+
     // App metadata for OpenRouter
     app: {
         name: 'Rhythm Chamber',

@@ -31,7 +31,7 @@ function initChat(personality, patterns, summary, streams = null) {
 /**
  * Build system prompt with user data
  */
-function buildSystemPrompt(queryContext = null) {
+function buildSystemPrompt(queryContext = null, semanticContext = null) {
     const template = window.Prompts?.system;
     if (!template || !userContext) return '';
 
@@ -68,7 +68,12 @@ function buildSystemPrompt(queryContext = null) {
         .replace('{{current_date}}', currentDate)
         .replace('{{evidence}}', evidenceText);
 
-    // Append query context if available
+    // Append semantic context from RAG if available (higher priority)
+    if (semanticContext) {
+        prompt += `\n\n${semanticContext}`;
+    }
+
+    // Append query context if available (fallback)
     if (queryContext) {
         prompt += `\n\nRELEVANT DATA FOR THIS QUERY:\n${queryContext}`;
     }
@@ -217,14 +222,12 @@ function getMonthName(monthNum) {
 
 /**
  * Send a message and get response
+ * Supports OpenAI-style function calling for dynamic data queries
  */
 async function sendMessage(message, apiKey = null) {
     if (!userContext) {
         throw new Error('Chat not initialized. Call initChat first.');
     }
-
-    // Generate query context based on message
-    const queryContext = generateQueryContext(message);
 
     // Add user message to history
     conversationHistory.push({
@@ -232,23 +235,44 @@ async function sendMessage(message, apiKey = null) {
         content: message
     });
 
-    // Build messages array with dynamic system prompt
+    // Try to get semantic context from RAG if configured
+    let semanticContext = null;
+    if (window.RAG?.isConfigured()) {
+        try {
+            semanticContext = await window.RAG.getSemanticContext(message, 3);
+            if (semanticContext) {
+                console.log('[Chat] Semantic context retrieved from RAG');
+            }
+        } catch (err) {
+            console.warn('[Chat] RAG semantic search failed:', err.message);
+        }
+    }
+
+    // Build messages array with system prompt (includes semantic context if available)
     const messages = [
-        { role: 'system', content: buildSystemPrompt(queryContext) },
+        { role: 'system', content: buildSystemPrompt(null, semanticContext) },
         ...conversationHistory
     ];
 
-    // Get configuration
+    // Get configuration - use Settings.getSettings() to properly merge config.js + localStorage
     const config = window.Config?.openrouter;
     if (!config) {
         throw new Error('Config not loaded. Make sure js/config.js exists.');
     }
 
-    // Get API key from config, storage, or parameter
-    const key = apiKey || config.apiKey || await Storage.getSetting('openrouter_key');
+    // Get the merged settings (config.js as base, localStorage overrides)
+    const settings = window.Settings?.getSettings?.() || {};
 
-    if (!key || key === 'your-api-key-here') {
+    // Get API key priority: parameter > merged settings > raw config
+    // The merged settings already handle the placeholder check
+    let key = apiKey || settings.openrouter?.apiKey || config.apiKey;
+
+    // Check if key is valid (not empty and not the placeholder)
+    const isValidKey = key && key !== '' && key !== 'your-api-key-here';
+
+    if (!isValidKey) {
         // Return a helpful message if no API key configured
+        const queryContext = generateQueryContext(message);
         const fallbackResponse = generateFallbackResponse(message, queryContext);
         conversationHistory.push({
             role: 'assistant',
@@ -258,40 +282,69 @@ async function sendMessage(message, apiKey = null) {
     }
 
     try {
-        const response = await fetch(config.apiUrl, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${key}`,
-                'Content-Type': 'application/json',
-                'HTTP-Referer': config.app?.url || window.location.origin,
-                'X-Title': config.app?.name || 'Rhythm Chamber'
-            },
-            body: JSON.stringify({
-                model: config.model,
-                messages,
-                max_tokens: config.maxTokens,
-                temperature: config.temperature
-            })
-        });
+        // Get function schemas if available
+        const tools = window.Functions?.schemas || [];
+        const useTools = tools.length > 0 && streamsData && streamsData.length > 0;
 
-        if (!response.ok) {
-            throw new Error(`API error: ${response.status}`);
+        // Initial API call
+        let response = await callOpenRouter(key, config, messages, useTools ? tools : undefined);
+        let responseMessage = response.choices[0]?.message;
+
+        // Handle function calls (tool calls)
+        if (responseMessage?.tool_calls && responseMessage.tool_calls.length > 0) {
+            console.log('[Chat] LLM requested tool calls:', responseMessage.tool_calls.map(tc => tc.function.name));
+
+            // Add assistant's tool call message to conversation
+            conversationHistory.push({
+                role: 'assistant',
+                content: responseMessage.content || null,
+                tool_calls: responseMessage.tool_calls
+            });
+
+            // Execute each function call and add results
+            for (const toolCall of responseMessage.tool_calls) {
+                const functionName = toolCall.function.name;
+                const args = JSON.parse(toolCall.function.arguments || '{}');
+
+                console.log(`[Chat] Executing function: ${functionName}`, args);
+
+                // Execute the function
+                const result = window.Functions.execute(functionName, args, streamsData);
+
+                console.log(`[Chat] Function result:`, result);
+
+                // Add tool result to conversation
+                conversationHistory.push({
+                    role: 'tool',
+                    tool_call_id: toolCall.id,
+                    content: JSON.stringify(result)
+                });
+            }
+
+            // Make follow-up call with function results
+            const followUpMessages = [
+                { role: 'system', content: buildSystemPrompt() },
+                ...conversationHistory
+            ];
+
+            response = await callOpenRouter(key, config, followUpMessages, undefined);
+            responseMessage = response.choices[0]?.message;
         }
 
-        const data = await response.json();
-        const assistantMessage = data.choices[0]?.message?.content || 'I couldn\'t generate a response.';
+        const assistantContent = responseMessage?.content || 'I couldn\'t generate a response.';
 
-        // Add to history
+        // Add final response to history
         conversationHistory.push({
             role: 'assistant',
-            content: assistantMessage
+            content: assistantContent
         });
 
-        return assistantMessage;
+        return assistantContent;
 
     } catch (error) {
         console.error('Chat error:', error);
 
+        const queryContext = generateQueryContext(message);
         const fallbackResponse = generateFallbackResponse(message, queryContext);
         conversationHistory.push({
             role: 'assistant',
@@ -299,6 +352,43 @@ async function sendMessage(message, apiKey = null) {
         });
         return fallbackResponse;
     }
+}
+
+/**
+ * Make an API call to OpenRouter
+ */
+async function callOpenRouter(apiKey, config, messages, tools) {
+    const body = {
+        model: config.model,
+        messages,
+        max_tokens: config.maxTokens,
+        temperature: config.temperature
+    };
+
+    // Add tools if provided
+    if (tools && tools.length > 0) {
+        body.tools = tools;
+        body.tool_choice = 'auto';
+    }
+
+    const response = await fetch(config.apiUrl, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': config.app?.url || window.location.origin,
+            'X-Title': config.app?.name || 'Rhythm Chamber'
+        },
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Chat] API error:', response.status, errorText);
+        throw new Error(`API error: ${response.status}`);
+    }
+
+    return response.json();
 }
 
 /**

@@ -114,3 +114,5 @@ Features implemented beyond original roadmap:
 - **Detection Explainer** — Transparency on personality scoring
 - **Incremental Caching** — Crash-safe parsing
 - **Markdown in Chat** — Formatted AI responses
+- **AI Function Calling** — LLM can query data via tools (get_top_artists, etc.)
+- **Semantic Search Premium** — RAG with Qdrant + Stripe payments ($5 lifetime / $2/mo)
