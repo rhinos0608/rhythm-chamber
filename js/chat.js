@@ -1,30 +1,9 @@
 /**
  * Chat Integration Module
  * Handles conversation with OpenRouter API
+ * 
+ * System prompts are defined in prompts.js for easy editing
  */
-
-// System prompt template
-const SYSTEM_PROMPT = `You are a music personality analyst for Rhythm Chamber. You help users explore what their listening patterns reveal about them.
-
-PERSONALITY TYPE: {{personality_name}}
-TAGLINE: {{tagline}}
-
-USER'S LISTENING SUMMARY:
-{{summary}}
-
-DETECTED PATTERNS:
-{{evidence}}
-
-INSTRUCTIONS:
-1. Be conversational and warm, but insightful
-2. Reference specific patterns from their data when relevant
-3. Ask follow-up questions to invite reflection
-4. Never be generic - use their actual data
-5. Keep responses concise (2-3 paragraphs max)
-6. When they ask about specific times/artists, use the patterns provided
-7. Don't be therapy-speak or preachy - be like a curious friend
-
-TONE: Intriguing, warm, specific, conversational. "You" not "users".`;
 
 let conversationHistory = [];
 let userContext = null;
@@ -48,23 +27,41 @@ function initChat(personality, patterns, summary) {
  * Build system prompt with user data
  */
 function buildSystemPrompt() {
-    if (!userContext) return SYSTEM_PROMPT;
+    const template = window.Prompts?.system;
+    if (!template || !userContext) return '';
 
     const { personality, patterns, summary } = userContext;
 
+    // Format date range
+    const dateRange = summary?.dateRange
+        ? `${summary.dateRange.start} to ${summary.dateRange.end}`
+        : 'Unknown';
+
     // Format summary
     const summaryText = summary
-        ? `${summary.totalHours} hours of music, ${summary.uniqueArtists} artists, ${summary.uniqueTracks} tracks from ${summary.dateRange.start} to ${summary.dateRange.end}`
+        ? `${summary.totalHours} hours of music, ${summary.uniqueArtists} artists, ${summary.uniqueTracks} tracks`
         : 'Summary not available';
 
-    // Format evidence
-    const evidenceText = personality.allEvidence?.join('\n• ') || 'No specific patterns detected';
+    // Format evidence with more detail
+    const evidenceItems = personality.allEvidence || [];
+    const evidenceText = evidenceItems.length > 0
+        ? '• ' + evidenceItems.join('\n• ')
+        : 'No specific patterns detected';
 
-    return SYSTEM_PROMPT
+    // Get current date
+    const currentDate = new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+
+    return template
         .replace('{{personality_name}}', personality.name)
         .replace('{{tagline}}', personality.tagline)
         .replace('{{summary}}', summaryText)
-        .replace('{{evidence}}', '• ' + evidenceText);
+        .replace('{{date_range}}', dateRange)
+        .replace('{{current_date}}', currentDate)
+        .replace('{{evidence}}', evidenceText);
 }
 
 /**
