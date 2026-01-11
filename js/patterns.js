@@ -460,6 +460,151 @@ function generatePatternSummary(streams, patterns) {
     };
 }
 
+/**
+ * Detect patterns from Spotify API data (Quick Snapshot)
+ * Works with limited data: recent 50 tracks + top artists/tracks
+ */
+function detectLitePatterns(liteData) {
+    const { recentStreams, topArtists, topTracks } = liteData;
+
+    // 1. Diversity in recent plays
+    const recentArtists = new Set(recentStreams.map(s => s.artistName));
+    const diversityRatio = recentStreams.length > 0
+        ? recentArtists.size / recentStreams.length
+        : 0;
+
+    const diversity = {
+        uniqueArtists: recentArtists.size,
+        totalPlays: recentStreams.length,
+        ratio: Math.round(diversityRatio * 100),
+        isHighDiversity: diversityRatio > 0.6,
+        isLowDiversity: diversityRatio < 0.3,
+        signal: diversityRatio > 0.6 ? 'explorer' : diversityRatio < 0.3 ? 'repeater' : 'balanced',
+        description: diversityRatio > 0.6
+            ? `${recentArtists.size} different artists in your last ${recentStreams.length} plays — always exploring`
+            : diversityRatio < 0.3
+                ? `Only ${recentArtists.size} artists in your last ${recentStreams.length} plays — deep in the favorites`
+                : `Balanced mix of ${recentArtists.size} artists in recent listening`
+    };
+
+    // 2. Current obsession (most repeated artist in recent)
+    const recentArtistCounts = {};
+    for (const stream of recentStreams) {
+        recentArtistCounts[stream.artistName] = (recentArtistCounts[stream.artistName] || 0) + 1;
+    }
+    const sortedRecent = Object.entries(recentArtistCounts)
+        .sort((a, b) => b[1] - a[1]);
+
+    const currentObsession = sortedRecent[0] ? {
+        artist: sortedRecent[0][0],
+        plays: sortedRecent[0][1],
+        percentage: Math.round((sortedRecent[0][1] / recentStreams.length) * 100),
+        isObsessed: sortedRecent[0][1] >= 10, // 10+ plays in last 50 = obsession
+        description: sortedRecent[0][1] >= 10
+            ? `Currently obsessed with ${sortedRecent[0][0]} — ${sortedRecent[0][1]} plays recently`
+            : `Top recent artist: ${sortedRecent[0][0]}`
+    } : null;
+
+    // 3. Taste stability (compare short-term vs long-term top artists)
+    const shortTermNames = new Set(topArtists.shortTerm.map(a => a.name));
+    const longTermNames = new Set(topArtists.longTerm.map(a => a.name));
+
+    const stableArtists = [...shortTermNames].filter(name => longTermNames.has(name));
+    const stabilityRatio = shortTermNames.size > 0
+        ? stableArtists.length / shortTermNames.size
+        : 0;
+
+    const tasteStability = {
+        shortTermCount: shortTermNames.size,
+        longTermCount: longTermNames.size,
+        stableCount: stableArtists.length,
+        ratio: Math.round(stabilityRatio * 100),
+        isStable: stabilityRatio > 0.5,
+        isShifting: stabilityRatio < 0.2,
+        stableArtists: stableArtists.slice(0, 5),
+        signal: stabilityRatio > 0.5 ? 'stable' : stabilityRatio < 0.2 ? 'shifting' : 'evolving',
+        description: stabilityRatio > 0.5
+            ? `${Math.round(stabilityRatio * 100)}% of your current favorites are all-time favorites — you know your taste`
+            : stabilityRatio < 0.2
+                ? `Only ${Math.round(stabilityRatio * 100)}% overlap with all-time favorites — your taste is shifting`
+                : `Your taste is evolving — ${stableArtists.length} artists remain from your all-time favorites`
+    };
+
+    // 4. Rising stars (in short-term but not long-term)
+    const shortTermOnly = topArtists.shortTerm
+        .filter(a => !longTermNames.has(a.name))
+        .slice(0, 5);
+
+    const risingStars = {
+        artists: shortTermOnly.map(a => ({ name: a.name, genres: a.genres })),
+        count: shortTermOnly.length,
+        hasNew: shortTermOnly.length > 3,
+        description: shortTermOnly.length > 3
+            ? `${shortTermOnly.length} new artists in your rotation: ${shortTermOnly.slice(0, 3).map(a => a.name).join(', ')}`
+            : null
+    };
+
+    // 5. Genre consistency
+    const allGenres = [];
+    topArtists.shortTerm.forEach(a => allGenres.push(...(a.genres || [])));
+    const genreCounts = {};
+    for (const genre of allGenres) {
+        genreCounts[genre] = (genreCounts[genre] || 0) + 1;
+    }
+    const topGenres = Object.entries(genreCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([genre, count]) => ({ genre, count }));
+
+    const genreProfile = {
+        topGenres,
+        hasGenreData: topGenres.length > 0,
+        description: topGenres.length > 0
+            ? `Your current sound: ${topGenres.slice(0, 3).map(g => g.genre).join(', ')}`
+            : null
+    };
+
+    // Collect all evidence
+    const evidence = [];
+    if (diversity.description) evidence.push(diversity.description);
+    if (currentObsession?.description && currentObsession.isObsessed) evidence.push(currentObsession.description);
+    if (tasteStability.description) evidence.push(tasteStability.description);
+    if (risingStars.description) evidence.push(risingStars.description);
+    if (genreProfile.description) evidence.push(genreProfile.description);
+
+    return {
+        diversity,
+        currentObsession,
+        tasteStability,
+        risingStars,
+        genreProfile,
+        evidence,
+        isLiteData: true,
+        summary: generateLiteSummary(liteData, { diversity, tasteStability, topGenres })
+    };
+}
+
+/**
+ * Generate summary for lite data
+ */
+function generateLiteSummary(liteData, patterns) {
+    const { recentStreams, topArtists, topTracks, profile } = liteData;
+
+    return {
+        displayName: profile?.displayName || 'Music Lover',
+        recentTrackCount: recentStreams.length,
+        topArtistCount: topArtists.shortTerm.length,
+        topTrackCount: topTracks.shortTerm.length,
+        topArtists: topArtists.shortTerm.slice(0, 5).map(a => a.name),
+        topTracks: topTracks.shortTerm.slice(0, 5).map(t => `${t.name} by ${t.artist}`),
+        topGenres: patterns.topGenres.slice(0, 3).map(g => g.genre),
+        diversitySignal: patterns.diversity.signal,
+        stabilitySignal: patterns.tasteStability.signal,
+        isLiteData: true,
+        fetchedAt: liteData.fetchedAt
+    };
+}
+
 // Public API
 window.Patterns = {
     detectComfortDiscoveryRatio,
@@ -470,5 +615,6 @@ window.Patterns = {
     detectDiscoveryExplosions,
     detectMoodSearching,
     detectTrueFavorites,
-    detectAllPatterns
+    detectAllPatterns,
+    detectLitePatterns
 };

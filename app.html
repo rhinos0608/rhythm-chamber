@@ -22,7 +22,11 @@
         <!-- Header -->
         <header class="app-header">
             <h1><a href="index.html">🎵 Rhythm Chamber</a></h1>
-            <button class="btn btn-secondary" id="reset-btn" style="display: none;">Start Over</button>
+            <div class="header-actions">
+                <button class="settings-btn" id="settings-btn" onclick="Settings.showSettingsModal()"
+                    title="Settings">⚙️</button>
+                <button class="btn btn-secondary" id="reset-btn" style="display: none;">Start Over</button>
+            </div>
         </header>
 
         <!-- Main Content -->
@@ -37,6 +41,17 @@
                     onclick="document.getElementById('file-input').click()">
                     Choose File
                 </button>
+
+                <!-- Spotify Quick Snapshot Option -->
+                <div class="upload-alternatives">
+                    <div class="divider-text">or get a quick snapshot</div>
+                    <button class="btn btn-spotify" id="spotify-connect-btn">
+                        <span>🎵</span> Connect Spotify
+                    </button>
+                    <p style="margin-top: var(--space-sm); font-size: 0.8rem; color: var(--text-muted);">
+                        Instant preview from your recent listening
+                    </p>
+                </div>
             </div>
 
             <!-- Processing State -->
@@ -45,7 +60,7 @@
                 <p class="progress-text" id="progress-text">Reading your listening history...</p>
             </div>
 
-            <!-- Personality Reveal -->
+            <!-- Personality Reveal (Full Data) -->
             <section class="reveal-section" id="reveal-section">
                 <div class="personality-reveal">
                     <div class="emoji" id="personality-emoji">🏛️</div>
@@ -69,6 +84,54 @@
                             <span>💬</span> Explore in Chat
                         </button>
                         <button class="btn btn-secondary" id="share-card-btn">
+                            <span>↗️</span> Share Card
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Lite Reveal Section (Spotify API Data) -->
+            <section class="lite-reveal-section" id="lite-reveal-section">
+                <div class="personality-reveal">
+                    <div class="lite-badge">
+                        <span>⚡</span> Quick Snapshot
+                    </div>
+
+                    <div class="emoji" id="lite-personality-emoji">🧭</div>
+                    <h2 class="personality-type">Your Current Vibe:</h2>
+                    <h3 class="gradient-text" id="lite-personality-name"
+                        style="font-size: 2rem; margin-bottom: var(--space-lg);">The Sound Explorer</h3>
+                    <p class="personality-description" id="lite-personality-description">
+                        Even your recent listens are diverse. You're constantly discovering and sampling new sounds.
+                    </p>
+
+                    <!-- Top Artists Display -->
+                    <div class="genre-tags" id="lite-genre-tags">
+                        <!-- Dynamically populated with genre tags -->
+                    </div>
+
+                    <div class="evidence-list" id="lite-evidence-list">
+                        <h4>What We Found</h4>
+                        <ul id="lite-evidence-items">
+                            <!-- Dynamically populated -->
+                        </ul>
+                    </div>
+
+                    <!-- Upsell Card -->
+                    <div class="upsell-card">
+                        <h4>✨ Want the full picture?</h4>
+                        <p>Upload your complete Spotify history to discover your emotional eras, ghosted artists, life
+                            events, and deeper patterns.</p>
+                        <button class="btn btn-primary" id="lite-upload-full-btn">
+                            <span>📁</span> Upload Full History
+                        </button>
+                    </div>
+
+                    <div class="reveal-actions" style="margin-top: var(--space-xl);">
+                        <button class="btn btn-primary" id="lite-explore-chat-btn">
+                            <span>💬</span> Explore in Chat
+                        </button>
+                        <button class="btn btn-secondary" id="lite-share-card-btn">
                             <span>↗️</span> Share Card
                         </button>
                     </div>
@@ -122,11 +185,14 @@
 
     <!-- Scripts -->
     <script src="js/config.js"></script>
+    <script src="js/settings.js"></script>
+    <script src="js/spotify.js"></script>
     <script src="js/prompts.js"></script>
     <script src="js/storage.js"></script>
     <script src="js/parser.js"></script>
     <script src="js/patterns.js"></script>
     <script src="js/personality.js"></script>
+    <script src="js/data-query.js"></script>
     <script src="js/chat.js"></script>
     <script src="js/cards.js"></script>
     <script src="js/app.js"></script>

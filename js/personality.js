@@ -197,10 +197,153 @@ function generateRevealInsight(personality, patterns) {
     };
 }
 
+// ==========================================
+// Lite Personality Classification (Quick Snapshot)
+// ==========================================
+
+/**
+ * Simplified personality types for limited API data
+ */
+const LITE_PERSONALITY_TYPES = {
+    current_obsessor: {
+        name: 'The Current Obsessor',
+        emoji: '🎯',
+        tagline: 'Deep in one sound right now.',
+        description: 'You\'re currently fixated on specific artists. When something clicks, you go ALL in.',
+        signals: ['high repeat in recent', 'focused listening']
+    },
+    sound_explorer: {
+        name: 'The Sound Explorer',
+        emoji: '🧭',
+        tagline: 'Always seeking new territory.',
+        description: 'Even your recent listens are diverse. You\'re constantly discovering and sampling new sounds.',
+        signals: ['high diversity', 'many artists in recent plays']
+    },
+    taste_keeper: {
+        name: 'The Taste Keeper',
+        emoji: '🏠',
+        tagline: 'You know exactly what you love.',
+        description: 'Your current favorites match your all-time favorites. You\'ve found your sound and you own it.',
+        signals: ['stable taste', 'consistent over time']
+    },
+    taste_shifter: {
+        name: 'The Taste Shifter',
+        emoji: '🌊',
+        tagline: 'Your sound is evolving.',
+        description: 'What you\'re into now is different from your history. Your musical journey is in motion.',
+        signals: ['shifting taste', 'new discoveries']
+    }
+};
+
+/**
+ * Classify personality from lite patterns
+ */
+function classifyLitePersonality(litePatterns) {
+    const { diversity, currentObsession, tasteStability, risingStars } = litePatterns;
+
+    const scores = {
+        current_obsessor: 0,
+        sound_explorer: 0,
+        taste_keeper: 0,
+        taste_shifter: 0
+    };
+
+    const evidence = {
+        current_obsessor: [],
+        sound_explorer: [],
+        taste_keeper: [],
+        taste_shifter: []
+    };
+
+    // Diversity signals
+    if (diversity.isLowDiversity) {
+        scores.current_obsessor += 3;
+        evidence.current_obsessor.push(diversity.description);
+    }
+    if (diversity.isHighDiversity) {
+        scores.sound_explorer += 3;
+        evidence.sound_explorer.push(diversity.description);
+    }
+
+    // Current obsession
+    if (currentObsession?.isObsessed) {
+        scores.current_obsessor += 2;
+        evidence.current_obsessor.push(currentObsession.description);
+    }
+
+    // Taste stability
+    if (tasteStability.isStable) {
+        scores.taste_keeper += 3;
+        evidence.taste_keeper.push(tasteStability.description);
+    }
+    if (tasteStability.isShifting) {
+        scores.taste_shifter += 3;
+        evidence.taste_shifter.push(tasteStability.description);
+    }
+
+    // Rising stars
+    if (risingStars.hasNew) {
+        scores.taste_shifter += 1;
+        scores.sound_explorer += 1;
+        if (risingStars.description) {
+            evidence.taste_shifter.push(risingStars.description);
+        }
+    }
+
+    // Sort by score
+    const ranked = Object.entries(scores)
+        .sort((a, b) => b[1] - a[1]);
+
+    const primaryType = ranked[0][0];
+    const primaryScore = ranked[0][1];
+    const typeInfo = LITE_PERSONALITY_TYPES[primaryType];
+    const primaryEvidence = evidence[primaryType];
+
+    // Collect all notable evidence
+    const allEvidence = [];
+    for (const [type, items] of Object.entries(evidence)) {
+        if (items.length > 0 && scores[type] > 0) {
+            allEvidence.push(...items);
+        }
+    }
+
+    return {
+        type: primaryType,
+        name: typeInfo.name,
+        emoji: typeInfo.emoji,
+        tagline: typeInfo.tagline,
+        description: typeInfo.description,
+        score: primaryScore,
+        confidence: calculateLiteConfidence(scores),
+        evidence: primaryEvidence,
+        allEvidence: [...new Set(allEvidence)].slice(0, 4),
+        scores,
+        isLitePersonality: true,
+        upsellMessage: 'This is a snapshot based on your recent activity. Upload your full Spotify history for the complete picture — eras, ghosted artists, life events, and more.'
+    };
+}
+
+/**
+ * Calculate confidence for lite classification
+ */
+function calculateLiteConfidence(scores) {
+    const values = Object.values(scores);
+    const max = Math.max(...values);
+    const sum = values.reduce((a, b) => a + b, 0);
+
+    if (sum === 0) return 0;
+
+    // Lower confidence than full analysis (since limited data)
+    const dominance = max / sum;
+    return Math.round(dominance * 80); // Cap at 80% for lite
+}
+
 // Public API
 window.Personality = {
     TYPES: PERSONALITY_TYPES,
+    LITE_TYPES: LITE_PERSONALITY_TYPES,
     scorePersonality,
     classifyPersonality,
+    classifyLitePersonality,
     generateRevealInsight
 };

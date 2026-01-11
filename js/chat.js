@@ -3,20 +3,25 @@
  * Handles conversation with OpenRouter API
  * 
  * System prompts are defined in prompts.js for easy editing
+ * Data queries are handled by data-query.js
  */
 
 let conversationHistory = [];
 let userContext = null;
+let streamsData = null;  // Actual streaming data for queries
 
 /**
- * Initialize chat with user context
+ * Initialize chat with user context and streams data
  */
-function initChat(personality, patterns, summary) {
+function initChat(personality, patterns, summary, streams = null) {
     userContext = {
         personality,
         patterns,
         summary
     };
+
+    // Store streams for data queries
+    streamsData = streams;
 
     conversationHistory = [];
 
@@ -26,7 +31,7 @@ function initChat(personality, patterns, summary) {
 /**
  * Build system prompt with user data
  */
-function buildSystemPrompt() {
+function buildSystemPrompt(queryContext = null) {
     const template = window.Prompts?.system;
     if (!template || !userContext) return '';
 
@@ -55,13 +60,159 @@ function buildSystemPrompt() {
         day: 'numeric'
     });
 
-    return template
+    let prompt = template
         .replace('{{personality_name}}', personality.name)
         .replace('{{tagline}}', personality.tagline)
         .replace('{{summary}}', summaryText)
         .replace('{{date_range}}', dateRange)
         .replace('{{current_date}}', currentDate)
         .replace('{{evidence}}', evidenceText);
+
+    // Append query context if available
+    if (queryContext) {
+        prompt += `\n\nRELEVANT DATA FOR THIS QUERY:\n${queryContext}`;
+    }
+
+    return prompt;
+}
+
+/**
+ * Analyze user message and generate relevant data context
+ */
+function generateQueryContext(message) {
+    if (!streamsData || !window.DataQuery) {
+        return null;
+    }
+
+    const contextParts = [];
+
+    // Check for date/time period queries
+    const dateParams = window.DataQuery.parseDateQuery(message);
+    if (dateParams) {
+        const periodData = window.DataQuery.queryByTimePeriod(streamsData, dateParams);
+        if (periodData.found) {
+            const period = dateParams.month
+                ? `${getMonthName(dateParams.month)} ${dateParams.year}`
+                : `${dateParams.year}`;
+
+            contextParts.push(`DATA FOR ${period.toUpperCase()}:`);
+            contextParts.push(`- Total plays: ${periodData.totalPlays}`);
+            contextParts.push(`- Listening time: ${periodData.totalHours} hours`);
+            contextParts.push(`- Unique artists: ${periodData.uniqueArtists}`);
+            contextParts.push(`- Unique tracks: ${periodData.uniqueTracks}`);
+
+            if (periodData.topArtists.length > 0) {
+                contextParts.push(`\nTop Artists:`);
+                periodData.topArtists.slice(0, 5).forEach((a, i) => {
+                    contextParts.push(`  ${i + 1}. ${a.name} (${a.plays} plays)`);
+                });
+            }
+
+            if (periodData.topTracks.length > 0) {
+                contextParts.push(`\nTop Tracks:`);
+                periodData.topTracks.slice(0, 5).forEach((t, i) => {
+                    contextParts.push(`  ${i + 1}. "${t.name}" by ${t.artist} (${t.plays} plays)`);
+                });
+            }
+        } else {
+            contextParts.push(`Note: No streaming data found for this period.`);
+        }
+    }
+
+    // Check for artist queries
+    const artistPatterns = [
+        /(?:about|listening to|played|play|heard)\s+([A-Za-z][A-Za-z\s&.']+?)(?:\s+in|\s+during|\?|$)/i,
+        /(?:when did i|did i listen to|did i play)\s+([A-Za-z][A-Za-z\s&.']+?)(?:\s+in|\?|$)/i,
+        /([A-Za-z][A-Za-z\s&.']+?)\s+(?:plays?|streams?|listening)/i
+    ];
+
+    for (const pattern of artistPatterns) {
+        const match = message.match(pattern);
+        if (match) {
+            const artistName = match[1].trim();
+            if (artistName.length > 2 && !isCommonWord(artistName)) {
+                const artistData = window.DataQuery.findPeakListeningPeriod(streamsData, artistName);
+                if (artistData.found) {
+                    contextParts.push(`\nDATA FOR ARTIST "${artistData.artistName}":`);
+                    contextParts.push(`- Total plays: ${artistData.totalPlays}`);
+                    contextParts.push(`- First listened: ${artistData.firstListen}`);
+                    contextParts.push(`- Last listened: ${artistData.lastListen}`);
+                    contextParts.push(`- Peak period: ${artistData.peakPeriod} (${artistData.peakPlays} plays)`);
+
+                    if (artistData.monthlyBreakdown.length > 1) {
+                        contextParts.push(`\nMonthly breakdown:`);
+                        artistData.monthlyBreakdown.forEach(m => {
+                            contextParts.push(`  - ${m.period}: ${m.plays} plays`);
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Check for comparison queries
+    if (message.toLowerCase().includes('compare') || message.toLowerCase().includes('vs') ||
+        message.toLowerCase().includes('versus') || message.toLowerCase().includes('different')) {
+        const years = message.match(/20\d{2}/g);
+        if (years && years.length >= 2) {
+            const comparison = window.DataQuery.comparePeriods(
+                streamsData,
+                { year: parseInt(years[0]) },
+                { year: parseInt(years[1]) }
+            );
+            if (comparison.found) {
+                contextParts.push(`\nCOMPARISON ${years[0]} vs ${years[1]}:`);
+                contextParts.push(`${years[0]}: ${comparison.period1.totalHours}h, ${comparison.period1.uniqueArtists} artists`);
+                contextParts.push(`${years[1]}: ${comparison.period2.totalHours}h, ${comparison.period2.uniqueArtists} artists`);
+
+                if (comparison.newArtists.length > 0) {
+                    contextParts.push(`\nNew in ${years[1]}: ${comparison.newArtists.map(a => a.name).join(', ')}`);
+                }
+                if (comparison.droppedArtists.length > 0) {
+                    contextParts.push(`Dropped from ${years[0]}: ${comparison.droppedArtists.map(a => a.name).join(', ')}`);
+                }
+            }
+        }
+    }
+
+    // Check for "most" queries (most listened, favorite, top)
+    if (/\b(most|favorite|top|biggest)\b/i.test(message)) {
+        // Already covered by evidence, but add overall stats if asking about all time
+        if (/\b(all.?time|ever|overall|total)\b/i.test(message)) {
+            const overall = window.DataQuery.queryByTimePeriod(streamsData, {});
+            if (overall.found) {
+                contextParts.push(`\nOVERALL TOP ARTISTS:`);
+                overall.topArtists.slice(0, 10).forEach((a, i) => {
+                    contextParts.push(`  ${i + 1}. ${a.name} (${a.plays} plays)`);
+                });
+            }
+        }
+    }
+
+    return contextParts.length > 0 ? contextParts.join('\n') : null;
+}
+
+/**
+ * Check if a word is too common to be an artist name
+ */
+function isCommonWord(word) {
+    const commonWords = new Set([
+        'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+        'of', 'with', 'by', 'from', 'was', 'were', 'been', 'have', 'has',
+        'did', 'does', 'do', 'is', 'are', 'am', 'what', 'when', 'where',
+        'who', 'why', 'how', 'this', 'that', 'these', 'those', 'my', 'your',
+        'music', 'listening', 'listen', 'played', 'play', 'heard', 'hear'
+    ]);
+    return commonWords.has(word.toLowerCase());
+}
+
+/**
+ * Get month name from number
+ */
+function getMonthName(monthNum) {
+    const months = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+    return months[monthNum - 1] || 'Unknown';
 }
 
 /**
@@ -72,15 +223,18 @@ async function sendMessage(message, apiKey = null) {
         throw new Error('Chat not initialized. Call initChat first.');
     }
 
+    // Generate query context based on message
+    const queryContext = generateQueryContext(message);
+
     // Add user message to history
     conversationHistory.push({
         role: 'user',
         content: message
     });
 
-    // Build messages array
+    // Build messages array with dynamic system prompt
     const messages = [
-        { role: 'system', content: buildSystemPrompt() },
+        { role: 'system', content: buildSystemPrompt(queryContext) },
         ...conversationHistory
     ];
 
@@ -95,7 +249,7 @@ async function sendMessage(message, apiKey = null) {
 
     if (!key || key === 'your-api-key-here') {
         // Return a helpful message if no API key configured
-        const fallbackResponse = generateFallbackResponse(message);
+        const fallbackResponse = generateFallbackResponse(message, queryContext);
         conversationHistory.push({
             role: 'assistant',
             content: fallbackResponse
@@ -138,7 +292,7 @@ async function sendMessage(message, apiKey = null) {
     } catch (error) {
         console.error('Chat error:', error);
 
-        const fallbackResponse = generateFallbackResponse(message);
+        const fallbackResponse = generateFallbackResponse(message, queryContext);
         conversationHistory.push({
             role: 'assistant',
             content: fallbackResponse
@@ -149,13 +303,57 @@ async function sendMessage(message, apiKey = null) {
 
 /**
  * Generate a fallback response when API is unavailable
+ * Now uses query context to provide data-driven answers
  */
-function generateFallbackResponse(message) {
+function generateFallbackResponse(message, queryContext) {
     const { personality, patterns } = userContext;
     const lowerMessage = message.toLowerCase();
 
-    // Check for common questions
-    if (lowerMessage.includes('2020') || lowerMessage.includes('2021') || lowerMessage.includes('2022')) {
+    // If we have query context, use it to build a response
+    if (queryContext) {
+        // Parse the context to extract key info
+        const lines = queryContext.split('\n').filter(l => l.trim());
+
+        // Check for time period data
+        if (queryContext.includes('DATA FOR')) {
+            const topArtistMatch = queryContext.match(/1\. ([^\(]+) \((\d+) plays\)/);
+            const hoursMatch = queryContext.match(/Listening time: (\d+) hours/);
+            const periodMatch = queryContext.match(/DATA FOR ([^:]+):/);
+
+            if (periodMatch && topArtistMatch) {
+                const period = periodMatch[1];
+                const topArtist = topArtistMatch[1].trim();
+                const plays = topArtistMatch[2];
+                const hours = hoursMatch ? hoursMatch[1] : 'many';
+
+                return `In ${period}, you listened to ${hours} hours of music. Your top artist was ${topArtist} with ${plays} plays. As ${personality.name}, this kind of deep listening is typical of how you engage with music.\n\nWant to explore what else was happening in that period?`;
+            }
+        }
+
+        // Check for artist data
+        if (queryContext.includes('DATA FOR ARTIST')) {
+            const artistMatch = queryContext.match(/DATA FOR ARTIST "([^"]+)":/);
+            const playsMatch = queryContext.match(/Total plays: (\d+)/);
+            const peakMatch = queryContext.match(/Peak period: ([^(]+)/);
+
+            if (artistMatch && playsMatch) {
+                const artist = artistMatch[1];
+                const plays = playsMatch[1];
+                const peak = peakMatch ? peakMatch[1].trim() : null;
+
+                let response = `You've played ${artist} ${plays} times total.`;
+                if (peak) {
+                    response += ` Your peak listening period was ${peak}.`;
+                }
+                response += `\n\nThis fits your ${personality.name} profile — ${personality.tagline.toLowerCase()}`;
+                return response;
+            }
+        }
+    }
+
+    // Existing fallback logic for common patterns
+    if (lowerMessage.includes('2020') || lowerMessage.includes('2021') ||
+        lowerMessage.includes('2022') || lowerMessage.includes('2023')) {
         const year = message.match(/20\d{2}/)?.[0];
         if (patterns.eras && patterns.eras.eras.length > 0) {
             const era = patterns.eras.eras.find(e => e.start.includes(year));
@@ -199,10 +397,19 @@ function getHistory() {
     return [...conversationHistory];
 }
 
+/**
+ * Set streams data after initialization (for compatibility)
+ */
+function setStreamsData(streams) {
+    streamsData = streams;
+}
+
 // Public API
 window.Chat = {
     initChat,
     sendMessage,
     clearHistory,
-    getHistory
+    getHistory,
+    setStreamsData
 };
+
