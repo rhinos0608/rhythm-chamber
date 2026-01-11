@@ -387,78 +387,23 @@ function showReveal() {
 function populateScoreBreakdown(personality) {
     const scoreBreakdown = document.getElementById('score-breakdown');
     const scoreTotal = document.getElementById('score-total');
+    const explainer = document.getElementById('detection-explainer');
 
-    if (!personality.scores) {
-        // Hide explainer if no scores available
-        document.getElementById('detection-explainer').style.display = 'none';
+    if (!personality.breakdown || personality.breakdown.length === 0) {
+        // Hide explainer if no breakdown available
+        explainer.style.display = 'none';
         return;
     }
 
-    const patterns = appState.patterns || {};
-    const scores = personality.scores;
-    const breakdownItems = [];
+    explainer.style.display = '';
 
-    // Map each scored pattern to a human-readable explanation
-    if (patterns.eras?.hasEras) {
-        breakdownItems.push({
-            label: `Eras: ${patterns.eras.count || 0} detected`,
-            points: 3,
-            active: true
-        });
-    } else {
-        breakdownItems.push({ label: 'Eras: No distinct periods found', points: 0, active: false });
-    }
-
-    if (patterns.comfortDiscovery) {
-        const ratio = patterns.comfortDiscovery.ratio || 0;
-        breakdownItems.push({
-            label: `Comfort ratio: ${ratio.toFixed(0)} plays/artist`,
-            points: ratio > 50 ? 3 : (ratio < 10 ? 3 : 0),
-            active: ratio > 50 || ratio < 10
-        });
-    }
-
-    if (patterns.timePatterns?.isMoodEngineer) {
-        breakdownItems.push({
-            label: 'Time patterns: Morning ≠ Evening',
-            points: 3,
-            active: true
-        });
-    } else {
-        breakdownItems.push({ label: 'Time patterns: Consistent throughout day', points: 0, active: false });
-    }
-
-    if (patterns.socialPatterns?.isSocialChameleon) {
-        breakdownItems.push({
-            label: 'Social patterns: Weekday ≠ Weekend',
-            points: 2,
-            active: true
-        });
-    }
-
-    if (patterns.ghostedArtists?.hasGhosted) {
-        breakdownItems.push({
-            label: `Ghosted artists: ${patterns.ghostedArtists.ghosted?.length || 0} detected`,
-            points: 2,
-            active: true
-        });
-    }
-
-    if (patterns.moodSearching?.hasMoodSearching) {
-        breakdownItems.push({
-            label: `Mood searching: ${patterns.moodSearching.sessions || 0} rapid-skip sessions`,
-            points: 2,
-            active: true
-        });
-    }
-
-    // Generate HTML
-    scoreBreakdown.innerHTML = breakdownItems.map(item =>
-        `<li class="${item.active ? 'score-positive' : 'score-zero'}">${item.label} (${item.active ? '+' + item.points : '0'} points)</li>`
+    // Use the pre-computed breakdown from personality module
+    scoreBreakdown.innerHTML = personality.breakdown.map(item =>
+        `<li class="${item.points > 0 ? 'score-positive' : 'score-zero'}">${item.label} (${item.points > 0 ? '+' + item.points : '0'} points)</li>`
     ).join('');
 
-    // Calculate total
-    const totalPoints = Object.values(scores).reduce((a, b) => a + b, 0);
+    // Calculate total from breakdown
+    const totalPoints = personality.breakdown.reduce((sum, item) => sum + item.points, 0);
     scoreTotal.textContent = `Total: ${totalPoints} points → ${personality.name}`;
 }
 
