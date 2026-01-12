@@ -7,7 +7,7 @@
     <title>Rhythm Chamber — Analyze</title>
     <meta name="description" content="Upload your Spotify data and discover your music personality.">
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://accounts.spotify.com https://api.spotify.com https://openrouter.ai; img-src 'self' data: https://i.scdn.co;">
+        content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://accounts.spotify.com https://api.spotify.com https://openrouter.ai http://localhost:11434 http://localhost:1234 http://127.0.0.1:11434 http://127.0.0.1:1234; img-src 'self' data: https://i.scdn.co;">
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -31,6 +31,8 @@
             <div class="header-actions">
                 <button class="settings-btn" id="settings-btn" onclick="Settings.showSettingsModal()"
                     title="Settings">⚙️</button>
+                <button class="btn btn-secondary" id="privacy-dashboard-btn" onclick="showPrivacyDashboard()"
+                    title="Privacy Dashboard">🔒</button>
                 <button class="btn btn-secondary" id="reset-btn" style="display: none;">Start Over</button>
             </div>
         </header>
@@ -163,7 +165,7 @@
                             <h4>✨ Want the full picture?</h4>
                             <p>Upload your complete Spotify history to discover your emotional eras, artists you've
                                 stopped
-                                listening, life
+                                listening to, life
                                 events, and deeper patterns.</p>
                             <button class="btn btn-primary" id="lite-upload-full-btn">
                                 <span>📁</span> Upload Full History
@@ -200,9 +202,9 @@
                         <button class="suggestion-chip" data-question="Which artists did I stop listening to?">Which
                             artists
                             did I stop listening to?</button>
-                        <button class="suggestion-chip" data-question="Which artist do I really like the most?">Which
+                        <button class="suggestion-chip" data-question="Which artist did I listen to the least?">Which
                             artist
-                            do I really like the most?</button>
+                            did I listen to the least?</button>
                     </div>
 
                     <div class="chat-input-container">
@@ -280,6 +282,27 @@
                 </div>
             </div>
         </div>
+
+        <!-- Privacy Dashboard Modal -->
+        <div class="modal-overlay" id="privacy-dashboard-modal" style="display: none;">
+            <div class="modal-content" style="max-width: 600px; text-align: left;">
+                <h3 style="margin-bottom: var(--space-md);">🔒 Privacy Health Check</h3>
+                <div class="privacy-dashboard" id="privacy-dashboard-content">
+                    <p><strong>Raw streams:</strong> <span id="raw-streams-count">-</span></p>
+                    <p><strong>Aggregated patterns:</strong> <span id="patterns-summary">-</span></p>
+                    <div class="token-status" id="token-status">
+                        <p><strong>Spotify Tokens:</strong> <span id="spotify-token-status">-</span></p>
+                    </div>
+                    <div style="margin-top: var(--space-lg); display: flex; gap: var(--space-md); flex-wrap: wrap;">
+                        <button class="btn btn-secondary" onclick="clearSensitiveData()">Clear Raw Data</button>
+                        <button class="btn btn-secondary" onclick="document.getElementById('privacy-dashboard-modal').style.display='none'">Close</button>
+                    </div>
+                    <p style="margin-top: var(--space-md); font-size: 0.85rem; color: var(--text-muted);">
+                        <small>All data is stored locally in your browser. Nothing is sent to any server.</small>
+                    </p>
+                </div>
+            </div>
+        </div>
     </div>
 
 
@@ -298,6 +321,7 @@
     <script src="js/personality.js"></script>
     <script src="js/data-query.js"></script>
     <script src="js/functions.js"></script>
+    <script src="js/ollama.js"></script>
     <script src="js/chat.js"></script>
     <script src="js/cards.js"></script>
     <script src="js/app.js"></script>

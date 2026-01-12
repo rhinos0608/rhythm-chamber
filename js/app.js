@@ -17,6 +17,7 @@ let appState = {
 };
 
 let activeWorker = null; // Track active worker for cancellation
+let workerAbortController = null; // NEW: Per-reset abort controller
 
 // DOM Elements
 const uploadZone = document.getElementById('upload-zone');
@@ -348,6 +349,18 @@ async function handleSpotifyCallback(code) {
         // Exchange code for token
         await Spotify.handleCallback(code);
 
+        // NEW: Start background token refresh for long operations
+        Spotify.startBackgroundRefresh();
+
+        // NEW: Validate session before fetching
+        if (!await Spotify.ensureValidToken()) {
+            showToast('Session expired. Reconnecting...');
+            const refreshed = await Spotify.refreshToken();
+            if (!refreshed) {
+                throw new Error('Session expired. Please reconnect to Spotify.');
+            }
+        }
+
         // Fetch data from Spotify
         const spotifyData = await Spotify.fetchSnapshotData((message) => {
             progressText.textContent = message;
@@ -358,6 +371,16 @@ async function handleSpotifyCallback(code) {
         await new Promise(r => setTimeout(r, 10));
 
         appState.liteData = Spotify.transformForAnalysis(spotifyData);
+
+        // NEW: Show instant insight immediately
+        progressText.textContent = 'Generating instant insight...';
+        const instantInsight = Patterns.detectImmediateVibe(appState.liteData);
+        
+        // Update UI with instant insight
+        progressText.innerHTML = `Quick snapshot ready!<br><br>${instantInsight}<br><br><small>Full analysis requires complete history for accurate personality detection</small>`;
+        
+        // Wait a moment for user to read
+        await new Promise(r => setTimeout(r, 2000));
 
         // Detect patterns from lite data
         progressText.textContent = 'Detecting your current vibe...';
@@ -394,9 +417,16 @@ async function processFile(file) {
     showProcessing();
     appState.isLiteMode = false;
 
+    // NEW: Create abort controller for this parsing session
+    if (workerAbortController) {
+        workerAbortController.abort();
+    }
+    workerAbortController = new AbortController();
+
     // Terminate any existing worker
     if (activeWorker) {
         activeWorker.terminate();
+        activeWorker = null;
     }
 
     // Use Web Worker for parsing (keeps UI responsive)
@@ -406,7 +436,7 @@ async function processFile(file) {
     Storage.clearStreams();
 
     activeWorker.onmessage = async (e) => {
-        const { type, message, streams, chunks, stats, error, partialStreams, fileIndex, totalFiles } = e.data;
+        const { type, message, streams, chunks, stats, error, partialStreams, fileIndex, totalFiles, usage } = e.data;
 
         if (type === 'progress') {
             progressText.textContent = message;
@@ -420,6 +450,19 @@ async function processFile(file) {
                 activeWorker.terminate();
                 activeWorker = null;
             }
+        }
+
+        // NEW: Handle memory warnings from worker
+        if (type === 'memory_warning') {
+            const usagePercent = Math.round(usage * 100);
+            progressText.innerHTML = `Low on memory (${usagePercent}%) - pausing to avoid crash...`;
+            console.warn(`[App] Memory warning: ${usagePercent}% usage`);
+        }
+
+        // NEW: Handle memory resumed
+        if (type === 'memory_resumed') {
+            progressText.textContent = 'Resuming processing...';
+            console.log('[App] Memory usage normalized, resuming');
         }
 
         // Handle incremental saves from partial data
@@ -480,6 +523,15 @@ async function processFile(file) {
             activeWorker = null;
         }
     };
+
+    // NEW: Listen for abort signal
+    workerAbortController.signal.addEventListener('abort', () => {
+        if (activeWorker) {
+            activeWorker.terminate();
+            activeWorker = null;
+            console.log('[App] Worker aborted via signal');
+        }
+    });
 
     // Start parsing
     activeWorker.postMessage({ type: 'parse', file });
@@ -930,87 +982,181 @@ function hideResetConfirmModal() {
     }
 }
 
+/**
+ * NEW: Wait for all workers to abort with timeout
+ * This is the core of the safe reset flow
+ */
+async function $waitUntilAllWorkersAbort(abortController, timeoutMs) {
+    const start = Date.now();
+    
+    // Send abort signal to worker
+    if (activeWorker) {
+        try {
+            activeWorker.postMessage({ type: 'abort' });
+        } catch (e) {
+            // Worker may already be terminated
+        }
+    }
+
+    // Wait for worker to acknowledge or timeout
+    while (Date.now() - start < timeoutMs) {
+        if (!activeWorker) {
+            // Worker already terminated
+            return true;
+        }
+        
+        // Check if worker is still responding
+        try {
+            // If worker is still active after 100ms, it's not responding to abort
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // If still active, force terminate
+            if (activeWorker) {
+                console.log('[App] Worker not responding to abort, forcing termination');
+                activeWorker.terminate();
+                activeWorker = null;
+                return true;
+            }
+        } catch (e) {
+            return true;
+        }
+    }
+
+    // Timeout reached
+    console.warn('[App] Worker abort timeout reached');
+    if (activeWorker) {
+        activeWorker.terminate();
+        activeWorker = null;
+    }
+    return false;
+}
+
 async function executeReset() {
     hideResetConfirmModal();
 
-    // HNW Fix: Enhanced worker termination with message queue drain
-    // 1. Stop background refresh first (prevents new token operations)
-    // 2. Mark worker as invalid so any in-flight messages are ignored  
-    // 3. Send abort signal to worker (graceful shutdown)
-    // 4. Wait for message queue drain
-    // 5. Force terminate after drain window
-    // 6. Clear storage and security state
-
-    // Stop background token refresh if running
-    if (Spotify.stopBackgroundRefresh) {
-        Spotify.stopBackgroundRefresh();
-    }
-
-    if (activeWorker) {
-        const workerRef = activeWorker;
-        activeWorker = null; // Mark as invalid immediately
-
-        // Nullify handlers first to prevent race with in-flight messages
-        workerRef.onmessage = null;
-        workerRef.onerror = null;
-
-        // Send abort signal to worker (if supported)
-        try {
-            workerRef.postMessage({ type: 'abort' });
-        } catch (e) {
-            // Worker may already be terminated, ignore
+    // NEW: Safe reset flow with AbortController
+    const abortController = new AbortController();
+    
+    try {
+        // Step 1: Stop background operations
+        if (Spotify.stopBackgroundRefresh) {
+            Spotify.stopBackgroundRefresh();
         }
 
-        // Wait for message queue drain (500ms is sufficient for most cases)
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Step 2: Cancel all pending operations with timeout
+        progressText.textContent = 'Cancelling operations...';
+        await $waitUntilAllWorkersAbort(abortController, 30_000); // 30s max
 
-        // Force terminate after drain window
-        try {
-            workerRef.terminate();
-        } catch (e) {
-            // Already terminated, ignore
+        // Step 3: Now safe to clear storage
+        progressText.textContent = 'Clearing data...';
+        await Storage.clear();
+        await Storage.clearAllSessions();
+
+        // Step 4: Clear Spotify tokens and security bindings
+        Spotify.clearTokens();
+
+        // Step 5: Clear any RAG checkpoints
+        if (window.RAG?.clearCheckpoint) {
+            window.RAG.clearCheckpoint();
+        }
+
+        // Step 6: Reset app state
+        appState = {
+            streams: null,
+            chunks: null,
+            patterns: null,
+            personality: null,
+            liteData: null,
+            litePatterns: null,
+            isLiteMode: false,
+            view: 'upload',
+            sidebarCollapsed: appState.sidebarCollapsed  // Preserve sidebar state
+        };
+
+        Chat.clearHistory();
+        localStorage.removeItem('rhythm_chamber_current_session');
+
+        console.log('[App] Reset complete');
+        showUpload();
+    } catch (error) {
+        console.error('[App] Reset failed:', error);
+        progressText.textContent = `Reset error: ${error.message}`;
+        // Still try to clear what we can
+        await Storage.clear();
+        showUpload();
+    } finally {
+        // Cleanup
+        if (workerAbortController) {
+            workerAbortController.abort();
+            workerAbortController = null;
         }
     }
-
-    // Clear storage
-    await Storage.clear();
-    await Storage.clearAllSessions();  // Clear all chat sessions
-
-    // Clear Spotify tokens and security bindings
-    Spotify.clearTokens();
-
-    // Clear any RAG checkpoints
-    if (window.RAG?.clearCheckpoint) {
-        window.RAG.clearCheckpoint();
-    }
-
-    // Reset app state
-    appState = {
-        streams: null,
-        chunks: null,
-        patterns: null,
-        personality: null,
-        liteData: null,
-        litePatterns: null,
-        isLiteMode: false,
-        view: 'upload',
-        sidebarCollapsed: appState.sidebarCollapsed  // Preserve sidebar state
-    };
-
-    Chat.clearHistory();
-    localStorage.removeItem('rhythm_chamber_current_session');
-
-    console.log('[App] Reset complete');
-    showUpload();
 }
 
 function handleReset() {
     showResetConfirmModal();
 }
 
+// ==========================================
+// Privacy Dashboard Functions
+// ==========================================
+
+function showToast(message, duration = 3000) {
+    // Create toast element if it doesn't exist
+    let toast = document.getElementById('toast-notification');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toast-notification';
+        toast.className = 'toast-notification';
+        document.body.appendChild(toast);
+    }
+    
+    toast.textContent = message;
+    toast.classList.add('show');
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, duration);
+}
+
+async function showPrivacyDashboard() {
+    const modal = document.getElementById('privacy-dashboard-modal');
+    if (!modal) return;
+
+    // Get data summary
+    const summary = await Storage.getDataSummary();
+    
+    // Update UI
+    document.getElementById('raw-streams-count').textContent = 
+        summary.hasRawStreams ? `${summary.streamCount.toLocaleString()} streams (${summary.estimatedSizeMB}MB)` : 'None';
+    
+    document.getElementById('patterns-summary').textContent = 
+        summary.chunkCount > 0 ? `${summary.chunkCount} chunks, ${summary.chatSessionCount} chat sessions` : 'No patterns yet';
+    
+    // Check Spotify tokens
+    const hasSpotifyToken = await Storage.getToken('spotify_access_token');
+    document.getElementById('spotify-token-status').textContent = 
+        hasSpotifyToken ? 'Present (encrypted)' : 'Not stored';
+
+    // Show modal
+    modal.style.display = 'flex';
+}
+
+async function clearSensitiveData() {
+    if (!confirm('Clear all raw streams? This keeps your personality analysis and chat history.')) {
+        return;
+    }
+    
+    await Storage.clearSensitiveData();
+    alert('Raw data cleared. Your personality analysis and chat history are preserved.');
+    showPrivacyDashboard(); // Refresh the dashboard
+}
+
 // Make modal functions available globally for onclick handlers
 window.executeReset = executeReset;
 window.hideResetConfirmModal = hideResetConfirmModal;
+window.showPrivacyDashboard = showPrivacyDashboard;
+window.clearSensitiveData = clearSensitiveData;
 
 // ==========================================
 // Sidebar Controller

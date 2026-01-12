@@ -11,8 +11,9 @@ const CURRENT_SESSION_KEY = 'rhythm_chamber_current_session';
 const EMERGENCY_BACKUP_KEY = 'rhythm_chamber_emergency_backup';  // Sync backup for beforeunload
 
 // HNW Fix: Timeout constants to prevent cascade failures
-const CHAT_API_TIMEOUT_MS = 60000;       // 60 second timeout for API calls
-const CHAT_FUNCTION_TIMEOUT_MS = 30000;  // 30 second timeout for function execution
+const CHAT_API_TIMEOUT_MS = 60000;           // 60 second timeout for cloud API calls
+const LOCAL_LLM_TIMEOUT_MS = 90000;          // 90 second timeout for local LLM providers
+const CHAT_FUNCTION_TIMEOUT_MS = 30000;      // 30 second timeout for function execution
 const AUTO_SAVE_DELAY_MS = 2000;         // Debounce session saves
 const EMERGENCY_BACKUP_MAX_AGE_MS = 3600000;  // 1 hour max age for emergency backups
 
@@ -706,12 +707,6 @@ async function sendMessage(message, optionsOrKey = null) {
         ...conversationHistory
     ];
 
-    // Get configuration - use Settings.getSettings() to properly merge config.js + localStorage
-    const config = window.Config?.openrouter;
-    if (!config) {
-        throw new Error('Config not loaded. Make sure js/config.js exists.');
-    }
-
     // Handle legacy apiKey argument or options object
     const options = (typeof optionsOrKey === 'string')
         ? { apiKey: optionsOrKey }
@@ -722,6 +717,16 @@ async function sendMessage(message, optionsOrKey = null) {
     // Get the merged settings (config.js as base, localStorage overrides)
     const settings = window.Settings?.getSettings?.() || {};
 
+    // Determine which LLM provider to use
+    const provider = settings.llm?.provider || 'openrouter';
+    console.log('[Chat] Using LLM provider:', provider);
+
+    // For local providers (Ollama, LM Studio), no API key or openrouter config needed
+    const isLocalProvider = provider === 'ollama' || provider === 'lmstudio';
+
+    // Get configuration - only strictly required for OpenRouter
+    const config = window.Config?.openrouter || {};
+
     // Get API key priority: parameter > merged settings > raw config
     // The merged settings already handle the placeholder check
     let key = apiKey || settings.openrouter?.apiKey || config.apiKey;
@@ -729,7 +734,8 @@ async function sendMessage(message, optionsOrKey = null) {
     // Check if key is valid (not empty and not the placeholder)
     const isValidKey = key && key !== '' && key !== 'your-api-key-here';
 
-    if (!isValidKey) {
+    // For cloud providers, require API key; for local, check availability
+    if (!isLocalProvider && !isValidKey) {
         // Return a helpful message if no API key configured
         const queryContext = generateQueryContext(message);
         const fallbackResponse = generateFallbackResponse(message, queryContext);
@@ -745,11 +751,8 @@ async function sendMessage(message, optionsOrKey = null) {
         };
     }
 
-    // Merge static config (has apiUrl) with user settings (has model/tokens)
-    const finalConfig = {
-        ...config,
-        ...(settings.openrouter || {})
-    };
+    // Build provider-specific config
+    const providerConfig = buildProviderConfig(provider, settings, config);
 
     try {
         // Get function schemas if available
@@ -759,8 +762,8 @@ async function sendMessage(message, optionsOrKey = null) {
         // Notify UI: Thinking/Sending request
         if (onProgress) onProgress({ type: 'thinking' });
 
-        // Initial API call
-        let response = await callOpenRouter(key, finalConfig, messages, useTools ? tools : undefined);
+        // Initial API call - routes to correct provider, pass onProgress for local streaming
+        let response = await callLLM(providerConfig, key, messages, useTools ? tools : undefined, isLocalProvider ? onProgress : null);
         let responseMessage = response.choices[0]?.message;
 
         // Handle function calls (tool calls)
@@ -831,7 +834,7 @@ async function sendMessage(message, optionsOrKey = null) {
             // Notify UI: Thinking again (processing tool results)
             if (onProgress) onProgress({ type: 'thinking' });
 
-            response = await callOpenRouter(key, finalConfig, followUpMessages, undefined);
+            response = await callLLM(providerConfig, key, followUpMessages, undefined);
             responseMessage = response.choices[0]?.message;
         }
 
@@ -873,6 +876,255 @@ async function sendMessage(message, optionsOrKey = null) {
             role: 'assistant'
         };
     }
+}
+
+// ==========================================
+// LLM Provider Routing
+// ==========================================
+
+/**
+ * Build provider-specific configuration
+ * @param {string} provider - Provider name (openrouter, ollama, lmstudio)
+ * @param {object} settings - User settings
+ * @param {object} baseConfig - Base config from config.js
+ * @returns {object} Provider-specific config
+ */
+function buildProviderConfig(provider, settings, baseConfig) {
+    switch (provider) {
+        case 'ollama':
+            return {
+                provider: 'ollama',
+                endpoint: settings.llm?.ollamaEndpoint || 'http://localhost:11434',
+                model: settings.ollama?.model || 'llama3.2',
+                temperature: settings.ollama?.temperature ?? settings.openrouter?.temperature ?? 0.7,
+                topP: settings.ollama?.topP ?? 0.9,
+                maxTokens: settings.ollama?.maxTokens || 2000
+            };
+
+        case 'lmstudio':
+            return {
+                provider: 'lmstudio',
+                endpoint: settings.llm?.lmstudioEndpoint || 'http://localhost:1234/v1',
+                model: settings.lmstudio?.model || 'local-model',
+                temperature: settings.lmstudio?.temperature ?? settings.openrouter?.temperature ?? 0.7,
+                topP: settings.lmstudio?.topP ?? 0.9,
+                maxTokens: settings.lmstudio?.maxTokens || 2000
+            };
+
+        case 'openrouter':
+        default:
+            return {
+                provider: 'openrouter',
+                ...baseConfig,
+                ...(settings.openrouter || {}),
+                model: settings.openrouter?.model || baseConfig.model,
+                temperature: settings.openrouter?.temperature ?? 0.7,
+                topP: settings.openrouter?.topP ?? 0.9,
+                maxTokens: settings.openrouter?.maxTokens || 4500,
+                frequencyPenalty: settings.openrouter?.frequencyPenalty ?? 0,
+                presencePenalty: settings.openrouter?.presencePenalty ?? 0
+            };
+    }
+}
+
+/**
+ * Unified LLM call routing - routes to appropriate provider
+ * @param {object} config - Provider config from buildProviderConfig
+ * @param {string} apiKey - API key (for OpenRouter)
+ * @param {Array} messages - Chat messages
+ * @param {Array} tools - Function calling tools (optional)
+ * @param {function} onProgress - Progress callback for streaming (optional)
+ * @returns {Promise<object>} Response in OpenAI-compatible format
+ */
+async function callLLM(config, apiKey, messages, tools, onProgress = null) {
+    switch (config.provider) {
+        case 'ollama':
+            return await callOllama(config, messages, tools, onProgress);
+
+        case 'lmstudio':
+            return await callLMStudio(config, messages, tools, onProgress);
+
+        case 'openrouter':
+        default:
+            return await callOpenRouter(apiKey, config, messages, tools);
+    }
+}
+
+/**
+ * Call Ollama API with streaming support
+ * @param {object} config - Provider config
+ * @param {Array} messages - Chat messages
+ * @param {Array} tools - Function tools (optional)
+ * @param {function} onProgress - Progress callback for streaming
+ */
+async function callOllama(config, messages, tools, onProgress = null) {
+    if (!window.Ollama) {
+        throw new Error('Ollama module not loaded');
+    }
+
+    // Check if Ollama is available
+    const available = await window.Ollama.isAvailable();
+    if (!available) {
+        throw new Error('Ollama server not running. Start with: ollama serve');
+    }
+
+    // Use streaming if onProgress callback provided
+    const useStreaming = typeof onProgress === 'function';
+
+    return await window.Ollama.chatCompletion(messages, {
+        ...config,
+        stream: useStreaming,
+        onToken: useStreaming ? (token, thinking) => {
+            onProgress({ type: 'token', token, thinking });
+        } : null
+    }, tools);
+}
+
+/**
+ * Call LM Studio API (OpenAI-compatible) with streaming support
+ * @param {object} config - Provider config
+ * @param {Array} messages - Chat messages
+ * @param {Array} tools - Function tools (optional)
+ * @param {function} onProgress - Progress callback for streaming
+ */
+async function callLMStudio(config, messages, tools, onProgress = null) {
+    const useStreaming = typeof onProgress === 'function';
+
+    const body = {
+        model: config.model,
+        messages,
+        max_tokens: config.maxTokens,
+        temperature: config.temperature,
+        top_p: config.topP,
+        stream: useStreaming
+    };
+
+    // Add tools if provided
+    if (tools && tools.length > 0) {
+        body.tools = tools;
+        body.tool_choice = 'auto';
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), LOCAL_LLM_TIMEOUT_MS);
+
+    try {
+        const response = await fetch(`${config.endpoint}/chat/completions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('[Chat] LM Studio error:', response.status, errorText);
+            throw new Error(`LM Studio error: ${response.status}`);
+        }
+
+        // Handle streaming response
+        if (useStreaming) {
+            return await handleStreamingResponse(response, onProgress);
+        }
+
+        return response.json();
+    } catch (err) {
+        clearTimeout(timeoutId);
+        if (err.name === 'AbortError') {
+            throw new Error(`LM Studio request timed out after ${LOCAL_LLM_TIMEOUT_MS / 1000} seconds`);
+        }
+        throw err;
+    }
+}
+
+/**
+ * Handle SSE streaming response from LM Studio / OpenAI-compatible APIs
+ */
+async function handleStreamingResponse(response, onProgress) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    let fullContent = '';
+    let thinkingContent = '';
+    let inThinking = false;
+    let lastMessage = null;
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+        for (const line of lines) {
+            if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                if (data === '[DONE]') continue;
+
+                try {
+                    const parsed = JSON.parse(data);
+                    const delta = parsed.choices?.[0]?.delta;
+
+                    if (delta?.content) {
+                        const token = delta.content;
+
+                        // Detect thinking blocks (<think>...</think>)
+                        if (token.includes('<think>')) {
+                            inThinking = true;
+                            const parts = token.split('<think>');
+                            if (parts[0]) {
+                                fullContent += parts[0];
+                                onProgress({ type: 'token', token: parts[0] });
+                            }
+                            thinkingContent += parts[1] || '';
+                            continue;
+                        }
+
+                        if (token.includes('</think>')) {
+                            inThinking = false;
+                            const parts = token.split('</think>');
+                            thinkingContent += parts[0] || '';
+                            onProgress({ type: 'thinking', content: thinkingContent });
+                            thinkingContent = '';
+                            if (parts[1]) {
+                                fullContent += parts[1];
+                                onProgress({ type: 'token', token: parts[1] });
+                            }
+                            continue;
+                        }
+
+                        if (inThinking) {
+                            thinkingContent += token;
+                        } else {
+                            fullContent += token;
+                            onProgress({ type: 'token', token });
+                        }
+                    }
+
+                    lastMessage = parsed;
+                } catch (e) {
+                    // Ignore parse errors for malformed chunks
+                }
+            }
+        }
+    }
+
+    // Build OpenAI-compatible response
+    return {
+        choices: [{
+            message: {
+                role: 'assistant',
+                content: fullContent
+            },
+            finish_reason: 'stop'
+        }],
+        model: lastMessage?.model,
+        thinking: thinkingContent || undefined
+    };
 }
 
 /**

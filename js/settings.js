@@ -6,7 +6,20 @@
  * and optionally override those settings via localStorage.
  */
 
-// Available models for the dropdown
+// Available LLM providers
+const LLM_PROVIDERS = [
+    { id: 'openrouter', name: 'OpenRouter (Cloud)', description: 'Use OpenRouter API with many models' },
+    { id: 'ollama', name: 'Ollama (Local)', description: 'Run models locally - zero cloud data' },
+    { id: 'lmstudio', name: 'LM Studio (Local)', description: 'OpenAI-compatible local inference' }
+];
+
+// Default endpoints for local providers
+const DEFAULT_ENDPOINTS = {
+    ollama: 'http://localhost:11434',
+    lmstudio: 'http://localhost:1234/v1'
+};
+
+// Available models for the dropdown (OpenRouter)
 const AVAILABLE_MODELS = [
     { id: 'xiaomi/mimo-v2-flash:free', name: 'Xiaomi Mimo v2 Flash (Free)', free: true },
     { id: 'mistralai/mistral-7b-instruct:free', name: 'Mistral 7B (Free)', free: true },
@@ -29,11 +42,35 @@ function getSettings() {
 
     // Build settings object from config.js
     const settings = {
+        // LLM Provider settings  
+        llm: {
+            provider: 'openrouter', // 'openrouter' | 'ollama' | 'lmstudio'
+            ollamaEndpoint: DEFAULT_ENDPOINTS.ollama,
+            lmstudioEndpoint: DEFAULT_ENDPOINTS.lmstudio
+        },
         openrouter: {
             apiKey: configOpenrouter.apiKey || '',
             model: configOpenrouter.model || 'xiaomi/mimo-v2-flash:free',
             maxTokens: configOpenrouter.maxTokens || 4500,
-            temperature: configOpenrouter.temperature ?? 0.7
+            temperature: configOpenrouter.temperature ?? 0.7,
+            // Advanced parameters
+            topP: configOpenrouter.topP ?? 0.9,
+            frequencyPenalty: configOpenrouter.frequencyPenalty ?? 0,
+            presencePenalty: configOpenrouter.presencePenalty ?? 0
+        },
+        // Ollama-specific settings
+        ollama: {
+            model: 'llama3.2',
+            temperature: 0.7,
+            topP: 0.9,
+            maxTokens: 2000
+        },
+        // LM Studio settings (uses OpenAI format)
+        lmstudio: {
+            model: 'local-model',
+            temperature: 0.7,
+            topP: 0.9,
+            maxTokens: 2000
         },
         spotify: {
             clientId: configSpotify.clientId || ''
@@ -67,11 +104,35 @@ async function getSettingsAsync() {
 
     // Build settings object from config.js
     const settings = {
+        // LLM Provider settings  
+        llm: {
+            provider: 'openrouter', // 'openrouter' | 'ollama' | 'lmstudio'
+            ollamaEndpoint: DEFAULT_ENDPOINTS.ollama,
+            lmstudioEndpoint: DEFAULT_ENDPOINTS.lmstudio
+        },
         openrouter: {
             apiKey: configOpenrouter.apiKey || '',
             model: configOpenrouter.model || 'xiaomi/mimo-v2-flash:free',
             maxTokens: configOpenrouter.maxTokens || 4500,
-            temperature: configOpenrouter.temperature ?? 0.7
+            temperature: configOpenrouter.temperature ?? 0.7,
+            // Advanced parameters
+            topP: configOpenrouter.topP ?? 0.9,
+            frequencyPenalty: configOpenrouter.frequencyPenalty ?? 0,
+            presencePenalty: configOpenrouter.presencePenalty ?? 0
+        },
+        // Ollama-specific settings
+        ollama: {
+            model: 'llama3.2',
+            temperature: 0.7,
+            topP: 0.9,
+            maxTokens: 2000
+        },
+        // LM Studio settings (uses OpenAI format)
+        lmstudio: {
+            model: 'local-model',
+            temperature: 0.7,
+            topP: 0.9,
+            maxTokens: 2000
         },
         spotify: {
             clientId: configSpotify.clientId || ''
@@ -111,6 +172,17 @@ async function getSettingsAsync() {
  * @param {Object} parsed - Parsed stored settings
  */
 function applySettingsOverrides(settings, parsed) {
+    // LLM Provider settings
+    if (parsed.llm?.provider) {
+        settings.llm.provider = parsed.llm.provider;
+    }
+    if (parsed.llm?.ollamaEndpoint) {
+        settings.llm.ollamaEndpoint = parsed.llm.ollamaEndpoint;
+    }
+    if (parsed.llm?.lmstudioEndpoint) {
+        settings.llm.lmstudioEndpoint = parsed.llm.lmstudioEndpoint;
+    }
+
     // Only use stored API key if config.js has placeholder or empty
     if (parsed.openrouter?.apiKey &&
         (!settings.openrouter.apiKey || settings.openrouter.apiKey === 'your-api-key-here')) {
@@ -130,6 +202,27 @@ function applySettingsOverrides(settings, parsed) {
     // Only use stored temperature if user explicitly changed it
     if (parsed.openrouter?.temperature !== undefined) {
         settings.openrouter.temperature = parsed.openrouter.temperature;
+    }
+
+    // Advanced parameters
+    if (parsed.openrouter?.topP !== undefined) {
+        settings.openrouter.topP = parsed.openrouter.topP;
+    }
+    if (parsed.openrouter?.frequencyPenalty !== undefined) {
+        settings.openrouter.frequencyPenalty = parsed.openrouter.frequencyPenalty;
+    }
+    if (parsed.openrouter?.presencePenalty !== undefined) {
+        settings.openrouter.presencePenalty = parsed.openrouter.presencePenalty;
+    }
+
+    // Ollama settings
+    if (parsed.ollama) {
+        Object.assign(settings.ollama, parsed.ollama);
+    }
+
+    // LM Studio settings
+    if (parsed.lmstudio) {
+        Object.assign(settings.lmstudio, parsed.lmstudio);
     }
 
     // Only use stored Spotify client ID if config.js has placeholder or empty
@@ -260,57 +353,149 @@ function showSettingsModal() {
             </div>
             
             <div class="settings-body">
-                <!-- AI Settings Section -->
+                <!-- LLM Provider Section -->
                 <div class="settings-section">
                     <h3>🤖 AI Chat Settings</h3>
-                    <p class="settings-description">
-                        ${hasConfigKey
+                    
+                    <!-- Provider Selection -->
+                    <div class="settings-field">
+                        <label for="setting-llm-provider">LLM Provider</label>
+                        <select id="setting-llm-provider" onchange="Settings.onProviderChange(this.value)">
+                            ${LLM_PROVIDERS.map(p => `
+                                <option value="${p.id}" ${settings.llm.provider === p.id ? 'selected' : ''}>
+                                    ${p.name}
+                                </option>
+                            `).join('')}
+                        </select>
+                        <span class="settings-hint" id="provider-hint">
+                            ${LLM_PROVIDERS.find(p => p.id === settings.llm.provider)?.description || ''}
+                        </span>
+                    </div>
+                    
+                    <!-- Ollama Status (shown when ollama selected) -->
+                    <div id="ollama-status" class="settings-field provider-section" style="display: ${settings.llm.provider === 'ollama' ? 'block' : 'none'}">
+                        <div class="status-indicator" id="ollama-connection-status">
+                            <span class="status-dot checking"></span>
+                            <span>Checking Ollama connection...</span>
+                        </div>
+                        <div class="settings-field">
+                            <label for="setting-ollama-endpoint">Ollama Endpoint</label>
+                            <input type="text" id="setting-ollama-endpoint" 
+                                   value="${settings.llm.ollamaEndpoint}" 
+                                   placeholder="http://localhost:11434">
+                            <button class="btn btn-small" onclick="Settings.testOllamaConnection()">Test</button>
+                        </div>
+                        <div class="settings-field">
+                            <label for="setting-ollama-model">Model</label>
+                            <select id="setting-ollama-model">
+                                <option value="${settings.ollama.model}">${settings.ollama.model}</option>
+                            </select>
+                            <button class="btn btn-small" onclick="Settings.refreshOllamaModels()">↻ Refresh</button>
+                            <span class="settings-hint">Run <code>ollama list</code> to see available models</span>
+                        </div>
+                    </div>
+                    
+                    <!-- LM Studio Section (shown when lmstudio selected) -->
+                    <div id="lmstudio-status" class="settings-field provider-section" style="display: ${settings.llm.provider === 'lmstudio' ? 'block' : 'none'}">
+                        <div class="settings-field">
+                            <label for="setting-lmstudio-endpoint">LM Studio Endpoint</label>
+                            <input type="text" id="setting-lmstudio-endpoint" 
+                                   value="${settings.llm.lmstudioEndpoint}" 
+                                   placeholder="http://localhost:1234/v1">
+                            <span class="settings-hint">LM Studio uses OpenAI-compatible API at port 1234</span>
+                        </div>
+                        
+                        <div class="settings-field">
+                            <label for="setting-lmstudio-model">Model Name</label>
+                            <input type="text" id="setting-lmstudio-model" 
+                                   value="${settings.lmstudio?.model || 'local-model'}" 
+                                   placeholder="e.g., qwen2.5-coder-7b-instruct">
+                            <span class="settings-hint">The model name as shown in LM Studio's server tab</span>
+                        </div>
+                    </div>
+                    
+                    <!-- OpenRouter Section (shown when openrouter selected) -->
+                    <div id="openrouter-section" class="provider-section" style="display: ${settings.llm.provider === 'openrouter' ? 'block' : 'none'}">
+                        <p class="settings-description">
+                            ${hasConfigKey
             ? '✅ API key configured in config.js'
             : 'Configure your OpenRouter API key. Get a free key at <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a>'}
-                    </p>
-                    
-                    <div class="settings-field">
-                        <label for="setting-api-key">API Key ${hasConfigKey ? '(from config.js)' : ''}</label>
-                        <input type="password" id="setting-api-key" 
-                               value="${apiKeyDisplay}" 
-                               placeholder="${hasConfigKey ? '••••••••••••••••' : 'sk-or-v1-...'}" 
-                               ${hasConfigKey ? 'readonly' : ''}
-                               autocomplete="off">
-                        <button class="btn-show-password" onclick="Settings.togglePasswordVisibility('setting-api-key', this)">Show</button>
+                        </p>
+                        
+                        <div class="settings-field">
+                            <label for="setting-api-key">API Key ${hasConfigKey ? '(from config.js)' : ''}</label>
+                            <input type="password" id="setting-api-key" 
+                                   value="${apiKeyDisplay}" 
+                                   placeholder="${hasConfigKey ? '••••••••••••••••' : 'sk-or-v1-...'}" 
+                                   ${hasConfigKey ? 'readonly' : ''}
+                                   autocomplete="off">
+                            <button class="btn-show-password" onclick="Settings.togglePasswordVisibility('setting-api-key', this)">Show</button>
+                        </div>
+                        
+                        <div class="settings-field">
+                            <label for="setting-model">Model</label>
+                            <input type="text" id="setting-model" 
+                                   list="model-options"
+                                   value="${settings.openrouter.model}" 
+                                   placeholder="e.g., anthropic/claude-3.5-sonnet"
+                                   autocomplete="off">
+                            <datalist id="model-options">
+                                ${AVAILABLE_MODELS.map(m => `
+                                    <option value="${m.id}">${m.name}</option>
+                                `).join('')}
+                            </datalist>
+                            <span class="settings-hint">Select a preset or enter any <a href="https://openrouter.ai/models" target="_blank">OpenRouter model ID</a></span>
+                        </div>
                     </div>
                     
-                    <div class="settings-field">
-                        <label for="setting-model">Model</label>
-                        <input type="text" id="setting-model" 
-                               list="model-options"
-                               value="${settings.openrouter.model}" 
-                               placeholder="e.g., anthropic/claude-3.5-sonnet"
-                               autocomplete="off">
-                        <datalist id="model-options">
-                            ${AVAILABLE_MODELS.map(m => `
-                                <option value="${m.id}">${m.name}</option>
-                            `).join('')}
-                        </datalist>
-                        <span class="settings-hint">Select a preset or enter any <a href="https://openrouter.ai/models" target="_blank">OpenRouter model ID</a></span>
-                    </div>
-                    
+                    <!-- Common Parameters (all providers) -->
                     <div class="settings-row">
                         <div class="settings-field">
                             <label for="setting-max-tokens">Max Response Length</label>
                             <input type="number" id="setting-max-tokens" 
                                    value="${settings.openrouter.maxTokens}" 
-                                   min="100" max="6000" step="100">
+                                   min="100" max="8000" step="100">
                             <span class="settings-hint">tokens (higher = longer responses)</span>
                         </div>
                         
                         <div class="settings-field">
-                            <label for="setting-temperature">Creativity</label>
+                            <label for="setting-temperature">Temperature</label>
                             <input type="range" id="setting-temperature" 
                                    value="${settings.openrouter.temperature}" 
-                                   min="0" max="1" step="0.1">
-                            <span class="settings-hint" id="temp-value">${settings.openrouter.temperature} (${settings.openrouter.temperature < 0.4 ? 'focused' : settings.openrouter.temperature > 0.7 ? 'creative' : 'balanced'})</span>
+                                   min="0" max="2" step="0.1">
+                            <span class="settings-hint" id="temp-value">${settings.openrouter.temperature} (${settings.openrouter.temperature < 0.4 ? 'focused' : settings.openrouter.temperature > 1.0 ? 'creative' : 'balanced'})</span>
                         </div>
                     </div>
+                    
+                    <!-- Advanced Parameters (collapsible) -->
+                    <details class="settings-advanced">
+                        <summary>Advanced Parameters</summary>
+                        <div class="settings-row">
+                            <div class="settings-field">
+                                <label for="setting-top-p">Top P (Nucleus Sampling)</label>
+                                <input type="range" id="setting-top-p" 
+                                       value="${settings.openrouter.topP}" 
+                                       min="0" max="1" step="0.05">
+                                <span class="settings-hint" id="top-p-value">${settings.openrouter.topP}</span>
+                            </div>
+                            
+                            <div class="settings-field">
+                                <label for="setting-freq-penalty">Frequency Penalty</label>
+                                <input type="range" id="setting-freq-penalty" 
+                                       value="${settings.openrouter.frequencyPenalty}" 
+                                       min="-2" max="2" step="0.1">
+                                <span class="settings-hint" id="freq-penalty-value">${settings.openrouter.frequencyPenalty}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="settings-field">
+                            <label for="setting-pres-penalty">Presence Penalty</label>
+                            <input type="range" id="setting-pres-penalty" 
+                                   value="${settings.openrouter.presencePenalty}" 
+                                   min="-2" max="2" step="0.1">
+                            <span class="settings-hint" id="pres-penalty-value">${settings.openrouter.presencePenalty} (positive = more topic diversity)</span>
+                        </div>
+                    </details>
                 </div>
                 
                 <!-- Spotify Settings Section -->
@@ -426,11 +611,38 @@ function showSettingsModal() {
     // Add temperature slider listener
     const tempSlider = document.getElementById('setting-temperature');
     const tempValue = document.getElementById('temp-value');
-    tempSlider.addEventListener('input', () => {
+    tempSlider?.addEventListener('input', () => {
         const val = parseFloat(tempSlider.value);
-        const label = val < 0.4 ? 'focused' : val > 0.7 ? 'creative' : 'balanced';
+        const label = val < 0.4 ? 'focused' : val > 1.0 ? 'creative' : 'balanced';
         tempValue.textContent = `${val} (${label})`;
     });
+
+    // Add top-p slider listener
+    const topPSlider = document.getElementById('setting-top-p');
+    const topPValue = document.getElementById('top-p-value');
+    topPSlider?.addEventListener('input', () => {
+        topPValue.textContent = topPSlider.value;
+    });
+
+    // Add frequency penalty slider listener
+    const freqSlider = document.getElementById('setting-freq-penalty');
+    const freqValue = document.getElementById('freq-penalty-value');
+    freqSlider?.addEventListener('input', () => {
+        freqValue.textContent = freqSlider.value;
+    });
+
+    // Add presence penalty slider listener
+    const presSlider = document.getElementById('setting-pres-penalty');
+    const presValue = document.getElementById('pres-penalty-value');
+    presSlider?.addEventListener('input', () => {
+        const val = parseFloat(presSlider.value);
+        presValue.textContent = `${val} (positive = more topic diversity)`;
+    });
+
+    // Check Ollama connection if selected
+    if (settings.llm.provider === 'ollama') {
+        checkOllamaConnection();
+    }
 
     // Add escape key listener
     modal.addEventListener('keydown', (e) => {
@@ -455,21 +667,55 @@ function hideSettingsModal() {
  * Save settings from the modal form
  */
 function saveFromModal() {
+    // Get provider selection
+    const provider = document.getElementById('setting-llm-provider')?.value || 'openrouter';
+    const ollamaEndpoint = document.getElementById('setting-ollama-endpoint')?.value || DEFAULT_ENDPOINTS.ollama;
+    const lmstudioEndpoint = document.getElementById('setting-lmstudio-endpoint')?.value || DEFAULT_ENDPOINTS.lmstudio;
+    const ollamaModel = document.getElementById('setting-ollama-model')?.value || 'llama3.2';
+    const lmstudioModel = document.getElementById('setting-lmstudio-model')?.value || 'local-model';
+
+    // OpenRouter settings
     const apiKeyInput = document.getElementById('setting-api-key');
-    const model = document.getElementById('setting-model').value;
-    const maxTokens = parseInt(document.getElementById('setting-max-tokens').value) || 4500;
-    const temperature = parseFloat(document.getElementById('setting-temperature').value) || 0.7;
+    const model = document.getElementById('setting-model')?.value || 'xiaomi/mimo-v2-flash:free';
+    const maxTokens = parseInt(document.getElementById('setting-max-tokens')?.value) || 4500;
+    const temperature = parseFloat(document.getElementById('setting-temperature')?.value) || 0.7;
+
+    // Advanced parameters
+    const topP = parseFloat(document.getElementById('setting-top-p')?.value) || 0.9;
+    const frequencyPenalty = parseFloat(document.getElementById('setting-freq-penalty')?.value) || 0;
+    const presencePenalty = parseFloat(document.getElementById('setting-pres-penalty')?.value) || 0;
+
     const spotifyInput = document.getElementById('setting-spotify-client-id');
 
     // Only save API key if user actually entered one (field not readonly)
-    const apiKey = apiKeyInput.readOnly ? null : apiKeyInput.value.trim();
-    const spotifyClientId = spotifyInput.readOnly ? null : spotifyInput.value.trim();
+    const apiKey = apiKeyInput?.readOnly ? null : apiKeyInput?.value?.trim();
+    const spotifyClientId = spotifyInput?.readOnly ? null : spotifyInput?.value?.trim();
 
     const settings = {
+        llm: {
+            provider,
+            ollamaEndpoint,
+            lmstudioEndpoint
+        },
         openrouter: {
             model,
-            maxTokens: Math.min(Math.max(maxTokens, 100), 6000),
-            temperature: Math.min(Math.max(temperature, 0), 1)
+            maxTokens: Math.min(Math.max(maxTokens, 100), 8000),
+            temperature: Math.min(Math.max(temperature, 0), 2),
+            topP: Math.min(Math.max(topP, 0), 1),
+            frequencyPenalty: Math.min(Math.max(frequencyPenalty, -2), 2),
+            presencePenalty: Math.min(Math.max(presencePenalty, -2), 2)
+        },
+        ollama: {
+            model: ollamaModel,
+            temperature: Math.min(Math.max(temperature, 0), 2),
+            topP: Math.min(Math.max(topP, 0), 1),
+            maxTokens: Math.min(Math.max(maxTokens, 100), 8000)
+        },
+        lmstudio: {
+            model: lmstudioModel,
+            temperature: Math.min(Math.max(temperature, 0), 2),
+            topP: Math.min(Math.max(topP, 0), 1),
+            maxTokens: Math.min(Math.max(maxTokens, 100), 8000)
         },
         spotify: {}
     };
@@ -805,12 +1051,145 @@ async function confirmSessionReset() {
     }
 }
 
+// ==========================================
+// Provider UI Helper Functions
+// ==========================================
+
+/**
+ * Handle provider change in settings UI
+ * @param {string} provider - New provider id
+ */
+function onProviderChange(provider) {
+    // Update hint text
+    const hint = document.getElementById('provider-hint');
+    const selectedProvider = LLM_PROVIDERS.find(p => p.id === provider);
+    if (hint && selectedProvider) {
+        hint.textContent = selectedProvider.description;
+    }
+
+    // Show/hide provider-specific sections
+    const ollamaSection = document.getElementById('ollama-status');
+    const lmstudioSection = document.getElementById('lmstudio-status');
+    const openrouterSection = document.getElementById('openrouter-section');
+
+    if (ollamaSection) ollamaSection.style.display = provider === 'ollama' ? 'block' : 'none';
+    if (lmstudioSection) lmstudioSection.style.display = provider === 'lmstudio' ? 'block' : 'none';
+    if (openrouterSection) openrouterSection.style.display = provider === 'openrouter' ? 'block' : 'none';
+
+    // Check Ollama connection if selected
+    if (provider === 'ollama') {
+        checkOllamaConnection();
+    }
+}
+
+/**
+ * Check Ollama connection status (called on modal open)
+ */
+async function checkOllamaConnection() {
+    const statusEl = document.getElementById('ollama-connection-status');
+    if (!statusEl) return;
+
+    // Set checking state
+    statusEl.innerHTML = `
+        <span class="status-dot checking"></span>
+        <span>Checking Ollama connection...</span>
+    `;
+
+    try {
+        if (!window.Ollama) {
+            statusEl.innerHTML = `
+                <span class="status-dot error"></span>
+                <span>Ollama module not loaded</span>
+            `;
+            return;
+        }
+
+        const result = await window.Ollama.detectServer();
+
+        if (result.available) {
+            statusEl.innerHTML = `
+                <span class="status-dot connected"></span>
+                <span>Connected to Ollama v${result.version}</span>
+            `;
+            // Refresh model list
+            await refreshOllamaModels();
+        } else {
+            statusEl.innerHTML = `
+                <span class="status-dot error"></span>
+                <span>${result.error || 'Cannot connect to Ollama'}</span>
+            `;
+        }
+    } catch (error) {
+        statusEl.innerHTML = `
+            <span class="status-dot error"></span>
+            <span>Error: ${error.message}</span>
+        `;
+    }
+}
+
+/**
+ * Test Ollama connection (called by Test button)
+ */
+async function testOllamaConnection() {
+    const endpointInput = document.getElementById('setting-ollama-endpoint');
+    if (endpointInput) {
+        // Temporarily update the endpoint in Ollama module
+        const originalEndpoint = window.Ollama?.getEndpoint?.();
+        // Note: The endpoint is read from settings, so we save first
+        const tempSettings = getSettings();
+        tempSettings.llm.ollamaEndpoint = endpointInput.value;
+        localStorage.setItem('rhythm_chamber_settings', JSON.stringify(tempSettings));
+    }
+
+    await checkOllamaConnection();
+    showToast('Ollama connection tested');
+}
+
+/**
+ * Refresh list of available Ollama models
+ */
+async function refreshOllamaModels() {
+    const modelSelect = document.getElementById('setting-ollama-model');
+    if (!modelSelect || !window.Ollama) return;
+
+    try {
+        const models = await window.Ollama.listModels();
+        const currentValue = modelSelect.value;
+
+        // Clear and rebuild options
+        modelSelect.innerHTML = '';
+
+        if (models.length === 0) {
+            modelSelect.innerHTML = '<option value="">No models found - run: ollama pull llama3.2</option>';
+            return;
+        }
+
+        // Add models to dropdown
+        for (const model of models) {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = `${model.name} (${model.sizeGB}GB)`;
+            if (model.id === currentValue) {
+                option.selected = true;
+            }
+            modelSelect.appendChild(option);
+        }
+
+        // If previous selection not found, select first model
+        if (!modelSelect.value && models.length > 0) {
+            modelSelect.value = models[0].id;
+        }
+
+    } catch (error) {
+        modelSelect.innerHTML = `<option value="">Error loading models: ${error.message}</option>`;
+    }
+}
+
 // Public API
 window.Settings = {
     getSettings,
     getSettingsAsync,
     saveSettings,
-
     clearSettings,
     getSetting,
     hasApiKey,
@@ -826,5 +1205,13 @@ window.Settings = {
     showSessionResetModal,
     hideSessionResetModal,
     confirmSessionReset,
-    AVAILABLE_MODELS
+    // Provider UI helpers
+    onProviderChange,
+    checkOllamaConnection,
+    testOllamaConnection,
+    refreshOllamaModels,
+    // Constants
+    AVAILABLE_MODELS,
+    LLM_PROVIDERS,
+    DEFAULT_ENDPOINTS
 };
