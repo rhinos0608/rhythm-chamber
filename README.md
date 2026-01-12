@@ -18,10 +18,10 @@ Upload .zip → Personality Reveal → Chat → Share Card
 
 ## Key Differentiators
 
-1. **Duration tracking** — TikTok-style engagement analysis
-2. **Life event detection** — "You stopped working out. What happened?"
-3. **Personality types** — Identity labels, not just stats
-4. **Silence as a feature** — Zero-choice, no explanation
+1. **Duration tracking** — Music engagement analysis
+2. **Personality types** — What kind of type your data shows
+3. **Silence as a feature** — Zero-choice, no explanation
+4. **100% free - nothing is feature is locked, future monetization for $2 monthly or $10 lifetime for chat storage and synchronization
 
 ## Project Status
 🚧 **Pre-development** — Documentation complete, ready for implementation
