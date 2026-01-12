@@ -2,25 +2,27 @@
 
 ## Overview
 
-The personality type reveal is the core product moment. This doc covers detection algorithms, life event patterns, and duration-based behavioral analysis.
+The personality type reveal is the core product moment. This doc covers detection algorithms, life event patterns, duration-based behavioral analysis, and **semantic search capabilities** that differentiate us from stats.fm's static charts.
 
 ---
 
 ## Personality Types
 
-| Type | Signal |
-|------|--------|
-| **Emotional Archaeologist** | Distinct eras + high repeat + genre shifts |
-| **Mood Engineer** | Time-of-day patterns + mood searching |
-| **Discovery Junkie** | Low plays-per-artist + high unique count |
-| **Comfort Curator** | Same songs for years + slow to change |
-| **Social Chameleon** | Weekday ≠ weekend patterns |
+| Type | Signal | Why It's Compelling |
+|------|--------|---------------------|
+| **Emotional Archaeologist** | Distinct eras + high repeat + genre shifts | "You mark time through sound" |
+| **Mood Engineer** | Time-of-day patterns + mood searching | "You strategically use music to change state" |
+| **Discovery Junkie** | Low plays-per-artist + high unique count | "Constantly seeking new territory" |
+| **Comfort Curator** | Same songs for years + slow to change | "Knows exactly what they love" |
+| **Social Chameleon** | Weekday ≠ weekend patterns | "Music adapts to context" |
+
+**Not Myers-Briggs.** These compete with stats.fm's generic charts by telling you *who you are* through your music.
 
 ---
 
 ## Duration-Based Metrics (The Moat)
 
-We don't just count plays — we analyze engagement.
+We don't just count plays—we analyze engagement.
 
 | Behavior | Pattern | Insight |
 |----------|---------|---------|
@@ -128,7 +130,7 @@ This `breakdown` array is passed to the UI to generate the "How did we detect th
 
 ## Life Event Detection
 
-The AI doesn't just analyze — it **notices and asks**.
+The AI doesn't just analyze—it **notices and asks**.
 
 ### Detection Patterns (MVP - No API)
 
@@ -183,9 +185,58 @@ def detect_exploration_burst(streams):
 **The Formula:**
 ```
 "You were [doing X consistently]. 
- Then it just [stopped/changed]. 
- What happened?"
+Then it just [stopped/changed]. 
+What happened?"
 ```
+
+---
+
+## Semantic Search: The Data Depth Advantage
+
+### Why ChatGPT Can't Do This
+
+ChatGPT has a context window limit. Your complete listening history is too big. We handle it locally with semantic search.
+
+### How It Works
+
+1. **Chunking**: Your data is broken into meaningful chunks:
+   - Monthly summaries (top artists, stats)
+   - Artist profiles (history, patterns)
+   - Era summaries (emotional periods)
+
+2. **Embeddings**: Each chunk gets a vector representation using OpenRouter's embedding API.
+
+3. **Search**: When you ask a question, we:
+   - Generate embedding for your query
+   - Search Qdrant for top 3-5 relevant chunks
+   - Inject those chunks into the LLM context
+   - LLM generates accurate, contextual response
+
+### Example Queries
+
+**Stats.fm:** "March 2020 Top Artists" → Chart
+**Rhythm Chamber:** "What was I listening to during my breakup in March 2020?" → Semantic answer
+
+```
+You: "What was I listening to during my breakup in March 2020?"
+
+System: "In March 2020, you played The National's 'I Need My Girl' 
+127 times, mostly between 2-4am. Before that, you hadn't played 
+it since 2018. This matches your 'Emotional Archaeologist' pattern.
+
+You also discovered 23 new artists that month—unusual for you. 
+What opened you up during that time?"
+```
+
+### Data Depth vs Real-Time
+
+| Stats.fm | Rhythm Chamber |
+|----------|----------------|
+| Full history + real-time | Full history only |
+| "What are you listening to NOW?" | "What did this period mean?" |
+| Surface-level trends | Deep behavioral patterns |
+
+**We're not competing on real-time.** We're competing on depth of understanding.
 
 ---
 
@@ -197,3 +248,30 @@ def detect_exploration_burst(streams):
 2. **No genre data** — Can't detect "workout" or "sad" music without API
 3. **Artist normalization** — "RHCP" ≠ "Red Hot Chili Peppers"
 4. **Personality overlap** — Users may score high on multiple types → show primary + secondary
+
+---
+
+## The Competitive Moat
+
+### What Stats.fm Shows
+- Charts, graphs, numbers
+- "You listened to X hours"
+- "Top artists: A, B, C"
+
+### What Rhythm Chamber Shows
+- Identity and meaning
+- "You're an Emotional Archaeologist"
+- "You mark time through sound"
+- "What was this era of your life about?"
+
+**The difference:** Stats.fm tells you *what* you listened to. We tell you *why* it matters and *who* you are because of it.
+
+### Why This Can't Be Copied
+
+1. **Zero-backend architecture** — Stats.fm can't match our free tier
+2. **BYOK model** — Power users prefer our transparency
+3. **Chat-first interface** — Natural language > clicking charts
+4. **Semantic search** — Deep data queries vs surface stats
+5. **Personality types** — Identity badges vs generic charts
+
+**We're not building a better stats.fm. We're building the next evolution of music self-discovery.**

@@ -27,11 +27,10 @@ True credential revocation and session invalidation require server infrastructur
 | **Credential replay attacks** | Session-bound key derivation |
 | **Stale session persistence** | Session versioning with invalidation |
 | **Proxy/VPN credential stuffing** | Geographic anomaly detection |
-| **Cross-user RAG access** | Namespace isolation per user |
 | **Timezone manipulation** | UTC-based time calculations |
-| **XSS token theft** | Device fingerprint binding (NEW) |
-| **Token hijacking** | Secure context enforcement (NEW) |
-| **False positive lockouts** | Travel-aware adaptive thresholds (NEW) |
+| **XSS token theft** | Device fingerprint binding |
+| **Token hijacking** | Secure context enforcement |
+| **False positive lockouts** | Travel-aware adaptive thresholds |
 
 ### What We Cannot Protect Against
 
@@ -143,14 +142,19 @@ if (Security.isRateLimited('embedding', 5)) {
 }
 ```
 
-### 6. Namespace Isolation
+### 6. Obfuscation vs Encryption
 
-RAG collections are isolated per user using a hash of their Spotify user ID:
+> [!IMPORTANT]
+> Rhythm Chamber uses **two different protection levels** depending on data sensitivity:
 
-```javascript
-// Collection: rhythm_chamber_a1b2c3d4
-const collection = await RAG.getCollectionName();
-```
+| Method | Algorithm | Use Case | Threat Model |
+|--------|-----------|----------|-------------|
+| **Obfuscation** | XOR with session salt | Non-critical data | Casual inspection |
+| **Encryption** | AES-GCM 256-bit | API keys, credentials | DevTools/memory attack |
+
+**Obfuscation** (`Security.obfuscate()`) uses simple XOR with a session salt. It prevents casual reading but is NOT cryptographically secure.
+
+**Encryption** (`Security.encryptData()`) uses AES-GCM with PBKDF2 key derivation (100k iterations). This is real encryption, though keys are still client-side.
 
 ### 7. Unified Error Context (NEW)
 
@@ -268,6 +272,7 @@ If you discover a security vulnerability in Rhythm Chamber:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.2 | 2026-01-13 | Clarified obfuscation vs encryption, removed namespace isolation (user owns Qdrant) |
 | 1.1 | 2026-01-12 | XSS token protection, adaptive lockouts, unified errors |
 | 1.0 | 2026-01-12 | Initial security model |
 

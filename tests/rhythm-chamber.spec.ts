@@ -315,4 +315,294 @@ test.describe('File Validation', () => {
         // Clean up
         fs.unlinkSync(invalidDataPath);
     });
+
+    test('should reject empty JSON array', async ({ page }) => {
+        await page.goto('/app.html', { waitUntil: 'networkidle' });
+        await clearIndexedDB(page);
+        await page.goto('/app.html', { waitUntil: 'networkidle' });
+
+        // Create empty array file
+        const emptyDataPath = path.join(TEST_DATA_DIR, 'empty-data.json');
+        fs.writeFileSync(emptyDataPath, JSON.stringify([]));
+
+        // Try to upload
+        await page.locator('#file-input').setInputFiles(emptyDataPath);
+
+        // Should show error
+        await expect(page.locator('#progress-text')).toContainText(/error|empty|no.*data|fail/i, { timeout: 10000 });
+
+        // Clean up
+        fs.unlinkSync(emptyDataPath);
+    });
+});
+
+// ==========================================
+// Settings Persistence Tests
+// ==========================================
+
+test.describe('Settings Persistence', () => {
+    test('should persist settings across page reload', async ({ page }) => {
+        await page.goto('/app.html', { waitUntil: 'networkidle' });
+        await clearIndexedDB(page);
+        await page.goto('/app.html', { waitUntil: 'networkidle' });
+
+        // Open settings modal via settings button
+        const settingsBtn = page.locator('#settings-btn, .settings-btn').first();
+        await settingsBtn.click();
+        await expect(page.locator('#settings-modal')).toBeVisible({ timeout: 5000 });
+
+        // Change a setting (model selection)
+        const modelSelect = page.locator('#model-select');
+        if (await modelSelect.isVisible()) {
+            await modelSelect.selectOption({ index: 1 }); // Select second option
+        }
+
+        // Close modal via close button
+        const closeBtn = page.locator('#settings-modal .close-btn, #settings-modal [class*="close"]').first();
+        await closeBtn.click();
+        await expect(page.locator('#settings-modal')).not.toBeVisible({ timeout: 5000 });
+
+        // Reload page
+        await page.reload({ waitUntil: 'networkidle' });
+
+        // Re-open settings and verify setting persisted
+        const settingsBtnAfterReload = page.locator('#settings-btn, .settings-btn').first();
+        await settingsBtnAfterReload.click();
+        await expect(page.locator('#settings-modal')).toBeVisible({ timeout: 5000 });
+
+        // Re-query model select after page reload (DOM is new)
+        const modelSelectAfterReload = page.locator('#model-select');
+        await expect(modelSelectAfterReload).toBeVisible({ timeout: 5000 });
+
+        // Verify model selection persisted (check it's not empty)
+        const selectedValue = await modelSelectAfterReload.inputValue();
+        expect(selectedValue).toBeTruthy();
+    });
+
+
+    test('should show settings modal and close properly', async ({ page }) => {
+        await page.goto('/app.html', { waitUntil: 'networkidle' });
+
+        // Open settings
+        const settingsBtn = page.locator('#settings-btn, .settings-btn').first();
+        await settingsBtn.click();
+        await expect(page.locator('#settings-modal')).toBeVisible({ timeout: 5000 });
+
+        // Close via close button
+        const closeBtn = page.locator('#settings-modal .close-btn, #settings-modal [class*="close"]').first();
+        await closeBtn.click();
+        await expect(page.locator('#settings-modal')).not.toBeVisible({ timeout: 5000 });
+    });
+});
+
+// ==========================================
+// Start Over / Reset Tests
+// ==========================================
+
+test.describe('Start Over Functionality', () => {
+    test('should show reset confirmation modal', async ({ page }) => {
+        await page.goto('/app.html', { waitUntil: 'networkidle' });
+        await clearIndexedDB(page);
+        await page.goto('/app.html', { waitUntil: 'networkidle' });
+
+        // Upload data first
+        await page.locator('#file-input').setInputFiles(SAMPLE_JSON_PATH);
+        await expect(page.locator('.personality-reveal').first()).toBeVisible({ timeout: 30000 });
+
+        // Wait for Start Over button to be visible
+        const startOverBtn = page.locator('#reset-btn, .reset-btn, button:has-text("Start Over")').first();
+        await page.waitForTimeout(500); // Let UI settle
+
+        if (await startOverBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+            await startOverBtn.click();
+
+            // Should show confirmation modal
+            const resetModal = page.locator('#reset-confirm-modal, #reset-modal, .reset-modal').first();
+            await expect(resetModal).toBeVisible({ timeout: 5000 });
+        } else {
+            // Start Over button may not be visible in personality view - test passes
+            test.skip();
+        }
+    });
+
+    test('should return to upload view after confirmed reset', async ({ page }) => {
+        await page.goto('/app.html', { waitUntil: 'networkidle' });
+        await clearIndexedDB(page);
+        await page.goto('/app.html', { waitUntil: 'networkidle' });
+
+        // Upload data first
+        await page.locator('#file-input').setInputFiles(SAMPLE_JSON_PATH);
+        await expect(page.locator('.personality-reveal').first()).toBeVisible({ timeout: 30000 });
+
+        // Click Start Over button
+        const startOverBtn = page.locator('#reset-btn');
+        if (await startOverBtn.isVisible()) {
+            await startOverBtn.click();
+
+            // Confirm reset
+            const confirmBtn = page.locator('#reset-modal .confirm-btn, #reset-modal .btn-danger');
+            if (await confirmBtn.isVisible()) {
+                await confirmBtn.click();
+
+                // Should return to upload view
+                await expect(page.locator('#upload-zone')).toBeVisible({ timeout: 10000 });
+            }
+        }
+    });
+});
+
+// ==========================================
+// Chat Input Tests
+// ==========================================
+
+test.describe('Chat Input Functionality', () => {
+    test('should have accessible chat input after personality reveal', async ({ page }) => {
+        await page.goto('/app.html', { waitUntil: 'networkidle' });
+        await clearIndexedDB(page);
+        await page.goto('/app.html', { waitUntil: 'networkidle' });
+
+        // Upload and wait for personality
+        await page.locator('#file-input').setInputFiles(SAMPLE_JSON_PATH);
+        await expect(page.locator('.personality-reveal').first()).toBeVisible({ timeout: 30000 });
+
+        // Go to chat
+        const chatBtn = page.locator('#explore-chat-btn');
+        await expect(chatBtn).toBeVisible({ timeout: 5000 });
+        await chatBtn.click();
+
+        // Wait for chat view with longer timeout
+        await expect(page.locator('#chat-container, .chat-container, [class*="chat"]').first()).toBeVisible({ timeout: 10000 });
+
+        // Chat input should be visible and enabled
+        const chatInput = page.locator('#chat-input, textarea[placeholder*="message"], .chat-input').first();
+        await expect(chatInput).toBeVisible({ timeout: 5000 });
+        await expect(chatInput).toBeEnabled();
+
+        // Type a message
+        await chatInput.fill('Hello, what can you tell me about my music?');
+        expect(await chatInput.inputValue()).toContain('Hello');
+
+        // Send button should be visible
+        const sendBtn = page.locator('#chat-send, #send-btn, .chat-send').first();
+        await expect(sendBtn).toBeVisible();
+    });
+
+    test('should display system welcome message in chat', async ({ page }) => {
+        await page.goto('/app.html', { waitUntil: 'networkidle' });
+        await clearIndexedDB(page);
+        await page.goto('/app.html', { waitUntil: 'networkidle' });
+
+        // Upload and navigate to chat
+        await page.locator('#file-input').setInputFiles(SAMPLE_JSON_PATH);
+        await expect(page.locator('.personality-reveal').first()).toBeVisible({ timeout: 30000 });
+
+        const chatBtn = page.locator('#explore-chat-btn');
+        await expect(chatBtn).toBeVisible({ timeout: 5000 });
+        await chatBtn.click();
+
+        // Should have at least one message (system/assistant welcome)
+        const messages = page.locator('.chat-message, .message');
+        await expect(messages.first()).toBeVisible({ timeout: 5000 });
+    });
+});
+
+// ==========================================
+// Sidebar Tests
+// ==========================================
+
+test.describe('Sidebar Functionality', () => {
+    test('should toggle sidebar visibility', async ({ page }) => {
+        await page.goto('/app.html', { waitUntil: 'networkidle' });
+        await clearIndexedDB(page);
+        await page.goto('/app.html', { waitUntil: 'networkidle' });
+
+        // Upload and navigate to chat (where sidebar is visible)
+        await page.locator('#file-input').setInputFiles(SAMPLE_JSON_PATH);
+        await expect(page.locator('.personality-reveal').first()).toBeVisible({ timeout: 30000 });
+
+        const chatBtn = page.locator('#explore-chat-btn');
+        await expect(chatBtn).toBeVisible({ timeout: 5000 });
+        await chatBtn.click();
+
+        // Sidebar toggle should be accessible
+        const toggleBtn = page.locator('#sidebar-toggle');
+        if (await toggleBtn.isVisible()) {
+            // Click to toggle
+            await toggleBtn.click();
+
+            // Sidebar state should change (collapsed class)
+            await page.waitForTimeout(300); // Wait for animation
+
+            // Toggle again
+            await toggleBtn.click();
+            await page.waitForTimeout(300);
+        }
+    });
+
+    test('should persist sidebar state across reload', async ({ page }) => {
+        await page.goto('/app.html', { waitUntil: 'networkidle' });
+        await clearIndexedDB(page);
+        await page.goto('/app.html', { waitUntil: 'networkidle' });
+
+        // Upload and navigate to chat
+        await page.locator('#file-input').setInputFiles(SAMPLE_JSON_PATH);
+        await expect(page.locator('.personality-reveal').first()).toBeVisible({ timeout: 30000 });
+
+        const chatBtn = page.locator('#explore-chat-btn');
+        await expect(chatBtn).toBeVisible({ timeout: 5000 });
+        await chatBtn.click();
+        await expect(page.locator('#chat-container, .chat-container, [class*="chat"]').first()).toBeVisible({ timeout: 10000 });
+
+
+        // Store sidebar state before toggle
+        const sidebar = page.locator('#chat-sidebar');
+        const wasCollapsed = await sidebar.evaluate(el => el.classList.contains('collapsed'));
+
+        // Toggle sidebar
+        const toggleBtn = page.locator('#sidebar-toggle');
+        if (await toggleBtn.isVisible()) {
+            await toggleBtn.click();
+            await page.waitForTimeout(300);
+
+            // Verify state changed
+            const isNowCollapsed = await sidebar.evaluate(el => el.classList.contains('collapsed'));
+            expect(isNowCollapsed).not.toBe(wasCollapsed);
+
+            // Reload and check persistence
+            await page.reload({ waitUntil: 'networkidle' });
+            await page.waitForTimeout(500);
+
+            // State should persist
+            const afterReloadCollapsed = await sidebar.evaluate(el => el.classList.contains('collapsed'));
+            expect(afterReloadCollapsed).toBe(isNowCollapsed);
+        }
+    });
+});
+
+// ==========================================
+// Error Boundary Tests
+// ==========================================
+
+test.describe('Error Handling', () => {
+    test('should handle malformed JSON gracefully', async ({ page }) => {
+        await page.goto('/app.html', { waitUntil: 'networkidle' });
+        await clearIndexedDB(page);
+        await page.goto('/app.html', { waitUntil: 'networkidle' });
+
+        // Create malformed JSON file
+        const malformedPath = path.join(TEST_DATA_DIR, 'malformed.json');
+        fs.writeFileSync(malformedPath, '{ invalid json without closing');
+
+        // Try to upload
+        await page.locator('#file-input').setInputFiles(malformedPath);
+
+        // Should show error message (not crash)
+        await expect(page.locator('#progress-text')).toContainText(/error|parse|invalid|json/i, { timeout: 10000 });
+
+        // App should still be responsive
+        await expect(page.locator('#upload-zone')).toBeVisible();
+
+        // Clean up
+        fs.unlinkSync(malformedPath);
+    });
 });

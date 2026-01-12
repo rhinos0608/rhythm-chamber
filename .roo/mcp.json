@@ -1,1 +1,1 @@
-{"mcpServers":{"filesystem":{"command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","/Users/rhinesharar/rhythm-chamber"],"alwaysAllow":["edit_file","read_text_file"]}}}
+{"mcpServers":{"filesystem":{"command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","/Users/rhinesharar/rhythm-chamber"],"alwaysAllow":["read_text_file","search_files"]}}}

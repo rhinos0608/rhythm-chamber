@@ -1,16 +1,24 @@
 # Technical Architecture
 
-## The Insight: No Server Needed (Free MVP)
+## The Insight: Zero-Backend is Our Moat
 
-**Everything runs on the user's device by default.** Zero friction, zero accounts.
+**Everything runs on the user's device by default.** This isn't just cost-saving—it's a competitive advantage against server-dependent competitors like Stats.fm.
 
-| Component | Cost | Who Pays |
-|-----------|------|----------|
-| LLM inference | $0 | OpenRouter (free tier) |
-| Processing | $0 | User's browser |
-| Data storage | $0 | User's localStorage/IndexedDB |
-| **Cloud Sync** | **$2/mo / $10 One-time** | **(Future)** User pays for server storage |
-| **Total (Base)** | **$0** | **Free Forever** |
+| Component | Cost | Who Pays | Competitive Advantage |
+|-----------|------|----------|----------------------|
+| LLM inference | $0 | OpenRouter (free tier) | No server costs = free tier is actually free |
+| Processing | $0 | User's browser | Privacy-first, no data breach risk |
+| Data storage | $0 | User's localStorage/IndexedDB | User controls their data, not us |
+| **Cloud Sync** | **$2/mo / $10 One-time** | **(Future)** User pays for server storage | **Optional**—users can stay 100% local |
+| **Total (Base)** | **$0** | **Free Forever** | Stats.fm needs to monetize to survive |
+
+**Key Insight:** Stats.fm requires server infrastructure, which means:
+- They must monetize to cover hosting costs
+- They control your data
+- They can shut down or change pricing
+- You depend on their uptime
+
+**Rhythm Chamber:** "Your data never leaves your device, runs in your browser, you control everything."
 
 ---
 
@@ -37,6 +45,8 @@ Your "backend":
 └── Static HTML/JS files only (no serverless needed)
 ```
 
+**This architecture is a feature, not a bug.** For the quantified-self crowd, this is hugely compelling.
+
 ---
 
 ## Configuration & Persistence
@@ -47,6 +57,12 @@ The app uses a layered configuration system:
 2.  **Overrides**: `localStorage` stores user-configured settings (API keys, models).
 3.  **UI**: An in-app settings modal allows users to modify these without editing files.
 4.  **Priority**: `config.js` > `localStorage` (if `config.js` has non-placeholder values).
+
+**BYOK Model (Bring Your Own Keys):**
+- Users provide their own OpenRouter API key
+- Users can provide their own Qdrant cluster for semantic search
+- Users control their AI model choice
+- **This appeals to power users who want control and transparency**
 
 ---
 
@@ -118,7 +134,7 @@ flowchart LR
     D --> E[Store in IndexedDB]
     E --> F[Full pattern detection]
     F --> G[Full personality]
-    G --> H[Reveal + Chat]
+    G --> H[Reveal + Chat + Semantic Search]
 ```
 
 **Data Available:**
@@ -126,6 +142,7 @@ flowchart LR
 - Skip patterns, play durations
 - Era detection, ghosted artists
 - Time-of-day patterns
+- **Semantic search across entire history**
 
 ---
 
@@ -243,26 +260,7 @@ When function calling is unavailable (no API key, free models that don't support
 
 ---
 
-## Data-Driven Prompt Engineering
-
-The system prompt dynamically adapts based on a "Key Data Profile" generated during the analysis phase.
-
-### Inputs
-1.  **Wrapped-Style Metrics**:
-    *   Total Minutes listened
-    *   Top Artist Name + Percentile (estimated)
-    *   Peak Listening Day
-    *   Distinct Artists Count
-2.  **Personality Lens**:
-    *   Primary Personality Type (e.g., "The Mood Engineer")
-    *   Evidence Points (e.g., "Morning ≠ Evening")
-
-### Injection Flow
-`js/patterns.js` calculates metrics -> `js/personality.js` formats them -> `js/chat.js` injects into `js/prompts.js` template (`{{data_insights}}`).
-
----
-
-## Semantic Search
+## Semantic Search: The Competitive Moat
 
 ### Architecture Overview
 
@@ -276,6 +274,15 @@ flowchart LR
     D --> E[Inject into System Prompt]
     E --> F[LLM Response]
 ```
+
+### Why This Matters vs Stats.fm
+
+**Stats.fm:** "Click to explore charts"
+**Rhythm Chamber:** "Ask natural questions"
+
+**Example:**
+- **Stats.fm:** Shows you a chart of "March 2020 Top Artists"
+- **Rhythm Chamber:** You ask "What was I listening to during my breakup in March 2020?" → Gets semantic answer with context
 
 ### Components
 
@@ -318,6 +325,10 @@ if (window.RAG?.isConfigured()) {
 2. Enter Qdrant URL + API key in Settings
 3. Click "Generate Embeddings" → Progress bar
 4. Semantic search now active in chat
+
+**This is a power user feature**—but that's the point. Power users are our target audience.
+
+---
 
 ## Storage: IndexedDB + localStorage
 
