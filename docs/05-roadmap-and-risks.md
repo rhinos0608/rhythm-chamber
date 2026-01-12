@@ -101,7 +101,7 @@
 | P1 | Premium AI models | Better chat quality |
 | P1 | Production deploy | Vercel/Netlify |
 | P2 | Year-in-review generator | Annual summary |
-| P2 | Monetization (credits) | Usage-based pricing |
+| P2 | Monetization 
 | P3 | Apple Music support | Different data format |
 
 ---
