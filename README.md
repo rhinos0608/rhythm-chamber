@@ -21,7 +21,7 @@ Upload .zip → Personality Reveal → Chat → Share Card
 1. **Duration tracking** — Music engagement analysis
 2. **Personality types** — What kind of type your data shows
 3. **Silence as a feature** — Zero-choice, no explanation
-4. **100% free - nothing is feature is locked, future monetization for $2 monthly or $10 lifetime for chat storage and synchronization
+4. **100% free** - nothing is feature is locked, future monetization for $2 monthly or $10 lifetime for chat storage and synchronization
 
 ## Project Status
 🚧 **Pre-development** — Documentation complete, ready for implementation
