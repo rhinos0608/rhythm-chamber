@@ -687,6 +687,73 @@ function generateLiteSummary(liteData, patterns) {
     };
 }
 
+/**
+ * NEW: Detect immediate vibe from first 5 minutes of data
+* Used for instant insight in Quick Snapshot mode
+*/
+function detectImmediateVibe(liteData) {
+    const { recentStreams, topArtists, topTracks } = liteData;
+
+    if (!recentStreams || recentStreams.length === 0) {
+        return "Upload your data to see your music personality!";
+    }
+
+    // Get first 5 minutes worth of streams (or all if less)
+    const first5MinStreams = recentStreams.slice(0, 15); // Approx 15 streams for 5 mins
+
+    // Analyze diversity
+    const uniqueArtists = new Set(first5MinStreams.map(s => s.artistName)).size;
+    const totalStreams = first5MinStreams.length;
+    const diversityRatio = uniqueArtists / totalStreams;
+
+    // Analyze current obsession
+    const artistCounts = {};
+    first5MinStreams.forEach(s => {
+        artistCounts[s.artistName] = (artistCounts[s.artistName] || 0) + 1;
+    });
+    const sortedArtists = Object.entries(artistCounts).sort((a, b) => b[1] - a[1]);
+    const topArtist = sortedArtists[0];
+
+    // Analyze genres
+    const allGenres = [];
+    topArtists.shortTerm.forEach(a => allGenres.push(...(a.genres || [])));
+    const genreCounts = {};
+    for (const genre of allGenres) {
+        genreCounts[genre] = (genreCounts[genre] || 0) + 1;
+    }
+    const topGenres = Object.entries(genreCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([genre]) => genre);
+
+    // Generate instant insight
+    let insight = "";
+
+    // Diversity insight
+    if (diversityRatio > 0.6) {
+        insight += "You're exploring new sounds - always discovering fresh artists! ";
+    } else if (diversityRatio < 0.3) {
+        insight += `You're deep in your favorites - ${topArtist[0]} is on repeat! `;
+    } else {
+        insight += "Balanced mix of familiar and new music. ";
+    }
+
+    // Genre insight
+    if (topGenres.length > 0) {
+        insight += `Your current vibe: ${topGenres.join(", ")}. `;
+    }
+
+    // Engagement insight
+    const avgCompletion = first5MinStreams.reduce((sum, s) => sum + (s.completionRate || 0), 0) / first5MinStreams.length;
+    if (avgCompletion > 0.8) {
+        insight += "You're fully engaged with your music! ";
+    } else if (avgCompletion < 0.5) {
+        insight += "Lots of skipping - searching for the right mood. ";
+    }
+
+    return insight.trim();
+}
+
 // Public API
 window.Patterns = {
     detectComfortDiscoveryRatio,
@@ -698,5 +765,6 @@ window.Patterns = {
     detectMoodSearching,
     detectTrueFavorites,
     detectAllPatterns,
-    detectLitePatterns
+    detectLitePatterns,
+    detectImmediateVibe
 };

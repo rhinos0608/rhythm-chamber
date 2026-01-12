@@ -102,7 +102,9 @@ async function saveConfig(config) {
         chunksCount: config.chunksCount,
         generatedAt: config.generatedAt,
         dataHash: config.dataHash,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        // Flag for sync checks - indicates credentials have been saved
+        hasCredentials: !!(config.qdrantUrl && config.qdrantApiKey)
     };
 
     // Store non-sensitive in unified storage (IndexedDB)
@@ -136,27 +138,46 @@ async function saveConfig(config) {
 }
 
 
+
 /**
- * Check if RAG is fully configured and ready
+ * Get RAG configuration synchronously (for UI checks)
+ * Uses localStorage directly - doesn't include encrypted credentials
+ * For full config with credentials, use async getConfig()
  */
-function isConfigured() {
-    const config = getConfig();
-    return !!(config?.qdrantUrl && config?.qdrantApiKey && config?.embeddingsGenerated);
+function getConfigSync() {
+    try {
+        const stored = localStorage.getItem(RAG_STORAGE_KEY);
+        return stored ? JSON.parse(stored) : null;
+    } catch (e) {
+        return null;
+    }
 }
 
 /**
- * Check if Qdrant credentials are set (but embeddings may not be generated)
+ * Check if RAG is fully configured and ready (SYNC version)
+ * Note: Uses localStorage, so credentials may not be fully checked
+ */
+function isConfigured() {
+    const config = getConfigSync();
+    return !!(config?.embeddingsGenerated);
+}
+
+/**
+ * Check if Qdrant credentials are set (SYNC version)
+ * Note: Checks localStorage flag, not actual encrypted credentials
  */
 function hasCredentials() {
-    const config = getConfig();
-    return !!(config?.qdrantUrl && config?.qdrantApiKey);
+    const config = getConfigSync();
+    // Check if we have the flag that indicates credentials were saved
+    return !!(config?.hasCredentials || (config?.qdrantUrl && config?.qdrantApiKey));
 }
 
 /**
  * Check if embeddings are stale (data changed since generation)
+ * ASYNC - needs to fetch data hash
  */
 async function isStale() {
-    const config = getConfig();
+    const config = await getConfig();
     if (!config?.embeddingsGenerated || !config?.dataHash) {
         return true;
     }
@@ -164,6 +185,7 @@ async function isStale() {
     const currentHash = await window.Storage?.getDataHash?.();
     return currentHash !== config.dataHash;
 }
+
 
 /**
  * Get checkpoint for resume
@@ -273,6 +295,212 @@ async function clearCheckpoint() {
     // Also clear from localStorage
     localStorage.removeItem(RAG_CHECKPOINT_KEY);
     localStorage.removeItem(RAG_CHECKPOINT_CIPHER_KEY);
+}
+
+// ==========================================
+// Incremental Embedding Support (Phase 3)
+// ==========================================
+
+/**
+ * Get the embedding manifest - tracks what has been embedded
+ * 
+ * The manifest stores:
+ * - embeddedMonths: Set of month keys (e.g., "2024-03") that have been embedded
+ * - embeddedArtists: Set of artist names with their chunk hash
+ * - lastEmbeddedDate: The most recent stream date that was embedded
+ * - totalChunksEmbedded: Count of all chunks embedded so far
+ * 
+ * @returns {Object} The embedding manifest or default empty manifest
+ */
+async function getEmbeddingManifest() {
+    const MANIFEST_KEY = 'rhythm_chamber_embedding_manifest';
+
+    try {
+        // Try unified storage first
+        if (window.Storage?.getConfig) {
+            const manifest = await window.Storage.getConfig(MANIFEST_KEY);
+            if (manifest) return manifest;
+        }
+
+        // Fallback to localStorage
+        const stored = localStorage.getItem(MANIFEST_KEY);
+        if (stored) return JSON.parse(stored);
+    } catch (e) {
+        console.warn('[RAG] Failed to get embedding manifest:', e);
+    }
+
+    // Default empty manifest
+    return {
+        embeddedMonths: [],
+        embeddedArtists: [],
+        lastEmbeddedDate: null,
+        totalChunksEmbedded: 0,
+        version: 1
+    };
+}
+
+/**
+ * Save the embedding manifest
+ * 
+ * @param {Object} manifest - The manifest to save
+ */
+async function saveEmbeddingManifest(manifest) {
+    const MANIFEST_KEY = 'rhythm_chamber_embedding_manifest';
+
+    manifest.updatedAt = Date.now();
+
+    // Save to unified storage
+    if (window.Storage?.setConfig) {
+        try {
+            await window.Storage.setConfig(MANIFEST_KEY, manifest);
+        } catch (e) {
+            console.warn('[RAG] Failed to save manifest to unified storage:', e);
+        }
+    }
+
+    // Also save to localStorage for fallback
+    try {
+        localStorage.setItem(MANIFEST_KEY, JSON.stringify(manifest));
+    } catch (e) {
+        console.warn('[RAG] Failed to save manifest to localStorage:', e);
+    }
+}
+
+/**
+ * Clear the embedding manifest (used during full re-embedding)
+ */
+async function clearEmbeddingManifest() {
+    const MANIFEST_KEY = 'rhythm_chamber_embedding_manifest';
+
+    if (window.Storage?.removeConfig) {
+        try {
+            await window.Storage.removeConfig(MANIFEST_KEY);
+        } catch (e) {
+            console.warn('[RAG] Failed to clear manifest from unified storage:', e);
+        }
+    }
+    localStorage.removeItem(MANIFEST_KEY);
+}
+
+/**
+ * Detect new chunks that haven't been embedded yet
+ * 
+ * Compares current streams against the manifest to find:
+ * - New months that haven't been summarized
+ * - New artists that haven't been profiled
+ * - Updated data for existing months (more plays)
+ * 
+ * @param {Array} streams - Current streaming data
+ * @returns {Object} { newChunks, updatedMonths, summary }
+ */
+async function getNewChunks(streams) {
+    const manifest = await getEmbeddingManifest();
+    const embeddedMonthsSet = new Set(manifest.embeddedMonths || []);
+    const embeddedArtistsSet = new Set(manifest.embeddedArtists || []);
+
+    // Analyze current data
+    const currentMonths = new Set();
+    const currentArtists = new Map(); // artist -> play count
+    let latestDate = null;
+
+    streams.forEach(stream => {
+        const date = new Date(stream.ts || stream.endTime);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        const artist = stream.master_metadata_album_artist_name || stream.artistName || 'Unknown';
+
+        currentMonths.add(monthKey);
+        currentArtists.set(artist, (currentArtists.get(artist) || 0) + 1);
+
+        if (!latestDate || date > latestDate) latestDate = date;
+    });
+
+    // Find new months
+    const newMonths = [];
+    currentMonths.forEach(month => {
+        if (!embeddedMonthsSet.has(month)) {
+            newMonths.push(month);
+        }
+    });
+
+    // Find new artists (top 50 that haven't been embedded)
+    const sortedArtists = [...currentArtists.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 50);
+
+    const newArtists = sortedArtists
+        .filter(([artist]) => !embeddedArtistsSet.has(artist))
+        .map(([artist, count]) => ({ artist, count }));
+
+    // Calculate what chunks would be created from new data
+    const newMonthChunksCount = newMonths.length; // 1 chunk per month
+    const newArtistChunksCount = newArtists.length; // 1 chunk per artist
+    const totalNewChunks = newMonthChunksCount + newArtistChunksCount;
+
+    return {
+        newMonths,
+        newArtists,
+        totalNewChunks,
+        manifest,
+        summary: {
+            existingMonths: embeddedMonthsSet.size,
+            existingArtists: embeddedArtistsSet.size,
+            newMonthsCount: newMonths.length,
+            newArtistsCount: newArtists.length,
+            hasNewData: totalNewChunks > 0,
+            latestDate: latestDate?.toISOString()
+        }
+    };
+}
+
+/**
+ * Filter streams to only include data for incremental embedding
+ * 
+ * @param {Array} streams - All streaming data
+ * @param {Object} incrementalInfo - Output from getNewChunks()
+ * @returns {Array} Streams filtered to only new data
+ */
+function filterStreamsForIncremental(streams, incrementalInfo) {
+    const { newMonths, newArtists } = incrementalInfo;
+    const newMonthsSet = new Set(newMonths);
+    const newArtistsSet = new Set(newArtists.map(a => a.artist));
+
+    return streams.filter(stream => {
+        const date = new Date(stream.ts || stream.endTime);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        const artist = stream.master_metadata_album_artist_name || stream.artistName || 'Unknown';
+
+        // Include if from a new month OR from a new artist
+        return newMonthsSet.has(monthKey) || newArtistsSet.has(artist);
+    });
+}
+
+/**
+ * Update manifest after successful embedding
+ * 
+ * @param {Array} embeddedChunks - Chunks that were successfully embedded
+ */
+async function updateManifestAfterEmbedding(embeddedChunks) {
+    const manifest = await getEmbeddingManifest();
+
+    const monthsSet = new Set(manifest.embeddedMonths || []);
+    const artistsSet = new Set(manifest.embeddedArtists || []);
+
+    embeddedChunks.forEach(chunk => {
+        if (chunk.type === 'monthly_summary' && chunk.metadata?.month) {
+            monthsSet.add(chunk.metadata.month);
+        } else if (chunk.type === 'artist_profile' && chunk.metadata?.artist) {
+            artistsSet.add(chunk.metadata.artist);
+        }
+    });
+
+    manifest.embeddedMonths = [...monthsSet];
+    manifest.embeddedArtists = [...artistsSet];
+    manifest.totalChunksEmbedded = (manifest.totalChunksEmbedded || 0) + embeddedChunks.length;
+    manifest.lastEmbeddedAt = Date.now();
+
+    await saveEmbeddingManifest(manifest);
+
+    console.log(`[RAG] Updated manifest: ${monthsSet.size} months, ${artistsSet.size} artists embedded`);
 }
 
 
@@ -644,9 +872,13 @@ async function generateEmbeddings(onProgress = () => { }, options = {}) {
             dataHash: dataHash
         });
 
+        // Update embedding manifest for incremental support (Phase 3)
+        await updateManifestAfterEmbedding(chunks);
+
         onProgress(totalChunks, totalChunks, '✓ Embeddings generated successfully!');
 
         return { success: true, chunksProcessed: totalChunks };
+
 
     } finally {
         // SECURITY: Always stop background refresh when done
@@ -818,6 +1050,7 @@ async function getSemanticContext(query, limit = 3) {
 // Public API
 window.RAG = {
     getConfig,
+    getConfigSync,  // Sync version for UI checks
     saveConfig,
     isConfigured,
     hasCredentials,
@@ -831,9 +1064,18 @@ window.RAG = {
     generateEmbeddings,
     clearEmbeddings,
     getSemanticContext,
-    getCollectionName, // Exposed for debugging
-    COLLECTION_NAME: COLLECTION_NAME_BASE, // Base name (actual uses namespace)
+    getCollectionName,
+
+    // Incremental embedding support (Phase 3)
+    getEmbeddingManifest,
+    getNewChunks,
+    filterStreamsForIncremental,
+    clearEmbeddingManifest,
+
+    // Constants
+    COLLECTION_NAME: COLLECTION_NAME_BASE,
     EMBEDDING_MODEL
 };
 
-console.log('[RAG] Secure RAG module loaded with namespace isolation');
+
+console.log('[RAG] RAG module loaded with incremental embedding support');

@@ -1235,8 +1235,97 @@ a {
   background: var(--bg-primary);
 }
 
+/* Provider Section Styles */
+.provider-section {
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-glass);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-md);
+  font-size: 0.85rem;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.checking {
+  background: #f59e0b;
+  animation: pulse-glow 1s ease-in-out infinite;
+}
+
+.status-dot.connected {
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.5);
+}
+
+.status-dot.error {
+  background: #ef4444;
+}
+
+.btn-small {
+  padding: var(--space-xs) var(--space-sm) !important;
+  font-size: 0.75rem !important;
+  margin-left: var(--space-sm);
+}
+
+/* Advanced Parameters Collapsible */
+.settings-advanced {
+  margin-top: var(--space-lg);
+  padding: var(--space-md);
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.settings-advanced summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding: var(--space-sm) 0;
+}
+
+.settings-advanced summary:hover {
+  color: var(--text-primary);
+}
+
+.settings-advanced[open] summary {
+  margin-bottom: var(--space-md);
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: var(--space-sm);
+}
+
+.settings-field select {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.settings-field select:focus {
+  border-color: var(--accent-primary);
+  outline: none;
+}
+
 /* Toast Notifications */
-.toast {
+.toast,
+.toast-notification {
   position: fixed;
   bottom: var(--space-xl);
   left: 50%;
@@ -1250,11 +1339,59 @@ a {
   opacity: 0;
   transition: all 0.3s ease;
   z-index: 2000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-.toast.show {
+.toast.show,
+.toast-notification.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+/* Privacy Dashboard Styles */
+.privacy-dashboard {
+  padding: var(--space-md);
+}
+
+.privacy-dashboard p {
+  margin-bottom: var(--space-sm);
+  font-size: 0.95rem;
+}
+
+.privacy-dashboard strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.privacy-dashboard .token-status {
+  background: var(--bg-primary);
+  padding: var(--space-md);
+  border-radius: var(--radius-sm);
+  margin: var(--space-md) 0;
+  border: 1px solid var(--border-subtle);
+}
+
+.privacy-dashboard .btn {
+  font-size: 0.85rem;
+  padding: var(--space-sm) var(--space-md);
+}
+
+/* Privacy Dashboard Button in Header */
+#privacy-dashboard-btn {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+#privacy-dashboard-btn:hover {
+  background: var(--bg-glass);
+  color: var(--text-primary);
+  border-color: var(--border-accent);
 }
 
 /* Settings Button in Header */

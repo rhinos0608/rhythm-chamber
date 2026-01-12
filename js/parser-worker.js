@@ -14,6 +14,50 @@ importScripts('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
 const MAX_FILE_SIZE_MB = 500;          // 500MB limit
 const MAX_STREAMS = 1_000_000;         // 1M play limit
 const MIN_VALID_RATIO = 0.95;          // 95% must be valid (not 50%)
+const CHUNK_SIZE_MB = 10;              // NEW: Process in 10MB chunks
+const MB = 1024 * 1024;                // Bytes in 1MB
+const MEMORY_THRESHOLD = 0.75;         // NEW: 75% RAM usage threshold
+
+// NEW: State for pause/resume
+let isPaused = false;
+let pauseResolve = null;
+
+/**
+ * NEW: Check memory usage and pause if needed
+ */
+async function checkMemoryAndPause() {
+    if (typeof navigator !== 'undefined' && navigator.memory) {
+        const usage = navigator.memory.usage;
+        if (usage > MEMORY_THRESHOLD) {
+            console.log(`[Worker] Memory usage ${Math.round(usage * 100)}% - pausing...`);
+            self.postMessage({ type: 'memory_warning', usage });
+            
+            // Wait for resume signal
+            await new Promise(resolve => {
+                pauseResolve = resolve;
+                isPaused = true;
+            });
+            
+            console.log('[Worker] Resuming processing...');
+            self.postMessage({ type: 'memory_resumed' });
+        }
+    }
+}
+
+/**
+ * NEW: Handle pause/resume signals from main thread
+ */
+self.addEventListener('message', (e) => {
+    if (e.data.type === 'pause') {
+        isPaused = true;
+    } else if (e.data.type === 'resume') {
+        if (pauseResolve) {
+            pauseResolve();
+            pauseResolve = null;
+            isPaused = false;
+        }
+    }
+});
 
 /**
  * Validate a single stream entry matches Spotify schema
@@ -309,7 +353,7 @@ async function parseZipFile(file, existingStreams = null) {
 
     postProgress(`Found ${streamingFiles.length} history files...`);
 
-    // Parse all streaming history files with incremental saving
+    // NEW: Process files in chunks to manage memory
     let allRawStreams = [];
 
     for (let i = 0; i < streamingFiles.length; i++) {
@@ -319,7 +363,22 @@ async function parseZipFile(file, existingStreams = null) {
         const content = await entry.async('text');
         const data = JSON.parse(content);
 
-        allRawStreams = allRawStreams.concat(data);
+        // NEW: Process in chunks if data is large
+        if (data.length > 10000) {
+            // Large file - process in chunks
+            for (let j = 0; j < data.length; j += 10000) {
+                const chunk = data.slice(j, j + 10000);
+                allRawStreams = allRawStreams.concat(chunk);
+                
+                // Check memory and pause if needed
+                await checkMemoryAndPause();
+                
+                // Send progress update
+                postProgress(`Processing chunk ${Math.floor(j/10000) + 1}/${Math.ceil(data.length/10000)} of file ${i + 1}...`);
+            }
+        } else {
+            allRawStreams = allRawStreams.concat(data);
+        }
 
         // Send partial update for incremental saving
         self.postMessage({
