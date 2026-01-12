@@ -405,8 +405,8 @@ function saveFromModal() {
 
     saveSettings(settings);
 
-    // Save Qdrant settings for premium users
-    if (window.Payments?.isPremium() && window.RAG) {
+    // Save Qdrant settings
+    if (window.RAG) {
         const qdrantUrl = document.getElementById('setting-qdrant-url')?.value?.trim();
         const qdrantKey = document.getElementById('setting-qdrant-key')?.value?.trim();
 

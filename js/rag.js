@@ -424,10 +424,6 @@ async function search(query, limit = 5) {
  * @param {object} options - Options including resume, mergeStrategy
  */
 async function generateEmbeddings(onProgress = () => { }, options = {}) {
-    if (!Payments.isPremium()) {
-        throw new Error('Premium subscription required');
-    }
-
     const config = getConfig();
     if (!config?.qdrantUrl || !config?.qdrantApiKey) {
         throw new Error('Please configure your Qdrant credentials first');

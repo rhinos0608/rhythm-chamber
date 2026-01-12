@@ -70,7 +70,7 @@ People don't care about the numbers. They care about **what the numbers say abou
 | Tier | Price | What You Get |
 |------|-------|--------------|
 | **Free** | $0 | Personality type reveal, unlimited chat (free models) |
-| **Premium **| $2 Per month or $5 Lifetime | storage and chat synchronization (nothing is feature locked)
+| **Premium **| $2 Per month or $10 Lifetime | storage and chat synchronization (nothing is feature locked)
 
 ### Why This Works
 - Nothing is feature locked and users only pay for what we pay for as well
