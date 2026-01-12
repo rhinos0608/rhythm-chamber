@@ -4,14 +4,15 @@
  */
 
 const DB_NAME = 'rhythm-chamber';
-const DB_VERSION = 1;
+const DB_VERSION = 2;  // Bumped for CHAT_SESSIONS store
 
 const STORES = {
   STREAMS: 'streams',
   CHUNKS: 'chunks',
   EMBEDDINGS: 'embeddings',
   PERSONALITY: 'personality',
-  SETTINGS: 'settings'
+  SETTINGS: 'settings',
+  CHAT_SESSIONS: 'chat_sessions'  // NEW: Persistent chat storage
 };
 
 let db = null;
@@ -63,6 +64,12 @@ async function initDB() {
       // Store for user settings
       if (!database.objectStoreNames.contains(STORES.SETTINGS)) {
         database.createObjectStore(STORES.SETTINGS, { keyPath: 'key' });
+      }
+
+      // Store for chat sessions (NEW in v2)
+      if (!database.objectStoreNames.contains(STORES.CHAT_SESSIONS)) {
+        const sessionsStore = database.createObjectStore(STORES.CHAT_SESSIONS, { keyPath: 'id' });
+        sessionsStore.createIndex('updatedAt', 'updatedAt', { unique: false });
       }
     };
   });
@@ -205,6 +212,105 @@ const Storage = {
   async getSetting(key) {
     const result = await get(STORES.SETTINGS, key);
     return result?.value;
+  },
+
+  // ==========================================
+  // Chat Sessions
+  // ==========================================
+
+  /**
+   * Save a chat session (create or update)
+   * @param {Object} session - Session object with id, title, messages, etc.
+   */
+  async saveSession(session) {
+    if (!session.id) {
+      throw new Error('Session must have an id');
+    }
+    const now = new Date().toISOString();
+    const data = {
+      ...session,
+      updatedAt: now,
+      createdAt: session.createdAt || now,
+      messageCount: session.messages?.length || 0
+    };
+    const result = await put(STORES.CHAT_SESSIONS, data);
+    this._notifyUpdate('session', 1);
+    return result;
+  },
+
+  /**
+   * Get a single session by ID
+   * @param {string} id - Session ID
+   */
+  async getSession(id) {
+    return get(STORES.CHAT_SESSIONS, id);
+  },
+
+  /**
+   * Get all sessions, sorted by updatedAt (most recent first)
+   */
+  async getAllSessions() {
+    const database = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction(STORES.CHAT_SESSIONS, 'readonly');
+      const store = transaction.objectStore(STORES.CHAT_SESSIONS);
+      const index = store.index('updatedAt');
+      const request = index.openCursor(null, 'prev'); // Descending order
+
+      const sessions = [];
+      request.onsuccess = (event) => {
+        const cursor = event.target.result;
+        if (cursor) {
+          sessions.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(sessions);
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
+  },
+
+  /**
+   * Delete a session by ID
+   * @param {string} id - Session ID
+   */
+  async deleteSession(id) {
+    const database = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction(STORES.CHAT_SESSIONS, 'readwrite');
+      const store = transaction.objectStore(STORES.CHAT_SESSIONS);
+      const request = store.delete(id);
+
+      request.onsuccess = () => {
+        this._notifyUpdate('session', -1);
+        resolve();
+      };
+      request.onerror = () => reject(request.error);
+    });
+  },
+
+  /**
+   * Get count of sessions
+   */
+  async getSessionCount() {
+    const database = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction(STORES.CHAT_SESSIONS, 'readonly');
+      const store = transaction.objectStore(STORES.CHAT_SESSIONS);
+      const request = store.count();
+
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  },
+
+  /**
+   * Clear all sessions
+   */
+  async clearAllSessions() {
+    await clear(STORES.CHAT_SESSIONS);
+    this._notifyUpdate('session', 0);
   },
 
   // Utility

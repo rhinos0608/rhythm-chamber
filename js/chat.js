@@ -6,20 +6,39 @@
  * Data queries are handled by data-query.js
  */
 
-const CONVERSATION_STORAGE_KEY = 'rhythm_chamber_conversation';
+const CONVERSATION_STORAGE_KEY = 'rhythm_chamber_conversation';  // Legacy, for migration
+const CURRENT_SESSION_KEY = 'rhythm_chamber_current_session';
 
 // HNW Fix: Timeout constants to prevent cascade failures
-const API_TIMEOUT_MS = 60000;       // 60 second timeout for API calls
-const FUNCTION_TIMEOUT_MS = 30000;  // 30 second timeout for function execution
+const CHAT_API_TIMEOUT_MS = 60000;       // 60 second timeout for API calls
+const CHAT_FUNCTION_TIMEOUT_MS = 30000;  // 30 second timeout for function execution
+const AUTO_SAVE_DELAY_MS = 2000;         // Debounce session saves
 
 let conversationHistory = [];
 let userContext = null;
 let streamsData = null;  // Actual streaming data for queries
 
+// Session management state
+let currentSessionId = null;
+let autoSaveTimeoutId = null;
+let sessionUpdateListeners = [];
+
+/**
+ * Generate a UUID for session IDs
+ */
+function generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
 /**
  * Initialize chat with user context and streams data
+ * Now supports persistent session storage
  */
-function initChat(personality, patterns, summary, streams = null) {
+async function initChat(personality, patterns, summary, streams = null) {
     userContext = {
         personality,
         patterns,
@@ -29,19 +48,8 @@ function initChat(personality, patterns, summary, streams = null) {
     // Store streams for data queries
     streamsData = streams;
 
-    // Restore conversation from session if exists
-    try {
-        const saved = sessionStorage.getItem(CONVERSATION_STORAGE_KEY);
-        if (saved) {
-            conversationHistory = JSON.parse(saved);
-            console.log('[Chat] Restored', conversationHistory.length, 'messages from session');
-        } else {
-            conversationHistory = [];
-        }
-    } catch (e) {
-        console.warn('[Chat] Failed to restore conversation:', e);
-        conversationHistory = [];
-    }
+    // Try to load current session or create new one
+    await loadOrCreateSession();
 
     // Register for storage updates to refresh data
     if (window.Storage?.onUpdate) {
@@ -49,6 +57,40 @@ function initChat(personality, patterns, summary, streams = null) {
     }
 
     return buildSystemPrompt();
+}
+
+/**
+ * Load existing session or create a new one
+ */
+async function loadOrCreateSession() {
+    // Check for saved current session ID
+    const savedSessionId = localStorage.getItem(CURRENT_SESSION_KEY);
+
+    if (savedSessionId) {
+        const session = await loadSession(savedSessionId);
+        if (session) {
+            return session;
+        }
+    }
+
+    // Migrate from legacy sessionStorage if exists
+    try {
+        const legacyData = sessionStorage.getItem(CONVERSATION_STORAGE_KEY);
+        if (legacyData) {
+            const history = JSON.parse(legacyData);
+            if (history.length > 0) {
+                console.log('[Chat] Migrating legacy conversation to session storage');
+                await createNewSession(history);
+                sessionStorage.removeItem(CONVERSATION_STORAGE_KEY);
+                return;
+            }
+        }
+    } catch (e) {
+        console.warn('[Chat] Legacy migration failed:', e);
+    }
+
+    // No saved session, create new
+    await createNewSession();
 }
 
 /**
@@ -62,24 +104,253 @@ async function handleStorageUpdate(event) {
 }
 
 /**
- * Save conversation to session
+ * Save conversation to IndexedDB (debounced)
  */
 function saveConversation() {
+    // Cancel any pending save
+    if (autoSaveTimeoutId) {
+        clearTimeout(autoSaveTimeoutId);
+    }
+
+    // Debounce the save
+    autoSaveTimeoutId = setTimeout(async () => {
+        await saveCurrentSession();
+        autoSaveTimeoutId = null;
+    }, AUTO_SAVE_DELAY_MS);
+}
+
+/**
+ * Save current session to IndexedDB immediately
+ */
+async function saveCurrentSession() {
+    if (!currentSessionId || !window.Storage?.saveSession) {
+        return;
+    }
+
     try {
-        // Only save last 50 messages to prevent storage bloat
-        const toSave = conversationHistory.slice(-50);
-        sessionStorage.setItem(CONVERSATION_STORAGE_KEY, JSON.stringify(toSave));
+        const session = {
+            id: currentSessionId,
+            title: generateSessionTitle(),
+            messages: conversationHistory.slice(-100), // Limit to 100 messages
+            metadata: {
+                personalityName: userContext?.personality?.name || 'Unknown',
+                personalityEmoji: userContext?.personality?.emoji || '🎵',
+                isLiteMode: false
+            }
+        };
+
+        await window.Storage.saveSession(session);
+        console.log('[Chat] Session saved:', currentSessionId);
+        notifySessionUpdate();
     } catch (e) {
-        console.warn('[Chat] Failed to save conversation:', e);
+        console.error('[Chat] Failed to save session:', e);
     }
 }
 
 /**
- * Clear conversation history
+ * Generate a title for the session based on first user message
+ */
+function generateSessionTitle() {
+    const firstUserMsg = conversationHistory.find(m => m.role === 'user');
+    if (firstUserMsg?.content) {
+        const title = firstUserMsg.content.slice(0, 50);
+        return title.length < firstUserMsg.content.length ? title + '...' : title;
+    }
+    return 'New Chat';
+}
+
+/**
+ * Create a new session
+ * @param {Array} initialMessages - Optional initial messages (for migration)
+ */
+async function createNewSession(initialMessages = []) {
+    // Flush any pending saves for previous session
+    if (autoSaveTimeoutId) {
+        clearTimeout(autoSaveTimeoutId);
+        await saveCurrentSession();
+    }
+
+    currentSessionId = generateUUID();
+    conversationHistory = [...initialMessages];
+
+    localStorage.setItem(CURRENT_SESSION_KEY, currentSessionId);
+
+    // Save immediately if we have messages
+    if (initialMessages.length > 0) {
+        await saveCurrentSession();
+    }
+
+    console.log('[Chat] Created new session:', currentSessionId);
+    notifySessionUpdate();
+    return currentSessionId;
+}
+
+/**
+ * Load a session by ID
+ * @param {string} sessionId - Session ID to load
+ * @returns {Object|null} Session object or null if not found/invalid
+ */
+async function loadSession(sessionId) {
+    if (!window.Storage?.getSession) {
+        console.warn('[Chat] Storage not available');
+        return null;
+    }
+
+    try {
+        const session = await window.Storage.getSession(sessionId);
+
+        if (!session) {
+            console.warn(`[Chat] Session ${sessionId} not found`);
+            return null;
+        }
+
+        // Validate session structure (HNW defensive)
+        if (!validateSession(session)) {
+            console.warn(`[Chat] Session ${sessionId} is corrupted`);
+            return null;
+        }
+
+        currentSessionId = session.id;
+        conversationHistory = session.messages || [];
+        localStorage.setItem(CURRENT_SESSION_KEY, currentSessionId);
+
+        console.log('[Chat] Loaded session:', sessionId, 'with', conversationHistory.length, 'messages');
+        return session;
+    } catch (e) {
+        console.error('[Chat] Failed to load session:', e);
+        return null;
+    }
+}
+
+/**
+ * Validate session structure (HNW defensive programming)
+ */
+function validateSession(session) {
+    return session
+        && typeof session.id === 'string'
+        && Array.isArray(session.messages)
+        && typeof session.createdAt === 'string';
+}
+
+/**
+ * Switch to a different session
+ * @param {string} sessionId - Session ID to switch to
+ */
+async function switchSession(sessionId) {
+    // Save current session first
+    if (currentSessionId && autoSaveTimeoutId) {
+        clearTimeout(autoSaveTimeoutId);
+        await saveCurrentSession();
+    }
+
+    const session = await loadSession(sessionId);
+    if (session) {
+        notifySessionUpdate();
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Get all sessions for sidebar display
+ */
+async function listSessions() {
+    if (!window.Storage?.getAllSessions) {
+        return [];
+    }
+    try {
+        return await window.Storage.getAllSessions();
+    } catch (e) {
+        console.error('[Chat] Failed to list sessions:', e);
+        return [];
+    }
+}
+
+/**
+ * Delete a session by ID
+ * @param {string} sessionId - Session ID to delete
+ */
+async function deleteSessionById(sessionId) {
+    if (!window.Storage?.deleteSession) {
+        return false;
+    }
+
+    try {
+        await window.Storage.deleteSession(sessionId);
+
+        // If we deleted the current session, create a new one
+        if (sessionId === currentSessionId) {
+            await createNewSession();
+        }
+
+        notifySessionUpdate();
+        return true;
+    } catch (e) {
+        console.error('[Chat] Failed to delete session:', e);
+        return false;
+    }
+}
+
+/**
+ * Rename a session
+ * @param {string} sessionId - Session ID to rename
+ * @param {string} newTitle - New title
+ */
+async function renameSession(sessionId, newTitle) {
+    if (!window.Storage?.getSession || !window.Storage?.saveSession) {
+        return false;
+    }
+
+    try {
+        const session = await window.Storage.getSession(sessionId);
+        if (session) {
+            session.title = newTitle;
+            await window.Storage.saveSession(session);
+            notifySessionUpdate();
+            return true;
+        }
+        return false;
+    } catch (e) {
+        console.error('[Chat] Failed to rename session:', e);
+        return false;
+    }
+}
+
+/**
+ * Get current session ID
+ */
+function getCurrentSessionId() {
+    return currentSessionId;
+}
+
+/**
+ * Register a listener for session updates
+ */
+function onSessionUpdate(callback) {
+    if (typeof callback === 'function') {
+        sessionUpdateListeners.push(callback);
+    }
+}
+
+/**
+ * Notify all session update listeners
+ */
+function notifySessionUpdate() {
+    sessionUpdateListeners.forEach(cb => {
+        try {
+            cb({ sessionId: currentSessionId });
+        } catch (e) {
+            console.error('[Chat] Error in session update listener:', e);
+        }
+    });
+}
+
+/**
+ * Clear conversation history and create new session
  */
 function clearConversation() {
     conversationHistory = [];
-    sessionStorage.removeItem(CONVERSATION_STORAGE_KEY);
+    createNewSession();
 }
 
 /**
@@ -375,7 +646,7 @@ async function sendMessage(message, apiKey = null) {
                     result = await Promise.race([
                         Promise.resolve(window.Functions.execute(functionName, args, streamsData)),
                         new Promise((_, reject) =>
-                            setTimeout(() => reject(new Error(`Function ${functionName} timed out after ${FUNCTION_TIMEOUT_MS}ms`)), FUNCTION_TIMEOUT_MS)
+                            setTimeout(() => reject(new Error(`Function ${functionName} timed out after ${CHAT_FUNCTION_TIMEOUT_MS}ms`)), CHAT_FUNCTION_TIMEOUT_MS)
                         )
                     ]);
                 } catch (funcError) {
@@ -463,7 +734,7 @@ async function callOpenRouter(apiKey, config, messages, tools) {
 
     // Use timeout wrapper if available, otherwise basic fetch with AbortController
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), CHAT_API_TIMEOUT_MS);
 
     try {
         const response = await fetch(config.apiUrl, {
@@ -490,7 +761,7 @@ async function callOpenRouter(apiKey, config, messages, tools) {
     } catch (err) {
         clearTimeout(timeoutId);
         if (err.name === 'AbortError') {
-            throw new Error(`API request timed out after ${API_TIMEOUT_MS / 1000} seconds`);
+            throw new Error(`API request timed out after ${CHAT_API_TIMEOUT_MS / 1000} seconds`);
         }
         throw err;
     }
@@ -668,6 +939,14 @@ window.Chat = {
     clearHistory,
     clearConversation,
     getHistory,
-    setStreamsData
+    setStreamsData,
+    // Session management
+    createNewSession,
+    loadSession,
+    switchSession,
+    listSessions,
+    deleteSessionById,
+    renameSession,
+    getCurrentSessionId,
+    onSessionUpdate
 };
-

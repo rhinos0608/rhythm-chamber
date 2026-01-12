@@ -21,7 +21,10 @@
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
-            <h1><a href="index.html">🎵 Rhythm Chamber</a></h1>
+            <div class="header-left">
+                <button class="sidebar-toggle-btn" id="sidebar-toggle-btn" title="Toggle sidebar">☰</button>
+                <h1><a href="index.html">🎵 Rhythm Chamber</a></h1>
+            </div>
             <div class="header-actions">
                 <button class="settings-btn" id="settings-btn" onclick="Settings.showSettingsModal()"
                     title="Settings">⚙️</button>
@@ -29,173 +32,218 @@
             </div>
         </header>
 
-        <!-- Main Content -->
-        <main class="app-main">
-            <!-- Upload Zone -->
-            <div class="upload-zone" id="upload-zone">
-                <div class="icon">📁</div>
-                <h2>Drop your Spotify data here</h2>
-                <p>Upload a .zip export or .json streaming history. Your data stays on your device.</p>
-                <input type="file" id="file-input" accept=".zip,.json">
-                <button class="btn btn-primary" style="margin-top: var(--space-xl);"
-                    onclick="document.getElementById('file-input').click()">
-                    Choose File
-                </button>
-
-                <!-- Spotify Quick Snapshot Option -->
-                <div class="upload-alternatives">
-                    <div class="divider-text">or get a quick snapshot</div>
-                    <button class="btn btn-spotify" id="spotify-connect-btn">
-                        <span>🎵</span> Connect Spotify
+        <!-- App Layout with Sidebar -->
+        <div class="app-layout" id="app-layout">
+            <!-- Chat Sidebar -->
+            <aside class="chat-sidebar" id="chat-sidebar">
+                <div class="sidebar-header">
+                    <button class="new-chat-btn" id="new-chat-btn">
+                        <span>+</span> New Chat
                     </button>
-                    <p style="margin-top: var(--space-sm); font-size: 0.8rem; color: var(--text-muted);">
-                        Instant preview from your recent listening
-                    </p>
+                </div>
+                <div class="sidebar-sessions" id="sidebar-sessions">
+                    <!-- Dynamically populated with session items -->
+                </div>
+                <div class="sidebar-footer">
+                    <button class="sidebar-collapse-btn" id="sidebar-collapse-btn" title="Hide sidebar">◀</button>
+                </div>
+            </aside>
+
+            <!-- Sidebar Overlay for Mobile -->
+            <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+            <!-- Main Content -->
+            <main class="app-main">
+                <!-- Upload Zone -->
+                <div class="upload-zone" id="upload-zone">
+                    <div class="icon">📁</div>
+                    <h2>Drop your Spotify data here</h2>
+                    <p>Upload a .zip export or .json streaming history. Your data stays on your device.</p>
+                    <input type="file" id="file-input" accept=".zip,.json">
+                    <button class="btn btn-primary" style="margin-top: var(--space-xl);"
+                        onclick="document.getElementById('file-input').click()">
+                        Choose File
+                    </button>
+
+                    <!-- Spotify Quick Snapshot Option -->
+                    <div class="upload-alternatives">
+                        <div class="divider-text">or get a quick snapshot</div>
+                        <button class="btn btn-spotify" id="spotify-connect-btn">
+                            <span>🎵</span> Connect Spotify
+                        </button>
+                        <p style="margin-top: var(--space-sm); font-size: 0.8rem; color: var(--text-muted);">
+                            Instant preview from your recent listening
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Processing State -->
+                <div class="processing" id="processing">
+                    <div class="spinner"></div>
+                    <p class="progress-text" id="progress-text">Reading your listening history...</p>
+                </div>
+
+                <!-- Personality Reveal (Full Data) -->
+                <section class="reveal-section" id="reveal-section">
+                    <div class="personality-reveal">
+                        <div class="emoji" id="personality-emoji">🏛️</div>
+                        <h2 class="personality-type">Your Music Personality:</h2>
+                        <h3 class="gradient-text" id="personality-name"
+                            style="font-size: 2rem; margin-bottom: var(--space-lg);">The Emotional Archaeologist</h3>
+                        <p class="personality-description" id="personality-description">
+                            You don't just listen to music — you use it to process feelings.
+                            Your patterns show distinct "emotional eras."
+                        </p>
+
+                        <!-- Data Stats -->
+                        <p class="data-stats" id="data-stats">
+                            Analyzed <strong id="stream-count">0</strong> streams
+                            from <span id="date-range-start">-</span> to <span id="date-range-end">-</span>
+                        </p>
+
+                        <div class="evidence-list" id="evidence-list">
+                            <h4>Detected Patterns</h4>
+                            <ul id="evidence-items">
+                                <!-- Dynamically populated -->
+                            </ul>
+                        </div>
+
+                        <!-- Detection Explainer -->
+                        <details class="detection-explainer" id="detection-explainer">
+                            <summary>How did we detect this?</summary>
+                            <ul id="score-breakdown">
+                                <!-- Dynamically populated -->
+                            </ul>
+                            <p class="score-total" id="score-total">Total: 0 points → Type</p>
+                        </details>
+
+                        <div class="reveal-actions">
+                            <button class="btn btn-primary" id="explore-chat-btn">
+                                <span>💬</span> Explore in Chat
+                            </button>
+                            <button class="btn btn-secondary" id="share-card-btn">
+                                <span>↗️</span> Share Card
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Lite Reveal Section (Spotify API Data) -->
+                <section class="lite-reveal-section" id="lite-reveal-section">
+                    <div class="personality-reveal">
+                        <div class="lite-badge">
+                            <span>⚡</span> Quick Snapshot
+                        </div>
+
+                        <div class="emoji" id="lite-personality-emoji">🧭</div>
+                        <h2 class="personality-type">Your Current Vibe:</h2>
+                        <h3 class="gradient-text" id="lite-personality-name"
+                            style="font-size: 2rem; margin-bottom: var(--space-lg);">The Sound Explorer</h3>
+                        <p class="personality-description" id="lite-personality-description">
+                            Even your recent listens are diverse. You're constantly discovering and sampling new sounds.
+                        </p>
+
+                        <!-- Top Artists Display -->
+                        <div class="genre-tags" id="lite-genre-tags">
+                            <!-- Dynamically populated with genre tags -->
+                        </div>
+
+                        <div class="evidence-list" id="lite-evidence-list">
+                            <h4>What We Found</h4>
+                            <ul id="lite-evidence-items">
+                                <!-- Dynamically populated -->
+                            </ul>
+                        </div>
+
+                        <!-- Upsell Card -->
+                        <div class="upsell-card">
+                            <h4>✨ Want the full picture?</h4>
+                            <p>Upload your complete Spotify history to discover your emotional eras, artists you've
+                                stopped
+                                listening, life
+                                events, and deeper patterns.</p>
+                            <button class="btn btn-primary" id="lite-upload-full-btn">
+                                <span>📁</span> Upload Full History
+                            </button>
+                        </div>
+
+                        <div class="reveal-actions" style="margin-top: var(--space-xl);">
+                            <button class="btn btn-primary" id="lite-explore-chat-btn">
+                                <span>💬</span> Explore in Chat
+                            </button>
+                            <button class="btn btn-secondary" id="lite-share-card-btn">
+                                <span>↗️</span> Share Card
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Chat Section -->
+                <section class="chat-section" id="chat-section">
+                    <div class="chat-header">
+                        <p>🎵 You're <strong id="chat-personality-name">The Emotional Archaeologist</strong></p>
+                    </div>
+
+                    <div class="chat-messages" id="chat-messages">
+                        <div class="message assistant">
+                            What would you like to explore about your listening patterns?
+                        </div>
+                    </div>
+
+                    <div class="chat-suggestions" id="chat-suggestions">
+                        <button class="suggestion-chip" data-question="What was my music like in my data?">What was my
+                            music
+                            like in my data?</button>
+                        <button class="suggestion-chip" data-question="Which artists did I stop listening to?">Which
+                            artists
+                            did I stop listening to?</button>
+                        <button class="suggestion-chip" data-question="Which artist do I really like the most?">Which
+                            artist
+                            do I really like the most?</button>
+                    </div>
+
+                    <div class="chat-input-container">
+                        <div class="chat-input-wrapper">
+                            <input type="text" class="chat-input" id="chat-input" placeholder="Ask about your music..."
+                                autocomplete="off">
+                            <button class="chat-send" id="chat-send">
+                                <span>➤</span>
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Share Card Container -->
+                <div class="share-card-container" id="share-card-container">
+                    <div class="share-card" id="share-card">
+                        <div class="emoji" id="card-emoji">🏛️</div>
+                        <h3>Your Music Personality</h3>
+                        <p class="gradient-text" id="card-type-name"
+                            style="font-size: 1.5rem; margin: var(--space-md) 0;">
+                            The Emotional Archaeologist</p>
+                        <p class="tagline" id="card-tagline">You mark time through sound.</p>
+                        <p class="branding">rhythmchamber.com</p>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Reset Confirmation Modal -->
+        <div class="modal-overlay" id="reset-confirm-modal" style="display: none;">
+            <div class="modal-content" style="max-width: 400px; text-align: center;">
+                <h3 style="margin-bottom: var(--space-md);">🔄 Start Over?</h3>
+                <p style="margin-bottom: var(--space-lg); color: var(--text-muted);">
+                    Your data will be cleared. This cannot be undone.
+                </p>
+                <div style="display: flex; gap: var(--space-md); justify-content: center;">
+                    <button class="btn btn-secondary" onclick="hideResetConfirmModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="executeReset()"
+                        style="background: var(--danger, #dc3545);">
+                        Yes, Start Over
+                    </button>
                 </div>
             </div>
-
-            <!-- Processing State -->
-            <div class="processing" id="processing">
-                <div class="spinner"></div>
-                <p class="progress-text" id="progress-text">Reading your listening history...</p>
-            </div>
-
-            <!-- Personality Reveal (Full Data) -->
-            <section class="reveal-section" id="reveal-section">
-                <div class="personality-reveal">
-                    <div class="emoji" id="personality-emoji">🏛️</div>
-                    <h2 class="personality-type">Your Music Personality:</h2>
-                    <h3 class="gradient-text" id="personality-name"
-                        style="font-size: 2rem; margin-bottom: var(--space-lg);">The Emotional Archaeologist</h3>
-                    <p class="personality-description" id="personality-description">
-                        You don't just listen to music — you use it to process feelings.
-                        Your patterns show distinct "emotional eras."
-                    </p>
-
-                    <!-- Data Stats -->
-                    <p class="data-stats" id="data-stats">
-                        Analyzed <strong id="stream-count">0</strong> streams
-                        from <span id="date-range-start">-</span> to <span id="date-range-end">-</span>
-                    </p>
-
-                    <div class="evidence-list" id="evidence-list">
-                        <h4>Detected Patterns</h4>
-                        <ul id="evidence-items">
-                            <!-- Dynamically populated -->
-                        </ul>
-                    </div>
-
-                    <!-- Detection Explainer -->
-                    <details class="detection-explainer" id="detection-explainer">
-                        <summary>How did we detect this?</summary>
-                        <ul id="score-breakdown">
-                            <!-- Dynamically populated -->
-                        </ul>
-                        <p class="score-total" id="score-total">Total: 0 points → Type</p>
-                    </details>
-
-                    <div class="reveal-actions">
-                        <button class="btn btn-primary" id="explore-chat-btn">
-                            <span>💬</span> Explore in Chat
-                        </button>
-                        <button class="btn btn-secondary" id="share-card-btn">
-                            <span>↗️</span> Share Card
-                        </button>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Lite Reveal Section (Spotify API Data) -->
-            <section class="lite-reveal-section" id="lite-reveal-section">
-                <div class="personality-reveal">
-                    <div class="lite-badge">
-                        <span>⚡</span> Quick Snapshot
-                    </div>
-
-                    <div class="emoji" id="lite-personality-emoji">🧭</div>
-                    <h2 class="personality-type">Your Current Vibe:</h2>
-                    <h3 class="gradient-text" id="lite-personality-name"
-                        style="font-size: 2rem; margin-bottom: var(--space-lg);">The Sound Explorer</h3>
-                    <p class="personality-description" id="lite-personality-description">
-                        Even your recent listens are diverse. You're constantly discovering and sampling new sounds.
-                    </p>
-
-                    <!-- Top Artists Display -->
-                    <div class="genre-tags" id="lite-genre-tags">
-                        <!-- Dynamically populated with genre tags -->
-                    </div>
-
-                    <div class="evidence-list" id="lite-evidence-list">
-                        <h4>What We Found</h4>
-                        <ul id="lite-evidence-items">
-                            <!-- Dynamically populated -->
-                        </ul>
-                    </div>
-
-                    <!-- Upsell Card -->
-                    <div class="upsell-card">
-                        <h4>✨ Want the full picture?</h4>
-                        <p>Upload your complete Spotify history to discover your emotional eras, ghosted artists, life
-                            events, and deeper patterns.</p>
-                        <button class="btn btn-primary" id="lite-upload-full-btn">
-                            <span>📁</span> Upload Full History
-                        </button>
-                    </div>
-
-                    <div class="reveal-actions" style="margin-top: var(--space-xl);">
-                        <button class="btn btn-primary" id="lite-explore-chat-btn">
-                            <span>💬</span> Explore in Chat
-                        </button>
-                        <button class="btn btn-secondary" id="lite-share-card-btn">
-                            <span>↗️</span> Share Card
-                        </button>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Chat Section -->
-            <section class="chat-section" id="chat-section">
-                <div class="chat-header">
-                    <p>🎵 You're <strong id="chat-personality-name">The Emotional Archaeologist</strong></p>
-                </div>
-
-                <div class="chat-messages" id="chat-messages">
-                    <div class="message assistant">
-                        What would you like to explore about your listening patterns?
-                    </div>
-                </div>
-
-                <div class="chat-suggestions" id="chat-suggestions">
-                    <button class="suggestion-chip" data-question="What was I like in 2020?">What was I like in
-                        2020?</button>
-                    <button class="suggestion-chip" data-question="Who did I ghost?">Who did I ghost?</button>
-                    <button class="suggestion-chip" data-question="What's my true favorite?">What's my true
-                        favorite?</button>
-                </div>
-
-                <div class="chat-input-container">
-                    <div class="chat-input-wrapper">
-                        <input type="text" class="chat-input" id="chat-input" placeholder="Ask about your music..."
-                            autocomplete="off">
-                        <button class="chat-send" id="chat-send">
-                            <span>➤</span>
-                        </button>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Share Card Container -->
-            <div class="share-card-container" id="share-card-container">
-                <div class="share-card" id="share-card">
-                    <div class="emoji" id="card-emoji">🏛️</div>
-                    <h3>Your Music Personality</h3>
-                    <p class="gradient-text" id="card-type-name" style="font-size: 1.5rem; margin: var(--space-md) 0;">
-                        The Emotional Archaeologist</p>
-                    <p class="tagline" id="card-tagline">You mark time through sound.</p>
-                    <p class="branding">rhythmchamber.com</p>
-                </div>
-            </div>
-        </main>
+        </div>
     </div>
 
     <!-- Scripts -->
