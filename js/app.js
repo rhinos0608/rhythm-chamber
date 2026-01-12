@@ -533,25 +533,29 @@ async function handleChatSend() {
     document.getElementById('chat-suggestions').style.display = 'none';
 
     // Get response
-    await processMessageResponse(Chat.sendMessage(message));
+    await processMessageResponse((options) => Chat.sendMessage(message, options));
 }
 
 /**
- * Process the response from Chat.sendMessage or regenerateLastResponse
+ * Process the response from Chat module with progress updates
  */
-async function processMessageResponse(promise) {
+async function processMessageResponse(actionFn) {
     // Create a temporary loading placeholder
     const loadingId = addLoadingMessage();
 
+    const onProgress = (state) => {
+        updateLoadingMessage(loadingId, state);
+    };
+
     try {
-        const response = await promise;
+        const response = await actionFn({ onProgress });
 
         // Remove loading message
         removeMessageElement(loadingId);
 
         // Add actual response
         if (response.status === 'error') {
-            addMessage(response.content, 'assistant', true); // true for isError
+            addMessage(response.content, 'assistant', true);
         } else {
             addMessage(response.content, 'assistant');
         }
@@ -567,10 +571,25 @@ function addLoadingMessage() {
     const div = document.createElement('div');
     div.className = 'message assistant loading';
     div.id = id;
-    div.innerHTML = '<span class="typing-indicator">...</span>';
+    div.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
     messages.appendChild(div);
     messages.scrollTop = messages.scrollHeight;
     return id;
+}
+
+function updateLoadingMessage(id, state) {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    if (state.type === 'tool_start') {
+        el.className = 'message tool-execution';
+        el.innerHTML = `<span class="icon">⚡</span> Analyzing data with ${state.tool}...`;
+    } else if (state.type === 'tool_end') {
+        // Transition back to thinking or stay until next event
+    } else if (state.type === 'thinking') {
+        el.className = 'message assistant loading';
+        el.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+    }
 }
 
 function removeMessageElement(id) {
@@ -631,7 +650,28 @@ function addMessage(text, role, isError = false) {
     const actionsDiv = document.createElement('div');
     actionsDiv.className = 'message-actions';
 
-    if (role === 'user') {
+    if (isError) {
+        // Retry Button
+        const retryBtn = document.createElement('button');
+        retryBtn.className = 'retry-btn';
+        retryBtn.textContent = 'Try Again';
+        retryBtn.onclick = async () => {
+            div.remove();
+            await processMessageResponse((options) => Chat.regenerateLastResponse(options));
+        };
+        actionsDiv.appendChild(retryBtn);
+
+        // Settings Button
+        const settingsBtn = document.createElement('button');
+        settingsBtn.className = 'retry-btn secondary';
+        settingsBtn.textContent = 'Change Model';
+        settingsBtn.style.marginLeft = '10px';
+        settingsBtn.onclick = () => {
+            const modal = document.getElementById('settings-modal');
+            if (modal) modal.style.display = 'block';
+        };
+        actionsDiv.appendChild(settingsBtn);
+    } else if (role === 'user') {
         // Edit Button
         const editBtn = document.createElement('button');
         editBtn.className = 'action-btn edit';
@@ -651,7 +691,7 @@ function addMessage(text, role, isError = false) {
             // Remove this message from UI
             div.remove();
             // Call regenerate
-            await processMessageResponse(Chat.regenerateLastResponse());
+            await processMessageResponse((options) => Chat.regenerateLastResponse(options));
         };
         actionsDiv.appendChild(regenBtn);
     }
@@ -709,7 +749,7 @@ function enableEditMode(messageDiv, currentText) {
             addMessage(newText, 'user');
 
             // Trigger edit in Chat module
-            await processMessageResponse(Chat.editMessage(index, newText));
+            await processMessageResponse((options) => Chat.editMessage(index, newText, options));
         } else {
             cancelEdit();
         }

@@ -8,6 +8,7 @@
 
 // Available models for the dropdown
 const AVAILABLE_MODELS = [
+    { id: 'xiaomi/mimo-v2-flash:free', name: 'Xiaomi Mimo v2 Flash (Free)', free: true },
     { id: 'mistralai/mistral-7b-instruct:free', name: 'Mistral 7B (Free)', free: true },
     { id: 'meta-llama/llama-3.1-8b-instruct:free', name: 'Llama 3.1 8B (Free)', free: true },
     { id: 'google/gemma-2-9b-it:free', name: 'Gemma 2 9B (Free)', free: true },
@@ -29,8 +30,8 @@ function getSettings() {
     const settings = {
         openrouter: {
             apiKey: configOpenrouter.apiKey || '',
-            model: configOpenrouter.model || 'mistralai/mistral-7b-instruct:free',
-            maxTokens: configOpenrouter.maxTokens || 1000,
+            model: configOpenrouter.model || 'xiaomi/mimo-v2-flash:free',
+            maxTokens: configOpenrouter.maxTokens || 4500,
             temperature: configOpenrouter.temperature ?? 0.7
         },
         spotify: {
@@ -217,7 +218,7 @@ function showSettingsModal() {
                             <label for="setting-max-tokens">Max Response Length</label>
                             <input type="number" id="setting-max-tokens" 
                                    value="${settings.openrouter.maxTokens}" 
-                                   min="100" max="4000" step="100">
+                                   min="100" max="6000" step="100">
                             <span class="settings-hint">tokens (higher = longer responses)</span>
                         </div>
                         
@@ -375,7 +376,7 @@ function hideSettingsModal() {
 function saveFromModal() {
     const apiKeyInput = document.getElementById('setting-api-key');
     const model = document.getElementById('setting-model').value;
-    const maxTokens = parseInt(document.getElementById('setting-max-tokens').value) || 1000;
+    const maxTokens = parseInt(document.getElementById('setting-max-tokens').value) || 4500;
     const temperature = parseFloat(document.getElementById('setting-temperature').value) || 0.7;
     const spotifyInput = document.getElementById('setting-spotify-client-id');
 
@@ -386,7 +387,7 @@ function saveFromModal() {
     const settings = {
         openrouter: {
             model,
-            maxTokens: Math.min(Math.max(maxTokens, 100), 4000),
+            maxTokens: Math.min(Math.max(maxTokens, 100), 6000),
             temperature: Math.min(Math.max(temperature, 0), 1)
         },
         spotify: {}

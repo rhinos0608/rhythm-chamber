@@ -18,12 +18,12 @@ const Config = {
         apiUrl: 'https://openrouter.ai/api/v1/chat/completions',
 
         // Model selection
-        // Free tier: 'mistralai/mistral-7b-instruct:free'
+        // Free tier: 'xiaomi/mimo-v2-flash:free' (default), 'mistralai/mistral-7b-instruct:free'
         // Paid options: 'anthropic/claude-3.5-sonnet', 'openai/gpt-4-turbo'
-        model: 'mistralai/mistral-7b-instruct:free',
+        model: 'xiaomi/mimo-v2-flash:free',
 
         // Chat parameters
-        maxTokens: 1000,
+        maxTokens: 4500,
         temperature: 0.7
     },
 

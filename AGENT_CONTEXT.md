@@ -114,16 +114,19 @@ Modal UI for configuring without editing config.js:
 - **Data stats**: "Analyzed X streams from Y to Z"
 - **Incremental caching**: Partial saves during parsing (crash-safe)
 
-### 5. Semantic Search
-Feature with user-managed infrastructure:
-- **Embeddings**: `qwen/qwen3-embedding-8b` via OpenRouter
-- **Vector storage**: User's own Qdrant Cloud cluster (1GB free)
-- **RAG integration**: Semantic context injected into chat automatically
+### 5. Semantic Search (Free)
+Integrated via `js/rag.js`. Users provide own Qdrant Cloud credentials.
+- In-memory vector generation (Transformer.js) or Cohere API.
+- Semantic search over listening history.
+- Context injection into LLM prompts.
 
-Settings UI shows:
-- Qdrant URL/Key inputs + Generate Embeddings button
+### 6. Data-Driven Prompt Engineering
+The AI persona is grounded in "Key Data Profiles" (`js/prompts.js`):
+- **Data Insights**: System prompt gets precise Wrapped-style metrics (Total Minutes, Top Artist, Percentile, Peak Day).
+- **Personality as Lens**: The "Personality Type" is used as a lens to interpret data, not just a label.
+- **Evidence Injection**: Detected patterns are passed as evidence to the LLM.
 
-### 6. Chat Session Storage
+### 7. Chat Session Storage
 Persistent chat conversations with ChatGPT-style sidebar:
 - **IndexedDB storage**: Sessions persist across browser restarts
 - **Collapsible sidebar**: Shows all past chats with title, date, message count

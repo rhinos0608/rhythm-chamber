@@ -458,6 +458,64 @@ function detectAllPatterns(streams, chunks) {
 /**
  * Generate overall stats summary
  */
+
+
+/**
+ * Generate Spotify Wrapped-style data insights
+ */
+function generateDataInsights(streams) {
+    if (!streams || streams.length === 0) return null;
+
+    // 1. Basic Counts
+    const totalMinutes = Math.round(streams.reduce((sum, s) => sum + s.msPlayed, 0) / 60000);
+    const uniqueArtists = new Set(streams.map(s => s.artistName)).size;
+
+    // 2. Top Artist & Percentile
+    const artistPlays = {};
+    const artistTime = {};
+    for (const s of streams) {
+        artistPlays[s.artistName] = (artistPlays[s.artistName] || 0) + 1;
+        artistTime[s.artistName] = (artistTime[s.artistName] || 0) + s.msPlayed;
+    }
+
+    const sortedArtists = Object.entries(artistTime).sort((a, b) => b[1] - a[1]);
+    const topArtist = sortedArtists[0];
+    const topArtistName = topArtist ? topArtist[0] : 'Unknown';
+    const topArtistMinutes = topArtist ? Math.round(topArtist[1] / 60000) : 0;
+
+    // Heuristic for "Top X%" based on global Spotify listening averages
+    // This is estimated for fun since we don't have global data
+    let percentile = "Top 5%";
+    if (topArtistMinutes > 5000) percentile = "Top 0.05%";
+    else if (topArtistMinutes > 2000) percentile = "Top 0.5%";
+    else if (topArtistMinutes > 1000) percentile = "Top 1%";
+    else if (topArtistMinutes > 500) percentile = "Top 2%";
+
+    // 3. Peak Listening Day
+    const dayCounts = {};
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    for (const s of streams) {
+        const day = s.dayOfWeek !== undefined ? s.dayOfWeek : new Date(s.playedAt).getDay();
+        dayCounts[day] = (dayCounts[day] || 0) + 1;
+    }
+    const peakDayIndex = Object.entries(dayCounts).sort((a, b) => b[1] - a[1])[0][0];
+    const peakDay = days[peakDayIndex];
+
+    return {
+        totalMinutes,
+        uniqueArtists,
+        topArtist: {
+            name: topArtistName,
+            minutes: topArtistMinutes,
+            percentile
+        },
+        peakDay
+    };
+}
+
+/**
+ * Generate overall stats summary
+ */
 function generatePatternSummary(streams, patterns) {
     const totalHours = Math.round(streams.reduce((sum, s) => sum + s.msPlayed, 0) / 3600000);
     const uniqueArtists = new Set(streams.map(s => s.artistName)).size;
@@ -466,6 +524,9 @@ function generatePatternSummary(streams, patterns) {
     const firstDate = new Date(streams[0].playedAt);
     const lastDate = new Date(streams[streams.length - 1].playedAt);
     const spanDays = Math.round((lastDate - firstDate) / (24 * 60 * 60 * 1000));
+
+    // Create detailed insights
+    const insights = generateDataInsights(streams);
 
     return {
         totalStreams: streams.length,
@@ -476,7 +537,8 @@ function generatePatternSummary(streams, patterns) {
             start: firstDate.toISOString().split('T')[0],
             end: lastDate.toISOString().split('T')[0],
             days: spanDays
-        }
+        },
+        insights // Pass insights up
     };
 }
 

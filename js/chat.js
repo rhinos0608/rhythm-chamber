@@ -371,10 +371,10 @@ function buildSystemPrompt(queryContext = null, semanticContext = null) {
         ? `${summary.dateRange.start} to ${summary.dateRange.end}`
         : 'Unknown';
 
-    // Format summary
-    const summaryText = summary
-        ? `${summary.totalHours} hours of music, ${summary.uniqueArtists} artists, ${summary.uniqueTracks} tracks`
-        : 'Summary not available';
+    // Format data insights
+    // Prioritize the formatted string from personality module, fallback to summary stats
+    const dataInsights = personality.dataInsights
+        || (summary ? `${summary.totalHours} hours of music, ${summary.uniqueArtists} artists` : 'No data available');
 
     // Format evidence with more detail
     const evidenceItems = personality.allEvidence || [];
@@ -392,7 +392,7 @@ function buildSystemPrompt(queryContext = null, semanticContext = null) {
     let prompt = template
         .replace('{{personality_name}}', personality.name)
         .replace('{{tagline}}', personality.tagline)
-        .replace('{{summary}}', summaryText)
+        .replace('{{data_insights}}', dataInsights)
         .replace('{{date_range}}', dateRange)
         .replace('{{current_date}}', currentDate)
         .replace('{{evidence}}', evidenceText);
@@ -553,7 +553,7 @@ function getMonthName(monthNum) {
  * Send a message and get response
  * Supports OpenAI-style function calling for dynamic data queries
  */
-async function sendMessage(message, apiKey = null) {
+async function sendMessage(message, optionsOrKey = null) {
     if (!userContext) {
         throw new Error('Chat not initialized. Call initChat first.');
     }
@@ -589,6 +589,13 @@ async function sendMessage(message, apiKey = null) {
         throw new Error('Config not loaded. Make sure js/config.js exists.');
     }
 
+    // Handle legacy apiKey argument or options object
+    const options = (typeof optionsOrKey === 'string')
+        ? { apiKey: optionsOrKey }
+        : (optionsOrKey || {});
+
+    const { apiKey, onProgress } = options;
+
     // Get the merged settings (config.js as base, localStorage overrides)
     const settings = window.Settings?.getSettings?.() || {};
 
@@ -607,7 +614,12 @@ async function sendMessage(message, apiKey = null) {
             role: 'assistant',
             content: fallbackResponse
         });
-        return fallbackResponse;
+        return {
+            content: fallbackResponse,
+            status: 'success', // Treat fallback as success for now to show message
+            role: 'assistant',
+            isFallback: true
+        };
     }
 
     // Merge static config (has apiUrl) with user settings (has model/tokens)
@@ -620,6 +632,9 @@ async function sendMessage(message, apiKey = null) {
         // Get function schemas if available
         const tools = window.Functions?.schemas || [];
         const useTools = tools.length > 0 && streamsData && streamsData.length > 0;
+
+        // Notify UI: Thinking/Sending request
+        if (onProgress) onProgress({ type: 'thinking' });
 
         // Initial API call
         let response = await callOpenRouter(key, finalConfig, messages, useTools ? tools : undefined);
@@ -644,6 +659,9 @@ async function sendMessage(message, apiKey = null) {
 
                 console.log(`[Chat] Executing function: ${functionName}`, args);
 
+                // Notify UI: Tool start
+                if (onProgress) onProgress({ type: 'tool_start', tool: functionName });
+
                 // Execute the function with timeout protection
                 let result;
                 try {
@@ -655,10 +673,23 @@ async function sendMessage(message, apiKey = null) {
                     ]);
                 } catch (funcError) {
                     console.error(`[Chat] Function execution failed:`, funcError);
-                    result = { error: funcError.message };
+
+                    // Notify UI: Tool error (optional state update)
+                    if (onProgress) onProgress({ type: 'tool_end', tool: functionName }); // Reset UI state
+
+                    // Return error status to allow UI to show retry
+                    return {
+                        status: 'error',
+                        content: `Function call '${functionName}' failed: ${funcError.message}. Please try again or select a different model.`,
+                        role: 'assistant',
+                        isFunctionError: true
+                    };
                 }
 
                 console.log(`[Chat] Function result:`, result);
+
+                // Notify UI: Tool end
+                if (onProgress) onProgress({ type: 'tool_end', tool: functionName, result });
 
                 // Add tool result to conversation
                 conversationHistory.push({
@@ -673,6 +704,9 @@ async function sendMessage(message, apiKey = null) {
                 { role: 'system', content: buildSystemPrompt() },
                 ...conversationHistory
             ];
+
+            // Notify UI: Thinking again (processing tool results)
+            if (onProgress) onProgress({ type: 'thinking' });
 
             response = await callOpenRouter(key, finalConfig, followUpMessages, undefined);
             responseMessage = response.choices[0]?.message;
@@ -775,7 +809,7 @@ async function callOpenRouter(apiKey, config, messages, tools) {
  * Regenerate the last assistant response
  * Removes the last assistant message and re-sends the last user message
  */
-async function regenerateLastResponse() {
+async function regenerateLastResponse(options = null) {
     if (conversationHistory.length === 0) return null;
 
     // Check if last message was assistant
@@ -797,7 +831,7 @@ async function regenerateLastResponse() {
     conversationHistory.pop();
 
     // Re-send
-    return sendMessage(message);
+    return sendMessage(message, options);
 }
 
 /**
@@ -816,7 +850,7 @@ function deleteMessage(index) {
  * Edit a user message
  * Truncates history to that point, updates message, and regenerates response
  */
-async function editMessage(index, newText) {
+async function editMessage(index, newText, options = null) {
     if (index < 0 || index >= conversationHistory.length) return null;
 
     const msg = conversationHistory[index];
@@ -826,7 +860,7 @@ async function editMessage(index, newText) {
     conversationHistory = conversationHistory.slice(0, index);
 
     // Send new message (this will add it to history and generate response)
-    return sendMessage(newText);
+    return sendMessage(newText, options);
 }
 
 /**

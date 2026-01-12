@@ -2144,3 +2144,98 @@ a {
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-primary);
 }
+
+/* AI Animation Elements */
+
+/* Typing Indicator */
+.typing-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+}
+
+.typing-indicator span {
+  width: 6px;
+  height: 6px;
+  background: var(--text-secondary);
+  border-radius: 50%;
+  animation: typing-bounce 1.4s infinite ease-in-out both;
+}
+
+.typing-indicator span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes typing-bounce {
+
+  0%,
+  80%,
+  100% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Message States */
+.message.loading {
+  opacity: 0.8;
+}
+
+.message.tool-execution {
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  background: rgba(6, 182, 212, 0.05);
+  /* Cyan tint */
+  border: 1px dashed var(--accent-secondary);
+  color: var(--accent-secondary);
+  align-self: center;
+  /* Center these status updates */
+  width: auto;
+  max-width: 90%;
+  padding: var(--space-xs) var(--space-md);
+  margin: var(--space-xs) 0;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.message.tool-execution .icon {
+  animation: spin 2s linear infinite;
+  display: inline-block;
+}
+
+.message.error {
+  background: rgba(220, 53, 69, 0.1);
+  /* Red tint */
+  border: 1px solid var(--danger, #dc3545);
+  color: #ff8fa3;
+}
+
+.message-actions .retry-btn {
+  color: var(--text-primary);
+  background: var(--accent-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 4px 12px;
+  margin-top: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.message-actions .retry-btn:hover {
+  opacity: 0.9;
+}

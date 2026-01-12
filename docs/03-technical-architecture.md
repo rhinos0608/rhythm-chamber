@@ -244,6 +244,25 @@ When function calling is unavailable (no API key, free models that don't support
 
 ---
 
+## Data-Driven Prompt Engineering
+
+The system prompt dynamically adapts based on a "Key Data Profile" generated during the analysis phase.
+
+### Inputs
+1.  **Wrapped-Style Metrics**:
+    *   Total Minutes listened
+    *   Top Artist Name + Percentile (estimated)
+    *   Peak Listening Day
+    *   Distinct Artists Count
+2.  **Personality Lens**:
+    *   Primary Personality Type (e.g., "The Mood Engineer")
+    *   Evidence Points (e.g., "Morning ≠ Evening")
+
+### Injection Flow
+`js/patterns.js` calculates metrics -> `js/personality.js` formats them -> `js/chat.js` injects into `js/prompts.js` template (`{{data_insights}}`).
+
+---
+
 ## Semantic Search
 
 ### Architecture Overview

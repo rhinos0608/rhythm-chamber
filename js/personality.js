@@ -173,6 +173,10 @@ function classifyPersonality(patterns) {
         }
     }
 
+    // Format insights if available
+    const insights = patterns.summary?.insights;
+    const dataInsights = insights ? formatInsights(insights) : null;
+
     return {
         type: primaryType,
         name: typeInfo.name,
@@ -185,8 +189,22 @@ function classifyPersonality(patterns) {
         evidence: primaryEvidence,
         allEvidence: [...new Set(allEvidence)].slice(0, 5),
         scores,
-        breakdown
+        breakdown,
+        dataInsights // New field for prompt injection
     };
+}
+
+/**
+ * Format data insights for prompt
+ */
+function formatInsights(insights) {
+    if (!insights) return null;
+    return [
+        `• Total Time: ${insights.totalMinutes.toLocaleString()} minutes`,
+        `• Distinct Artists: ${insights.uniqueArtists.toLocaleString()}`,
+        `• Top Artist: ${insights.topArtist.name} (${insights.topArtist.minutes.toLocaleString()} mins, ${insights.topArtist.percentile})`,
+        `• Busiest Listening Day: ${insights.peakDay}`
+    ].join('\n');
 }
 
 /**
