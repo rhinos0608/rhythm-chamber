@@ -4,17 +4,8 @@
  */
 
 // State
-let appState = {
-    streams: null,
-    chunks: null,
-    patterns: null,
-    personality: null,
-    liteData: null,      // Spotify API data
-    litePatterns: null,  // Patterns from lite data
-    isLiteMode: false,   // Quick Snapshot mode
-    view: 'upload',      // upload, processing, reveal, lite-reveal, chat
-    sidebarCollapsed: false  // Sidebar visibility state
-};
+// State is managed by StateManager (js/state-manager.js)
+// Access via StateManager.getState() or subscribe for updates
 
 let activeWorker = null; // Track active worker for cancellation
 
@@ -37,7 +28,7 @@ const sidebarCollapseBtn = document.getElementById('sidebar-collapse-btn');
 const sidebarOverlay = document.getElementById('sidebar-overlay');
 const newChatBtn = document.getElementById('new-chat-btn');
 
-const SIDEBAR_STATE_KEY = 'rhythm_chamber_sidebar_collapsed';
+
 
 /**
  * Initialize the app
@@ -55,6 +46,13 @@ async function init() {
             console.log('[App] Cleared orphaned conversation history');
         }
     }
+
+    // Init State Manager (loads data and sidebar prefs)
+    await StateManager.init();
+
+    // Subscribe to state changes (Router)
+    // This triggers immediately with current state
+    StateManager.subscribe(handleStateChange);
 
     // Check for Spotify OAuth callback
     const urlParams = new URLSearchParams(window.location.search);
@@ -84,22 +82,47 @@ async function init() {
         }
     }
 
-    // Check for existing data
-    const existingData = await Storage.getPersonality();
-    if (existingData) {
-        appState.personality = existingData;
-        appState.streams = await Storage.getStreams();
-        appState.chunks = await Storage.getChunks();
+    setupEventListeners();
+    setupSpotifyButton();
+}
 
-        if (appState.streams) {
-            appState.patterns = Patterns.detectAllPatterns(appState.streams, appState.chunks);
-            showReveal();
+/**
+ * Handle state changes from StateManager
+ * Acts as the UI Router
+ */
+function handleStateChange(state, changes) {
+    // View Routing
+    if (changes.view || changes.personality) {
+        switch (state.view) {
+            case 'upload':
+                showUpload();
+                break;
+            case 'processing':
+                showProcessing();
+                break;
+            case 'reveal':
+                showReveal(state);
+                break;
+            case 'lite-reveal':
+                showLiteReveal(state);
+                break;
+            case 'chat':
+                showChat(state);
+                break;
+            default:
+                showUpload();
         }
     }
 
-    setupEventListeners();
-    setupSpotifyButton();
-    initSidebar();
+    // Sidebar State
+    if (changes.sidebarCollapsed !== undefined || changes.view) {
+        updateSidebarVisibility(state);
+    }
+
+    // Update ephemeral UI if needed
+    if (state.isProcessing && changes.processingProgress) {
+        // Update progress text if we had a slot for it
+    }
 }
 
 /**
@@ -216,7 +239,7 @@ async function handleSpotifyConnect() {
  * Handle Spotify OAuth callback
  */
 async function handleSpotifyCallback(code) {
-    showProcessing();
+    StateManager.setState({ view: 'processing' });
     progressText.textContent = 'Connecting to Spotify...';
 
     try {
@@ -232,29 +255,39 @@ async function handleSpotifyCallback(code) {
         progressText.textContent = 'Analyzing your listening patterns...';
         await new Promise(r => setTimeout(r, 10));
 
-        appState.liteData = Spotify.transformForAnalysis(spotifyData);
+        const liteData = Spotify.transformForAnalysis(spotifyData);
 
         // Detect patterns from lite data
         progressText.textContent = 'Detecting your current vibe...';
         await new Promise(r => setTimeout(r, 10));
 
-        appState.litePatterns = Patterns.detectLitePatterns(appState.liteData);
+        const litePatterns = Patterns.detectLitePatterns(liteData);
 
         // Classify lite personality
         progressText.textContent = 'Classifying your music personality...';
         await new Promise(r => setTimeout(r, 10));
 
-        appState.personality = Personality.classifyLitePersonality(appState.litePatterns);
-        appState.personality.summary = appState.litePatterns.summary;
-        appState.isLiteMode = true;
+        const personality = Personality.classifyLitePersonality(litePatterns);
+        personality.summary = litePatterns.summary;
 
-        // Show lite reveal
-        showLiteReveal();
+        // Update State
+        await StateManager.setState({
+            liteData,
+            litePatterns,
+            personality,
+            isLiteMode: true,
+            view: 'lite-reveal',
+            isProcessing: false,
+            // Clear heavier data to avoid confusion
+            streams: null,
+            chunks: null,
+            patterns: null
+        });
 
     } catch (error) {
         console.error('Spotify callback error:', error);
         progressText.textContent = `Error: ${error.message}`;
-        setTimeout(() => showUpload(), 3000);
+        setTimeout(() => StateManager.setState({ view: 'upload' }), 3000);
     }
 }
 
@@ -266,8 +299,8 @@ async function handleSpotifyCallback(code) {
  * Process uploaded file using Web Worker (non-blocking)
  */
 async function processFile(file) {
-    showProcessing();
-    appState.isLiteMode = false;
+    StateManager.setState({ view: 'processing' });
+    // appState.isLiteMode = false; // Handled in final state set
 
     // Terminate any existing worker
     if (activeWorker) {
@@ -290,7 +323,7 @@ async function processFile(file) {
         if (type === 'error') {
             console.error('Worker error:', error);
             progressText.textContent = `Error: ${error}`;
-            setTimeout(() => showUpload(), 3000);
+            setTimeout(() => StateManager.setState({ view: 'upload' }), 3000);
             if (activeWorker) {
                 activeWorker.terminate();
                 activeWorker = null;
@@ -310,33 +343,40 @@ async function processFile(file) {
 
         if (type === 'complete') {
             try {
-                appState.streams = streams;
-                appState.chunks = chunks;
-
                 // Pattern detection runs on main thread (fast enough)
                 progressText.textContent = 'Detecting behavioral patterns...';
                 await new Promise(r => setTimeout(r, 10)); // Let UI update
 
-                appState.patterns = Patterns.detectAllPatterns(streams, chunks);
+                const patterns = Patterns.detectAllPatterns(streams, chunks);
 
                 // Classify personality
                 progressText.textContent = 'Classifying personality...';
                 await new Promise(r => setTimeout(r, 10));
 
-                appState.personality = Personality.classifyPersonality(appState.patterns);
-                appState.personality.summary = appState.patterns.summary;
+                const personality = Personality.classifyPersonality(patterns);
+                personality.summary = patterns.summary;
 
                 // Save final complete data to IndexedDB
                 progressText.textContent = 'Saving...';
                 await Storage.saveStreams(streams);
                 await Storage.saveChunks(chunks);
-                await Storage.savePersonality(appState.personality);
+                await Storage.savePersonality(personality);
 
-                showReveal();
+                // Update State
+                await StateManager.setState({
+                    streams,
+                    chunks,
+                    patterns,
+                    personality,
+                    isLiteMode: false,
+                    view: 'reveal',
+                    isProcessing: false
+                });
+
             } catch (err) {
                 console.error('Processing error:', err);
                 progressText.textContent = `Error: ${err.message}`;
-                setTimeout(() => showUpload(), 3000);
+                setTimeout(() => StateManager.setState({ view: 'upload' }), 3000);
             }
 
             if (activeWorker) {
@@ -349,7 +389,7 @@ async function processFile(file) {
     activeWorker.onerror = (err) => {
         console.error('Worker error:', err);
         progressText.textContent = `Error: ${err.message}`;
-        setTimeout(() => showUpload(), 3000);
+        setTimeout(() => StateManager.setState({ view: 'upload' }), 3000);
         if (activeWorker) {
             activeWorker.terminate();
             activeWorker = null;
@@ -365,7 +405,7 @@ async function processFile(file) {
 // ==========================================
 
 function showUpload() {
-    appState.view = 'upload';
+    // Update DOM only (State managed by StateManager)
     uploadZone.style.display = 'flex';
     processing.classList.remove('active');
     revealSection.classList.remove('active');
@@ -380,7 +420,7 @@ function showUpload() {
 }
 
 function showProcessing() {
-    appState.view = 'processing';
+    // Update DOM only
     uploadZone.style.display = 'none';
     processing.classList.add('active');
     revealSection.classList.remove('active');
@@ -389,14 +429,14 @@ function showProcessing() {
     resetBtn.style.display = 'none';
 }
 
-function showReveal() {
-    if (!appState.personality) {
+function showReveal(state = StateManager.getState()) {
+    if (!state.personality) {
         console.warn('showReveal called without personality data');
-        showUpload();
+        StateManager.setState({ view: 'upload' });
         return;
     }
 
-    appState.view = 'reveal';
+    // appState.view = 'reveal'; // Managed by Router
     uploadZone.style.display = 'none';
     processing.classList.remove('active');
     revealSection.classList.add('active');
@@ -405,14 +445,14 @@ function showReveal() {
     resetBtn.style.display = 'block';
 
     // Populate reveal
-    const p = appState.personality;
+    const p = state.personality;
     document.getElementById('personality-emoji').textContent = p.emoji;
     document.getElementById('personality-name').textContent = p.name;
     document.getElementById('personality-description').textContent = p.description;
 
     // Data Stats
-    const streams = appState.streams || [];
-    const summary = appState.patterns?.summary || {};
+    const streams = state.streams || [];
+    const summary = state.patterns?.summary || {};
     document.getElementById('stream-count').textContent = streams.length.toLocaleString();
 
     if (summary.dateRange) {
@@ -428,7 +468,7 @@ function showReveal() {
     populateScoreBreakdown(p);
 
     // Init chat context with streams data for queries
-    Chat.initChat(p, appState.patterns, appState.patterns.summary, appState.streams);
+    Chat.initChat(p, state.patterns, state.patterns.summary, state.streams);
 }
 
 /**
@@ -457,14 +497,14 @@ function populateScoreBreakdown(personality) {
     scoreTotal.textContent = `Total: ${totalPoints} points → ${personality.name}`;
 }
 
-function showLiteReveal() {
-    if (!appState.personality) {
+function showLiteReveal(state = StateManager.getState()) {
+    if (!state.personality) {
         console.warn('showLiteReveal called without personality data');
-        showUpload();
+        StateManager.setState({ view: 'upload' });
         return;
     }
 
-    appState.view = 'lite-reveal';
+    // appState.view = 'lite-reveal'; // Managed by Router
     uploadZone.style.display = 'none';
     processing.classList.remove('active');
     revealSection.classList.remove('active');
@@ -473,14 +513,14 @@ function showLiteReveal() {
     resetBtn.style.display = 'block';
 
     // Populate lite reveal
-    const p = appState.personality;
+    const p = state.personality;
     document.getElementById('lite-personality-emoji').textContent = p.emoji;
     document.getElementById('lite-personality-name').textContent = p.name;
     document.getElementById('lite-personality-description').textContent = p.description;
 
     // Genre tags
     const genreTags = document.getElementById('lite-genre-tags');
-    const genres = appState.litePatterns?.summary?.topGenres || [];
+    const genres = state.litePatterns?.summary?.topGenres || [];
     genreTags.innerHTML = genres.map(g => `<span class="genre-tag">${g}</span>`).join('');
 
     // Evidence
@@ -488,16 +528,16 @@ function showLiteReveal() {
     evidenceItems.innerHTML = p.allEvidence.map(e => `<li>${e}</li>`).join('');
 
     // Init chat context with lite data (no streams for lite mode)
-    Chat.initChat(p, appState.litePatterns, appState.litePatterns.summary, appState.liteData?.recentStreams || null);
+    Chat.initChat(p, state.litePatterns, state.litePatterns.summary, state.liteData?.recentStreams || null);
 }
 
-function showChat() {
-    if (!appState.personality) {
-        showUpload();
+function showChat(state = StateManager.getState()) {
+    if (!state.personality) {
+        StateManager.setState({ view: 'upload' });
         return;
     }
 
-    appState.view = 'chat';
+    // appState.view = 'chat'; // Managed by Router
     uploadZone.style.display = 'none';
     processing.classList.remove('active');
     revealSection.classList.remove('active');
@@ -505,7 +545,7 @@ function showChat() {
     chatSection.classList.add('active');
     resetBtn.style.display = 'block';
 
-    document.getElementById('chat-personality-name').textContent = appState.personality.name;
+    document.getElementById('chat-personality-name').textContent = state.personality.name;
 
     // Show sidebar and render sessions
     if (chatSidebar) {
@@ -781,7 +821,10 @@ function enableEditMode(messageDiv, currentText) {
 // ==========================================
 
 async function handleShare() {
-    await Cards.shareCard(appState.personality);
+    const state = StateManager.getState(); // Get fresh state
+    if (state.personality) {
+        await Cards.shareCard(state.personality);
+    }
 }
 
 // ==========================================
@@ -860,23 +903,16 @@ async function executeReset() {
     }
 
     // Reset app state
-    appState = {
-        streams: null,
-        chunks: null,
-        patterns: null,
-        personality: null,
-        liteData: null,
-        litePatterns: null,
-        isLiteMode: false,
-        view: 'upload',
-        sidebarCollapsed: appState.sidebarCollapsed  // Preserve sidebar state
-    };
+    // Reset app state via Manager
+    await StateManager.reset();
 
     Chat.clearHistory();
     localStorage.removeItem('rhythm_chamber_current_session');
 
     console.log('[App] Reset complete');
-    showUpload();
+    // StateManager reset broadcasts RESET, but we might need to explicit trigger UI update? 
+    // StateManager.reset() triggers subscribers with empty state -> Router calls showUpload.
+    // showUpload(); // Redundant via subscription
 }
 
 function handleReset() {
@@ -895,10 +931,9 @@ window.hideResetConfirmModal = hideResetConfirmModal;
  * Initialize sidebar state and event listeners
  */
 function initSidebar() {
-    // Restore collapsed state
-    const savedState = localStorage.getItem(SIDEBAR_STATE_KEY);
-    appState.sidebarCollapsed = savedState === 'true';
-    updateSidebarVisibility();
+    // Restore state handled by StateManager.init()
+
+    // updateSidebarVisibility(); // Handled by initial subscription callback
 
     // Setup event listeners
     if (sidebarToggleBtn) {
@@ -927,7 +962,8 @@ function initSidebar() {
  * Hide sidebar when not in chat view
  */
 function hideSidebarForNonChatViews() {
-    if (chatSidebar && appState.view !== 'chat') {
+    const state = StateManager.getState();
+    if (chatSidebar && state.view !== 'chat') {
         chatSidebar.classList.add('hidden');
     }
 }
@@ -935,10 +971,10 @@ function hideSidebarForNonChatViews() {
 /**
  * Update sidebar visibility based on state
  */
-function updateSidebarVisibility() {
+function updateSidebarVisibility(state = StateManager.getState()) {
     if (!chatSidebar) return;
 
-    if (appState.sidebarCollapsed) {
+    if (state.sidebarCollapsed) {
         chatSidebar.classList.add('collapsed');
     } else {
         chatSidebar.classList.remove('collapsed');
@@ -946,7 +982,7 @@ function updateSidebarVisibility() {
 
     // Mobile overlay
     if (sidebarOverlay) {
-        if (!appState.sidebarCollapsed && window.innerWidth <= 768) {
+        if (!state.sidebarCollapsed && window.innerWidth <= 768) {
             sidebarOverlay.classList.add('visible');
         } else {
             sidebarOverlay.classList.remove('visible');
@@ -958,13 +994,13 @@ function updateSidebarVisibility() {
  * Toggle sidebar collapsed state
  */
 function toggleSidebar() {
-    appState.sidebarCollapsed = !appState.sidebarCollapsed;
-    localStorage.setItem(SIDEBAR_STATE_KEY, appState.sidebarCollapsed.toString());
-    updateSidebarVisibility();
+    const currentState = StateManager.getState().sidebarCollapsed;
+    const newState = !currentState;
+    StateManager.setState({ sidebarCollapsed: newState });
 
     // Mobile: Toggle open class
     if (window.innerWidth <= 768) {
-        if (appState.sidebarCollapsed) {
+        if (newState) { // if collapsed is true
             chatSidebar.classList.remove('open');
         } else {
             chatSidebar.classList.add('open');
@@ -976,9 +1012,8 @@ function toggleSidebar() {
  * Close sidebar (mobile)
  */
 function closeSidebar() {
-    appState.sidebarCollapsed = true;
-    localStorage.setItem(SIDEBAR_STATE_KEY, 'true');
-    updateSidebarVisibility();
+    StateManager.setState({ sidebarCollapsed: true });
+    // updateSidebarVisibility handled by subscription
     if (chatSidebar) {
         chatSidebar.classList.remove('open');
     }
