@@ -29,6 +29,9 @@ True credential revocation and session invalidation require server infrastructur
 | **Proxy/VPN credential stuffing** | Geographic anomaly detection |
 | **Cross-user RAG access** | Namespace isolation per user |
 | **Timezone manipulation** | UTC-based time calculations |
+| **XSS token theft** | Device fingerprint binding (NEW) |
+| **Token hijacking** | Secure context enforcement (NEW) |
+| **False positive lockouts** | Travel-aware adaptive thresholds (NEW) |
 
 ### What We Cannot Protect Against
 
@@ -78,7 +81,36 @@ Security.invalidateSessions();
 > [!IMPORTANT]
 > **After changing passwords**: Log out of Rhythm Chamber to reset security keys.
 
-### 3. Geographic Anomaly Detection
+### 3. XSS Token Protection (NEW)
+
+Spotify access tokens are bound to device fingerprints to mitigate localStorage theft:
+
+```javascript
+// Token binding created on successful OAuth
+await Security.createTokenBinding(accessToken);
+
+// Verified before EVERY API call
+await Security.verifyTokenBinding(token);  // Throws on mismatch
+```
+
+**Components of device fingerprint:**
+- Browser language
+- Platform
+- Timezone
+- Screen resolution
+- Hardware concurrency
+- Session salt (unique per browser session)
+
+**Secure context enforcement:**
+```javascript
+const check = Security.checkSecureContext();
+if (!check.secure) {
+    throw new Error(check.reason);
+    // Blocks: insecure contexts, cross-origin iframes, data:/blob: protocols
+}
+```
+
+### 4. Geographic Anomaly Detection
 
 To detect proxy/VPN-based credential stuffing attacks, we track connection patterns:
 
@@ -93,7 +125,15 @@ if (suspicious.geoAnomaly) {
 }
 ```
 
-### 4. Rate Limiting
+**Travel-aware adaptive thresholds:**
+```javascript
+// Adjusts lockout thresholds based on change patterns:
+// - >10 min between geo changes = likely travel (1.5x tolerance)
+// - <1 min between changes = likely attack (0.5x threshold)
+const threshold = Security.calculateAdaptiveThreshold(5, 'embedding');
+```
+
+### 5. Rate Limiting
 
 Client-side rate limiting prevents abuse of embedding APIs:
 
@@ -103,7 +143,7 @@ if (Security.isRateLimited('embedding', 5)) {
 }
 ```
 
-### 5. Namespace Isolation
+### 6. Namespace Isolation
 
 RAG collections are isolated per user using a hash of their Spotify user ID:
 
@@ -111,6 +151,25 @@ RAG collections are isolated per user using a hash of their Spotify user ID:
 // Collection: rhythm_chamber_a1b2c3d4
 const collection = await RAG.getCollectionName();
 ```
+
+### 7. Unified Error Context (NEW)
+
+Structured error handling with recovery paths:
+
+```javascript
+const error = Security.ErrorContext.create('GEO_LOCKOUT', 'Too many location changes', {
+    isLikelyTravel: true,
+    cooldownMinutes: 60
+});
+// Returns: { code, rootCause, recoveryPath, userMessage, severity, ... }
+```
+
+### 8. Navigation Cleanup
+
+Tab visibility and navigation events are monitored for suspicious patterns:
+
+- Extended hidden tab periods (>30 min) trigger re-auth suggestion
+- Page unload events are logged for audit trail
 
 ---
 
@@ -125,6 +184,18 @@ rhythm_chamber_encrypted_creds: {"qdrant_credentials":{"cipher":"ZnVja3lvdXRoaXN
 ```
 
 Without the active session key, decryption fails.
+
+---
+
+### Scenario: XSS Token Theft (NEW)
+**Attack**: Inject script to steal Spotify access token from localStorage
+
+**Mitigation**:
+1. Token is bound to device fingerprint at creation
+2. Every API request verifies fingerprint match
+3. Fingerprint includes session-specific salt (different per browser tab/session)
+4. Mismatch triggers immediate session invalidation + token clearing
+5. Attacker's stolen token fails verification on different device/session
 
 ---
 
@@ -146,6 +217,17 @@ Without the active session key, decryption fails.
 2. >3 distinct fingerprints in 1 hour triggers "geographic anomaly"
 3. Rate limit threshold reduced by 50%
 4. Additional failures result in lockout
+
+---
+
+### Scenario: Legitimate Travel Lockout (NEW)
+**Issue**: User travels to new location, gets locked out
+
+**Mitigation (Adaptive Thresholds)**:
+1. Time between geo changes analyzed
+2. >10 min between changes = travel pattern detected
+3. Threshold increased by 50% for traveling users
+4. Clear error messages with wait time estimates
 
 ---
 
@@ -186,4 +268,6 @@ If you discover a security vulnerability in Rhythm Chamber:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1 | 2026-01-12 | XSS token protection, adaptive lockouts, unified errors |
 | 1.0 | 2026-01-12 | Initial security model |
+

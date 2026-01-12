@@ -768,26 +768,58 @@ function hideResetConfirmModal() {
 async function executeReset() {
     hideResetConfirmModal();
 
-    // HNW Fix: Prevent worker message race condition
-    // 1. Mark worker as invalid so any in-flight messages are ignored
-    // 2. Terminate worker
-    // 3. Wait for in-flight messages to be dropped
-    // 4. Clear storage
+    // HNW Fix: Enhanced worker termination with message queue drain
+    // 1. Stop background refresh first (prevents new token operations)
+    // 2. Mark worker as invalid so any in-flight messages are ignored  
+    // 3. Send abort signal to worker (graceful shutdown)
+    // 4. Wait for message queue drain
+    // 5. Force terminate after drain window
+    // 6. Clear storage and security state
 
-    if (activeWorker) {
-        // Nullify the handlers first to prevent race with in-flight messages
-        activeWorker.onmessage = null;
-        activeWorker.onerror = null;
-        activeWorker.terminate();
-        activeWorker = null;
+    // Stop background token refresh if running
+    if (Spotify.stopBackgroundRefresh) {
+        Spotify.stopBackgroundRefresh();
     }
 
-    // Brief delay to ensure any queued postMessage() calls are dropped
-    await new Promise(resolve => setTimeout(resolve, 100));
+    if (activeWorker) {
+        const workerRef = activeWorker;
+        activeWorker = null; // Mark as invalid immediately
 
+        // Nullify handlers first to prevent race with in-flight messages
+        workerRef.onmessage = null;
+        workerRef.onerror = null;
+
+        // Send abort signal to worker (if supported)
+        try {
+            workerRef.postMessage({ type: 'abort' });
+        } catch (e) {
+            // Worker may already be terminated, ignore
+        }
+
+        // Wait for message queue drain (500ms is sufficient for most cases)
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Force terminate after drain window
+        try {
+            workerRef.terminate();
+        } catch (e) {
+            // Already terminated, ignore
+        }
+    }
+
+    // Clear storage
     await Storage.clear();
     await Storage.clearAllSessions();  // Clear all chat sessions
+
+    // Clear Spotify tokens and security bindings
     Spotify.clearTokens();
+
+    // Clear any RAG checkpoints
+    if (window.RAG?.clearCheckpoint) {
+        window.RAG.clearCheckpoint();
+    }
+
+    // Reset app state
     appState = {
         streams: null,
         chunks: null,
@@ -799,8 +831,11 @@ async function executeReset() {
         view: 'upload',
         sidebarCollapsed: appState.sidebarCollapsed  // Preserve sidebar state
     };
+
     Chat.clearHistory();
     localStorage.removeItem('rhythm_chamber_current_session');
+
+    console.log('[App] Reset complete');
     showUpload();
 }
 

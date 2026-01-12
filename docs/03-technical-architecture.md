@@ -481,11 +481,17 @@ This application uses a **100% client-side security model**. All security measur
 | Feature | Implementation | Purpose |
 |---------|----------------|---------|
 | **AES-GCM Credential Encryption** | `security.js` | RAG credentials encrypted with session-derived keys |
+| **XSS Token Binding** | `security.js`, `spotify.js` | Spotify tokens bound to device fingerprint |
+| **Secure Context Enforcement** | `security.js` | Blocks operation in iframes, data: protocols |
 | **Session Versioning** | `security.js` | Keys invalidated when auth fails |
+| **Background Token Refresh** | `spotify.js` | Proactive refresh during long operations |
+| **Adaptive Lockout Thresholds** | `security.js` | Travel-aware threshold adjustment |
 | **Geographic Anomaly Detection** | `security.js` | Detects proxy/VPN-based attacks |
 | **Rate Limiting** | `security.js` | Prevents credential stuffing |
 | **Namespace Isolation** | `rag.js` | Per-user RAG collections |
-| **UTC Time Normalization** | `parser-worker.js` | DST-resistant pattern detection |
+| **Unified Error Context** | `security.js` | Structured errors with recovery paths |
+| **Enhanced Worker Reset** | `app.js` | Message queue drain before termination |
+| **Checkpoint Merge** | `rag.js` | Graceful handling of data changes mid-resume |
 | **Privacy Controls** | `storage.js` | Session-only mode, data cleanup |
 
 ### Threat Mitigations
@@ -493,11 +499,16 @@ This application uses a **100% client-side security model**. All security measur
 | Concern | Mitigation |
 |---------|------------|
 | API keys in DevTools | AES-GCM encryption with session-bound keys |
+| XSS token theft | Device fingerprint binding + verification on every API call |
+| Iframe/clickjacking attacks | Secure context enforcement blocks cross-origin iframes |
 | Session replay attacks | Session versioning with auto-invalidation |
+| Token expiry during processing | Background token refresh monitors expiry proactively |
+| False positive lockouts | Travel-aware adaptive thresholds (1.5x tolerance for travelers) |
 | Credential stuffing | Rate limiting + geographic anomaly detection |
 | Cross-user RAG access | Namespace isolation using user hash |
-| Spotify token theft | PKCE flow + token refresh invalidates sessions |
-| DST timezone manipulation | UTC-based time calculations |
+| Spotify token theft | PKCE flow + token refresh invalidates sessions + fingerprint binding |
+| Worker race conditions | Message queue drain + abort signaling before termination |
+| Checkpoint data mismatch | Merge capability with user choice (merge or restart) |
 | Data persistence concerns | Session-only mode + explicit consent |
 
 ### Limitations (Client-Side Architecture)
@@ -510,6 +521,7 @@ These threats cannot be fully mitigated without backend infrastructure:
 - **Full memory inspection** - Sophisticated attackers with browser access can extract secrets
 - **Remote session revocation** - Cannot revoke sessions from another device
 - **Token theft with physical access** - localStorage accessible to device holder
+- **HttpOnly cookies** - Not possible without server-side token management
 
 This is an **accepted trade-off** for the zero-cost, privacy-first architecture.
 

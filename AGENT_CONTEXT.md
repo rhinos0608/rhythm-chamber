@@ -1,7 +1,7 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Last updated:** 2026-01-12 19:50 AEDT  
-> **Status:** MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening
+> **Last updated:** 2026-01-12 20:50 AEDT  
+> **Status:** MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 (XSS Token Protection)
 
 ---
 
@@ -137,11 +137,15 @@ Client-side security module (`security.js`) providing defense-in-depth:
 | Feature | Purpose |
 |---------|----------|
 | **AES-GCM Encryption** | RAG credentials encrypted with session-derived keys |
+| **XSS Token Binding** | Spotify tokens bound to device fingerprint (NEW) |
+| **Secure Context Check** | Blocks operation in iframes, data: protocols (NEW) |
 | **Session Versioning** | Keys invalidated on auth failures |
+| **Background Token Refresh** | Proactive refresh during long operations (NEW) |
+| **Adaptive Lockouts** | Travel-aware threshold adjustment (NEW) |
 | **Rate Limiting** | Prevents credential stuffing attacks |
 | **Geographic Detection** | Detects proxy/VPN-based attacks |
 | **Namespace Isolation** | Per-user RAG collection separation |
-| **UTC Time Handling** | DST-resistant pattern detection |
+| **Unified Error Context** | Structured errors with recovery paths (NEW) |
 
 > **Note:** This is client-side security, not equivalent to server-side. See `SECURITY.md` for full threat model.
 
@@ -190,6 +194,33 @@ npx http-server -p 8080 -c-1
 ---
 
 ## Session Log
+
+### Session 12 — 2026-01-12 (XSS Token Protection)
+
+**What was done:**
+1. Added XSS token protection layer to `security.js` with device fingerprinting
+2. Integrated token binding into `spotify.js` OAuth flow and API calls
+3. Enhanced worker reset synchronization in `app.js` with message queue drain
+4. Added background token refresh system in `spotify.js` for long operations
+5. Enhanced checkpoint validation in `rag.js` with merge capability
+6. Added adaptive lockout thresholds based on travel patterns
+7. Created unified error context system (`ErrorContext`)
+8. Updated `SECURITY.md` with new attack scenarios and mitigations
+
+**New security features:**
+- `createTokenBinding()` / `verifyTokenBinding()` - Device fingerprint binding
+- `checkSecureContext()` - Blocks insecure/iframe contexts
+- `calculateAdaptiveThreshold()` - Travel-aware lockout adjustment
+- `checkTokenRefreshNeeded()` - Smart token refresh timing
+- `ErrorContext.create()` - Structured errors with recovery paths
+- `startBackgroundRefresh()` / `stopBackgroundRefresh()` - Long operation support
+
+**HNW patterns addressed:**
+- Hierarchy: Clear worker termination with abort signaling
+- Network: Token binding prevents cross-device theft
+- Wave: Background refresh prevents mid-operation token expiry
+
+---
 
 ### Session 11 — 2026-01-12 (Security Hardening)
 

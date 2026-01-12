@@ -152,6 +152,11 @@ const Spotify = (() => {
             const expiryTime = Date.now() + (data.expires_in * 1000);
             localStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
 
+            // SECURITY: Create token binding to prevent theft
+            if (window.Security?.createTokenBinding) {
+                await window.Security.createTokenBinding(data.access_token);
+            }
+
             // Clean up verifier
             localStorage.removeItem(STORAGE_KEYS.CODE_VERIFIER);
 
@@ -191,6 +196,11 @@ const Spotify = (() => {
         Object.values(STORAGE_KEYS).forEach(key => {
             localStorage.removeItem(key);
         });
+
+        // SECURITY: Clear token binding on logout
+        if (window.Security?.clearTokenBinding) {
+            window.Security.clearTokenBinding();
+        }
     }
 
     /**
@@ -253,6 +263,11 @@ const Spotify = (() => {
             const expiryTime = Date.now() + (data.expires_in * 1000);
             localStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
 
+            // SECURITY: Update token binding with new token
+            if (window.Security?.createTokenBinding) {
+                await window.Security.createTokenBinding(data.access_token);
+            }
+
             console.log('[Spotify] Token refreshed successfully');
             return true;
         } catch (error) {
@@ -299,6 +314,7 @@ const Spotify = (() => {
     /**
      * Make an authenticated API request
      * HNW Fix: Now auto-refreshes token on 401 before failing
+     * SECURITY: Verifies token binding before each request
      * @param {string} url - API endpoint
      * @param {object} options - Fetch options
      * @returns {Promise<object>} API response
@@ -310,6 +326,17 @@ const Spotify = (() => {
         }
 
         const token = getAccessToken();
+
+        // SECURITY: Verify token binding before each API call
+        if (window.Security?.verifyTokenBinding) {
+            try {
+                await window.Security.verifyTokenBinding(token);
+            } catch (bindingError) {
+                // Token binding failed - possible theft
+                clearTokens();
+                throw bindingError;
+            }
+        }
 
         const response = await fetch(url, {
             ...options,
@@ -526,6 +553,84 @@ const Spotify = (() => {
     }
 
     // ==========================================
+    // BACKGROUND TOKEN REFRESH
+    // For long-running operations (embedding generation, large data processing)
+    // ==========================================
+
+    let tokenRefreshInterval = null;
+    let isProcessingOperation = false;
+
+    /**
+     * Start background token refresh monitoring
+     * Call this before starting long operations
+     */
+    function startBackgroundRefresh() {
+        if (tokenRefreshInterval) {
+            console.log('[Spotify] Background refresh already running');
+            return;
+        }
+
+        isProcessingOperation = true;
+
+        // Check every 5 minutes
+        tokenRefreshInterval = setInterval(async () => {
+            const expiry = localStorage.getItem(STORAGE_KEYS.TOKEN_EXPIRY);
+            if (!expiry) return;
+
+            const expiryTime = parseInt(expiry, 10);
+
+            // Use Security module for smart refresh check
+            if (window.Security?.checkTokenRefreshNeeded) {
+                const { shouldRefresh, urgency } = window.Security.checkTokenRefreshNeeded(expiryTime, true);
+
+                if (shouldRefresh) {
+                    console.log(`[Spotify] Proactive token refresh (urgency: ${urgency})...`);
+                    try {
+                        await refreshToken();
+                    } catch (error) {
+                        console.error('[Spotify] Background refresh failed:', error);
+                        // Don't stop the interval - let the main flow handle auth errors
+                    }
+                }
+            } else {
+                // Fallback: refresh if expiring within 10 minutes
+                const timeUntilExpiry = expiryTime - Date.now();
+                if (timeUntilExpiry < 10 * 60 * 1000 && timeUntilExpiry > 0) {
+                    console.log('[Spotify] Proactive token refresh (legacy check)...');
+                    try {
+                        await refreshToken();
+                    } catch (error) {
+                        console.error('[Spotify] Background refresh failed:', error);
+                    }
+                }
+            }
+        }, 5 * 60 * 1000); // 5 minutes
+
+        console.log('[Spotify] Background token refresh started');
+    }
+
+    /**
+     * Stop background token refresh
+     * Call this when long operations complete
+     */
+    function stopBackgroundRefresh() {
+        if (tokenRefreshInterval) {
+            clearInterval(tokenRefreshInterval);
+            tokenRefreshInterval = null;
+            isProcessingOperation = false;
+            console.log('[Spotify] Background token refresh stopped');
+        }
+    }
+
+    /**
+     * Check if background refresh is running
+     * @returns {boolean}
+     */
+    function isBackgroundRefreshActive() {
+        return tokenRefreshInterval !== null;
+    }
+
+    // ==========================================
     // Public API
     // ==========================================
 
@@ -539,6 +644,7 @@ const Spotify = (() => {
         hasValidToken,
         getAccessToken,
         clearTokens,
+        refreshToken,
 
         // API
         getRecentlyPlayed,
@@ -548,9 +654,15 @@ const Spotify = (() => {
 
         // Quick Snapshot
         fetchSnapshotData,
-        transformForAnalysis
+        transformForAnalysis,
+
+        // Background Refresh (NEW)
+        startBackgroundRefresh,
+        stopBackgroundRefresh,
+        isBackgroundRefreshActive
     };
 })();
 
 // Make available globally
 window.Spotify = Spotify;
+

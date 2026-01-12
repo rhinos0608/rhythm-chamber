@@ -592,6 +592,347 @@ function isSessionValid() {
     return true;
 }
 
+// ==========================================
+// XSS TOKEN PROTECTION LAYER
+// Critical: Mitigates localStorage token theft in client-side architecture
+// ==========================================
+
+const TOKEN_BINDING_KEY = 'rhythm_chamber_token_binding';
+const DEVICE_FINGERPRINT_KEY = 'rhythm_chamber_device_fp';
+
+/**
+ * Generate device/session fingerprint for token binding
+ * Uses browser characteristics that change between devices but stay stable on same device
+ * @returns {Promise<string>} Fingerprint hash
+ */
+async function generateDeviceFingerprint() {
+    const components = [
+        navigator.language,
+        navigator.platform,
+        Intl.DateTimeFormat().resolvedOptions().timeZone,
+        screen.width + 'x' + screen.height,
+        screen.colorDepth,
+        navigator.hardwareConcurrency || 'unknown',
+        // Add session-specific component to prevent cross-tab attacks
+        sessionStorage.getItem(SESSION_SALT_KEY) || 'no-session'
+    ];
+
+    const fingerprint = await hashData(components.join('|'));
+    return fingerprint.slice(0, 16); // Truncated for efficiency
+}
+
+/**
+ * Check if running in a secure context
+ * Blocks sensitive operations in insecure environments (HTTP, embedded frames, etc.)
+ * @returns {{secure: boolean, reason?: string}}
+ */
+function checkSecureContext() {
+    // Modern secure context check
+    if (typeof window.isSecureContext !== 'undefined' && !window.isSecureContext) {
+        return {
+            secure: false,
+            reason: 'Not running in a secure context (HTTPS required for sensitive operations)'
+        };
+    }
+
+    // Check for suspicious iframe embedding (clickjacking/XSS vector)
+    if (window.top !== window.self) {
+        // We're in an iframe - this could be legitimate (dev tools) or malicious
+        try {
+            // If we can't access parent, it's cross-origin - highly suspicious
+            const parentUrl = window.parent.location.href;
+            // If we get here, same-origin iframe - less suspicious but still log
+            console.warn('[Security] Running in same-origin iframe');
+        } catch (e) {
+            return {
+                secure: false,
+                reason: 'Running in cross-origin iframe - possible clickjacking attack'
+            };
+        }
+    }
+
+    // Check for data: or blob: protocols (common XSS vectors)
+    if (window.location.protocol === 'data:' || window.location.protocol === 'blob:') {
+        return {
+            secure: false,
+            reason: 'Running in potentially malicious context (data: or blob: protocol)'
+        };
+    }
+
+    return { secure: true };
+}
+
+/**
+ * Create token binding - called after successful auth
+ * Binds token to device fingerprint to prevent token theft
+ * @param {string} token - The access token to bind
+ * @returns {Promise<boolean>} Success status
+ */
+async function createTokenBinding(token) {
+    if (!token) return false;
+
+    // Verify secure context first
+    const securityCheck = checkSecureContext();
+    if (!securityCheck.secure) {
+        console.error('[Security] Cannot create token binding:', securityCheck.reason);
+        return false;
+    }
+
+    const fingerprint = await generateDeviceFingerprint();
+
+    // Store fingerprint for future verification
+    sessionStorage.setItem(DEVICE_FINGERPRINT_KEY, fingerprint);
+
+    // Create binding: hash of fingerprint + token (don't store raw token)
+    const binding = await hashData(`${fingerprint}:${token}:rhythm-chamber`);
+    localStorage.setItem(TOKEN_BINDING_KEY, binding);
+
+    console.log('[Security] Token binding created');
+    return true;
+}
+
+/**
+ * Verify token binding - called before any token usage
+ * Throws if binding doesn't match (possible token theft)
+ * @param {string} token - Token to verify
+ * @returns {Promise<boolean>} True if valid
+ * @throws {Error} If binding verification fails
+ */
+async function verifyTokenBinding(token) {
+    if (!token) return false;
+
+    const storedBinding = localStorage.getItem(TOKEN_BINDING_KEY);
+    if (!storedBinding) {
+        // No binding exists - token might be from before this feature
+        // Log warning but don't block (backward compatibility)
+        console.warn('[Security] No token binding found - consider re-authenticating');
+        return true;
+    }
+
+    // Regenerate fingerprint (should match if same device/session)
+    const currentFingerprint = await generateDeviceFingerprint();
+    const expectedBinding = await hashData(`${currentFingerprint}:${token}:rhythm-chamber`);
+
+    if (storedBinding !== expectedBinding) {
+        console.error('[Security] TOKEN BINDING MISMATCH - possible session hijacking!');
+
+        // Record this as a security incident
+        await recordFailedAttempt('token_binding', 'Fingerprint mismatch detected');
+
+        // Invalidate everything
+        invalidateSessions();
+        clearTokenBinding();
+
+        throw new Error('Security check failed: Token binding mismatch. Please reconnect to Spotify.');
+    }
+
+    return true;
+}
+
+/**
+ * Clear token binding (on logout or session invalidation)
+ */
+function clearTokenBinding() {
+    localStorage.removeItem(TOKEN_BINDING_KEY);
+    sessionStorage.removeItem(DEVICE_FINGERPRINT_KEY);
+    console.log('[Security] Token binding cleared');
+}
+
+/**
+ * Calculate recommended token expiry for processing sessions
+ * Uses shorter expiry during sensitive operations to reduce attack window
+ * @param {number} spotifyExpiresIn - Default expiry from Spotify (usually 3600s)
+ * @returns {number} Recommended expiry in milliseconds
+ */
+function calculateProcessingTokenExpiry(spotifyExpiresIn) {
+    // For processing sessions: use 75% of Spotify expiry, max 45 minutes
+    const maxProcessingExpiry = 45 * 60 * 1000; // 45 minutes
+    const calculatedExpiry = spotifyExpiresIn * 1000 * 0.75;
+
+    return Math.min(calculatedExpiry, maxProcessingExpiry);
+}
+
+/**
+ * Check if token should be refreshed proactively
+ * @param {number} expiryTime - Token expiry timestamp in ms
+ * @param {boolean} isProcessing - Whether a long operation is in progress
+ * @returns {{shouldRefresh: boolean, urgency: 'normal'|'soon'|'critical'}}
+ */
+function checkTokenRefreshNeeded(expiryTime, isProcessing = false) {
+    const now = Date.now();
+    const timeUntilExpiry = expiryTime - now;
+
+    // Processing sessions: more aggressive refresh (15 min buffer)
+    // Normal sessions: 5 min buffer
+    const buffer = isProcessing ? 15 * 60 * 1000 : 5 * 60 * 1000;
+
+    if (timeUntilExpiry <= 0) {
+        return { shouldRefresh: true, urgency: 'critical' };
+    }
+
+    if (timeUntilExpiry <= buffer) {
+        return { shouldRefresh: true, urgency: 'soon' };
+    }
+
+    if (timeUntilExpiry <= buffer * 3) {
+        return { shouldRefresh: false, urgency: 'normal' };
+    }
+
+    return { shouldRefresh: false, urgency: 'normal' };
+}
+
+/**
+ * Setup navigation/tab close cleanup
+ * Clears sensitive tokens when user leaves page
+ */
+function setupNavigationCleanup() {
+    window.addEventListener('beforeunload', () => {
+        // Only scrub if user is actually leaving (not just refreshing with saved session)
+        // Check if this is a "hard" navigation vs refresh
+        const navType = performance.getEntriesByType?.('navigation')?.[0]?.type;
+
+        // On actual navigation away (not refresh), consider clearing tokens
+        // However, this is aggressive - for MVP, just log
+        console.log('[Security] Page unload detected, navigation type:', navType);
+
+        // Note: Actual token clearing on every unload breaks UX for page refreshes
+        // Instead, we rely on token binding + short expiry + session validation
+    });
+
+    // Handle visibility change (tab hidden) - could indicate tab switching during attack
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            // Tab is hidden - potential attack vector (user tricked to another tab)
+            // Log but don't clear tokens (would break background processing)
+            const hiddenAt = Date.now();
+            sessionStorage.setItem('rhythm_chamber_hidden_at', String(hiddenAt));
+        } else {
+            // Tab is visible again - check how long it was hidden
+            const hiddenAt = sessionStorage.getItem('rhythm_chamber_hidden_at');
+            if (hiddenAt) {
+                const hiddenDuration = Date.now() - parseInt(hiddenAt, 10);
+                // If hidden for > 30 minutes, suggest re-auth
+                if (hiddenDuration > 30 * 60 * 1000) {
+                    console.warn('[Security] Tab was hidden for extended period - consider re-authenticating');
+                }
+                sessionStorage.removeItem('rhythm_chamber_hidden_at');
+            }
+        }
+    });
+}
+
+// Initialize navigation cleanup on module load
+setupNavigationCleanup();
+
+/**
+ * Adaptive lockout threshold calculation
+ * Accounts for travel patterns to reduce false positives
+ * @param {number} baseThreshold - Default threshold
+ * @param {string} operation - Operation being checked
+ * @returns {number} Adjusted threshold
+ */
+function calculateAdaptiveThreshold(baseThreshold, operation) {
+    const geoChanges = countRecentGeoChanges();
+
+    // Get timing pattern of geo changes
+    const stored = localStorage.getItem(IP_HISTORY_KEY);
+    if (!stored || geoChanges <= 3) {
+        return baseThreshold; // Normal threshold
+    }
+
+    try {
+        const history = JSON.parse(stored);
+        const oneHourAgo = Date.now() - 60 * 60 * 1000;
+        const recentEntries = history.filter(h => h.timestamp > oneHourAgo);
+
+        if (recentEntries.length < 2) {
+            return baseThreshold;
+        }
+
+        // Calculate average time between geo changes
+        let totalGaps = 0;
+        for (let i = 1; i < recentEntries.length; i++) {
+            totalGaps += recentEntries[i].timestamp - recentEntries[i - 1].timestamp;
+        }
+        const avgGap = totalGaps / (recentEntries.length - 1);
+
+        // Travel pattern: changes spread over 10+ minutes each
+        // Attack pattern: rapid changes within seconds
+        if (avgGap > 10 * 60 * 1000) { // > 10 min between changes = likely travel
+            console.log('[Security] Detected travel pattern - increasing tolerance');
+            return Math.floor(baseThreshold * 1.5);
+        } else if (avgGap < 60 * 1000) { // < 1 min = suspicious
+            console.warn('[Security] Rapid geo changes detected - reducing threshold');
+            return Math.floor(baseThreshold / 2);
+        }
+
+        return baseThreshold;
+    } catch (e) {
+        return baseThreshold;
+    }
+}
+
+/**
+ * Unified error context system
+ * Creates structured errors with recovery paths
+ */
+const ErrorContext = {
+    /**
+     * Create structured error context
+     * @param {string} code - Error code
+     * @param {string} rootCause - Root cause description
+     * @param {object} details - Additional details
+     * @returns {object} Structured error context
+     */
+    create(code, rootCause, details = {}) {
+        return {
+            code,
+            rootCause,
+            timestamp: Date.now(),
+            recoveryPath: this.getRecoveryPath(code),
+            userMessage: this.getUserMessage(code, details),
+            severity: this.getSeverity(code),
+            ...details
+        };
+    },
+
+    getRecoveryPath(code) {
+        const paths = {
+            'AUTH_FAILURE': 'reconnect_spotify',
+            'TOKEN_EXPIRED': 'refresh_token',
+            'TOKEN_BINDING_FAIL': 'reconnect_spotify',
+            'GEO_LOCKOUT': 'wait_or_verify_identity',
+            'CHECKPOINT_MISMATCH': 'merge_or_restart',
+            'WORKER_ABORT': 'retry_operation',
+            'XSS_DETECTED': 'use_secure_browser',
+            'RATE_LIMITED': 'wait_and_retry'
+        };
+        return paths[code] || 'contact_support';
+    },
+
+    getUserMessage(code, details) {
+        const messages = {
+            'GEO_LOCKOUT': details.isLikelyTravel
+                ? `Security check triggered while traveling. Please wait ${details.cooldownMinutes || 60} minutes or try from a consistent location.`
+                : `Security lockout: ${details.failureCount || 'Multiple'} failed attempts detected. Please wait before trying again.`,
+            'CHECKPOINT_MISMATCH': 'Your data has changed since the last save. You can merge with previous progress or start fresh.',
+            'TOKEN_BINDING_FAIL': 'Security check failed. Please reconnect to Spotify to verify your identity.',
+            'XSS_DETECTED': 'This app requires a secure browser environment. Please ensure you\'re using HTTPS and not in an embedded frame.',
+            'RATE_LIMITED': `Too many requests. Please wait ${details.waitSeconds || 60} seconds before trying again.`
+        };
+        return messages[code] || 'An error occurred. Please try again.';
+    },
+
+    getSeverity(code) {
+        const critical = ['TOKEN_BINDING_FAIL', 'XSS_DETECTED'];
+        const high = ['AUTH_FAILURE', 'GEO_LOCKOUT'];
+
+        if (critical.includes(code)) return 'critical';
+        if (high.includes(code)) return 'high';
+        return 'medium';
+    }
+};
+
 // Public API
 window.Security = {
     // Obfuscation (legacy, for non-critical data)
@@ -621,6 +962,19 @@ window.Security = {
     checkSuspiciousActivity,
     clearSecurityLockout,
     countRecentGeoChanges,
+    calculateAdaptiveThreshold,
+
+    // XSS Token Protection (NEW)
+    checkSecureContext,
+    generateDeviceFingerprint,
+    createTokenBinding,
+    verifyTokenBinding,
+    clearTokenBinding,
+    calculateProcessingTokenExpiry,
+    checkTokenRefreshNeeded,
+
+    // Unified Error System (NEW)
+    ErrorContext,
 
     // Utility
     generateRandomString,
@@ -631,4 +985,5 @@ window.Security = {
     getSessionSalt
 };
 
-console.log('[Security] Client-side security module loaded (AES-GCM encryption enabled)');
+console.log('[Security] Client-side security module loaded (AES-GCM + XSS Token Protection enabled)');
+

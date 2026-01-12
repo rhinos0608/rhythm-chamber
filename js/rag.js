@@ -421,6 +421,7 @@ async function search(query, limit = 5) {
 /**
  * Generate embeddings for all streaming data chunks
  * @param {Function} onProgress - Progress callback (current, total, message)
+ * @param {object} options - Options including resume, mergeStrategy
  */
 async function generateEmbeddings(onProgress = () => { }, options = {}) {
     if (!Payments.isPremium()) {
@@ -432,122 +433,162 @@ async function generateEmbeddings(onProgress = () => { }, options = {}) {
         throw new Error('Please configure your Qdrant credentials first');
     }
 
-    const { resume = false } = options;
+    // SECURITY: Start background token refresh for long operation
+    if (window.Spotify?.startBackgroundRefresh) {
+        window.Spotify.startBackgroundRefresh();
+    }
+
+    const { resume = false, mergeStrategy = null } = options;
     const checkpoint = resume ? getCheckpoint() : null;
 
-    // Get streaming data
-    const streams = await Storage.getStreams();
-    if (!streams || streams.length === 0) {
-        throw new Error('No streaming data found. Please upload your Spotify data first.');
-    }
-
-    // Calculate data hash for staleness detection
-    const dataHash = await window.Storage?.getDataHash?.() || 'unknown';
-
-    onProgress(0, 100, 'Preparing data...');
-
-    // Create chunks from streaming data
-    const chunks = createChunks(streams);
-    const totalChunks = chunks.length;
-
-    // Calculate time estimate (roughly 0.3s per chunk with batching)
-    const estimatedSeconds = Math.ceil(totalChunks * 0.03); // ~30ms per chunk in batch
-    const estimateText = window.Utils?.formatDuration?.(estimatedSeconds) || `~${estimatedSeconds}s`;
-
-    // Determine starting point
-    // HNW Fix: Validate checkpoint hash against current data hash
-    let startBatch = 0;
-    if (checkpoint && checkpoint.totalChunks === totalChunks) {
-        // Critical: Validate that checkpoint was created for the same data
-        if (checkpoint.dataHash && checkpoint.dataHash !== dataHash) {
-            console.warn('[RAG] Checkpoint data hash mismatch - data has changed since checkpoint');
-            clearCheckpoint();
-            onProgress(0, totalChunks, `Data changed - starting fresh... (Est: ${estimateText})`);
-        } else {
-            startBatch = checkpoint.lastBatch + 1;
-            onProgress(checkpoint.processed, totalChunks,
-                `Resuming from batch ${startBatch}... (${estimateText} remaining)`);
+    try {
+        // Get streaming data
+        const streams = await Storage.getStreams();
+        if (!streams || streams.length === 0) {
+            throw new Error('No streaming data found. Please upload your Spotify data first.');
         }
-    } else {
-        onProgress(0, totalChunks, `Processing ${totalChunks} chunks... (Est: ${estimateText})`);
-    }
 
-    // Ensure collection exists
-    await ensureCollection();
+        // Calculate data hash for staleness detection
+        const dataHash = await window.Storage?.getDataHash?.() || 'unknown';
 
-    // Process in batches to avoid rate limits
-    const BATCH_SIZE = 10;
-    let processed = checkpoint?.processed || 0;
+        onProgress(0, 100, 'Preparing data...');
 
-    for (let i = startBatch * BATCH_SIZE; i < chunks.length; i += BATCH_SIZE) {
-        const batchIndex = Math.floor(i / BATCH_SIZE);
-        const batch = chunks.slice(i, i + BATCH_SIZE);
-        const texts = batch.map(c => c.text);
+        // Create chunks from streaming data
+        const chunks = createChunks(streams);
+        const totalChunks = chunks.length;
 
-        try {
-            // Get embeddings for batch
-            const embeddings = await getEmbedding(texts);
+        // Calculate time estimate (roughly 0.3s per chunk with batching)
+        const estimatedSeconds = Math.ceil(totalChunks * 0.03); // ~30ms per chunk in batch
+        const estimateText = window.Utils?.formatDuration?.(estimatedSeconds) || `~${estimatedSeconds}s`;
 
-            // Prepare points for Qdrant
-            const points = batch.map((chunk, idx) => ({
-                id: i + idx + 1, // Qdrant requires positive integers
-                vector: embeddings[idx],
-                payload: {
-                    text: chunk.text,
-                    type: chunk.type,
-                    metadata: chunk.metadata
+        // Determine starting point
+        // HNW Fix: Enhanced checkpoint validation with merge capability
+        let startBatch = 0;
+        if (checkpoint && checkpoint.totalChunks === totalChunks) {
+            // Critical: Validate that checkpoint was created for the same data
+            if (checkpoint.dataHash && checkpoint.dataHash !== dataHash) {
+                console.warn('[RAG] Checkpoint data hash mismatch - data has changed since checkpoint');
+
+                // Handle based on merge strategy
+                if (mergeStrategy === 'merge') {
+                    // Continue from checkpoint, process new chunks after
+                    startBatch = checkpoint.lastBatch + 1;
+                    onProgress(checkpoint.processed, totalChunks,
+                        `Merging: resuming from batch ${startBatch}... (${estimateText} remaining)`);
+                } else if (mergeStrategy === 'restart') {
+                    clearCheckpoint();
+                    onProgress(0, totalChunks, `Starting fresh... (Est: ${estimateText})`);
+                } else {
+                    // No strategy specified - return options for UI to prompt user
+                    return {
+                        action: 'prompt_merge',
+                        options: [
+                            {
+                                strategy: 'merge',
+                                label: 'Keep previous progress + add new data',
+                                description: `Resume from batch ${checkpoint.lastBatch + 1}, then process new chunks`
+                            },
+                            {
+                                strategy: 'restart',
+                                label: 'Start fresh',
+                                description: 'Discard previous progress and reprocess all data'
+                            }
+                        ],
+                        checkpoint
+                    };
                 }
-            }));
-
-            // Upsert to Qdrant
-            await upsertPoints(points);
-
-            processed += batch.length;
-
-            // Save checkpoint after each batch
-            saveCheckpoint({
-                lastBatch: batchIndex,
-                processed,
-                totalChunks,
-                dataHash
-            });
-
-            onProgress(processed, totalChunks, `Processed ${processed}/${totalChunks} chunks...`);
-
-        } catch (err) {
-            console.error('Batch processing error:', err);
-            // Save checkpoint so user can resume
-            saveCheckpoint({
-                lastBatch: batchIndex - 1,
-                processed,
-                totalChunks,
-                dataHash,
-                error: err.message
-            });
-            throw new Error(`Failed at batch ${batchIndex}: ${err.message}. You can resume from Settings.`);
+            } else {
+                startBatch = checkpoint.lastBatch + 1;
+                onProgress(checkpoint.processed, totalChunks,
+                    `Resuming from batch ${startBatch}... (${estimateText} remaining)`);
+            }
+        } else {
+            onProgress(0, totalChunks, `Processing ${totalChunks} chunks... (Est: ${estimateText})`);
         }
 
-        // Small delay to avoid rate limits
-        if (i + BATCH_SIZE < chunks.length) {
-            await new Promise(r => setTimeout(r, 200));
+        // Ensure collection exists
+        await ensureCollection();
+
+        // Process in batches to avoid rate limits
+        const BATCH_SIZE = 10;
+        let processed = checkpoint?.processed || 0;
+
+        for (let i = startBatch * BATCH_SIZE; i < chunks.length; i += BATCH_SIZE) {
+            const batchIndex = Math.floor(i / BATCH_SIZE);
+            const batch = chunks.slice(i, i + BATCH_SIZE);
+            const texts = batch.map(c => c.text);
+
+            try {
+                // Get embeddings for batch
+                const embeddings = await getEmbedding(texts);
+
+                // Prepare points for Qdrant
+                const points = batch.map((chunk, idx) => ({
+                    id: i + idx + 1, // Qdrant requires positive integers
+                    vector: embeddings[idx],
+                    payload: {
+                        text: chunk.text,
+                        type: chunk.type,
+                        metadata: chunk.metadata
+                    }
+                }));
+
+                // Upsert to Qdrant
+                await upsertPoints(points);
+
+                processed += batch.length;
+
+                // Save checkpoint after each batch
+                saveCheckpoint({
+                    lastBatch: batchIndex,
+                    processed,
+                    totalChunks,
+                    dataHash
+                });
+
+                onProgress(processed, totalChunks, `Processed ${processed}/${totalChunks} chunks...`);
+
+            } catch (err) {
+                console.error('Batch processing error:', err);
+                // Save checkpoint so user can resume
+                saveCheckpoint({
+                    lastBatch: batchIndex - 1,
+                    processed,
+                    totalChunks,
+                    dataHash,
+                    error: err.message
+                });
+                throw new Error(`Failed at batch ${batchIndex}: ${err.message}. You can resume from Settings.`);
+            }
+
+            // Small delay to avoid rate limits
+            if (i + BATCH_SIZE < chunks.length) {
+                await new Promise(r => setTimeout(r, 200));
+            }
+        }
+
+        // Clear checkpoint and mark complete
+        clearCheckpoint();
+
+        // Mark embeddings as generated with data hash
+        saveConfig({
+            ...config,
+            embeddingsGenerated: true,
+            chunksCount: totalChunks,
+            generatedAt: new Date().toISOString(),
+            dataHash: dataHash
+        });
+
+        onProgress(totalChunks, totalChunks, '✓ Embeddings generated successfully!');
+
+        return { success: true, chunksProcessed: totalChunks };
+
+    } finally {
+        // SECURITY: Always stop background refresh when done
+        if (window.Spotify?.stopBackgroundRefresh) {
+            window.Spotify.stopBackgroundRefresh();
         }
     }
-
-    // Clear checkpoint and mark complete
-    clearCheckpoint();
-
-    // Mark embeddings as generated with data hash
-    saveConfig({
-        ...config,
-        embeddingsGenerated: true,
-        chunksCount: totalChunks,
-        generatedAt: new Date().toISOString(),
-        dataHash: dataHash
-    });
-
-    onProgress(totalChunks, totalChunks, '✓ Embeddings generated successfully!');
-
-    return { success: true, chunksProcessed: totalChunks };
 }
 
 /**
