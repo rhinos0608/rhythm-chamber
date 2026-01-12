@@ -20,6 +20,7 @@ let streamsData = null;  // Actual streaming data for queries
 
 // Session management state
 let currentSessionId = null;
+let currentSessionCreatedAt = null;  // HNW Fix: Preserve createdAt across saves
 let autoSaveTimeoutId = null;
 let sessionUpdateListeners = [];
 
@@ -131,6 +132,7 @@ async function saveCurrentSession() {
         const session = {
             id: currentSessionId,
             title: generateSessionTitle(),
+            createdAt: currentSessionCreatedAt,  // HNW Fix: Preserve original createdAt
             messages: conversationHistory.slice(-100), // Limit to 100 messages
             metadata: {
                 personalityName: userContext?.personality?.name || 'Unknown',
@@ -171,6 +173,7 @@ async function createNewSession(initialMessages = []) {
     }
 
     currentSessionId = generateUUID();
+    currentSessionCreatedAt = new Date().toISOString();  // HNW Fix: Set createdAt for new session
     conversationHistory = [...initialMessages];
 
     localStorage.setItem(CURRENT_SESSION_KEY, currentSessionId);
@@ -211,6 +214,7 @@ async function loadSession(sessionId) {
         }
 
         currentSessionId = session.id;
+        currentSessionCreatedAt = session.createdAt;  // HNW Fix: Preserve createdAt from loaded session
         conversationHistory = session.messages || [];
         localStorage.setItem(CURRENT_SESSION_KEY, currentSessionId);
 

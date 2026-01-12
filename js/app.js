@@ -1033,11 +1033,39 @@ async function handleNewChat() {
     }
 }
 
+// Track which session is pending deletion
+let pendingDeleteSessionId = null;
+
 /**
- * Handle session delete
+ * Handle session delete - show confirmation modal
  */
-async function handleSessionDelete(sessionId) {
-    if (!confirm('Delete this conversation?')) return;
+function handleSessionDelete(sessionId) {
+    pendingDeleteSessionId = sessionId;
+    const modal = document.getElementById('delete-chat-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+/**
+ * Hide delete chat confirmation modal
+ */
+function hideDeleteChatModal() {
+    pendingDeleteSessionId = null;
+    const modal = document.getElementById('delete-chat-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+/**
+ * Confirm and execute the delete
+ */
+async function confirmDeleteChat() {
+    if (!pendingDeleteSessionId) return;
+
+    const sessionId = pendingDeleteSessionId;
+    hideDeleteChatModal();
 
     await Chat.deleteSessionById(sessionId);
 
@@ -1093,7 +1121,7 @@ function appendMessage(role, content) {
 
     const div = document.createElement('div');
     div.className = `message ${role}`;
-    div.innerHTML = `<div class="message-content">${marked ? marked.parse(content) : content}</div>`;
+    div.innerHTML = `<div class="message-content">${typeof marked !== 'undefined' ? marked.parse(content) : content}</div>`;
     messages.appendChild(div);
 }
 
@@ -1101,6 +1129,8 @@ function appendMessage(role, content) {
 window.handleSessionClick = handleSessionClick;
 window.handleSessionDelete = handleSessionDelete;
 window.handleSessionRename = handleSessionRename;
+window.hideDeleteChatModal = hideDeleteChatModal;
+window.confirmDeleteChat = confirmDeleteChat;
 
 // Start
 init();

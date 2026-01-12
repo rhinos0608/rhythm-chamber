@@ -228,6 +228,14 @@ const Spotify = (() => {
 
             if (!response.ok) {
                 console.error('[Spotify] Token refresh failed:', response.status);
+
+                // SECURITY: Invalidate all sessions when refresh fails
+                // This prevents stale sessions from persisting after auth issues
+                if (window.Security?.invalidateSessions) {
+                    console.warn('[Spotify] Invalidating sessions due to refresh failure');
+                    window.Security.invalidateSessions();
+                }
+
                 return false;
             }
 
@@ -249,6 +257,12 @@ const Spotify = (() => {
             return true;
         } catch (error) {
             console.error('[Spotify] Token refresh error:', error);
+
+            // SECURITY: Invalidate sessions on network/auth errors
+            if (window.Security?.invalidateSessions) {
+                window.Security.invalidateSessions();
+            }
+
             return false;
         }
     }

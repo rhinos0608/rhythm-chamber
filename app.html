@@ -14,6 +14,7 @@
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap"
         rel="stylesheet">
 
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link rel="stylesheet" href="css/styles.css">
 </head>
 
@@ -244,11 +245,29 @@
                 </div>
             </div>
         </div>
+
+        <!-- Delete Chat Confirmation Modal -->
+        <div class="modal-overlay" id="delete-chat-modal" style="display: none;">
+            <div class="modal-content" style="max-width: 400px; text-align: center;">
+                <h3 style="margin-bottom: var(--space-md);">🗑️ Delete Chat?</h3>
+                <p style="margin-bottom: var(--space-lg); color: var(--text-muted);">
+                    This conversation will be permanently deleted.
+                </p>
+                <div style="display: flex; gap: var(--space-md); justify-content: center;">
+                    <button class="btn btn-secondary" onclick="hideDeleteChatModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="confirmDeleteChat()"
+                        style="background: var(--danger, #dc3545);">
+                        Yes, Delete
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Scripts -->
     <script src="js/config.js"></script>
     <script src="js/utils.js"></script>
+    <script src="js/security.js"></script>
     <script src="js/settings.js"></script>
     <script src="js/payments.js"></script>
     <script src="js/rag.js"></script>

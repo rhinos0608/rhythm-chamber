@@ -1,6 +1,11 @@
 /**
  * Pattern Detection Module
  * Detects behavioral patterns from listening data
+ * 
+ * TIMEZONE HANDLING:
+ * Uses UTC hours (hourUTC) when available for consistent results
+ * regardless of user's current timezone or DST transitions.
+ * Falls back to local hour if UTC not present (legacy data).
  */
 
 /**
@@ -102,16 +107,20 @@ function detectEras(streams, chunks) {
 /**
  * Detect time-of-day listening patterns
  * Morning vs evening overlap <30% = mood engineer signal
+ * 
+ * Uses UTC hours for consistency across DST transitions
+ * Requires minimum 100 streams in each time bucket to avoid false positives
  */
 function detectTimePatterns(streams) {
-    const morningArtists = new Set(); // 5am - 11am
-    const eveningArtists = new Set(); // 6pm - 11pm
+    const morningArtists = new Set(); // 5am - 11am UTC
+    const eveningArtists = new Set(); // 6pm - 11pm UTC
 
     const morningStreams = [];
     const eveningStreams = [];
 
     for (const stream of streams) {
-        const hour = stream.hour;
+        // Use UTC hour for DST-resistant analysis; fallback to local for legacy data
+        const hour = stream.hourUTC ?? stream.hour;
 
         if (hour >= 5 && hour < 12) {
             morningArtists.add(stream.artistName);
@@ -127,14 +136,25 @@ function detectTimePatterns(streams) {
         ? intersection.length / morningArtists.size
         : 0;
 
+    // Require minimum 100 streams in each bucket to avoid false positives from sparse data
+    const MIN_STREAMS_THRESHOLD = 100;
+    const hasEnoughData = morningStreams.length >= MIN_STREAMS_THRESHOLD &&
+        eveningStreams.length >= MIN_STREAMS_THRESHOLD;
+
     return {
         morningArtistCount: morningArtists.size,
         eveningArtistCount: eveningArtists.size,
+        morningStreamCount: morningStreams.length,
+        eveningStreamCount: eveningStreams.length,
         overlap: Math.round(overlap * 100),
-        isMoodEngineer: overlap < 0.3 && morningArtists.size > 5 && eveningArtists.size > 5,
-        description: overlap < 0.3
-            ? `Morning vs evening overlap: only ${Math.round(overlap * 100)}% — you use music to set your mood`
-            : `${Math.round(overlap * 100)}% overlap between morning and evening listening`
+        // Only flag as mood engineer if we have enough data to be confident
+        isMoodEngineer: hasEnoughData && overlap < 0.3 && morningArtists.size > 5 && eveningArtists.size > 5,
+        hasEnoughData,
+        description: !hasEnoughData
+            ? `Need more listening data for time pattern analysis`
+            : overlap < 0.3
+                ? `Morning vs evening overlap: only ${Math.round(overlap * 100)}% — you use music to set your mood`
+                : `${Math.round(overlap * 100)}% overlap between morning and evening listening`
     };
 }
 

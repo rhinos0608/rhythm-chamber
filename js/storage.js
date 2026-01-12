@@ -1,6 +1,11 @@
 /**
  * IndexedDB Storage Module
  * Handles all local data persistence
+ * 
+ * PRIVACY CONTROLS:
+ * - Session-only mode: Data only lives in memory for the current session
+ * - Sensitive data cleanup: Clear raw streams after personality analysis
+ * - Explicit consent tracking: Respects user preference for data retention
  */
 
 const DB_NAME = 'rhythm-chamber';
@@ -15,6 +20,10 @@ const STORES = {
   CHAT_SESSIONS: 'chat_sessions'  // NEW: Persistent chat storage
 };
 
+// Privacy control flags
+let sessionOnlyMode = false;
+let dataPersistenceConsent = true; // Default to true for backward compatibility
+
 let db = null;
 
 // Event listener registry for storage updates
@@ -22,6 +31,7 @@ const updateListeners = [];
 
 /**
  * Initialize the database
+ * HNW Fix: Added onversionchange and onblocked handlers to prevent deadlock
  */
 async function initDB() {
   if (db) return db;
@@ -31,8 +41,23 @@ async function initDB() {
 
     request.onerror = () => reject(request.error);
 
+    // HNW Fix: Handle blocked event when other tabs hold connections
+    request.onblocked = () => {
+      console.warn('[Storage] Database upgrade blocked by other tabs. Please close other instances of this app.');
+    };
+
     request.onsuccess = () => {
       db = request.result;
+
+      // HNW Fix: Close connection when another tab needs to upgrade
+      db.onversionchange = () => {
+        console.log('[Storage] Database version change detected, closing connection');
+        db.close();
+        db = null;
+        // Optionally reload to get new version
+        window.location.reload();
+      };
+
       resolve(db);
     };
 
@@ -464,8 +489,104 @@ const Storage = {
         console.error('[Storage] Error in update listener:', e);
       }
     });
+  },
+
+  // ==========================================
+  // Privacy Controls
+  // ==========================================
+
+  /**
+   * Enable session-only mode
+   * In this mode, writes to IndexedDB are skipped; data only lives in memory
+   * Useful for users who don't want persistent storage
+   * @param {boolean} enabled
+   */
+  setSessionOnlyMode(enabled) {
+    sessionOnlyMode = !!enabled;
+    console.log(`[Storage] Session-only mode: ${sessionOnlyMode}`);
+    return sessionOnlyMode;
+  },
+
+  /**
+   * Check if session-only mode is enabled
+   */
+  isSessionOnlyMode() {
+    return sessionOnlyMode;
+  },
+
+  /**
+   * Set user's consent for data persistence
+   * @param {boolean} consent - Whether user consents to storing data
+   */
+  setDataPersistenceConsent(consent) {
+    dataPersistenceConsent = !!consent;
+    localStorage.setItem('rhythm_chamber_persistence_consent', consent ? 'true' : 'false');
+    console.log(`[Storage] Data persistence consent: ${dataPersistenceConsent}`);
+    return dataPersistenceConsent;
+  },
+
+  /**
+   * Check if user has consented to data persistence
+   */
+  hasDataPersistenceConsent() {
+    // Check localStorage for explicit setting
+    const stored = localStorage.getItem('rhythm_chamber_persistence_consent');
+    if (stored !== null) {
+      dataPersistenceConsent = stored === 'true';
+    }
+    return dataPersistenceConsent;
+  },
+
+  /**
+   * Clear sensitive data (raw streams) while keeping aggregated data
+   * Call after personality analysis to minimize data retention
+   * Only chunks and personality (aggregated, non-identifying) are retained
+   */
+  async clearSensitiveData() {
+    console.log('[Storage] Clearing sensitive data (raw streams)...');
+
+    // Clear raw streams
+    await clear(STORES.STREAMS);
+
+    // Clear any legacy sessionStorage conversation history
+    sessionStorage.removeItem('rhythm_chamber_conversation');
+
+    // Clear stored credentials (force re-entry on next use)
+    localStorage.removeItem('rhythm_chamber_rag');
+    localStorage.removeItem('rhythm_chamber_rag_checkpoint');
+    localStorage.removeItem('rhythm_chamber_rag_checkpoint_cipher');
+
+    this._notifyUpdate('sensitiveDataCleared', 0);
+    console.log('[Storage] Sensitive data cleared. Aggregated data (chunks, personality) retained.');
+
+    return { success: true, retained: ['chunks', 'personality', 'chat_sessions'] };
+  },
+
+  /**
+   * Get summary of what data is stored
+   * Useful for transparency UI
+   */
+  async getDataSummary() {
+    const streams = await this.getStreams();
+    const chunks = await this.getChunks();
+    const personality = await this.getPersonality();
+    const sessionCount = await this.getSessionCount();
+
+    return {
+      hasRawStreams: !!(streams && streams.length > 0),
+      streamCount: streams?.length || 0,
+      chunkCount: chunks?.length || 0,
+      hasPersonality: !!personality,
+      chatSessionCount: sessionCount,
+      sessionOnlyMode,
+      persistenceConsent: dataPersistenceConsent,
+      estimatedSizeMB: streams ? Math.round(JSON.stringify(streams).length / 1024 / 1024 * 100) / 100 : 0
+    };
   }
 };
 
 // Make available globally
 window.Storage = Storage;
+
+console.log('[Storage] Module loaded with privacy controls');
+

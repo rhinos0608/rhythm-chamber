@@ -57,27 +57,29 @@ The app uses a layered configuration system:
 rhythm-chamber/
 ├── index.html              # Landing page
 ├── app.html                # Main analyzer app
+├── SECURITY.md             # Security model documentation
 ├── css/
 │   └── styles.css          # All styles including premium/Stripe theme
 ├── js/
 │   ├── config.js           # API keys (gitignored)
 │   ├── config.example.js   # Config template (+ Stripe keys)
 │   ├── app.js              # Main application controller
-│   ├── spotify.js          # Spotify OAuth PKCE + API calls
+│   ├── spotify.js          # Spotify OAuth PKCE + session invalidation
+│   ├── security.js         # Client-side security (AES-GCM, rate limiting)
 │   ├── payments.js         # Entitlement checks (Free MVP stub)
-│   ├── rag.js              # Embeddings + Qdrant vector search
+│   ├── rag.js              # Embeddings + Qdrant + encrypted credentials
 │   ├── parser.js           # .zip file parsing
-│   ├── patterns.js         # Pattern detection algorithms
+│   ├── patterns.js         # Pattern detection (UTC-based)
 │   ├── personality.js      # Personality classification
 │   ├── data-query.js       # Chat data query utilities
 │   ├── functions.js        # LLM function schemas + executors
 │   ├── chat.js             # OpenRouter chat + function calling + RAG
 │   ├── prompts.js          # Editable prompt templates
-│   ├── storage.js          # IndexedDB wrapper
+│   ├── storage.js          # IndexedDB wrapper + privacy controls
 │   ├── settings.js         # Settings management & premium UI
 │   └── cards.js            # Shareable card generation
 ├── workers/
-│   └── parser-worker.js    # Web Worker for .zip parsing
+│   └── parser-worker.js    # Web Worker for .zip parsing (UTC extraction)
 └── docs/
     └── *.md                # Documentation
 ```
@@ -301,6 +303,16 @@ if (window.RAG?.isConfigured()) {
 
 ## Storage: IndexedDB + localStorage
 
+### IndexedDB Stores
+
+| Store | Key | Content |
+|-------|-----|---------|
+| `streams` | `'user-streams'` | Raw Spotify streaming history |
+| `chunks` | `'user-chunks'` | Aggregated weekly/monthly data |
+| `personality` | `'result'` | Personality classification result |
+| `settings` | key | User preferences |
+| `chat_sessions` | session ID | **Persistent chat conversations** |
+
 ```javascript
 // js/storage.js
 
@@ -309,11 +321,43 @@ await db.put('streams', { id: 'user-streams', data: parsedStreams });
 await db.put('chunks', { id: 'user-chunks', data: chunks });
 
 // Personality stored in IndexedDB
-await db.put('personality', { id: 'user', ...personality });
+await db.put('personality', { id: 'result', ...personality });
+
+// Chat sessions stored in IndexedDB
+await db.put('chat_sessions', {
+  id: 'uuid-string',
+  title: 'First user message...',
+  createdAt: '2026-01-12T17:00:00Z',
+  updatedAt: '2026-01-12T17:30:00Z',
+  messageCount: 12,
+  messages: [{ role: 'user', content: '...' }, ...],
+  metadata: { personalityName, personalityEmoji, isLiteMode }
+});
 
 // Spotify tokens in localStorage
 localStorage.setItem('spotify_access_token', token);
 localStorage.setItem('spotify_token_expiry', expiry);
+```
+
+### Chat Session Management
+
+Persistent multi-conversation support with ChatGPT-style sidebar:
+
+| Feature | Implementation |
+|---------|----------------|
+| Session persistence | IndexedDB `chat_sessions` store |
+| Auto-save | Debounced 2-second save after messages |
+| Auto-titling | First user message (50 chars) |
+| Session list | Sorted by `updatedAt` descending |
+| Sidebar toggle | Header hamburger (☰) + footer collapse (◀) |
+| Mobile UX | Sidebar slides as overlay with backdrop |
+
+```mermaid
+flowchart LR
+    A[Send Message] --> B[Debounce 2s]
+    B --> C[Save Session to IndexedDB]
+    C --> D[Notify Sidebar]
+    D --> E[Re-render Session List]
 ```
 
 ---
@@ -426,12 +470,48 @@ async function sendMessage(message) {
 
 ## Security Considerations
 
+### Core Security Model
+
+This application uses a **100% client-side security model**. All security measures are implemented in the browser, which provides defense-in-depth but cannot match server-side security.
+
+> **Full threat model documented in `SECURITY.md`**
+
+### Security Features (Implemented)
+
+| Feature | Implementation | Purpose |
+|---------|----------------|---------|
+| **AES-GCM Credential Encryption** | `security.js` | RAG credentials encrypted with session-derived keys |
+| **Session Versioning** | `security.js` | Keys invalidated when auth fails |
+| **Geographic Anomaly Detection** | `security.js` | Detects proxy/VPN-based attacks |
+| **Rate Limiting** | `security.js` | Prevents credential stuffing |
+| **Namespace Isolation** | `rag.js` | Per-user RAG collections |
+| **UTC Time Normalization** | `parser-worker.js` | DST-resistant pattern detection |
+| **Privacy Controls** | `storage.js` | Session-only mode, data cleanup |
+
+### Threat Mitigations
+
 | Concern | Mitigation |
 |---------|------------|
-| API keys exposed | Use BYOK (bring your own key) model |
-| Spotify tokens | Stored in localStorage, cleared on reset |
-| User data | Never leaves browser, no server storage |
-| PKCE flow | Prevents code interception attacks |
+| API keys in DevTools | AES-GCM encryption with session-bound keys |
+| Session replay attacks | Session versioning with auto-invalidation |
+| Credential stuffing | Rate limiting + geographic anomaly detection |
+| Cross-user RAG access | Namespace isolation using user hash |
+| Spotify token theft | PKCE flow + token refresh invalidates sessions |
+| DST timezone manipulation | UTC-based time calculations |
+| Data persistence concerns | Session-only mode + explicit consent |
+
+### Limitations (Client-Side Architecture)
+
+> [!WARNING]
+> **Not Equivalent to Server-Side Security**
+
+These threats cannot be fully mitigated without backend infrastructure:
+
+- **Full memory inspection** - Sophisticated attackers with browser access can extract secrets
+- **Remote session revocation** - Cannot revoke sessions from another device
+- **Token theft with physical access** - localStorage accessible to device holder
+
+This is an **accepted trade-off** for the zero-cost, privacy-first architecture.
 
 ---
 

@@ -1,7 +1,7 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Last updated:** 2026-01-12 09:51 AEDT  
-> **Status:** MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free for MVP) + HNW Fixes
+> **Last updated:** 2026-01-12 19:50 AEDT  
+> **Status:** MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening
 
 ---
 
@@ -17,7 +17,7 @@ Music analytics app that tells users what their listening says about them — li
 `Landing → Spotify OAuth → Quick Snapshot Reveal → Upsell to Full`
 
 **Tech stack:**  
-100% client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter API + Spotify Web API
+Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter API + Spotify Web API
 
 ---
 
@@ -31,13 +31,13 @@ Music analytics app that tells users what their listening says about them — li
 | Data parser | ✅ Done | `js/parser-worker.js` (Web Worker) |
 | Pattern detection | ✅ Done | `js/patterns.js` (8 algorithms + lite mode) |
 | Personality engine | ✅ Done | `js/personality.js` (5 types + lite types) |
-| Chat integration | ✅ Done | `js/chat.js` (OpenRouter + function calling) |
+| Chat integration | ✅ Done | `js/chat.js` (OpenRouter + function calling + sessions) |
 | Data query system | ✅ Done | `js/data-query.js` (time/artist queries) |
 | **Function calling** | ✅ Done | `js/functions.js` (6 LLM-callable tools) |
 | **Payments** | ✅ Done | `js/payments.js` (Stubbed for Free MVP) |
 | **RAG/Semantic** | ✅ Done | `js/rag.js` (embeddings + Qdrant) |
 | Card generator | ✅ Done | `js/cards.js` (Canvas) |
-| Storage | ✅ Done | `js/storage.js` (IndexedDB + incremental save) |
+| Storage | ✅ Done | `js/storage.js` (IndexedDB + incremental save + chat sessions) |
 | API config | ✅ Done | `js/config.js` (gitignored) |
 | **Spotify OAuth** | ✅ Done | `js/spotify.js` (PKCE flow) |
 | **Settings UI** | ✅ Done | `js/settings.js` (modal config) |
@@ -52,10 +52,11 @@ Music analytics app that tells users what their listening says about them — li
 rhythm-chamber/
 ├── index.html              # Landing page (+ Quick Snapshot button)
 ├── app.html                # Main app (+ Settings button)
+├── SECURITY.md             # Security model documentation
 ├── css/styles.css          # Design system (~1300 lines)
 ├── js/
 │   ├── app.js              # Main controller (OAuth handling, view transitions)
-│   ├── parser-worker.js    # Web Worker (incremental parsing + partial saves)
+│   ├── parser-worker.js    # Web Worker (incremental parsing + UTC time extraction)
 │   ├── parser.js           # Legacy parser (not used)
 │   ├── patterns.js         # 8 pattern algorithms + detectLitePatterns()
 │   ├── personality.js      # 5 types + lite types + score breakdown
@@ -63,11 +64,12 @@ rhythm-chamber/
 │   ├── data-query.js       # Query streams by time/artist/track
 │   ├── functions.js        # LLM function schemas + executors
 │   ├── cards.js            # Canvas card generator
-│   ├── storage.js          # IndexedDB (appendStreams, clearStreams)
+│   ├── storage.js          # IndexedDB (streams, chunks, personality, chat sessions, privacy controls)
 │   ├── settings.js         # In-app settings modal (API key, model, etc.)
-│   ├── spotify.js          # Spotify OAuth PKCE + API calls
+│   ├── spotify.js          # Spotify OAuth PKCE + API calls + session invalidation
+│   ├── security.js         # Client-side security (AES-GCM, rate limiting, anomaly detection)
 │   ├── payments.js         # Stripe Checkout + premium status
-│   ├── rag.js              # Embeddings + Qdrant vector search
+│   ├── rag.js              # Embeddings + Qdrant vector search + encrypted credentials
 │   ├── prompts.js          # System prompt templates
 │   ├── config.js           # API keys (gitignored)
 │   └── config.example.js   # Config template (+ Stripe)
@@ -121,6 +123,28 @@ Feature with user-managed infrastructure:
 Settings UI shows:
 - Qdrant URL/Key inputs + Generate Embeddings button
 
+### 6. Chat Session Storage
+Persistent chat conversations with ChatGPT-style sidebar:
+- **IndexedDB storage**: Sessions persist across browser restarts
+- **Collapsible sidebar**: Shows all past chats with title, date, message count
+- **Session management**: Create, switch, rename, delete conversations
+- **Auto-save**: Debounced 2-second save after each message
+- **Auto-titling**: First user message becomes session title
+
+### 7. Security Features
+Client-side security module (`security.js`) providing defense-in-depth:
+
+| Feature | Purpose |
+|---------|----------|
+| **AES-GCM Encryption** | RAG credentials encrypted with session-derived keys |
+| **Session Versioning** | Keys invalidated on auth failures |
+| **Rate Limiting** | Prevents credential stuffing attacks |
+| **Geographic Detection** | Detects proxy/VPN-based attacks |
+| **Namespace Isolation** | Per-user RAG collection separation |
+| **UTC Time Handling** | DST-resistant pattern detection |
+
+> **Note:** This is client-side security, not equivalent to server-side. See `SECURITY.md` for full threat model.
+
 ---
 
 ## Personality Types
@@ -160,99 +184,81 @@ npx http-server -p 8080 -c-1
 4. **Use Web Worker** — Never block main thread for parsing
 5. **Single source of truth** — Scoring logic lives in `personality.js`, not duplicated
 6. **Config hierarchy**: config.js (defaults) → localStorage (user overrides)
-7. **Update session log** at end of session
+7. **Security first**: Use `Security.storeEncryptedCredentials()` for sensitive data
+8. **Update session log** at end of session
 
 ---
 
 ## Session Log
 
-### Session 6 — 2026-01-12 (Semantic Search Premium)
+### Session 11 — 2026-01-12 (Security Hardening)
 
 **What was done:**
-1. Created `js/payments.js` with Stripe Checkout integration ($5 lifetime / $2 monthly)
-2. Created `js/rag.js` with embeddings + Qdrant vector storage
-3. Updated `js/settings.js` with conditional premium section
-4. Updated `js/chat.js` to inject semantic context from RAG
-5. Added premium CSS: badges, pricing cards, progress bar
-6. Updated `config.example.js` with Stripe placeholders
+1. Created `security.js` with AES-GCM encryption, session versioning, and anomaly detection
+2. Upgraded `rag.js` to use encrypted credentials instead of XOR obfuscation
+3. Added session invalidation to `spotify.js` on auth failures
+4. Added UTC-based time extraction to `parser-worker.js` for DST resistance
+5. Updated `patterns.js` to use UTC hours with minimum data thresholds
+6. Added privacy controls to `storage.js` (session-only mode, data cleanup)
+7. Created `SECURITY.md` documenting threat model and mitigations
 
-**Key decisions:**
-- User-managed Qdrant clusters (no server-side infrastructure)
-- Premium status stored in localStorage (client-only verification)
-- Embeddings use `qwen/qwen3-embedding-8b` (4096 dimensions)
-- Chunking creates monthly summaries + artist profiles for search
+**Security features:**
+- `storeEncryptedCredentials()` / `getEncryptedCredentials()` for AES-GCM storage
+- Session versioning with automatic invalidation on auth failures
+- Geographic anomaly detection (connection fingerprint tracking)
+- Rate limiting with reduced thresholds on anomaly detection
+- Per-user namespace isolation for RAG collections
+
+**HNW patterns addressed:**
+- Hierarchy: Clear credential authority chain with Security module
+- Network: Encrypted credential flow prevents DevTools leakage
+- Wave: Session versioning invalidates stale credentials
 
 ---
 
-### Session 5 — 2026-01-12 (AI Function Calling)
+### Session 10 — 2026-01-12 (Chat Session Storage)
 
 **What was done:**
-1. Created `js/functions.js` with 6 OpenAI-style function schemas
-2. Updated `js/chat.js` to support tool calling in OpenRouter API
-3. Updated `js/prompts.js` to instruct LLM to use available functions
-4. Added `functions.js` script to `app.html`
+1. Added `CHAT_SESSIONS` IndexedDB store in `storage.js` with CRUD operations
+2. Refactored `chat.js` with session management: create, load, switch, list, delete, rename
+3. Added collapsible sidebar to `app.html` with session list UI
+4. Added sidebar CSS to `styles.css` with animations and mobile responsiveness
+5. Integrated sidebar controller in `app.js` with toggle, render, and interaction handlers
+6. Debounced auto-save (2s) to prevent rapid IndexedDB writes
+7. Auto-generate session titles from first user message
+8. Legacy migration from sessionStorage to IndexedDB
 
-**Key decisions:**
-- LLM now calls functions directly (e.g., `get_top_artists(year=2020)`) instead of regex parsing
-- Functions execute against `DataQuery` module and return structured JSON
-- Follow-up API call sends function results back to LLM for final response
-- Fallback to regex-based context injection when API unavailable
+**Key features:**
+- ☰ Toggle button in header, ◀ collapse button in sidebar footer
+- "+ New Chat" button, session list with title/date/message count
+- Hover actions: rename (✏️), delete (🗑️)
+- Sidebar hidden in non-chat views, remembers collapsed state
+
+**HNW patterns applied:**
+- Clear authority: storage.js → data, chat.js → sessions, app.js → UI
+- Debounced saves prevent wave cascade
+- Session validation on load with graceful fallback
 
 ---
 
-### Session 4 — 2026-01-12 (Settings & Transparency)
+### Sessions 1-9 — 2026-01-11/12 (Foundation)
 
-**What was done:**
-1. Fixed settings.js to properly read from config.js as source of truth
-2. Added detection explainer showing personality score breakdown
-3. Added data stats (stream count, date range) to reveal
-4. Implemented incremental IndexedDB caching during parsing
-5. Fixed markdown rendering in chat messages
-6. Increased default maxTokens from 500 → 1000
-7. Fixed property reference bugs (moodSearching.count)
-
-**Key decisions:**
-- Centralized scoring breakdown in `personality.js` (no duplicated logic)
-- config.js fields shown as readonly in settings modal
-- Incremental saves via worker `partial` messages + `appendStreams()`
-
----
-
-### Session 7 — 2026-01-12 (HNW Diagnostic Fixes)
-
-**What was done:**
-1. Applied Hierarchy-Network-Wave diagnostic analysis to identify system vulnerabilities
-2. Added payment integrity signature to `activatePremium()` in payments.js
-3. Implemented checkpoint/resume for embedding generation in rag.js
-4. Added storage event emitter pattern in storage.js with data hash tracking
-5. Implemented conversation persistence in chat.js with session storage
-6. Added data refresh listener in chat.js for new uploads
-7. Created utils.js with `fetchWithTimeout()` and `fetchWithRetry()` utilities
-8. Added Qdrant connection pre-test in settings.js
-9. Added resume button for interrupted embedding generation
-10. Implemented staleness detection for vector embeddings
-
-**Key fixes:**
-- **Critical**: Payment bypass mitigation, CORS pre-test, resume on failure
-- **High**: Data refresh on upload, API timeouts, conversation persistence
-- **Medium**: Vector staleness, time estimates, utility functions
-
----
-
-### Session 9 — 2026-01-12 (HNW Fixes Implementation)
-
-**What was done:**
-1. Fixed reset race condition in `app.js` - nullify worker handlers before termination + 100ms delay
-2. Cleaned up `payments.js` - removed dead code, clarified MVP free tier status
-3. Added timeout protection to `chat.js` - AbortController (60s API), Promise.race (30s functions)
-4. Implemented Spotify token refresh in `spotify.js` - auto-refresh on 401, ensureValidToken()
-5. Added RAG checkpoint validation in `rag.js` - compare dataHash before resuming
-6. Added storage consistency validation in `storage.js` + `app.js` - validateConsistency() on startup
+**Summary of prior work:**
+- Session 1: Documentation refinement (personality engine, lite version concept)
+- Session 2: Core implementation (parser, patterns, personality, chat, cards)
+- Session 3: Spotify Quick Snapshot, data queries for chat
+- Session 4: Settings UI, transparency features, incremental caching
+- Session 5: AI function calling (6 LLM-callable tools)
+- Session 6: Semantic search with Qdrant vector storage
+- Session 7: HNW diagnostic analysis, conversation persistence
+- Session 8: Chat error handling, regenerate/edit/delete features
+- Session 9: Reset race condition fix, timeout protection, token refresh
 
 **Key fixes (HNW Analysis):**
 - **Critical**: Reset race condition prevented, premium bypass clarified (free for MVP)
 - **High**: Chat timeout cascade prevention, Spotify cliff-edge expiry handled
 - **Medium**: RAG checkpoint staleness detection, cross-storage consistency checks
+
 
 **Not done (deferred):**
 - Long-term refactoring (extract controllers from app.js)
@@ -260,70 +266,3 @@ npx http-server -p 8080 -c-1
 - Add circuit breakers for external APIs
 - Parallelize RAG embedding generation
 
----
-
-### Session 8 — 2026-01-13 (Chat V2: Error Handling & Management)
-
-**What was done:**
-1. Implemented robust error handling in `js/chat.js` with structured response objects
-2. Added features: Regenerate response, Edit user message, Delete message
-3. Updated UI (`js/app.js`) to render action buttons and handle interactions
-4. Added styles (`css/styles.css`) for message actions and error states
-
-**Key decisions:**
-- **Structured Responses**: `sendMessage` returns `{ content, status, role }` for UI control
-- **History Management**: Editing a message truncates subsequent history to preserve context logic
-- **UI UX**: Actions appear on hover (or always for errors) to reduce clutter
-
----
-
-### Session 3 — 2026-01-11 (Spotify Quick Snapshot & Chat Data)
-2. Built lite pattern detection and personality types
-3. Added Quick Snapshot button to landing page
-4. Built lite reveal section with upsell messaging
-5. Created data-query.js for chat to access stream data
-6. Updated chat.js to inject query results into system prompt
-7. Updated technical architecture docs
-
-**Key decisions:**
-- Client-side PKCE (no server needed for OAuth)
-- Lite types simpler, with upsell for full analysis
-- Chat can answer "What did I listen to in March?"
-
----
-
-### Session 2 — 2026-01-11 (Implementation)
-
-**What was done:**
-1. Built complete static site: `index.html`, `app.html`, `css/styles.css`
-2. Implemented data pipeline with Web Worker (non-blocking)
-3. Built all 8 pattern detection algorithms
-4. Created 5-type personality classifier with scoring and evidence
-5. Added OpenRouter chat integration with config file
-6. Created Canvas-based shareable card generator
-7. Added direct JSON upload support (in addition to .zip)
-8. Created `.gitignore` and `docs/API_SETUP.md`
-
-**Tech decisions:**
-- Web Worker for parsing (keeps UI responsive)
-- External config.js for API keys (gitignored)
-- Supports both .zip and .json uploads
-
----
-
-### Session 1 — 2026-01-11 (Documentation)
-
-**What was done:**
-1. Refined product from stats → "Wrapped but deeper" personality engine
-2. Added duration tracking (TikTok-style behavioral signals)
-3. Added life event detection (ghosts, discovery explosions)
-4. Created UX philosophy (micro-insights, zero-choice, silence)
-5. Added Lite version concept (Spotify OAuth instant onboarding)
-6. Added transparency features doc (show your work)
-7. Consolidated from 12 docs → 6 docs with clear separation
-
-**Key decisions:**
-- Silence is a feature (returning None is valid)
-- Duration is the moat
-- Ask, don't tell
-- Lite vs Full two-path onboarding

@@ -3,36 +3,111 @@
  * 
  * Handles semantic search using embeddings and Qdrant vector storage.
  * Premium feature - requires user's own Qdrant Cloud cluster.
+ * 
+ * SECURITY FEATURES:
+ * - Credentials obfuscated in localStorage (not plaintext)
+ * - Checkpoints encrypted with session-derived keys
+ * - Collection namespace isolation per user
+ * - Rate limiting on embedding generation
+ * - Anomaly detection for failed API attempts
  */
 
 const RAG_STORAGE_KEY = 'rhythm_chamber_rag';
+const RAG_CREDENTIAL_KEY = 'qdrant_credentials'; // Key for encrypted storage
 const RAG_CHECKPOINT_KEY = 'rhythm_chamber_rag_checkpoint';
-const COLLECTION_NAME = 'rhythm_chamber';
+const RAG_CHECKPOINT_CIPHER_KEY = 'rhythm_chamber_rag_checkpoint_cipher';
+const COLLECTION_NAME_BASE = 'rhythm_chamber';
 const EMBEDDING_MODEL = 'qwen/qwen3-embedding-8b';
 const EMBEDDING_DIMENSIONS = 4096; // qwen3-embedding-8b output dimension
 const API_TIMEOUT_MS = 60000; // 60 second timeout
+const EMBEDDING_RATE_LIMIT = 5; // Max 5 embedding batches per minute
 
 /**
- * Get RAG configuration from localStorage
+ * Get namespace-isolated collection name
+ * Uses user hash for isolation between users on shared clusters
  */
-function getConfig() {
+let cachedNamespace = null;
+async function getCollectionName() {
+    if (cachedNamespace) return `${COLLECTION_NAME_BASE}_${cachedNamespace}`;
+
+    if (window.Security?.getUserNamespace) {
+        cachedNamespace = await window.Security.getUserNamespace();
+        return `${COLLECTION_NAME_BASE}_${cachedNamespace}`;
+    }
+    return COLLECTION_NAME_BASE;
+}
+
+/**
+ * Get RAG configuration
+ * Credentials are encrypted with AES-GCM, not just obfuscated
+ * Returns null if decryption fails (session changed, re-auth needed)
+ */
+async function getConfig() {
     try {
+        // Get non-sensitive config from localStorage
         const stored = localStorage.getItem(RAG_STORAGE_KEY);
-        if (!stored) return null;
-        return JSON.parse(stored);
+        const config = stored ? JSON.parse(stored) : {};
+
+        // Get encrypted credentials using Security module
+        if (window.Security?.getEncryptedCredentials) {
+            const creds = await window.Security.getEncryptedCredentials(RAG_CREDENTIAL_KEY);
+            if (creds) {
+                config.qdrantUrl = creds.qdrantUrl;
+                config.qdrantApiKey = creds.qdrantApiKey;
+            }
+        }
+
+        // Fallback: Check for legacy unencrypted storage (migration path)
+        if (!config.qdrantApiKey && stored) {
+            const legacy = JSON.parse(stored);
+            if (legacy.qdrantApiKey) {
+                console.warn('[RAG] Found legacy unencrypted credentials - will encrypt on next save');
+                config.qdrantUrl = legacy.qdrantUrl;
+                config.qdrantApiKey = legacy.qdrantApiKey;
+            }
+        }
+
+        return Object.keys(config).length > 0 ? config : null;
     } catch (e) {
+        console.error('[RAG] Failed to get config:', e);
         return null;
     }
 }
 
 /**
- * Save RAG configuration to localStorage
+ * Save RAG configuration
+ * Credentials are encrypted with AES-GCM for real security
  */
-function saveConfig(config) {
-    localStorage.setItem(RAG_STORAGE_KEY, JSON.stringify({
-        ...config,
+async function saveConfig(config) {
+    // Separate sensitive credentials from non-sensitive config
+    const nonSensitive = {
+        embeddingsGenerated: config.embeddingsGenerated,
+        chunksCount: config.chunksCount,
+        generatedAt: config.generatedAt,
+        dataHash: config.dataHash,
         updatedAt: new Date().toISOString()
-    }));
+    };
+
+    // Store non-sensitive in localStorage
+    localStorage.setItem(RAG_STORAGE_KEY, JSON.stringify(nonSensitive));
+
+    // Encrypt and store credentials if Security module available
+    if (config.qdrantUrl || config.qdrantApiKey) {
+        if (window.Security?.storeEncryptedCredentials) {
+            await window.Security.storeEncryptedCredentials(RAG_CREDENTIAL_KEY, {
+                qdrantUrl: config.qdrantUrl,
+                qdrantApiKey: config.qdrantApiKey
+            });
+            console.log('[RAG] Credentials encrypted with AES-GCM');
+        } else {
+            // Fallback warning - credentials not properly secured
+            console.warn('[RAG] Security module not available - credentials stored unencrypted!');
+            const legacy = JSON.parse(localStorage.getItem(RAG_STORAGE_KEY) || '{}');
+            legacy.qdrantUrl = config.qdrantUrl;
+            legacy.qdrantApiKey = config.qdrantApiKey;
+            localStorage.setItem(RAG_STORAGE_KEY, JSON.stringify(legacy));
+        }
+    }
 }
 
 /**
@@ -66,24 +141,62 @@ async function isStale() {
 
 /**
  * Get checkpoint for resume
+ * Decrypts dataHash if encrypted
  */
-function getCheckpoint() {
+async function getCheckpoint() {
     try {
+        // Try encrypted checkpoint first
+        const cipher = localStorage.getItem(RAG_CHECKPOINT_CIPHER_KEY);
+        if (cipher && window.Security?.decryptData) {
+            try {
+                const sessionKey = await window.Security.getSessionKey();
+                const decrypted = await window.Security.decryptData(cipher, sessionKey);
+                if (decrypted) {
+                    return JSON.parse(decrypted);
+                }
+            } catch (decryptErr) {
+                console.warn('[RAG] Checkpoint decryption failed (session changed?)');
+            }
+        }
+
+        // Fallback to legacy unencrypted checkpoint
         const stored = localStorage.getItem(RAG_CHECKPOINT_KEY);
         return stored ? JSON.parse(stored) : null;
     } catch (e) {
+        console.error('[RAG] Failed to get checkpoint:', e);
         return null;
     }
 }
 
 /**
  * Save checkpoint for resume
+ * Encrypts with session key for security
  */
-function saveCheckpoint(data) {
-    localStorage.setItem(RAG_CHECKPOINT_KEY, JSON.stringify({
+async function saveCheckpoint(data) {
+    const checkpoint = {
         ...data,
         timestamp: Date.now()
-    }));
+    };
+
+    // Try to encrypt checkpoint
+    if (window.Security?.encryptData && window.Security?.getSessionKey) {
+        try {
+            const sessionKey = await window.Security.getSessionKey();
+            const encrypted = await window.Security.encryptData(
+                JSON.stringify(checkpoint),
+                sessionKey
+            );
+            localStorage.setItem(RAG_CHECKPOINT_CIPHER_KEY, encrypted);
+            // Clear legacy unencrypted key
+            localStorage.removeItem(RAG_CHECKPOINT_KEY);
+            return;
+        } catch (encryptErr) {
+            console.warn('[RAG] Checkpoint encryption failed, using plaintext fallback');
+        }
+    }
+
+    // Fallback to unencrypted (if Security module not loaded)
+    localStorage.setItem(RAG_CHECKPOINT_KEY, JSON.stringify(checkpoint));
 }
 
 /**
@@ -91,14 +204,30 @@ function saveCheckpoint(data) {
  */
 function clearCheckpoint() {
     localStorage.removeItem(RAG_CHECKPOINT_KEY);
+    localStorage.removeItem(RAG_CHECKPOINT_CIPHER_KEY);
 }
 
 /**
  * Get embedding for text using OpenRouter API
+ * Includes rate limiting and anomaly detection
+ * 
  * @param {string|string[]} input - Text or array of texts to embed
  * @returns {Promise<number[]|number[][]>} Embedding vector(s)
  */
 async function getEmbedding(input) {
+    // Security: Check for suspicious activity
+    if (window.Security?.checkSuspiciousActivity) {
+        const suspicious = await window.Security.checkSuspiciousActivity('embedding');
+        if (suspicious.blocked) {
+            throw new Error(suspicious.message);
+        }
+    }
+
+    // Security: Rate limiting
+    if (window.Security?.isRateLimited?.('embedding', EMBEDDING_RATE_LIMIT)) {
+        throw new Error('Rate limited: Please wait before generating more embeddings');
+    }
+
     const apiKey = window.Settings?.getSettings?.()?.openrouter?.apiKey;
 
     if (!apiKey || apiKey === 'your-api-key-here') {
@@ -107,29 +236,44 @@ async function getEmbedding(input) {
 
     // Use timeout wrapper if available
     const fetchFn = window.Utils?.fetchWithTimeout || fetch;
-    const response = await fetchFn('https://openrouter.ai/api/v1/embeddings', {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': window.location.origin,
-            'X-Title': 'Rhythm Chamber'
-        },
-        body: JSON.stringify({
-            model: EMBEDDING_MODEL,
-            input: Array.isArray(input) ? input : [input]
-        })
-    }, API_TIMEOUT_MS);
 
-    if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error?.message || `Embedding API error: ${response.status}`);
+    try {
+        const response = await fetchFn('https://openrouter.ai/api/v1/embeddings', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': window.location.origin,
+                'X-Title': 'Rhythm Chamber'
+            },
+            body: JSON.stringify({
+                model: EMBEDDING_MODEL,
+                input: Array.isArray(input) ? input : [input]
+            })
+        }, API_TIMEOUT_MS);
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            const errorMsg = error.error?.message || `Embedding API error: ${response.status}`;
+
+            // Record failed attempt for anomaly detection
+            await window.Security?.recordFailedAttempt?.('embedding', errorMsg);
+
+            throw new Error(errorMsg);
+        }
+
+        const data = await response.json();
+        const embeddings = data.data.map(d => d.embedding);
+
+        return Array.isArray(input) ? embeddings : embeddings[0];
+
+    } catch (err) {
+        // Record network/auth failures
+        if (err.message.includes('401') || err.message.includes('403')) {
+            await window.Security?.recordFailedAttempt?.('embedding', err.message);
+        }
+        throw err;
     }
-
-    const data = await response.json();
-    const embeddings = data.data.map(d => d.embedding);
-
-    return Array.isArray(input) ? embeddings : embeddings[0];
 }
 
 /**
@@ -156,6 +300,7 @@ async function testConnection() {
 
 /**
  * Create collection in Qdrant if it doesn't exist
+ * Uses namespace-isolated collection name
  */
 async function ensureCollection() {
     const config = getConfig();
@@ -163,8 +308,12 @@ async function ensureCollection() {
         throw new Error('Qdrant credentials not configured');
     }
 
+    // Get namespace-isolated collection name
+    const collectionName = await getCollectionName();
+    console.log(`[RAG] Using collection: ${collectionName}`);
+
     // Check if collection exists
-    const checkResponse = await fetch(`${config.qdrantUrl}/collections/${COLLECTION_NAME}`, {
+    const checkResponse = await fetch(`${config.qdrantUrl}/collections/${collectionName}`, {
         headers: { 'api-key': config.qdrantApiKey }
     });
 
@@ -173,7 +322,7 @@ async function ensureCollection() {
     }
 
     // Create collection
-    const createResponse = await fetch(`${config.qdrantUrl}/collections/${COLLECTION_NAME}`, {
+    const createResponse = await fetch(`${config.qdrantUrl}/collections/${collectionName}`, {
         method: 'PUT',
         headers: {
             'api-key': config.qdrantApiKey,
@@ -189,6 +338,7 @@ async function ensureCollection() {
 
     if (!createResponse.ok) {
         const error = await createResponse.json().catch(() => ({}));
+        await window.Security?.recordFailedAttempt?.('qdrant', `Create collection failed: ${createResponse.status}`);
         throw new Error(error.status?.error || `Failed to create collection: ${createResponse.status}`);
     }
 
@@ -197,6 +347,7 @@ async function ensureCollection() {
 
 /**
  * Upsert points to Qdrant
+ * Uses namespace-isolated collection
  * @param {Array} points - Array of { id, vector, payload } objects
  */
 async function upsertPoints(points) {
@@ -205,7 +356,9 @@ async function upsertPoints(points) {
         throw new Error('Qdrant credentials not configured');
     }
 
-    const response = await fetch(`${config.qdrantUrl}/collections/${COLLECTION_NAME}/points`, {
+    const collectionName = await getCollectionName();
+
+    const response = await fetch(`${config.qdrantUrl}/collections/${collectionName}/points`, {
         method: 'PUT',
         headers: {
             'api-key': config.qdrantApiKey,
@@ -216,6 +369,7 @@ async function upsertPoints(points) {
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({}));
+        await window.Security?.recordFailedAttempt?.('qdrant', `Upsert failed: ${response.status}`);
         throw new Error(error.status?.error || `Upsert failed: ${response.status}`);
     }
 
@@ -224,6 +378,7 @@ async function upsertPoints(points) {
 
 /**
  * Search for similar vectors in Qdrant
+ * Uses namespace-isolated collection
  * @param {string} query - Search query text
  * @param {number} limit - Number of results to return
  * @returns {Promise<Array>} Search results with payloads
@@ -237,8 +392,10 @@ async function search(query, limit = 5) {
     // Get embedding for query
     const queryVector = await getEmbedding(query);
 
+    const collectionName = await getCollectionName();
+
     // Search in Qdrant
-    const response = await fetch(`${config.qdrantUrl}/collections/${COLLECTION_NAME}/points/search`, {
+    const response = await fetch(`${config.qdrantUrl}/collections/${collectionName}/points/search`, {
         method: 'POST',
         headers: {
             'api-key': config.qdrantApiKey,
@@ -253,6 +410,7 @@ async function search(query, limit = 5) {
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({}));
+        await window.Security?.recordFailedAttempt?.('qdrant', `Search failed: ${response.status}`);
         throw new Error(error.status?.error || `Search failed: ${response.status}`);
     }
 
@@ -495,6 +653,7 @@ function createChunks(streams) {
 
 /**
  * Clear all embeddings from Qdrant
+ * Uses namespace-isolated collection
  */
 async function clearEmbeddings() {
     const config = getConfig();
@@ -502,8 +661,10 @@ async function clearEmbeddings() {
         throw new Error('Qdrant credentials not configured');
     }
 
+    const collectionName = await getCollectionName();
+
     // Delete collection
-    const response = await fetch(`${config.qdrantUrl}/collections/${COLLECTION_NAME}`, {
+    const response = await fetch(`${config.qdrantUrl}/collections/${collectionName}`, {
         method: 'DELETE',
         headers: { 'api-key': config.qdrantApiKey }
     });
@@ -518,6 +679,9 @@ async function clearEmbeddings() {
     delete newConfig.chunksCount;
     delete newConfig.generatedAt;
     saveConfig(newConfig);
+
+    // Clear cached namespace
+    cachedNamespace = null;
 
     return { success: true };
 }
@@ -563,6 +727,9 @@ window.RAG = {
     generateEmbeddings,
     clearEmbeddings,
     getSemanticContext,
-    COLLECTION_NAME,
+    getCollectionName, // Exposed for debugging
+    COLLECTION_NAME: COLLECTION_NAME_BASE, // Base name (actual uses namespace)
     EMBEDDING_MODEL
 };
+
+console.log('[RAG] Secure RAG module loaded with namespace isolation');

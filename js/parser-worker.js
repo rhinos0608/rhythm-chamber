@@ -191,6 +191,7 @@ function normalizeStream(stream, filePath) {
 
 /**
  * Calculate derived metrics for streams
+ * Includes UTC-based time extraction for timezone-consistent analysis
  */
 function enrichStreams(streams) {
     const trackDurations = {};
@@ -221,8 +222,14 @@ function enrichStreams(streams) {
             estimatedDuration,
             completionRate,
             playType,
+            // Local time (legacy, for backwards compatibility)
             hour: date.getHours(),
             dayOfWeek: date.getDay(),
+            // UTC time for consistent pattern detection across DST changes
+            hourUTC: date.getUTCHours(),
+            dayOfWeekUTC: date.getUTCDay(),
+            // Timezone context for reference
+            timezoneOffset: date.getTimezoneOffset(),
             month: date.getMonth(),
             year: date.getFullYear(),
             date: date.toISOString().split('T')[0]
