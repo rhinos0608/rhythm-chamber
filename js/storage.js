@@ -9,7 +9,7 @@
  */
 
 const DB_NAME = 'rhythm-chamber';
-const DB_VERSION = 2;  // Bumped for CHAT_SESSIONS store
+const DB_VERSION = 3;  // Bumped for unified storage migration
 
 const STORES = {
   STREAMS: 'streams',
@@ -17,8 +17,39 @@ const STORES = {
   EMBEDDINGS: 'embeddings',
   PERSONALITY: 'personality',
   SETTINGS: 'settings',
-  CHAT_SESSIONS: 'chat_sessions'  // NEW: Persistent chat storage
+  CHAT_SESSIONS: 'chat_sessions',
+  // NEW in v3: Unified storage migration
+  CONFIG: 'config',           // Key-value store for all configuration
+  TOKENS: 'tokens',           // Encrypted token storage (OAuth, API keys)
+  MIGRATION: 'migration'      // Migration state and rollback backup
 };
+
+// Migration version - increment when adding new localStorage keys to migrate
+const STORAGE_MIGRATION_VERSION = 1;
+
+// Keys to migrate from localStorage to IndexedDB CONFIG store
+const LOCALSTORAGE_KEYS_TO_MIGRATE = [
+  'rhythm_chamber_settings',
+  'rhythm_chamber_rag',
+  'rhythm_chamber_rag_checkpoint',
+  'rhythm_chamber_rag_checkpoint_cipher',
+  'rhythm_chamber_current_session',
+  'rhythm_chamber_sidebar_collapsed',
+  'rhythm_chamber_persistence_consent'
+];
+
+// Token keys to migrate to TOKENS store
+const LOCALSTORAGE_TOKEN_KEYS = [
+  'spotify_access_token',
+  'spotify_token_expiry',
+  'spotify_refresh_token'
+];
+
+// Keys that must stay in localStorage (require sync access)
+const LOCALSTORAGE_EXEMPT_KEYS = [
+  'rhythm_chamber_emergency_backup'  // Phase 0: Must be sync for beforeunload
+];
+
 
 // Privacy control flags
 let sessionOnlyMode = false;
@@ -140,12 +171,28 @@ async function initDB() {
         database.createObjectStore(STORES.SETTINGS, { keyPath: 'key' });
       }
 
-      // Store for chat sessions (NEW in v2)
+      // Store for chat sessions (v2)
       if (!database.objectStoreNames.contains(STORES.CHAT_SESSIONS)) {
         const sessionsStore = database.createObjectStore(STORES.CHAT_SESSIONS, { keyPath: 'id' });
         sessionsStore.createIndex('updatedAt', 'updatedAt', { unique: false });
       }
+
+      // NEW in v3: Unified config store (key-value)
+      if (!database.objectStoreNames.contains(STORES.CONFIG)) {
+        database.createObjectStore(STORES.CONFIG, { keyPath: 'key' });
+      }
+
+      // NEW in v3: Token store for encrypted credentials
+      if (!database.objectStoreNames.contains(STORES.TOKENS)) {
+        database.createObjectStore(STORES.TOKENS, { keyPath: 'key' });
+      }
+
+      // NEW in v3: Migration state and rollback backup
+      if (!database.objectStoreNames.contains(STORES.MIGRATION)) {
+        database.createObjectStore(STORES.MIGRATION, { keyPath: 'id' });
+      }
     };
+
   });
 }
 
@@ -220,8 +267,18 @@ async function clearAll() {
 
 // Public API
 const Storage = {
-  init: initDB,
+  /**
+   * Initialize storage and run any pending migrations
+   * HNW Wave: Migration runs before any other module accesses data
+   */
+  async init() {
+    await initDB();
+    // Run migration after DB is ready (idempotent - safe to call every time)
+    await migrateFromLocalStorage();
+    return db;
+  },
   STORES,
+
 
   // Streams
   async saveStreams(streams) {
@@ -624,7 +681,12 @@ const Storage = {
     // Clear any legacy sessionStorage conversation history
     sessionStorage.removeItem('rhythm_chamber_conversation');
 
-    // Clear stored credentials (force re-entry on next use)
+    // Clear stored credentials from unified storage
+    await removeConfig('rhythm_chamber_rag');
+    await removeConfig('rhythm_chamber_rag_checkpoint');
+    await removeConfig('rhythm_chamber_rag_checkpoint_cipher');
+
+    // Also clear from localStorage (backward compat)
     localStorage.removeItem('rhythm_chamber_rag');
     localStorage.removeItem('rhythm_chamber_rag_checkpoint');
     localStorage.removeItem('rhythm_chamber_rag_checkpoint_cipher');
@@ -634,6 +696,7 @@ const Storage = {
 
     return { success: true, retained: ['chunks', 'personality', 'chat_sessions'] };
   },
+
 
   /**
    * Get summary of what data is stored
@@ -658,8 +721,369 @@ const Storage = {
   }
 };
 
+// ==========================================
+// Unified Config API
+// HNW: Single authority for all configuration storage
+// ==========================================
+
+/**
+ * Get a config value from unified storage
+ * HNW Network: Single point of access prevents fragmented information flow
+ * @param {string} key - The config key
+ * @param {*} defaultValue - Default if not found
+ * @returns {Promise<*>} The stored value or default
+ */
+async function getConfig(key, defaultValue = null) {
+  try {
+    const database = await initDB();
+    return new Promise((resolve) => {
+      const transaction = database.transaction(STORES.CONFIG, 'readonly');
+      const store = transaction.objectStore(STORES.CONFIG);
+      const request = store.get(key);
+
+      request.onsuccess = () => {
+        const result = request.result;
+        resolve(result ? result.value : defaultValue);
+      };
+      request.onerror = () => {
+        console.warn(`[Storage] Failed to get config '${key}', using default`);
+        resolve(defaultValue);
+      };
+    });
+  } catch (err) {
+    // HNW Graceful degradation: Fall back to localStorage
+    console.warn(`[Storage] IndexedDB unavailable for config '${key}', checking localStorage`);
+    const lsKey = key.startsWith('rhythm_chamber_') ? key : `rhythm_chamber_${key}`;
+    const stored = localStorage.getItem(lsKey);
+    return stored ? JSON.parse(stored) : defaultValue;
+  }
+}
+
+/**
+ * Set a config value in unified storage
+ * HNW Hierarchy: Storage module is the single authority for persistence
+ * @param {string} key - The config key
+ * @param {*} value - The value to store
+ * @returns {Promise<void>}
+ */
+async function setConfig(key, value) {
+  try {
+    const database = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction(STORES.CONFIG, 'readwrite');
+      const store = transaction.objectStore(STORES.CONFIG);
+      const request = store.put({ key, value, updatedAt: new Date().toISOString() });
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => {
+        console.warn(`[Storage] Failed to set config '${key}' in IndexedDB`);
+        reject(request.error);
+      };
+    });
+  } catch (err) {
+    // HNW Graceful degradation: Fall back to localStorage with warning
+    console.warn(`[Storage] IndexedDB unavailable, storing config '${key}' in localStorage`);
+    const lsKey = key.startsWith('rhythm_chamber_') ? key : `rhythm_chamber_${key}`;
+    localStorage.setItem(lsKey, JSON.stringify(value));
+  }
+}
+
+/**
+ * Remove a config value from unified storage
+ * @param {string} key - The config key to remove
+ * @returns {Promise<void>}
+ */
+async function removeConfig(key) {
+  try {
+    const database = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction(STORES.CONFIG, 'readwrite');
+      const store = transaction.objectStore(STORES.CONFIG);
+      const request = store.delete(key);
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (err) {
+    console.warn(`[Storage] Failed to remove config '${key}'`);
+  }
+}
+
+/**
+ * Get a token from secure token storage
+ * @param {string} key - Token key (e.g., 'spotify_access_token')
+ * @returns {Promise<*>} The token value or null
+ */
+async function getToken(key) {
+  try {
+    const database = await initDB();
+    return new Promise((resolve) => {
+      const transaction = database.transaction(STORES.TOKENS, 'readonly');
+      const store = transaction.objectStore(STORES.TOKENS);
+      const request = store.get(key);
+
+      request.onsuccess = () => {
+        const result = request.result;
+        resolve(result ? result.value : null);
+      };
+      request.onerror = () => resolve(null);
+    });
+  } catch (err) {
+    // Graceful degradation
+    return localStorage.getItem(key);
+  }
+}
+
+/**
+ * Set a token in secure token storage
+ * @param {string} key - Token key
+ * @param {*} value - Token value
+ * @returns {Promise<void>}
+ */
+async function setToken(key, value) {
+  try {
+    const database = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction(STORES.TOKENS, 'readwrite');
+      const store = transaction.objectStore(STORES.TOKENS);
+      const request = store.put({ key, value, updatedAt: new Date().toISOString() });
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (err) {
+    // Graceful degradation
+    localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+  }
+}
+
+/**
+ * Remove a token from storage
+ * @param {string} key - Token key
+ * @returns {Promise<void>}
+ */
+async function removeToken(key) {
+  try {
+    const database = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction(STORES.TOKENS, 'readwrite');
+      const store = transaction.objectStore(STORES.TOKENS);
+      const request = store.delete(key);
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (err) {
+    localStorage.removeItem(key);
+  }
+}
+
+// ==========================================
+// Migration Infrastructure
+// HNW Wave: One-time migration that must complete atomically
+// ==========================================
+
+/**
+ * Get the current migration state
+ * @returns {Promise<Object|null>} Migration state or null if never migrated
+ */
+async function getMigrationState() {
+  try {
+    const database = await initDB();
+    return new Promise((resolve) => {
+      const transaction = database.transaction(STORES.MIGRATION, 'readonly');
+      const store = transaction.objectStore(STORES.MIGRATION);
+      const request = store.get('migration_state');
+
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => resolve(null);
+    });
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * Backup all localStorage to MIGRATION store before migration
+ * HNW Hierarchy: Provides rollback authority if migration fails
+ * @returns {Promise<void>}
+ */
+async function backupLocalStorage() {
+  const backup = {};
+
+  // Capture all rhythm_chamber keys and token keys
+  const allKeys = [...LOCALSTORAGE_KEYS_TO_MIGRATE, ...LOCALSTORAGE_TOKEN_KEYS];
+  for (const key of allKeys) {
+    const value = localStorage.getItem(key);
+    if (value !== null) {
+      backup[key] = value;
+    }
+  }
+
+  if (Object.keys(backup).length === 0) {
+    console.log('[Storage] No localStorage data to backup');
+    return;
+  }
+
+  const database = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(STORES.MIGRATION, 'readwrite');
+    const store = transaction.objectStore(STORES.MIGRATION);
+    const request = store.put({
+      id: 'pre_migration_backup',
+      backup,
+      timestamp: Date.now(),
+      version: STORAGE_MIGRATION_VERSION
+    });
+
+    request.onsuccess = () => {
+      console.log(`[Storage] Backed up ${Object.keys(backup).length} localStorage keys`);
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Migrate data from localStorage to IndexedDB
+ * HNW Wave: Idempotent - safe to call multiple times
+ * @returns {Promise<{migrated: boolean, keysProcessed: number}>}
+ */
+async function migrateFromLocalStorage() {
+  // Check if already migrated
+  const state = await getMigrationState();
+  if (state && state.version >= STORAGE_MIGRATION_VERSION) {
+    console.log('[Storage] Migration already complete (v' + state.version + ')');
+    return { migrated: false, keysProcessed: 0 };
+  }
+
+  console.log('[Storage] Starting localStorage → IndexedDB migration...');
+
+  // Step 1: Backup everything first (atomic safety)
+  await backupLocalStorage();
+
+  let keysProcessed = 0;
+
+  // Step 2: Migrate config keys
+  for (const key of LOCALSTORAGE_KEYS_TO_MIGRATE) {
+    const value = localStorage.getItem(key);
+    if (value !== null) {
+      try {
+        // Parse JSON if possible, otherwise store as-is
+        let parsedValue;
+        try {
+          parsedValue = JSON.parse(value);
+        } catch {
+          parsedValue = value;
+        }
+        await setConfig(key, parsedValue);
+        keysProcessed++;
+      } catch (err) {
+        console.warn(`[Storage] Failed to migrate key '${key}':`, err);
+      }
+    }
+  }
+
+  // Step 3: Migrate token keys
+  for (const key of LOCALSTORAGE_TOKEN_KEYS) {
+    const value = localStorage.getItem(key);
+    if (value !== null) {
+      try {
+        await setToken(key, value);
+        keysProcessed++;
+      } catch (err) {
+        console.warn(`[Storage] Failed to migrate token '${key}':`, err);
+      }
+    }
+  }
+
+  // Step 4: Mark migration complete
+  const database = await initDB();
+  await new Promise((resolve, reject) => {
+    const transaction = database.transaction(STORES.MIGRATION, 'readwrite');
+    const store = transaction.objectStore(STORES.MIGRATION);
+    const request = store.put({
+      id: 'migration_state',
+      version: STORAGE_MIGRATION_VERSION,
+      completedAt: new Date().toISOString(),
+      keysProcessed
+    });
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+
+  // Step 5: Clear migrated keys from localStorage (backup retained in MIGRATION store)
+  for (const key of LOCALSTORAGE_KEYS_TO_MIGRATE) {
+    localStorage.removeItem(key);
+  }
+  for (const key of LOCALSTORAGE_TOKEN_KEYS) {
+    localStorage.removeItem(key);
+  }
+
+  console.log(`[Storage] Migration complete. Processed ${keysProcessed} keys.`);
+  return { migrated: true, keysProcessed };
+}
+
+/**
+ * Rollback migration - restore localStorage from backup
+ * HNW Hierarchy: Emergency authority to undo migration
+ * @returns {Promise<boolean>} True if rollback succeeded
+ */
+async function rollbackMigration() {
+  try {
+    const database = await initDB();
+    const backup = await new Promise((resolve) => {
+      const transaction = database.transaction(STORES.MIGRATION, 'readonly');
+      const store = transaction.objectStore(STORES.MIGRATION);
+      const request = store.get('pre_migration_backup');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(null);
+    });
+
+    if (!backup || !backup.backup) {
+      console.warn('[Storage] No backup found for rollback');
+      return false;
+    }
+
+    // Restore localStorage
+    for (const [key, value] of Object.entries(backup.backup)) {
+      localStorage.setItem(key, value);
+    }
+
+    // Clear migration state (allows re-migration)
+    await new Promise((resolve, reject) => {
+      const transaction = database.transaction(STORES.MIGRATION, 'readwrite');
+      const store = transaction.objectStore(STORES.MIGRATION);
+      store.delete('migration_state');
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject();
+    });
+
+    console.log('[Storage] Migration rolled back successfully');
+    return true;
+  } catch (err) {
+    console.error('[Storage] Rollback failed:', err);
+    return false;
+  }
+}
+
+// ==========================================
+// Extend Storage API with new methods
+// ==========================================
+
+// Add unified API methods to Storage object
+Storage.getConfig = getConfig;
+Storage.setConfig = setConfig;
+Storage.removeConfig = removeConfig;
+Storage.getToken = getToken;
+Storage.setToken = setToken;
+Storage.removeToken = removeToken;
+Storage.migrateFromLocalStorage = migrateFromLocalStorage;
+Storage.rollbackMigration = rollbackMigration;
+Storage.getMigrationState = getMigrationState;
+
 // Make available globally
 window.Storage = Storage;
 
-console.log('[Storage] Module loaded with privacy controls');
+console.log('[Storage] Module loaded with privacy controls and unified config API');
 

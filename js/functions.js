@@ -138,14 +138,48 @@ const FUNCTION_SCHEMAS = [
     }
 ];
 
+// ==========================================
+// Retry Configuration
+// HNW Fix: Retry at executor layer, not API layer
+// Transient failures occur here (large dataset processing, rate limits)
+// ==========================================
+
+const MAX_FUNCTION_RETRIES = 2;
+const RETRY_BASE_DELAY_MS = 500;
+
+/**
+ * Check if error is transient (worth retrying)
+ */
+function isTransientError(err) {
+    const msg = (err.message || '').toLowerCase();
+    return msg.includes('timeout') ||
+        msg.includes('rate limit') ||
+        msg.includes('429') ||
+        msg.includes('503') ||
+        msg.includes('network') ||
+        msg.includes('fetch') ||
+        err.name === 'AbortError';
+}
+
+/**
+ * Exponential backoff delay with jitter
+ */
+async function backoffDelay(attempt) {
+    const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+    const jitter = Math.random() * 100; // Prevent thundering herd
+    await new Promise(r => setTimeout(r, delay + jitter));
+}
+
 /**
  * Execute a function call against the user's streaming data
+ * Includes retry logic with exponential backoff for transient errors
+ * 
  * @param {string} functionName - Name of the function to execute
  * @param {Object} args - Arguments passed by the LLM
  * @param {Array} streams - User's streaming data
  * @returns {Object} Result to send back to the LLM
  */
-function executeFunction(functionName, args, streams) {
+async function executeFunction(functionName, args, streams) {
     if (!streams || streams.length === 0) {
         return { error: "No streaming data available. User needs to upload their Spotify data first." };
     }
@@ -154,34 +188,40 @@ function executeFunction(functionName, args, streams) {
         return { error: "DataQuery module not loaded." };
     }
 
-    try {
-        switch (functionName) {
-            case "get_top_artists":
-                return executeGetTopArtists(args, streams);
+    const functionMap = {
+        get_top_artists: executeGetTopArtists,
+        get_top_tracks: executeGetTopTracks,
+        get_artist_history: executeGetArtistHistory,
+        get_listening_stats: executeGetListeningStats,
+        compare_periods: executeComparePeriods,
+        search_tracks: executeSearchTracks
+    };
 
-            case "get_top_tracks":
-                return executeGetTopTracks(args, streams);
-
-            case "get_artist_history":
-                return executeGetArtistHistory(args, streams);
-
-            case "get_listening_stats":
-                return executeGetListeningStats(args, streams);
-
-            case "compare_periods":
-                return executeComparePeriods(args, streams);
-
-            case "search_tracks":
-                return executeSearchTracks(args, streams);
-
-            default:
-                return { error: `Unknown function: ${functionName}` };
-        }
-    } catch (err) {
-        console.error(`Function execution error (${functionName}):`, err);
-        return { error: `Failed to execute ${functionName}: ${err.message}` };
+    const fn = functionMap[functionName];
+    if (!fn) {
+        return { error: `Unknown function: ${functionName}` };
     }
+
+    let lastError;
+    for (let attempt = 0; attempt <= MAX_FUNCTION_RETRIES; attempt++) {
+        try {
+            return await Promise.resolve(fn(args, streams));
+        } catch (err) {
+            lastError = err;
+            console.warn(`[Functions] Attempt ${attempt + 1}/${MAX_FUNCTION_RETRIES + 1} for ${functionName} failed:`, err.message);
+
+            if (isTransientError(err) && attempt < MAX_FUNCTION_RETRIES) {
+                await backoffDelay(attempt);
+                continue;
+            }
+            break;
+        }
+    }
+
+    console.error(`[Functions] ${functionName} failed after ${MAX_FUNCTION_RETRIES + 1} attempts:`, lastError);
+    return { error: `Failed to execute ${functionName}: ${lastError.message}` };
 }
+
 
 // ==========================================
 // Function Executors

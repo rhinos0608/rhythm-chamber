@@ -22,3 +22,10 @@ node_modules/
 # Build outputs (if added later)
 dist/
 build/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

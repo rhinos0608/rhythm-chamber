@@ -1,0 +1,33 @@
+{
+  "name": "rhythm-chamber",
+  "version": "1.0.0",
+  "description": "Rhythm Chamber is an AI powered data analytics application that focuses on what your data says about you, think of it like spotify wrapped but year round and actually personalized. Everything is customizable, bring your own key and model, local models will be soon available for users who want to bring their own compute. Bring your own JSON or ZIP file, or connect to your spotify account for quick data snippet insights. This application for now is 100% client-side, your data is only seen by openrouter (if logging is enabled) and your music provider. We cannot hold any of your data.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "dev": "npx http-server . -p 8080 -c-1",
+    "test": "npx playwright test",
+    "test:ui": "npx playwright test --ui",
+    "test:headed": "npx playwright test --headed",
+    "test:report": "npx playwright show-report"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rhinos0608/rhythm-chamber.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/rhinos0608/rhythm-chamber/issues"
+  },
+  "homepage": "https://github.com/rhinos0608/rhythm-chamber#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "@types/node": "^25.0.6",
+    "http-server": "^14.1.1"
+  }
+}

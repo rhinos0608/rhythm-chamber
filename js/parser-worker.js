@@ -6,16 +6,201 @@
 // Import JSZip dynamically
 importScripts('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
 
+// ==========================================
+// Validation Configuration
+// HNW Fix: Tight validation to prevent silent data corruption
+// ==========================================
+
+const MAX_FILE_SIZE_MB = 500;          // 500MB limit
+const MAX_STREAMS = 1_000_000;         // 1M play limit
+const MIN_VALID_RATIO = 0.95;          // 95% must be valid (not 50%)
+
+/**
+ * Validate a single stream entry matches Spotify schema
+ * Checks for required fields and valid timestamp
+ */
+function validateSpotifyStream(stream) {
+    // Must have timestamp
+    const timestamp = stream.ts || stream.endTime;
+    if (!timestamp) return false;
+
+    // Must have track or artist (not both required, some edge cases)
+    const track = stream.master_metadata_track_name || stream.trackName;
+    const artist = stream.master_metadata_album_artist_name || stream.artistName;
+    if (!track && !artist) return false;
+
+    // Timestamp must be valid date
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return false;
+
+    // Timestamp must be reasonable (between 2000 and now+1year)
+    const year = date.getFullYear();
+    if (year < 2000 || year > new Date().getFullYear() + 1) return false;
+
+    return true;
+}
+
+/**
+ * Validate a file before processing
+ * Throws on invalid file
+ */
+function validateFile(file) {
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+        throw new Error(
+            `File too large: ${(file.size / 1024 / 1024).toFixed(1)}MB ` +
+            `exceeds ${MAX_FILE_SIZE_MB}MB limit. ` +
+            `Please split your data export or contact support.`
+        );
+    }
+}
+
+/**
+ * Validate parsed streams meet quality threshold
+ * Returns validation result with stats
+ */
+function validateStreams(streams) {
+    if (streams.length === 0) {
+        throw new Error('No streams found in file.');
+    }
+
+    if (streams.length > MAX_STREAMS) {
+        throw new Error(
+            `Too many streams: ${streams.length.toLocaleString()} ` +
+            `exceeds limit of ${MAX_STREAMS.toLocaleString()}. ` +
+            `Please use a smaller data export.`
+        );
+    }
+
+    const validStreams = streams.filter(validateSpotifyStream);
+    const ratio = validStreams.length / streams.length;
+
+    if (ratio < MIN_VALID_RATIO) {
+        throw new Error(
+            `File does not appear to be valid Spotify data. ` +
+            `Only ${(ratio * 100).toFixed(1)}% of entries match expected format ` +
+            `(need ${MIN_VALID_RATIO * 100}%). ` +
+            `Please ensure this is an official Spotify data export.`
+        );
+    }
+
+    return {
+        validStreams,
+        totalCount: streams.length,
+        validCount: validStreams.length,
+        invalidCount: streams.length - validStreams.length,
+        validRatio: ratio
+    };
+}
+
+/**
+ * Detect temporal overlap between new and existing streams
+ * Returns overlap info for user decision (merge/replace/keep)
+ */
+function detectTemporalOverlap(newStreams, existingStreams) {
+    if (!existingStreams || existingStreams.length === 0) {
+        return { hasOverlap: false, newStreams };
+    }
+
+    // Get date ranges
+    const getDateRange = (streams) => {
+        const dates = streams
+            .map(s => new Date(s.playedAt || s.ts || s.endTime))
+            .filter(d => !isNaN(d.getTime()))
+            .sort((a, b) => a - b);
+        return dates.length > 0
+            ? { start: dates[0], end: dates[dates.length - 1] }
+            : null;
+    };
+
+    const existingRange = getDateRange(existingStreams);
+    const newRange = getDateRange(newStreams);
+
+    if (!existingRange || !newRange) {
+        return { hasOverlap: false, newStreams };
+    }
+
+    // Check for temporal overlap
+    const overlapStart = new Date(Math.max(existingRange.start, newRange.start));
+    const overlapEnd = new Date(Math.min(existingRange.end, newRange.end));
+
+    if (overlapStart > overlapEnd) {
+        // No overlap - date ranges don't intersect
+        return { hasOverlap: false, newStreams };
+    }
+
+    // Calculate overlap duration
+    const overlapDays = Math.ceil((overlapEnd - overlapStart) / (1000 * 60 * 60 * 24));
+
+    // Create hash set of existing streams for deduplication
+    const existingHashes = new Set();
+    existingStreams.forEach(s => {
+        const ts = s.playedAt || s.ts || s.endTime;
+        const track = s.trackName || s.master_metadata_track_name || '';
+        const artist = s.artistName || s.master_metadata_album_artist_name || '';
+        existingHashes.add(`${ts}|${track}|${artist}`);
+    });
+
+    // Separate truly new vs duplicates
+    const uniqueNew = [];
+    const duplicates = [];
+
+    newStreams.forEach(s => {
+        const ts = s.playedAt || s.ts || s.endTime;
+        const track = s.trackName || s.master_metadata_track_name || '';
+        const artist = s.artistName || s.master_metadata_album_artist_name || '';
+        const hash = `${ts}|${track}|${artist}`;
+
+        if (existingHashes.has(hash)) {
+            duplicates.push(s);
+        } else {
+            uniqueNew.push(s);
+        }
+    });
+
+    return {
+        hasOverlap: true,
+        overlapPeriod: {
+            start: overlapStart.toISOString().split('T')[0],
+            end: overlapEnd.toISOString().split('T')[0],
+            days: overlapDays
+        },
+        existingRange: {
+            start: existingRange.start.toISOString().split('T')[0],
+            end: existingRange.end.toISOString().split('T')[0]
+        },
+        newRange: {
+            start: newRange.start.toISOString().split('T')[0],
+            end: newRange.end.toISOString().split('T')[0]
+        },
+        stats: {
+            totalNew: newStreams.length,
+            exactDuplicates: duplicates.length,
+            uniqueNew: uniqueNew.length,
+            existingCount: existingStreams.length
+        },
+        // Pre-computed results for each strategy
+        strategies: {
+            merge: uniqueNew,  // Only add truly new streams (recommended)
+            replace: newStreams,  // Replace everything with new data
+            keep: []  // Keep existing, ignore new entirely
+        }
+    };
+}
+
+
 self.onmessage = async (e) => {
-    const { type, file } = e.data;
+    const { type, file, existingStreams } = e.data;
 
     if (type === 'parse') {
         try {
-            // Detect file type
+            // Validate file size before processing
+            validateFile(file);
+
+            // Detect file type and parse
             if (file.name.endsWith('.json')) {
-                await parseJsonFile(file);
+                await parseJsonFile(file, existingStreams);
             } else {
-                await parseZipFile(file);
+                await parseZipFile(file, existingStreams);
             }
         } catch (error) {
             self.postMessage({ type: 'error', error: error.message });
@@ -26,7 +211,7 @@ self.onmessage = async (e) => {
 /**
  * Parse a direct JSON file (streaming history array)
  */
-async function parseJsonFile(file) {
+async function parseJsonFile(file, existingStreams = null) {
     postProgress('Reading JSON file...');
 
     const text = await file.text();
@@ -36,9 +221,35 @@ async function parseJsonFile(file) {
         throw new Error('JSON file must contain an array of streams.');
     }
 
-    postProgress(`Found ${data.length} streams...`);
+    postProgress(`Found ${data.length} streams, validating...`);
 
-    const normalized = data.map(stream => normalizeStream(stream, file.name));
+    // Validate streams with 95% threshold
+    const validation = validateStreams(data);
+    if (validation.invalidCount > 0) {
+        postProgress(`${validation.invalidCount} invalid entries filtered out`);
+    }
+
+    const normalized = validation.validStreams.map(stream => normalizeStream(stream, file.name));
+
+    // Check for overlap with existing data
+    if (existingStreams && existingStreams.length > 0) {
+        postProgress('Checking for overlap with existing data...');
+        const overlap = detectTemporalOverlap(normalized, existingStreams);
+
+        if (overlap.hasOverlap) {
+            // Send overlap info to main thread for user decision
+            self.postMessage({
+                type: 'overlap_detected',
+                overlap: {
+                    ...overlap,
+                    // Don't send full strategies - too much data
+                    // Main thread will re-process based on decision
+                    strategies: undefined
+                }
+            });
+            return; // Wait for user decision
+        }
+    }
 
     postProgress('Sorting and deduplicating...');
     normalized.sort((a, b) => new Date(a.playedAt) - new Date(b.playedAt));
@@ -63,15 +274,20 @@ async function parseJsonFile(file) {
         chunks,
         stats: {
             totalStreams: enriched.length,
-            fileCount: 1
+            fileCount: 1,
+            validationStats: {
+                validRatio: validation.validRatio,
+                invalidCount: validation.invalidCount
+            }
         }
     });
+
 }
 
 /**
  * Parse a Spotify data export .zip file
  */
-async function parseZipFile(file) {
+async function parseZipFile(file, existingStreams = null) {
     postProgress('Extracting archive...');
 
     const zip = await JSZip.loadAsync(file);
@@ -94,7 +310,7 @@ async function parseZipFile(file) {
     postProgress(`Found ${streamingFiles.length} history files...`);
 
     // Parse all streaming history files with incremental saving
-    let allStreams = [];
+    let allRawStreams = [];
 
     for (let i = 0; i < streamingFiles.length; i++) {
         const { path, entry } = streamingFiles[i];
@@ -103,18 +319,46 @@ async function parseZipFile(file) {
         const content = await entry.async('text');
         const data = JSON.parse(content);
 
-        const normalized = data.map(stream => normalizeStream(stream, path));
-        allStreams = allStreams.concat(normalized);
+        allRawStreams = allRawStreams.concat(data);
 
         // Send partial update for incremental saving
-        // This allows main thread to cache data in case of crash
         self.postMessage({
             type: 'partial',
             fileIndex: i + 1,
             totalFiles: streamingFiles.length,
-            streamCount: allStreams.length,
-            partialStreams: normalized // Just the new streams from this file
+            streamCount: allRawStreams.length
         });
+    }
+
+    postProgress(`Validating ${allRawStreams.length} streams...`);
+
+    // Validate all streams with 95% threshold
+    const validation = validateStreams(allRawStreams);
+    if (validation.invalidCount > 0) {
+        postProgress(`${validation.invalidCount} invalid entries filtered out`);
+    }
+
+    // Normalize valid streams
+    let allStreams = validation.validStreams.map(stream =>
+        normalizeStream(stream, 'zip')
+    );
+
+    // Check for overlap with existing data
+    if (existingStreams && existingStreams.length > 0) {
+        postProgress('Checking for overlap with existing data...');
+        const overlap = detectTemporalOverlap(allStreams, existingStreams);
+
+        if (overlap.hasOverlap) {
+            // Send overlap info to main thread for user decision
+            self.postMessage({
+                type: 'overlap_detected',
+                overlap: {
+                    ...overlap,
+                    strategies: undefined // Don't send full data over worker boundary
+                }
+            });
+            return; // Wait for user decision
+        }
     }
 
     postProgress('Sorting and deduplicating...');
@@ -143,10 +387,15 @@ async function parseZipFile(file) {
         chunks,
         stats: {
             totalStreams: enriched.length,
-            fileCount: streamingFiles.length
+            fileCount: streamingFiles.length,
+            validationStats: {
+                validRatio: validation.validRatio,
+                invalidCount: validation.invalidCount
+            }
         }
     });
 }
+
 
 function postProgress(message) {
     self.postMessage({ type: 'progress', message });

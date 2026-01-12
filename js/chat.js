@@ -8,11 +8,13 @@
 
 const CONVERSATION_STORAGE_KEY = 'rhythm_chamber_conversation';  // Legacy, for migration
 const CURRENT_SESSION_KEY = 'rhythm_chamber_current_session';
+const EMERGENCY_BACKUP_KEY = 'rhythm_chamber_emergency_backup';  // Sync backup for beforeunload
 
 // HNW Fix: Timeout constants to prevent cascade failures
 const CHAT_API_TIMEOUT_MS = 60000;       // 60 second timeout for API calls
 const CHAT_FUNCTION_TIMEOUT_MS = 30000;  // 30 second timeout for function execution
 const AUTO_SAVE_DELAY_MS = 2000;         // Debounce session saves
+const EMERGENCY_BACKUP_MAX_AGE_MS = 3600000;  // 1 hour max age for emergency backups
 
 let conversationHistory = [];
 let userContext = null;
@@ -49,6 +51,9 @@ async function initChat(personality, patterns, summary, streams = null) {
     // Store streams for data queries
     streamsData = streams;
 
+    // Recover any emergency backup from previous session (tab closed mid-save)
+    await recoverEmergencyBackup();
+
     // Try to load current session or create new one
     await loadOrCreateSession();
 
@@ -62,10 +67,18 @@ async function initChat(personality, patterns, summary, streams = null) {
 
 /**
  * Load existing session or create a new one
+ * Uses unified Storage API with localStorage fallback
  */
 async function loadOrCreateSession() {
-    // Check for saved current session ID
-    const savedSessionId = localStorage.getItem(CURRENT_SESSION_KEY);
+    // Try unified storage first for current session ID
+    let savedSessionId = null;
+    if (window.Storage?.getConfig) {
+        savedSessionId = await window.Storage.getConfig(CURRENT_SESSION_KEY);
+    }
+    // Fallback to localStorage
+    if (!savedSessionId) {
+        savedSessionId = localStorage.getItem(CURRENT_SESSION_KEY);
+    }
 
     if (savedSessionId) {
         const session = await loadSession(savedSessionId);
@@ -73,6 +86,7 @@ async function loadOrCreateSession() {
             return session;
         }
     }
+
 
     // Migrate from legacy sessionStorage if exists
     try {
@@ -118,6 +132,100 @@ function saveConversation() {
         await saveCurrentSession();
         autoSaveTimeoutId = null;
     }, AUTO_SAVE_DELAY_MS);
+}
+
+/**
+ * Flush pending save asynchronously - use when we have time (visibilitychange)
+ * This has time to complete because tab is going hidden, not closing
+ */
+async function flushPendingSaveAsync() {
+    if (autoSaveTimeoutId) {
+        clearTimeout(autoSaveTimeoutId);
+        autoSaveTimeoutId = null;
+    }
+    if (currentSessionId && conversationHistory.length > 0) {
+        try {
+            await saveCurrentSession();
+            console.log('[Chat] Session flushed on visibility change');
+        } catch (e) {
+            console.error('[Chat] Flush save failed:', e);
+        }
+    }
+}
+
+/**
+ * Emergency synchronous backup to localStorage - use when tab is closing
+ * beforeunload requires sync completion; async saves will be abandoned
+ * Next load will detect this and migrate to IndexedDB
+ */
+function emergencyBackupSync() {
+    if (!currentSessionId || conversationHistory.length === 0) return;
+
+    const backup = {
+        sessionId: currentSessionId,
+        createdAt: currentSessionCreatedAt,
+        messages: conversationHistory.slice(-100),
+        timestamp: Date.now()
+    };
+
+    try {
+        localStorage.setItem(EMERGENCY_BACKUP_KEY, JSON.stringify(backup));
+        console.log('[Chat] Emergency backup saved to localStorage');
+    } catch (e) {
+        // localStorage might be full or unavailable
+        console.error('[Chat] Emergency backup failed:', e);
+    }
+}
+
+/**
+ * Recover emergency backup on load - called during initChat()
+ * If we have a backup newer than what's in IndexedDB, restore it
+ */
+async function recoverEmergencyBackup() {
+    const backupStr = localStorage.getItem(EMERGENCY_BACKUP_KEY);
+    if (!backupStr) return false;
+
+    try {
+        const backup = JSON.parse(backupStr);
+
+        // Only recover if backup is recent (< 1 hour old)
+        if (Date.now() - backup.timestamp > EMERGENCY_BACKUP_MAX_AGE_MS) {
+            console.log('[Chat] Emergency backup too old, discarding');
+            localStorage.removeItem(EMERGENCY_BACKUP_KEY);
+            return false;
+        }
+
+        // Check if session exists with fewer messages
+        const existing = await window.Storage?.getSession?.(backup.sessionId);
+        if (existing) {
+            const existingCount = existing.messages?.length || 0;
+            const backupCount = backup.messages?.length || 0;
+
+            if (backupCount > existingCount) {
+                // Backup has more messages - update existing session
+                existing.messages = backup.messages;
+                existing.createdAt = backup.createdAt || existing.createdAt;
+                await window.Storage.saveSession(existing);
+                console.log('[Chat] Recovered', backupCount - existingCount, 'messages from emergency backup');
+            }
+        } else if (backup.messages && backup.messages.length > 0) {
+            // Session doesn't exist, create it from backup
+            await window.Storage?.saveSession?.({
+                id: backup.sessionId,
+                title: 'Recovered Chat',
+                createdAt: backup.createdAt || new Date().toISOString(),
+                messages: backup.messages
+            });
+            console.log('[Chat] Created new session from emergency backup');
+        }
+
+        localStorage.removeItem(EMERGENCY_BACKUP_KEY);
+        return true;
+    } catch (e) {
+        console.error('[Chat] Emergency backup recovery failed:', e);
+        localStorage.removeItem(EMERGENCY_BACKUP_KEY);
+        return false;
+    }
 }
 
 /**
@@ -176,7 +284,14 @@ async function createNewSession(initialMessages = []) {
     currentSessionCreatedAt = new Date().toISOString();  // HNW Fix: Set createdAt for new session
     conversationHistory = [...initialMessages];
 
+    // Save current session ID to unified storage and localStorage
+    if (window.Storage?.setConfig) {
+        window.Storage.setConfig(CURRENT_SESSION_KEY, currentSessionId).catch(e =>
+            console.warn('[Chat] Failed to save session ID to unified storage:', e)
+        );
+    }
     localStorage.setItem(CURRENT_SESSION_KEY, currentSessionId);
+
 
     // Save immediately if we have messages
     if (initialMessages.length > 0) {
@@ -216,10 +331,18 @@ async function loadSession(sessionId) {
         currentSessionId = session.id;
         currentSessionCreatedAt = session.createdAt;  // HNW Fix: Preserve createdAt from loaded session
         conversationHistory = session.messages || [];
+
+        // Save current session ID to unified storage and localStorage
+        if (window.Storage?.setConfig) {
+            window.Storage.setConfig(CURRENT_SESSION_KEY, currentSessionId).catch(e =>
+                console.warn('[Chat] Failed to save session ID to unified storage:', e)
+            );
+        }
         localStorage.setItem(CURRENT_SESSION_KEY, currentSessionId);
 
         console.log('[Chat] Loaded session:', sessionId, 'with', conversationHistory.length, 'messages');
         return session;
+
     } catch (e) {
         console.error('[Chat] Failed to load session:', e);
         return null;
@@ -967,6 +1090,28 @@ function setStreamsData(streams) {
     streamsData = streams;
 }
 
+// ==========================================
+// Session Persistence Event Handlers
+// HNW Fix: Correct sync/async strategy for tab close
+// ==========================================
+
+if (typeof window !== 'undefined') {
+    // Async save when tab goes hidden (mobile switch, minimize, tab switch)
+    // visibilitychange gives us time for async operations
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+            flushPendingSaveAsync();
+        }
+    });
+
+    // Sync backup when tab is actually closing
+    // beforeunload requires synchronous completion - async saves will be abandoned
+    window.addEventListener('beforeunload', emergencyBackupSync);
+
+    // Also handle pagehide for mobile Safari compatibility
+    window.addEventListener('pagehide', emergencyBackupSync);
+}
+
 // Public API
 window.Chat = {
     initChat,
@@ -986,5 +1131,8 @@ window.Chat = {
     deleteSessionById,
     renameSession,
     getCurrentSessionId,
-    onSessionUpdate
+    onSessionUpdate,
+    // Exposed for testing
+    emergencyBackupSync,
+    recoverEmergencyBackup
 };
