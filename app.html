@@ -264,7 +264,24 @@
                 </div>
             </div>
         </div>
+
+        <!-- Multi-Tab Warning Modal -->
+        <div class="modal-overlay" id="multi-tab-modal" style="display: none;">
+            <div class="modal-content" style="max-width: 400px; text-align: center;">
+                <h3 style="margin-bottom: var(--space-md);">⚠️ Multiple Tabs Detected</h3>
+                <p class="modal-message" style="margin-bottom: var(--space-lg); color: var(--text-muted);">
+                    Rhythm Chamber is open in another tab. This tab is now read-only to prevent data corruption.
+                </p>
+                <div style="display: flex; gap: var(--space-md); justify-content: center;">
+                    <button class="btn btn-primary"
+                        onclick="document.getElementById('multi-tab-modal').style.display='none'">
+                        OK, Continue in Read-Only Mode
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
+
 
     <!-- Scripts -->
     <script src="js/config.js"></script>

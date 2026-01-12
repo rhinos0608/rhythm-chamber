@@ -40,13 +40,25 @@ async function getCollectionName() {
 /**
  * Get RAG configuration
  * Credentials are encrypted with AES-GCM, not just obfuscated
+ * Uses unified storage API with localStorage fallback
  * Returns null if decryption fails (session changed, re-auth needed)
  */
 async function getConfig() {
     try {
-        // Get non-sensitive config from localStorage
-        const stored = localStorage.getItem(RAG_STORAGE_KEY);
-        const config = stored ? JSON.parse(stored) : {};
+        // Try unified storage first (IndexedDB after migration)
+        let config = {};
+        if (window.Storage?.getConfig) {
+            const storedConfig = await window.Storage.getConfig(RAG_STORAGE_KEY);
+            if (storedConfig) {
+                config = storedConfig;
+            }
+        }
+
+        // Fallback to localStorage (pre-migration or if IndexedDB unavailable)
+        if (!config || Object.keys(config).length === 0) {
+            const stored = localStorage.getItem(RAG_STORAGE_KEY);
+            config = stored ? JSON.parse(stored) : {};
+        }
 
         // Get encrypted credentials using Security module
         if (window.Security?.getEncryptedCredentials) {
@@ -58,12 +70,15 @@ async function getConfig() {
         }
 
         // Fallback: Check for legacy unencrypted storage (migration path)
-        if (!config.qdrantApiKey && stored) {
-            const legacy = JSON.parse(stored);
-            if (legacy.qdrantApiKey) {
-                console.warn('[RAG] Found legacy unencrypted credentials - will encrypt on next save');
-                config.qdrantUrl = legacy.qdrantUrl;
-                config.qdrantApiKey = legacy.qdrantApiKey;
+        if (!config.qdrantApiKey) {
+            const ls = localStorage.getItem(RAG_STORAGE_KEY);
+            if (ls) {
+                const legacy = JSON.parse(ls);
+                if (legacy.qdrantApiKey) {
+                    console.warn('[RAG] Found legacy unencrypted credentials - will encrypt on next save');
+                    config.qdrantUrl = legacy.qdrantUrl;
+                    config.qdrantApiKey = legacy.qdrantApiKey;
+                }
             }
         }
 
@@ -74,9 +89,11 @@ async function getConfig() {
     }
 }
 
+
 /**
  * Save RAG configuration
  * Credentials are encrypted with AES-GCM for real security
+ * Uses unified storage API with localStorage fallback
  */
 async function saveConfig(config) {
     // Separate sensitive credentials from non-sensitive config
@@ -88,7 +105,15 @@ async function saveConfig(config) {
         updatedAt: new Date().toISOString()
     };
 
-    // Store non-sensitive in localStorage
+    // Store non-sensitive in unified storage (IndexedDB)
+    if (window.Storage?.setConfig) {
+        try {
+            await window.Storage.setConfig(RAG_STORAGE_KEY, nonSensitive);
+        } catch (e) {
+            console.warn('[RAG] Failed to save to unified storage:', e);
+        }
+    }
+    // Also save to localStorage as sync fallback
     localStorage.setItem(RAG_STORAGE_KEY, JSON.stringify(nonSensitive));
 
     // Encrypt and store credentials if Security module available
@@ -109,6 +134,7 @@ async function saveConfig(config) {
         }
     }
 }
+
 
 /**
  * Check if RAG is fully configured and ready
@@ -141,11 +167,33 @@ async function isStale() {
 
 /**
  * Get checkpoint for resume
- * Decrypts dataHash if encrypted
+ * Decrypts dataHash if encrypted. Uses unified storage with fallback.
  */
 async function getCheckpoint() {
     try {
-        // Try encrypted checkpoint first
+        // Try unified storage first (IndexedDB)
+        if (window.Storage?.getConfig) {
+            const cipher = await window.Storage.getConfig(RAG_CHECKPOINT_CIPHER_KEY);
+            if (cipher && window.Security?.decryptData) {
+                try {
+                    const sessionKey = await window.Security.getSessionKey();
+                    const decrypted = await window.Security.decryptData(cipher, sessionKey);
+                    if (decrypted) {
+                        return JSON.parse(decrypted);
+                    }
+                } catch (decryptErr) {
+                    console.warn('[RAG] Checkpoint decryption failed (session changed?)');
+                }
+            }
+
+            // Check for unencrypted checkpoint in unified storage
+            const plainCheckpoint = await window.Storage.getConfig(RAG_CHECKPOINT_KEY);
+            if (plainCheckpoint) {
+                return plainCheckpoint;
+            }
+        }
+
+        // Fallback to localStorage
         const cipher = localStorage.getItem(RAG_CHECKPOINT_CIPHER_KEY);
         if (cipher && window.Security?.decryptData) {
             try {
@@ -159,7 +207,7 @@ async function getCheckpoint() {
             }
         }
 
-        // Fallback to legacy unencrypted checkpoint
+        // Fallback to legacy unencrypted checkpoint in localStorage
         const stored = localStorage.getItem(RAG_CHECKPOINT_KEY);
         return stored ? JSON.parse(stored) : null;
     } catch (e) {
@@ -170,7 +218,7 @@ async function getCheckpoint() {
 
 /**
  * Save checkpoint for resume
- * Encrypts with session key for security
+ * Encrypts with session key for security. Uses unified storage with fallback.
  */
 async function saveCheckpoint(data) {
     const checkpoint = {
@@ -186,8 +234,14 @@ async function saveCheckpoint(data) {
                 JSON.stringify(checkpoint),
                 sessionKey
             );
+
+            // Save to unified storage (IndexedDB)
+            if (window.Storage?.setConfig) {
+                await window.Storage.setConfig(RAG_CHECKPOINT_CIPHER_KEY, encrypted);
+                await window.Storage.removeConfig(RAG_CHECKPOINT_KEY);
+            }
+            // Also save to localStorage as fallback
             localStorage.setItem(RAG_CHECKPOINT_CIPHER_KEY, encrypted);
-            // Clear legacy unencrypted key
             localStorage.removeItem(RAG_CHECKPOINT_KEY);
             return;
         } catch (encryptErr) {
@@ -196,16 +250,31 @@ async function saveCheckpoint(data) {
     }
 
     // Fallback to unencrypted (if Security module not loaded)
+    if (window.Storage?.setConfig) {
+        await window.Storage.setConfig(RAG_CHECKPOINT_KEY, checkpoint);
+    }
     localStorage.setItem(RAG_CHECKPOINT_KEY, JSON.stringify(checkpoint));
 }
 
 /**
  * Clear checkpoint after completion
+ * Clears from both unified storage and localStorage
  */
-function clearCheckpoint() {
+async function clearCheckpoint() {
+    // Clear from unified storage
+    if (window.Storage?.removeConfig) {
+        try {
+            await window.Storage.removeConfig(RAG_CHECKPOINT_KEY);
+            await window.Storage.removeConfig(RAG_CHECKPOINT_CIPHER_KEY);
+        } catch (e) {
+            console.warn('[RAG] Failed to clear checkpoint from unified storage:', e);
+        }
+    }
+    // Also clear from localStorage
     localStorage.removeItem(RAG_CHECKPOINT_KEY);
     localStorage.removeItem(RAG_CHECKPOINT_CIPHER_KEY);
 }
+
 
 /**
  * Get embedding for text using OpenRouter API

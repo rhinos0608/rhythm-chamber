@@ -19,7 +19,8 @@ const AVAILABLE_MODELS = [
 
 /**
  * Get current settings - reads directly from window.Config (source of truth)
- * Falls back to localStorage overrides only if config.js values are missing
+ * Falls back to localStorage overrides, then IndexedDB (after migration).
+ * SYNC version for backward compatibility - use getSettingsAsync for full unified storage support.
  */
 function getSettings() {
     // Read directly from config.js as the source of truth
@@ -40,37 +41,12 @@ function getSettings() {
     };
 
     // Only apply localStorage overrides for fields that are empty/placeholder in config.js
+    // After migration, this will be empty and fall through to defaults
     const stored = localStorage.getItem('rhythm_chamber_settings');
     if (stored) {
         try {
             const parsed = JSON.parse(stored);
-
-            // Only use localStorage API key if config.js has placeholder or empty
-            if (parsed.openrouter?.apiKey &&
-                (!settings.openrouter.apiKey || settings.openrouter.apiKey === 'your-api-key-here')) {
-                settings.openrouter.apiKey = parsed.openrouter.apiKey;
-            }
-
-            // Only use localStorage model if user explicitly changed it
-            if (parsed.openrouter?.model) {
-                settings.openrouter.model = parsed.openrouter.model;
-            }
-
-            // Only use localStorage maxTokens if user explicitly changed it
-            if (parsed.openrouter?.maxTokens) {
-                settings.openrouter.maxTokens = parsed.openrouter.maxTokens;
-            }
-
-            // Only use localStorage temperature if user explicitly changed it
-            if (parsed.openrouter?.temperature !== undefined) {
-                settings.openrouter.temperature = parsed.openrouter.temperature;
-            }
-
-            // Only use localStorage Spotify client ID if config.js has placeholder or empty
-            if (parsed.spotify?.clientId &&
-                (!settings.spotify.clientId || settings.spotify.clientId === 'your-spotify-client-id')) {
-                settings.spotify.clientId = parsed.spotify.clientId;
-            }
+            applySettingsOverrides(settings, parsed);
         } catch (e) {
             console.error('Failed to parse stored settings:', e);
         }
@@ -80,11 +56,106 @@ function getSettings() {
 }
 
 /**
- * Save user overrides to localStorage
- * Note: This does NOT modify config.js - it stores overrides that will
- * be applied on next getSettings() call
+ * Get settings from unified storage (async version)
+ * HNW: Single point of truth through unified storage API
+ * @returns {Promise<Object>} Settings object
  */
-function saveSettings(settings) {
+async function getSettingsAsync() {
+    // Read directly from config.js as the source of truth
+    const configOpenrouter = window.Config?.openrouter || {};
+    const configSpotify = window.Config?.spotify || {};
+
+    // Build settings object from config.js
+    const settings = {
+        openrouter: {
+            apiKey: configOpenrouter.apiKey || '',
+            model: configOpenrouter.model || 'xiaomi/mimo-v2-flash:free',
+            maxTokens: configOpenrouter.maxTokens || 4500,
+            temperature: configOpenrouter.temperature ?? 0.7
+        },
+        spotify: {
+            clientId: configSpotify.clientId || ''
+        }
+    };
+
+    // Try unified storage first (IndexedDB after migration)
+    if (window.Storage?.getConfig) {
+        try {
+            const storedConfig = await window.Storage.getConfig('rhythm_chamber_settings');
+            if (storedConfig) {
+                applySettingsOverrides(settings, storedConfig);
+                return settings;
+            }
+        } catch (e) {
+            console.warn('[Settings] Failed to read from unified storage:', e);
+        }
+    }
+
+    // Fall back to localStorage (pre-migration or if IndexedDB fails)
+    const stored = localStorage.getItem('rhythm_chamber_settings');
+    if (stored) {
+        try {
+            const parsed = JSON.parse(stored);
+            applySettingsOverrides(settings, parsed);
+        } catch (e) {
+            console.error('Failed to parse stored settings:', e);
+        }
+    }
+
+    return settings;
+}
+
+/**
+ * Apply settings overrides from stored values to settings object
+ * @param {Object} settings - Base settings to modify
+ * @param {Object} parsed - Parsed stored settings
+ */
+function applySettingsOverrides(settings, parsed) {
+    // Only use stored API key if config.js has placeholder or empty
+    if (parsed.openrouter?.apiKey &&
+        (!settings.openrouter.apiKey || settings.openrouter.apiKey === 'your-api-key-here')) {
+        settings.openrouter.apiKey = parsed.openrouter.apiKey;
+    }
+
+    // Only use stored model if user explicitly changed it
+    if (parsed.openrouter?.model) {
+        settings.openrouter.model = parsed.openrouter.model;
+    }
+
+    // Only use stored maxTokens if user explicitly changed it
+    if (parsed.openrouter?.maxTokens) {
+        settings.openrouter.maxTokens = parsed.openrouter.maxTokens;
+    }
+
+    // Only use stored temperature if user explicitly changed it
+    if (parsed.openrouter?.temperature !== undefined) {
+        settings.openrouter.temperature = parsed.openrouter.temperature;
+    }
+
+    // Only use stored Spotify client ID if config.js has placeholder or empty
+    if (parsed.spotify?.clientId &&
+        (!settings.spotify.clientId || settings.spotify.clientId === 'your-spotify-client-id')) {
+        settings.spotify.clientId = parsed.spotify.clientId;
+    }
+}
+
+/**
+ * Save user overrides to unified storage (IndexedDB) with localStorage sync fallback
+ * HNW: Storage module is the single authority for persistence
+ * Note: This does NOT modify config.js - it stores overrides
+ */
+async function saveSettings(settings) {
+    // Try unified storage first (IndexedDB)
+    if (window.Storage?.setConfig) {
+        try {
+            await window.Storage.setConfig('rhythm_chamber_settings', settings);
+            console.log('[Settings] Saved to unified storage');
+        } catch (e) {
+            console.warn('[Settings] Failed to save to unified storage:', e);
+        }
+    }
+
+    // Also save to localStorage as sync fallback (for pre-migration reads)
     localStorage.setItem('rhythm_chamber_settings', JSON.stringify(settings));
 
     // Update the runtime Config object so changes take effect immediately
@@ -113,9 +184,19 @@ function saveSettings(settings) {
 /**
  * Clear all stored setting overrides
  */
-function clearSettings() {
+async function clearSettings() {
+    // Clear from unified storage
+    if (window.Storage?.removeConfig) {
+        try {
+            await window.Storage.removeConfig('rhythm_chamber_settings');
+        } catch (e) {
+            console.warn('[Settings] Failed to clear from unified storage:', e);
+        }
+    }
+    // Also clear localStorage
     localStorage.removeItem('rhythm_chamber_settings');
 }
+
 
 /**
  * Get a specific setting value
@@ -689,9 +770,17 @@ async function confirmSessionReset() {
             window.Security.invalidateSessions();
         }
 
-        // Clear RAG config
+        // Clear RAG config from unified storage and localStorage
+        if (window.Storage?.removeConfig) {
+            await window.Storage.removeConfig('rhythm_chamber_rag');
+            await window.Storage.removeConfig('rhythm_chamber_rag_checkpoint');
+            await window.Storage.removeConfig('rhythm_chamber_rag_checkpoint_cipher');
+        }
+        // Also clear from localStorage (backward compat)
         localStorage.removeItem('rhythm_chamber_rag');
         localStorage.removeItem('rhythm_chamber_rag_checkpoint');
+        localStorage.removeItem('rhythm_chamber_rag_checkpoint_cipher');
+
 
         // Get new version for display
         const newVersion = window.Security?.getSessionVersion?.() || 'new';
@@ -719,7 +808,9 @@ async function confirmSessionReset() {
 // Public API
 window.Settings = {
     getSettings,
+    getSettingsAsync,
     saveSettings,
+
     clearSettings,
     getSetting,
     hasApiKey,

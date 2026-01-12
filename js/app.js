@@ -39,11 +39,136 @@ const newChatBtn = document.getElementById('new-chat-btn');
 
 const SIDEBAR_STATE_KEY = 'rhythm_chamber_sidebar_collapsed';
 
+// ==========================================
+// Cross-Tab Coordination
+// HNW Fix: Prevent data corruption from multiple tabs
+// Uses BroadcastChannel for instant propagation (no polling)
+// ==========================================
+
+const TAB_ID = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+let tabCoordination = null;
+let isPrimaryTab = true;
+
+/**
+ * Initialize cross-tab coordination
+ * Uses BroadcastChannel for instant, no-polling coordination
+ */
+function initTabCoordination() {
+    if (!('BroadcastChannel' in window)) {
+        console.warn('[App] BroadcastChannel not supported, skipping cross-tab coordination');
+        return;
+    }
+
+    tabCoordination = new BroadcastChannel('rhythm_chamber_coordination');
+
+    tabCoordination.addEventListener('message', (event) => {
+        if (event.data.type === 'CLAIM_PRIMARY' && event.data.tabId !== TAB_ID) {
+            // Another tab claimed primary - we become secondary
+            if (isPrimaryTab) {
+                isPrimaryTab = false;
+                showMultiTabWarning();
+                disableWriteOperations();
+            }
+        } else if (event.data.type === 'RELEASE_PRIMARY') {
+            // Primary tab closed - we can try to claim
+            claimPrimaryTab();
+        } else if (event.data.type === 'QUERY_PRIMARY') {
+            // Another tab asking if there's a primary - respond if we're primary
+            if (isPrimaryTab) {
+                tabCoordination.postMessage({ type: 'CLAIM_PRIMARY', tabId: TAB_ID });
+            }
+        }
+    });
+
+    // Query for existing primary tabs first
+    tabCoordination.postMessage({ type: 'QUERY_PRIMARY', tabId: TAB_ID });
+
+    // Wait briefly for responses, then claim if no one responds
+    setTimeout(() => {
+        if (isPrimaryTab) {
+            claimPrimaryTab();
+        }
+    }, 100);
+
+    // Release primary on unload
+    window.addEventListener('beforeunload', () => {
+        if (isPrimaryTab) {
+            tabCoordination?.postMessage({ type: 'RELEASE_PRIMARY', tabId: TAB_ID });
+        }
+    });
+}
+
+/**
+ * Claim this tab as primary
+ */
+function claimPrimaryTab() {
+    isPrimaryTab = true;
+    tabCoordination?.postMessage({ type: 'CLAIM_PRIMARY', tabId: TAB_ID });
+    console.log('[App] Claimed primary tab:', TAB_ID);
+}
+
+/**
+ * Show warning that another tab is active
+ */
+function showMultiTabWarning() {
+    const modal = document.getElementById('multi-tab-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        const msgEl = modal.querySelector('.modal-message');
+        if (msgEl) {
+            msgEl.textContent =
+                'Rhythm Chamber is open in another tab. ' +
+                'This tab is now read-only to prevent data corruption. ' +
+                'Close the other tab to regain full access here.';
+        }
+    } else {
+        // Fallback if modal doesn't exist yet
+        console.warn('[App] Multi-tab detected. This tab is read-only.');
+    }
+}
+
+/**
+ * Disable write operations in secondary tabs
+ */
+function disableWriteOperations() {
+    // Disable file upload
+    if (uploadZone) {
+        uploadZone.style.pointerEvents = 'none';
+        uploadZone.style.opacity = '0.5';
+    }
+    if (fileInput) fileInput.disabled = true;
+
+    // Disable chat input
+    const chatInput = document.getElementById('chat-input');
+    const chatSend = document.getElementById('chat-send');
+    if (chatInput) {
+        chatInput.disabled = true;
+        chatInput.placeholder = 'Read-only mode (close other tab to enable)';
+    }
+    if (chatSend) chatSend.disabled = true;
+
+    // Disable reset
+    if (resetBtn) resetBtn.disabled = true;
+
+    // Disable Spotify connect
+    if (spotifyConnectBtn) spotifyConnectBtn.disabled = true;
+
+    // Disable new chat button
+    if (newChatBtn) newChatBtn.disabled = true;
+
+    console.log('[App] Write operations disabled - secondary tab mode');
+}
+
+
 /**
  * Initialize the app
  */
 async function init() {
+    // Initialize cross-tab coordination first (prevents race conditions)
+    initTabCoordination();
+
     await Storage.init();
+
 
     // HNW Fix: Validate storage consistency on startup
     const validation = await Storage.validateConsistency();
@@ -893,12 +1018,20 @@ window.hideResetConfirmModal = hideResetConfirmModal;
 
 /**
  * Initialize sidebar state and event listeners
+ * Uses unified storage with localStorage fallback
  */
-function initSidebar() {
-    // Restore collapsed state
-    const savedState = localStorage.getItem(SIDEBAR_STATE_KEY);
-    appState.sidebarCollapsed = savedState === 'true';
+async function initSidebar() {
+    // Restore collapsed state from unified storage or localStorage
+    let savedState = null;
+    if (window.Storage?.getConfig) {
+        savedState = await window.Storage.getConfig(SIDEBAR_STATE_KEY);
+    }
+    if (savedState === null) {
+        savedState = localStorage.getItem(SIDEBAR_STATE_KEY);
+    }
+    appState.sidebarCollapsed = savedState === 'true' || savedState === true;
     updateSidebarVisibility();
+
 
     // Setup event listeners
     if (sidebarToggleBtn) {
@@ -959,6 +1092,10 @@ function updateSidebarVisibility() {
  */
 function toggleSidebar() {
     appState.sidebarCollapsed = !appState.sidebarCollapsed;
+    // Save to unified storage and localStorage
+    if (window.Storage?.setConfig) {
+        window.Storage.setConfig(SIDEBAR_STATE_KEY, appState.sidebarCollapsed).catch(() => { });
+    }
     localStorage.setItem(SIDEBAR_STATE_KEY, appState.sidebarCollapsed.toString());
     updateSidebarVisibility();
 
@@ -977,6 +1114,10 @@ function toggleSidebar() {
  */
 function closeSidebar() {
     appState.sidebarCollapsed = true;
+    // Save to unified storage and localStorage
+    if (window.Storage?.setConfig) {
+        window.Storage.setConfig(SIDEBAR_STATE_KEY, true).catch(() => { });
+    }
     localStorage.setItem(SIDEBAR_STATE_KEY, 'true');
     updateSidebarVisibility();
     if (chatSidebar) {
