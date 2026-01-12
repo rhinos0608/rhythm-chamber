@@ -70,23 +70,13 @@ People don't care about the numbers. They care about **what the numbers say abou
 | Tier | Price | What You Get |
 |------|-------|--------------|
 | **Free** | $0 | Personality type reveal, unlimited chat (free models) |
-| **Credits** | $1-2 each | Year in Review, Relationship Analysis, Era Deep-Dives |
-| **Premium** | $5-10/mo | Premium AI models, unlimited reports, monthly updates |
+| **Premium **| $2 Per month or $5 Lifetime | storage and chat synchronization (nothing is feature locked)
 
 ### Why This Works
-- People pay for personality tests (16personalities, astrology apps)
-- We're a personality test that updates monthly and you can ask questions
-- Credits are low-barrier ($1 entry) for casual users
-- Premium for power users who want everything
-
-### Revenue Projections (5,000 users)
-| Segment | Users | Monthly |
-|---------|-------|---------|
-| Free | 4,000 (80%) | $0 |
-| Credits | 500 (10%) | $1,500 |
-| Pro | 400 (8%) | $2,000 |
-| Elite | 100 (2%) | $1,000 |
-| **Total** | | **$4,500/mo** |
+- Nothing is feature locked and users only pay for what we pay for as well
+- We are transparent about our data
+- People flock to spotify wrapped and stats.fm, we give them a reason to keep coming back
+- We only monetize and handle user data on market signal, giving easy MVP
 
 ---
 
