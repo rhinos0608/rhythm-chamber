@@ -22,6 +22,13 @@ const MEMORY_THRESHOLD = 0.75;         // NEW: 75% RAM usage threshold
 let isPaused = false;
 let pauseResolve = null;
 
+// HNW Wave: Sliding window backpressure state
+// Prevents message queue overflow by waiting for ACKs from main thread
+const MAX_PENDING_ACKS = 5;      // Max messages awaiting ACK
+let pendingAcks = 0;             // Current pending ACK count
+let ackId = 0;                   // Rolling ACK ID
+const ackResolvers = new Map();  // ackId -> resolve function
+
 /**
  * NEW: Check memory usage and pause if needed
  */
@@ -31,13 +38,13 @@ async function checkMemoryAndPause() {
         if (usage > MEMORY_THRESHOLD) {
             console.log(`[Worker] Memory usage ${Math.round(usage * 100)}% - pausing...`);
             self.postMessage({ type: 'memory_warning', usage });
-            
+
             // Wait for resume signal
             await new Promise(resolve => {
                 pauseResolve = resolve;
                 isPaused = true;
             });
-            
+
             console.log('[Worker] Resuming processing...');
             self.postMessage({ type: 'memory_resumed' });
         }
@@ -45,7 +52,35 @@ async function checkMemoryAndPause() {
 }
 
 /**
- * NEW: Handle pause/resume signals from main thread
+ * HNW Wave: Post message with backpressure control
+ * Waits for ACK slot to be available before sending
+ * Prevents message queue overflow when main thread is slow to process
+ */
+async function postWithBackpressure(message) {
+    // Wait if we have too many pending ACKs
+    while (pendingAcks >= MAX_PENDING_ACKS) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
+    // Assign ACK ID and track
+    const currentAckId = ++ackId;
+    pendingAcks++;
+
+    // Create promise that resolves when ACK is received
+    const ackPromise = new Promise(resolve => {
+        ackResolvers.set(currentAckId, resolve);
+    });
+
+    // Send message with ACK ID
+    self.postMessage({ ...message, ackId: currentAckId });
+
+    // Return the promise for callers who want to wait for ACK
+    return { ackId: currentAckId, ackPromise };
+}
+
+/**
+ * NEW: Handle pause/resume and ACK signals from main thread
+ * HNW Wave: Backpressure coordination
  */
 self.addEventListener('message', (e) => {
     if (e.data.type === 'pause') {
@@ -55,6 +90,15 @@ self.addEventListener('message', (e) => {
             pauseResolve();
             pauseResolve = null;
             isPaused = false;
+        }
+    } else if (e.data.type === 'ack') {
+        // HNW: Handle ACK from main thread
+        const ackIdReceived = e.data.ackId;
+        const resolver = ackResolvers.get(ackIdReceived);
+        if (resolver) {
+            resolver();
+            ackResolvers.delete(ackIdReceived);
+            pendingAcks = Math.max(0, pendingAcks - 1);
         }
     }
 });
@@ -369,19 +413,19 @@ async function parseZipFile(file, existingStreams = null) {
             for (let j = 0; j < data.length; j += 10000) {
                 const chunk = data.slice(j, j + 10000);
                 allRawStreams = allRawStreams.concat(chunk);
-                
+
                 // Check memory and pause if needed
                 await checkMemoryAndPause();
-                
+
                 // Send progress update
-                postProgress(`Processing chunk ${Math.floor(j/10000) + 1}/${Math.ceil(data.length/10000)} of file ${i + 1}...`);
+                postProgress(`Processing chunk ${Math.floor(j / 10000) + 1}/${Math.ceil(data.length / 10000)} of file ${i + 1}...`);
             }
         } else {
             allRawStreams = allRawStreams.concat(data);
         }
 
-        // Send partial update for incremental saving
-        self.postMessage({
+        // Send partial update for incremental saving (with backpressure)
+        await postWithBackpressure({
             type: 'partial',
             fileIndex: i + 1,
             totalFiles: streamingFiles.length,

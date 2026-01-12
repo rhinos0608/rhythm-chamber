@@ -414,8 +414,23 @@ async function handleSpotifyCallback(code) {
  * Process uploaded file using Web Worker (non-blocking)
  */
 async function processFile(file) {
+    // HNW Hierarchy: Acquire operation lock before starting file processing
+    let fileLockId = null;
+    if (window.OperationLock) {
+        try {
+            fileLockId = await window.OperationLock.acquire('file_processing');
+        } catch (lockError) {
+            // Another conflicting operation is in progress
+            showToast(`Cannot upload: ${lockError.message}`);
+            return;
+        }
+    }
+
     showProcessing();
     appState.isLiteMode = false;
+
+    // Store lock ID in appState to access in handlers
+    appState._fileLockId = fileLockId;
 
     // NEW: Create abort controller for this parsing session
     if (workerAbortController) {
@@ -465,7 +480,6 @@ async function processFile(file) {
             console.log('[App] Memory usage normalized, resuming');
         }
 
-        // Handle incremental saves from partial data
         if (type === 'partial') {
             try {
                 // Save partial streams incrementally (crash-safe)
@@ -473,6 +487,11 @@ async function processFile(file) {
                 progressText.textContent = `Parsing file ${fileIndex}/${totalFiles}... (${e.data.streamCount.toLocaleString()} streams)`;
             } catch (err) {
                 console.warn('Failed to save partial streams:', err);
+            }
+
+            // HNW Wave: Send ACK back to worker for backpressure flow control
+            if (e.data.ackId && activeWorker) {
+                activeWorker.postMessage({ type: 'ack', ackId: e.data.ackId });
             }
         }
 
@@ -511,6 +530,12 @@ async function processFile(file) {
                 activeWorker.terminate();
                 activeWorker = null;
             }
+
+            // Release operation lock
+            if (appState._fileLockId && window.OperationLock) {
+                window.OperationLock.release('file_processing', appState._fileLockId);
+                appState._fileLockId = null;
+            }
         }
     };
 
@@ -522,6 +547,11 @@ async function processFile(file) {
             activeWorker.terminate();
             activeWorker = null;
         }
+        // Release operation lock on error
+        if (appState._fileLockId && window.OperationLock) {
+            window.OperationLock.release('file_processing', appState._fileLockId);
+            appState._fileLockId = null;
+        }
     };
 
     // NEW: Listen for abort signal
@@ -530,6 +560,11 @@ async function processFile(file) {
             activeWorker.terminate();
             activeWorker = null;
             console.log('[App] Worker aborted via signal');
+        }
+        // Release operation lock on abort
+        if (appState._fileLockId && window.OperationLock) {
+            window.OperationLock.release('file_processing', appState._fileLockId);
+            appState._fileLockId = null;
         }
     });
 
@@ -1129,9 +1164,6 @@ async function $waitUntilAllWorkersAbort(abortController, timeoutMs) {
 async function executeReset() {
     hideResetConfirmModal();
 
-    // NEW: Safe reset flow with AbortController
-    const abortController = new AbortController();
-
     try {
         // Step 1: Stop background operations
         if (Spotify.stopBackgroundRefresh) {
@@ -1140,22 +1172,33 @@ async function executeReset() {
 
         // Step 2: Cancel all pending operations with timeout
         progressText.textContent = 'Cancelling operations...';
+        const abortController = new AbortController();
         await $waitUntilAllWorkersAbort(abortController, 30_000); // 30s max
 
-        // Step 3: Now safe to clear storage
+        // Step 3: Clear ALL data across ALL backends (unified)
         progressText.textContent = 'Clearing data...';
-        await Storage.clear();
-        await Storage.clearAllSessions();
+        const result = await Storage.clearAllData();
 
-        // Step 4: Clear Spotify tokens and security bindings
-        Spotify.clearTokens();
-
-        // Step 5: Clear any RAG checkpoints
-        if (window.RAG?.clearCheckpoint) {
-            window.RAG.clearCheckpoint();
+        if (!result.success) {
+            if (result.blockedBy) {
+                showToast(`Cannot reset: ${result.blockedBy}`);
+                showUpload();
+                return;
+            }
         }
 
-        // Step 6: Reset app state
+        // Log results for debugging
+        console.log('[App] clearAllData result:', result);
+
+        // Show warning if Qdrant clear failed
+        if (result.qdrant?.error) {
+            console.warn('[App] Qdrant embeddings may not have been cleared:', result.qdrant.error);
+        }
+
+        // Step 4: Clear Spotify tokens (handled separately for security)
+        Spotify.clearTokens();
+
+        // Step 5: Reset app state
         appState = {
             streams: null,
             chunks: null,
@@ -1169,15 +1212,12 @@ async function executeReset() {
         };
 
         Chat.clearHistory();
-        localStorage.removeItem('rhythm_chamber_current_session');
 
         console.log('[App] Reset complete');
         showUpload();
     } catch (error) {
         console.error('[App] Reset failed:', error);
         progressText.textContent = `Reset error: ${error.message}`;
-        // Still try to clear what we can
-        await Storage.clear();
         showUpload();
     } finally {
         // Cleanup
@@ -1189,6 +1229,18 @@ async function executeReset() {
 }
 
 function handleReset() {
+    // HNW Hierarchy: Check if conflicting operation is in progress
+    if (window.OperationLock) {
+        const fileProcessing = window.OperationLock.isLocked('file_processing');
+        const embedding = window.OperationLock.isLocked('embedding_generation');
+
+        if (fileProcessing || embedding) {
+            const blockedBy = fileProcessing ? 'file upload' : 'embedding generation';
+            showToast(`Cannot reset while ${blockedBy} is in progress`);
+            return;
+        }
+    }
+
     showResetConfirmModal();
 }
 
@@ -1578,7 +1630,23 @@ function appendMessage(role, content) {
 
     const div = document.createElement('div');
     div.className = `message ${role}`;
-    div.innerHTML = `<div class="message-content">${typeof marked !== 'undefined' ? marked.parse(content) : content}</div>`;
+
+    // Safely parse markdown with null/undefined checks
+    let parsedContent = '';
+    if (content) {
+        if (typeof marked !== 'undefined' && marked.parse) {
+            try {
+                parsedContent = marked.parse(content);
+            } catch (e) {
+                console.warn('Markdown parsing failed:', e);
+                parsedContent = content;
+            }
+        } else {
+            parsedContent = content;
+        }
+    }
+
+    div.innerHTML = `<div class="message-content">${parsedContent}</div>`;
     messages.appendChild(div);
 }
 
