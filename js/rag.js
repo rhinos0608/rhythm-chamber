@@ -23,19 +23,19 @@ const API_TIMEOUT_MS = 60000; // 60 second timeout
 const EMBEDDING_RATE_LIMIT = 5; // Max 5 embedding batches per minute
 
 /**
- * Get namespace-isolated collection name
- * Uses user hash for isolation between users on shared clusters
+ * Get collection name for Qdrant
+ * 
+ * SIMPLIFIED (Phase 2): User owns their own Qdrant instance,
+ * so namespace isolation is unnecessary. The collection name is now
+ * just the base name without per-user hashing.
+ * 
+ * This removes the dependency on Security.getUserNamespace() which
+ * was designed for shared cluster scenarios.
  */
-let cachedNamespace = null;
-async function getCollectionName() {
-    if (cachedNamespace) return `${COLLECTION_NAME_BASE}_${cachedNamespace}`;
-
-    if (window.Security?.getUserNamespace) {
-        cachedNamespace = await window.Security.getUserNamespace();
-        return `${COLLECTION_NAME_BASE}_${cachedNamespace}`;
-    }
+function getCollectionName() {
     return COLLECTION_NAME_BASE;
 }
+
 
 /**
  * Get RAG configuration
@@ -786,11 +786,9 @@ async function clearEmbeddings() {
     delete newConfig.generatedAt;
     saveConfig(newConfig);
 
-    // Clear cached namespace
-    cachedNamespace = null;
-
     return { success: true };
 }
+
 
 /**
  * Get semantic context for a chat query

@@ -1,12 +1,12 @@
 # User Experience
 
-## Two-Path Onboarding
+## Chat-First Onboarding
 
 ```mermaid
 flowchart TD
-    A["Landing: 'What does your music say about you?'"] --> B{Choose path}
+    A["Landing: 'Chat with your Spotify data'"] --> B{Choose path}
     B -->|Instant| C[Connect Spotify OAuth]
-    B -->|Full depth| D[Request data export]
+    B -->|Full depth| D[Upload data export]
     C --> E["Lite Profile: Current vibe (50 songs)"]
     E --> F[Chat with limited context]
     F --> G["Upsell: For full history, upload data"]
@@ -14,9 +14,11 @@ flowchart TD
     D --> H[Wait 5-30 days]
     H --> I[Upload .zip]
     I --> J[Full Personality Reveal]
-    J --> K[Chat with full context]
+    J --> K[Chat with full context + semantic search]
     K --> L[Share Card]
 ```
+
+**Key shift:** Chat is the primary interface, not a dashboard. Users ask questions naturally.
 
 ---
 
@@ -41,7 +43,7 @@ Right now you're deep in:
 • Radiohead • The National • Bon Iver
 
 This is a snapshot. For your full emotional 
-history — the eras, the ghosts, the patterns — 
+eras — the eras, the ghosts, the patterns — 
 upload your complete data.
 ```
 
@@ -52,36 +54,24 @@ upload your complete data.
 1. Request data from Spotify
 2. Wait 5-30 days
 3. Upload .zip
-4. Full personality reveal + deep chat
+4. Full personality reveal + semantic search
+
+**New capability:** Semantic search across your entire history
+
+```
+You: "What was I listening to during my breakup in March 2020?"
+
+System: "In March 2020, you played The National's 'I Need My Girl' 
+127 times, mostly between 2-4am. Before that, you hadn't played 
+it since 2018. This matches your 'Emotional Archaeologist' pattern."
+```
 
 ---
 
-## UX Philosophy: Minimal Insight Design
+## UX Philosophy: Chat-First Design
 
-> TikTok works because there's nothing to decide.
-> One insight appears. It leaves. Memory does the rest.
-
-### Micro-Insights (0-3x/week)
-
-**Rules:**
-- One sentence
-- No explanation
-- No action required
-
-**Examples:**
-```
-"Your listening has been circling the same emotional register for three days."
-"Still in the quiet zone."
-"You keep starting songs but not finishing them."
-```
-
-### Progressive Reveal
-
-- Week 1: "You've been avoiding high-energy music."
-- Week 2: "Still in the quiet zone."
-- Week 3: "Three weeks of soft listening. Something settling?"
-
-**Recognition is the reward.** Don't explain it away.
+> ChatGPT works because you ask what you want.
+> We apply that to your personal data.
 
 ### Zero-Choice Consumption
 
@@ -91,7 +81,18 @@ upload your complete data.
 - ❌ "Show me more like this"
 - ❌ Settings that affect content
 
-One insight appears. It leaves. If they want more, they chat.
+**Instead:**
+- ✅ One insight in feed (optional, 0-3x/week)
+- ✅ Chat interface for exploration
+- ✅ Natural language queries
+
+### Progressive Reveal
+
+- Week 1: "You've been avoiding high-energy music."
+- Week 2: "Still in the quiet zone."
+- Week 3: "Three weeks of soft listening. Something settling?"
+
+**Recognition is the reward.** Don't explain it away.
 
 > [!IMPORTANT]
 > **Zero insights in a week is valid.** Silence is part of the product language.
@@ -143,15 +144,17 @@ You mark time through sound.
 │  └─────────────────────────────────────┘   │
 │                                             │
 │  💭 Try: "What was I like in 2019?"         │
-```
+│  💭 Try: "Show me my breakup music"         │
+│  💭 Try: "When did I discover new artists?" │
 └─────────────────────────────────────────────┘
+```
 
 ### Chat Controls
 - **Regenerate**: For when the insight didn't land.
 - **Edit**: To refine the question without typing it all again.
 - **Delete**: To curate the conversation history.
 
-**Feed = ambient awareness. Chat = active exploration.**
+**Chat = active exploration. Feed = ambient awareness.**
 
 ---
 

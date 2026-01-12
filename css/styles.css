@@ -1484,7 +1484,6 @@ a {
 /* Message Actions */
 .message {
   position: relative;
-  group: message;
   /* For hover effects if supported, otherwise just a class */
 }
 
@@ -1865,6 +1864,99 @@ a {
 
   .sidebar-overlay.visible {
     z-index: 99;
+  }
+}
+
+/* ==========================================
+   New Landing Page Elements
+   ========================================== */
+
+/* USP Grid (Unique Selling Points) */
+.usp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-lg);
+  margin-top: var(--space-2xl);
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.usp-card {
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  text-align: center;
+  transition: var(--transition-base);
+}
+
+.usp-card:hover {
+  border-color: var(--border-accent);
+  transform: translateY(-2px);
+}
+
+.usp-card .emoji {
+  font-size: 2rem;
+  margin-bottom: var(--space-sm);
+}
+
+.usp-card h3 {
+  font-size: 1rem;
+  margin-bottom: var(--space-xs);
+  color: var(--text-primary);
+}
+
+.usp-card p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* Comparison Grid */
+.comparison-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-xl);
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.comparison-grid .card {
+  padding: var(--space-xl);
+}
+
+.comparison-grid h3 {
+  margin-bottom: var(--space-lg);
+  text-align: center;
+}
+
+.comparison-grid ul {
+  list-style: none;
+  padding: 0;
+}
+
+.comparison-grid li {
+  padding: var(--space-sm) 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.comparison-grid li::before {
+  content: '•';
+  color: var(--accent-primary);
+  margin-right: var(--space-sm);
+  font-weight: bold;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .comparison-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .usp-grid {
+    grid-template-columns: 1fr;
   }
 }
 

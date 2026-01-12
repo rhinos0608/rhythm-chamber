@@ -4,15 +4,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rhythm Chamber — What Does Your Music Say About You?</title>
+  <title>Rhythm Chamber — Chat With Your Spotify Data</title>
   <meta name="description"
-    content="Discover your music personality. Upload your Spotify data and uncover what your listening patterns reveal about who you are.">
+    content="Chat with your complete Spotify history. Privacy-first, local processing, semantic search. The way ChatGPT can't handle your data.">
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:;">
 
   <!-- Open Graph -->
-  <meta property="og:title" content="Rhythm Chamber — Your Music Personality">
-  <meta property="og:description" content="We don't show you stats. We hold up a mirror.">
+  <meta property="og:title" content="Rhythm Chamber — Chat With Your Spotify Data">
+  <meta property="og:description"
+    content="Your complete listening history is too big for ChatGPT. We handle it locally, with privacy and semantic search.">
   <meta property="og:type" content="website">
 
   <!-- Fonts -->
@@ -30,29 +31,52 @@
     <!-- Hero Section -->
     <section class="hero">
       <div class="hero-icon">🎵</div>
-      <h1>What does your music <span class="gradient-text">say about you?</span></h1>
-      <p class="hero-subtitle">We don't show you stats. We hold up a mirror.</p>
+      <h1>Chat with your Spotify data <span class="gradient-text">— the way ChatGPT can't</span></h1>
+      <p class="hero-subtitle">Your complete listening history is too big for ChatGPT. We handle it locally, with
+        privacy, semantic search, and accurate data queries.</p>
 
       <div class="cta-group">
         <a href="app.html" class="btn btn-primary">
-          <span>📁</span> Upload History
+          <span>📁</span> Upload Your Data
         </a>
         <a href="app.html?mode=spotify" class="btn btn-spotify" id="lite-btn">
           <span>⚡</span> Quick Snapshot
         </a>
+      </div>
+
+      <div class="usp-grid">
+        <div class="usp-card">
+          <div class="emoji">🔒</div>
+          <h3>Privacy First</h3>
+          <p>Your data never leaves your device</p>
+        </div>
+        <div class="usp-card">
+          <div class="emoji">🧠</div>
+          <h3>Semantic Search</h3>
+          <p>Ask natural questions about your history</p>
+        </div>
+        <div class="usp-card">
+          <div class="emoji">⚡</div>
+          <h3>Zero Backend</h3>
+          <p>Runs entirely in your browser</p>
+        </div>
       </div>
     </section>
 
     <!-- Personality Types Preview -->
     <section class="types-section">
       <div class="container">
-        <h2 style="text-align: center;">Discover Your <span class="gradient-text">Music Personality</span></h2>
+        <h2 style="text-align: center;">Get Your <span class="gradient-text">Listener Personality</span></h2>
+        <p style="text-align: center; max-width: 600px; margin: 0 auto var(--space-2xl);">
+          Not Myers-Briggs. These compete with stats.fm's generic charts by telling you <strong>who you are</strong>
+          through your music.
+        </p>
 
         <div class="types-grid">
           <div class="card type-card">
             <div class="emoji">🏛️</div>
             <h3>Emotional Archaeologist</h3>
-            <p>You use music to process the past. Your library is a scrapbook.</p>
+            <p>You mark time through sound. Your library is a scrapbook.</p>
           </div>
 
           <div class="card type-card">
@@ -82,6 +106,36 @@
       </div>
     </section>
 
+    <!-- Competitive Position -->
+    <section class="container" style="padding: var(--space-3xl) var(--space-lg); background: var(--bg-secondary);">
+      <h2 style="text-align: center; margin-bottom: var(--space-2xl);">Stats.fm Shows <span
+          class="gradient-text">WHAT</span>. We Show <span class="gradient-text">WHY & WHO</span>.</h2>
+
+      <div class="comparison-grid">
+        <div class="card">
+          <h3>📊 Stats.fm</h3>
+          <ul style="text-align: left; padding-left: var(--space-lg);">
+            <li>"You listened to 12,847 hours"</li>
+            <li>Charts and graphs</li>
+            <li>Click to explore</li>
+            <li>Full history + real-time</li>
+            <li>Low technical barrier</li>
+          </ul>
+        </div>
+
+        <div class="card" style="border: 2px solid var(--accent);">
+          <h3>🎵 Rhythm Chamber</h3>
+          <ul style="text-align: left; padding-left: var(--space-lg);">
+            <li>"You're a Mood Engineer because..."</li>
+            <li>Identity and meaning</li>
+            <li>Ask questions naturally</li>
+            <li>Full history only (depth over speed)</li>
+            <li>BYOK model (power users)</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
     <!-- How It Works -->
     <section class="container" style="padding: var(--space-3xl) var(--space-lg);">
       <h2 style="text-align: center; margin-bottom: var(--space-2xl);">How It Works</h2>
@@ -101,15 +155,38 @@
 
         <div class="card" style="text-align: center;">
           <div style="font-size: 2rem; margin-bottom: var(--space-md);">3️⃣</div>
-          <h3>Meet Yourself</h3>
-          <p>Discover your music personality and explore with chat</p>
+          <h3>Chat & Discover</h3>
+          <p>Ask questions like "What was I like in 2019?" and get semantic answers</p>
         </div>
+      </div>
+    </section>
+
+    <!-- The BYOK Advantage -->
+    <section class="container" style="padding: var(--space-3xl) var(--space-lg); background: var(--bg-secondary);">
+      <h2 style="text-align: center; margin-bottom: var(--space-2xl);">The <span class="gradient-text">BYOK
+          Advantage</span></h2>
+
+      <div class="card" style="max-width: 800px; margin: 0 auto; text-align: center;">
+        <p style="font-size: 1.1em; line-height: 1.6;">
+          <strong>Bring Your Own Keys</strong> isn't "too cheap to host AI" — it's "respecting power users' desire for
+          control."
+        </p>
+        <ul style="text-align: left; margin-top: var(--space-lg); padding-left: var(--space-xl);">
+          <li><strong>Privacy-conscious:</strong> Already exporting data, understand data sovereignty</li>
+          <li><strong>Technical:</strong> Know what API keys are, appreciate transparency</li>
+          <li><strong>Sovereignty:</strong> Willing to pay for their own infrastructure</li>
+          <li><strong>No black box:</strong> They control the AI, we provide the interface</li>
+        </ul>
+        <p style="margin-top: var(--space-lg); font-style: italic;">
+          "Your data never leaves your device, runs in your browser, you control everything."
+        </p>
       </div>
     </section>
 
     <!-- Footer -->
     <footer class="footer">
-      <p>Your data never leaves your device. 100% private.</p>
+      <p><strong>Zero-backend architecture.</strong> No servers. No data collection. Free forever.</p>
+      <p>Your data stays on your device. 100% private.</p>
       <button class="settings-btn" onclick="Settings.showSettingsModal()" title="Settings"
         style="margin-top: var(--space-md);">⚙️ Settings</button>
     </footer>
