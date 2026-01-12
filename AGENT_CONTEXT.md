@@ -1,7 +1,17 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Last updated:** 2026-01-12 20:50 AEDT  
-> **Status:** MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 (XSS Token Protection)
+> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 (XSS Token Protection)
+
+---
+
+## Monetization Strategy
+
+**Philosophy:** The core experience is free and client-side (privacy-first). Users only pay for server-side persistence and synchronization.
+
+| Tier | Cost | Features |
+|------|------|----------|
+| **MVP Core** | **Free** | Full analysis, RAG/Semantic Search (BYO Keys), Unlimited local use, 100% Client-side. |
+| **Cloud Sync** | **$2/mo** or **$10 Lifetime** | *Proposed Future Feature.* Encrypted cloud backup of chat sessions and listening history, cross-device sync. |
 
 ---
 

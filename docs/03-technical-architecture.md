@@ -1,6 +1,6 @@
 # Technical Architecture
 
-## The Insight: No Server Needed
+## The Insight: No Server Needed (Free MVP)
 
 **Everything runs on the user's device by default.** Zero friction, zero accounts.
 
@@ -9,9 +9,8 @@
 | LLM inference | $0 | OpenRouter (free tier) |
 | Processing | $0 | User's browser |
 | Data storage | $0 | User's localStorage/IndexedDB |
-| Spotify OAuth | $0 | Spotify (PKCE flow, no backend) |
-| Frontend hosting | ~$0 | Vercel free tier |
-| **Total per user** | **$0** | |
+| **Cloud Sync** | **$2/mo / $10 One-time** | **(Future)** User pays for server storage |
+| **Total (Base)** | **$0** | **Free Forever** |
 
 ---
 

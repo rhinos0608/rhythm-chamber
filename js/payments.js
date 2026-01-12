@@ -1,12 +1,13 @@
 /**
  * Payments Module for Rhythm Chamber
  * 
- * HNW Analysis Result: Premium entitlement was an authority vacuum.
- * Decision: Core app is free for MVP. This module now provides:
- * - isPremium() always returns true (all features available)
- * - Clear documentation that monetization requires server-side verification
+ * CURRENT STATUS: Free MVP (Stateless)
+ * - All core features (Analysis, Chat, RAG) are FREE.
+ * - No user accounts, no server storage.
  * 
- * For production monetization, implement server-side JWT verification.
+ * FUTURE MONETIZATION:
+ * - "Cloud Sync" for $2/month or $10 One-time.
+ * - Pays for encrypted server storage and cross-device sync.
  */
 
 /**
@@ -95,9 +96,15 @@ window.Payments = {
     // Available plans (informational)
     PLANS: {
         mvp_free: {
-            name: 'MVP Free Tier',
+            name: 'MVP Core',
             price: '$0',
-            features: ['Full Analysis', 'Chat', 'Semantic Search', 'Share Cards']
+            features: ['Full Analysis', 'Chat', 'Semantic Search (BYO Keys)', 'Local Storage']
+        },
+        cloud_sync: {
+            name: 'Cloud Sync',
+            price: '$2/mo or $10/life',
+            status: 'coming_soon',
+            features: ['Encrypted Cloud Backup', 'Cross-Device Sync', 'Web Access']
         }
     }
 };
