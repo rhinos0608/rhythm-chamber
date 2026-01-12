@@ -34,6 +34,17 @@ const spotifyConnectBtn = document.getElementById('spotify-connect-btn');
 async function init() {
     await Storage.init();
 
+    // HNW Fix: Validate storage consistency on startup
+    const validation = await Storage.validateConsistency();
+    if (!validation.valid) {
+        console.warn('[App] Storage inconsistencies detected:', validation.warnings);
+        // Auto-clear conversation if it exists without context
+        if (validation.fixes.includes('clearConversation')) {
+            sessionStorage.removeItem('rhythm_chamber_conversation');
+            console.log('[App] Cleared orphaned conversation history');
+        }
+    }
+
     // Check for Spotify OAuth callback
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has('code')) {
@@ -715,11 +726,22 @@ async function handleShare() {
 
 async function handleReset() {
     if (confirm('Start over? Your data will be cleared.')) {
-        // Terminate active worker first
+        // HNW Fix: Prevent worker message race condition
+        // 1. Mark worker as invalid so any in-flight messages are ignored
+        // 2. Terminate worker
+        // 3. Wait for in-flight messages to be dropped
+        // 4. Clear storage
+
         if (activeWorker) {
+            // Nullify the handlers first to prevent race with in-flight messages
+            activeWorker.onmessage = null;
+            activeWorker.onerror = null;
             activeWorker.terminate();
             activeWorker = null;
         }
+
+        // Brief delay to ensure any queued postMessage() calls are dropped
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         await Storage.clear();
         Spotify.clearTokens();

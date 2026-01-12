@@ -1,7 +1,7 @@
 # AI Agent Reference — Rhythm Chamber
 
 > **Last updated:** 2026-01-12 09:51 AEDT  
-> **Status:** MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search Premium + HNW Fixes
+> **Status:** MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free for MVP) + HNW Fixes
 
 ---
 
@@ -34,7 +34,7 @@ Music analytics app that tells users what their listening says about them — li
 | Chat integration | ✅ Done | `js/chat.js` (OpenRouter + function calling) |
 | Data query system | ✅ Done | `js/data-query.js` (time/artist queries) |
 | **Function calling** | ✅ Done | `js/functions.js` (6 LLM-callable tools) |
-| **Payments** | ✅ Done | `js/payments.js` (Stripe Checkout) |
+| **Payments** | ✅ Done | `js/payments.js` (Stubbed for Free MVP) |
 | **RAG/Semantic** | ✅ Done | `js/rag.js` (embeddings + Qdrant) |
 | Card generator | ✅ Done | `js/cards.js` (Canvas) |
 | Storage | ✅ Done | `js/storage.js` (IndexedDB + incremental save) |
@@ -112,16 +112,14 @@ Modal UI for configuring without editing config.js:
 - **Data stats**: "Analyzed X streams from Y to Z"
 - **Incremental caching**: Partial saves during parsing (crash-safe)
 
-### 5. Semantic Search (Premium)
-Premium feature with user-managed infrastructure:
-- **Stripe payments**: $5 lifetime or $2/month via Checkout
+### 5. Semantic Search
+Feature with user-managed infrastructure:
 - **Embeddings**: `qwen/qwen3-embedding-8b` via OpenRouter
 - **Vector storage**: User's own Qdrant Cloud cluster (1GB free)
 - **RAG integration**: Semantic context injected into chat automatically
 
 Settings UI shows:
-- Non-premium: Upgrade button → pricing modal
-- Premium: Qdrant URL/Key inputs + Generate Embeddings button
+- Qdrant URL/Key inputs + Generate Embeddings button
 
 ---
 
@@ -238,6 +236,29 @@ npx http-server -p 8080 -c-1
 - **Critical**: Payment bypass mitigation, CORS pre-test, resume on failure
 - **High**: Data refresh on upload, API timeouts, conversation persistence
 - **Medium**: Vector staleness, time estimates, utility functions
+
+---
+
+### Session 9 — 2026-01-12 (HNW Fixes Implementation)
+
+**What was done:**
+1. Fixed reset race condition in `app.js` - nullify worker handlers before termination + 100ms delay
+2. Cleaned up `payments.js` - removed dead code, clarified MVP free tier status
+3. Added timeout protection to `chat.js` - AbortController (60s API), Promise.race (30s functions)
+4. Implemented Spotify token refresh in `spotify.js` - auto-refresh on 401, ensureValidToken()
+5. Added RAG checkpoint validation in `rag.js` - compare dataHash before resuming
+6. Added storage consistency validation in `storage.js` + `app.js` - validateConsistency() on startup
+
+**Key fixes (HNW Analysis):**
+- **Critical**: Reset race condition prevented, premium bypass clarified (free for MVP)
+- **High**: Chat timeout cascade prevention, Spotify cliff-edge expiry handled
+- **Medium**: RAG checkpoint staleness detection, cross-storage consistency checks
+
+**Not done (deferred):**
+- Long-term refactoring (extract controllers from app.js)
+- Unify Lite/Full data paths
+- Add circuit breakers for external APIs
+- Parallelize RAG embedding generation
 
 ---
 

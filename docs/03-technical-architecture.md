@@ -64,7 +64,7 @@ rhythm-chamber/
 │   ├── config.example.js   # Config template (+ Stripe keys)
 │   ├── app.js              # Main application controller
 │   ├── spotify.js          # Spotify OAuth PKCE + API calls
-│   ├── payments.js         # Stripe Checkout + premium status
+│   ├── payments.js         # Entitlement checks (Free MVP stub)
 │   ├── rag.js              # Embeddings + Qdrant vector search
 │   ├── parser.js           # .zip file parsing
 │   ├── patterns.js         # Pattern detection algorithms
@@ -242,11 +242,11 @@ When function calling is unavailable (no API key, free models that don't support
 
 ---
 
-## Semantic Search (Premium Feature)
+## Semantic Search
 
 ### Architecture Overview
 
-Premium users can enable RAG-powered semantic search using their own Qdrant Cloud cluster:
+Users can enable RAG-powered semantic search using their own Qdrant Cloud cluster:
 
 ```mermaid
 flowchart LR
@@ -261,7 +261,7 @@ flowchart LR
 
 | Module | Purpose |
 |--------|---------|
-| `payments.js` | Stripe Checkout, premium status in localStorage |
+| `payments.js` | Entitlement stub (always returns true for MVP) |
 | `rag.js` | Embeddings API, Qdrant client, chunking logic |
 
 ### Embedding Generation
@@ -294,11 +294,10 @@ if (window.RAG?.isConfigured()) {
 
 ### User Setup Flow
 
-1. Complete Stripe Checkout → Premium activated
-2. Create free Qdrant Cloud cluster
-3. Enter Qdrant URL + API key in Settings
-4. Click "Generate Embeddings" → Progress bar
-5. Semantic search now active in chat
+1. Create free Qdrant Cloud cluster
+2. Enter Qdrant URL + API key in Settings
+3. Click "Generate Embeddings" → Progress bar
+4. Semantic search now active in chat
 
 ## Storage: IndexedDB + localStorage
 

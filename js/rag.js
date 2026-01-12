@@ -297,11 +297,19 @@ async function generateEmbeddings(onProgress = () => { }, options = {}) {
     const estimateText = window.Utils?.formatDuration?.(estimatedSeconds) || `~${estimatedSeconds}s`;
 
     // Determine starting point
+    // HNW Fix: Validate checkpoint hash against current data hash
     let startBatch = 0;
     if (checkpoint && checkpoint.totalChunks === totalChunks) {
-        startBatch = checkpoint.lastBatch + 1;
-        onProgress(checkpoint.processed, totalChunks,
-            `Resuming from batch ${startBatch}... (${estimateText} remaining)`);
+        // Critical: Validate that checkpoint was created for the same data
+        if (checkpoint.dataHash && checkpoint.dataHash !== dataHash) {
+            console.warn('[RAG] Checkpoint data hash mismatch - data has changed since checkpoint');
+            clearCheckpoint();
+            onProgress(0, totalChunks, `Data changed - starting fresh... (Est: ${estimateText})`);
+        } else {
+            startBatch = checkpoint.lastBatch + 1;
+            onProgress(checkpoint.processed, totalChunks,
+                `Resuming from batch ${startBatch}... (${estimateText} remaining)`);
+        }
     } else {
         onProgress(0, totalChunks, `Processing ${totalChunks} chunks... (Est: ${estimateText})`);
     }

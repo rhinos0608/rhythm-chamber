@@ -8,6 +8,10 @@
 
 const CONVERSATION_STORAGE_KEY = 'rhythm_chamber_conversation';
 
+// HNW Fix: Timeout constants to prevent cascade failures
+const API_TIMEOUT_MS = 60000;       // 60 second timeout for API calls
+const FUNCTION_TIMEOUT_MS = 30000;  // 30 second timeout for function execution
+
 let conversationHistory = [];
 let userContext = null;
 let streamsData = null;  // Actual streaming data for queries
@@ -358,14 +362,26 @@ async function sendMessage(message, apiKey = null) {
             });
 
             // Execute each function call and add results
+            // HNW Fix: Add timeout to prevent indefinite hangs
             for (const toolCall of responseMessage.tool_calls) {
                 const functionName = toolCall.function.name;
                 const args = JSON.parse(toolCall.function.arguments || '{}');
 
                 console.log(`[Chat] Executing function: ${functionName}`, args);
 
-                // Execute the function
-                const result = window.Functions.execute(functionName, args, streamsData);
+                // Execute the function with timeout protection
+                let result;
+                try {
+                    result = await Promise.race([
+                        Promise.resolve(window.Functions.execute(functionName, args, streamsData)),
+                        new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error(`Function ${functionName} timed out after ${FUNCTION_TIMEOUT_MS}ms`)), FUNCTION_TIMEOUT_MS)
+                        )
+                    ]);
+                } catch (funcError) {
+                    console.error(`[Chat] Function execution failed:`, funcError);
+                    result = { error: funcError.message };
+                }
 
                 console.log(`[Chat] Function result:`, result);
 
@@ -429,6 +445,7 @@ async function sendMessage(message, apiKey = null) {
 
 /**
  * Make an API call to OpenRouter
+ * HNW Fix: Added timeout protection to prevent cascade failures
  */
 async function callOpenRouter(apiKey, config, messages, tools) {
     const body = {
@@ -444,24 +461,39 @@ async function callOpenRouter(apiKey, config, messages, tools) {
         body.tool_choice = 'auto';
     }
 
-    const response = await fetch(config.apiUrl, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': config.app?.url || window.location.origin,
-            'X-Title': config.app?.name || 'Rhythm Chamber'
-        },
-        body: JSON.stringify(body)
-    });
+    // Use timeout wrapper if available, otherwise basic fetch with AbortController
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[Chat] API error:', response.status, errorText);
-        throw new Error(`API error: ${response.status}`);
+    try {
+        const response = await fetch(config.apiUrl, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': config.app?.url || window.location.origin,
+                'X-Title': config.app?.name || 'Rhythm Chamber'
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('[Chat] API error:', response.status, errorText);
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        return response.json();
+    } catch (err) {
+        clearTimeout(timeoutId);
+        if (err.name === 'AbortError') {
+            throw new Error(`API request timed out after ${API_TIMEOUT_MS / 1000} seconds`);
+        }
+        throw err;
     }
-
-    return response.json();
 }
 
 /**

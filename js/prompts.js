@@ -99,10 +99,10 @@ IMPORTANT: Use the available functions to get precise data rather than guessing.
      * Suggested questions shown in chat UI
      */
     suggestions: [
-        "What was I like in 2023?",
-        "Who did I ghost?",
-        "What's my true favorite?",
-        "When did my taste change most?",
+        "What does my music say about me?",
+        "Which artist do I not listen to anymore?",
+        "Which artist do I listen to the most?",
+        "What are my favorite genres?",
         "What patterns do you see?"
     ]
 };

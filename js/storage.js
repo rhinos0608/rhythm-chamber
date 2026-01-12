@@ -250,6 +250,103 @@ const Storage = {
   },
 
   /**
+   * HNW Fix: Validate storage consistency across different mechanisms
+   * Checks for orphaned data and cross-storage mismatches
+   * Should be called during app initialization
+   * @returns {object} Validation results with warnings array
+   */
+  async validateConsistency() {
+    const warnings = [];
+    const fixes = [];
+
+    try {
+      // 1. Check IndexedDB data consistency
+      const streams = await this.getStreams();
+      const personality = await this.getPersonality();
+      const chunks = await this.getChunks();
+
+      // If we have personality but no streams, something is inconsistent
+      if (personality && (!streams || streams.length === 0)) {
+        warnings.push('Personality data exists without streaming data');
+        // Could offer to clear personality, but for MVP just warn
+      }
+
+      // If we have chunks but no streams
+      if (chunks && chunks.length > 0 && (!streams || streams.length === 0)) {
+        warnings.push('Chunk data exists without streaming data');
+      }
+
+      // 2. Check sessionStorage conversation history consistency
+      try {
+        const conversation = sessionStorage.getItem('rhythm_chamber_conversation');
+        if (conversation) {
+          const history = JSON.parse(conversation);
+          // If we have conversation history but no personality, context is missing
+          if (history.length > 0 && !personality) {
+            warnings.push('Conversation history exists without personality context - may cause chat confusion');
+            fixes.push('clearConversation');
+          }
+        }
+      } catch (e) {
+        // Corrupt conversation data
+        warnings.push('Conversation history is corrupt - will be cleared');
+        sessionStorage.removeItem('rhythm_chamber_conversation');
+        fixes.push('conversationCleared');
+      }
+
+      // 3. Check localStorage RAG status consistency
+      try {
+        const ragConfig = localStorage.getItem('rhythm_chamber_rag');
+        if (ragConfig) {
+          const config = JSON.parse(ragConfig);
+          if (config.embeddingsGenerated && (!streams || streams.length === 0)) {
+            warnings.push('RAG embeddings marked as generated but no streams exist');
+          }
+          // Check if data hash matches current data
+          if (config.dataHash && streams) {
+            const currentHash = await this.getDataHash();
+            if (currentHash && config.dataHash !== currentHash) {
+              warnings.push('RAG embeddings may be stale - data has changed since generation');
+            }
+          }
+        }
+      } catch (e) {
+        warnings.push('RAG configuration is corrupt');
+      }
+
+      // 4. Check Spotify tokens consistency
+      const spotifyToken = localStorage.getItem('spotify_access_token');
+      const spotifyExpiry = localStorage.getItem('spotify_token_expiry');
+      if (spotifyToken && !spotifyExpiry) {
+        warnings.push('Spotify token exists without expiry timestamp');
+      }
+
+      // Log warnings for debugging
+      if (warnings.length > 0) {
+        console.warn('[Storage] Consistency validation found issues:', warnings);
+      } else {
+        console.log('[Storage] Consistency validation passed');
+      }
+
+      return {
+        valid: warnings.length === 0,
+        warnings,
+        fixes,
+        hasData: streams && streams.length > 0,
+        hasPersonality: !!personality
+      };
+    } catch (err) {
+      console.error('[Storage] Consistency validation error:', err);
+      return {
+        valid: false,
+        warnings: ['Validation failed: ' + err.message],
+        fixes: [],
+        error: err.message
+      };
+    }
+  },
+
+  /**
    * Internal: Notify all listeners of update
    */
   _notifyUpdate(type, count) {

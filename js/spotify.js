@@ -193,22 +193,109 @@ const Spotify = (() => {
         });
     }
 
+    /**
+     * HNW Fix: Refresh access token using refresh token
+     * Prevents cliff-edge session expiry
+     * @returns {Promise<boolean>} Success status
+     */
+    async function refreshToken() {
+        const refreshTokenValue = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+
+        if (!refreshTokenValue) {
+            console.warn('[Spotify] No refresh token available');
+            return false;
+        }
+
+        if (!isConfigured()) {
+            console.warn('[Spotify] Cannot refresh - not configured');
+            return false;
+        }
+
+        try {
+            console.log('[Spotify] Attempting token refresh...');
+
+            const response = await fetch(ENDPOINTS.token, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: new URLSearchParams({
+                    client_id: Config.spotify.clientId,
+                    grant_type: 'refresh_token',
+                    refresh_token: refreshTokenValue
+                })
+            });
+
+            if (!response.ok) {
+                console.error('[Spotify] Token refresh failed:', response.status);
+                return false;
+            }
+
+            const data = await response.json();
+
+            // Update tokens
+            localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, data.access_token);
+
+            // New refresh token may be provided
+            if (data.refresh_token) {
+                localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, data.refresh_token);
+            }
+
+            // Update expiry (current time + expires_in seconds)
+            const expiryTime = Date.now() + (data.expires_in * 1000);
+            localStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
+
+            console.log('[Spotify] Token refreshed successfully');
+            return true;
+        } catch (error) {
+            console.error('[Spotify] Token refresh error:', error);
+            return false;
+        }
+    }
+
+    /**
+     * HNW Fix: Check if token can be refreshed
+     * @returns {boolean}
+     */
+    function canRefreshToken() {
+        return !!localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN) && isConfigured();
+    }
+
+    /**
+     * HNW Fix: Ensure valid token, refreshing if needed
+     * @returns {Promise<boolean>} Whether a valid token is available
+     */
+    async function ensureValidToken() {
+        if (hasValidToken()) {
+            return true;
+        }
+
+        // Token expired or missing - try to refresh
+        if (canRefreshToken()) {
+            return await refreshToken();
+        }
+
+        return false;
+    }
+
     // ==========================================
     // API Calls
     // ==========================================
 
     /**
      * Make an authenticated API request
+     * HNW Fix: Now auto-refreshes token on 401 before failing
      * @param {string} url - API endpoint
      * @param {object} options - Fetch options
      * @returns {Promise<object>} API response
      */
     async function apiRequest(url, options = {}) {
-        const token = getAccessToken();
-
-        if (!token) {
-            throw new Error('No access token. Please connect to Spotify first.');
+        // Ensure we have a valid token first
+        if (!await ensureValidToken()) {
+            throw new Error('No valid access token. Please connect to Spotify again.');
         }
+
+        const token = getAccessToken();
 
         const response = await fetch(url, {
             ...options,
@@ -219,7 +306,27 @@ const Spotify = (() => {
         });
 
         if (response.status === 401) {
-            // Token expired
+            // Token may have just expired - try one refresh
+            console.log('[Spotify] Got 401, attempting token refresh...');
+            const refreshed = await refreshToken();
+
+            if (refreshed) {
+                // Retry with new token
+                const newToken = getAccessToken();
+                const retryResponse = await fetch(url, {
+                    ...options,
+                    headers: {
+                        'Authorization': `Bearer ${newToken}`,
+                        ...options.headers
+                    }
+                });
+
+                if (retryResponse.ok) {
+                    return retryResponse.json();
+                }
+            }
+
+            // Refresh failed or retry failed - clear tokens and fail
             clearTokens();
             throw new Error('Session expired. Please reconnect to Spotify.');
         }

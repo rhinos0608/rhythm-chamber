@@ -255,67 +255,54 @@ function showSettingsModal() {
                     </div>
                 </div>
                 
-                <!-- Premium Semantic Search Section -->
+                <!-- Semantic Search Section (Now Free) -->
                 <div class="settings-section premium-section">
-                    <h3>🚀 Semantic Search ${window.Payments?.isPremium() ? '<span class="premium-badge">Premium</span>' : ''}</h3>
-                    ${window.Payments?.isPremium() ? `
-                        <p class="settings-description">
-                            RAG-powered semantic search using your own Qdrant cluster.
-                        </p>
-                        
-                        <div class="settings-field">
-                            <label for="setting-qdrant-url">Qdrant Cluster URL</label>
-                            <input type="text" id="setting-qdrant-url" 
-                                   value="${window.RAG?.getConfig()?.qdrantUrl || ''}" 
-                                   placeholder="https://xyz-abc.cloud.qdrant.io:6333"
-                                   autocomplete="off">
-                            <span class="settings-hint">Get a free cluster at <a href="https://cloud.qdrant.io" target="_blank">cloud.qdrant.io</a></span>
-                        </div>
-                        
-                        <div class="settings-field">
-                            <label for="setting-qdrant-key">Qdrant API Key</label>
-                            <input type="password" id="setting-qdrant-key" 
-                                   value="${window.RAG?.getConfig()?.qdrantApiKey || ''}" 
-                                   placeholder="Enter your Qdrant API key"
-                                   autocomplete="off">
-                            <button class="btn-show-password" onclick="Settings.togglePasswordVisibility('setting-qdrant-key', this)">Show</button>
-                        </div>
-                        
-                        <div class="settings-field">
-                            <button class="btn btn-primary" id="generate-embeddings-btn" onclick="Settings.generateEmbeddings()">
-                                ${window.RAG?.isConfigured() ? '🔄 Regenerate Embeddings' : '⚡ Generate Embeddings'}
+                    <h3>🚀 Semantic Search</h3>
+                    <p class="settings-description">
+                        RAG-powered semantic search using your own Qdrant cluster.
+                        Connect your cluster to ask natural questions about your listening history.
+                    </p>
+                    
+                    <div class="settings-field">
+                        <label for="setting-qdrant-url">Qdrant Cluster URL</label>
+                        <input type="text" id="setting-qdrant-url" 
+                               value="${window.RAG?.getConfig()?.qdrantUrl || ''}" 
+                               placeholder="https://xyz-abc.cloud.qdrant.io:6333"
+                               autocomplete="off">
+                        <span class="settings-hint">Get a free cluster at <a href="https://cloud.qdrant.io" target="_blank">cloud.qdrant.io</a></span>
+                    </div>
+                    
+                    <div class="settings-field">
+                        <label for="setting-qdrant-key">Qdrant API Key</label>
+                        <input type="password" id="setting-qdrant-key" 
+                               value="${window.RAG?.getConfig()?.qdrantApiKey || ''}" 
+                               placeholder="Enter your Qdrant API key"
+                               autocomplete="off">
+                        <button class="btn-show-password" onclick="Settings.togglePasswordVisibility('setting-qdrant-key', this)">Show</button>
+                    </div>
+                    
+                    <div class="settings-field">
+                        <button class="btn btn-primary" id="generate-embeddings-btn" onclick="Settings.generateEmbeddings()">
+                            ${window.RAG?.isConfigured() ? '🔄 Regenerate Embeddings' : '⚡ Generate Embeddings'}
+                        </button>
+                        ${window.RAG?.getCheckpoint?.() ? `
+                            <button class="btn btn-secondary" id="resume-embeddings-btn" onclick="Settings.resumeEmbeddings()">
+                                ▶️ Resume
                             </button>
-                            ${window.RAG?.getCheckpoint?.() ? `
-                                <button class="btn btn-secondary" id="resume-embeddings-btn" onclick="Settings.resumeEmbeddings()">
-                                    ▶️ Resume
-                                </button>
-                            ` : ''}
-                            ${window.RAG?.isConfigured() ? `
-                                <span class="settings-hint success">✓ ${window.RAG.getConfig()?.chunksCount || 0} chunks indexed</span>
-                            ` : window.RAG?.getCheckpoint?.() ? `
-                                <span class="settings-hint warning">⚠️ Interrupted - click Resume to continue</span>
-                            ` : `
-                                <span class="settings-hint">Required after adding your Qdrant credentials</span>
-                            `}
-                        </div>
-                        
-                        <div id="embedding-progress" class="embedding-progress" style="display: none;">
-                            <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-                            <span class="progress-text" id="progress-text">Processing...</span>
-                        </div>
-                    ` : `
-                        <p class="settings-description">
-                            Ask natural questions about your listening history with AI-powered semantic search.
-                            Requires your own Qdrant cluster (free tier available).
-                        </p>
-                        
-                        <div class="premium-cta">
-                            <button class="btn btn-primary" onclick="Payments.showUpgradeModal()">
-                                🚀 Upgrade for $5
-                            </button>
-                            <span class="settings-hint">One-time payment, lifetime access</span>
-                        </div>
-                    `}
+                        ` : ''}
+                        ${window.RAG?.isConfigured() ? `
+                            <span class="settings-hint success">✓ ${window.RAG.getConfig()?.chunksCount || 0} chunks indexed</span>
+                        ` : window.RAG?.getCheckpoint?.() ? `
+                            <span class="settings-hint warning">⚠️ Interrupted - click Resume to continue</span>
+                        ` : `
+                            <span class="settings-hint">Required after adding your Qdrant credentials</span>
+                        `}
+                    </div>
+                    
+                    <div id="embedding-progress" class="embedding-progress" style="display: none;">
+                        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+                        <span class="progress-text" id="progress-text">Processing...</span>
+                    </div>
                 </div>
             </div>
             
