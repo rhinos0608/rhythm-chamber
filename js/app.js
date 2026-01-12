@@ -375,10 +375,10 @@ async function handleSpotifyCallback(code) {
         // NEW: Show instant insight immediately
         progressText.textContent = 'Generating instant insight...';
         const instantInsight = Patterns.detectImmediateVibe(appState.liteData);
-        
+
         // Update UI with instant insight
         progressText.innerHTML = `Quick snapshot ready!<br><br>${instantInsight}<br><br><small>Full analysis requires complete history for accurate personality detection</small>`;
-        
+
         // Wait a moment for user to read
         await new Promise(r => setTimeout(r, 2000));
 
@@ -726,20 +726,77 @@ async function processMessageResponse(actionFn) {
 
     try {
         const response = await actionFn({ onProgress });
+        const loadingEl = document.getElementById(loadingId);
 
-        // Remove loading message
-        removeMessageElement(loadingId);
+        // Check if we were streaming (element has streaming content)
+        const wasStreaming = loadingEl?.dataset?.streaming === 'true';
 
-        // Add actual response
-        if (response.status === 'error') {
-            addMessage(response.content, 'assistant', true);
+        if (wasStreaming) {
+            // For streamed messages, finalize the existing element instead of replacing
+            loadingEl.classList.remove('streaming');
+            loadingEl.classList.add('assistant');
+            loadingEl.removeAttribute('id'); // Remove temporary ID
+            delete loadingEl.dataset.streaming;
+
+            // Add message actions (regenerate, delete buttons)
+            finalizeStreamedMessage(loadingEl, response.content);
         } else {
-            addMessage(response.content, 'assistant');
+            // Non-streaming: remove loading and add full response
+            removeMessageElement(loadingId);
+
+            if (response.status === 'error') {
+                addMessage(response.content, 'assistant', true);
+            } else {
+                addMessage(response.content, 'assistant');
+            }
         }
     } catch (err) {
         removeMessageElement(loadingId);
         addMessage(`Error: ${err.message}`, 'assistant', true);
     }
+}
+
+/**
+ * Finalize a streamed message - add action buttons
+ */
+function finalizeStreamedMessage(messageEl, fullContent) {
+    // Parse markdown now that full content is available
+    const contentEl = messageEl.querySelector('.streaming-content');
+    if (contentEl && fullContent) {
+        contentEl.innerHTML = parseMarkdown(fullContent);
+        contentEl.classList.remove('streaming-content');
+    }
+
+    // Add actions container
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'message-actions';
+
+    // Regenerate button
+    const regenBtn = document.createElement('button');
+    regenBtn.className = 'action-btn regenerate';
+    regenBtn.innerHTML = '↻';
+    regenBtn.title = 'Regenerate';
+    regenBtn.onclick = async () => {
+        messageEl.remove();
+        await processMessageResponse((options) => Chat.regenerateLastResponse(options));
+    };
+    actionsDiv.appendChild(regenBtn);
+
+    // Delete button
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'action-btn delete';
+    deleteBtn.innerHTML = '×';
+    deleteBtn.title = 'Delete';
+    deleteBtn.onclick = () => {
+        const messages = document.getElementById('chat-messages');
+        const index = Array.from(messages.children).indexOf(messageEl);
+        if (Chat.deleteMessage(index)) {
+            messageEl.remove();
+        }
+    };
+    actionsDiv.appendChild(deleteBtn);
+
+    messageEl.appendChild(actionsDiv);
 }
 
 function addLoadingMessage() {
@@ -764,8 +821,46 @@ function updateLoadingMessage(id, state) {
     } else if (state.type === 'tool_end') {
         // Transition back to thinking or stay until next event
     } else if (state.type === 'thinking') {
-        el.className = 'message assistant loading';
-        el.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+        // Reset to thinking indicator (for non-streaming or initial state)
+        if (!el.dataset.streaming) {
+            el.className = 'message assistant loading';
+            el.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+        }
+    } else if (state.type === 'token') {
+        // Streaming token - append to message
+        if (!el.dataset.streaming) {
+            // First token - switch from loading to streaming mode
+            el.dataset.streaming = 'true';
+            el.className = 'message assistant streaming';
+            el.innerHTML = '<div class="message-content streaming-content"></div>';
+        }
+        const contentEl = el.querySelector('.streaming-content');
+        if (contentEl && state.token) {
+            // Append token, escaping HTML
+            const escaped = state.token
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\n/g, '<br>');
+            contentEl.innerHTML += escaped;
+            // Scroll to show new content
+            const messages = document.getElementById('chat-messages');
+            if (messages) messages.scrollTop = messages.scrollHeight;
+        }
+    } else if (state.type === 'thinking' && state.content) {
+        // Thinking block from reasoning model (DeepSeek R1, etc.)
+        // Show in a collapsible thinking section
+        let thinkingEl = el.querySelector('.thinking-block');
+        if (!thinkingEl) {
+            thinkingEl = document.createElement('details');
+            thinkingEl.className = 'thinking-block';
+            thinkingEl.innerHTML = '<summary>💭 Model reasoning</summary><div class="thinking-content"></div>';
+            el.insertBefore(thinkingEl, el.firstChild);
+        }
+        const content = thinkingEl.querySelector('.thinking-content');
+        if (content) {
+            content.textContent = state.content;
+        }
     }
 }
 
@@ -988,7 +1083,7 @@ function hideResetConfirmModal() {
  */
 async function $waitUntilAllWorkersAbort(abortController, timeoutMs) {
     const start = Date.now();
-    
+
     // Send abort signal to worker
     if (activeWorker) {
         try {
@@ -1004,12 +1099,12 @@ async function $waitUntilAllWorkersAbort(abortController, timeoutMs) {
             // Worker already terminated
             return true;
         }
-        
+
         // Check if worker is still responding
         try {
             // If worker is still active after 100ms, it's not responding to abort
             await new Promise(resolve => setTimeout(resolve, 100));
-            
+
             // If still active, force terminate
             if (activeWorker) {
                 console.log('[App] Worker not responding to abort, forcing termination');
@@ -1036,7 +1131,7 @@ async function executeReset() {
 
     // NEW: Safe reset flow with AbortController
     const abortController = new AbortController();
-    
+
     try {
         // Step 1: Stop background operations
         if (Spotify.stopBackgroundRefresh) {
@@ -1110,10 +1205,10 @@ function showToast(message, duration = 3000) {
         toast.className = 'toast-notification';
         document.body.appendChild(toast);
     }
-    
+
     toast.textContent = message;
     toast.classList.add('show');
-    
+
     setTimeout(() => {
         toast.classList.remove('show');
     }, duration);
@@ -1125,17 +1220,17 @@ async function showPrivacyDashboard() {
 
     // Get data summary
     const summary = await Storage.getDataSummary();
-    
+
     // Update UI
-    document.getElementById('raw-streams-count').textContent = 
+    document.getElementById('raw-streams-count').textContent =
         summary.hasRawStreams ? `${summary.streamCount.toLocaleString()} streams (${summary.estimatedSizeMB}MB)` : 'None';
-    
-    document.getElementById('patterns-summary').textContent = 
+
+    document.getElementById('patterns-summary').textContent =
         summary.chunkCount > 0 ? `${summary.chunkCount} chunks, ${summary.chatSessionCount} chat sessions` : 'No patterns yet';
-    
+
     // Check Spotify tokens
     const hasSpotifyToken = await Storage.getToken('spotify_access_token');
-    document.getElementById('spotify-token-status').textContent = 
+    document.getElementById('spotify-token-status').textContent =
         hasSpotifyToken ? 'Present (encrypted)' : 'Not stored';
 
     // Show modal
@@ -1146,7 +1241,7 @@ async function clearSensitiveData() {
     if (!confirm('Clear all raw streams? This keeps your personality analysis and chat history.')) {
         return;
     }
-    
+
     await Storage.clearSensitiveData();
     alert('Raw data cleared. Your personality analysis and chat history are preserved.');
     showPrivacyDashboard(); // Refresh the dashboard

@@ -2468,3 +2468,63 @@ a {
 .message-actions .retry-btn:hover {
   opacity: 0.9;
 }
+
+/* Streaming Message State */
+.message.streaming {
+  opacity: 1;
+}
+
+.message.streaming .streaming-content::after {
+  content: '▊';
+  animation: cursor-blink 0.7s infinite;
+  color: var(--accent-primary);
+  margin-left: 2px;
+}
+
+@keyframes cursor-blink {
+
+  0%,
+  50% {
+    opacity: 1;
+  }
+
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Thinking Block (for reasoning models) */
+.thinking-block {
+  margin-bottom: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: rgba(139, 92, 246, 0.08);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent-primary);
+  font-size: 0.85rem;
+}
+
+.thinking-block summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-weight: 500;
+  user-select: none;
+}
+
+.thinking-block summary:hover {
+  color: var(--text-primary);
+}
+
+.thinking-block[open] summary {
+  margin-bottom: var(--space-sm);
+}
+
+.thinking-block .thinking-content {
+  color: var(--text-muted);
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: var(--space-sm) 0;
+}
