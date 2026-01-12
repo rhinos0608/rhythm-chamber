@@ -468,6 +468,95 @@ const Storage = {
     this._notifyUpdate('session', 0);
   },
 
+  /**
+   * Clear ALL data across ALL storage backends
+   * HNW Hierarchy: Single authority for complete data wipe
+   * 
+   * Coordinates:
+   * - IndexedDB stores (streams, chunks, personality, sessions, config, tokens)
+   * - localStorage (all rhythm_chamber_* and token keys)
+   * - Qdrant embeddings (via RAG.clearEmbeddings)
+   * 
+   * @returns {Promise<Object>} Result with per-backend status
+   */
+  async clearAllData() {
+    const results = {
+      indexedDB: { cleared: false, stores: [] },
+      localStorage: { cleared: false, keys: 0 },
+      qdrant: { cleared: false, error: null }
+    };
+
+    // Acquire operation lock
+    let lockId = null;
+    if (window.OperationLock) {
+      try {
+        lockId = await window.OperationLock.acquire('privacy_clear');
+      } catch (e) {
+        return { success: false, error: e.message, blockedBy: e.message };
+      }
+    }
+
+    try {
+      // 1. Clear all IndexedDB stores
+      for (const storeName of Object.values(STORES)) {
+        try {
+          await clear(storeName);
+          results.indexedDB.stores.push(storeName);
+        } catch (e) {
+          console.warn(`[Storage] Failed to clear store ${storeName}:`, e);
+        }
+      }
+      results.indexedDB.cleared = results.indexedDB.stores.length > 0;
+
+      // 2. Clear localStorage (rhythm_chamber_* keys and tokens)
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (
+          key.startsWith('rhythm_chamber_') ||
+          key.startsWith('spotify_') ||
+          key === 'qdrant_url' ||
+          key === 'qdrant_api_key'
+        )) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      results.localStorage.keys = keysToRemove.length;
+      results.localStorage.cleared = true;
+
+      // 3. Clear Qdrant embeddings (if configured)
+      if (window.RAG?.hasCredentials?.()) {
+        try {
+          await window.RAG.clearEmbeddings();
+          results.qdrant.cleared = true;
+        } catch (e) {
+          console.warn('[Storage] Failed to clear Qdrant embeddings:', e);
+          results.qdrant.error = e.message;
+          // Continue - don't fail the whole operation if Qdrant is unavailable
+        }
+      } else {
+        results.qdrant.cleared = true; // No embeddings to clear
+      }
+
+      // Notify subscribers
+      this._notifyUpdate('allDataCleared', 0);
+
+      // Dispatch event for UI
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('storage:cleared', { detail: results }));
+      }
+
+      return { success: true, ...results };
+
+    } finally {
+      // Always release the lock
+      if (lockId && window.OperationLock) {
+        window.OperationLock.release('privacy_clear', lockId);
+      }
+    }
+  },
+
   // Utility
   clear: clearAll,
 

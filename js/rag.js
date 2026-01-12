@@ -726,6 +726,16 @@ async function generateEmbeddings(onProgress = () => { }, options = {}) {
         throw new Error('Please configure your Qdrant credentials first');
     }
 
+    // HNW Hierarchy: Acquire operation lock before starting embedding generation
+    let embeddingLockId = null;
+    if (window.OperationLock) {
+        try {
+            embeddingLockId = await window.OperationLock.acquire('embedding_generation');
+        } catch (lockError) {
+            throw new Error(`Cannot generate embeddings: ${lockError.message}`);
+        }
+    }
+
     // SECURITY: Start background token refresh for long operation
     if (window.Spotify?.startBackgroundRefresh) {
         window.Spotify.startBackgroundRefresh();
@@ -755,40 +765,52 @@ async function generateEmbeddings(onProgress = () => { }, options = {}) {
         const estimateText = window.Utils?.formatDuration?.(estimatedSeconds) || `~${estimatedSeconds}s`;
 
         // Determine starting point
-        // HNW Fix: Enhanced checkpoint validation with merge capability
+        // HNW Fix: Enhanced checkpoint validation with auto-restart (power users can override via Settings)
         let startBatch = 0;
         if (checkpoint && checkpoint.totalChunks === totalChunks) {
             // Critical: Validate that checkpoint was created for the same data
             if (checkpoint.dataHash && checkpoint.dataHash !== dataHash) {
                 console.warn('[RAG] Checkpoint data hash mismatch - data has changed since checkpoint');
 
-                // Handle based on merge strategy
-                if (mergeStrategy === 'merge') {
-                    // Continue from checkpoint, process new chunks after
+                // Check power user setting for checkpoint strategy
+                let strategy = mergeStrategy;
+                if (!strategy) {
+                    // Read from unified storage (default: 'auto' = restart)
+                    const ragSettings = await window.Storage?.getConfig?.('rhythm_chamber_rag_settings');
+                    strategy = ragSettings?.checkpointStrategy || 'auto';
+
+                    // 'prompt' means surface the choice to UI (power user mode)
+                    if (strategy === 'prompt') {
+                        return {
+                            action: 'prompt_merge',
+                            options: [
+                                {
+                                    strategy: 'merge',
+                                    label: 'Keep previous progress + add new data',
+                                    description: `Resume from batch ${checkpoint.lastBatch + 1}, then process new chunks`
+                                },
+                                {
+                                    strategy: 'restart',
+                                    label: 'Start fresh',
+                                    description: 'Discard previous progress and reprocess all data'
+                                }
+                            ],
+                            checkpoint
+                        };
+                    }
+                }
+
+                // Handle based on strategy (default auto = restart)
+                if (strategy === 'merge') {
                     startBatch = checkpoint.lastBatch + 1;
+                    console.log(`[RAG] Strategy: merge → resuming from batch ${startBatch}`);
                     onProgress(checkpoint.processed, totalChunks,
                         `Merging: resuming from batch ${startBatch}... (${estimateText} remaining)`);
-                } else if (mergeStrategy === 'restart') {
-                    clearCheckpoint();
-                    onProgress(0, totalChunks, `Starting fresh... (Est: ${estimateText})`);
                 } else {
-                    // No strategy specified - return options for UI to prompt user
-                    return {
-                        action: 'prompt_merge',
-                        options: [
-                            {
-                                strategy: 'merge',
-                                label: 'Keep previous progress + add new data',
-                                description: `Resume from batch ${checkpoint.lastBatch + 1}, then process new chunks`
-                            },
-                            {
-                                strategy: 'restart',
-                                label: 'Start fresh',
-                                description: 'Discard previous progress and reprocess all data'
-                            }
-                        ],
-                        checkpoint
-                    };
+                    // Default: auto-restart on mismatch
+                    console.log('[RAG] Strategy: auto → restarting fresh due to data change');
+                    clearCheckpoint();
+                    onProgress(0, totalChunks, `Data changed. Starting fresh... (Est: ${estimateText})`);
                 }
             } else {
                 startBatch = checkpoint.lastBatch + 1;
@@ -884,6 +906,11 @@ async function generateEmbeddings(onProgress = () => { }, options = {}) {
         // SECURITY: Always stop background refresh when done
         if (window.Spotify?.stopBackgroundRefresh) {
             window.Spotify.stopBackgroundRefresh();
+        }
+
+        // HNW Hierarchy: Always release operation lock
+        if (embeddingLockId && window.OperationLock) {
+            window.OperationLock.release('embedding_generation', embeddingLockId);
         }
     }
 }
