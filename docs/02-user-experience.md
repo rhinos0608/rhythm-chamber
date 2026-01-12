@@ -143,8 +143,13 @@ You mark time through sound.
 │  └─────────────────────────────────────┘   │
 │                                             │
 │  💭 Try: "What was I like in 2019?"         │
-└─────────────────────────────────────────────┘
 ```
+└─────────────────────────────────────────────┘
+
+### Chat Controls
+- **Regenerate**: For when the insight didn't land.
+- **Edit**: To refine the question without typing it all again.
+- **Delete**: To curate the conversation history.
 
 **Feed = ambient awareness. Chat = active exploration.**
 

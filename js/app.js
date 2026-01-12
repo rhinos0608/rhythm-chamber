@@ -15,6 +15,8 @@ let appState = {
     view: 'upload' // upload, processing, reveal, lite-reveal, chat
 };
 
+let activeWorker = null; // Track active worker for cancellation
+
 // DOM Elements
 const uploadZone = document.getElementById('upload-zone');
 const fileInput = document.getElementById('file-input');
@@ -244,13 +246,18 @@ async function processFile(file) {
     showProcessing();
     appState.isLiteMode = false;
 
+    // Terminate any existing worker
+    if (activeWorker) {
+        activeWorker.terminate();
+    }
+
     // Use Web Worker for parsing (keeps UI responsive)
-    const worker = new Worker('js/parser-worker.js');
+    activeWorker = new Worker('js/parser-worker.js');
 
     // Clear any previous partial saves before new parsing session
     Storage.clearStreams();
 
-    worker.onmessage = async (e) => {
+    activeWorker.onmessage = async (e) => {
         const { type, message, streams, chunks, stats, error, partialStreams, fileIndex, totalFiles } = e.data;
 
         if (type === 'progress') {
@@ -261,7 +268,10 @@ async function processFile(file) {
             console.error('Worker error:', error);
             progressText.textContent = `Error: ${error}`;
             setTimeout(() => showUpload(), 3000);
-            worker.terminate();
+            if (activeWorker) {
+                activeWorker.terminate();
+                activeWorker = null;
+            }
         }
 
         // Handle incremental saves from partial data
@@ -306,19 +316,25 @@ async function processFile(file) {
                 setTimeout(() => showUpload(), 3000);
             }
 
-            worker.terminate();
+            if (activeWorker) {
+                activeWorker.terminate();
+                activeWorker = null;
+            }
         }
     };
 
-    worker.onerror = (err) => {
+    activeWorker.onerror = (err) => {
         console.error('Worker error:', err);
         progressText.textContent = `Error: ${err.message}`;
         setTimeout(() => showUpload(), 3000);
-        worker.terminate();
+        if (activeWorker) {
+            activeWorker.terminate();
+            activeWorker = null;
+        }
     };
 
     // Start parsing
-    worker.postMessage({ type: 'parse', file });
+    activeWorker.postMessage({ type: 'parse', file });
 }
 
 // ==========================================
@@ -346,6 +362,12 @@ function showProcessing() {
 }
 
 function showReveal() {
+    if (!appState.personality) {
+        console.warn('showReveal called without personality data');
+        showUpload();
+        return;
+    }
+
     appState.view = 'reveal';
     uploadZone.style.display = 'none';
     processing.classList.remove('active');
@@ -408,6 +430,12 @@ function populateScoreBreakdown(personality) {
 }
 
 function showLiteReveal() {
+    if (!appState.personality) {
+        console.warn('showLiteReveal called without personality data');
+        showUpload();
+        return;
+    }
+
     appState.view = 'lite-reveal';
     uploadZone.style.display = 'none';
     processing.classList.remove('active');
@@ -436,6 +464,11 @@ function showLiteReveal() {
 }
 
 function showChat() {
+    if (!appState.personality) {
+        showUpload();
+        return;
+    }
+
     appState.view = 'chat';
     uploadZone.style.display = 'none';
     processing.classList.remove('active');
@@ -465,14 +498,56 @@ async function handleChatSend() {
     document.getElementById('chat-suggestions').style.display = 'none';
 
     // Get response
-    const response = await Chat.sendMessage(message);
-    addMessage(response, 'assistant');
+    await processMessageResponse(Chat.sendMessage(message));
+}
+
+/**
+ * Process the response from Chat.sendMessage or regenerateLastResponse
+ */
+async function processMessageResponse(promise) {
+    // Create a temporary loading placeholder
+    const loadingId = addLoadingMessage();
+
+    try {
+        const response = await promise;
+
+        // Remove loading message
+        removeMessageElement(loadingId);
+
+        // Add actual response
+        if (response.status === 'error') {
+            addMessage(response.content, 'assistant', true); // true for isError
+        } else {
+            addMessage(response.content, 'assistant');
+        }
+    } catch (err) {
+        removeMessageElement(loadingId);
+        addMessage(`Error: ${err.message}`, 'assistant', true);
+    }
+}
+
+function addLoadingMessage() {
+    const id = 'msg-' + Date.now();
+    const messages = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'message assistant loading';
+    div.id = id;
+    div.innerHTML = '<span class="typing-indicator">...</span>';
+    messages.appendChild(div);
+    messages.scrollTop = messages.scrollHeight;
+    return id;
+}
+
+function removeMessageElement(id) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
 }
 
 /**
  * Simple markdown to HTML converter for chat messages
  */
 function parseMarkdown(text) {
+    if (!text) return '';
     return text
         // Escape HTML first
         .replace(/&/g, '&amp;')
@@ -491,20 +566,139 @@ function parseMarkdown(text) {
         .replace(/^(.+)$/, '<p>$1</p>');
 }
 
-function addMessage(text, role) {
+/**
+ * Add message to chat UI with actions
+ */
+function addMessage(text, role, isError = false) {
     const messages = document.getElementById('chat-messages');
     const div = document.createElement('div');
-    div.className = `message ${role}`;
+    div.className = `message ${role} ${isError ? 'error' : ''}`;
+
+    // Message index in history (approximate, for deletion/editing)
+    // Accurate way would be to pass index, but appending assumes valid order for now.
+    // We'll calculate index based on DOM position for simplicity in this MVP
+    // or rely on the Chat module to handle logic if we pass the right signals.
+    // Better: Rerender all messages? No, inefficient.
+    // We will just append and attach handlers that look up their index dynamically.
+
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
 
     // Parse markdown for assistant messages, plain text for user
     if (role === 'assistant') {
-        div.innerHTML = parseMarkdown(text);
+        contentDiv.innerHTML = parseMarkdown(text);
     } else {
-        div.textContent = text;
+        contentDiv.textContent = text;
+    }
+    div.appendChild(contentDiv);
+
+    // Actions Container
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'message-actions';
+
+    if (role === 'user') {
+        // Edit Button
+        const editBtn = document.createElement('button');
+        editBtn.className = 'action-btn edit';
+        editBtn.innerHTML = '✎';
+        editBtn.title = 'Edit';
+        editBtn.onclick = () => enableEditMode(div, text);
+        actionsDiv.appendChild(editBtn);
+    } else {
+        // Regenerate Button (Assistant only)
+        // Only show if it matches the last message, or if it's an error
+        // Note: For simplicity we add it, simpler logic might be to only show on hover
+        const regenBtn = document.createElement('button');
+        regenBtn.className = 'action-btn regenerate';
+        regenBtn.innerHTML = '↻';
+        regenBtn.title = 'Regenerate';
+        regenBtn.onclick = async () => {
+            // Remove this message from UI
+            div.remove();
+            // Call regenerate
+            await processMessageResponse(Chat.regenerateLastResponse());
+        };
+        actionsDiv.appendChild(regenBtn);
     }
 
+    // Delete Button (Both)
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'action-btn delete';
+    deleteBtn.innerHTML = '×';
+    deleteBtn.title = 'Delete';
+    deleteBtn.onclick = () => {
+        // Find index
+        const index = Array.from(messages.children).indexOf(div);
+        if (Chat.deleteMessage(index)) {
+            div.remove();
+        }
+    };
+    actionsDiv.appendChild(deleteBtn);
+
+    div.appendChild(actionsDiv);
     messages.appendChild(div);
     messages.scrollTop = messages.scrollHeight;
+}
+
+function enableEditMode(messageDiv, currentText) {
+    const contentDiv = messageDiv.querySelector('.message-content');
+    const actionsDiv = messageDiv.querySelector('.message-actions');
+
+    // Hide standard actions
+    actionsDiv.style.display = 'none';
+
+    // Replace content with input
+    const wrapper = document.createElement('div');
+    wrapper.className = 'edit-input-wrapper';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'edit-input';
+    input.value = currentText;
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'action-btn';
+    saveBtn.innerText = 'Save';
+    saveBtn.onclick = async () => {
+        const newText = input.value.trim();
+        if (newText && newText !== currentText) {
+            const index = Array.from(messageDiv.parentElement.children).indexOf(messageDiv);
+
+            // Remove this message and all after it from UI
+            const allMessages = Array.from(messageDiv.parentElement.children);
+            for (let i = index; i < allMessages.length; i++) {
+                allMessages[i].remove();
+            }
+
+            // Re-add the updated user message to UI
+            addMessage(newText, 'user');
+
+            // Trigger edit in Chat module
+            await processMessageResponse(Chat.editMessage(index, newText));
+        } else {
+            cancelEdit();
+        }
+    };
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'action-btn';
+    cancelBtn.innerText = 'Cancel';
+    cancelBtn.onclick = cancelEdit;
+
+    function cancelEdit() {
+        contentDiv.style.display = '';
+        wrapper.remove();
+        actionsDiv.style.display = '';
+    }
+
+    wrapper.appendChild(input);
+    wrapper.appendChild(saveBtn);
+    wrapper.appendChild(cancelBtn);
+
+    contentDiv.style.display = 'none';
+    messageDiv.insertBefore(wrapper, actionsDiv);
+
+    input.focus();
 }
 
 // ==========================================
@@ -521,6 +715,12 @@ async function handleShare() {
 
 async function handleReset() {
     if (confirm('Start over? Your data will be cleared.')) {
+        // Terminate active worker first
+        if (activeWorker) {
+            activeWorker.terminate();
+            activeWorker = null;
+        }
+
         await Storage.clear();
         Spotify.clearTokens();
         appState = {

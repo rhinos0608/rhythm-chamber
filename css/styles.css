@@ -1480,3 +1480,85 @@ a {
   color: var(--accent-primary);
   text-decoration: underline;
 }
+/* Message Actions */
+.message {
+  position: relative;
+  group: message; /* For hover effects if supported, otherwise just a class */
+}
+
+/* Show actions on hover */
+.message:hover .message-actions {
+  opacity: 1;
+}
+
+.message-actions {
+  position: absolute;
+  bottom: -20px;
+  right: 0;
+  display: flex;
+  gap: 4px;
+  opacity: 0; /* Hidden by default */
+  transition: opacity 0.2s ease;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  border: 1px solid var(--border-subtle);
+}
+
+/* Always show actions for errors or if force-visible */
+.message.error .message-actions,
+.message-actions.visible {
+  opacity: 1;
+}
+
+.action-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex; /* For icon alignment */
+  align-items: center;
+  gap: 4px;
+}
+
+.action-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.action-btn.delete:hover {
+  color: #ef4444; /* Red */
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* Error Message Style */
+.message.error {
+  border-color: rgba(239, 68, 68, 0.5); /* Red border */
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* Edit Mode */
+.edit-input-wrapper {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.edit-input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-subtle);
+  color: white;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 4px;
+}

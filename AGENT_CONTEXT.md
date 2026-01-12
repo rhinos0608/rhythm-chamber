@@ -241,10 +241,22 @@ npx http-server -p 8080 -c-1
 
 ---
 
-### Session 3 — 2026-01-11 (Spotify Quick Snapshot & Chat Data)
+### Session 8 — 2026-01-13 (Chat V2: Error Handling & Management)
 
 **What was done:**
-1. Implemented Spotify OAuth PKCE flow (`spotify.js`)
+1. Implemented robust error handling in `js/chat.js` with structured response objects
+2. Added features: Regenerate response, Edit user message, Delete message
+3. Updated UI (`js/app.js`) to render action buttons and handle interactions
+4. Added styles (`css/styles.css`) for message actions and error states
+
+**Key decisions:**
+- **Structured Responses**: `sendMessage` returns `{ content, status, role }` for UI control
+- **History Management**: Editing a message truncates subsequent history to preserve context logic
+- **UI UX**: Actions appear on hover (or always for errors) to reduce clutter
+
+---
+
+### Session 3 — 2026-01-11 (Spotify Quick Snapshot & Chat Data)
 2. Built lite pattern detection and personality types
 3. Added Quick Snapshot button to landing page
 4. Built lite reveal section with upsell messaging

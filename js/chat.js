@@ -331,13 +331,19 @@ async function sendMessage(message, apiKey = null) {
         return fallbackResponse;
     }
 
+    // Merge static config (has apiUrl) with user settings (has model/tokens)
+    const finalConfig = {
+        ...config,
+        ...(settings.openrouter || {})
+    };
+
     try {
         // Get function schemas if available
         const tools = window.Functions?.schemas || [];
         const useTools = tools.length > 0 && streamsData && streamsData.length > 0;
 
         // Initial API call
-        let response = await callOpenRouter(key, config, messages, useTools ? tools : undefined);
+        let response = await callOpenRouter(key, finalConfig, messages, useTools ? tools : undefined);
         let responseMessage = response.choices[0]?.message;
 
         // Handle function calls (tool calls)
@@ -377,7 +383,7 @@ async function sendMessage(message, apiKey = null) {
                 ...conversationHistory
             ];
 
-            response = await callOpenRouter(key, config, followUpMessages, undefined);
+            response = await callOpenRouter(key, finalConfig, followUpMessages, undefined);
             responseMessage = response.choices[0]?.message;
         }
 
@@ -392,19 +398,32 @@ async function sendMessage(message, apiKey = null) {
         // Save conversation to session storage
         saveConversation();
 
-        return assistantContent;
+        return {
+            content: assistantContent,
+            status: 'success',
+            role: 'assistant'
+        };
 
     } catch (error) {
         console.error('Chat error:', error);
 
         const queryContext = generateQueryContext(message);
         const fallbackResponse = generateFallbackResponse(message, queryContext);
+
+        // Add fallback to history but mark as error context if needed
         conversationHistory.push({
             role: 'assistant',
-            content: fallbackResponse
+            content: fallbackResponse,
+            error: true
         });
         saveConversation();
-        return fallbackResponse;
+
+        return {
+            content: fallbackResponse,
+            status: 'error',
+            error: error.message,
+            role: 'assistant'
+        };
     }
 }
 
@@ -443,6 +462,64 @@ async function callOpenRouter(apiKey, config, messages, tools) {
     }
 
     return response.json();
+}
+
+/**
+ * Regenerate the last assistant response
+ * Removes the last assistant message and re-sends the last user message
+ */
+async function regenerateLastResponse() {
+    if (conversationHistory.length === 0) return null;
+
+    // Check if last message was assistant
+    const lastMsg = conversationHistory[conversationHistory.length - 1];
+    if (lastMsg.role === 'assistant') {
+        conversationHistory.pop(); // Remove assistant message
+    }
+
+    // Check if we have a user message to regenerate from
+    const lastUserMsg = conversationHistory[conversationHistory.length - 1];
+    if (!lastUserMsg || lastUserMsg.role !== 'user') {
+        return { error: 'No user message found to regenerate response for.' };
+    }
+
+    // Get the last user message content
+    const message = lastUserMsg.content;
+
+    // Remove the user message too because sendMessage will add it back
+    conversationHistory.pop();
+
+    // Re-send
+    return sendMessage(message);
+}
+
+/**
+ * Delete a specific message index from history
+ * Note: Deleting a message changes the context for subsequent messages
+ */
+function deleteMessage(index) {
+    if (index < 0 || index >= conversationHistory.length) return false;
+
+    conversationHistory.splice(index, 1);
+    saveConversation();
+    return true;
+}
+
+/**
+ * Edit a user message
+ * Truncates history to that point, updates message, and regenerates response
+ */
+async function editMessage(index, newText) {
+    if (index < 0 || index >= conversationHistory.length) return null;
+
+    const msg = conversationHistory[index];
+    if (msg.role !== 'user') return { error: 'Can only edit user messages' };
+
+    // Truncate history to remove this message and everything after it
+    conversationHistory = conversationHistory.slice(0, index);
+
+    // Send new message (this will add it to history and generate response)
+    return sendMessage(newText);
 }
 
 /**
@@ -553,6 +630,9 @@ function setStreamsData(streams) {
 window.Chat = {
     initChat,
     sendMessage,
+    regenerateLastResponse,
+    deleteMessage,
+    editMessage,
     clearHistory,
     clearConversation,
     getHistory,
