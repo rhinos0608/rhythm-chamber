@@ -29,6 +29,50 @@ let db = null;
 // Event listener registry for storage updates
 const updateListeners = [];
 
+// Operation queue to prevent race conditions
+const storageQueue = [];
+let isQueueProcessing = false;
+let criticalOperationInProgress = false;
+let pendingReload = false;
+
+/**
+ * Queue an async operation to run sequentially
+ * critical operations block version changes
+ */
+async function queuedOperation(fn, isCritical = false) {
+  return new Promise((resolve, reject) => {
+    storageQueue.push({ fn, resolve, reject, isCritical });
+    processQueue();
+  });
+}
+
+async function processQueue() {
+  if (isQueueProcessing || storageQueue.length === 0) return;
+  isQueueProcessing = true;
+
+  while (storageQueue.length > 0) {
+    const { fn, resolve, reject, isCritical } = storageQueue.shift();
+    if (isCritical) criticalOperationInProgress = true;
+
+    try {
+      const result = await fn();
+      resolve(result);
+    } catch (err) {
+      reject(err);
+    } finally {
+      if (isCritical) criticalOperationInProgress = false;
+    }
+  }
+
+  isQueueProcessing = false;
+
+  // If a reload was deferred, do it now that operations are done
+  if (pendingReload && storageQueue.length === 0) {
+    console.log('[Storage] Executing deferred reload');
+    window.location.reload();
+  }
+}
+
 /**
  * Initialize the database
  * HNW Fix: Added onversionchange and onblocked handlers to prevent deadlock
@@ -51,11 +95,16 @@ async function initDB() {
 
       // HNW Fix: Close connection when another tab needs to upgrade
       db.onversionchange = () => {
-        console.log('[Storage] Database version change detected, closing connection');
-        db.close();
-        db = null;
-        // Optionally reload to get new version
-        window.location.reload();
+        if (criticalOperationInProgress) {
+          console.warn('[Storage] Version change deferred - critical operation in progress');
+          pendingReload = true;
+          // Could dispatch event to show UI banner here
+        } else {
+          console.log('[Storage] Database version change detected, closing connection');
+          db.close();
+          db = null;
+          window.location.reload();
+        }
       };
 
       resolve(db);
@@ -176,10 +225,11 @@ const Storage = {
 
   // Streams
   async saveStreams(streams) {
-    const result = await put(STORES.STREAMS, { id: 'all', data: streams, savedAt: new Date().toISOString() });
-    // Notify listeners of update
-    this._notifyUpdate('streams', streams.length);
-    return result;
+    return queuedOperation(async () => {
+      const result = await put(STORES.STREAMS, { id: 'all', data: streams, savedAt: new Date().toISOString() });
+      this._notifyUpdate('streams', streams.length);
+      return result;
+    }, true); // Critical
   },
 
   async getStreams() {
@@ -192,28 +242,45 @@ const Storage = {
    * Merges with existing streams in IndexedDB
    */
   async appendStreams(newStreams) {
-    const existing = await this.getStreams() || [];
-    const merged = [...existing, ...newStreams];
-    const result = await put(STORES.STREAMS, { id: 'all', data: merged, savedAt: new Date().toISOString() });
-    // Notify listeners of update
-    this._notifyUpdate('streams', merged.length);
-    return result;
+    return queuedOperation(async () => {
+      // Need to get inside the lock to ensure consistency
+      const existingData = await get(STORES.STREAMS, 'all');
+      const existing = existingData?.data || [];
+      const merged = [...existing, ...newStreams];
+      const result = await put(STORES.STREAMS, { id: 'all', data: merged, savedAt: new Date().toISOString() });
+      this._notifyUpdate('streams', merged.length);
+      return result;
+    }, true); // Critical
   },
 
   /**
    * Clear only streams (for fresh parsing)
    */
   async clearStreams() {
-    const result = await clear(STORES.STREAMS);
-    this._notifyUpdate('streams', 0);
-    return result;
+    return queuedOperation(async () => {
+      const result = await clear(STORES.STREAMS);
+      this._notifyUpdate('streams', 0);
+      return result;
+    }, true);
   },
 
   // Chunks
   async saveChunks(chunks) {
-    for (const chunk of chunks) {
-      await put(STORES.CHUNKS, chunk);
-    }
+    return queuedOperation(async () => {
+      const db = await initDB();
+      // Use transaction for bulk add
+      const tx = db.transaction(STORES.CHUNKS, 'readwrite');
+      const store = tx.objectStore(STORES.CHUNKS);
+
+      return new Promise((resolve, reject) => {
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+
+        for (const chunk of chunks) {
+          store.put(chunk);
+        }
+      });
+    }, true);
   },
 
   async getChunks() {
@@ -222,7 +289,9 @@ const Storage = {
 
   // Personality
   async savePersonality(personality) {
-    return put(STORES.PERSONALITY, { id: 'result', ...personality, savedAt: new Date().toISOString() });
+    return queuedOperation(async () => {
+      return put(STORES.PERSONALITY, { id: 'result', ...personality, savedAt: new Date().toISOString() });
+    }, true);
   },
 
   async getPersonality() {
@@ -231,7 +300,9 @@ const Storage = {
 
   // Settings
   async saveSetting(key, value) {
-    return put(STORES.SETTINGS, { key, value });
+    return queuedOperation(async () => {
+      return put(STORES.SETTINGS, { key, value });
+    });
   },
 
   async getSetting(key) {
@@ -248,19 +319,21 @@ const Storage = {
    * @param {Object} session - Session object with id, title, messages, etc.
    */
   async saveSession(session) {
-    if (!session.id) {
-      throw new Error('Session must have an id');
-    }
-    const now = new Date().toISOString();
-    const data = {
-      ...session,
-      updatedAt: now,
-      createdAt: session.createdAt || now,
-      messageCount: session.messages?.length || 0
-    };
-    const result = await put(STORES.CHAT_SESSIONS, data);
-    this._notifyUpdate('session', 1);
-    return result;
+    return queuedOperation(async () => {
+      if (!session.id) {
+        throw new Error('Session must have an id');
+      }
+      const now = new Date().toISOString();
+      const data = {
+        ...session,
+        updatedAt: now,
+        createdAt: session.createdAt || now,
+        messageCount: session.messages?.length || 0
+      };
+      const result = await put(STORES.CHAT_SESSIONS, data);
+      this._notifyUpdate('session', 1);
+      return result;
+    });
   },
 
   /**

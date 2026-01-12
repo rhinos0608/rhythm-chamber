@@ -143,7 +143,16 @@ const Spotify = (() => {
 
             const data = await response.json();
 
-            // Store tokens
+            // SECURITY: Create token binding BEFORE storing token
+            // This prevents storing an unbound token if binding fails
+            if (window.Security?.createTokenBinding) {
+                const bindingSuccess = await window.Security.createTokenBinding(data.access_token);
+                if (!bindingSuccess) {
+                    throw new Error('Failed to create security binding - token rejected');
+                }
+            }
+
+            // Store tokens only after successful binding
             localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, data.access_token);
             if (data.refresh_token) {
                 localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, data.refresh_token);
@@ -151,11 +160,6 @@ const Spotify = (() => {
             // Store expiry time (current time + expires_in seconds)
             const expiryTime = Date.now() + (data.expires_in * 1000);
             localStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
-
-            // SECURITY: Create token binding to prevent theft
-            if (window.Security?.createTokenBinding) {
-                await window.Security.createTokenBinding(data.access_token);
-            }
 
             // Clean up verifier
             localStorage.removeItem(STORAGE_KEYS.CODE_VERIFIER);
@@ -251,6 +255,15 @@ const Spotify = (() => {
 
             const data = await response.json();
 
+            // SECURITY: Create binding BEFORE updating storage
+            // This prevents race conditions where an unbound token is valid
+            if (window.Security?.createTokenBinding) {
+                const bindingSuccess = await window.Security.createTokenBinding(data.access_token);
+                if (!bindingSuccess) {
+                    throw new Error('Failed to update security binding during refresh');
+                }
+            }
+
             // Update tokens
             localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, data.access_token);
 
@@ -262,11 +275,6 @@ const Spotify = (() => {
             // Update expiry (current time + expires_in seconds)
             const expiryTime = Date.now() + (data.expires_in * 1000);
             localStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
-
-            // SECURITY: Update token binding with new token
-            if (window.Security?.createTokenBinding) {
-                await window.Security.createTokenBinding(data.access_token);
-            }
 
             console.log('[Spotify] Token refreshed successfully');
             return true;
