@@ -13,7 +13,7 @@ const PREMIUM_STORAGE_KEY = 'rhythm_chamber_premium';
 const PLANS = {
     lifetime: {
         name: 'Lifetime Access',
-        price: '$5',
+        price: '$10',
         mode: 'payment',
         description: 'One-time payment, forever access'
     },
@@ -232,18 +232,18 @@ function showUpgradeModal() {
                 </p>
                 
                 <div class="pricing-cards">
-                    <div class="pricing-card featured" onclick="Payments.upgradeToPremium('lifetime')">
-                        <div class="pricing-badge">Best Value</div>
-                        <h3>Lifetime</h3>
-                        <div class="pricing-amount">$5</div>
-                        <p>One-time payment</p>
-                        <ul>
-                            <li>✓ Semantic search forever</li>
-                            <li>✓ Unlimited embeddings</li>
-                            <li>✓ All future features</li>
-                        </ul>
-                        <button class="btn btn-primary">Get Lifetime Access</button>
-                    </div>
+                <div class="pricing-card featured" onclick="Payments.upgradeToPremium('lifetime')">
+                <div class="pricing-badge">Best Value</div>
+                <h3>Lifetime</h3>
+                <div class="pricing-amount">$10</div>
+                <p>One-time payment</p>
+                <ul>
+                <li>✓ Semantic search forever</li>
+                <li>✓ Unlimited embeddings</li>
+                <li>✓ All future features</li>
+                </ul>
+                <button class="btn btn-primary">Get Lifetime Access</button>
+                </div>
                     
                     <div class="pricing-card" onclick="Payments.upgradeToPremium('monthly')">
                         <h3>Monthly</h3>

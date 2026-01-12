@@ -86,7 +86,6 @@
 |---------|--------|
 | Genre-dependent patterns (workout, breakup) | v2 (needs API) |
 | Proactive observations | v2 (creepy risk) |
-| Premium tiers | Post-validation |
 | Apple Music | Post-MVP |
 | Friend comparisons | Post-MVP |
 | WASM embeddings | v1.1 |
@@ -101,7 +100,7 @@
 | P1 | Premium AI models | Better chat quality |
 | P1 | Production deploy | Vercel/Netlify |
 | P2 | Year-in-review generator | Annual summary |
-| P2 | Monetization 
+| P2 | Cloud/Device Sync | User pays for server storage |
 | P3 | Apple Music support | Different data format |
 
 ---
@@ -115,4 +114,4 @@ Features implemented beyond original roadmap:
 - **Incremental Caching** — Crash-safe parsing
 - **Markdown in Chat** — Formatted AI responses
 - **AI Function Calling** — LLM can query data via tools (get_top_artists, etc.)
-- **Semantic Search Premium** — RAG with Qdrant + Stripe payments ($5 lifetime / $2/mo)
+- **Semantic Search** — RAG with Qdrant (now free for all users)
