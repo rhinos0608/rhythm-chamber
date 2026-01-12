@@ -1,5 +1,6 @@
 # Rhythm Chamber
 
+Rhythm Chamber is an AI powered data analytics application that focuses on what your data says about you, think of it like spotify wrapped but year round and actually personalized. Everything is customizable, bring your own key and model, local models will be soon available for users who want to bring their own compute. Bring your own JSON or ZIP file, or connect to your spotify account for quick data snippet insights. This application for now is 100% client-side, your data is only seen by openrouter (if logging is enabled) and your music provider. We cannot hold any of your data.
 
 | Document | Description |
 |----------|-------------|
