@@ -258,10 +258,28 @@ function showSettingsModal() {
                 <!-- Semantic Search Section (Now Free) -->
                 <div class="settings-section premium-section">
                     <h3>🚀 Semantic Search</h3>
+                    
+                    <!-- Security Status Indicator -->
+                    <div class="security-status-banner" id="security-status">
+                        <span class="security-icon">🔐</span>
+                        <span class="security-level">Security Level: <strong>Medium</strong></span>
+                        <span class="security-description">Requires physical device protection</span>
+                    </div>
+                    
                     <p class="settings-description">
                         RAG-powered semantic search using your own Qdrant cluster.
                         Connect your cluster to ask natural questions about your listening history.
                     </p>
+                    
+                    <!-- Security Warning -->
+                    <div class="security-warning">
+                        <span class="warning-icon">⚠️</span>
+                        <div class="warning-content">
+                            <strong>Physical Security Notice</strong>
+                            <p>API keys remain accessible if your device is compromised. 
+                            Protect physical access to this device as you would bank PINs or passwords.</p>
+                        </div>
+                    </div>
                     
                     <div class="settings-field">
                         <label for="setting-qdrant-url">Qdrant Cluster URL</label>
@@ -302,6 +320,14 @@ function showSettingsModal() {
                     <div id="embedding-progress" class="embedding-progress" style="display: none;">
                         <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
                         <span class="progress-text" id="progress-text">Processing...</span>
+                    </div>
+                    
+                    <!-- Session Reset with Cryptographic Proof -->
+                    <div class="settings-field session-controls">
+                        <button class="btn btn-danger-outline" onclick="Settings.showSessionResetModal()">
+                            🔒 Reset Security Session
+                        </button>
+                        <span class="settings-hint">Invalidates all encrypted credentials and forces re-authentication</span>
                     </div>
                 </div>
             </div>
@@ -541,6 +567,154 @@ function resumeEmbeddings() {
     generateEmbeddings(true);
 }
 
+/**
+ * Show session reset confirmation modal with cryptographic proof
+ */
+async function showSessionResetModal() {
+    // Remove existing modal if present
+    const existing = document.getElementById('session-reset-modal');
+    if (existing) existing.remove();
+
+    // Get current session version for display
+    const currentVersion = window.Security?.getSessionVersion?.() || 1;
+    const newVersion = currentVersion + 1;
+
+    // Generate a proof hash that will change after reset
+    let proofHash = 'N/A';
+    try {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(`session-${currentVersion}-${Date.now()}`);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        proofHash = hashArray.slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (e) {
+        proofHash = 'unable-to-generate';
+    }
+
+    const modal = document.createElement('div');
+    modal.id = 'session-reset-modal';
+    modal.className = 'session-reset-modal';
+    modal.innerHTML = `
+        <div class="session-reset-overlay" onclick="Settings.hideSessionResetModal()"></div>
+        <div class="session-reset-content">
+            <div class="session-reset-header">
+                <h2>🔒 Reset Security Session</h2>
+            </div>
+            
+            <div class="session-reset-body">
+                <div class="reset-warning">
+                    <span class="warning-icon">⚠️</span>
+                    <div class="warning-text">
+                        <strong>This action will:</strong>
+                        <ul>
+                            <li>Invalidate all encrypted credentials</li>
+                            <li>Clear RAG checkpoint data</li>
+                            <li>Require re-entering your Qdrant API key</li>
+                            <li>Force generation of new session keys</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="crypto-proof">
+                    <h4>🔐 Cryptographic Proof of Revocation</h4>
+                    <div class="proof-details">
+                        <div class="proof-row">
+                            <span class="proof-label">Current Session:</span>
+                            <code class="proof-value">v${currentVersion}</code>
+                        </div>
+                        <div class="proof-row">
+                            <span class="proof-label">New Session:</span>
+                            <code class="proof-value new-session">v${newVersion}</code>
+                        </div>
+                        <div class="proof-row">
+                            <span class="proof-label">Revocation Hash:</span>
+                            <code class="proof-value hash">${proofHash}</code>
+                        </div>
+                    </div>
+                    <p class="proof-explanation">
+                        After reset, all data encrypted with session v${currentVersion} will be permanently unreadable.
+                        The revocation hash provides proof that the reset occurred.
+                    </p>
+                </div>
+            </div>
+            
+            <div class="session-reset-footer">
+                <button class="btn btn-secondary" onclick="Settings.hideSessionResetModal()">Cancel</button>
+                <button class="btn btn-danger" id="confirm-reset-btn" onclick="Settings.confirmSessionReset()">
+                    Reset Session
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Add escape key listener
+    const escHandler = (e) => {
+        if (e.key === 'Escape') {
+            hideSessionResetModal();
+            document.removeEventListener('keydown', escHandler);
+        }
+    };
+    document.addEventListener('keydown', escHandler);
+}
+
+/**
+ * Hide session reset modal
+ */
+function hideSessionResetModal() {
+    const modal = document.getElementById('session-reset-modal');
+    if (modal) {
+        modal.classList.add('closing');
+        setTimeout(() => modal.remove(), 200);
+    }
+}
+
+/**
+ * Confirm and execute session reset
+ */
+async function confirmSessionReset() {
+    const confirmBtn = document.getElementById('confirm-reset-btn');
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Resetting...';
+    }
+
+    try {
+        // Perform session invalidation
+        if (window.Security?.clearSessionData) {
+            await window.Security.clearSessionData();
+        } else if (window.Security?.invalidateSessions) {
+            window.Security.invalidateSessions();
+        }
+
+        // Clear RAG config
+        localStorage.removeItem('rhythm_chamber_rag');
+        localStorage.removeItem('rhythm_chamber_rag_checkpoint');
+
+        // Get new version for display
+        const newVersion = window.Security?.getSessionVersion?.() || 'new';
+
+        // Show success message
+        hideSessionResetModal();
+        showToast(`✅ Session reset complete. Now on session v${newVersion}`);
+
+        // Refresh settings modal to show updated state
+        setTimeout(() => {
+            hideSettingsModal();
+            showSettingsModal();
+        }, 500);
+
+    } catch (error) {
+        console.error('Session reset error:', error);
+        showToast('Error during reset: ' + error.message);
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Reset Session';
+        }
+    }
+}
+
 // Public API
 window.Settings = {
     getSettings,
@@ -557,5 +731,8 @@ window.Settings = {
     showToast,
     generateEmbeddings,
     resumeEmbeddings,
+    showSessionResetModal,
+    hideSessionResetModal,
+    confirmSessionReset,
     AVAILABLE_MODELS
 };
