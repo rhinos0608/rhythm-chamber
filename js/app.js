@@ -711,6 +711,12 @@ function finalizeStreamedMessage(messageEl, fullContent) {
 }
 
 function addLoadingMessage() {
+    // Delegate to ChatUIController if available
+    if (window.ChatUIController?.addLoadingMessage) {
+        return window.ChatUIController.addLoadingMessage();
+    }
+
+    // Fallback implementation
     const id = 'msg-' + Date.now();
     const messages = document.getElementById('chat-messages');
     const div = document.createElement('div');
@@ -723,6 +729,12 @@ function addLoadingMessage() {
 }
 
 function updateLoadingMessage(id, state) {
+    // Delegate to ChatUIController if available
+    if (window.ChatUIController?.updateLoadingMessage) {
+        return window.ChatUIController.updateLoadingMessage(id, state);
+    }
+
+    // Fallback implementation
     const el = document.getElementById(id);
     if (!el) return;
 
@@ -776,14 +788,26 @@ function updateLoadingMessage(id, state) {
 }
 
 function removeMessageElement(id) {
+    // Delegate to ChatUIController if available
+    if (window.ChatUIController?.removeMessageElement) {
+        return window.ChatUIController.removeMessageElement(id);
+    }
+
     const el = document.getElementById(id);
     if (el) el.remove();
 }
 
 /**
  * Simple markdown to HTML converter for chat messages
+ * Delegates to ChatUIController when available
  */
 function parseMarkdown(text) {
+    // Delegate to ChatUIController if available
+    if (window.ChatUIController?.parseMarkdown) {
+        return window.ChatUIController.parseMarkdown(text);
+    }
+
+    // Fallback implementation
     if (!text) return '';
     return text
         // Escape HTML first
