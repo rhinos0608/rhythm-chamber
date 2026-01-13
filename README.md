@@ -115,10 +115,18 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 
 ## Monetization
 
-**Free Tier:** Personality reveal + unlimited chat (free models) + local processing  
-**Premium:** $2/month or $10 lifetime for cloud sync, premium models, priority support
+| Tier | Price | What You Get |
+|------|-------|--------------|
+| **Free** | $0 | Full local analysis, BYOK chat, basic cards, personality reveal |
+| **Supporter** | **$19 Lifetime** | CLI tool, premium themes, "Verified" badge, friend compare JSON import |
+| **Patron** | $7/month | Dev Discord access, roadmap voting, early beta features |
 
-**Why it works:** Users only pay for what we pay for. Transparent, usage-based.
+**Why it works:**
+- **$19 is a "no-brainer"** impulse buy for developers who find the tool useful
+- **CLI version** is the killer feature for power users who want scripting
+- **Zero-backend** means no payment processing infrastructure needed
+- **One codebase** with license key unlock - no maintenance nightmare
+- **Friend compare** via JSON exchange keeps data private and creates viral loop
 
 ---
 

@@ -98,6 +98,12 @@ it since 2018. This matches your 'Emotional Archaeologist' pattern."
 > **Zero insights in a week is valid.** Silence is part of the product language.
 > Returning `None` is a feature. Forced "notability" causes pattern hallucination.
 
+### Monetization Integration
+- **Free users**: Full chat experience with free models
+- **Supporters**: Unlock CLI, themes, badges
+- **Patrons**: Community access + early features
+- **No paywalls on core insights**: Personality reveal is always free
+
 ---
 
 ## Insight Tone
@@ -136,6 +142,7 @@ You mark time through sound.
 │  Rhythm Chamber                    [⚙️] [↗] │
 ├─────────────────────────────────────────────┤
 │  🎵 You're "The Emotional Archaeologist"    │
+│  [Verified] ← Supporter badge               │
 │                                             │
 │  What do you want to explore?               │
 │                                             │
@@ -146,6 +153,8 @@ You mark time through sound.
 │  💭 Try: "What was I like in 2019?"         │
 │  💭 Try: "Show me my breakup music"         │
 │  💭 Try: "When did I discover new artists?" │
+│                                             │
+│  [CLI Mode Available] ← Supporter feature   │
 └─────────────────────────────────────────────┘
 ```
 
@@ -153,6 +162,7 @@ You mark time through sound.
 - **Regenerate**: For when the insight didn't land.
 - **Edit**: To refine the question without typing it all again.
 - **Delete**: To curate the conversation history.
+- **Export Chat**: Supporter feature - save conversations locally
 
 **Chat = active exploration. Feed = ambient awareness.**
 
@@ -172,6 +182,19 @@ You mark time through sound.
 │  [Discover yours at RhythmChamber]  │
 └─────────────────────────────────────┘
 ```
+
+**Supporter Features on Cards:**
+- Premium theme styling
+- "Verified" badge (if supporter)
+- Custom backgrounds
+- Enhanced visual design
+
+**Friend Compare Flow:**
+1. User A exports profile as JSON
+2. Shares via Discord/Signal (zero backend)
+3. User B imports JSON
+4. App runs local comparison
+5. Shows: "You and Alex both have 'Emotional Archaeologist' patterns"
 
 ---
 

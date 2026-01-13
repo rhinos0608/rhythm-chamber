@@ -87,6 +87,13 @@ Power users WANT control:
 - Stats.fm needs servers → must monetize → controls your data
 - Rhythm Chamber: "Your data never leaves your device, runs in your browser, you control everything"
 
+**Monetization Alignment:**
+- Free tier: Full local analysis, BYOK chat
+- Supporter ($19): CLI tool for power users, themes, badges
+- Patron ($7/month): Community + early access
+- **No payment processing**: Just license keys
+- **No maintenance nightmare**: One codebase, simple unlocking
+
 For the quantified-self crowd, this is hugely compelling.
 
 ---

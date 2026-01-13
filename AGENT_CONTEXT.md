@@ -6,12 +6,26 @@
 
 ## Monetization Strategy
 
-**Philosophy:** The core experience is free and client-side (privacy-first). Users only pay for server-side persistence and synchronization.
+**Philosophy:** The core experience is free and client-side (privacy-first). Supporter-driven model with zero-backend infrastructure.
 
 | Tier | Cost | Features |
 |------|------|----------|
-| **MVP Core** | **Free** | Full analysis, RAG/Semantic Search (BYO Keys), Unlimited local use, 100% Client-side. |
-| **Cloud Sync** | **$2/mo** or **$10 Lifetime** | *Proposed Future Feature.* Encrypted cloud backup of chat sessions and listening history, cross-device sync. |
+| **Free** | **$0** | Full local analysis, BYOK chat, basic cards, personality reveal, 100% Client-side. |
+| **Supporter** | **$19 Lifetime** | CLI tool, premium themes (Dark/Cyberpunk/Minimal), "Verified" badge, friend compare JSON import |
+| **Patron** | **$7/month** | Dev Discord access, roadmap voting rights, early beta features, priority support |
+
+**Key Strategy:**
+- **One codebase**: All features in main app, unlocked with license key
+- **No payment processing**: Static keys given to Patreon supporters
+- **Hacker-resistant**: Accept bypassing, target supporters who want to pay
+- **CLI version**: Wraps existing `js/parser.js` and `js/data-query.js` in Node.js
+- **Friend compare**: Local JSON export/import, zero backend
+
+**Why it works:**
+- $19 is impulse-buy for developers who find the tool useful
+- CLI is killer feature for power users who want scripting
+- No infrastructure costs for supporter features
+- Creates viral loop via friend comparison
 
 ---
 
