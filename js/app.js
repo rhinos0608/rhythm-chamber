@@ -487,6 +487,15 @@ function updateLoadingMessage(id, state) {
     if (state.type === 'tool_start') {
         el.className = 'message tool-execution';
         el.innerHTML = `<span class="icon">⚡</span> Analyzing data with ${state.tool}...`;
+    } else if (state.type === 'tool_end') {
+        el.className = 'message assistant loading';
+        const hasError = state.error || state.result?.error;
+        el.innerHTML = `
+            <div class="tool-status ${hasError ? 'error' : 'success'}">
+                ${hasError ? '⚠️' : '✅'} ${state.tool || 'Tool'} ${hasError ? 'failed' : 'finished'}
+            </div>
+            <div class="typing-indicator"><span></span><span></span><span></span></div>
+        `;
     } else if (state.type === 'thinking') {
         if (!el.dataset.streaming) {
             el.className = 'message assistant loading';

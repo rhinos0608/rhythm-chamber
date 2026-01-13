@@ -117,6 +117,8 @@ async function handleStreamingResponse(response, onProgress) {
     let thinkingContent = '';
     let inThinking = false;
     let lastMessage = null;
+    let toolCallsAccumulator = [];  // Collect tool calls from streaming
+    let toolCallsById = {};  // Track tool calls by id for proper assembly
 
     while (true) {
         const { done, value } = await reader.read();
@@ -173,6 +175,28 @@ async function handleStreamingResponse(response, onProgress) {
                     // Track tool calls in streaming
                     if (delta?.tool_calls) {
                         onProgress({ type: 'tool_call', toolCalls: delta.tool_calls });
+                        // Accumulate tool calls from streaming chunks
+                        for (const tc of delta.tool_calls) {
+                            const idx = tc.index ?? 0;
+                            if (!toolCallsById[idx]) {
+                                toolCallsById[idx] = {
+                                    id: tc.id || `call_${idx}`,
+                                    type: 'function',
+                                    function: {
+                                        name: tc.function?.name || '',
+                                        arguments: tc.function?.arguments || ''
+                                    }
+                                };
+                            } else {
+                                // Append arguments for chunked tool calls
+                                if (tc.function?.name) {
+                                    toolCallsById[idx].function.name = tc.function.name;
+                                }
+                                if (tc.function?.arguments) {
+                                    toolCallsById[idx].function.arguments += tc.function.arguments;
+                                }
+                            }
+                        }
                     }
 
                     lastMessage = parsed;
@@ -183,14 +207,24 @@ async function handleStreamingResponse(response, onProgress) {
         }
     }
 
+    // Finalize tool calls array (outside the while loop)
+    toolCallsAccumulator = Object.values(toolCallsById);
+
     // Build OpenAI-compatible response
+    const message = {
+        role: 'assistant',
+        content: fullContent || null
+    };
+
+    // Add tool calls if present
+    if (toolCallsAccumulator.length > 0) {
+        message.tool_calls = toolCallsAccumulator;
+    }
+
     return {
         choices: [{
-            message: {
-                role: 'assistant',
-                content: fullContent
-            },
-            finish_reason: 'stop'
+            message,
+            finish_reason: toolCallsAccumulator.length > 0 ? 'tool_calls' : 'stop'
         }],
         model: lastMessage?.model,
         thinking: thinkingContent || undefined
