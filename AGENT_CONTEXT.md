@@ -20,8 +20,10 @@
 
 | Tier | Cost | Features | Infrastructure | Trust Signal |
 |------|------|----------|----------------|--------------|
-| **Cloud Sync** | **$50 Lifetime + $10/month** | Multi-device chat sync, encrypted cloud backup, **managed embeddings & AI setup**, security signatures & validation | Hybrid (Server-side DB + Client-side E2EE) | **"Secured by [External Firm]"** |
-| **Cloud Sync** | **$15/month** | Same as above, no lifetime payment | Hybrid (Server-side DB + Client-side E2EE) | **"Secured by [External Firm]"** |
+| **Cloud Backup** | **$50 Lifetime + $10/month** | Multi-device access, encrypted cloud backup, **managed embeddings & AI setup** | Hybrid (Server-side DB + Client-side E2EE) | **"Secured by [External Firm]"** |
+| **Cloud Backup** | **$15/month** | Same as above, no lifetime payment | Hybrid (Server-side DB + Client-side E2EE) | **"Secured by [External Firm]"** |
+
+> **Note on "Cloud Backup"**: This is intentionally NOT "Cloud Sync". It's manual backup/restore between devices — not real-time sync. No CRDTs, no conflict resolution, just "last-write-wins" encrypted blob storage. This keeps costs low (~$20-50/month for 1000 users) and complexity minimal.
 
 **Key Strategy - "Sovereign-to-Managed" Pipeline:**
 - **Community First**: 100% free local tool builds trust and user base
@@ -130,7 +132,8 @@ rhythm-chamber/
 │   ├── storage/            # Storage Submodules
 │   │   ├── indexeddb.js    # Core DB operations
 │   │   ├── config-api.js   # Config & Token storage
-│   │   └── migration.js    # localStorage migration
+│   │   ├── migration.js    # localStorage migration
+│   │   └── sync-strategy.js # Sync strategy abstraction (Phase 2 prep)
 │   │
 │   ├── security/           # Security Submodules
 │   │   ├── encryption.js   # AES-GCM
@@ -264,6 +267,27 @@ npx http-server -p 8080 -c-1
 ---
 
 ## Session Log
+
+### Session 14 — 2026-01-13 (Backend Infrastructure Setup)
+
+**What was done:**
+1. **Backend Schema**: Created `backend/schema.sql` with Supabase PostgreSQL schema (sync_data, chat_sessions, user_metadata tables with RLS policies).
+2. **API Stubs**: Created `backend/api/sync.js` with placeholder routes (returns 501 - not integrated).
+3. **Sync Strategy Abstraction**: Created `js/storage/sync-strategy.js` with `SyncStrategy` interface, `LocalOnlySync` (active), and `CloudSync` (stub).
+4. **Storage Facade Updates**: Added `getSyncManager()`, `getSyncStrategy()`, `getSyncStatus()` to `storage.js`.
+5. **Terminology Update**: Changed "Cloud Sync" → "Cloud Backup" to set correct user expectations.
+
+**Key Architectural Decisions:**
+- **Backend NOT Integrated**: All backend code is preparation only — no frontend changes.
+- **Last-Write-Wins**: No CRDTs or complex conflict resolution — simple blob storage.
+- **Strategy Pattern**: Future cloud backup can be enabled by switching strategy without changing app code.
+
+**Infrastructure Cost Estimate (1000 users):**
+- Supabase Pro: $25/month
+- Blob storage: $5-15/month
+- Total: ~$30-50/month (covered by ~5 Cloud Backup subscribers)
+
+---
 
 ### Session 13 — 2026-01-13 (Modular Refactoring)
 
