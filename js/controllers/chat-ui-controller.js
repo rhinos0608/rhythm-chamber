@@ -325,7 +325,13 @@ function updateLoadingMessage(id, state) {
             break;
 
         case 'tool_end':
-            // Transition back to thinking
+            el.className = 'message assistant loading';
+            el.innerHTML = `
+                <div class="tool-status ${state.error || state.result?.error ? 'error' : 'success'}">
+                    ${state.error || state.result?.error ? '⚠️' : '✅'} ${state.tool || 'Tool'} ${state.error || state.result?.error ? 'failed' : 'finished'}
+                </div>
+                <div class="typing-indicator"><span></span><span></span><span></span></div>
+            `;
             break;
 
         case 'thinking':

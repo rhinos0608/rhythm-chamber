@@ -101,7 +101,6 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 ## File Structure (Current - Modular Architecture)
 
 ```
-rhythm-chamber/
 ├── index.html              # Landing page (+ Quick Snapshot button)
 ├── app.html                # Main app (+ Settings button)
 ├── SECURITY.md             # Security model documentation
@@ -114,7 +113,6 @@ rhythm-chamber/
 │   ├── personality.js      # 5 types + lite types + score breakdown
 │   ├── chat.js             # Chat orchestration (Delegates to Providers + MessageOperations + SessionManager)
 │   ├── data-query.js       # Query streams by time/artist/track
-│   ├── functions.js        # LLM function schemas + executors (10 functions)
 │   ├── cards.js            # Canvas card generator
 │   ├── storage.js          # Storage Facade (Delegates to js/storage/ modules)
 │   ├── settings.js         # In-app settings modal (API key, model, etc.)
@@ -134,6 +132,20 @@ rhythm-chamber/
 │   ├── local-vector-store.js # Client-side vector search
 │   ├── token-counter.js    # Token usage tracking
 │   ├── operation-lock.js   # Critical operation coordination
+│   │
+│   ├── functions/          # Function Calling Modules (Modular Architecture)
+│   │   ├── index.js        # Facade - unified execute() + schema access
+│   │   ├── schemas/
+│   │   │   ├── data-queries.js     # Core data query schemas (6 functions)
+│   │   │   ├── template-queries.js # Template profile schemas (4 functions)
+│   │   │   └── analytics-queries.js # Stats.fm/Wrapped-style schemas (12 functions)
+│   │   ├── executors/
+│   │   │   ├── data-executors.js     # Core data query executors
+│   │   │   ├── template-executors.js # Template profile executors
+│   │   │   └── analytics-executors.js # Analytics function executors
+│   │   └── utils/
+│   │       ├── retry.js      # Exponential backoff retry logic
+│   │       └── validation.js # Input validation + date range parsing
 │   │
 │   ├── providers/          # LLM Provider Modules
 │   │   ├── provider-interface.js
@@ -188,16 +200,40 @@ rhythm-chamber/
 | **Full** | .zip/.json upload | Complete eras, ghosted artists, all patterns |
 | **Lite (Quick Snapshot)** | Spotify OAuth | Last 50 tracks, top artists/tracks, limited patterns |
 
-### 2. AI Function Calling
-The LLM can dynamically query user data using OpenAI-style function calling (`js/functions.js`):
-- `get_top_artists(year, month?, limit?)` - Top artists for a period
-- `get_top_tracks(year, month?, limit?)` - Top tracks for a period
+### 2. AI Function Calling (22 Functions)
+The LLM can dynamically query user data using OpenAI-style function calling (`js/functions/`):
+
+**Core Data Queries:**
+- `get_top_artists(year, month?, quarter?, season?, limit?, sort_by?)` - Top artists for a period
+- `get_top_tracks(year, month?, quarter?, season?, limit?, sort_by?)` - Top tracks for a period
 - `get_artist_history(artist_name)` - Full history for an artist
-- `get_listening_stats(year?, month?)` - Stats for a period
+- `get_listening_stats(year?, month?, quarter?, season?)` - Stats for a period
 - `compare_periods(year1, year2)` - Compare two years
 - `search_tracks(track_name)` - Search for a track
 
-The LLM decides when to call these functions based on user questions, enabling precise answers like "Show me my top 10 artists from 2020."
+**Stats.fm-Style Analytics:**
+- `get_bottom_tracks(year, limit?, min_plays?)` - Least played tracks
+- `get_bottom_artists(year, limit?, min_plays?)` - Least played artists
+- `get_listening_clock(year?, month?, group_by?)` - 24-hour listening breakdown
+- `get_listening_streaks(year?, min_streak_days?)` - Consecutive listening days
+- `get_time_by_artist(year, limit?)` - Artists by total MINUTES (not plays)
+- `get_platform_stats(year?)` - iOS/Android breakdown
+
+**Spotify Wrapped-Style Analytics:**
+- `get_discovery_stats(year, breakdown?)` - New artists discovered
+- `get_skip_patterns(year?, type?, limit?)` - Skip rate analysis
+- `get_shuffle_habits(year?, breakdown?)` - Shuffle vs intentional listening
+- `get_peak_listening_day(year?, metric?)` - Busiest day of week
+- `get_completion_rate(year?, threshold?, breakdown?)` - Song completion rates
+- `get_offline_listening(year?, limit?)` - Offline listening patterns
+
+**Template Profile Functions:**
+- `get_templates_by_genre(genre, limit?)` - Find templates by genre
+- `get_templates_with_pattern(pattern_type)` - Find templates with specific patterns
+- `get_templates_by_personality(personality_type)` - Find templates by personality
+- `synthesize_profile(description)` - AI-generate custom profile
+
+The LLM decides when to call these functions based on user questions, enabling precise answers like "Show me my least played tracks from Q1 2022."
 
 ### 3. In-App Settings
 Modal UI for configuring without editing config.js:

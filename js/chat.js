@@ -860,77 +860,11 @@ async function sendMessage(message, optionsOrKey = null) {
         }
         let responseMessage = response.choices[0].message;
 
-        // Handle function calls (tool calls)
-        if (responseMessage?.tool_calls && responseMessage.tool_calls.length > 0) {
-            console.log('[Chat] LLM requested tool calls:', responseMessage.tool_calls.map(tc => tc.function.name));
-
-            // Add assistant's tool call message to conversation
-            conversationHistory.push({
-                role: 'assistant',
-                content: responseMessage.content || null,
-                tool_calls: responseMessage.tool_calls
-            });
-
-            // Execute each function call and add results
-            // HNW Fix: Add timeout to prevent indefinite hangs
-            for (const toolCall of responseMessage.tool_calls) {
-                const functionName = toolCall.function.name;
-                const args = JSON.parse(toolCall.function.arguments || '{}');
-
-                console.log(`[Chat] Executing function: ${functionName}`, args);
-
-                // Notify UI: Tool start
-                if (onProgress) onProgress({ type: 'tool_start', tool: functionName });
-
-                // Execute the function with timeout protection
-                let result;
-                try {
-                    result = await Promise.race([
-                        Promise.resolve(window.Functions.execute(functionName, args, streamsData)),
-                        new Promise((_, reject) =>
-                            setTimeout(() => reject(new Error(`Function ${functionName} timed out after ${CHAT_FUNCTION_TIMEOUT_MS}ms`)), CHAT_FUNCTION_TIMEOUT_MS)
-                        )
-                    ]);
-                } catch (funcError) {
-                    console.error(`[Chat] Function execution failed:`, funcError);
-
-                    // Notify UI: Tool error (optional state update)
-                    if (onProgress) onProgress({ type: 'tool_end', tool: functionName }); // Reset UI state
-
-                    // Return error status to allow UI to show retry
-                    return {
-                        status: 'error',
-                        content: `Function call '${functionName}' failed: ${funcError.message}. Please try again or select a different model.`,
-                        role: 'assistant',
-                        isFunctionError: true
-                    };
-                }
-
-                console.log(`[Chat] Function result:`, result);
-
-                // Notify UI: Tool end
-                if (onProgress) onProgress({ type: 'tool_end', tool: functionName, result });
-
-                // Add tool result to conversation
-                conversationHistory.push({
-                    role: 'tool',
-                    tool_call_id: toolCall.id,
-                    content: JSON.stringify(result)
-                });
-            }
-
-            // Make follow-up call with function results
-            const followUpMessages = [
-                { role: 'system', content: buildSystemPrompt() },
-                ...conversationHistory
-            ];
-
-            // Notify UI: Thinking again (processing tool results)
-            if (onProgress) onProgress({ type: 'thinking' });
-
-            response = await callLLM(providerConfig, key, followUpMessages, undefined);
-            responseMessage = response.choices[0]?.message;
+        const toolHandlingResult = await handleToolCalls(responseMessage, providerConfig, key, onProgress);
+        if (toolHandlingResult?.earlyReturn) {
+            return toolHandlingResult.earlyReturn;
         }
+        responseMessage = toolHandlingResult.responseMessage || responseMessage;
 
         const assistantContent = responseMessage?.content || 'I couldn\'t generate a response.';
 
@@ -970,6 +904,154 @@ async function sendMessage(message, optionsOrKey = null) {
             role: 'assistant'
         };
     }
+}
+
+// ==========================================
+// Tool Call Handling
+// ==========================================
+
+/**
+ * Execute LLM-requested tool calls and return the follow-up response message.
+ * If a tool fails, returns an early result for the caller to surface.
+ */
+async function handleToolCalls(responseMessage, providerConfig, key, onProgress) {
+    if (!responseMessage?.tool_calls || responseMessage.tool_calls.length === 0) {
+        return { responseMessage };
+    }
+
+    console.log('[Chat] LLM requested tool calls:', responseMessage.tool_calls.map(tc => tc.function.name));
+
+    // Add assistant's tool call message to conversation
+    conversationHistory.push({
+        role: 'assistant',
+        content: responseMessage.content || null,
+        tool_calls: responseMessage.tool_calls
+    });
+
+    // Execute each function call and add results
+    // HNW Fix: Add timeout to prevent indefinite hangs
+    for (const toolCall of responseMessage.tool_calls) {
+        const functionName = toolCall.function.name;
+        const rawArgs = toolCall.function.arguments || '{}';
+        let args;
+
+        try {
+            args = rawArgs ? JSON.parse(rawArgs) : {};
+        } catch (parseError) {
+            console.warn(`[Chat] Invalid tool call arguments for ${functionName}:`, rawArgs);
+
+            if (onProgress) onProgress({ type: 'tool_end', tool: functionName, error: true });
+
+            return {
+                earlyReturn: {
+                    status: 'error',
+                    content: buildToolCodeOnlyError(functionName, rawArgs),
+                    role: 'assistant',
+                    isFunctionError: true
+                }
+            };
+        }
+
+        console.log(`[Chat] Executing function: ${functionName}`, args);
+
+        // Notify UI: Tool start
+        if (onProgress) onProgress({ type: 'tool_start', tool: functionName });
+
+        // Execute the function with timeout protection
+        let result;
+        try {
+            result = await Promise.race([
+                Promise.resolve(window.Functions.execute(functionName, args, streamsData)),
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error(`Function ${functionName} timed out after ${CHAT_FUNCTION_TIMEOUT_MS}ms`)), CHAT_FUNCTION_TIMEOUT_MS)
+                )
+            ]);
+        } catch (funcError) {
+            console.error(`[Chat] Function execution failed:`, funcError);
+
+            // Notify UI: Tool error (optional state update)
+            if (onProgress) onProgress({ type: 'tool_end', tool: functionName, error: true }); // Reset UI state
+
+            // Return error status to allow UI to show retry
+            return {
+                earlyReturn: {
+                    status: 'error',
+                    content: `Function call '${functionName}' failed: ${funcError.message}. Please try again or select a different model.`,
+                    role: 'assistant',
+                    isFunctionError: true
+                }
+            };
+        }
+
+        console.log(`[Chat] Function result:`, result);
+
+        // If the model returned code instead of real arguments, surface that explicitly
+        if (result?.error && isCodeLikeToolArguments(rawArgs)) {
+            if (onProgress) onProgress({ type: 'tool_end', tool: functionName, result });
+            return {
+                earlyReturn: {
+                    status: 'error',
+                    content: buildToolCodeOnlyError(functionName, rawArgs),
+                    role: 'assistant',
+                    isFunctionError: true
+                }
+            };
+        }
+
+        // Notify UI: Tool end
+        if (onProgress) onProgress({ type: 'tool_end', tool: functionName, result });
+
+        // Add tool result to conversation
+        conversationHistory.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(result)
+        });
+    }
+
+    // Make follow-up call with function results
+    const followUpMessages = [
+        { role: 'system', content: buildSystemPrompt() },
+        ...conversationHistory
+    ];
+
+    // Notify UI: Thinking again (processing tool results)
+    if (onProgress) onProgress({ type: 'thinking' });
+
+    const response = await callLLM(providerConfig, key, followUpMessages, undefined);
+    return { responseMessage: response.choices[0]?.message };
+}
+
+/**
+ * Heuristic check for when the model returns code instead of JSON args
+ */
+function isCodeLikeToolArguments(rawArgs = '') {
+    const trimmed = String(rawArgs || '').trim();
+
+    if (!trimmed) {
+        return false;
+    }
+
+    // Look for code-like patterns (backticks, declarations, arrows, function calls)
+    const codePattern = /```|function\s|\bconst\b|\blet\b|\bvar\b|=>|return\s|;|\n/;
+
+    if (codePattern.test(trimmed)) {
+        return true;
+    }
+
+    // Simple function call shape like fn(...)
+    return /^[A-Za-z_$][\w$]*\s*\(/.test(trimmed);
+}
+
+/**
+ * Build a user-facing error message when tool calls look like code-only responses
+ */
+function buildToolCodeOnlyError(functionName, rawArgs) {
+    const codeHint = isCodeLikeToolArguments(rawArgs);
+    if (codeHint) {
+        return `The AI tried to call '${functionName}' but only shared code for the call instead of executing it. Ask it to run the tool directly (no code blocks) or try again.`;
+    }
+    return `Function call '${functionName}' failed because the tool arguments were invalid. Please try again or select a different model.`;
 }
 
 // ==========================================

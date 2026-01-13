@@ -636,6 +636,29 @@ async function testConnection() {
 }
 
 /**
+ * Build consistent Qdrant error messaging with write-permission hints
+ */
+function buildQdrantErrorMessage(action, response, errorPayload = {}) {
+    const status = response?.status;
+    const rawMessage = errorPayload?.status?.error || errorPayload?.message || errorPayload?.error;
+    const statusText = status ? ` (${status})` : '';
+    const base = `${action} failed${statusText}${rawMessage ? `: ${rawMessage}` : ''}`;
+    const permissionHint = isQdrantPermissionError(status, rawMessage)
+        ? 'Your Qdrant API key may be read-only. Use a key with write permissions to continue.'
+        : '';
+    return permissionHint ? `${base}. ${permissionHint}` : base;
+}
+
+function isQdrantPermissionError(status, message = '') {
+    if (status === 401 || status === 403) return true;
+    const normalized = message.toLowerCase();
+    return normalized.includes('permission') ||
+        normalized.includes('forbidden') ||
+        normalized.includes('read only') ||
+        normalized.includes('read-only');
+}
+
+/**
  * Create collection in Qdrant if it doesn't exist
  * Uses namespace-isolated collection name
  */
@@ -653,6 +676,13 @@ async function ensureCollection() {
     const checkResponse = await fetch(`${config.qdrantUrl}/collections/${collectionName}`, {
         headers: { 'api-key': config.qdrantApiKey }
     });
+
+    if (!checkResponse.ok && isQdrantPermissionError(checkResponse.status)) {
+        const error = await checkResponse.json().catch(() => ({}));
+        const message = buildQdrantErrorMessage('Check collection', checkResponse, error);
+        await window.Security?.recordFailedAttempt?.('qdrant', message);
+        throw new Error(message);
+    }
 
     if (checkResponse.ok) {
         return true; // Collection exists
@@ -675,8 +705,9 @@ async function ensureCollection() {
 
     if (!createResponse.ok) {
         const error = await createResponse.json().catch(() => ({}));
-        await window.Security?.recordFailedAttempt?.('qdrant', `Create collection failed: ${createResponse.status}`);
-        throw new Error(error.status?.error || `Failed to create collection: ${createResponse.status}`);
+        const message = buildQdrantErrorMessage('Create collection', createResponse, error);
+        await window.Security?.recordFailedAttempt?.('qdrant', message);
+        throw new Error(message);
     }
 
     return true;
@@ -706,8 +737,9 @@ async function upsertPoints(points) {
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        await window.Security?.recordFailedAttempt?.('qdrant', `Upsert failed: ${response.status}`);
-        throw new Error(error.status?.error || `Upsert failed: ${response.status}`);
+        const message = buildQdrantErrorMessage('Upsert points', response, error);
+        await window.Security?.recordFailedAttempt?.('qdrant', message);
+        throw new Error(message);
     }
 
     return await response.json();
