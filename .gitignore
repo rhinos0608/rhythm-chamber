@@ -1,5 +1,6 @@
 # API Keys and Secrets
 js/config.js
+backend/.env
 
 # OS Files
 .DS_Store

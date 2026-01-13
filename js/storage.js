@@ -513,6 +513,44 @@ const Storage = {
       console.error('[Storage] Validation error:', err);
       return { valid: false, warnings: [err.message], fixes: [], error: err.message };
     }
+  },
+
+  // ==========================================
+  // Sync Strategy (Phase 2 Preparation)
+  // ==========================================
+
+  /**
+   * Get the sync manager for strategy selection
+   * Currently only LocalOnlySync is available
+   * @returns {SyncManager}
+   */
+  getSyncManager() {
+    return window.SyncManager;
+  },
+
+  /**
+   * Get current sync strategy
+   * @returns {SyncStrategy}
+   */
+  getSyncStrategy() {
+    return window.SyncManager?.getStrategy() || null;
+  },
+
+  /**
+   * Get sync status
+   * @returns {Promise<object>}
+   */
+  async getSyncStatus() {
+    const strategy = this.getSyncStrategy();
+    if (!strategy) {
+      return {
+        mode: 'local',
+        lastSync: null,
+        pending: false,
+        message: 'Sync strategy not initialized'
+      };
+    }
+    return strategy.getStatus();
   }
 };
 
@@ -520,3 +558,4 @@ const Storage = {
 window.Storage = Storage;
 
 console.log('[Storage] Facade loaded - delegates to IndexedDBCore, ConfigAPI, StorageMigration');
+
