@@ -89,17 +89,32 @@ async function callProvider(config, apiKey, messages, tools, onProgress = null) 
     }
 
     // Route to appropriate provider
+    let response;
     switch (config.provider) {
         case 'ollama':
-            return await providerModule.call(config, messages, tools, onProgress);
+            response = await providerModule.call(config, messages, tools, onProgress);
+            break;
 
         case 'lmstudio':
-            return await providerModule.call(config, messages, tools, onProgress);
+            response = await providerModule.call(config, messages, tools, onProgress);
+            break;
 
         case 'openrouter':
         default:
-            return await providerModule.call(apiKey, config, messages, tools, onProgress);
+            response = await providerModule.call(apiKey, config, messages, tools, onProgress);
+            break;
     }
+
+    // Validate response format from all providers
+    if (!response || typeof response !== 'object') {
+        throw new Error(`${config.provider} returned no response`);
+    }
+    if (!response.choices || !Array.isArray(response.choices)) {
+        console.warn('[ProviderInterface] Response missing choices array, will use fallback:', config.provider);
+        throw new Error(`${config.provider} returned malformed response (missing choices array)`);
+    }
+
+    return response;
 }
 
 /**
