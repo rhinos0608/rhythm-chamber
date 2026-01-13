@@ -500,11 +500,7 @@ function updateLoadingMessage(id, state) {
         }
         const contentEl = el.querySelector('.streaming-content');
         if (contentEl && state.token) {
-            const escaped = state.token
-                .replace(/&/g, '&')
-                .replace(/</g, '<')
-                .replace(/>/g, '>')
-                .replace(/\n/g, '<br>');
+            const escaped = escapeHtml(state.token).replace(/\n/g, '<br>');
             contentEl.innerHTML += escaped;
             const messages = document.getElementById('chat-messages');
             if (messages) messages.scrollTop = messages.scrollHeight;
@@ -534,6 +530,28 @@ function removeMessageElement(id) {
 }
 
 /**
+ * Escape HTML to prevent injection in rendered content
+ */
+function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, (char) => {
+        switch (char) {
+            case '&':
+                return '&amp;';
+            case '<':
+                return '&lt;';
+            case '>':
+                return '&gt;';
+            case '"':
+                return '&quot;';
+            case "'":
+                return '&#39;';
+            default:
+                return char;
+        }
+    });
+}
+
+/**
  * Simple markdown to HTML converter
  */
 function parseMarkdown(text) {
@@ -542,10 +560,7 @@ function parseMarkdown(text) {
     }
 
     if (!text) return '';
-    return text
-        .replace(/&/g, '&')
-        .replace(/</g, '<')
-        .replace(/>/g, '>')
+    return escapeHtml(text)
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/__(.+?)__/g, '<strong>$1</strong>')
         .replace(/\*([^\*]+)\*/g, '<em>$1</em>')

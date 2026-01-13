@@ -3,6 +3,9 @@
  * Parses .zip exports and extracts streaming history
  */
 
+const JSZIP_URL = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+const JSZIP_INTEGRITY = 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG';
+
 /**
  * Parse a Spotify data export .zip file
  * @param {File} file - The .zip file
@@ -14,7 +17,10 @@ async function parseSpotifyExport(file, onProgress = () => { }) {
 
     // Dynamically load JSZip if not present
     if (typeof JSZip === 'undefined') {
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+        await loadScript(JSZIP_URL, {
+            integrity: JSZIP_INTEGRITY,
+            crossorigin: 'anonymous'
+        });
     }
 
     onProgress('Extracting archive...');
@@ -268,7 +274,7 @@ function getWeekStart(date) {
 /**
  * Load a script dynamically
  */
-function loadScript(src) {
+function loadScript(src, options = {}) {
     return new Promise((resolve, reject) => {
         if (document.querySelector(`script[src="${src}"]`)) {
             resolve();
@@ -276,6 +282,12 @@ function loadScript(src) {
         }
         const script = document.createElement('script');
         script.src = src;
+        if (options.integrity) {
+            script.integrity = options.integrity;
+        }
+        if (options.crossorigin) {
+            script.crossOrigin = options.crossorigin;
+        }
         script.onload = resolve;
         script.onerror = reject;
         document.head.appendChild(script);

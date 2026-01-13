@@ -11,10 +11,10 @@
 // Dependencies (injected via init)
 // ==========================================
 
-let DataQuery = null;
-let TokenCounter = null;
-let Functions = null;
-let RAG = null;
+let _DataQuery = null;
+let _TokenCounter = null;
+let _Functions = null;
+let _RAG = null;
 
 // ==========================================
 // State Management
@@ -32,10 +32,10 @@ let streamsData = null;
  * @param {Object} dependencies - Required dependencies
  */
 function init(dependencies) {
-    DataQuery = dependencies.DataQuery;
-    TokenCounter = dependencies.TokenCounter;
-    Functions = dependencies.Functions;
-    RAG = dependencies.RAG;
+    _DataQuery = dependencies.DataQuery;
+    _TokenCounter = dependencies.TokenCounter;
+    _Functions = dependencies.Functions;
+    _RAG = dependencies.RAG;
 
     console.log('[MessageOperations] Initialized with dependencies');
 }
@@ -147,16 +147,16 @@ async function editMessage(index, newText, conversationHistory, sendMessageFn, o
  * @returns {string|null} Query context or null
  */
 function generateQueryContext(message) {
-    if (!streamsData || !DataQuery) {
+    if (!streamsData || !_DataQuery) {
         return null;
     }
 
     const contextParts = [];
 
     // Check for date/time period queries
-    const dateParams = DataQuery.parseDateQuery(message);
+    const dateParams = _DataQuery.parseDateQuery(message);
     if (dateParams) {
-        const periodData = DataQuery.queryByTimePeriod(streamsData, dateParams);
+        const periodData = _DataQuery.queryByTimePeriod(streamsData, dateParams);
         if (periodData.found) {
             const period = dateParams.month
                 ? `${getMonthName(dateParams.month)} ${dateParams.year}`
@@ -198,7 +198,7 @@ function generateQueryContext(message) {
         if (match) {
             const artistName = match[1].trim();
             if (artistName.length > 2 && !isCommonWord(artistName)) {
-                const artistData = DataQuery.findPeakListeningPeriod(streamsData, artistName);
+                const artistData = _DataQuery.findPeakListeningPeriod(streamsData, artistName);
                 if (artistData.found) {
                     contextParts.push(`\nDATA FOR ARTIST "${artistData.artistName}":`);
                     contextParts.push(`- Total plays: ${artistData.totalPlays}`);
@@ -222,7 +222,7 @@ function generateQueryContext(message) {
         message.toLowerCase().includes('versus') || message.toLowerCase().includes('different')) {
         const years = message.match(/20\d{2}/g);
         if (years && years.length >= 2) {
-            const comparison = DataQuery.comparePeriods(
+            const comparison = _DataQuery.comparePeriods(
                 streamsData,
                 { year: parseInt(years[0]) },
                 { year: parseInt(years[1]) }
@@ -246,7 +246,7 @@ function generateQueryContext(message) {
     if (/\b(most|favorite|top|biggest)\b/i.test(message)) {
         // Already covered by evidence, but add overall stats if asking about all time
         if (/\b(all.?time|ever|overall|total)\b/i.test(message)) {
-            const overall = DataQuery.queryByTimePeriod(streamsData, {});
+            const overall = _DataQuery.queryByTimePeriod(streamsData, {});
             if (overall.found) {
                 contextParts.push(`\nOVERALL TOP ARTISTS:`);
                 overall.topArtists.slice(0, 10).forEach((a, i) => {
@@ -366,12 +366,12 @@ function generateFallbackResponse(message, queryContext) {
  * @returns {Promise<string|null>} Semantic context or null
  */
 async function getSemanticContext(message, limit = 3) {
-    if (!RAG || !RAG.isConfigured()) {
+    if (!_RAG || !_RAG.isConfigured()) {
         return null;
     }
 
     try {
-        const context = await RAG.getSemanticContext(message, limit);
+        const context = await _RAG.getSemanticContext(message, limit);
         return context;
     } catch (error) {
         console.warn('[MessageOperations] RAG semantic search failed:', error.message);
@@ -386,7 +386,7 @@ async function getSemanticContext(message, limit = 3) {
  * @returns {Object} Token info
  */
 function calculateTokenUsage(params) {
-    if (!TokenCounter) {
+    if (!_TokenCounter) {
         return {
             total: 0,
             contextWindow: 4000,
@@ -395,7 +395,7 @@ function calculateTokenUsage(params) {
         };
     }
 
-    return TokenCounter.calculateRequestTokens(params);
+    return _TokenCounter.calculateRequestTokens(params);
 }
 
 /**
@@ -405,11 +405,11 @@ function calculateTokenUsage(params) {
  * @returns {Object} Recommended action
  */
 function getRecommendedTokenAction(tokenInfo) {
-    if (!TokenCounter) {
+    if (!_TokenCounter) {
         return { action: 'proceed', message: 'No token counter available' };
     }
 
-    return TokenCounter.getRecommendedAction(tokenInfo);
+    return _TokenCounter.getRecommendedAction(tokenInfo);
 }
 
 /**
@@ -420,11 +420,11 @@ function getRecommendedTokenAction(tokenInfo) {
  * @returns {Object} Truncated parameters
  */
 function truncateToTarget(params, targetTokens) {
-    if (!TokenCounter) {
+    if (!_TokenCounter) {
         return params; // No truncation possible
     }
 
-    return TokenCounter.truncateToTarget(params, targetTokens);
+    return _TokenCounter.truncateToTarget(params, targetTokens);
 }
 
 // ==========================================

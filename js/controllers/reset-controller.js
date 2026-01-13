@@ -11,13 +11,13 @@
 // Dependencies (injected via init)
 // ==========================================
 
-let Storage = null;
-let AppState = null;
-let Spotify = null;
-let Chat = null;
-let OperationLock = null;
-let ViewController = null;
-let showToast = null;
+let _Storage = null;
+let _AppState = null;
+let _Spotify = null;
+let _Chat = null;
+let _OperationLock = null;
+let _ViewController = null;
+let _showToast = null;
 
 // ==========================================
 // State Management
@@ -34,13 +34,13 @@ let pendingDeleteSessionId = null;
  * @param {Object} dependencies - Required dependencies
  */
 function init(dependencies) {
-    Storage = dependencies.Storage;
-    AppState = dependencies.AppState;
-    Spotify = dependencies.Spotify;
-    Chat = dependencies.Chat;
-    OperationLock = dependencies.OperationLock;
-    ViewController = dependencies.ViewController;
-    showToast = dependencies.showToast;
+    _Storage = dependencies.Storage;
+    _AppState = dependencies.AppState;
+    _Spotify = dependencies.Spotify;
+    _Chat = dependencies.Chat;
+    _OperationLock = dependencies.OperationLock;
+    _ViewController = dependencies.ViewController;
+    _showToast = dependencies.showToast;
 
     console.log('[ResetController] Initialized with dependencies');
 }
@@ -51,13 +51,13 @@ function init(dependencies) {
  */
 function handleReset() {
     // HNW Hierarchy: Check if conflicting operation is in progress
-    if (OperationLock) {
-        const fileProcessing = OperationLock.isLocked('file_processing');
-        const embedding = OperationLock.isLocked('embedding_generation');
+    if (_OperationLock) {
+        const fileProcessing = _OperationLock.isLocked('file_processing');
+        const embedding = _OperationLock.isLocked('embedding_generation');
 
         if (fileProcessing || embedding) {
             const blockedBy = fileProcessing ? 'file upload' : 'embedding generation';
-            if (showToast) showToast(`Cannot reset while ${blockedBy} is in progress`);
+            if (_showToast) _showToast(`Cannot reset while ${blockedBy} is in progress`);
             return;
         }
     }
@@ -93,36 +93,36 @@ function hideResetConfirmModal() {
 async function executeReset() {
     hideResetConfirmModal();
 
-    if (!ViewController || !Storage || !AppState) {
+    if (!_ViewController || !_Storage || !_AppState) {
         console.error('[ResetController] Required dependencies not available');
         return;
     }
 
     try {
         // Step 1: Stop background operations
-        if (Spotify && Spotify.stopBackgroundRefresh) {
-            Spotify.stopBackgroundRefresh();
+        if (Spotify && _Spotify.stopBackgroundRefresh) {
+            _Spotify.stopBackgroundRefresh();
         }
 
         // Step 2: Cancel all pending operations with timeout
-        if (ViewController) {
-            ViewController.updateProgress('Cancelling operations...');
+        if (_ViewController) {
+            _ViewController.updateProgress('Cancelling operations...');
         }
 
         const abortController = new AbortController();
         await waitForWorkersAbort(abortController, 30_000); // 30s max
 
         // Step 3: Clear ALL data across ALL backends (unified)
-        if (ViewController) {
-            ViewController.updateProgress('Clearing data...');
+        if (_ViewController) {
+            _ViewController.updateProgress('Clearing data...');
         }
 
-        const result = await Storage.clearAllData();
+        const result = await _Storage.clearAllData();
 
         if (!result.success) {
             if (result.blockedBy) {
-                if (showToast) showToast(`Cannot reset: ${result.blockedBy}`);
-                if (ViewController) ViewController.showUpload();
+                if (_showToast) _showToast(`Cannot reset: ${result.blockedBy}`);
+                if (_ViewController) _ViewController.showUpload();
                 return;
             }
         }
@@ -136,31 +136,31 @@ async function executeReset() {
         }
 
         // Step 4: Clear Spotify tokens (handled separately for security)
-        if (Spotify) {
-            Spotify.clearTokens();
+        if (_Spotify) {
+            _Spotify.clearTokens();
         }
 
         // Step 5: Reset app state (via centralized AppState)
-        if (AppState) {
-            AppState.reset();
+        if (_AppState) {
+            _AppState.reset();
         }
 
         // Step 6: Clear chat history
-        if (Chat) {
-            Chat.clearHistory();
+        if (_Chat) {
+            _Chat.clearHistory();
         }
 
         console.log('[ResetController] Reset complete');
 
-        if (ViewController) {
-            ViewController.showUpload();
+        if (_ViewController) {
+            _ViewController.showUpload();
         }
 
     } catch (error) {
         console.error('[ResetController] Reset failed:', error);
-        if (ViewController) {
-            ViewController.updateProgress(`Reset error: ${error.message}`);
-            ViewController.showUpload();
+        if (_ViewController) {
+            _ViewController.updateProgress(`Reset error: ${error.message}`);
+            _ViewController.showUpload();
         }
     }
 }
@@ -247,13 +247,13 @@ async function clearSensitiveData() {
         return;
     }
 
-    if (!Storage || !ViewController) return;
+    if (!_Storage || !_ViewController) return;
 
-    await Storage.clearSensitiveData();
-    if (showToast) showToast('Raw data cleared. Your personality analysis and chat history are preserved.');
+    await _Storage.clearSensitiveData();
+    if (_showToast) _showToast('Raw data cleared. Your personality analysis and chat history are preserved.');
 
-    if (ViewController) {
-        ViewController.showPrivacyDashboard(); // Refresh the dashboard
+    if (_ViewController) {
+        _ViewController.showPrivacyDashboard(); // Refresh the dashboard
     }
 }
 
@@ -262,10 +262,10 @@ async function clearSensitiveData() {
  */
 async function showPrivacyDashboard() {
     const modal = document.getElementById('privacy-dashboard-modal');
-    if (!modal || !Storage) return;
+    if (!modal || !_Storage) return;
 
     // Get data summary
-    const summary = await Storage.getDataSummary();
+    const summary = await _Storage.getDataSummary();
 
     // Update UI
     const rawStreamsCount = document.getElementById('raw-streams-count');
@@ -286,7 +286,7 @@ async function showPrivacyDashboard() {
 
     // Check Spotify tokens
     if (spotifyTokenStatus) {
-        const hasSpotifyToken = await Storage.getToken('spotify_access_token');
+        const hasSpotifyToken = await _Storage.getToken('spotify_access_token');
         spotifyTokenStatus.textContent = hasSpotifyToken ? 'Present (encrypted)' : 'Not stored';
     }
 

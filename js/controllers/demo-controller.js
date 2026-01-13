@@ -11,10 +11,10 @@
 // Dependencies (injected via init)
 // ==========================================
 
-let AppState = null;
-let DemoData = null;
-let ViewController = null;
-let showToast = null;
+let _AppState = null;
+let _DemoData = null;
+let _ViewController = null;
+let _showToast = null;
 
 // ==========================================
 // Core Functions
@@ -25,10 +25,10 @@ let showToast = null;
  * @param {Object} dependencies - Required dependencies
  */
 function init(dependencies) {
-    AppState = dependencies.AppState;
-    DemoData = dependencies.DemoData;
-    ViewController = dependencies.ViewController;
-    showToast = dependencies.showToast;
+    _AppState = dependencies.AppState;
+    _DemoData = dependencies.DemoData;
+    _ViewController = dependencies.ViewController;
+    _showToast = dependencies.showToast;
 
     console.log('[DemoController] Initialized with dependencies');
 }
@@ -39,36 +39,36 @@ function init(dependencies) {
  * @returns {Promise<void>}
  */
 async function loadDemoMode() {
-    if (!ViewController || !AppState || !DemoData) {
+    if (!_ViewController || !_AppState || !_DemoData) {
         console.error('[DemoController] Required dependencies not available');
         return;
     }
 
     console.log('[DemoController] Loading demo data: "The Emo Teen"');
 
-    ViewController.showProcessing();
-    ViewController.updateProgress('🎭 Loading demo mode...');
+    _ViewController.showProcessing();
+    _ViewController.updateProgress('🎭 Loading demo mode...');
 
     // Get demo data package
-    const demoPackage = DemoData.getFullDemoPackage();
+    const demoPackage = _DemoData.getFullDemoPackage();
 
     // Load demo data into ISOLATED demo domain (not main data domain)
     // HNW: Prevents demo data from polluting real user data
-    ViewController.updateProgress('Loading sample streaming history...');
+    _ViewController.updateProgress('Loading sample streaming history...');
     await new Promise(r => setTimeout(r, 300));
 
-    AppState.update('demo', {
+    _AppState.update('demo', {
         isDemoMode: true,
         streams: demoPackage.streams,
         patterns: demoPackage.patterns,
         personality: demoPackage.personality
     });
 
-    ViewController.updateProgress('Preparing demo experience...');
+    _ViewController.updateProgress('Preparing demo experience...');
     await new Promise(r => setTimeout(r, 300));
 
     // Show reveal
-    ViewController.showReveal();
+    _ViewController.showReveal();
 
     // Add demo badge to UI
     addDemoBadge();
@@ -164,11 +164,11 @@ function setupDemoChatSuggestions() {
  * @returns {Object} Demo data package
  */
 function getDemoPackage() {
-    if (!DemoData) {
+    if (!_DemoData) {
         console.error('[DemoController] DemoData module not available');
         return null;
     }
-    return DemoData.getFullDemoPackage();
+    return _DemoData.getFullDemoPackage();
 }
 
 /**
@@ -176,8 +176,8 @@ function getDemoPackage() {
  * @returns {boolean}
  */
 function isDemoMode() {
-    if (!AppState) return false;
-    const demoState = AppState.get('demo');
+    if (!_AppState) return false;
+    const demoState = _AppState.get('demo');
     return demoState?.isDemoMode || false;
 }
 
@@ -187,11 +187,11 @@ function isDemoMode() {
  * @returns {{ streams: Array, patterns: Object, personality: Object, isDemoMode: boolean }}
  */
 function getActiveData() {
-    if (!AppState) {
+    if (!_AppState) {
         return { streams: null, patterns: null, personality: null, isDemoMode: false };
     }
 
-    const state = AppState.get();
+    const state = _AppState.get();
     const isDemo = state.demo?.isDemoMode || false;
 
     if (isDemo) {
@@ -216,10 +216,10 @@ function getActiveData() {
  * @returns {Promise<void>}
  */
 async function exitDemoMode() {
-    if (!AppState || !ViewController) return;
+    if (!_AppState || !_ViewController) return;
 
     // Clear demo state
-    AppState.update('demo', {
+    _AppState.update('demo', {
         isDemoMode: false,
         streams: null,
         patterns: null,
@@ -240,7 +240,7 @@ async function exitDemoMode() {
     }
 
     // Show upload view
-    ViewController.showUpload();
+    _ViewController.showUpload();
 
     console.log('[DemoController] Exited demo mode');
 }
@@ -250,10 +250,10 @@ async function exitDemoMode() {
  * @returns {boolean} True if demo data is valid
  */
 function validateDemoData() {
-    if (!DemoData) return false;
+    if (!_DemoData) return false;
 
     try {
-        const demoPackage = DemoData.getFullDemoPackage();
+        const demoPackage = _DemoData.getFullDemoPackage();
         return demoPackage &&
             Array.isArray(demoPackage.streams) &&
             demoPackage.streams.length > 0 &&
