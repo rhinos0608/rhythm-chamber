@@ -536,8 +536,14 @@ function buildSystemPrompt(queryContext = null, semanticContext = null) {
 
 /**
  * Analyze user message and generate relevant data context
+ * DELEGATES to MessageOperations
  */
 function generateQueryContext(message) {
+    if (typeof window.MessageOperations !== 'undefined') {
+        return window.MessageOperations.generateQueryContext(message);
+    }
+
+    // Fallback if MessageOperations not available
     if (!streamsData || !window.DataQuery) {
         return null;
     }
@@ -1258,10 +1264,18 @@ async function callOpenRouterLegacy(apiKey, config, messages, tools) {
 
 /**
  * Regenerate the last assistant response
- * Removes the last assistant message and re-sends the last user message
- * Handles function call sequences: user -> assistant(tool_calls) -> tool -> assistant
+ * DELEGATES to MessageOperations
  */
 async function regenerateLastResponse(options = null) {
+    if (typeof window.MessageOperations !== 'undefined') {
+        return window.MessageOperations.regenerateLastResponse(
+            conversationHistory,
+            sendMessage,
+            options
+        );
+    }
+
+    // Fallback if MessageOperations not available
     if (conversationHistory.length === 0) return null;
 
     // Remove messages from the end until we find the user message
@@ -1298,9 +1312,14 @@ async function regenerateLastResponse(options = null) {
 
 /**
  * Delete a specific message index from history
- * Note: Deleting a message changes the context for subsequent messages
+ * DELEGATES to MessageOperations
  */
 function deleteMessage(index) {
+    if (typeof window.MessageOperations !== 'undefined') {
+        return window.MessageOperations.deleteMessage(index, conversationHistory);
+    }
+
+    // Fallback if MessageOperations not available
     if (index < 0 || index >= conversationHistory.length) return false;
 
     conversationHistory.splice(index, 1);
@@ -1310,9 +1329,20 @@ function deleteMessage(index) {
 
 /**
  * Edit a user message
- * Truncates history to that point, updates message, and regenerates response
+ * DELEGATES to MessageOperations
  */
 async function editMessage(index, newText, options = null) {
+    if (typeof window.MessageOperations !== 'undefined') {
+        return window.MessageOperations.editMessage(
+            index,
+            newText,
+            conversationHistory,
+            sendMessage,
+            options
+        );
+    }
+
+    // Fallback if MessageOperations not available
     if (index < 0 || index >= conversationHistory.length) return null;
 
     const msg = conversationHistory[index];
@@ -1327,9 +1357,14 @@ async function editMessage(index, newText, options = null) {
 
 /**
  * Generate a fallback response when API is unavailable
- * Now uses query context to provide data-driven answers
+ * DELEGATES to MessageOperations
  */
 function generateFallbackResponse(message, queryContext) {
+    if (typeof window.MessageOperations !== 'undefined') {
+        return window.MessageOperations.generateFallbackResponse(message, queryContext);
+    }
+
+    // Fallback if MessageOperations not available
     const { personality, patterns } = userContext;
     const lowerMessage = message.toLowerCase();
 
