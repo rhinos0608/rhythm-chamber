@@ -1252,14 +1252,25 @@ async function callOpenRouterLegacy(apiKey, config, messages, tools) {
 /**
  * Regenerate the last assistant response
  * Removes the last assistant message and re-sends the last user message
+ * Handles function call sequences: user -> assistant(tool_calls) -> tool -> assistant
  */
 async function regenerateLastResponse(options = null) {
     if (conversationHistory.length === 0) return null;
 
-    // Check if last message was assistant
-    const lastMsg = conversationHistory[conversationHistory.length - 1];
-    if (lastMsg.role === 'assistant') {
-        conversationHistory.pop(); // Remove assistant message
+    // Remove messages from the end until we find the user message
+    // This handles both simple exchanges AND function call sequences:
+    // - Simple: user -> assistant
+    // - With tools: user -> assistant(tool_calls) -> tool* -> assistant
+    while (conversationHistory.length > 0) {
+        const lastMsg = conversationHistory[conversationHistory.length - 1];
+
+        if (lastMsg.role === 'user') {
+            // Found the user message - stop removing
+            break;
+        }
+
+        // Remove assistant, tool, or any other message type
+        conversationHistory.pop();
     }
 
     // Check if we have a user message to regenerate from
