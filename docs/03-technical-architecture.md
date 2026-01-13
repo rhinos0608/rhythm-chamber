@@ -49,14 +49,38 @@ Your "backend":
 
 ---
 
+## Modular Architecture (Refactored)
+
+To manage complexity, the "God Objects" (chat.js, app.js, storage.js) have been decomposed into focused submodules with facade interfaces.
+
+### 1. Storage Facade
+`js/storage.js` acts as a unified entry point, delegating to specialized backends:
+- **IndexedDBCore** (`js/storage/indexeddb.js`): Raw database operations.
+- **ConfigAPI** (`js/storage/config-api.js`): Key-value store for settings and tokens.
+- **Migration** (`js/storage/migration.js`): One-way migration from localStorage.
+
+### 2. LLM Provider Interface
+`js/chat.js` delegates all model interactions to `ProviderInterface` (`js/providers/provider-interface.js`), which routes to:
+- **OpenRouter** (`js/providers/openrouter.js`): Cloud API.
+- **LM Studio** (`js/providers/lmstudio.js`): Local inference.
+- **Ollama** (`js/providers/ollama-adapter.js`): Local inference adapter.
+
+### 3. Controller Pattern
+UI logic is being extracted from `app.js` into focused controllers:
+- **ChatUIController** (`js/controllers/chat-ui-controller.js`): Message rendering, streaming, markdown.
+- **SidebarController** (`js/controllers/sidebar-controller.js`): Session list management.
+- **ViewController** (`js/controllers/view-controller.js`): Transitions and state.
+
+---
+
 ## Configuration & Persistence
 
 The app uses a layered configuration system:
 
 1.  **Defaults**: `config.js` provides baseline values (placeholders).
-2.  **Overrides**: `localStorage` stores user-configured settings (API keys, models).
-3.  **UI**: An in-app settings modal allows users to modify these without editing files.
-4.  **Priority**: `config.js` > `localStorage` (if `config.js` has non-placeholder values).
+2.  **Overrides**: `localStorage` (via ConfigAPI) stores user-configured settings.
+3.  **UI**: An in-app settings modal allows users to modify these.
+4.  **Priority**: `config.js` > `localStorage`.
 
 **BYOK Model (Bring Your Own Keys):**
 - Users provide their own OpenRouter API key
@@ -74,27 +98,50 @@ rhythm-chamber/
 ├── app.html                # Main analyzer app
 ├── SECURITY.md             # Security model documentation
 ├── css/
-│   └── styles.css          # All styles including premium/Stripe theme
+│   └── styles.css          # Design system
 ├── js/
+│   ├── app.js              # Main controller (Delegates to sub-controllers)
 │   ├── config.js           # API keys (gitignored)
-│   ├── config.example.js   # Config template (+ Stripe keys)
-│   ├── app.js              # Main application controller
-│   ├── spotify.js          # Spotify OAuth PKCE + session invalidation
-│   ├── security.js         # Client-side security (AES-GCM, rate limiting)
-│   ├── payments.js         # Entitlement checks (Free MVP stub)
-│   ├── rag.js              # Embeddings + Qdrant + encrypted credentials
+│   ├── utils.js            # Utilities
+│   │
+│   ├── controllers/        # UI Logic
+│   │   ├── chat-ui-controller.js
+│   │   ├── sidebar-controller.js
+│   │   └── view-controller.js
+│   │
+│   ├── providers/          # AI Providers
+│   │   ├── provider-interface.js
+│   │   ├── openrouter.js
+│   │   ├── lmstudio.js
+│   │   └── ollama-adapter.js
+│   │
+│   ├── storage/            # Data Layer
+│   │   ├── indexeddb.js
+│   │   ├── config-api.js
+│   │   └── migration.js
+│   │
+│   ├── security/           # Security Layer
+│   │   ├── encryption.js
+│   │   ├── token-binding.js
+│   │   ├── anomaly.js
+│   │   └── index.js
+│   │
+│   ├── storage.js          # Storage Facade
+│   ├── spotify.js          # Spotify OAuth PKCE
+│   ├── security.js         # Security Facade
+│   ├── payments.js         # Entitlement checks (Free MVP)
+│   ├── rag.js              # Embeddings + Qdrant
 │   ├── parser.js           # .zip file parsing
-│   ├── patterns.js         # Pattern detection (UTC-based)
+│   ├── patterns.js         # Pattern detection
 │   ├── personality.js      # Personality classification
 │   ├── data-query.js       # Chat data query utilities
-│   ├── functions.js        # LLM function schemas + executors
-│   ├── chat.js             # OpenRouter chat + function calling + RAG
+│   ├── functions.js        # LLM function schemas
+│   ├── chat.js             # Chat orchestration (Delegates to Providers)
 │   ├── prompts.js          # Editable prompt templates
-│   ├── storage.js          # IndexedDB wrapper + privacy controls
-│   ├── settings.js         # Settings management & premium UI
+│   ├── settings.js         # Settings management
 │   └── cards.js            # Shareable card generation
 ├── workers/
-│   └── parser-worker.js    # Web Worker for .zip parsing (UTC extraction)
+│   └── parser-worker.js    # Web Worker for .zip parsing
 └── docs/
     └── *.md                # Documentation
 ```
@@ -162,29 +209,18 @@ localStorage.setItem('spotify_code_verifier', codeVerifier);
 window.location.href = `https://accounts.spotify.com/authorize?
   client_id=${CLIENT_ID}&
   response_type=code&
-  redirect_uri=${REDIRECT_URI}&
-  code_challenge_method=S256&
+  ...
   code_challenge=${codeChallenge}&
   scope=user-read-recently-played user-top-read`;
 
 // 4. On callback, exchange code for token
-const response = await fetch('https://accounts.spotify.com/api/token', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  body: new URLSearchParams({
-    grant_type: 'authorization_code',
-    code: authorizationCode,
-    redirect_uri: REDIRECT_URI,
-    client_id: CLIENT_ID,
-    code_verifier: storedVerifier
-  })
-});
+const response = await fetch('https://accounts.spotify.com/api/token', { ... });
 ```
 
 **Key Benefits:**
 - No client secret needed
 - No backend required
-- Tokens stored in localStorage
+- Tokens stored in localStorage (encrypted/bound)
 - Automatic token refresh support
 
 ---
@@ -217,46 +253,6 @@ flowchart LR
 | `get_listening_stats` | Stats for a period | year?, month? |
 | `compare_periods` | Compare two years | year1, year2 |
 | `search_tracks` | Search for a track | track_name |
-
-### Example Request/Response
-
-```javascript
-// User asks: "Show me my top 10 artists from 2020"
-
-// 1. LLM responds with tool_call:
-{
-  tool_calls: [{
-    id: "call_123",
-    function: {
-      name: "get_top_artists",
-      arguments: '{"year": 2020, "limit": 10}'
-    }
-  }]
-}
-
-// 2. Function executes and returns:
-{
-  period: "2020",
-  total_plays: 8234,
-  top_artists: [
-    { rank: 1, name: "Taylor Swift", plays: 847 },
-    { rank: 2, name: "The National", plays: 621 },
-    // ... 8 more
-  ]
-}
-
-// 3. LLM generates final response using real data
-```
-
-### Legacy: Context Injection (Fallback)
-
-When function calling is unavailable (no API key, free models that don't support tools), the system falls back to regex-based context injection:
-
-```javascript
-// js/chat.js - generateQueryContext()
-// Parses user message with regex, queries data, injects into prompt
-// Less reliable but works without function calling support
-```
 
 ---
 
@@ -302,32 +298,6 @@ flowchart LR
 // 5. Store config + status in localStorage
 ```
 
-### Chunk Types
-
-| Type | Content |
-|------|---------|
-| `monthly_summary` | Month listening stats, top 10 artists/tracks |
-| `artist_profile` | Artist history, play count, first/last listen, top tracks |
-
-### Chat Integration
-
-```javascript
-// In chat.js sendMessage()
-if (window.RAG?.isConfigured()) {
-    semanticContext = await window.RAG.getSemanticContext(message, 3);
-    // Injects top 3 matching chunks into system prompt
-}
-```
-
-### User Setup Flow
-
-1. Create free Qdrant Cloud cluster
-2. Enter Qdrant URL + API key in Settings
-3. Click "Generate Embeddings" → Progress bar
-4. Semantic search now active in chat
-
-**This is a power user feature**—but that's the point. Power users are our target audience.
-
 ---
 
 ## Storage: IndexedDB + localStorage
@@ -341,52 +311,20 @@ if (window.RAG?.isConfigured()) {
 | `personality` | `'result'` | Personality classification result |
 | `settings` | key | User preferences |
 | `chat_sessions` | session ID | **Persistent chat conversations** |
+| `config` | Various | Persistent settings (ConfigAPI) |
+| `tokens` | Various | Encrypted/Bound tokens (ConfigAPI) |
 
 ```javascript
-// js/storage.js
+// js/storage.js (Facade)
 
-// Streams stored in IndexedDB (large data)
-await db.put('streams', { id: 'user-streams', data: parsedStreams });
-await db.put('chunks', { id: 'user-chunks', data: chunks });
+// Delegates to js/storage/indexeddb.js
+await Storage.saveStreams(parsedStreams);
 
-// Personality stored in IndexedDB
-await db.put('personality', { id: 'result', ...personality });
+// Delegates to js/storage/config-api.js
+await Storage.saveSetting('theme', 'dark');
 
-// Chat sessions stored in IndexedDB
-await db.put('chat_sessions', {
-  id: 'uuid-string',
-  title: 'First user message...',
-  createdAt: '2026-01-12T17:00:00Z',
-  updatedAt: '2026-01-12T17:30:00Z',
-  messageCount: 12,
-  messages: [{ role: 'user', content: '...' }, ...],
-  metadata: { personalityName, personalityEmoji, isLiteMode }
-});
-
-// Spotify tokens in localStorage
-localStorage.setItem('spotify_access_token', token);
-localStorage.setItem('spotify_token_expiry', expiry);
-```
-
-### Chat Session Management
-
-Persistent multi-conversation support with ChatGPT-style sidebar:
-
-| Feature | Implementation |
-|---------|----------------|
-| Session persistence | IndexedDB `chat_sessions` store |
-| Auto-save | Debounced 2-second save after messages |
-| Auto-titling | First user message (50 chars) |
-| Session list | Sorted by `updatedAt` descending |
-| Sidebar toggle | Header hamburger (☰) + footer collapse (◀) |
-| Mobile UX | Sidebar slides as overlay with backdrop |
-
-```mermaid
-flowchart LR
-    A[Send Message] --> B[Debounce 2s]
-    B --> C[Save Session to IndexedDB]
-    C --> D[Notify Sidebar]
-    D --> E[Re-render Session List]
+// Delegates to js/storage/migration.js
+await Storage.migrateFromLocalStorage();
 ```
 
 ---
@@ -442,35 +380,24 @@ flowchart LR
 ## Chat: OpenRouter Integration
 
 ```javascript
-// js/chat.js
+// js/chat.js (via ProviderInterface)
 
 async function sendMessage(message) {
-  // Generate query context from user's question
-  const queryContext = generateQueryContext(message);
+  // Configured provider (OpenRouter, LMStudio, or Ollama)
+  const providerConfig = await ProviderInterface.buildProviderConfig(
+    settings.provider, 
+    settings
+  );
   
-  // Build dynamic system prompt
-  const systemPrompt = buildSystemPrompt(queryContext);
+  // Unified call via interface
+  const response = await ProviderInterface.callProvider(
+    providerConfig, 
+    apiKey, 
+    messages, 
+    tools
+  );
   
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENROUTER_KEY}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': window.location.origin,
-      'X-Title': 'Rhythm Chamber'
-    },
-    body: JSON.stringify({
-      model: 'mistralai/mistral-7b-instruct:free',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...conversationHistory
-      ],
-      max_tokens: 500,
-      temperature: 0.7
-    })
-  });
-  
-  return response.json();
+  return response;
 }
 ```
 
@@ -512,47 +439,14 @@ This application uses a **100% client-side security model**. All security measur
 | **AES-GCM Credential Encryption** | `security.js` | RAG credentials encrypted with session-derived keys |
 | **XSS Token Binding** | `security.js`, `spotify.js` | Spotify tokens bound to device fingerprint |
 | **Secure Context Enforcement** | `security.js` | Blocks operation in iframes, data: protocols |
-| **Session Versioning** | `security.js` | Keys invalidated when auth fails |
+| **Session Versioning** | `security.js` | Keys invalidated on auth failures |
 | **Background Token Refresh** | `spotify.js` | Proactive refresh during long operations |
 | **Adaptive Lockout Thresholds** | `security.js` | Travel-aware threshold adjustment |
 | **Geographic Anomaly Detection** | `security.js` | Detects proxy/VPN-based attacks |
 | **Rate Limiting** | `security.js` | Prevents credential stuffing |
 | **Namespace Isolation** | `rag.js` | Per-user RAG collections |
 | **Unified Error Context** | `security.js` | Structured errors with recovery paths |
-| **Enhanced Worker Reset** | `app.js` | Message queue drain before termination |
-| **Checkpoint Merge** | `rag.js` | Graceful handling of data changes mid-resume |
 | **Privacy Controls** | `storage.js` | Session-only mode, data cleanup |
-
-### Threat Mitigations
-
-| Concern | Mitigation |
-|---------|------------|
-| API keys in DevTools | AES-GCM encryption with session-bound keys |
-| XSS token theft | Device fingerprint binding + verification on every API call |
-| Iframe/clickjacking attacks | Secure context enforcement blocks cross-origin iframes |
-| Session replay attacks | Session versioning with auto-invalidation |
-| Token expiry during processing | Background token refresh monitors expiry proactively |
-| False positive lockouts | Travel-aware adaptive thresholds (1.5x tolerance for travelers) |
-| Credential stuffing | Rate limiting + geographic anomaly detection |
-| Cross-user RAG access | Namespace isolation using user hash |
-| Spotify token theft | PKCE flow + token refresh invalidates sessions + fingerprint binding |
-| Worker race conditions | Message queue drain + abort signaling before termination |
-| Checkpoint data mismatch | Merge capability with user choice (merge or restart) |
-| Data persistence concerns | Session-only mode + explicit consent |
-
-### Limitations (Client-Side Architecture)
-
-> [!WARNING]
-> **Not Equivalent to Server-Side Security**
-
-These threats cannot be fully mitigated without backend infrastructure:
-
-- **Full memory inspection** - Sophisticated attackers with browser access can extract secrets
-- **Remote session revocation** - Cannot revoke sessions from another device
-- **Token theft with physical access** - localStorage accessible to device holder
-- **HttpOnly cookies** - Not possible without server-side token management
-
-This is an **accepted trade-off** for the zero-cost, privacy-first architecture.
 
 ---
 
