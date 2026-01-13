@@ -4,6 +4,9 @@
  * Unified abstraction layer for all LLM providers (OpenRouter, Ollama, LM Studio).
  * Handles configuration building and request routing.
  * 
+ * BRING YOUR OWN AI: Users choose their AI infrastructure - local or cloud.
+ * Local AI (Ollama/LM Studio) provides maximum privacy with zero data transmission.
+ * 
  * @module providers/provider-interface
  */
 
@@ -37,7 +40,10 @@ function buildProviderConfig(provider, settings, baseConfig) {
                 temperature: settings.ollama?.temperature ?? settings.openrouter?.temperature ?? 0.7,
                 topP: settings.ollama?.topP ?? 0.9,
                 maxTokens: settings.ollama?.maxTokens || 2000,
-                timeout: PROVIDER_TIMEOUTS.local
+                timeout: PROVIDER_TIMEOUTS.local,
+                // Privacy flag for UI
+                isLocal: true,
+                privacyLevel: 'maximum'
             };
 
         case 'lmstudio':
@@ -48,7 +54,10 @@ function buildProviderConfig(provider, settings, baseConfig) {
                 temperature: settings.lmstudio?.temperature ?? settings.openrouter?.temperature ?? 0.7,
                 topP: settings.lmstudio?.topP ?? 0.9,
                 maxTokens: settings.lmstudio?.maxTokens || 2000,
-                timeout: PROVIDER_TIMEOUTS.local
+                timeout: PROVIDER_TIMEOUTS.local,
+                // Privacy flag for UI
+                isLocal: true,
+                privacyLevel: 'maximum'
             };
 
         case 'openrouter':
@@ -63,7 +72,10 @@ function buildProviderConfig(provider, settings, baseConfig) {
                 maxTokens: settings.openrouter?.maxTokens || 4500,
                 frequencyPenalty: settings.openrouter?.frequencyPenalty ?? 0,
                 presencePenalty: settings.openrouter?.presencePenalty ?? 0,
-                timeout: PROVIDER_TIMEOUTS.cloud
+                timeout: PROVIDER_TIMEOUTS.cloud,
+                // Privacy flag for UI
+                isLocal: false,
+                privacyLevel: 'cloud'
             };
     }
 }

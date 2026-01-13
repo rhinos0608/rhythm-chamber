@@ -7,6 +7,8 @@
  * Default endpoint: http://localhost:11434
  * 
  * API Reference: https://github.com/ollama/ollama/blob/main/docs/api.md
+ * 
+ * BRING YOUR OWN AI: Users run AI models on their own hardware for maximum privacy.
  */
 
 // ==========================================
@@ -310,7 +312,40 @@ async function chat(messages, model, options = {}) {
     }
 
     if (stream && onToken) {
-        return await handleStreamingResponse(response, onToken);
+        const result = await handleStreamingResponse(response, onToken);
+
+        // Check if streaming returned empty content - fallback to non-streaming
+        if (!result.content && !result.toolCalls) {
+            console.warn('[Ollama] Streaming returned empty response, retrying non-streaming');
+
+            // Make a new non-streaming request
+            const fallbackRequestBody = { ...requestBody, stream: false };
+            const fallbackResponse = await ollamaFetch('/api/chat', {
+                method: 'POST',
+                body: JSON.stringify(fallbackRequestBody)
+            }, GENERATION_TIMEOUT_MS);
+
+            if (!fallbackResponse.ok) {
+                throw new Error(`Ollama fallback failed: ${fallbackResponse.status}`);
+            }
+
+            const fallbackData = await fallbackResponse.json();
+            console.log('[Ollama] Non-streaming fallback succeeded');
+
+            // Send full content through onToken for UI update
+            if (fallbackData.message?.content) {
+                onToken(fallbackData.message.content);
+            }
+
+            return {
+                content: fallbackData.message?.content || '',
+                model: fallbackData.model,
+                done: fallbackData.done,
+                toolCalls: fallbackData.message?.tool_calls || null
+            };
+        }
+
+        return result;
     }
 
     const data = await response.json();
@@ -340,23 +375,51 @@ async function handleStreamingResponse(response, onToken) {
 
     let fullContent = '';
     let lastData = null;
+    let buffer = '';  // Buffer for incomplete chunks
 
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const lines = decoder.decode(value).split('\n').filter(Boolean);
+        // Append to buffer and process complete lines
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+
+        // Keep last incomplete line in buffer
+        buffer = lines.pop() || '';
+
         for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (!trimmedLine) continue;
+
             try {
-                const data = JSON.parse(line);
+                const data = JSON.parse(trimmedLine);
                 if (data.message?.content) {
                     fullContent += data.message.content;
                     onToken(data.message.content);
                 }
                 lastData = data;
-            } catch { /* Ignore parse errors */ }
+            } catch {
+                // Ignore parse errors for non-JSON lines
+            }
         }
     }
+
+    // Process any remaining buffer content
+    if (buffer.trim()) {
+        try {
+            const data = JSON.parse(buffer.trim());
+            if (data.message?.content) {
+                fullContent += data.message.content;
+                onToken(data.message.content);
+            }
+            lastData = data;
+        } catch {
+            // Ignore
+        }
+    }
+
+    console.log('[Ollama] Streaming complete - content length:', fullContent.length);
 
     return {
         content: fullContent,

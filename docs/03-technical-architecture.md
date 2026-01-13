@@ -6,7 +6,7 @@
 
 | Component | Cost | Who Pays | Competitive Advantage |
 |-----------|------|----------|----------------------|
-| LLM inference | $0 | OpenRouter (free tier) | No server costs = free tier is actually free |
+| LLM inference | $0 | **Your local AI** (Ollama/LM Studio) or OpenRouter (free tier) | **No cloud dependency** - run AI on your own hardware |
 | Processing | $0 | User's browser | Privacy-first, no data breach risk |
 | Data storage | $0 | User's localStorage/IndexedDB | User controls their data, not us |
 | **Supporter Features** | **$19 Lifetime** | **(Future)** User pays for CLI/themes/badges | **One-time unlock**—no recurring infrastructure |
@@ -23,7 +23,7 @@
 
 ---
 
-## Architecture: 100% Client-Side
+## Architecture: 100% Client-Side with Local AI
 
 ```
 User's Browser
@@ -39,7 +39,10 @@ User's Browser
 │       └── Full personality classification
 │
 ├── Store in localStorage/IndexedDB
-├── Chat via OpenRouter API (with data queries)
+├── Chat via **Your AI** (Local or Cloud)
+│   ├── **Local AI**: Ollama (http://localhost:11434)
+│   ├── **Local AI**: LM Studio (http://localhost:1234/v1)
+│   └── **Cloud AI**: OpenRouter (optional, BYOK)
 └── Generate shareable cards (Canvas API)
 
 Your "backend":
@@ -47,6 +50,56 @@ Your "backend":
 ```
 
 **This architecture is a feature, not a bug.** For the quantified-self crowd, this is hugely compelling.
+
+---
+
+## Bring Your Own AI (BYOAI) Model
+
+### Why Local AI is the Future
+
+**Traditional BYOK (Bring Your Own Key):**
+- Users provide cloud API keys (OpenRouter, OpenAI)
+- Data leaves the device
+- Ongoing API costs
+- Privacy concerns
+
+**Our BYOAI (Bring Your Own AI):**
+- **Users bring their own AI infrastructure**
+- **Local models**: Ollama, LM Studio (100% private)
+- **Cloud models**: OpenRouter (optional, user-controlled)
+- **Zero data transmission** for local AI
+- **No API costs** for local AI
+
+### Supported AI Providers
+
+| Provider | Type | Setup | Cost | Privacy | Best For |
+|----------|------|-------|------|---------|----------|
+| **Ollama** | Local | Install + download model | $0 | ⭐⭐⭐⭐⭐ | Maximum privacy, no internet needed |
+| **LM Studio** | Local | Install + load model | $0 | ⭐⭐⭐⭐⭐ | User-friendly local AI GUI |
+| **OpenRouter** | Cloud | API key | $0-$varies | ⭐⭐ | Convenience, premium models |
+
+### Local AI Setup
+
+**Ollama:**
+```bash
+# Install Ollama
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# Download a recommended model
+ollama pull llama3.2
+ollama pull mistral
+
+# Start server
+ollama serve
+```
+
+**LM Studio:**
+1. Download from lmstudio.ai
+2. Install and launch
+3. Download model from Hugging Face
+4. Start local server (port 1234)
+
+**Rhythm Chamber automatically detects and connects to local AI servers.**
 
 ---
 
@@ -152,10 +205,9 @@ The app uses a layered configuration system:
 3.  **UI**: An in-app settings modal allows users to modify these
 4.  **Priority**: `config.js` > `localStorage`
 
-**BYOK Model (Bring Your Own Keys):**
-- Users provide their own OpenRouter API key
-- Users can provide their own Qdrant cluster for semantic search
-- Users control their AI model choice
+**Bring Your Own AI Model:**
+- Users choose their AI provider (Ollama, LM Studio, or OpenRouter)
+- Users control their model selection
 - **This appeals to power users who want control and transparency**
 
 ---
@@ -176,7 +228,6 @@ rhythm-chamber/
 │   ├── personality.js      # 5 types + lite types + score breakdown
 │   ├── chat.js             # Chat orchestration (Delegates to Providers + MessageOperations + SessionManager)
 │   ├── data-query.js       # Query streams by time/artist/track
-│   ├── functions.js        # LLM function schemas + executors (10 functions)
 │   ├── cards.js            # Canvas card generator
 │   ├── storage.js          # Storage Facade (Delegates to js/storage/ modules)
 │   ├── settings.js         # In-app settings modal (API key, model, etc.)
@@ -196,6 +247,20 @@ rhythm-chamber/
 │   ├── local-vector-store.js # Client-side vector search
 │   ├── token-counter.js    # Token usage tracking
 │   ├── operation-lock.js   # Critical operation coordination
+│   │
+│   ├── functions/          # Function Calling Modules (Modular Architecture)
+│   │   ├── index.js        # Facade - unified execute() + schema access
+│   │   ├── schemas/
+│   │   │   ├── data-queries.js     # Core data query schemas (6 functions)
+│   │   │   ├── template-queries.js # Template profile schemas (4 functions)
+│   │   │   └── analytics-queries.js # Stats.fm/Wrapped-style schemas (12 functions)
+│   │   ├── executors/
+│   │   │   ├── data-executors.js     # Core data query executors
+│   │   │   ├── template-executors.js # Template profile executors
+│   │   │   └── analytics-executors.js # Analytics function executors
+│   │   └── utils/
+│   │       ├── retry.js      # Exponential backoff retry logic
+│   │       └── validation.js # Input validation + date range parsing
 │   │
 │   ├── providers/          # LLM Provider Modules
 │   │   ├── provider-interface.js
@@ -338,20 +403,45 @@ flowchart LR
     C -->|No| H
 ```
 
-### Available Functions (js/functions.js)
+### Available Functions (js/functions/ - 22 Total)
 
+**Core Data Queries (6 functions):**
 | Function | Description | Parameters |
 |----------|-------------|------------|
-| `get_top_artists` | Top N artists for a period | year, month?, limit? |
-| `get_top_tracks` | Top N tracks for a period | year, month?, limit? |
+| `get_top_artists` | Top N artists for a period | year, month?, quarter?, season?, limit?, sort_by? |
+| `get_top_tracks` | Top N tracks for a period | year, month?, quarter?, season?, limit?, sort_by? |
 | `get_artist_history` | Full history for an artist | artist_name |
-| `get_listening_stats` | Stats for a period | year?, month? |
+| `get_listening_stats` | Stats for a period | year?, month?, quarter?, season? |
 | `compare_periods` | Compare two years | year1, year2 |
 | `search_tracks` | Search for a track | track_name |
-| `get_templates_by_genre` | Filter templates by genre | genre |
-| `get_templates_with_pattern` | Find templates with patterns | pattern |
-| `get_templates_by_personality` | Match templates by personality | type |
-| `synthesize_profile` | AI synthesis from template | template_id, user_context |
+
+**Stats.fm-Style Analytics (6 functions):**
+| Function | Description | Parameters |
+|----------|-------------|------------|
+| `get_bottom_tracks` | Least played tracks | year, limit?, min_plays? |
+| `get_bottom_artists` | Least played artists | year, limit?, min_plays? |
+| `get_listening_clock` | 24-hour listening breakdown | year?, month?, group_by? |
+| `get_listening_streaks` | Consecutive listening days | year?, min_streak_days? |
+| `get_time_by_artist` | Artists by total MINUTES | year, limit? |
+| `get_platform_stats` | iOS/Android breakdown | year? |
+
+**Spotify Wrapped-Style Analytics (6 functions):**
+| Function | Description | Parameters |
+|----------|-------------|------------|
+| `get_discovery_stats` | New artists discovered | year, breakdown? |
+| `get_skip_patterns` | Skip rate analysis | year?, type?, limit? |
+| `get_shuffle_habits` | Shuffle vs intentional | year?, breakdown? |
+| `get_peak_listening_day` | Busiest day of week | year?, metric? |
+| `get_completion_rate` | Song completion rates | year?, threshold?, breakdown? |
+| `get_offline_listening` | Offline listening patterns | year?, limit? |
+
+**Template Profile Queries (4 functions):**
+| Function | Description | Parameters |
+|----------|-------------|------------|
+| `get_templates_by_genre` | Filter templates by genre | genre, limit? |
+| `get_templates_with_pattern` | Find templates with patterns | pattern_type |
+| `get_templates_by_personality` | Match templates by personality | personality_type |
+| `synthesize_profile` | AI synthesis from templates | description |
 
 ---
 
@@ -476,13 +566,13 @@ await Storage.migrateFromLocalStorage();
 
 ---
 
-## Chat: OpenRouter Integration
+## Chat: Local AI Integration
 
 ```javascript
 // js/chat.js (via ProviderInterface)
 
 async function sendMessage(message) {
-  // Configured provider (OpenRouter, LMStudio, or Ollama)
+  // Configured provider (Ollama, LMStudio, or OpenRouter)
   const providerConfig = await ProviderInterface.buildProviderConfig(
     settings.provider, 
     settings
@@ -500,6 +590,12 @@ async function sendMessage(message) {
 }
 ```
 
+**Local AI Benefits:**
+- **Zero data transmission** - everything stays on your device
+- **No API costs** - run models you already downloaded
+- **Privacy-first** - no third-party access to your data
+- **Offline capable** - works without internet connection
+
 ---
 
 ## Cost Analysis
@@ -509,7 +605,8 @@ async function sendMessage(message) {
 | Resource | Cost | Notes |
 |----------|------|-------|
 | Vercel hosting | $0 | Static files only |
-| OpenRouter free models | $0 | BYOK model |
+| **Local AI** | **$0** | **Ollama/LM Studio on your hardware** |
+| OpenRouter free models | $0 | Optional cloud provider |
 | localStorage/IndexedDB | $0 | Client-side storage |
 | Spotify OAuth (PKCE) | $0 | No backend needed |
 | **Total** | **$0** | **Zero infrastructure cost** |
@@ -594,7 +691,6 @@ This application uses a **100% client-side security model**. All security measur
 | **Adaptive Lockout Thresholds** | `security.js` | Travel-aware threshold adjustment |
 | **Geographic Anomaly Detection** | `security.js` | Detects proxy/VPN-based attacks |
 | **Rate Limiting** | `security.js` | Prevents credential stuffing |
-| **Namespace Isolation** | `rag.js` | Per-user RAG collections |
 | **Unified Error Context** | `security.js` | Structured errors with recovery paths |
 | **Privacy Controls** | `storage.js` | Session-only mode, data cleanup |
 
@@ -641,7 +737,7 @@ npx serve .
 ### Phase 1: Core Features
 
 #### Free Tier
-- [x] Full local analysis, BYOK chat, basic cards
+- [x] Full local analysis, BYOAI chat, basic cards
 - [x] Semantic search (Qdrant, user-provided credentials)
 - [x] Chat data queries (function calling)
 - [ ] WASM embeddings for semantic search (v1.1)
@@ -687,6 +783,32 @@ npx serve .
 ---
 
 ## Session Log
+
+### Session 18 — 2026-01-14 (Function Module Refactoring)
+
+**What was done:**
+1. **Modular Architecture**: Refactored `functions.js` (634 lines) into `js/functions/` with 10 new files
+2. **New Analytics Functions**: Added 12 stats.fm/Spotify Wrapped-style functions
+3. **Enhanced Time Ranges**: Added quarter (Q1-Q4), season, and custom date range support
+4. **HNW Compliance**: Utilities for retry logic (`utils/retry.js`) and validation (`utils/validation.js`)
+5. **Documentation**: Updated file structure and function tables in both docs
+
+**New Module Structure:**
+- `js/functions/index.js` - Facade with unified `execute()`
+- `js/functions/schemas/` - 3 schema files (data, template, analytics)
+- `js/functions/executors/` - 3 executor files
+- `js/functions/utils/` - Retry and validation utilities
+
+**New Functions (12 total):**
+- Stats.fm-style: `get_bottom_tracks`, `get_bottom_artists`, `get_listening_clock`, `get_listening_streaks`, `get_time_by_artist`, `get_platform_stats`
+- Wrapped-style: `get_discovery_stats`, `get_skip_patterns`, `get_shuffle_habits`, `get_peak_listening_day`, `get_completion_rate`, `get_offline_listening`
+
+**Files Updated:**
+- `app.html` - Updated script imports
+- `AGENT_CONTEXT.md` - Updated file structure and function docs
+- `docs/03-technical-architecture.md` - Updated architecture docs
+
+---
 
 ### Session 17 — 2026-01-14 (Architecture Documentation Update)
 

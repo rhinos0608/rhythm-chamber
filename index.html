@@ -6,14 +6,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rhythm Chamber — Chat With Your Spotify Data</title>
   <meta name="description"
-    content="Chat with your complete Spotify history. Privacy-first, local processing, semantic search. The way ChatGPT can't handle your data.">
+    content="Chat with your complete Spotify history using your own AI. Privacy-first, local processing, semantic search. Run AI on your device with Ollama or LM Studio.">
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:;">
 
   <!-- Open Graph -->
   <meta property="og:title" content="Rhythm Chamber — Chat With Your Spotify Data">
   <meta property="og:description"
-    content="Your complete listening history is too big for ChatGPT. We handle it locally, with privacy and semantic search.">
+    content="Your complete listening history is too big for ChatGPT. Run AI locally with Ollama/LM Studio or use cloud APIs. Zero data transmission.">
   <meta property="og:type" content="website">
 
   <!-- Fonts -->
@@ -31,9 +31,9 @@
     <!-- Hero Section -->
     <section class="hero">
       <div class="hero-icon">🎵</div>
-      <h1>Chat with your Spotify data <span class="gradient-text">— the way ChatGPT can't</span></h1>
-      <p class="hero-subtitle">Your complete listening history is too big for ChatGPT. We handle it locally, with
-        privacy, semantic search, and accurate data queries.</p>
+      <h1>Chat with your Spotify data <span class="gradient-text">— powered by your AI</span></h1>
+      <p class="hero-subtitle">Your complete listening history is too big for ChatGPT. Run AI locally with Ollama or LM
+        Studio for maximum privacy, or use cloud APIs. Zero data transmission for local AI.</p>
 
       <div class="cta-group">
         <a href="app.html" class="btn btn-primary">
@@ -50,18 +50,55 @@
       <div class="usp-grid">
         <div class="usp-card">
           <div class="emoji">🔒</div>
-          <h3>Privacy First</h3>
-          <p>Your data never leaves your device</p>
+          <h3>Zero Data Transmission</h3>
+          <p>Local AI = your data never leaves your device</p>
+        </div>
+        <div class="usp-card">
+          <div class="emoji">🤖</div>
+          <h3>Your AI, Your Control</h3>
+          <p>Ollama, LM Studio, or OpenRouter</p>
         </div>
         <div class="usp-card">
           <div class="emoji">🧠</div>
           <h3>Semantic Search</h3>
           <p>Ask natural questions about your history</p>
         </div>
-        <div class="usp-card">
-          <div class="emoji">⚡</div>
-          <h3>Zero Backend</h3>
-          <p>Runs entirely in your browser</p>
+      </div>
+    </section>
+
+    <!-- Local AI Providers -->
+    <section class="container" style="padding: var(--space-3xl) var(--space-lg); background: var(--bg-secondary);">
+      <h2 style="text-align: center; margin-bottom: var(--space-2xl);">Bring <span class="gradient-text">Your Own
+          AI</span></h2>
+
+      <div class="types-grid" style="max-width: 1000px; margin: 0 auto;">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: var(--space-md);">🦙</div>
+          <h3>Ollama (Local)</h3>
+          <p style="margin-bottom: var(--space-md);">Run models like Llama 3.2, Mistral, or Gemma on your own hardware.
+            Zero cloud dependency.</p>
+          <code
+            style="display: block; background: var(--bg-tertiary); padding: var(--space-sm); border-radius: 4px; font-size: 0.9em;">ollama serve</code>
+          <code
+            style="display: block; background: var(--bg-tertiary); padding: var(--space-sm); border-radius: 4px; font-size: 0.9em; margin-top: 4px;">ollama pull llama3.2</code>
+        </div>
+
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: var(--space-md);">🖥️</div>
+          <h3>LM Studio (Local)</h3>
+          <p style="margin-bottom: var(--space-md);">User-friendly GUI for local AI. OpenAI-compatible API at
+            localhost:1234.</p>
+          <code
+            style="display: block; background: var(--bg-tertiary); padding: var(--space-sm); border-radius: 4px; font-size: 0.9em;">http://localhost:1234/v1</code>
+        </div>
+
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: var(--space-md);">☁️</div>
+          <h3>OpenRouter (Cloud)</h3>
+          <p style="margin-bottom: var(--space-md);">Optional cloud provider for premium models. BYOK for convenience.
+          </p>
+          <code
+            style="display: block; background: var(--bg-tertiary); padding: var(--space-sm); border-radius: 4px; font-size: 0.9em;">sk-or-v1-...</code>
         </div>
       </div>
     </section>
@@ -123,6 +160,8 @@
             <li>Click to explore</li>
             <li>Full history + real-time</li>
             <li>Low technical barrier</li>
+            <li style="color: var(--danger);">❌ Cloud dependency</li>
+            <li style="color: var(--danger);">❌ No local AI</li>
           </ul>
         </div>
 
@@ -133,7 +172,9 @@
             <li>Identity and meaning</li>
             <li>Ask questions naturally</li>
             <li>Full history only (depth over speed)</li>
-            <li>BYOK model (power users)</li>
+            <li><strong>Bring Your Own AI</strong></li>
+            <li style="color: var(--success);">✅ Local AI (Ollama/LM Studio)</li>
+            <li style="color: var(--success);">✅ Zero data transmission</li>
           </ul>
         </div>
       </div>
@@ -158,30 +199,37 @@
 
         <div class="card" style="text-align: center;">
           <div style="font-size: 2rem; margin-bottom: var(--space-md);">3️⃣</div>
+          <h3>Choose Your AI</h3>
+          <p>Start Ollama/LM Studio locally, or configure OpenRouter in settings</p>
+        </div>
+
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 2rem; margin-bottom: var(--space-md);">4️⃣</div>
           <h3>Chat & Discover</h3>
           <p>Ask questions like "What was I like in 2019?" and get semantic answers</p>
         </div>
       </div>
     </section>
 
-    <!-- The BYOK Advantage -->
+    <!-- The BYOAI Advantage -->
     <section class="container" style="padding: var(--space-3xl) var(--space-lg); background: var(--bg-secondary);">
-      <h2 style="text-align: center; margin-bottom: var(--space-2xl);">The <span class="gradient-text">BYOK
+      <h2 style="text-align: center; margin-bottom: var(--space-2xl);">The <span class="gradient-text">BYOAI
           Advantage</span></h2>
 
       <div class="card" style="max-width: 800px; margin: 0 auto; text-align: center;">
         <p style="font-size: 1.1em; line-height: 1.6;">
-          <strong>Bring Your Own Keys</strong> We respect your privacy and sovereignty by giving you control over your
-          data.
+          <strong>Bring Your Own AI</strong> We respect your privacy and sovereignty by letting you control your AI
+          infrastructure.
         </p>
         <ul style="text-align: left; margin-top: var(--space-lg); padding-left: var(--space-xl);">
-          <li><strong>Privacy-conscious:</strong> Already exporting data, understand data sovereignty</li>
-          <li><strong>Technical:</strong> Know what API keys are, appreciate transparency</li>
-          <li><strong>Sovereignty:</strong> Willing to pay for their own infrastructure</li>
-          <li><strong>No black box:</strong> They control the AI, we provide the interface</li>
+          <li><strong>Privacy-conscious:</strong> Local AI means zero data transmission</li>
+          <li><strong>Technical:</strong> Run models on your own hardware</li>
+          <li><strong>Sovereignty:</strong> No vendor lock-in, full control</li>
+          <li><strong>Cost-effective:</strong> No API costs for local AI</li>
+          <li><strong>Transparent:</strong> Open-source, inspect the code</li>
         </ul>
         <p style="margin-top: var(--space-lg); font-style: italic;">
-          "Your data never leaves your device, runs in your browser, you control everything."
+          "Your data never leaves your device. Your AI runs on your hardware. You control everything."
         </p>
       </div>
     </section>
@@ -189,7 +237,7 @@
     <!-- Footer -->
     <footer class="footer">
       <p><strong>Zero-backend architecture.</strong> No servers. No data collection. Free forever.</p>
-      <p>Your data stays on your device. 100% private.</p>
+      <p>Local AI = maximum privacy. Cloud AI = optional convenience.</p>
       <button class="settings-btn" onclick="Settings.showSettingsModal()" title="Settings"
         style="margin-top: var(--space-md);">⚙️ Settings</button>
     </footer>
