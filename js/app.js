@@ -777,6 +777,20 @@ async function processMessageResponse(actionFn) {
         const response = await actionFn({ onProgress });
         const loadingEl = document.getElementById(loadingId);
 
+        // Handle null/undefined response
+        if (!response) {
+            removeMessageElement(loadingId);
+            addMessage('No response generated. Please try again.', 'assistant', true);
+            return;
+        }
+
+        // Handle error object (from regenerateLastResponse)
+        if (response.error && !response.content) {
+            removeMessageElement(loadingId);
+            addMessage(response.error, 'assistant', true);
+            return;
+        }
+
         // Check if we were streaming (element has streaming content)
         const wasStreaming = loadingEl?.dataset?.streaming === 'true';
 
