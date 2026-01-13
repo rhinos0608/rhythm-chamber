@@ -89,19 +89,31 @@
 | Apple Music | Post-MVP |
 | Friend comparisons | Post-MVP |
 | WASM embeddings | v1.1 |
+| **Cloud Sync** | **Phase 2 (Market Signal Triggered)** |
+| **Managed AI Setup** | **Phase 2 (Market Signal Triggered)** |
 
 ---
 
 ## Post-MVP Backlog
 
-| Priority | Feature | Notes |
-|----------|---------|-------|
-| P1 | Spotify audio features API (genre, BPM) | Deeper genre analysis |
-| P1 | Premium AI models | Better chat quality |
-| P1 | Production deploy | Vercel/Netlify |
-| P2 | Year-in-review generator | Annual summary |
-| P2 | Cloud/Device Sync | User pays for server storage |
-| P3 | Apple Music support | Different data format |
+### Phase 1: Sovereign Community (Completed)
+| Priority | Feature | Status | Purpose |
+|----------|---------|--------|----------|
+| P1 | Spotify audio features API (genre, BPM) | v1.1 | Deeper analysis |
+| P1 | Premium AI models | v1.1 | Better chat quality |
+| P1 | Production deploy | v1.0 | Launch free tier |
+| P2 | Year-in-review generator | v1.1 | Shareable content |
+| P3 | Apple Music support | Post-MVP | Market expansion |
+
+### Phase 2: Managed Cloud & AI (Trust-First Launch)
+| Priority | Feature | Pricing | Purpose | KPI |
+|----------|---------|---------|----------|------|
+| P1 | **Security Audit & Partnership** | **$5k-20k** | **External security firm** | **250-1,000 Supporters** |
+| P1 | **Cloud Sync Tier** | **$50 Life + $10/mo OR $15/mo** | Multi-device sync, managed AI | Launch after audit |
+| P1 | Security Signatures | Funded by Phase 1 | EV certificates, Apple notarization | Trust signal |
+| P1 | Server-side DB | Hybrid architecture | Firebase/Supabase for sync | Infrastructure |
+| P2 | E2EE Implementation | Phase 2 | Client-side encryption keys | Privacy guarantee |
+| P2 | Managed Intelligence | Phase 2 | Bundled embeddings & API setup | Convenience feature |
 
 ---
 
@@ -180,33 +192,57 @@ Stats.fm requires server infrastructure, which means:
 
 ## Risk Mitigation: Business
 
-### Monetization
-**Model:** Supporter-driven, zero-backend
-- Free tier: Full local analysis, BYOK chat, basic cards
-- Supporter: $19 Lifetime (CLI, themes, badges, friend compare)
-- Patron: $7/month (Discord, voting, early access)
-- **Why it works:** $19 is impulse-buy for developers; CLI is killer feature; no payment processing infrastructure needed
+### Monetization Strategy
+**Model:** Sovereign-to-Managed Pipeline (Community → Premium)
+
+#### Phase 1: Sovereign Community (Zero Cost to User)
+- **Free tier**: Full local analysis, BYOK chat, 100% client-side
+- **Supporter**: $19 Lifetime (CLI, themes, badges, friend compare)
+  - **Purpose**: Seed capital for security audit & infrastructure
+  - **Transparency**: "Your $19 funds our security partnership"
+  - **KPI**: Need ~250-1,000 Supporters to fund Phase 2
+- **Patron**: $7/month (Discord, voting, early access)
+  - **Purpose**: Sustainable community funding
+- **Why it works**: Zero risk entry, community investment, borrowed trust
+
+#### Phase 2: Managed Cloud & AI (Trust-First Launch)
+- **Cloud Sync**: $50 Lifetime + $10/month OR $15/month
+- **Value**: Multi-device sync, encrypted backup, managed AI setup
+- **Trust Signal**: "Secured by [External Firm]" badge
+- **Funding**: Supporter revenue funds external security audit (~$5k-20k)
+- **Trigger**: Only after hitting Supporter KPI + security audit complete
+- **Architecture**: Hybrid (Server-side DB + Client-side E2EE)
+- **Ongoing Costs**: $10/month covers API/embedding costs with margin
+- **Lifetime Protection**: Separates access fee from compute costs
+- **Never Deprecate Local**: Free tier remains functional forever
+
+### External Security & Marketing
+- **Strategy**: Use reputable external security firm for audit
+- **Marketing Asset**: "Audited by X" badge becomes sales feature
+- **Borrowed Trust**: Transfers security firm reputation to product
+- **Cost**: $5k-20k (funded by Supporter revenue)
+- **Benefit**: Addresses trust gap for cloud transition
 
 ### Patreon Integration
 - **One Codebase**: All features in main app, unlocked with license key
 - **No Separate Versions**: Avoids maintenance nightmare
 - **Hacker-Resistant**: Accept bypassing, target supporters who want to pay
 - **Implementation**: Static keys in `js/settings.js`
+- **Transparency**: Explicitly state revenue purpose
 
 ### User Acquisition
-**Strategy:** Target power users and developers
-- They already export data
-- They understand API keys
-- They value privacy and control
-- They're willing to pay for tools that give them control
-- **CLI version** appeals to developers who want scripting
-- **Friend compare** via JSON creates viral loop
+**Strategy:** "Sovereign-to-Managed" funnel
+- **Stage 1**: Free local tool (loss leader) → Build community
+- **Stage 2**: $19 Supporters (seed capital) → Fund security
+- **Stage 3**: $15 Cloud Sync (premium) → Scale revenue
+- **Target**: Power users, privacy enthusiasts, developers
+- **Viral Loop**: Free users become advocates, Supporters fund growth
 
 ### Competition
 **Differentiation:** We're not competing on stats. We're competing on self-discovery and power user features.
 - Stats.fm: "Look at your data" (charts, graphs)
 - Rhythm Chamber: "Look at yourself" (personality, chat)
-- **Plus**: CLI tool, zero-backend, BYOK, privacy-first
+- **Plus**: CLI tool, zero-backend, BYOK, privacy-first, **optional cloud sync with external security**
 
 ---
 
@@ -226,10 +262,11 @@ Stats.fm requires server infrastructure, which means:
 
 ### Scenario 3: "Power users don't actually want BYOK"
 **Mitigation:**
-- Offer optional cloud sync (paid)
+- Offer optional cloud sync (paid) with external security partnership
 - Keep local-first as default
 - Let users choose their level of control
 - **Supporter tier** gives them CLI and themes without needing to self-host
+- **Trust Signal**: "Secured by [External Firm]" badge for cloud users
 
 ### Scenario 4: "Personality types feel like astrology"
 **Mitigation:**
@@ -271,10 +308,11 @@ Stats.fm requires server infrastructure, which means:
 
 The zero-backend architecture isn't a limitation—it's our moat. The BYOK model isn't a barrier—it's a feature for our target audience. The data export friction isn't a bug—it's a filter for users who value depth over immediacy.
 
-**Monetization Strategy:**
-- $19 lifetime for CLI + themes + badges (impulse buy for developers)
-- $7/month for community + early access (Patreon model)
-- No payment processing infrastructure needed
-- One codebase, license key unlocks
+**Sovereign-to-Managed Strategy:**
+- **Phase 1**: Free local tool builds community, $19 Supporters fund security audit
+- **Phase 2**: Cloud sync with external security partnership, $50 + $10/month or $15/month
+- **Key Insight**: Use Supporter revenue to hire external security firm, market their badge as trust signal
+- **KPI**: Need ~250-1,000 Supporters before launching cloud tier
+- **Protection**: Free tier never deprecated, users can switch between local and cloud
 
 **If we get the first insight right, if it's shareable, if chat feels smart, and if the viral loop works—we win.**

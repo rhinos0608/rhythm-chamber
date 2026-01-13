@@ -406,34 +406,66 @@ async function sendMessage(message) {
 
 ## Cost Analysis
 
-### Default (Free Tier)
+### Phase 1: Sovereign Community (Zero Cost to User)
 
-| Resource | Cost |
-|----------|------|
-| Vercel hosting | $0 |
-| OpenRouter free models | $0 |
-| localStorage/IndexedDB | $0 |
-| Spotify OAuth (PKCE) | $0 |
-| **Total** | **$0** |
+| Resource | Cost | Notes |
+|----------|------|-------|
+| Vercel hosting | $0 | Static files only |
+| OpenRouter free models | $0 | BYOK model |
+| localStorage/IndexedDB | $0 | Client-side storage |
+| Spotify OAuth (PKCE) | $0 | No backend needed |
+| **Total** | **$0** | **Zero infrastructure cost** |
 
-### Supporter Tier ($19 Lifetime)
+### Phase 1: Supporter Tier ($19 Lifetime) - Seed Capital
 
-| Resource | Cost |
-|----------|------|
-| CLI tool (Node.js wrapper) | $0 (uses existing JS) |
-| Premium themes (CSS) | $0 |
-| Badge generation (Canvas) | $0 |
-| Friend compare (JSON) | $0 |
-| **Total** | **$0 infrastructure** |
+| Resource | Cost | Purpose |
+|----------|------|----------|
+| CLI tool (Node.js wrapper) | $0 (uses existing JS) | Feature unlock |
+| Premium themes (CSS) | $0 | Feature unlock |
+| Badge generation (Canvas) | $0 | Feature unlock |
+| Friend compare (JSON) | $0 | Feature unlock |
+| **Security Audit Fund** | **$19 per user** | **External security firm** |
+| **Cloud Infrastructure Fund** | **$19 per user** | **Future hosting costs** |
+| **Total** | **$0 infrastructure** | **Revenue = Seed Capital** |
 
-### Patreon Tier ($7/month)
+**Purpose of Supporter Revenue:**
+- **Primary**: Fund external security audit & partnership (~$5k-20k)
+- **Secondary**: Build cloud infrastructure war chest
+- **Marketing**: "Secured by [External Firm]" badge
+- **KPI**: Need ~250-1,000 Supporters to fund Phase 2
 
-| Resource | Cost |
-|----------|------|
-| Discord server | ~$5/month |
-| Early beta access | $0 (same codebase) |
-| Roadmap voting | $0 (community tool) |
-| **Total** | **~$5/month net** |
+### Phase 1: Patreon Tier ($7/month) - Community
+
+| Resource | Cost | Purpose |
+|----------|------|----------|
+| Discord server | ~$5/month | Community hosting |
+| Early beta access | $0 (same codebase) | Feature unlock |
+| Roadmap voting | $0 (community tool) | Engagement |
+| **Total** | **~$5/month net** | **Sustainable community** |
+
+### Phase 2: Managed Cloud & AI Tier
+
+| Tier | Cost Structure | Notes |
+|------|----------------|-------|
+| **Cloud Sync** | **$50 Lifetime + $10/month** | Lifetime access + ongoing compute |
+| **Cloud Sync** | **$15/month** | Pure subscription model |
+
+**Cost Breakdown (per user):**
+| Resource | Monthly Cost |
+|----------|--------------|
+| Cloud database (Firebase/Supabase) | ~$2-3 |
+| Embeddings API (OpenRouter) | ~$3-5 |
+| LLM API calls (if managed) | ~$2-4 |
+| Security certificates (amortized) | ~$2 |
+| **Total Infrastructure** | **~$9-14/month** |
+| **Gross Margin** | **~$1-6/month** |
+
+**Lifetime Model Protection:**
+- $50 upfront covers ~5 months of infrastructure
+- $10/month ongoing covers compute costs indefinitely
+- **Break-even**: ~5 months for lifetime tier
+- **Risk mitigation**: Separates access from compute costs
+- **External Security**: Budget for ongoing security partnership
 
 ### With Premium LLM
 
@@ -508,25 +540,48 @@ npx serve .
 
 ## Future Enhancements (Post-MVP)
 
-### Free Tier
-- [ ] Cloud sync option (Qdrant/Pinecone) - optional paid
-- [ ] WASM embeddings for semantic search
-- [ ] Playlist generation based on patterns
+### Phase 1: Core Features
 
-### Supporter Tier ($19 Lifetime)
+#### Free Tier
+- [x] Full local analysis, BYOK chat, basic cards
+- [x] Semantic search (Qdrant, user-provided credentials)
+- [x] Chat data queries (function calling)
+- [ ] WASM embeddings for semantic search (v1.1)
+- [ ] Playlist generation based on patterns (v1.1)
+
+#### Supporter Tier ($19 Lifetime)
 - [x] CLI tool for batch processing
 - [x] Premium themes (Dark, Cyberpunk, Minimal)
 - [x] "Verified" badge on cards
 - [x] Friend compare via JSON export/import
 
-### Patreon Tier ($7/month)
+#### Patreon Tier ($7/month)
 - [ ] Dev Discord community
 - [ ] Roadmap voting rights
 - [ ] Early access to beta features
 - [ ] Priority support
+
+### Phase 2: Managed Cloud & AI (Market Signal Triggered)
+
+#### Cloud Sync Tier ($50 Lifetime + $10/month OR $15/month)
+- [ ] **Multi-device chat sync**: Sync sessions across desktop/mobile
+- [ ] **Encrypted cloud backup**: E2EE storage of conversation history
+- [ ] **Managed AI setup**: Pre-configured embeddings & API integration
+- [ ] **Security signatures**: EV Code Signing + Apple notarization
+- [ ] **Hybrid architecture**: Optional server-side layer alongside local-first core
+- [ ] **Two points of failure**: Users can switch between local and cloud modes
+
+#### Technical Implementation
+- **Infrastructure**: Firebase/Supabase for sync (Phase 1 revenue funded)
+- **Encryption**: Client-side keys, server cannot read data
+- **Trigger**: Only after Phase 1 market validation
+- **Pricing Model**: $50 upfront + $10/month ongoing covers compute costs
+- **Risk Mitigation**: Separates access fee from API costs
 
 ### Technical Architecture Notes
 - **One Codebase**: All features in main app, unlocked with license key
 - **No Separate Versions**: Avoids maintenance nightmare
 - **License Key System**: Simple check in `js/settings.js`
 - **Hacker-Resistant**: Accept that bypassing is possible, target supporters who want to pay
+- **Zero-Backend Core**: Free tier remains 100% client-side
+- **Hybrid Option**: Phase 2 is opt-in convenience, not a requirement
