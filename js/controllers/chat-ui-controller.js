@@ -21,27 +21,40 @@ const CHAT_UI_SUGGESTIONS_ID = 'chat-suggestions';
 // ==========================================
 
 /**
- * Parse markdown to HTML for chat messages
+ * Escape HTML to prevent injection in rendered content
+ * @param {string} text - Raw text
+ * @returns {string} Escaped text
+ */
+function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, (char) => {
+        switch (char) {
+            case '&':
+                return '&amp;';
+            case '<':
+                return '&lt;';
+            case '>':
+                return '&gt;';
+            case '"':
+                return '&quot;';
+            case "'":
+                return '&#39;';
+            default:
+                return char;
+        }
+    });
+}
+
+/**
+ * Parse markdown to HTML for chat messages (safe subset only)
  * @param {string} text - Raw markdown text
  * @returns {string} HTML string
  */
 function parseMarkdown(text) {
     if (!text) return '';
 
-    // Use marked library if available, otherwise basic parsing
-    if (window.marked) {
-        try {
-            return marked.parse(text);
-        } catch {
-            // Fall through to basic parsing
-        }
-    }
+    const escaped = escapeHtml(text);
 
-    return text
-        // Escape HTML first
-        .replace(/&/g, '&')
-        .replace(/</g, '<')
-        .replace(/>/g, '>')
+    return escaped
         // Bold: **text** or __text__
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/__(.+?)__/g, '<strong>$1</strong>')
@@ -66,8 +79,8 @@ function createMessageElement(text, role, isError = false) {
     const div = document.createElement('div');
     div.className = `message ${role}${isError ? ' error' : ''}`;
 
-    // Parse markdown for assistant messages
-    const content = role === 'assistant' ? parseMarkdown(text) : text;
+    // Parse markdown for assistant messages, escape user messages
+    const content = role === 'assistant' ? parseMarkdown(text) : escapeHtml(text);
     div.innerHTML = `<div class="message-content">${content}</div>`;
 
     return div;
@@ -345,11 +358,7 @@ function updateLoadingMessage(id, state) {
             const contentEl = el.querySelector('.streaming-content');
             if (contentEl && state.token) {
                 // Escape and append token
-                const escaped = state.token
-                    .replace(/&/g, '&')
-                    .replace(/</g, '<')
-                    .replace(/>/g, '>')
-                    .replace(/\n/g, '<br>');
+                const escaped = escapeHtml(state.token).replace(/\n/g, '<br>');
                 contentEl.innerHTML += escaped;
 
                 // Scroll to show new content

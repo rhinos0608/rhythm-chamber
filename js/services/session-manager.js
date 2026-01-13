@@ -11,10 +11,10 @@
 // Constants
 // ==========================================
 
-const CONVERSATION_STORAGE_KEY = 'rhythm_chamber_conversation';  // Legacy, for migration
-const CURRENT_SESSION_KEY = 'rhythm_chamber_current_session';
-const EMERGENCY_BACKUP_KEY = 'rhythm_chamber_emergency_backup';  // Sync backup for beforeunload
-const EMERGENCY_BACKUP_MAX_AGE_MS = 3600000;  // 1 hour max age for emergency backups
+// CONVERSATION_STORAGE_KEY is already defined in chat.js (for migration)
+const SESSION_CURRENT_SESSION_KEY = 'rhythm_chamber_current_session';
+const SESSION_EMERGENCY_BACKUP_KEY = 'rhythm_chamber_emergency_backup';  // Sync backup for beforeunload
+const SESSION_EMERGENCY_BACKUP_MAX_AGE_MS = 3600000;  // 1 hour max age for emergency backups
 
 // ==========================================
 // State Management
@@ -64,11 +64,11 @@ async function loadOrCreateSession() {
     // Try unified storage first for current session ID
     let savedSessionId = null;
     if (window.Storage?.getConfig) {
-        savedSessionId = await window.Storage.getConfig(CURRENT_SESSION_KEY);
+        savedSessionId = await window.Storage.getConfig(SESSION_CURRENT_SESSION_KEY);
     }
     // Fallback to localStorage
     if (!savedSessionId) {
-        savedSessionId = localStorage.getItem(CURRENT_SESSION_KEY);
+        savedSessionId = localStorage.getItem(SESSION_CURRENT_SESSION_KEY);
     }
 
     if (savedSessionId) {
@@ -123,11 +123,11 @@ async function createNewSession(initialMessages = []) {
 
     // Save current session ID to unified storage and localStorage
     if (window.Storage?.setConfig) {
-        window.Storage.setConfig(CURRENT_SESSION_KEY, currentSessionId).catch(e =>
+        window.Storage.setConfig(SESSION_CURRENT_SESSION_KEY, currentSessionId).catch(e =>
             console.warn('[SessionManager] Failed to save session ID to unified storage:', e)
         );
     }
-    localStorage.setItem(CURRENT_SESSION_KEY, currentSessionId);
+    localStorage.setItem(SESSION_CURRENT_SESSION_KEY, currentSessionId);
 
     // Save immediately if we have messages
     if (initialMessages.length > 0) {
@@ -177,11 +177,11 @@ async function loadSession(sessionId) {
 
         // Save current session ID to unified storage and localStorage
         if (window.Storage?.setConfig) {
-            window.Storage.setConfig(CURRENT_SESSION_KEY, currentSessionId).catch(e =>
+            window.Storage.setConfig(SESSION_CURRENT_SESSION_KEY, currentSessionId).catch(e =>
                 console.warn('[SessionManager] Failed to save session ID to unified storage:', e)
             );
         }
-        localStorage.setItem(CURRENT_SESSION_KEY, currentSessionId);
+        localStorage.setItem(SESSION_CURRENT_SESSION_KEY, currentSessionId);
 
         console.log('[SessionManager] Loaded session:', sessionId, 'with', (session.messages || []).length, 'messages');
         return session;
@@ -282,7 +282,7 @@ function emergencyBackupSync() {
     };
 
     try {
-        localStorage.setItem(EMERGENCY_BACKUP_KEY, JSON.stringify(backup));
+        localStorage.setItem(SESSION_EMERGENCY_BACKUP_KEY, JSON.stringify(backup));
         console.log('[SessionManager] Emergency backup saved to localStorage');
     } catch (e) {
         // localStorage might be full or unavailable
@@ -295,16 +295,16 @@ function emergencyBackupSync() {
  * If we have a backup newer than what's in IndexedDB, restore it
  */
 async function recoverEmergencyBackup() {
-    const backupStr = localStorage.getItem(EMERGENCY_BACKUP_KEY);
+    const backupStr = localStorage.getItem(SESSION_EMERGENCY_BACKUP_KEY);
     if (!backupStr) return false;
 
     try {
         const backup = JSON.parse(backupStr);
 
         // Only recover if backup is recent (< 1 hour old)
-        if (Date.now() - backup.timestamp > EMERGENCY_BACKUP_MAX_AGE_MS) {
+        if (Date.now() - backup.timestamp > SESSION_EMERGENCY_BACKUP_MAX_AGE_MS) {
             console.log('[SessionManager] Emergency backup too old, discarding');
-            localStorage.removeItem(EMERGENCY_BACKUP_KEY);
+            localStorage.removeItem(SESSION_EMERGENCY_BACKUP_KEY);
             return false;
         }
 
@@ -332,11 +332,11 @@ async function recoverEmergencyBackup() {
             console.log('[SessionManager] Created new session from emergency backup');
         }
 
-        localStorage.removeItem(EMERGENCY_BACKUP_KEY);
+        localStorage.removeItem(SESSION_EMERGENCY_BACKUP_KEY);
         return true;
     } catch (e) {
         console.error('[SessionManager] Emergency backup recovery failed:', e);
-        localStorage.removeItem(EMERGENCY_BACKUP_KEY);
+        localStorage.removeItem(SESSION_EMERGENCY_BACKUP_KEY);
         return false;
     }
 }

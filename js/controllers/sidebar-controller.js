@@ -411,18 +411,13 @@ function appendMessage(role, content) {
     const div = document.createElement('div');
     div.className = `message ${role}`;
 
-    // Safely parse markdown with null/undefined checks
+    // Render content using the same safe markdown parser as the chat UI
     let parsedContent = '';
     if (content) {
-        if (typeof marked !== 'undefined' && marked.parse) {
-            try {
-                parsedContent = marked.parse(content);
-            } catch (e) {
-                console.warn('Markdown parsing failed:', e);
-                parsedContent = content;
-            }
+        if (window.ChatUIController?.parseMarkdown) {
+            parsedContent = window.ChatUIController.parseMarkdown(content);
         } else {
-            parsedContent = content;
+            parsedContent = escapeHtml(content);
         }
     }
 

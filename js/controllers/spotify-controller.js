@@ -11,13 +11,13 @@
 // Dependencies (injected via init)
 // ==========================================
 
-let Storage = null;
-let AppState = null;
-let Spotify = null;
-let Patterns = null;
-let Personality = null;
-let ViewController = null;
-let showToast = null;
+let _Storage = null;
+let _AppState = null;
+let _Spotify = null;
+let _Patterns = null;
+let _Personality = null;
+let _ViewController = null;
+let _showToast = null;
 
 // ==========================================
 // State Management
@@ -34,13 +34,13 @@ let backgroundRefreshInterval = null;
  * @param {Object} dependencies - Required dependencies
  */
 function init(dependencies) {
-    Storage = dependencies.Storage;
-    AppState = dependencies.AppState;
-    Spotify = dependencies.Spotify;
-    Patterns = dependencies.Patterns;
-    Personality = dependencies.Personality;
-    ViewController = dependencies.ViewController;
-    showToast = dependencies.showToast;
+    _Storage = dependencies.Storage;
+    _AppState = dependencies.AppState;
+    _Spotify = dependencies.Spotify;
+    _Patterns = dependencies.Patterns;
+    _Personality = dependencies.Personality;
+    _ViewController = dependencies.ViewController;
+    _showToast = dependencies.showToast;
 
     console.log('[SpotifyController] Initialized with dependencies');
 }
@@ -51,11 +51,11 @@ function init(dependencies) {
  */
 async function handleSpotifyConnect() {
     try {
-        await Spotify.initiateLogin();
+        await _Spotify.initiateLogin();
     } catch (error) {
         console.error('[SpotifyController] Spotify connect error:', error);
-        if (showToast) {
-            showToast(error.message);
+        if (_showToast) {
+            _showToast(error.message);
         } else {
             alert(error.message);
         }
@@ -68,87 +68,87 @@ async function handleSpotifyConnect() {
  * @returns {Promise<void>}
  */
 async function handleSpotifyCallback(code) {
-    if (!ViewController || !Spotify) {
+    if (!_ViewController || !_Spotify) {
         console.error('[SpotifyController] Required dependencies not available');
         return;
     }
 
-    ViewController.showProcessing();
-    ViewController.updateProgress('Connecting to Spotify...');
+    _ViewController.showProcessing();
+    _ViewController.updateProgress('Connecting to _Spotify...');
 
     try {
         // Exchange code for token
-        await Spotify.handleCallback(code);
+        await _Spotify.handleCallback(code);
 
         // Start background token refresh for long operations
         startBackgroundRefresh();
 
         // Validate session before fetching
-        if (!await Spotify.ensureValidToken()) {
-            if (showToast) showToast('Session expired. Reconnecting...');
-            const refreshed = await Spotify.refreshToken();
+        if (!await _Spotify.ensureValidToken()) {
+            if (_showToast) _showToast('Session expired. Reconnecting...');
+            const refreshed = await _Spotify.refreshToken();
             if (!refreshed) {
-                throw new Error('Session expired. Please reconnect to Spotify.');
+                throw new Error('Session expired. Please reconnect to _Spotify.');
             }
         }
 
         // Fetch data from Spotify
-        const spotifyData = await Spotify.fetchSnapshotData((message) => {
-            ViewController.updateProgress(message);
+        const spotifyData = await _Spotify.fetchSnapshotData((message) => {
+            _ViewController.updateProgress(message);
         });
 
         // Transform for analysis
-        ViewController.updateProgress('Analyzing your listening patterns...');
+        _ViewController.updateProgress('Analyzing your listening patterns...');
         await new Promise(r => setTimeout(r, 10));
 
-        const liteData = Spotify.transformForAnalysis(spotifyData);
+        const liteData = _Spotify.transformForAnalysis(spotifyData);
 
         // Update app state
-        if (AppState) {
-            AppState.update('lite', {
+        if (_AppState) {
+            _AppState.update('lite', {
                 liteData: liteData
             });
         }
 
         // Show instant insight immediately
-        ViewController.updateProgress('Generating instant insight...');
-        const instantInsight = Patterns.detectImmediateVibe(liteData);
+        _ViewController.updateProgress('Generating instant insight...');
+        const instantInsight = _Patterns.detectImmediateVibe(liteData);
 
         // Update UI with instant insight
-        ViewController.updateProgress(`Quick snapshot ready!<br><br>${instantInsight}<br><br><small>Full analysis requires complete history for accurate personality detection</small>`);
+        _ViewController.updateProgress(`Quick snapshot ready!<br><br>${instantInsight}<br><br><small>Full analysis requires complete history for accurate personality detection</small>`);
 
         // Wait a moment for user to read
         await new Promise(r => setTimeout(r, 2000));
 
         // Detect patterns from lite data
-        ViewController.updateProgress('Detecting your current vibe...');
+        _ViewController.updateProgress('Detecting your current vibe...');
         await new Promise(r => setTimeout(r, 10));
 
-        const litePatterns = Patterns.detectLitePatterns(liteData);
-        if (AppState) {
-            AppState.update('lite', { litePatterns });
+        const litePatterns = _Patterns.detectLitePatterns(liteData);
+        if (_AppState) {
+            _AppState.update('lite', { litePatterns });
         }
 
         // Classify lite personality
-        ViewController.updateProgress('Classifying your music personality...');
+        _ViewController.updateProgress('Classifying your music personality...');
         await new Promise(r => setTimeout(r, 10));
 
-        const personality = Personality.classifyLitePersonality(litePatterns);
-        personality.summary = litePatterns.summary;
+        const personality = _Personality.classifyLitePersonality(litePatterns);
+        personality.summary = lite_Patterns.summary;
 
-        if (AppState) {
-            AppState.setPersonality(personality);
-            AppState.update('lite', { isLiteMode: true });
+        if (_AppState) {
+            _AppState.setPersonality(personality);
+            _AppState.update('lite', { isLiteMode: true });
         }
 
         // Show lite reveal
-        ViewController.showLiteReveal();
+        _ViewController.showLiteReveal();
 
     } catch (error) {
         console.error('[SpotifyController] Callback error:', error);
-        if (ViewController) {
-            ViewController.updateProgress(`Error: ${error.message}`);
-            setTimeout(() => ViewController.showUpload(), 3000);
+        if (_ViewController) {
+            _ViewController.updateProgress(`Error: ${error.message}`);
+            setTimeout(() => _ViewController.showUpload(), 3000);
         }
     }
 }
@@ -158,7 +158,7 @@ async function handleSpotifyCallback(code) {
  * Prevents token expiry during long operations
  */
 function startBackgroundRefresh() {
-    if (!Spotify) return;
+    if (!_Spotify) return;
 
     // Clear any existing interval
     stopBackgroundRefresh();
@@ -166,10 +166,10 @@ function startBackgroundRefresh() {
     // Check token every 5 minutes
     backgroundRefreshInterval = setInterval(async () => {
         try {
-            const needsRefresh = await Spotify.checkTokenRefreshNeeded();
+            const needsRefresh = await _Spotify.checkTokenRefreshNeeded();
             if (needsRefresh) {
                 console.log('[SpotifyController] Background token refresh needed, refreshing...');
-                await Spotify.refreshToken();
+                await _Spotify.refreshToken();
             }
         } catch (error) {
             console.warn('[SpotifyController] Background refresh failed:', error);
@@ -195,10 +195,10 @@ function stopBackgroundRefresh() {
  * @returns {Promise<boolean>} True if session is valid
  */
 async function validateSession() {
-    if (!Spotify) return false;
+    if (!_Spotify) return false;
 
     try {
-        const isValid = await Spotify.ensureValidToken();
+        const isValid = await _Spotify.ensureValidToken();
         if (!isValid) {
             console.log('[SpotifyController] Session validation failed - token invalid');
         }
@@ -213,8 +213,8 @@ async function validateSession() {
  * Clear Spotify tokens (for reset operations)
  */
 function clearTokens() {
-    if (Spotify) {
-        Spotify.clearTokens();
+    if (_Spotify) {
+        _Spotify.clearTokens();
         console.log('[SpotifyController] Tokens cleared');
     }
 }
@@ -224,8 +224,8 @@ function clearTokens() {
  * @returns {boolean}
  */
 function isConfigured() {
-    if (!Spotify) return false;
-    return Spotify.isConfigured();
+    if (!_Spotify) return false;
+    return _Spotify.isConfigured();
 }
 
 /**
@@ -233,22 +233,22 @@ function isConfigured() {
  * @returns {Promise<Object>} Session status object
  */
 async function getSessionStatus() {
-    if (!Spotify) {
+    if (!_Spotify) {
         return { configured: false, valid: false, error: 'Spotify module not available' };
     }
 
     try {
-        const configured = Spotify.isConfigured();
-        const valid = configured ? await Spotify.ensureValidToken() : false;
+        const configured = _Spotify.isConfigured();
+        const valid = configured ? await _Spotify.ensureValidToken() : false;
 
         return {
             configured,
             valid,
-            hasToken: !!Spotify.getAccessToken()
+            hasToken: !!_Spotify.getAccessToken()
         };
     } catch (error) {
         return {
-            configured: Spotify.isConfigured(),
+            configured: _Spotify.isConfigured(),
             valid: false,
             error: error.message
         };
@@ -261,7 +261,7 @@ async function getSessionStatus() {
  * @returns {Promise<Object>} Spotify data
  */
 async function fetchSnapshotData(progressCallback) {
-    if (!Spotify) {
+    if (!_Spotify) {
         throw new Error('Spotify module not available');
     }
 
@@ -274,7 +274,7 @@ async function fetchSnapshotData(progressCallback) {
     startBackgroundRefresh();
 
     try {
-        const data = await Spotify.fetchSnapshotData(progressCallback);
+        const data = await _Spotify.fetchSnapshotData(progressCallback);
         return data;
     } finally {
         // Note: We keep background refresh running in case the caller needs more operations
@@ -288,10 +288,10 @@ async function fetchSnapshotData(progressCallback) {
  * @returns {Object} Transformed data
  */
 function transformForAnalysis(spotifyData) {
-    if (!Spotify) {
+    if (!_Spotify) {
         throw new Error('Spotify module not available');
     }
-    return Spotify.transformForAnalysis(spotifyData);
+    return _Spotify.transformForAnalysis(spotifyData);
 }
 
 // ==========================================

@@ -11,13 +11,13 @@
 // Dependencies (injected via init)
 // ==========================================
 
-let Storage = null;
-let AppState = null;
-let OperationLock = null;
-let Patterns = null;
-let Personality = null;
-let ViewController = null;
-let showToast = null;
+let _Storage = null;
+let _AppState = null;
+let _OperationLock = null;
+let _Patterns = null;
+let _Personality = null;
+let _ViewController = null;
+let _showToast = null;
 
 // ==========================================
 // State Management
@@ -36,13 +36,13 @@ let currentFileLockId = null;
  * @param {Object} dependencies - Required dependencies
  */
 function init(dependencies) {
-    Storage = dependencies.Storage;
-    AppState = dependencies.AppState;
-    OperationLock = dependencies.OperationLock;
-    Patterns = dependencies.Patterns;
-    Personality = dependencies.Personality;
-    ViewController = dependencies.ViewController;
-    showToast = dependencies.showToast;
+    _Storage = dependencies.Storage;
+    _AppState = dependencies.AppState;
+    _OperationLock = dependencies.OperationLock;
+    _Patterns = dependencies.Patterns;
+    _Personality = dependencies.Personality;
+    _ViewController = dependencies.ViewController;
+    _showToast = dependencies.showToast;
 
     console.log('[FileUploadController] Initialized with dependencies');
 }
@@ -54,37 +54,37 @@ function init(dependencies) {
  */
 async function handleFileUpload(file) {
     if (!file) {
-        showToast('No file selected');
+        _showToast('No file selected');
         return;
     }
 
     // Validate file type
     if (!file.name.endsWith('.zip') && !file.name.endsWith('.json')) {
-        showToast('Please upload a .zip or .json file');
+        _showToast('Please upload a .zip or .json file');
         return;
     }
 
     // Check for conflicting operations
-    if (OperationLock.isLocked('file_processing')) {
-        showToast('Upload already in progress, please wait');
+    if (_OperationLock.isLocked('file_processing')) {
+        _showToast('Upload already in progress, please wait');
         return;
     }
 
     // Acquire operation lock
     try {
-        currentFileLockId = await OperationLock.acquire('file_processing');
+        currentFileLockId = await _OperationLock.acquire('file_processing');
     } catch (lockError) {
-        showToast(`Cannot upload: ${lockError.message}`);
+        _showToast(`Cannot upload: ${lockError.message}`);
         return;
     }
 
     try {
         // Show processing view
-        ViewController.showProcessing('Preparing to parse file...');
+        _ViewController.showProcessing('Preparing to parse file...');
 
         // Update app state
-        if (AppState) {
-            AppState.update('lite', { isLiteMode: false });
+        if (_AppState) {
+            _AppState.update('lite', { isLiteMode: false });
         }
 
         // Create abort controller for this parsing session
@@ -97,8 +97,8 @@ async function handleFileUpload(file) {
         cleanupWorker();
 
         // Clear any previous partial saves
-        if (Storage) {
-            await Storage.clearStreams();
+        if (_Storage) {
+            await _Storage.clearStreams();
         }
 
         // Process file with Web Worker
@@ -106,14 +106,14 @@ async function handleFileUpload(file) {
 
     } catch (error) {
         console.error('[FileUploadController] Upload failed:', error);
-        if (ViewController && showToast) {
-            ViewController.showUpload();
-            showToast(`Upload failed: ${error.message}`);
+        if (_ViewController && _showToast) {
+            _ViewController.showUpload();
+            _showToast(`Upload failed: ${error.message}`);
         }
     } finally {
         // Release operation lock
-        if (currentFileLockId && OperationLock) {
-            OperationLock.release('file_processing', currentFileLockId);
+        if (currentFileLockId && _OperationLock) {
+            _OperationLock.release('file_processing', currentFileLockId);
             currentFileLockId = null;
         }
 
@@ -171,16 +171,16 @@ async function handleWorkerMessage(e, resolve, reject) {
 
     switch (type) {
         case 'progress':
-            if (ViewController) {
-                ViewController.updateProgress(message);
+            if (_ViewController) {
+                _ViewController.updateProgress(message);
             }
             break;
 
         case 'error':
             console.error('[FileUploadController] Worker error:', error);
             cleanupWorker();
-            if (ViewController) {
-                ViewController.showUpload();
+            if (_ViewController) {
+                _ViewController.showUpload();
             }
             reject(new Error(error));
             break;
@@ -214,8 +214,8 @@ async function handleWorkerMessage(e, resolve, reject) {
  */
 function handleMemoryWarning(usage) {
     const usagePercent = Math.round(usage * 100);
-    if (ViewController) {
-        ViewController.updateProgress(`Low on memory (${usagePercent}%) - pausing to avoid crash...`);
+    if (_ViewController) {
+        _ViewController.updateProgress(`Low on memory (${usagePercent}%) - pausing to avoid crash...`);
     }
     console.warn(`[FileUploadController] Memory warning: ${usagePercent}% usage`);
 }
@@ -224,8 +224,8 @@ function handleMemoryWarning(usage) {
  * Handle memory resumed
  */
 function handleMemoryResumed() {
-    if (ViewController) {
-        ViewController.updateProgress('Resuming processing...');
+    if (_ViewController) {
+        _ViewController.updateProgress('Resuming processing...');
     }
     console.log('[FileUploadController] Memory usage normalized, resuming');
 }
@@ -235,11 +235,11 @@ function handleMemoryResumed() {
  */
 async function handlePartialSave(partialStreams, fileIndex, totalFiles, streamCount) {
     try {
-        if (Storage) {
-            await Storage.appendStreams(partialStreams);
+        if (_Storage) {
+            await _Storage.appendStreams(partialStreams);
         }
-        if (ViewController) {
-            ViewController.updateProgress(`Parsing file ${fileIndex}/${totalFiles}... (${streamCount.toLocaleString()} streams)`);
+        if (_ViewController) {
+            _ViewController.updateProgress(`Parsing file ${fileIndex}/${totalFiles}... (${streamCount.toLocaleString()} streams)`);
         }
     } catch (err) {
         console.warn('[FileUploadController] Failed to save partial streams:', err);
@@ -251,51 +251,51 @@ async function handlePartialSave(partialStreams, fileIndex, totalFiles, streamCo
  */
 async function handleProcessingComplete(streams, chunks) {
     // Update app state
-    if (AppState) {
-        AppState.update('data', {
+    if (_AppState) {
+        _AppState.update('data', {
             streams: streams,
             chunks: chunks
         });
     }
 
     // Show progress
-    if (ViewController) {
-        ViewController.updateProgress('Detecting behavioral patterns...');
+    if (_ViewController) {
+        _ViewController.updateProgress('Detecting behavioral patterns...');
     }
     await new Promise(r => setTimeout(r, 10)); // Let UI update
 
     // Detect patterns
-    const patterns = Patterns.detectAllPatterns(streams, chunks);
-    if (AppState) {
-        AppState.setPatterns(patterns);
+    const patterns = _Patterns.detectAllPatterns(streams, chunks);
+    if (_AppState) {
+        _AppState.setPatterns(patterns);
     }
 
     // Classify personality
-    if (ViewController) {
-        ViewController.updateProgress('Classifying personality...');
+    if (_ViewController) {
+        _ViewController.updateProgress('Classifying personality...');
     }
     await new Promise(r => setTimeout(r, 10));
 
-    const personality = Personality.classifyPersonality(patterns);
+    const personality = _Personality.classifyPersonality(patterns);
     personality.summary = patterns.summary;
-    if (AppState) {
-        AppState.setPersonality(personality);
+    if (_AppState) {
+        _AppState.setPersonality(personality);
     }
 
     // Save final complete data to IndexedDB
-    if (ViewController) {
-        ViewController.updateProgress('Saving...');
+    if (_ViewController) {
+        _ViewController.updateProgress('Saving...');
     }
 
-    if (Storage) {
-        await Storage.saveStreams(streams);
-        await Storage.saveChunks(chunks);
-        await Storage.savePersonality(personality);
+    if (_Storage) {
+        await _Storage.saveStreams(streams);
+        await _Storage.saveChunks(chunks);
+        await _Storage.savePersonality(personality);
     }
 
     // Show reveal
-    if (ViewController) {
-        ViewController.showReveal();
+    if (_ViewController) {
+        _ViewController.showReveal();
     }
 }
 
@@ -312,8 +312,8 @@ function handleWorkerAbort() {
     }
 
     // Release operation lock on abort
-    if (currentFileLockId && OperationLock) {
-        OperationLock.release('file_processing', currentFileLockId);
+    if (currentFileLockId && _OperationLock) {
+        _OperationLock.release('file_processing', currentFileLockId);
         currentFileLockId = null;
     }
 }
@@ -362,14 +362,14 @@ function cancelProcessing() {
     cleanupWorker();
 
     // Release lock
-    if (currentFileLockId && OperationLock) {
-        OperationLock.release('file_processing', currentFileLockId);
+    if (currentFileLockId && _OperationLock) {
+        _OperationLock.release('file_processing', currentFileLockId);
         currentFileLockId = null;
     }
 
     // Show upload view
-    if (ViewController) {
-        ViewController.showUpload();
+    if (_ViewController) {
+        _ViewController.showUpload();
     }
 
     return true;
