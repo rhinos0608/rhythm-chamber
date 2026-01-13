@@ -191,6 +191,27 @@ const TokenCounter = {
         }
 
         return result;
+    },
+
+    // Reset the token display UI (for new chat sessions)
+    resetDisplay: function () {
+        const tokenCount = document.getElementById('token-count');
+        const tokenLimit = document.getElementById('token-limit');
+        const tokenPercent = document.getElementById('token-percent');
+        const tokenBarFill = document.getElementById('token-bar-fill');
+        const tokenWarnings = document.getElementById('token-warnings');
+        const tokenCounter = document.getElementById('token-counter');
+
+        if (tokenCount) tokenCount.textContent = '0';
+        if (tokenLimit) tokenLimit.textContent = this.getContextWindow().toLocaleString();
+        if (tokenPercent) tokenPercent.textContent = '(0%)';
+        if (tokenBarFill) tokenBarFill.style.width = '0%';
+        if (tokenWarnings) tokenWarnings.innerHTML = '';
+
+        // Optionally hide the counter until first message
+        // if (tokenCounter) tokenCounter.style.display = 'none';
+
+        console.log('[TokenCounter] Display reset');
     }
 };
 

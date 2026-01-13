@@ -304,6 +304,11 @@ async function handleNewChat() {
         messages.innerHTML = '';
     }
 
+    // Reset token counter display
+    if (window.TokenCounter?.resetDisplay) {
+        window.TokenCounter.resetDisplay();
+    }
+
     // Show suggestions
     const suggestions = document.getElementById('chat-suggestions');
     if (suggestions) {
