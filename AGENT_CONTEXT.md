@@ -80,11 +80,13 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 | Personality engine | ✅ Done | `js/personality.js` (5 types + lite types) |
 | Chat integration | ✅ Done | `js/chat.js` (OpenRouter + function calling + sessions) |
 | Data query system | ✅ Done | `js/data-query.js` (time/artist queries) |
-| **Function calling** | ✅ Done | `js/functions.js` (6 LLM-callable tools) |
+| **Function calling** | ✅ Done | `js/functions.js` (10 LLM-callable tools) |
+| **Template Profiles** | ✅ Done | `js/template-profiles.js` (8 curated profiles) |
+| **Profile Synthesizer** | ✅ Done | `js/profile-synthesizer.js` (AI synthesis) |
 | **Payments** | ✅ Done | `js/payments.js` (Stubbed for Free MVP) |
 | **RAG/Semantic** | ✅ Done | `js/rag.js` (embeddings + Qdrant) |
 | Card generator | ✅ Done | `js/cards.js` (Canvas) |
-| **Storage** | ✅ Done | `js/storage/` (IndexedDB + ConfigAPI + Migration) |
+| **Storage** | ✅ Done | `js/storage/` (IndexedDB + ConfigAPI + Migration + Profiles) |
 | **LLM Providers** | ✅ Done | `js/providers/` (OpenRouter, LMStudio, Ollama) |
 | **Controllers** | 🔄 In Progress | `js/controllers/` (ChatUI, Sidebar, View) |
 | **Spotify OAuth** | ✅ Done | `js/spotify.js` (PKCE flow) |
@@ -105,12 +107,12 @@ rhythm-chamber/
 ├── js/
 │   ├── app.js              # Main controller (Delegates to sub-controllers)
 │   ├── parser-worker.js    # Web Worker (incremental parsing + UTC time extraction)
-│   ├── parser.js           # Legacy parser (not used)
+│   ├── parser.js           # Parser facade (delegates to worker)
 │   ├── patterns.js         # 8 pattern algorithms + detectLitePatterns()
 │   ├── personality.js      # 5 types + lite types + score breakdown
 │   ├── chat.js             # Chat logic (Delegates to Providers)
 │   ├── data-query.js       # Query streams by time/artist/track
-│   ├── functions.js        # LLM function schemas + executors
+│   ├── functions.js        # LLM function schemas + executors (10 functions)
 │   ├── cards.js            # Canvas card generator
 │   ├── storage.js          # Storage Facade (Delegates to js/storage/ modules)
 │   ├── settings.js         # In-app settings modal (API key, model, etc.)
@@ -122,6 +124,14 @@ rhythm-chamber/
 │   ├── config.js           # API keys (gitignored)
 │   ├── config.example.js   # Config template (+ Stripe)
 │   ├── utils.js            # Timeout/retry utilities
+│   ├── demo-data.js        # Demo mode profile ("The Emo Teen")
+│   ├── template-profiles.js # 8 curated template profiles + TemplateProfileStore
+│   ├── profile-synthesizer.js # AI-driven profile synthesis from templates
+│   ├── genre-enrichment.js # Genre metadata enrichment
+│   ├── local-embeddings.js # Local embedding generation
+│   ├── local-vector-store.js # Client-side vector search
+│   ├── token-counter.js    # Token usage tracking
+│   ├── operation-lock.js   # Critical operation coordination
 │   │
 │   ├── providers/          # LLM Provider Modules
 │   │   ├── provider-interface.js
@@ -140,6 +150,9 @@ rhythm-chamber/
 │   │   ├── token-binding.js
 │   │   ├── anomaly.js
 │   │   └── index.js        # Module entry point
+│   │
+│   ├── state/              # State Management
+│   │   └── app-state.js    # Centralized app state
 │   │
 │   └── controllers/        # UI Controllers
 │       ├── chat-ui-controller.js
@@ -184,7 +197,30 @@ Modal UI for configuring without editing config.js:
 - **Data stats**: "Analyzed X streams from Y to Z"
 - **Incremental caching**: Partial saves during parsing (crash-safe)
 
-### 5. Semantic Search (Free)
+### 5. Template Profile System
+Curated listening profiles for comparison and inspiration, managed by `js/template-profiles.js` and synthesized by `js/profile-synthesizer.js`.
+
+**Template Profiles Store:**
+- 8 curated placeholder templates (The Emo Teen, The Commuter, etc.)
+- Search by genre, pattern, or personality type
+- Keyword matching for template selection
+- AI-driven synthesis from templates
+
+**Profile Synthesizer:**
+- AI-driven profile generation from selected templates
+- Keyword-based template matching
+- Integration with function calling for dynamic selection
+- Profile storage and management via `storage.js`
+
+**Template Functions (LLM-callable):**
+- `get_templates_by_genre(genre)` - Filter templates by musical genre
+- `get_templates_with_pattern(pattern)` - Find templates with specific patterns
+- `get_templates_by_personality(type)` - Match templates by personality type
+- `synthesize_profile(template_id, user_context)` - AI synthesis from template
+
+**Status:** Core infrastructure complete. Template data TBD from consenting friends/family.
+
+### 6. Semantic Search (Free)
 Integrated via `js/rag.js`. Users provide own Qdrant Cloud credentials.
 - In-memory vector generation (Transformer.js) or Cohere API.
 - Semantic search over listening history.
@@ -267,6 +303,22 @@ npx http-server -p 8080 -c-1
 ---
 
 ## Session Log
+
+### Session 15 — 2026-01-13 (Template Profile System)
+
+**What was done:**
+1. **Template Store**: Created `js/template-profiles.js` with 8 placeholder templates + search methods.
+2. **Profile Synthesizer**: Created `js/profile-synthesizer.js` for AI-driven profile synthesis.
+3. **Function Schemas**: Added 4 template functions to `functions.js` (get_templates_by_genre, get_templates_with_pattern, get_templates_by_personality, synthesize_profile).
+4. **Profile Storage**: Added profile management to `storage.js` (save, get, delete, set active).
+5. **Script Loading**: Updated `app.html` with new modules.
+
+**Key Architectural Decisions:**
+- **Placeholder Data**: Template stream data TBD (from consenting friends/family).
+- **Keyword Matching**: Synthesis uses keyword matching for template selection (AI function calling ready).
+- **No UI Yet**: Core infrastructure only — UI integration deferred.
+
+---
 
 ### Session 14 — 2026-01-13 (Backend Infrastructure Setup)
 

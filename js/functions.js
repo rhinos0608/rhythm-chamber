@@ -139,6 +139,88 @@ const FUNCTION_SCHEMAS = [
 ];
 
 // ==========================================
+// Template Function Schemas
+// Used for template profile queries and synthesis
+// ==========================================
+
+const TEMPLATE_FUNCTION_SCHEMAS = [
+    {
+        type: "function",
+        function: {
+            name: "get_templates_by_genre",
+            description: "Find template profiles that primarily listen to a specific genre. Use this to explore what profiles look like for different music tastes.",
+            parameters: {
+                type: "object",
+                properties: {
+                    genre: {
+                        type: "string",
+                        description: "Genre to search for (e.g., 'rock', 'jazz', 'emo', 'electronic')"
+                    },
+                    limit: {
+                        type: "integer",
+                        description: "Maximum number of templates to return (default: 5)"
+                    }
+                },
+                required: ["genre"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "get_templates_with_pattern",
+            description: "Find templates that exhibit a specific listening pattern. Use this to explore different listening behaviors.",
+            parameters: {
+                type: "object",
+                properties: {
+                    pattern_type: {
+                        type: "string",
+                        enum: ["eras", "ghosted_artists", "discovery_explosions", "high_repeat", "time_patterns", "era_transition", "weekend_heavy"],
+                        description: "Type of pattern to search for"
+                    }
+                },
+                required: ["pattern_type"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "get_templates_by_personality",
+            description: "Find templates that classify as a specific personality type. Use this to see examples of each personality.",
+            parameters: {
+                type: "object",
+                properties: {
+                    personality_type: {
+                        type: "string",
+                        enum: ["emotional_archaeologist", "mood_engineer", "discovery_junkie", "comfort_curator", "social_chameleon"],
+                        description: "Personality type to filter by"
+                    }
+                },
+                required: ["personality_type"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "synthesize_profile",
+            description: "Create a custom profile based on a natural language description. Combines patterns from existing templates.",
+            parameters: {
+                type: "object",
+                properties: {
+                    description: {
+                        type: "string",
+                        description: "Natural language description of the desired profile (e.g., 'someone who discovered jazz after years of rock' or 'a night owl who listens to electronic music')"
+                    }
+                },
+                required: ["description"]
+            }
+        }
+    }
+];
+
+// ==========================================
 // Retry Configuration
 // HNW Fix: Retry at executor layer, not API layer
 // Transient failures occur here (large dataset processing, rate limits)
@@ -194,8 +276,30 @@ async function executeFunction(functionName, args, streams) {
         get_artist_history: executeGetArtistHistory,
         get_listening_stats: executeGetListeningStats,
         compare_periods: executeComparePeriods,
-        search_tracks: executeSearchTracks
+        search_tracks: executeSearchTracks,
+        // Template functions (don't require user streams)
+        get_templates_by_genre: executeGetTemplatesByGenre,
+        get_templates_with_pattern: executeGetTemplatesWithPattern,
+        get_templates_by_personality: executeGetTemplatesByPersonality,
+        synthesize_profile: executeSynthesizeProfile
     };
+
+    // Template functions don't require user stream data
+    const templateFunctions = [
+        'get_templates_by_genre',
+        'get_templates_with_pattern',
+        'get_templates_by_personality',
+        'synthesize_profile'
+    ];
+
+    if (templateFunctions.includes(functionName)) {
+        const fn = functionMap[functionName];
+        try {
+            return await Promise.resolve(fn(args));
+        } catch (err) {
+            return { error: `Template function error: ${err.message}` };
+        }
+    }
 
     const fn = functionMap[functionName];
     if (!fn) {
@@ -387,6 +491,127 @@ function executeSearchTracks(args, streams) {
 }
 
 // ==========================================
+// Template Function Executors
+// ==========================================
+
+function executeGetTemplatesByGenre(args) {
+    const { genre, limit = 5 } = args;
+
+    if (!window.TemplateProfileStore) {
+        return { error: 'Template profiles not available' };
+    }
+
+    const templates = window.TemplateProfileStore.searchByGenre(genre, limit);
+
+    if (templates.length === 0) {
+        return {
+            error: `No templates found for genre "${genre}". Try: ${window.TemplateProfileStore.getAllGenres().slice(0, 5).join(', ')}`
+        };
+    }
+
+    return {
+        genre: genre,
+        count: templates.length,
+        templates: templates.map(t => ({
+            id: t.id,
+            name: t.name,
+            emoji: t.emoji,
+            description: t.description,
+            personality_type: t.metadata.personalityType,
+            has_data: window.TemplateProfileStore.hasData(t.id)
+        }))
+    };
+}
+
+function executeGetTemplatesWithPattern(args) {
+    const { pattern_type } = args;
+
+    if (!window.TemplateProfileStore) {
+        return { error: 'Template profiles not available' };
+    }
+
+    const templates = window.TemplateProfileStore.searchByPattern(pattern_type);
+
+    if (templates.length === 0) {
+        return {
+            error: `No templates found with pattern "${pattern_type}". Available patterns: ${window.TemplateProfileStore.getAllPatterns().join(', ')}`
+        };
+    }
+
+    return {
+        pattern: pattern_type,
+        count: templates.length,
+        templates: templates.map(t => ({
+            id: t.id,
+            name: t.name,
+            emoji: t.emoji,
+            description: t.description,
+            all_patterns: t.metadata.patternSignals
+        }))
+    };
+}
+
+function executeGetTemplatesByPersonality(args) {
+    const { personality_type } = args;
+
+    if (!window.TemplateProfileStore) {
+        return { error: 'Template profiles not available' };
+    }
+
+    const templates = window.TemplateProfileStore.searchByPersonality(personality_type);
+
+    if (templates.length === 0) {
+        return {
+            error: `No templates found for personality "${personality_type}".`
+        };
+    }
+
+    return {
+        personality_type: personality_type,
+        count: templates.length,
+        templates: templates.map(t => ({
+            id: t.id,
+            name: t.name,
+            emoji: t.emoji,
+            description: t.description,
+            genres: t.metadata.genres,
+            has_data: window.TemplateProfileStore.hasData(t.id)
+        }))
+    };
+}
+
+async function executeSynthesizeProfile(args) {
+    const { description } = args;
+
+    if (!window.ProfileSynthesizer) {
+        return { error: 'Profile synthesizer not available' };
+    }
+
+    try {
+        const profile = await window.ProfileSynthesizer.synthesizeFromDescription(description);
+
+        return {
+            success: true,
+            profile: {
+                id: profile.id,
+                name: profile.name,
+                description: profile.description,
+                personality: profile.personality ? {
+                    type: profile.personality.type,
+                    emoji: profile.personality.emoji,
+                    tagline: profile.personality.tagline
+                } : null,
+                source_templates: profile.sourceTemplates,
+                stream_count: profile.metadata.streamCount
+            },
+            message: `Created synthetic profile "${profile.name}" from ${profile.sourceTemplates.length} template(s).`
+        };
+    } catch (err) {
+        return { error: `Synthesis failed: ${err.message}` };
+    }
+}
+
+// ==========================================
 // Helpers
 // ==========================================
 
@@ -402,5 +627,7 @@ function getMonthName(monthNum) {
 
 window.Functions = {
     schemas: FUNCTION_SCHEMAS,
+    templateSchemas: TEMPLATE_FUNCTION_SCHEMAS,
+    allSchemas: [...FUNCTION_SCHEMAS, ...TEMPLATE_FUNCTION_SCHEMAS],
     execute: executeFunction
 };

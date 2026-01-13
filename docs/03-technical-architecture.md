@@ -140,6 +140,9 @@ rhythm-chamber/
 │   ├── chat.js             # Chat orchestration (Delegates to Providers)
 │   ├── prompts.js          # Editable prompt templates
 │   ├── settings.js         # Settings management
+│   ├── demo-data.js        # Demo mode profile
+│   ├── template-profiles.js # Curated template profiles
+│   ├── profile-synthesizer.js # AI-driven profile synthesis
 │   └── cards.js            # Shareable card generation
 ├── workers/
 │   └── parser-worker.js    # Web Worker for .zip parsing
@@ -254,6 +257,10 @@ flowchart LR
 | `get_listening_stats` | Stats for a period | year?, month? |
 | `compare_periods` | Compare two years | year1, year2 |
 | `search_tracks` | Search for a track | track_name |
+| `get_templates_by_genre` | Filter templates by genre | genre |
+| `get_templates_with_pattern` | Find templates with patterns | pattern |
+| `get_templates_by_personality` | Match templates by personality | type |
+| `synthesize_profile` | AI synthesis from template | template_id, user_context |
 
 ---
 
