@@ -3,18 +3,47 @@
  * Orchestrates the Rhythm Chamber flow
  */
 
-// State
-let appState = {
-    streams: null,
-    chunks: null,
-    patterns: null,
-    personality: null,
-    liteData: null,      // Spotify API data
-    litePatterns: null,  // Patterns from lite data
-    isLiteMode: false,   // Quick Snapshot mode
-    view: 'upload',      // upload, processing, reveal, lite-reveal, chat
-    sidebarCollapsed: false  // Sidebar visibility state
+// ==========================================
+// State Management (via AppState module)
+// HNW: Centralized state with single mutation authority
+// ==========================================
+
+// Initialize centralized state
+AppState.init();
+
+// Backward compatibility: appState getter for incremental migration
+// TODO: Remove once all direct appState access is migrated
+const appStateProxy = {
+    get streams() { return AppState.get('data').streams; },
+    set streams(v) { AppState.update('data', { streams: v }); },
+
+    get chunks() { return AppState.get('data').chunks; },
+    set chunks(v) { AppState.update('data', { chunks: v }); },
+
+    get patterns() { return AppState.get('data').patterns; },
+    set patterns(v) { AppState.update('data', { patterns: v }); },
+
+    get personality() { return AppState.get('data').personality; },
+    set personality(v) { AppState.update('data', { personality: v }); },
+
+    get liteData() { return AppState.get('lite').liteData; },
+    set liteData(v) { AppState.update('lite', { liteData: v }); },
+
+    get litePatterns() { return AppState.get('lite').litePatterns; },
+    set litePatterns(v) { AppState.update('lite', { litePatterns: v }); },
+
+    get isLiteMode() { return AppState.get('lite').isLiteMode; },
+    set isLiteMode(v) { AppState.update('lite', { isLiteMode: v }); },
+
+    get view() { return AppState.get('view').current; },
+    set view(v) { AppState.setView(v); },
+
+    get sidebarCollapsed() { return AppState.get('ui').sidebarCollapsed; },
+    set sidebarCollapsed(v) { AppState.setSidebarCollapsed(v); }
 };
+
+// Use proxy for backward compatibility
+let appState = appStateProxy;
 
 let activeWorker = null; // Track active worker for cancellation
 let workerAbortController = null; // NEW: Per-reset abort controller
@@ -30,15 +59,7 @@ const chatSection = document.getElementById('chat-section');
 const resetBtn = document.getElementById('reset-btn');
 const spotifyConnectBtn = document.getElementById('spotify-connect-btn');
 
-// Sidebar Elements
-const chatSidebar = document.getElementById('chat-sidebar');
-const sidebarSessions = document.getElementById('sidebar-sessions');
-const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
-const sidebarCollapseBtn = document.getElementById('sidebar-collapse-btn');
-const sidebarOverlay = document.getElementById('sidebar-overlay');
-const newChatBtn = document.getElementById('new-chat-btn');
-
-const SIDEBAR_STATE_KEY = 'rhythm_chamber_sidebar_collapsed';
+// Sidebar Elements (managed by SidebarController)
 
 // ==========================================
 // Cross-Tab Coordination
@@ -225,7 +246,11 @@ async function init() {
 
     setupEventListeners();
     setupSpotifyButton();
-    initSidebar();
+
+    // Initialize sidebar controller (uses AppState for state management)
+    if (window.SidebarController) {
+        await SidebarController.init();
+    }
 }
 
 /**
@@ -573,159 +598,10 @@ async function processFile(file) {
 }
 
 // ==========================================
-// View Transitions
+// View Transitions (Delegated to ViewController)
 // ==========================================
-
-function showUpload() {
-    appState.view = 'upload';
-    uploadZone.style.display = 'flex';
-    processing.classList.remove('active');
-    revealSection.classList.remove('active');
-    liteRevealSection?.classList.remove('active');
-    chatSection.classList.remove('active');
-    resetBtn.style.display = 'none';
-
-    // Hide sidebar in non-chat views
-    if (chatSidebar) {
-        chatSidebar.classList.add('hidden');
-    }
-}
-
-function showProcessing() {
-    appState.view = 'processing';
-    uploadZone.style.display = 'none';
-    processing.classList.add('active');
-    revealSection.classList.remove('active');
-    liteRevealSection?.classList.remove('active');
-    chatSection.classList.remove('active');
-    resetBtn.style.display = 'none';
-}
-
-function showReveal() {
-    if (!appState.personality) {
-        console.warn('showReveal called without personality data');
-        showUpload();
-        return;
-    }
-
-    appState.view = 'reveal';
-    uploadZone.style.display = 'none';
-    processing.classList.remove('active');
-    revealSection.classList.add('active');
-    liteRevealSection?.classList.remove('active');
-    chatSection.classList.remove('active');
-    resetBtn.style.display = 'block';
-
-    // Populate reveal
-    const p = appState.personality;
-    document.getElementById('personality-emoji').textContent = p.emoji;
-    document.getElementById('personality-name').textContent = p.name;
-    document.getElementById('personality-description').textContent = p.description;
-
-    // Data Stats
-    const streams = appState.streams || [];
-    const summary = appState.patterns?.summary || {};
-    document.getElementById('stream-count').textContent = streams.length.toLocaleString();
-
-    if (summary.dateRange) {
-        document.getElementById('date-range-start').textContent = summary.dateRange.start;
-        document.getElementById('date-range-end').textContent = summary.dateRange.end;
-    }
-
-    // Evidence
-    const evidenceItems = document.getElementById('evidence-items');
-    evidenceItems.innerHTML = p.allEvidence.map(e => `<li>${e}</li>`).join('');
-
-    // Score Breakdown (Detection Explainer)
-    populateScoreBreakdown(p);
-
-    // Init chat context with streams data for queries
-    Chat.initChat(p, appState.patterns, appState.patterns.summary, appState.streams);
-}
-
-/**
- * Populate the "How did we detect this?" explainer
- */
-function populateScoreBreakdown(personality) {
-    const scoreBreakdown = document.getElementById('score-breakdown');
-    const scoreTotal = document.getElementById('score-total');
-    const explainer = document.getElementById('detection-explainer');
-
-    if (!personality.breakdown || personality.breakdown.length === 0) {
-        // Hide explainer if no breakdown available
-        explainer.style.display = 'none';
-        return;
-    }
-
-    explainer.style.display = '';
-
-    // Use the pre-computed breakdown from personality module
-    scoreBreakdown.innerHTML = personality.breakdown.map(item =>
-        `<li class="${item.points > 0 ? 'score-positive' : 'score-zero'}">${item.label} (${item.points > 0 ? '+' + item.points : '0'} points)</li>`
-    ).join('');
-
-    // Calculate total from breakdown
-    const totalPoints = personality.breakdown.reduce((sum, item) => sum + item.points, 0);
-    scoreTotal.textContent = `Total: ${totalPoints} points → ${personality.name}`;
-}
-
-function showLiteReveal() {
-    if (!appState.personality) {
-        console.warn('showLiteReveal called without personality data');
-        showUpload();
-        return;
-    }
-
-    appState.view = 'lite-reveal';
-    uploadZone.style.display = 'none';
-    processing.classList.remove('active');
-    revealSection.classList.remove('active');
-    liteRevealSection.classList.add('active');
-    chatSection.classList.remove('active');
-    resetBtn.style.display = 'block';
-
-    // Populate lite reveal
-    const p = appState.personality;
-    document.getElementById('lite-personality-emoji').textContent = p.emoji;
-    document.getElementById('lite-personality-name').textContent = p.name;
-    document.getElementById('lite-personality-description').textContent = p.description;
-
-    // Genre tags
-    const genreTags = document.getElementById('lite-genre-tags');
-    const genres = appState.litePatterns?.summary?.topGenres || [];
-    genreTags.innerHTML = genres.map(g => `<span class="genre-tag">${g}</span>`).join('');
-
-    // Evidence
-    const evidenceItems = document.getElementById('lite-evidence-items');
-    evidenceItems.innerHTML = p.allEvidence.map(e => `<li>${e}</li>`).join('');
-
-    // Init chat context with lite data (no streams for lite mode)
-    Chat.initChat(p, appState.litePatterns, appState.litePatterns.summary, appState.liteData?.recentStreams || null);
-}
-
-function showChat() {
-    if (!appState.personality) {
-        showUpload();
-        return;
-    }
-
-    appState.view = 'chat';
-    uploadZone.style.display = 'none';
-    processing.classList.remove('active');
-    revealSection.classList.remove('active');
-    liteRevealSection?.classList.remove('active');
-    chatSection.classList.add('active');
-    resetBtn.style.display = 'block';
-
-    document.getElementById('chat-personality-name').textContent = appState.personality.name;
-
-    // Show sidebar and render sessions
-    if (chatSidebar) {
-        chatSidebar.classList.remove('hidden');
-        updateSidebarVisibility();
-        renderSessionList();
-    }
-}
+// All view functions moved to js/controllers/view-controller.js
+// Functions available globally: showUpload, showProcessing, showReveal, showLiteReveal, showChat
 
 // ==========================================
 // Chat Handler
@@ -1198,18 +1074,8 @@ async function executeReset() {
         // Step 4: Clear Spotify tokens (handled separately for security)
         Spotify.clearTokens();
 
-        // Step 5: Reset app state
-        appState = {
-            streams: null,
-            chunks: null,
-            patterns: null,
-            personality: null,
-            liteData: null,
-            litePatterns: null,
-            isLiteMode: false,
-            view: 'upload',
-            sidebarCollapsed: appState.sidebarCollapsed  // Preserve sidebar state
-        };
+        // Step 5: Reset app state (via centralized AppState)
+        AppState.reset();
 
         Chat.clearHistory();
 
@@ -1306,356 +1172,9 @@ window.showPrivacyDashboard = showPrivacyDashboard;
 window.clearSensitiveData = clearSensitiveData;
 
 // ==========================================
-// Sidebar Controller
+// Sidebar (Delegated to SidebarController)
 // ==========================================
-
-/**
- * Initialize sidebar state and event listeners
- * Uses unified storage with localStorage fallback
- */
-async function initSidebar() {
-    // Restore collapsed state from unified storage or localStorage
-    let savedState = null;
-    if (window.Storage?.getConfig) {
-        savedState = await window.Storage.getConfig(SIDEBAR_STATE_KEY);
-    }
-    if (savedState === null) {
-        savedState = localStorage.getItem(SIDEBAR_STATE_KEY);
-    }
-    appState.sidebarCollapsed = savedState === 'true' || savedState === true;
-    updateSidebarVisibility();
-
-
-    // Setup event listeners
-    if (sidebarToggleBtn) {
-        sidebarToggleBtn.addEventListener('click', toggleSidebar);
-    }
-    if (sidebarCollapseBtn) {
-        sidebarCollapseBtn.addEventListener('click', toggleSidebar);
-    }
-    if (sidebarOverlay) {
-        sidebarOverlay.addEventListener('click', closeSidebar);
-    }
-    if (newChatBtn) {
-        newChatBtn.addEventListener('click', handleNewChat);
-    }
-
-    // Register for session updates
-    if (Chat.onSessionUpdate) {
-        Chat.onSessionUpdate(renderSessionList);
-    }
-
-    // Initial sidebar hidden (shown only in chat view)
-    hideSidebarForNonChatViews();
-}
-
-/**
- * Hide sidebar when not in chat view
- */
-function hideSidebarForNonChatViews() {
-    if (chatSidebar && appState.view !== 'chat') {
-        chatSidebar.classList.add('hidden');
-    }
-}
-
-/**
- * Update sidebar visibility based on state
- */
-function updateSidebarVisibility() {
-    if (!chatSidebar) return;
-
-    if (appState.sidebarCollapsed) {
-        chatSidebar.classList.add('collapsed');
-    } else {
-        chatSidebar.classList.remove('collapsed');
-    }
-
-    // Mobile overlay
-    if (sidebarOverlay) {
-        if (!appState.sidebarCollapsed && window.innerWidth <= 768) {
-            sidebarOverlay.classList.add('visible');
-        } else {
-            sidebarOverlay.classList.remove('visible');
-        }
-    }
-}
-
-/**
- * Toggle sidebar collapsed state
- */
-function toggleSidebar() {
-    appState.sidebarCollapsed = !appState.sidebarCollapsed;
-    // Save to unified storage and localStorage
-    if (window.Storage?.setConfig) {
-        window.Storage.setConfig(SIDEBAR_STATE_KEY, appState.sidebarCollapsed).catch(() => { });
-    }
-    localStorage.setItem(SIDEBAR_STATE_KEY, appState.sidebarCollapsed.toString());
-    updateSidebarVisibility();
-
-    // Mobile: Toggle open class
-    if (window.innerWidth <= 768) {
-        if (appState.sidebarCollapsed) {
-            chatSidebar.classList.remove('open');
-        } else {
-            chatSidebar.classList.add('open');
-        }
-    }
-}
-
-/**
- * Close sidebar (mobile)
- */
-function closeSidebar() {
-    appState.sidebarCollapsed = true;
-    // Save to unified storage and localStorage
-    if (window.Storage?.setConfig) {
-        window.Storage.setConfig(SIDEBAR_STATE_KEY, true).catch(() => { });
-    }
-    localStorage.setItem(SIDEBAR_STATE_KEY, 'true');
-    updateSidebarVisibility();
-    if (chatSidebar) {
-        chatSidebar.classList.remove('open');
-    }
-}
-
-/**
- * Render session list in sidebar
- */
-async function renderSessionList() {
-    if (!sidebarSessions) return;
-
-    const sessions = await Chat.listSessions();
-    const currentId = Chat.getCurrentSessionId();
-
-    if (sessions.length === 0) {
-        sidebarSessions.innerHTML = `
-            <div class="sidebar-empty">
-                <div class="emoji">💬</div>
-                <p>No conversations yet.<br>Start a new chat!</p>
-            </div>
-        `;
-        return;
-    }
-
-    sidebarSessions.innerHTML = sessions.map(session => {
-        const isActive = session.id === currentId;
-        const date = new Date(session.updatedAt || session.createdAt);
-        const dateStr = formatRelativeDate(date);
-        const emoji = session.metadata?.personalityEmoji || '🎵';
-
-        return `
-            <div class="session-item ${isActive ? 'active' : ''}" 
-                 data-session-id="${session.id}"
-                 onclick="handleSessionClick('${session.id}')">
-                <div class="session-title">${escapeHtml(session.title || 'New Chat')}</div>
-                <div class="session-meta">
-                    <span class="emoji">${emoji}</span>
-                    <span>${dateStr}</span>
-                    <span>·</span>
-                    <span>${session.messageCount || 0} msgs</span>
-                </div>
-                <div class="session-actions">
-                    <button class="session-action-btn" 
-                            onclick="event.stopPropagation(); handleSessionRename('${session.id}')"
-                            title="Rename">✏️</button>
-                    <button class="session-action-btn delete" 
-                            onclick="event.stopPropagation(); handleSessionDelete('${session.id}')"
-                            title="Delete">🗑️</button>
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
-/**
- * Format date as relative string
- */
-function formatRelativeDate(date) {
-    const now = new Date();
-    const diffMs = now - date;
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-    return date.toLocaleDateString();
-}
-
-/**
- * Escape HTML to prevent XSS
- */
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-/**
- * Handle session click - switch to that session
- */
-async function handleSessionClick(sessionId) {
-    const currentId = Chat.getCurrentSessionId();
-    if (sessionId === currentId) return;
-
-    await Chat.switchSession(sessionId);
-
-    // Re-render chat messages
-    const messages = document.getElementById('chat-messages');
-    if (messages) {
-        messages.innerHTML = '';
-        const history = Chat.getHistory();
-        history.forEach(msg => {
-            if (msg.role === 'user' || msg.role === 'assistant') {
-                appendMessage(msg.role, msg.content);
-            }
-        });
-    }
-
-    // Close sidebar on mobile
-    if (window.innerWidth <= 768) {
-        closeSidebar();
-    }
-}
-
-/**
- * Handle new chat button
- */
-async function handleNewChat() {
-    await Chat.createNewSession();
-
-    // Clear chat messages
-    const messages = document.getElementById('chat-messages');
-    if (messages) {
-        messages.innerHTML = '';
-    }
-
-    // Show suggestions
-    const suggestions = document.getElementById('chat-suggestions');
-    if (suggestions) {
-        suggestions.style.display = 'flex';
-    }
-
-    // Close sidebar on mobile
-    if (window.innerWidth <= 768) {
-        closeSidebar();
-    }
-}
-
-// Track which session is pending deletion
-let pendingDeleteSessionId = null;
-
-/**
- * Handle session delete - show confirmation modal
- */
-function handleSessionDelete(sessionId) {
-    pendingDeleteSessionId = sessionId;
-    const modal = document.getElementById('delete-chat-modal');
-    if (modal) {
-        modal.style.display = 'flex';
-    }
-}
-
-/**
- * Hide delete chat confirmation modal
- */
-function hideDeleteChatModal() {
-    pendingDeleteSessionId = null;
-    const modal = document.getElementById('delete-chat-modal');
-    if (modal) {
-        modal.style.display = 'none';
-    }
-}
-
-/**
- * Confirm and execute the delete
- */
-async function confirmDeleteChat() {
-    if (!pendingDeleteSessionId) return;
-
-    const sessionId = pendingDeleteSessionId;
-    hideDeleteChatModal();
-
-    await Chat.deleteSessionById(sessionId);
-
-    // If we deleted the current session, clear messages
-    const messages = document.getElementById('chat-messages');
-    if (messages) {
-        messages.innerHTML = '';
-    }
-}
-
-/**
- * Handle session rename
- */
-async function handleSessionRename(sessionId) {
-    const sessionEl = document.querySelector(`[data-session-id="${sessionId}"]`);
-    if (!sessionEl) return;
-
-    const titleEl = sessionEl.querySelector('.session-title');
-    const currentTitle = titleEl.textContent;
-
-    // Replace with input
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'session-title-input';
-    input.value = currentTitle;
-    titleEl.replaceWith(input);
-    input.focus();
-    input.select();
-
-    // Save on blur or enter
-    const saveTitle = async () => {
-        const newTitle = input.value.trim() || 'New Chat';
-        await Chat.renameSession(sessionId, newTitle);
-    };
-
-    input.addEventListener('blur', saveTitle);
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            input.blur();
-        } else if (e.key === 'Escape') {
-            input.value = currentTitle;
-            input.blur();
-        }
-    });
-}
-
-/**
- * Append a message to chat (helper for session switching)
- */
-function appendMessage(role, content) {
-    const messages = document.getElementById('chat-messages');
-    if (!messages) return;
-
-    const div = document.createElement('div');
-    div.className = `message ${role}`;
-
-    // Safely parse markdown with null/undefined checks
-    let parsedContent = '';
-    if (content) {
-        if (typeof marked !== 'undefined' && marked.parse) {
-            try {
-                parsedContent = marked.parse(content);
-            } catch (e) {
-                console.warn('Markdown parsing failed:', e);
-                parsedContent = content;
-            }
-        } else {
-            parsedContent = content;
-        }
-    }
-
-    div.innerHTML = `<div class="message-content">${parsedContent}</div>`;
-    messages.appendChild(div);
-}
-
-// Make sidebar handlers available globally
-window.handleSessionClick = handleSessionClick;
-window.handleSessionDelete = handleSessionDelete;
-window.handleSessionRename = handleSessionRename;
-window.hideDeleteChatModal = hideDeleteChatModal;
-window.confirmDeleteChat = confirmDeleteChat;
+// All sidebar functions moved to js/controllers/sidebar-controller.js
 
 // Start
 init();
