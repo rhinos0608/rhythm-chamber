@@ -100,24 +100,42 @@ For the quantified-self crowd, this is hugely compelling.
 
 ## Monetization
 
-| Tier | Price | What You Get |
-|------|-------|--------------|
-| **Free** | $0 | Full local analysis, BYOK chat, basic cards, personality reveal |
-| **Supporter** | **$19 Lifetime** | CLI tool, premium themes, "Verified" badge, friend compare JSON import |
-| **Patron** | $7/month | Dev Discord access, roadmap voting, early beta features |
+### Phase 1: Sovereign Community (Zero Cost to User)
+
+| Tier | Price | What You Get | Infrastructure | Purpose |
+|------|-------|--------------|----------------|----------|
+| **Free** | $0 | Full local analysis, BYOK chat, basic cards, personality reveal | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
+| **Supporter** | **$19 Lifetime** | CLI tool, premium themes, "Verified" badge, friend compare JSON import | Client-side only | **Seed Capital**: Funds security audit & cloud infrastructure |
+| **Patron** | **$7/month** | Dev Discord access, roadmap voting, early beta features | Client-side + Discord | **Community**: Recurring revenue for ongoing support |
+
+### Phase 2: Managed Cloud & AI (Trust-First Launch)
+
+| Tier | Price | What You Get | Infrastructure | Trust Signal |
+|------|-------|--------------|----------------|--------------|
+| **Cloud Sync** | **$50 Lifetime + $10/month** | Multi-device chat sync, encrypted cloud backup, **managed embeddings & AI setup**, security signatures & validation | Hybrid (Server-side DB + Client-side E2EE) | **"Secured by [External Firm]"** |
+| **Cloud Sync** | **$15/month** | Same as above, no lifetime payment | Hybrid (Server-side DB + Client-side E2EE) | **"Secured by [External Firm]"** |
 
 ### Why This Works
-- **Psychology**: $19 is a "no-brainer" impulse buy for developers who find the tool useful
+- **Zero Risk Entry**: Users try without payment barrier
+- **Community Investment**: Supporters feel ownership in security development
+- **Borrowed Trust**: External security firm reputation transfers to your product
 - **CLI Version**: Killer feature for power users who want scripting capabilities
 - **Zero-Backend**: No payment processing infrastructure needed
 - **Viral Loop**: "Compare with Friend" via JSON exchange keeps data private
 - **BYOK Model**: Appeals to privacy-conscious power users who want control
+- **Phase 2 Trigger**: Only after hitting Supporter KPI (~250-1,000) and security audit complete
+- **Revenue Allocation**: Supporter funds go directly to security audit and cloud infrastructure
+- **Ongoing Costs**: $10/month covers API/embedding costs with margin
+- **Lifetime Protection**: Separates access fee from compute costs
+- **Two Points of Failure**: Users can switch between local and cloud modes
+- **Never Deprecate Local**: Free tier remains functional forever
 
 ### Patreon Integration Strategy
 - **One Codebase**: All features in main app, unlocked with license key
 - **No Maintenance Nightmare**: No separate codebases to sync
 - **Hacker-Resistant**: It's okay if people bypass - they weren't going to pay anyway
 - **Supporter Key**: Static key given to Patreon supporters
+- **Transparency**: Explicitly state "Your $19 funds our security audit"
 
 ### Feature Implementation
 - **CLI Version**: Wraps existing `js/parser.js` and `js/data-query.js` in Node.js
@@ -125,6 +143,7 @@ For the quantified-self crowd, this is hugely compelling.
 - **Badges**: Canvas-based visual elements on shareable cards
 - **Friend Compare**: Local JSON export/import, zero backend
 - **Patreon Perks**: Discord access, voting rights, early access
+- **Phase 2**: Multi-device sync, encrypted cloud backup, managed AI setup, **external security partnership**
 
 ---
 

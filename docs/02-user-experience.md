@@ -99,10 +99,23 @@ it since 2018. This matches your 'Emotional Archaeologist' pattern."
 > Returning `None` is a feature. Forced "notability" causes pattern hallucination.
 
 ### Monetization Integration
-- **Free users**: Full chat experience with free models
-- **Supporters**: Unlock CLI, themes, badges
-- **Patrons**: Community access + early features
-- **No paywalls on core insights**: Personality reveal is always free
+
+#### Phase 1: Sovereign Community (Zero Cost to User)
+- **Free users**: Full chat experience with free models, BYOK, 100% local
+- **Supporters**: $19 Lifetime - Unlock CLI, themes, badges, friend compare
+  - **Purpose**: Funds external security audit & cloud infrastructure
+  - **Transparency**: "Your $19 funds our security partnership"
+- **Patrons**: $7/month - Community access + early features
+- **No paywalls**: Personality reveal always free, builds trust
+
+#### Phase 2: Managed Cloud & AI (Trust-First Launch)
+- **Cloud Sync**: $50 lifetime + $10/month OR $15/month
+- **Features**: Multi-device sync, encrypted backup, managed AI setup
+- **Trust Signal**: "Secured by [External Firm]" badge
+- **Trigger**: Only after ~250-1,000 Supporters + security audit complete
+- **Architecture**: Hybrid (server-side DB + client-side E2EE)
+- **Two Points of Failure**: Users can switch between local and cloud modes
+- **Never Deprecate Local**: Free tier remains functional forever
 
 ---
 
@@ -204,24 +217,54 @@ You mark time through sound.
 - Mood logging
 - PDF reports
 - Apple Music
-- Cloud sync (optional paid feature)
+- **Cloud sync**: Phase 2 (Market Signal Triggered)
 
-## Monetization Features (Post-MVP)
+## Monetization Features
 
-### Supporter Tier ($19 Lifetime)
+### Phase 1: Sovereign Community (Zero Cost to User)
+
+#### Free Tier ($0)
+- **Full Local Analysis**: Complete personality engine and pattern detection
+- **BYOK Chat**: Bring your own API keys for AI chat
+- **Basic Cards**: Shareable personality cards
+- **100% Client-Side**: Zero server costs, maximum privacy
+- **Purpose**: Loss leader to build community and validate product
+
+#### Supporter Tier ($19 Lifetime) - Seed Capital
 - **CLI Tool**: Command-line interface for batch processing
 - **Premium Themes**: Dark, Cyberpunk, Minimal styles
 - **Verified Badge**: Visual indicator on shareable cards
 - **Friend Compare**: JSON export/import for local comparison
+- **Purpose**: Funds external security audit & cloud infrastructure
+- **Transparency**: "Your $19 funds our security partnership"
+- **KPI**: Need ~250-1,000 Supporters to fund Phase 2
 
-### Patreon Tier ($7/month)
+#### Patreon Tier ($7/month) - Community
 - **Dev Discord**: Community access and support
 - **Roadmap Voting**: Influence feature priorities
 - **Early Beta Access**: Try new features before release
 - **Priority Support**: Faster response times
+- **Purpose**: Sustainable community funding
+
+### Phase 2: Managed Cloud & AI (Trust-First Launch)
+
+#### Cloud Sync Tier ($50 Lifetime + $10/month OR $15/month)
+- **Multi-device Chat Sync**: Sync sessions across desktop/mobile
+- **Encrypted Cloud Backup**: E2EE storage of conversation history
+- **Managed AI Setup**: Pre-configured embeddings & API integration
+- **Security Signatures**: EV Code Signing + Apple notarization
+- **Hybrid Architecture**: Optional server-side layer alongside local-first core
+- **Two Points of Failure**: Users can switch between local and cloud modes
+- **Trust Signal**: "Secured by [External Firm]" badge
+- **Trigger**: Only after security audit complete and KPI met
 
 ### Implementation Strategy
-- All features in main app, unlocked with license key
-- No separate codebases
-- Simple key validation in settings
-- Accept that bypassing is possible, focus on supporters
+- **One Codebase**: All features in main app, unlocked with license key
+- **No Separate Versions**: Avoids maintenance nightmare
+- **Hacker-Resistant**: Accept bypassing, target supporters who want to pay
+- **Transparency**: Explicitly state revenue purpose
+- **Never Deprecate Local**: Free tier remains functional forever
+- **Phase 2 Trigger**: Only after ~250-1,000 Supporters + security audit
+- **Revenue Allocation**: Supporter funds go directly to security audit
+- **Ongoing Costs**: $10/month covers API/embedding costs with margin
+- **Lifetime Protection**: Separates access fee from compute costs

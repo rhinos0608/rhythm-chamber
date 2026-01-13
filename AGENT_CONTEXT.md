@@ -6,26 +6,47 @@
 
 ## Monetization Strategy
 
-**Philosophy:** The core experience is free and client-side (privacy-first). Supporter-driven model with zero-backend infrastructure.
+**Philosophy:** Community-first growth with zero monetization entry. Build a base of enthusiasts, then scale to premium managed services. Revenue from early supporters funds infrastructure and security.
 
-| Tier | Cost | Features |
-|------|------|----------|
-| **Free** | **$0** | Full local analysis, BYOK chat, basic cards, personality reveal, 100% Client-side. |
-| **Supporter** | **$19 Lifetime** | CLI tool, premium themes (Dark/Cyberpunk/Minimal), "Verified" badge, friend compare JSON import |
-| **Patron** | **$7/month** | Dev Discord access, roadmap voting rights, early beta features, priority support |
+### Phase 1: Sovereign Community (Zero Cost to User)
 
-**Key Strategy:**
-- **One codebase**: All features in main app, unlocked with license key
-- **No payment processing**: Static keys given to Patreon supporters
-- **Hacker-resistant**: Accept bypassing, target supporters who want to pay
+| Tier | Cost | Features | Infrastructure | Purpose |
+|------|------|----------|----------------|----------|
+| **Free** | **$0** | Full local analysis, BYOK chat, basic cards, personality reveal, 100% Client-side. | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
+| **Supporter** | **$19 Lifetime** | CLI tool, premium themes (Dark/Cyberpunk/Minimal), "Verified" badge, friend compare JSON import | Client-side only | **Seed Capital**: Funds security audit & cloud infrastructure |
+| **Patron** | **$7/month** | Dev Discord access, roadmap voting rights, early beta features, priority support | Client-side + Discord | **Community**: Recurring revenue for ongoing support |
+
+### Phase 2: Managed Cloud & AI (Trust-First Launch)
+
+| Tier | Cost | Features | Infrastructure | Trust Signal |
+|------|------|----------|----------------|--------------|
+| **Cloud Sync** | **$50 Lifetime + $10/month** | Multi-device chat sync, encrypted cloud backup, **managed embeddings & AI setup**, security signatures & validation | Hybrid (Server-side DB + Client-side E2EE) | **"Secured by [External Firm]"** |
+| **Cloud Sync** | **$15/month** | Same as above, no lifetime payment | Hybrid (Server-side DB + Client-side E2EE) | **"Secured by [External Firm]"** |
+
+**Key Strategy - "Sovereign-to-Managed" Pipeline:**
+- **Community First**: 100% free local tool builds trust and user base
+- **Seed Funding**: $19 Supporter tier acts as "crowdfunding" for security
+- **External Security**: Revenue funds reputable security firm audit & partnership
+- **Marketing Asset**: "Audited by X" badge becomes sales feature for Phase 2
+- **Clear KPI**: Need ~250-1,000 Supporters before launching cloud tier
+- **Transparency**: Explicitly state "Your $19 funds our security audit"
+- **One Codebase**: All features in main app, unlocked with license key
+- **Hacker-Resistant**: Accept bypassing, target supporters who want to pay
 - **CLI version**: Wraps existing `js/parser.js` and `js/data-query.js` in Node.js
 - **Friend compare**: Local JSON export/import, zero backend
+- **Phase 2 Trigger**: Only after hitting Supporter KPI and security audit complete
+- **Ongoing Costs**: $10/month covers API/embedding costs with margin
+- **Lifetime Protection**: Separates access fee from compute costs
+- **Two Points of Failure**: Users can switch between local and cloud modes
+- **Never Deprecate Local**: Free tier remains functional forever
 
 **Why it works:**
-- $19 is impulse-buy for developers who find the tool useful
-- CLI is killer feature for power users who want scripting
-- No infrastructure costs for supporter features
-- Creates viral loop via friend comparison
+- **Zero Risk Entry**: Users try without payment barrier
+- **Community Investment**: Supporters feel ownership in security development
+- **Borrowed Trust**: External security firm reputation transfers to your product
+- **Clear Value Prop**: "Convenience" (sync) vs "Control" (local) - user choice
+- **Sustainable**: Revenue covers costs, not subsidizing free users
+- **Viral Loop**: Free users become advocates, Supporters fund growth
 
 ---
 
