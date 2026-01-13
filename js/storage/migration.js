@@ -11,10 +11,10 @@
 // Migration Configuration
 // ==========================================
 
-const STORAGE_MIGRATION_VERSION = 1;
+const MIGRATION_MODULE_VERSION = 1;
 
 // Keys to migrate from localStorage to IndexedDB CONFIG store
-const LOCALSTORAGE_KEYS_TO_MIGRATE = [
+const MIGRATION_CONFIG_KEYS = [
     'rhythm_chamber_settings',
     'rhythm_chamber_rag',
     'rhythm_chamber_rag_checkpoint',
@@ -25,14 +25,14 @@ const LOCALSTORAGE_KEYS_TO_MIGRATE = [
 ];
 
 // Token keys to migrate to TOKENS store
-const LOCALSTORAGE_TOKEN_KEYS = [
+const MIGRATION_TOKEN_KEYS = [
     'spotify_access_token',
     'spotify_token_expiry',
     'spotify_refresh_token'
 ];
 
 // Keys that must stay in localStorage (require sync access)
-const LOCALSTORAGE_EXEMPT_KEYS = [
+const MIGRATION_EXEMPT_KEYS = [
     'rhythm_chamber_emergency_backup'
 ];
 
@@ -66,7 +66,7 @@ async function getMigrationState() {
  */
 async function isMigrationNeeded() {
     const state = await getMigrationState();
-    return !state || state.version < STORAGE_MIGRATION_VERSION;
+    return !state || state.version < MIGRATION_MODULE_VERSION;
 }
 
 // ==========================================
@@ -81,7 +81,7 @@ async function backupLocalStorage() {
     const backup = {};
 
     // Capture all keys to migrate
-    const allKeys = [...LOCALSTORAGE_KEYS_TO_MIGRATE, ...LOCALSTORAGE_TOKEN_KEYS];
+    const allKeys = [...MIGRATION_CONFIG_KEYS, ...MIGRATION_TOKEN_KEYS];
     for (const key of allKeys) {
         const value = localStorage.getItem(key);
         if (value !== null) {
@@ -102,7 +102,7 @@ async function backupLocalStorage() {
         id: 'pre_migration_backup',
         backup,
         timestamp: Date.now(),
-        version: STORAGE_MIGRATION_VERSION
+        version: MIGRATION_MODULE_VERSION
     });
 
     console.log(`[Migration] Backed up ${Object.keys(backup).length} localStorage keys`);
@@ -160,7 +160,7 @@ async function rollbackMigration() {
 async function migrateFromLocalStorage() {
     // Check if already migrated
     const state = await getMigrationState();
-    if (state && state.version >= STORAGE_MIGRATION_VERSION) {
+    if (state && state.version >= MIGRATION_MODULE_VERSION) {
         console.log('[Migration] Migration already complete (v' + state.version + ')');
         return { migrated: false, keysProcessed: 0 };
     }
@@ -179,7 +179,7 @@ async function migrateFromLocalStorage() {
     let keysProcessed = 0;
 
     // Step 2: Migrate config keys
-    for (const key of LOCALSTORAGE_KEYS_TO_MIGRATE) {
+    for (const key of MIGRATION_CONFIG_KEYS) {
         const value = localStorage.getItem(key);
         if (value !== null) {
             try {
@@ -198,7 +198,7 @@ async function migrateFromLocalStorage() {
     }
 
     // Step 3: Migrate token keys
-    for (const key of LOCALSTORAGE_TOKEN_KEYS) {
+    for (const key of MIGRATION_TOKEN_KEYS) {
         const value = localStorage.getItem(key);
         if (value !== null) {
             try {
@@ -213,16 +213,16 @@ async function migrateFromLocalStorage() {
     // Step 4: Mark migration complete
     await window.IndexedDBCore.put(window.IndexedDBCore.STORES.MIGRATION, {
         id: 'migration_state',
-        version: STORAGE_MIGRATION_VERSION,
+        version: MIGRATION_MODULE_VERSION,
         completedAt: new Date().toISOString(),
         keysProcessed
     });
 
     // Step 5: Clear migrated keys from localStorage (backup retained)
-    for (const key of LOCALSTORAGE_KEYS_TO_MIGRATE) {
+    for (const key of MIGRATION_CONFIG_KEYS) {
         localStorage.removeItem(key);
     }
-    for (const key of LOCALSTORAGE_TOKEN_KEYS) {
+    for (const key of MIGRATION_TOKEN_KEYS) {
         localStorage.removeItem(key);
     }
 
@@ -245,10 +245,10 @@ window.StorageMigration = {
     backupLocalStorage,
 
     // Configuration
-    VERSION: STORAGE_MIGRATION_VERSION,
-    KEYS_TO_MIGRATE: LOCALSTORAGE_KEYS_TO_MIGRATE,
-    TOKEN_KEYS: LOCALSTORAGE_TOKEN_KEYS,
-    EXEMPT_KEYS: LOCALSTORAGE_EXEMPT_KEYS
+    VERSION: MIGRATION_MODULE_VERSION,
+    KEYS_TO_MIGRATE: MIGRATION_CONFIG_KEYS,
+    TOKEN_KEYS: MIGRATION_TOKEN_KEYS,
+    EXEMPT_KEYS: MIGRATION_EXEMPT_KEYS
 };
 
 console.log('[StorageMigration] Migration module loaded');
