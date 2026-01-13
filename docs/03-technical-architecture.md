@@ -59,6 +59,7 @@ To manage complexity, the "God Objects" (chat.js, app.js, storage.js) have been 
 - **IndexedDBCore** (`js/storage/indexeddb.js`): Raw database operations.
 - **ConfigAPI** (`js/storage/config-api.js`): Key-value store for settings and tokens.
 - **Migration** (`js/storage/migration.js`): One-way migration from localStorage.
+- **ProfileStorage** (`js/storage/profiles.js`): Profile CRUD operations (extracted for HNW single-responsibility).
 
 ### 2. LLM Provider Interface
 `js/chat.js` delegates all model interactions to `ProviderInterface` (`js/providers/provider-interface.js`), which routes to:
@@ -119,12 +120,14 @@ rhythm-chamber/
 │   ├── storage/            # Data Layer
 │   │   ├── indexeddb.js
 │   │   ├── config-api.js
-│   │   └── migration.js
+│   │   ├── migration.js
+│   │   └── profiles.js     # Profile CRUD (extracted from facade)
 │   │
 │   ├── security/           # Security Layer
 │   │   ├── encryption.js
 │   │   ├── token-binding.js
 │   │   ├── anomaly.js
+│   │   ├── recovery-handlers.js # ErrorContext recovery actions
 │   │   └── index.js
 │   │
 │   ├── storage.js          # Storage Facade

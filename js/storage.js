@@ -252,113 +252,54 @@ const Storage = {
   },
 
   // ==========================================
-  // Profiles (Synthetic/Template) - Stored in Settings
+  // Profiles (delegate to ProfileStorage)
+  // HNW: Extracted to dedicated module for single-responsibility
   // ==========================================
 
-  /**
-   * Save a user-created or synthesized profile
-   * @param {object} profile - Profile to save
-   * @returns {Promise<void>}
-   */
   async saveProfile(profile) {
-    if (!profile.id) throw new Error('Profile must have an id');
-
-    const profiles = await this._getProfilesMap();
-    profiles[profile.id] = {
-      ...profile,
-      savedAt: new Date().toISOString()
-    };
-
-    await this.saveSetting('saved_profiles', profiles);
-    this._notifyUpdate('profile', Object.keys(profiles).length);
-    console.log(`[Storage] Saved profile: ${profile.name || profile.id}`);
-  },
-
-  /**
-   * Get all saved profiles
-   * @returns {Promise<Array>}
-   */
-  async getAllProfiles() {
-    const profiles = await this._getProfilesMap();
-    return Object.values(profiles).sort((a, b) =>
-      new Date(b.savedAt || 0) - new Date(a.savedAt || 0)
-    );
-  },
-
-  /**
-   * Get a single profile by ID
-   * @param {string} id - Profile ID
-   * @returns {Promise<object|null>}
-   */
-  async getProfile(id) {
-    const profiles = await this._getProfilesMap();
-    return profiles[id] || null;
-  },
-
-  /**
-   * Delete a saved profile
-   * @param {string} id - Profile ID
-   * @returns {Promise<void>}
-   */
-  async deleteProfile(id) {
-    const profiles = await this._getProfilesMap();
-    delete profiles[id];
-    await this.saveSetting('saved_profiles', profiles);
-
-    // Clear active if it was this profile
-    const activeId = await this.getSetting('active_profile_id');
-    if (activeId === id) {
-      await this.saveSetting('active_profile_id', null);
+    if (!window.ProfileStorage._storage) {
+      window.ProfileStorage.init(this);
     }
-
-    this._notifyUpdate('profile', Object.keys(profiles).length);
-    console.log(`[Storage] Deleted profile: ${id}`);
+    await window.ProfileStorage.saveProfile(profile);
+    this._notifyUpdate('profile', await this.getProfileCount());
   },
 
-  /**
-   * Get active profile ID
-   * @returns {Promise<string|null>}
-   */
+  async getAllProfiles() {
+    if (!window.ProfileStorage._storage) window.ProfileStorage.init(this);
+    return window.ProfileStorage.getAllProfiles();
+  },
+
+  async getProfile(id) {
+    if (!window.ProfileStorage._storage) window.ProfileStorage.init(this);
+    return window.ProfileStorage.getProfile(id);
+  },
+
+  async deleteProfile(id) {
+    if (!window.ProfileStorage._storage) window.ProfileStorage.init(this);
+    await window.ProfileStorage.deleteProfile(id);
+    this._notifyUpdate('profile', await this.getProfileCount());
+  },
+
   async getActiveProfileId() {
-    return this.getSetting('active_profile_id');
+    if (!window.ProfileStorage._storage) window.ProfileStorage.init(this);
+    return window.ProfileStorage.getActiveProfileId();
   },
 
-  /**
-   * Set active profile for chat context
-   * @param {string|null} id - Profile ID or null for user's real data
-   * @returns {Promise<void>}
-   */
   async setActiveProfile(id) {
-    await this.saveSetting('active_profile_id', id);
+    if (!window.ProfileStorage._storage) window.ProfileStorage.init(this);
+    await window.ProfileStorage.setActiveProfile(id);
     this._notifyUpdate('activeProfile', id ? 1 : 0);
-    console.log(`[Storage] Active profile set to: ${id || 'real data'}`);
   },
 
-  /**
-   * Get profile count
-   * @returns {Promise<number>}
-   */
   async getProfileCount() {
-    const profiles = await this._getProfilesMap();
-    return Object.keys(profiles).length;
+    if (!window.ProfileStorage._storage) window.ProfileStorage.init(this);
+    return window.ProfileStorage.getProfileCount();
   },
 
-  /**
-   * Clear all saved profiles
-   * @returns {Promise<void>}
-   */
   async clearAllProfiles() {
-    await this.saveSetting('saved_profiles', {});
-    await this.saveSetting('active_profile_id', null);
+    if (!window.ProfileStorage._storage) window.ProfileStorage.init(this);
+    await window.ProfileStorage.clearAllProfiles();
     this._notifyUpdate('profile', 0);
-    console.log('[Storage] All profiles cleared');
-  },
-
-  /**
-   * Private helper to get profiles map
-   */
-  async _getProfilesMap() {
-    return (await this.getSetting('saved_profiles')) || {};
   },
 
   // ==========================================

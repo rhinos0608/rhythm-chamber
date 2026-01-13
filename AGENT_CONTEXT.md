@@ -143,12 +143,14 @@ rhythm-chamber/
 │   │   ├── indexeddb.js    # Core DB operations
 │   │   ├── config-api.js   # Config & Token storage
 │   │   ├── migration.js    # localStorage migration
+│   │   ├── profiles.js     # Profile storage (extracted from facade)
 │   │   └── sync-strategy.js # Sync strategy abstraction (Phase 2 prep)
 │   │
 │   ├── security/           # Security Submodules
 │   │   ├── encryption.js   # AES-GCM
 │   │   ├── token-binding.js
 │   │   ├── anomaly.js
+│   │   ├── recovery-handlers.js # ErrorContext recovery actions
 │   │   └── index.js        # Module entry point
 │   │
 │   ├── state/              # State Management
@@ -303,6 +305,27 @@ npx http-server -p 8080 -c-1
 ---
 
 ## Session Log
+
+### Session 16 — 2026-01-14 (HNW Architectural Remediation)
+
+**What was done:**
+1. **Memory Leak Fix**: Added worker handler cleanup (`onmessage = null`) in 6 locations before `terminate()`.
+2. **Recovery Handlers**: Created `js/security/recovery-handlers.js` with executable handlers for all `ErrorContext` paths.
+3. **Cross-Tab Leader Election**: Replaced 100ms timeout with deterministic election (300ms window, lowest ID wins).
+4. **Demo Mode Isolation**: Expanded `demo` domain in AppState with isolated `streams/patterns/personality` + `getActiveData()` helper.
+5. **Profile Extraction**: Created `js/storage/profiles.js` module, `storage.js` now delegates all profile methods.
+6. **Documentation**: Rate limiting disclaimer, appStateProxy deprecation, operation lock contract.
+
+**Key Architectural Changes:**
+- **HNW Hierarchy**: Clear recovery path execution, deterministic tab authority.
+- **HNW Network**: Demo data isolated from real data domain.
+- **HNW Wave**: Leader election prevents race conditions in tab coordination.
+
+**New Files:**
+- `js/security/recovery-handlers.js` - Recovery action implementations
+- `js/storage/profiles.js` - Profile storage extracted from facade
+
+---
 
 ### Session 15 — 2026-01-13 (Template Profile System)
 
