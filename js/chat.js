@@ -879,17 +879,24 @@ async function sendMessage(message, optionsOrKey = null) {
 }
 
 // ==========================================
-// LLM Provider Routing
+// LLM Provider Routing (Delegated to Provider Modules)
 // ==========================================
 
 /**
  * Build provider-specific configuration
+ * Delegates to ProviderInterface module
  * @param {string} provider - Provider name (openrouter, ollama, lmstudio)
  * @param {object} settings - User settings
  * @param {object} baseConfig - Base config from config.js
  * @returns {object} Provider-specific config
  */
 function buildProviderConfig(provider, settings, baseConfig) {
+    // Delegate to provider interface if available
+    if (window.ProviderInterface?.buildProviderConfig) {
+        return window.ProviderInterface.buildProviderConfig(provider, settings, baseConfig);
+    }
+
+    // Fallback for backward compatibility
     switch (provider) {
         case 'ollama':
             return {
@@ -929,6 +936,7 @@ function buildProviderConfig(provider, settings, baseConfig) {
 
 /**
  * Unified LLM call routing - routes to appropriate provider
+ * Delegates to provider modules when available
  * @param {object} config - Provider config from buildProviderConfig
  * @param {string} apiKey - API key (for OpenRouter)
  * @param {Array} messages - Chat messages
@@ -937,38 +945,45 @@ function buildProviderConfig(provider, settings, baseConfig) {
  * @returns {Promise<object>} Response in OpenAI-compatible format
  */
 async function callLLM(config, apiKey, messages, tools, onProgress = null) {
+    // Try to use ProviderInterface for unified routing
+    if (window.ProviderInterface?.callProvider) {
+        try {
+            return await window.ProviderInterface.callProvider(config, apiKey, messages, tools, onProgress);
+        } catch (err) {
+            // If provider module fails, fall through to legacy handling
+            console.warn('[Chat] Provider module error, using fallback:', err.message);
+        }
+    }
+
+    // Legacy fallback - direct provider calls
     switch (config.provider) {
         case 'ollama':
-            return await callOllama(config, messages, tools, onProgress);
+            return await callOllamaLegacy(config, messages, tools, onProgress);
 
         case 'lmstudio':
-            return await callLMStudio(config, messages, tools, onProgress);
+            return await callLMStudioLegacy(config, messages, tools, onProgress);
 
         case 'openrouter':
         default:
-            return await callOpenRouter(apiKey, config, messages, tools);
+            return await callOpenRouterLegacy(apiKey, config, messages, tools);
     }
 }
 
-/**
- * Call Ollama API with streaming support
- * @param {object} config - Provider config
- * @param {Array} messages - Chat messages
- * @param {Array} tools - Function tools (optional)
- * @param {function} onProgress - Progress callback for streaming
- */
-async function callOllama(config, messages, tools, onProgress = null) {
+// ==========================================
+// Legacy Provider Functions (Fallbacks)
+// These are retained for backward compatibility if provider modules fail to load
+// ==========================================
+
+async function callOllamaLegacy(config, messages, tools, onProgress = null) {
     if (!window.Ollama) {
         throw new Error('Ollama module not loaded');
     }
 
-    // Check if Ollama is available
     const available = await window.Ollama.isAvailable();
     if (!available) {
         throw new Error('Ollama server not running. Start with: ollama serve');
     }
 
-    // Use streaming if onProgress callback provided
     const useStreaming = typeof onProgress === 'function';
 
     return await window.Ollama.chatCompletion(messages, {
@@ -980,14 +995,7 @@ async function callOllama(config, messages, tools, onProgress = null) {
     }, tools);
 }
 
-/**
- * Call LM Studio API (OpenAI-compatible) with streaming support
- * @param {object} config - Provider config
- * @param {Array} messages - Chat messages
- * @param {Array} tools - Function tools (optional)
- * @param {function} onProgress - Progress callback for streaming
- */
-async function callLMStudio(config, messages, tools, onProgress = null) {
+async function callLMStudioLegacy(config, messages, tools, onProgress = null) {
     const useStreaming = typeof onProgress === 'function';
 
     const body = {
@@ -999,7 +1007,6 @@ async function callLMStudio(config, messages, tools, onProgress = null) {
         stream: useStreaming
     };
 
-    // Add tools if provided
     if (tools && tools.length > 0) {
         body.tools = tools;
         body.tool_choice = 'auto';
@@ -1011,9 +1018,7 @@ async function callLMStudio(config, messages, tools, onProgress = null) {
     try {
         const response = await fetch(`${config.endpoint}/chat/completions`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
             signal: controller.signal
         });
@@ -1021,14 +1026,11 @@ async function callLMStudio(config, messages, tools, onProgress = null) {
         clearTimeout(timeoutId);
 
         if (!response.ok) {
-            const errorText = await response.text();
-            console.error('[Chat] LM Studio error:', response.status, errorText);
             throw new Error(`LM Studio error: ${response.status}`);
         }
 
-        // Handle streaming response
         if (useStreaming) {
-            return await handleStreamingResponse(response, onProgress);
+            return await handleStreamingResponseLegacy(response, onProgress);
         }
 
         return response.json();
@@ -1041,10 +1043,7 @@ async function callLMStudio(config, messages, tools, onProgress = null) {
     }
 }
 
-/**
- * Handle SSE streaming response from LM Studio / OpenAI-compatible APIs
- */
-async function handleStreamingResponse(response, onProgress) {
+async function handleStreamingResponseLegacy(response, onProgress) {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
@@ -1072,7 +1071,6 @@ async function handleStreamingResponse(response, onProgress) {
                     if (delta?.content) {
                         const token = delta.content;
 
-                        // Detect thinking blocks (<think>...</think>)
                         if (token.includes('<think>')) {
                             inThinking = true;
                             const parts = token.split('<think>');
@@ -1107,19 +1105,15 @@ async function handleStreamingResponse(response, onProgress) {
 
                     lastMessage = parsed;
                 } catch (e) {
-                    // Ignore parse errors for malformed chunks
+                    // Ignore parse errors
                 }
             }
         }
     }
 
-    // Build OpenAI-compatible response
     return {
         choices: [{
-            message: {
-                role: 'assistant',
-                content: fullContent
-            },
+            message: { role: 'assistant', content: fullContent },
             finish_reason: 'stop'
         }],
         model: lastMessage?.model,
@@ -1127,11 +1121,7 @@ async function handleStreamingResponse(response, onProgress) {
     };
 }
 
-/**
- * Make an API call to OpenRouter
- * HNW Fix: Added timeout protection to prevent cascade failures
- */
-async function callOpenRouter(apiKey, config, messages, tools) {
+async function callOpenRouterLegacy(apiKey, config, messages, tools) {
     const body = {
         model: config.model,
         messages,
@@ -1139,13 +1129,11 @@ async function callOpenRouter(apiKey, config, messages, tools) {
         temperature: config.temperature
     };
 
-    // Add tools if provided
     if (tools && tools.length > 0) {
         body.tools = tools;
         body.tool_choice = 'auto';
     }
 
-    // Use timeout wrapper if available, otherwise basic fetch with AbortController
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), CHAT_API_TIMEOUT_MS);
 

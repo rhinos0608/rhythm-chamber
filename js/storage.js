@@ -1,6 +1,12 @@
 /**
- * IndexedDB Storage Module
- * Handles all local data persistence
+ * IndexedDB Storage Module (Facade)
+ * 
+ * Unified storage API that delegates to submodules when available:
+ * - storage/indexeddb.js - Core IndexedDB operations
+ * - storage/config-api.js - Unified config/token storage
+ * - storage/migration.js - localStorage → IndexedDB migration
+ * 
+ * Maintains backward compatibility when submodules aren't loaded.
  * 
  * PRIVACY CONTROLS:
  * - Session-only mode: Data only lives in memory for the current session
