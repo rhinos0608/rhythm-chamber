@@ -8,9 +8,9 @@
 
 // Available LLM providers
 const LLM_PROVIDERS = [
-    { id: 'openrouter', name: 'OpenRouter (Cloud)', description: 'Use OpenRouter API with many models' },
-    { id: 'ollama', name: 'Ollama (Local)', description: 'Run models locally - zero cloud data' },
-    { id: 'lmstudio', name: 'LM Studio (Local)', description: 'OpenAI-compatible local inference' }
+    { id: 'ollama', name: 'Ollama (Local)', description: 'Run AI models on your own hardware - zero data transmission' },
+    { id: 'lmstudio', name: 'LM Studio (Local)', description: 'User-friendly local AI with OpenAI-compatible API' },
+    { id: 'openrouter', name: 'OpenRouter (Cloud)', description: 'Optional cloud provider for premium models' }
 ];
 
 // Default endpoints for local providers
@@ -44,7 +44,7 @@ function getSettings() {
     const settings = {
         // LLM Provider settings  
         llm: {
-            provider: 'openrouter', // 'openrouter' | 'ollama' | 'lmstudio'
+            provider: 'ollama', // Default to local AI for privacy
             ollamaEndpoint: DEFAULT_ENDPOINTS.ollama,
             lmstudioEndpoint: DEFAULT_ENDPOINTS.lmstudio
         },
@@ -108,7 +108,7 @@ async function getSettingsAsync() {
     const settings = {
         // LLM Provider settings  
         llm: {
-            provider: 'openrouter', // 'openrouter' | 'ollama' | 'lmstudio'
+            provider: 'ollama', // Default to local AI for privacy
             ollamaEndpoint: DEFAULT_ENDPOINTS.ollama,
             lmstudioEndpoint: DEFAULT_ENDPOINTS.lmstudio
         },
@@ -374,6 +374,9 @@ function showSettingsModal() {
                 <!-- LLM Provider Section -->
                 <div class="settings-section">
                     <h3>🤖 AI Chat Settings</h3>
+                    <p class="settings-description">
+                        Choose your AI provider. <strong>Local AI (Ollama/LM Studio) = zero data transmission.</strong>
+                    </p>
                     
                     <!-- Provider Selection -->
                     <div class="settings-field">
@@ -695,7 +698,7 @@ function hideSettingsModal() {
  */
 function saveFromModal() {
     // Get provider selection
-    const provider = document.getElementById('setting-llm-provider')?.value || 'openrouter';
+    const provider = document.getElementById('setting-llm-provider')?.value || 'ollama';
     const ollamaEndpoint = document.getElementById('setting-ollama-endpoint')?.value || DEFAULT_ENDPOINTS.ollama;
     const lmstudioEndpoint = document.getElementById('setting-lmstudio-endpoint')?.value || DEFAULT_ENDPOINTS.lmstudio;
     const ollamaModel = document.getElementById('setting-ollama-model')?.value || 'llama3.2';
@@ -1213,6 +1216,313 @@ async function refreshOllamaModels() {
         modelSelect.innerHTML = `<option value="">Error loading models: ${error.message}</option>`;
     }
 }
+// ==========================================
+// Tools Modal Functions
+// ==========================================
+
+/**
+ * Get the list of enabled tools from storage
+ * By default, all tools are enabled
+ */
+function getEnabledTools() {
+    const stored = localStorage.getItem('rhythm_chamber_enabled_tools');
+    if (stored) {
+        try {
+            return JSON.parse(stored);
+        } catch (e) {
+            console.error('[Settings] Failed to parse enabled tools:', e);
+        }
+    }
+    // Default: all tools enabled
+    return null; // null means "all enabled"
+}
+
+/**
+ * Save the list of enabled tools
+ * @param {string[]|null} enabledTools - Array of enabled tool names, or null for "all enabled"
+ */
+async function saveEnabledTools(enabledTools) {
+    if (enabledTools === null) {
+        localStorage.removeItem('rhythm_chamber_enabled_tools');
+    } else {
+        localStorage.setItem('rhythm_chamber_enabled_tools', JSON.stringify(enabledTools));
+    }
+
+    // Also save to unified storage
+    if (window.Storage?.setConfig) {
+        try {
+            await window.Storage.setConfig('rhythm_chamber_enabled_tools', enabledTools);
+        } catch (e) {
+            console.warn('[Settings] Failed to save enabled tools to unified storage:', e);
+        }
+    }
+}
+
+/**
+ * Check if a specific tool is enabled
+ * @param {string} toolName - Name of the tool
+ * @returns {boolean} Whether the tool is enabled
+ */
+function isToolEnabled(toolName) {
+    const enabledTools = getEnabledTools();
+    if (enabledTools === null) return true; // All enabled
+    return enabledTools.includes(toolName);
+}
+
+/**
+ * Get all function schemas organized by category
+ */
+function getToolsByCategory() {
+    const categories = {
+        data: {
+            name: '📊 Data Queries',
+            description: 'Core functions for querying your listening history',
+            tools: []
+        },
+        analytics: {
+            name: '📈 Analytics',
+            description: 'Stats.fm and Wrapped-style deep analytics',
+            tools: []
+        },
+        templates: {
+            name: '🎭 Template Profiles',
+            description: 'Explore curated profiles and AI synthesis',
+            tools: []
+        }
+    };
+
+    // Data query tools
+    const dataSchemas = window.DataQuerySchemas || [];
+    for (const schema of dataSchemas) {
+        categories.data.tools.push({
+            name: schema.function.name,
+            description: schema.function.description
+        });
+    }
+
+    // Analytics tools
+    const analyticsSchemas = window.AnalyticsQuerySchemas || [];
+    for (const schema of analyticsSchemas) {
+        categories.analytics.tools.push({
+            name: schema.function.name,
+            description: schema.function.description
+        });
+    }
+
+    // Template tools
+    const templateSchemas = window.TemplateQuerySchemas || [];
+    for (const schema of templateSchemas) {
+        categories.templates.tools.push({
+            name: schema.function.name,
+            description: schema.function.description
+        });
+    }
+
+    return categories;
+}
+
+/**
+ * Show the tools modal
+ */
+function showToolsModal() {
+    // Remove existing modal if present
+    const existing = document.getElementById('tools-modal');
+    if (existing) {
+        existing.remove();
+    }
+
+    const categories = getToolsByCategory();
+    const enabledTools = getEnabledTools();
+    const allTools = [
+        ...categories.data.tools,
+        ...categories.analytics.tools,
+        ...categories.templates.tools
+    ];
+
+    // Check if all tools are enabled
+    const allEnabled = enabledTools === null || enabledTools.length === allTools.length;
+
+    const modal = document.createElement('div');
+    modal.id = 'tools-modal';
+    modal.className = 'tools-modal';
+    modal.innerHTML = `
+        <div class="tools-overlay" onclick="Settings.hideToolsModal()"></div>
+        <div class="tools-content">
+            <div class="tools-header">
+                <h2>🧰 AI Tools</h2>
+                <button class="tools-close" onclick="Settings.hideToolsModal()">×</button>
+            </div>
+            
+            <div class="tools-body">
+                <p class="tools-description">
+                    Enable or disable specific tools to control what the AI can access. 
+                    Disabling unnecessary tools reduces token usage and can improve response quality.
+                </p>
+                
+                <!-- Bulk Actions -->
+                <div class="tools-bulk-actions">
+                    <label class="tool-toggle bulk-toggle">
+                        <input type="checkbox" id="toggle-all-tools" ${allEnabled ? 'checked' : ''} 
+                               onchange="Settings.onToggleAllTools(this.checked)">
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label"><strong>Enable All Tools</strong></span>
+                    </label>
+                    <span class="tools-count" id="tools-count">${enabledTools === null ? allTools.length : enabledTools.length}/${allTools.length} enabled</span>
+                </div>
+                
+                <!-- Categories -->
+                ${Object.entries(categories).map(([key, category]) => `
+                    <div class="tools-category">
+                        <h3>${category.name}</h3>
+                        <p class="category-description">${category.description}</p>
+                        <div class="tools-list">
+                            ${category.tools.map(tool => `
+                                <label class="tool-toggle" title="${tool.description}">
+                                    <input type="checkbox" 
+                                           data-tool="${tool.name}"
+                                           ${enabledTools === null || enabledTools.includes(tool.name) ? 'checked' : ''}
+                                           onchange="Settings.onToolToggle('${tool.name}', this.checked)">
+                                    <span class="toggle-slider"></span>
+                                    <span class="toggle-label">
+                                        <code>${tool.name}</code>
+                                        <span class="tool-desc">${truncateDescription(tool.description, 60)}</span>
+                                    </span>
+                                </label>
+                            `).join('')}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <div class="tools-footer">
+                <button class="btn btn-secondary" onclick="Settings.hideToolsModal()">Close</button>
+                <button class="btn btn-primary" onclick="Settings.saveToolsAndClose()">Save Changes</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Add escape key listener
+    modal.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            hideToolsModal();
+        }
+    });
+}
+
+/**
+ * Truncate description for display
+ */
+function truncateDescription(text, maxLength) {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength - 3) + '...';
+}
+
+/**
+ * Hide the tools modal
+ */
+function hideToolsModal() {
+    const modal = document.getElementById('tools-modal');
+    if (modal) {
+        modal.classList.add('closing');
+        setTimeout(() => modal.remove(), 200);
+    }
+}
+
+/**
+ * Handle individual tool toggle
+ */
+function onToolToggle(toolName, enabled) {
+    // Get current enabled tools
+    let enabledTools = getEnabledTools();
+    const allTools = getAllToolNames();
+
+    // If null (all enabled), convert to full array first
+    if (enabledTools === null) {
+        enabledTools = [...allTools];
+    }
+
+    if (enabled && !enabledTools.includes(toolName)) {
+        enabledTools.push(toolName);
+    } else if (!enabled) {
+        enabledTools = enabledTools.filter(t => t !== toolName);
+    }
+
+    // Update count display
+    updateToolsCount(enabledTools.length, allTools.length);
+
+    // Update "Enable All" checkbox state
+    const toggleAll = document.getElementById('toggle-all-tools');
+    if (toggleAll) {
+        toggleAll.checked = enabledTools.length === allTools.length;
+        toggleAll.indeterminate = enabledTools.length > 0 && enabledTools.length < allTools.length;
+    }
+
+    // Store temporarily (will be saved on "Save Changes")
+    document.getElementById('tools-modal').dataset.pending = JSON.stringify(enabledTools);
+}
+
+/**
+ * Handle toggle all tools
+ */
+function onToggleAllTools(enabled) {
+    const allTools = getAllToolNames();
+    const checkboxes = document.querySelectorAll('#tools-modal input[data-tool]');
+
+    checkboxes.forEach(cb => {
+        cb.checked = enabled;
+    });
+
+    const enabledTools = enabled ? [...allTools] : [];
+    updateToolsCount(enabledTools.length, allTools.length);
+
+    // Store temporarily
+    document.getElementById('tools-modal').dataset.pending = JSON.stringify(enabledTools);
+}
+
+/**
+ * Get all tool names from schemas
+ */
+function getAllToolNames() {
+    const schemas = window.Functions?.getAllSchemas?.() || [];
+    return schemas.map(s => s.function.name);
+}
+
+/**
+ * Update the enabled tools count display
+ */
+function updateToolsCount(enabled, total) {
+    const countEl = document.getElementById('tools-count');
+    if (countEl) {
+        countEl.textContent = `${enabled}/${total} enabled`;
+    }
+}
+
+/**
+ * Save tools settings and close modal
+ */
+async function saveToolsAndClose() {
+    const modal = document.getElementById('tools-modal');
+    const pendingData = modal?.dataset.pending;
+
+    if (pendingData) {
+        const enabledTools = JSON.parse(pendingData);
+        const allTools = getAllToolNames();
+
+        // If all tools are enabled, store null (default)
+        if (enabledTools.length === allTools.length) {
+            await saveEnabledTools(null);
+        } else {
+            await saveEnabledTools(enabledTools);
+        }
+
+        console.log(`[Settings] Saved ${enabledTools.length}/${allTools.length} tools enabled`);
+    }
+
+    hideToolsModal();
+    showToast('Tool settings saved!');
+}
 
 // Public API
 window.Settings = {
@@ -1240,6 +1550,14 @@ window.Settings = {
     checkOllamaConnection,
     testOllamaConnection,
     refreshOllamaModels,
+    // Tools modal
+    showToolsModal,
+    hideToolsModal,
+    onToolToggle,
+    onToggleAllTools,
+    saveToolsAndClose,
+    getEnabledTools,
+    isToolEnabled,
     // Constants
     AVAILABLE_MODELS,
     LLM_PROVIDERS,

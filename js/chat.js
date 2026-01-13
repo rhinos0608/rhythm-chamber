@@ -765,8 +765,8 @@ async function sendMessage(message, optionsOrKey = null) {
     // TOKEN COUNTING & CONTEXT WINDOW MANAGEMENT
     // ==========================================
 
-    // Get function schemas if available
-    const tools = window.Functions?.schemas || [];
+    // Get function schemas if available (filtered by user's enabled tools setting)
+    const tools = window.Functions?.getEnabledSchemas?.() || window.Functions?.schemas || [];
     let useTools = tools.length > 0 && streamsData && streamsData.length > 0;
 
     // Calculate token usage before making API call

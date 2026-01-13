@@ -135,6 +135,35 @@ function getAvailableFunctions() {
 }
 
 /**
+ * Get schemas filtered by enabled tools setting
+ * Returns only schemas for tools the user has enabled
+ * @returns {Array} Enabled function schemas
+ */
+function getEnabledSchemas() {
+    const allSchemas = getAllSchemas();
+
+    // Check if Settings module is available
+    if (!window.Settings?.getEnabledTools) {
+        return allSchemas; // All enabled by default
+    }
+
+    const enabledTools = window.Settings.getEnabledTools();
+
+    // null means all tools are enabled
+    if (enabledTools === null) {
+        return allSchemas;
+    }
+
+    // Filter to only enabled tools
+    const filtered = allSchemas.filter(schema =>
+        enabledTools.includes(schema.function.name)
+    );
+
+    console.log(`[Functions] Using ${filtered.length}/${allSchemas.length} enabled tools`);
+    return filtered;
+}
+
+/**
  * Check if a function exists
  */
 function hasFunction(name) {
@@ -163,6 +192,7 @@ window.Functions = {
 
     // Schema getters (dynamic)
     getAllSchemas,
+    getEnabledSchemas,
     getDataSchemas,
     getTemplateSchemas,
     getAnalyticsSchemas,

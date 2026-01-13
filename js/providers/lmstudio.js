@@ -4,6 +4,8 @@
  * Handles API calls to LM Studio (OpenAI-compatible local server).
  * Supports streaming with thinking block detection.
  * 
+ * BRING YOUR OWN AI: Users run AI models on their own hardware for maximum privacy.
+ * 
  * @module providers/lmstudio
  */
 
@@ -71,13 +73,49 @@ async function call(config, messages, tools, onProgress = null) {
         if (useStreaming) {
             try {
                 const result = await handleStreamingResponse(response, onProgress);
-                // Validate the result has the expected format
-                if (!result.choices || result.choices.length === 0) {
-                    console.warn('[LMStudio] Streaming returned empty response, retrying non-streaming');
-                    // Fallback: try non-streaming if streaming produced empty result
-                    // This shouldn't happen but handles edge cases
+                // Validate the result has non-empty content or tool calls
+                const hasContent = result.choices?.[0]?.message?.content?.length > 0;
+                const hasToolCalls = result.choices?.[0]?.message?.tool_calls?.length > 0;
+
+                if (hasContent || hasToolCalls) {
+                    return result;
                 }
-                return result;
+
+                // Streaming returned empty response - fallback to non-streaming
+                console.warn('[LMStudio] Streaming returned empty response, retrying non-streaming');
+
+                // Make a new non-streaming request
+                const fallbackController = new AbortController();
+                const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), timeout);
+
+                try {
+                    const fallbackBody = { ...body, stream: false };
+                    const fallbackResponse = await fetch(`${endpoint}/chat/completions`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(fallbackBody),
+                        signal: fallbackController.signal
+                    });
+
+                    clearTimeout(fallbackTimeoutId);
+
+                    if (!fallbackResponse.ok) {
+                        throw new Error(`LM Studio fallback error: ${fallbackResponse.status}`);
+                    }
+
+                    const fallbackResult = await fallbackResponse.json();
+                    console.log('[LMStudio] Non-streaming fallback succeeded');
+
+                    // Emit the full content through onProgress for UI update
+                    if (fallbackResult.choices?.[0]?.message?.content) {
+                        onProgress({ type: 'token', token: fallbackResult.choices[0].message.content });
+                    }
+
+                    return fallbackResult;
+                } catch (fallbackErr) {
+                    clearTimeout(fallbackTimeoutId);
+                    throw fallbackErr;
+                }
             } catch (streamErr) {
                 console.error('[LMStudio] Streaming error:', streamErr);
                 throw new Error(`LM Studio streaming failed: ${streamErr.message}`);
@@ -119,90 +157,166 @@ async function handleStreamingResponse(response, onProgress) {
     let lastMessage = null;
     let toolCallsAccumulator = [];  // Collect tool calls from streaming
     let toolCallsById = {};  // Track tool calls by id for proper assembly
+    let buffer = '';  // Buffer for incomplete chunks
 
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n').filter(line => line.trim() !== '');
+        // Append to buffer and process complete lines
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+
+        // Keep last incomplete line in buffer
+        buffer = lines.pop() || '';
 
         for (const line of lines) {
-            if (line.startsWith('data: ')) {
-                const data = line.slice(6);
+            const trimmedLine = line.trim();
+            if (trimmedLine === '' || trimmedLine === '[DONE]') continue;
+
+            // Try to parse the line - support both SSE format and NDJSON
+            let data = trimmedLine;
+
+            // Handle SSE data: prefix
+            if (trimmedLine.startsWith('data: ')) {
+                data = trimmedLine.slice(6);
                 if (data === '[DONE]') continue;
+            }
 
-                try {
-                    const parsed = JSON.parse(data);
-                    const delta = parsed.choices?.[0]?.delta;
+            // Skip non-JSON lines (SSE comments, empty data, etc.)
+            if (!data.startsWith('{')) continue;
 
-                    if (delta?.content) {
-                        const token = delta.content;
+            try {
+                const parsed = JSON.parse(data);
 
-                        // Detect thinking blocks (<think>...</think>)
-                        if (token.includes('<think>')) {
-                            inThinking = true;
-                            const parts = token.split('<think>');
-                            if (parts[0]) {
-                                fullContent += parts[0];
-                                onProgress({ type: 'token', token: parts[0] });
-                            }
-                            thinkingContent += parts[1] || '';
-                            continue;
-                        }
+                // Handle both streaming delta format AND complete message format
+                const delta = parsed.choices?.[0]?.delta;
+                const message = parsed.choices?.[0]?.message;
 
-                        if (token.includes('</think>')) {
-                            inThinking = false;
-                            const parts = token.split('</think>');
-                            thinkingContent += parts[0] || '';
-                            onProgress({ type: 'thinking', content: thinkingContent });
-                            thinkingContent = '';
-                            if (parts[1]) {
-                                fullContent += parts[1];
-                                onProgress({ type: 'token', token: parts[1] });
-                            }
-                            continue;
-                        }
-
-                        if (inThinking) {
-                            thinkingContent += token;
-                        } else {
-                            fullContent += token;
-                            onProgress({ type: 'token', token });
+                // For complete (non-streaming) responses embedded in stream
+                if (message?.content && !delta) {
+                    fullContent = message.content;
+                    if (message.tool_calls) {
+                        for (const tc of message.tool_calls) {
+                            toolCallsById[tc.id || `call_${Object.keys(toolCallsById).length}`] = {
+                                id: tc.id || `call_${Object.keys(toolCallsById).length}`,
+                                type: 'function',
+                                function: {
+                                    name: tc.function?.name || '',
+                                    arguments: typeof tc.function?.arguments === 'string'
+                                        ? tc.function.arguments
+                                        : JSON.stringify(tc.function?.arguments || {})
+                                }
+                            };
                         }
                     }
-
-                    // Track tool calls in streaming
-                    if (delta?.tool_calls) {
-                        onProgress({ type: 'tool_call', toolCalls: delta.tool_calls });
-                        // Accumulate tool calls from streaming chunks
-                        for (const tc of delta.tool_calls) {
-                            const idx = tc.index ?? 0;
-                            if (!toolCallsById[idx]) {
-                                toolCallsById[idx] = {
-                                    id: tc.id || `call_${idx}`,
-                                    type: 'function',
-                                    function: {
-                                        name: tc.function?.name || '',
-                                        arguments: tc.function?.arguments || ''
-                                    }
-                                };
-                            } else {
-                                // Append arguments for chunked tool calls
-                                if (tc.function?.name) {
-                                    toolCallsById[idx].function.name = tc.function.name;
-                                }
-                                if (tc.function?.arguments) {
-                                    toolCallsById[idx].function.arguments += tc.function.arguments;
-                                }
-                            }
-                        }
-                    }
-
                     lastMessage = parsed;
-                } catch (e) {
-                    // Ignore parse errors for malformed chunks
+                    continue;
                 }
+
+                if (delta?.content) {
+                    const token = delta.content;
+
+                    // Detect thinking blocks (<think>...</think>)
+                    if (token.includes('<think>')) {
+                        inThinking = true;
+                        const parts = token.split('<think>');
+                        if (parts[0]) {
+                            fullContent += parts[0];
+                            onProgress({ type: 'token', token: parts[0] });
+                        }
+                        thinkingContent += parts[1] || '';
+                        continue;
+                    }
+
+                    if (token.includes('</think>')) {
+                        inThinking = false;
+                        const parts = token.split('</think>');
+                        thinkingContent += parts[0] || '';
+                        onProgress({ type: 'thinking', content: thinkingContent });
+                        thinkingContent = '';
+                        if (parts[1]) {
+                            fullContent += parts[1];
+                            onProgress({ type: 'token', token: parts[1] });
+                        }
+                        continue;
+                    }
+
+                    if (inThinking) {
+                        thinkingContent += token;
+                    } else {
+                        fullContent += token;
+                        onProgress({ type: 'token', token });
+                    }
+                }
+
+                // Track tool calls in streaming
+                if (delta?.tool_calls) {
+                    onProgress({ type: 'tool_call', toolCalls: delta.tool_calls });
+                    // Accumulate tool calls from streaming chunks
+                    for (const tc of delta.tool_calls) {
+                        const idx = tc.index ?? 0;
+                        if (!toolCallsById[idx]) {
+                            toolCallsById[idx] = {
+                                id: tc.id || `call_${idx}`,
+                                type: 'function',
+                                function: {
+                                    name: tc.function?.name || '',
+                                    arguments: tc.function?.arguments || ''
+                                }
+                            };
+                        } else {
+                            // Append arguments for chunked tool calls
+                            if (tc.function?.name) {
+                                toolCallsById[idx].function.name = tc.function.name;
+                            }
+                            if (tc.function?.arguments) {
+                                toolCallsById[idx].function.arguments += tc.function.arguments;
+                            }
+                        }
+                    }
+                }
+
+                lastMessage = parsed;
+            } catch (e) {
+                // Log parse errors for debugging (only in dev)
+                if (data.length > 0 && data.startsWith('{')) {
+                    console.debug('[LMStudio] Failed to parse chunk:', data.substring(0, 100));
+                }
+            }
+        }
+    }
+
+    // Process any remaining buffer content
+    if (buffer.trim()) {
+        let data = buffer.trim();
+        if (data.startsWith('data: ')) {
+            data = data.slice(6);
+        }
+        if (data.startsWith('{')) {
+            try {
+                const parsed = JSON.parse(data);
+                const message = parsed.choices?.[0]?.message;
+                if (message?.content) {
+                    fullContent = message.content;
+                }
+                if (message?.tool_calls) {
+                    for (const tc of message.tool_calls) {
+                        toolCallsById[tc.id || `call_${Object.keys(toolCallsById).length}`] = {
+                            id: tc.id || `call_${Object.keys(toolCallsById).length}`,
+                            type: 'function',
+                            function: {
+                                name: tc.function?.name || '',
+                                arguments: typeof tc.function?.arguments === 'string'
+                                    ? tc.function.arguments
+                                    : JSON.stringify(tc.function?.arguments || {})
+                            }
+                        };
+                    }
+                }
+                lastMessage = parsed;
+            } catch (e) {
+                console.debug('[LMStudio] Failed to parse final buffer');
             }
         }
     }
@@ -211,19 +325,21 @@ async function handleStreamingResponse(response, onProgress) {
     toolCallsAccumulator = Object.values(toolCallsById);
 
     // Build OpenAI-compatible response
-    const message = {
+    const responseMessage = {
         role: 'assistant',
         content: fullContent || null
     };
 
     // Add tool calls if present
     if (toolCallsAccumulator.length > 0) {
-        message.tool_calls = toolCallsAccumulator;
+        responseMessage.tool_calls = toolCallsAccumulator;
     }
+
+    console.log('[LMStudio] Streaming complete - content length:', fullContent.length, 'tool_calls:', toolCallsAccumulator.length);
 
     return {
         choices: [{
-            message,
+            message: responseMessage,
             finish_reason: toolCallsAccumulator.length > 0 ? 'tool_calls' : 'stop'
         }],
         model: lastMessage?.model,
