@@ -1,0 +1,335 @@
+/**
+ * Reset Controller
+ * 
+ * Handles data reset operations with proper worker cleanup.
+ * Extracted from app.js to separate reset concerns from main app flow.
+ * 
+ * @module controllers/reset-controller
+ */
+
+// ==========================================
+// Dependencies (injected via init)
+// ==========================================
+
+let Storage = null;
+let AppState = null;
+let Spotify = null;
+let Chat = null;
+let OperationLock = null;
+let ViewController = null;
+let showToast = null;
+
+// ==========================================
+// State Management
+// ==========================================
+
+let pendingDeleteSessionId = null;
+
+// ==========================================
+// Core Functions
+// ==========================================
+
+/**
+ * Initialize ResetController with dependencies
+ * @param {Object} dependencies - Required dependencies
+ */
+function init(dependencies) {
+    Storage = dependencies.Storage;
+    AppState = dependencies.AppState;
+    Spotify = dependencies.Spotify;
+    Chat = dependencies.Chat;
+    OperationLock = dependencies.OperationLock;
+    ViewController = dependencies.ViewController;
+    showToast = dependencies.showToast;
+
+    console.log('[ResetController] Initialized with dependencies');
+}
+
+/**
+ * Handle reset button click
+ * Shows confirmation modal or executes reset if no conflicts
+ */
+function handleReset() {
+    // HNW Hierarchy: Check if conflicting operation is in progress
+    if (OperationLock) {
+        const fileProcessing = OperationLock.isLocked('file_processing');
+        const embedding = OperationLock.isLocked('embedding_generation');
+
+        if (fileProcessing || embedding) {
+            const blockedBy = fileProcessing ? 'file upload' : 'embedding generation';
+            if (showToast) showToast(`Cannot reset while ${blockedBy} is in progress`);
+            return;
+        }
+    }
+
+    showResetConfirmModal();
+}
+
+/**
+ * Show custom confirmation modal
+ */
+function showResetConfirmModal() {
+    const modal = document.getElementById('reset-confirm-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+/**
+ * Hide reset confirmation modal
+ */
+function hideResetConfirmModal() {
+    const modal = document.getElementById('reset-confirm-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+/**
+ * Execute the reset operation
+ * Orchestrates safe cleanup of all data and workers
+ * @returns {Promise<void>}
+ */
+async function executeReset() {
+    hideResetConfirmModal();
+
+    if (!ViewController || !Storage || !AppState) {
+        console.error('[ResetController] Required dependencies not available');
+        return;
+    }
+
+    try {
+        // Step 1: Stop background operations
+        if (Spotify && Spotify.stopBackgroundRefresh) {
+            Spotify.stopBackgroundRefresh();
+        }
+
+        // Step 2: Cancel all pending operations with timeout
+        if (ViewController) {
+            ViewController.updateProgress('Cancelling operations...');
+        }
+
+        const abortController = new AbortController();
+        await waitForWorkersAbort(abortController, 30_000); // 30s max
+
+        // Step 3: Clear ALL data across ALL backends (unified)
+        if (ViewController) {
+            ViewController.updateProgress('Clearing data...');
+        }
+
+        const result = await Storage.clearAllData();
+
+        if (!result.success) {
+            if (result.blockedBy) {
+                if (showToast) showToast(`Cannot reset: ${result.blockedBy}`);
+                if (ViewController) ViewController.showUpload();
+                return;
+            }
+        }
+
+        // Log results for debugging
+        console.log('[ResetController] clearAllData result:', result);
+
+        // Show warning if Qdrant clear failed
+        if (result.qdrant?.error) {
+            console.warn('[ResetController] Qdrant embeddings may not have been cleared:', result.qdrant.error);
+        }
+
+        // Step 4: Clear Spotify tokens (handled separately for security)
+        if (Spotify) {
+            Spotify.clearTokens();
+        }
+
+        // Step 5: Reset app state (via centralized AppState)
+        if (AppState) {
+            AppState.reset();
+        }
+
+        // Step 6: Clear chat history
+        if (Chat) {
+            Chat.clearHistory();
+        }
+
+        console.log('[ResetController] Reset complete');
+
+        if (ViewController) {
+            ViewController.showUpload();
+        }
+
+    } catch (error) {
+        console.error('[ResetController] Reset failed:', error);
+        if (ViewController) {
+            ViewController.updateProgress(`Reset error: ${error.message}`);
+            ViewController.showUpload();
+        }
+    }
+}
+
+/**
+ * Wait for all workers to abort with timeout
+ * This is the core of the safe reset flow
+ * 
+ * HNW Fix: Keep the "force terminate" timeout logic from app.js
+ * It's a necessary safety valve for client-side processing that can freeze
+ * 
+ * @param {AbortController} abortController - Abort controller for timeout
+ * @param {number} timeoutMs - Maximum wait time in milliseconds
+ * @returns {Promise<boolean>} Success status
+ */
+async function waitForWorkersAbort(abortController, timeoutMs) {
+    const start = Date.now();
+
+    // Get active worker from FileUploadController if available
+    const activeWorker = window.FileUploadController?.getProcessingState?.().workerActive
+        ? window.FileUploadController
+        : null;
+
+    // Send abort signal to worker
+    if (activeWorker) {
+        try {
+            // Try to cancel via FileUploadController
+            if (activeWorker.cancelProcessing) {
+                activeWorker.cancelProcessing();
+            }
+        } catch (e) {
+            // Worker may already be terminated
+        }
+    }
+
+    // Wait for worker to acknowledge or timeout
+    while (Date.now() - start < timeoutMs) {
+        const processingState = window.FileUploadController?.getProcessingState?.();
+
+        if (!processingState || !processingState.isProcessing) {
+            // Worker already terminated
+            return true;
+        }
+
+        // Check if worker is still responding
+        try {
+            // If worker is still active after 100ms, it's not responding to abort
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // If still active, force terminate
+            const stillProcessing = window.FileUploadController?.getProcessingState?.();
+            if (stillProcessing && stillProcessing.isProcessing) {
+                console.log('[ResetController] Worker not responding to abort, forcing termination');
+
+                // Force cleanup
+                if (window.FileUploadController?.cleanupWorker) {
+                    window.FileUploadController.cleanupWorker();
+                }
+
+                return true;
+            }
+        } catch (e) {
+            return true;
+        }
+    }
+
+    // Timeout reached
+    console.warn('[ResetController] Worker abort timeout reached');
+
+    // Force cleanup on timeout
+    if (window.FileUploadController?.cleanupWorker) {
+        window.FileUploadController.cleanupWorker();
+    }
+
+    return false;
+}
+
+/**
+ * Clear sensitive data only (keep personality and chat)
+ * @returns {Promise<void>}
+ */
+async function clearSensitiveData() {
+    if (!confirm('Clear all raw streams? This keeps your personality analysis and chat history.')) {
+        return;
+    }
+
+    if (!Storage || !ViewController) return;
+
+    await Storage.clearSensitiveData();
+    if (showToast) showToast('Raw data cleared. Your personality analysis and chat history are preserved.');
+
+    if (ViewController) {
+        ViewController.showPrivacyDashboard(); // Refresh the dashboard
+    }
+}
+
+/**
+ * Show privacy dashboard modal
+ */
+async function showPrivacyDashboard() {
+    const modal = document.getElementById('privacy-dashboard-modal');
+    if (!modal || !Storage) return;
+
+    // Get data summary
+    const summary = await Storage.getDataSummary();
+
+    // Update UI
+    const rawStreamsCount = document.getElementById('raw-streams-count');
+    const patternsSummary = document.getElementById('patterns-summary');
+    const spotifyTokenStatus = document.getElementById('spotify-token-status');
+
+    if (rawStreamsCount) {
+        rawStreamsCount.textContent = summary.hasRawStreams
+            ? `${summary.streamCount.toLocaleString()} streams (${summary.estimatedSizeMB}MB)`
+            : 'None';
+    }
+
+    if (patternsSummary) {
+        patternsSummary.textContent = summary.chunkCount > 0
+            ? `${summary.chunkCount} chunks, ${summary.chatSessionCount} chat sessions`
+            : 'No patterns yet';
+    }
+
+    // Check Spotify tokens
+    if (spotifyTokenStatus) {
+        const hasSpotifyToken = await Storage.getToken('spotify_access_token');
+        spotifyTokenStatus.textContent = hasSpotifyToken ? 'Present (encrypted)' : 'Not stored';
+    }
+
+    // Show modal
+    modal.style.display = 'flex';
+}
+
+/**
+ * Get reset confirmation state
+ * @returns {string|null} Pending session ID or null
+ */
+function getPendingDeleteSessionId() {
+    return pendingDeleteSessionId;
+}
+
+/**
+ * Set pending delete session ID
+ * @param {string|null} sessionId - Session ID to delete
+ */
+function setPendingDeleteSessionId(sessionId) {
+    pendingDeleteSessionId = sessionId;
+}
+
+// ==========================================
+// Public API
+// ==========================================
+
+const ResetController = {
+    init,
+    handleReset,
+    showResetConfirmModal,
+    hideResetConfirmModal,
+    executeReset,
+    clearSensitiveData,
+    showPrivacyDashboard,
+    getPendingDeleteSessionId,
+    setPendingDeleteSessionId,
+    waitForWorkersAbort
+};
+
+// Make available globally
+if (typeof window !== 'undefined') {
+    window.ResetController = ResetController;
+}
+
+console.log('[ResetController] Controller loaded');
