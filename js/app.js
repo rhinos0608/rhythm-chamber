@@ -42,9 +42,7 @@
 // ==========================================
 
 // Initialize centralized state
-if (typeof AppState !== 'undefined') {
-    AppState.init();
-}
+AppState.init();
 
 // ==========================================
 // Controller Initialization
@@ -57,63 +55,53 @@ async function initializeControllers() {
     console.log('[App] Initializing controllers...');
 
     // Initialize FileUploadController
-    if (typeof FileUploadController !== 'undefined') {
-        FileUploadController.init({
-            Storage,
-            AppState,
-            OperationLock: window.OperationLock,
-            Patterns,
-            Personality,
-            ViewController,
-            showToast
-        });
-    }
+    FileUploadController.init({
+        Storage,
+        AppState,
+        OperationLock: window.OperationLock,
+        Patterns,
+        Personality,
+        ViewController,
+        showToast
+    });
 
     // Initialize SpotifyController
-    if (typeof SpotifyController !== 'undefined') {
-        SpotifyController.init({
-            Storage,
-            AppState,
-            Spotify,
-            Patterns,
-            Personality,
-            ViewController,
-            showToast
-        });
-    }
+    SpotifyController.init({
+        Storage,
+        AppState,
+        Spotify,
+        Patterns,
+        Personality,
+        ViewController,
+        showToast
+    });
 
     // Initialize DemoController
-    if (typeof DemoController !== 'undefined') {
-        DemoController.init({
-            AppState,
-            DemoData,
-            ViewController,
-            showToast
-        });
-    }
+    DemoController.init({
+        AppState,
+        DemoData,
+        ViewController,
+        showToast
+    });
 
     // Initialize ResetController
-    if (typeof ResetController !== 'undefined') {
-        ResetController.init({
-            Storage,
-            AppState,
-            Spotify,
-            Chat: window.Chat,
-            OperationLock: window.OperationLock,
-            ViewController,
-            showToast
-        });
-    }
+    ResetController.init({
+        Storage,
+        AppState,
+        Spotify,
+        Chat: window.Chat,
+        OperationLock: window.OperationLock,
+        ViewController,
+        showToast
+    });
 
     // Initialize MessageOperations
-    if (typeof MessageOperations !== 'undefined') {
-        MessageOperations.init({
-            DataQuery: window.DataQuery,
-            TokenCounter: window.TokenCounter,
-            Functions: window.Functions,
-            RAG: window.RAG
-        });
-    }
+    MessageOperations.init({
+        DataQuery: window.DataQuery,
+        TokenCounter: window.TokenCounter,
+        Functions: window.Functions,
+        RAG: window.RAG
+    });
 
     console.log('[App] Controllers initialized');
 }
@@ -129,32 +117,26 @@ async function init() {
     console.log('[App] Initializing with HNW modular architecture...');
 
     // Initialize cross-tab coordination first (prevents race conditions)
-    if (typeof TabCoordinator !== 'undefined') {
-        const isPrimary = await TabCoordinator.init();
-        if (!isPrimary) {
-            console.log('[App] Secondary tab detected - write operations disabled');
-        }
+    const isPrimary = await TabCoordinator.init();
+    if (!isPrimary) {
+        console.log('[App] Secondary tab detected - write operations disabled');
     }
 
     // Initialize unified storage
-    if (typeof Storage !== 'undefined') {
-        await Storage.init();
+    await Storage.init();
 
-        // Validate storage consistency on startup
-        const validation = await Storage.validateConsistency();
-        if (!validation.valid) {
-            console.warn('[App] Storage inconsistencies detected:', validation.warnings);
-            if (validation.fixes.includes('clearConversation')) {
-                sessionStorage.removeItem('rhythm_chamber_conversation');
-                console.log('[App] Cleared orphaned conversation history');
-            }
+    // Validate storage consistency on startup
+    const validation = await Storage.validateConsistency();
+    if (!validation.valid) {
+        console.warn('[App] Storage inconsistencies detected:', validation.warnings);
+        if (validation.fixes.includes('clearConversation')) {
+            sessionStorage.removeItem('rhythm_chamber_conversation');
+            console.log('[App] Cleared orphaned conversation history');
         }
     }
 
     // Initialize session manager
-    if (typeof SessionManager !== 'undefined') {
-        await SessionManager.init();
-    }
+    await SessionManager.init();
 
     // Initialize all controllers with dependencies
     await initializeControllers();
@@ -187,7 +169,7 @@ async function init() {
     }
 
     // Demo mode
-    if (urlParams.get('mode') === 'demo' && typeof DemoData !== 'undefined') {
+    if (urlParams.get('mode') === 'demo') {
         console.log('[App] Demo mode activated');
         window.history.replaceState({}, document.title, window.location.pathname);
 
@@ -195,31 +177,26 @@ async function init() {
 
         setupEventListeners();
         setupSpotifyButton();
-
-        if (typeof SidebarController !== 'undefined') {
-            await SidebarController.init();
-        }
+        await SidebarController.init();
         return;
     }
 
     // Check for existing data
-    if (typeof Storage !== 'undefined') {
-        const existingData = await Storage.getPersonality();
-        if (existingData) {
-            // Load into AppState
-            AppState.update('data', {
-                personality: existingData,
-                streams: await Storage.getStreams(),
-                chunks: await Storage.getChunks()
-            });
+    const existingData = await Storage.getPersonality();
+    if (existingData) {
+        // Load into AppState
+        AppState.update('data', {
+            personality: existingData,
+            streams: await Storage.getStreams(),
+            chunks: await Storage.getChunks()
+        });
 
-            const state = AppState.get('data');
-            if (state.streams && typeof Patterns !== 'undefined') {
-                AppState.update('data', {
-                    patterns: Patterns.detectAllPatterns(state.streams, state.chunks)
-                });
-                showReveal();
-            }
+        const state = AppState.get('data');
+        if (state.streams) {
+            AppState.update('data', {
+                patterns: Patterns.detectAllPatterns(state.streams, state.chunks)
+            });
+            showReveal();
         }
     }
 
@@ -228,9 +205,7 @@ async function init() {
     setupSpotifyButton();
 
     // Initialize sidebar controller
-    if (typeof SidebarController !== 'undefined') {
-        await SidebarController.init();
-    }
+    await SidebarController.init();
 
     console.log('[App] Initialization complete');
 }
@@ -392,9 +367,7 @@ async function handleChatSend() {
     if (suggestions) suggestions.style.display = 'none';
 
     // Get response
-    if (typeof Chat !== 'undefined') {
-        await processMessageResponse((options) => Chat.sendMessage(message, options));
-    }
+    await processMessageResponse((options) => Chat.sendMessage(message, options));
 }
 
 /**
@@ -719,9 +692,7 @@ function enableEditMode(messageDiv, currentText) {
 
 async function handleShare() {
     const personality = AppState.get('data').personality || AppState.get('demo').personality;
-    if (typeof Cards !== 'undefined') {
-        await Cards.shareCard(personality);
-    }
+    await Cards.shareCard(personality);
 }
 
 // ==========================================
@@ -782,33 +753,23 @@ async function clearSensitiveData() {
 // ==========================================
 
 function showUpload() {
-    if (typeof ViewController !== 'undefined') {
-        ViewController.showUpload();
-    }
+    ViewController.showUpload();
 }
 
 function showProcessing(message) {
-    if (typeof ViewController !== 'undefined') {
-        ViewController.showProcessing(message);
-    }
+    ViewController.showProcessing(message);
 }
 
 function showReveal() {
-    if (typeof ViewController !== 'undefined') {
-        ViewController.showReveal();
-    }
+    ViewController.showReveal();
 }
 
 function showLiteReveal() {
-    if (typeof ViewController !== 'undefined') {
-        ViewController.showLiteReveal();
-    }
+    ViewController.showLiteReveal();
 }
 
 function showChat() {
-    if (typeof ViewController !== 'undefined') {
-        ViewController.showChat();
-    }
+    ViewController.showChat();
 }
 
 // ==========================================
