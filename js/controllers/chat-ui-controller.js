@@ -39,9 +39,9 @@ function parseMarkdown(text) {
 
     return text
         // Escape HTML first
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
+        .replace(/&/g, '&')
+        .replace(/</g, '<')
+        .replace(/>/g, '>')
         // Bold: **text** or __text__
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/__(.+?)__/g, '<strong>$1</strong>')
@@ -346,9 +346,9 @@ function updateLoadingMessage(id, state) {
             if (contentEl && state.token) {
                 // Escape and append token
                 const escaped = state.token
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
+                    .replace(/&/g, '&')
+                    .replace(/</g, '<')
+                    .replace(/>/g, '>')
                     .replace(/\n/g, '<br>');
                 contentEl.innerHTML += escaped;
 
@@ -357,7 +357,102 @@ function updateLoadingMessage(id, state) {
                 if (messages) messages.scrollTop = messages.scrollHeight;
             }
             break;
+
+        case 'token_update':
+            // Update token counter display
+            if (state.tokenInfo) {
+                updateTokenDisplay(state.tokenInfo);
+            }
+            break;
+
+        case 'token_warning':
+            // Show token warning
+            if (state.tokenInfo) {
+                showTokenWarning(state.message, state.tokenInfo, state.truncated);
+            }
+            break;
     }
+}
+
+/**
+ * Update the token counter display
+ * @param {object} tokenInfo - Token information from TokenCounter
+ */
+function updateTokenDisplay(tokenInfo) {
+    const counterEl = document.getElementById('token-counter');
+    if (!counterEl) return;
+
+    // Show the counter
+    counterEl.style.display = 'block';
+
+    // Update counts
+    const countEl = document.getElementById('token-count');
+    const limitEl = document.getElementById('token-limit');
+    const percentEl = document.getElementById('token-percent');
+    const barFillEl = document.getElementById('token-bar-fill');
+
+    if (countEl) countEl.textContent = tokenInfo.total.toLocaleString();
+    if (limitEl) limitEl.textContent = tokenInfo.contextWindow.toLocaleString();
+
+    const usagePercent = Math.round(tokenInfo.usagePercent);
+    if (percentEl) percentEl.textContent = `(${usagePercent}%)`;
+
+    // Update progress bar
+    if (barFillEl) {
+        barFillEl.style.width = `${Math.min(usagePercent, 100)}%`;
+
+        // Color coding based on usage
+        if (usagePercent > 85) {
+            barFillEl.style.backgroundColor = 'var(--danger, #dc3545)';
+        } else if (usagePercent > 70) {
+            barFillEl.style.backgroundColor = 'var(--warning, #ffc107)';
+        } else {
+            barFillEl.style.backgroundColor = 'var(--success, #28a745)';
+        }
+    }
+
+    // Update warnings display
+    const warningsEl = document.getElementById('token-warnings');
+    if (warningsEl) {
+        warningsEl.innerHTML = '';
+
+        if (tokenInfo.warnings && tokenInfo.warnings.length > 0) {
+            tokenInfo.warnings.forEach(warning => {
+                const warningDiv = document.createElement('div');
+                warningDiv.className = `token-warning ${warning.level}`;
+                warningDiv.textContent = warning.message;
+                warningsEl.appendChild(warningDiv);
+            });
+        }
+    }
+}
+
+/**
+ * Show a token warning message
+ * @param {string} message - Warning message
+ * @param {object} tokenInfo - Token information
+ * @param {boolean} truncated - Whether truncation was applied
+ */
+function showTokenWarning(message, tokenInfo, truncated) {
+    const messages = document.getElementById(CHAT_UI_MESSAGE_CONTAINER_ID);
+    if (!messages) return;
+
+    const warningDiv = document.createElement('div');
+    warningDiv.className = 'message system-warning';
+
+    const icon = truncated ? '⚠️' : 'ℹ️';
+    const title = truncated ? 'Context Truncated' : 'Token Warning';
+
+    warningDiv.innerHTML = `
+        <div class="message-content">
+            <strong>${icon} ${title}</strong><br>
+            ${message}<br>
+            <small>Usage: ${tokenInfo.total}/${tokenInfo.contextWindow} tokens (${Math.round(tokenInfo.usagePercent)}%)</small>
+        </div>
+    `;
+
+    messages.appendChild(warningDiv);
+    messages.scrollTop = messages.scrollHeight;
 }
 
 /**

@@ -95,14 +95,29 @@ For the quantified-self crowd, this is hugely compelling.
 
 | Tier | Price | What You Get |
 |------|-------|--------------|
-| **Free** | $0 | Personality reveal, unlimited chat (free models), local processing |
-| **Premium** | $2/month or $10 lifetime | Cloud sync (optional), priority support, premium models |
+| **Free** | $0 | Full local analysis, BYOK chat, basic cards, personality reveal |
+| **Supporter** | **$19 Lifetime** | CLI tool, premium themes, "Verified" badge, friend compare JSON import |
+| **Patron** | $7/month | Dev Discord access, roadmap voting, early beta features |
 
 ### Why This Works
-- **Transparent**: Users only pay for what we pay for
-- **Respects power users**: BYOK model appeals to privacy-conscious
-- **Zero infrastructure costs**: Free tier is actually free
-- **Viral loop**: Shareable personality cards drive signups
+- **Psychology**: $19 is a "no-brainer" impulse buy for developers who find the tool useful
+- **CLI Version**: Killer feature for power users who want scripting capabilities
+- **Zero-Backend**: No payment processing infrastructure needed
+- **Viral Loop**: "Compare with Friend" via JSON exchange keeps data private
+- **BYOK Model**: Appeals to privacy-conscious power users who want control
+
+### Patreon Integration Strategy
+- **One Codebase**: All features in main app, unlocked with license key
+- **No Maintenance Nightmare**: No separate codebases to sync
+- **Hacker-Resistant**: It's okay if people bypass - they weren't going to pay anyway
+- **Supporter Key**: Static key given to Patreon supporters
+
+### Feature Implementation
+- **CLI Version**: Wraps existing `js/parser.js` and `js/data-query.js` in Node.js
+- **Themes**: CSS-based, unlocked via license key in `js/settings.js`
+- **Badges**: Canvas-based visual elements on shareable cards
+- **Friend Compare**: Local JSON export/import, zero backend
+- **Patreon Perks**: Discord access, voting rights, early access
 
 ---
 

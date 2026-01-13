@@ -181,22 +181,32 @@ Stats.fm requires server infrastructure, which means:
 ## Risk Mitigation: Business
 
 ### Monetization
-**Model:** Transparent, usage-based
-- Free tier: Personality reveal + unlimited chat (free models)
-- Premium: $2/month or $10 lifetime
-- **Why it works:** Users only pay for what we pay for
+**Model:** Supporter-driven, zero-backend
+- Free tier: Full local analysis, BYOK chat, basic cards
+- Supporter: $19 Lifetime (CLI, themes, badges, friend compare)
+- Patron: $7/month (Discord, voting, early access)
+- **Why it works:** $19 is impulse-buy for developers; CLI is killer feature; no payment processing infrastructure needed
+
+### Patreon Integration
+- **One Codebase**: All features in main app, unlocked with license key
+- **No Separate Versions**: Avoids maintenance nightmare
+- **Hacker-Resistant**: Accept bypassing, target supporters who want to pay
+- **Implementation**: Static keys in `js/settings.js`
 
 ### User Acquisition
-**Strategy:** Target quantified-self enthusiasts
+**Strategy:** Target power users and developers
 - They already export data
 - They understand API keys
 - They value privacy and control
-- They're willing to pay for tools
+- They're willing to pay for tools that give them control
+- **CLI version** appeals to developers who want scripting
+- **Friend compare** via JSON creates viral loop
 
 ### Competition
-**Differentiation:** We're not competing on stats. We're competing on self-discovery.
-- Stats.fm: "Look at your data"
-- Rhythm Chamber: "Look at yourself"
+**Differentiation:** We're not competing on stats. We're competing on self-discovery and power user features.
+- Stats.fm: "Look at your data" (charts, graphs)
+- Rhythm Chamber: "Look at yourself" (personality, chat)
+- **Plus**: CLI tool, zero-backend, BYOK, privacy-first
 
 ---
 
@@ -219,12 +229,20 @@ Stats.fm requires server infrastructure, which means:
 - Offer optional cloud sync (paid)
 - Keep local-first as default
 - Let users choose their level of control
+- **Supporter tier** gives them CLI and themes without needing to self-host
 
 ### Scenario 4: "Personality types feel like astrology"
 **Mitigation:**
 - Show exact detection logic
 - Use specific evidence from user data
 - Make it explainable and transparent
+
+### Scenario 5: "Patreon model creates maintenance nightmare"
+**Mitigation:**
+- **One codebase only**: No separate versions
+- **License key unlock**: Simple feature flag in settings
+- **Static keys**: No complex payment processing
+- **Accept piracy**: Focus on supporters who want to pay
 
 ---
 
@@ -249,8 +267,14 @@ Stats.fm requires server infrastructure, which means:
 
 ## The Bottom Line
 
-**We're not building a better stats.fm. We're building the next evolution of music self-discovery.**
+**We're not building a better stats.fm. We're building the next evolution of music self-discovery for power users.**
 
 The zero-backend architecture isn't a limitation—it's our moat. The BYOK model isn't a barrier—it's a feature for our target audience. The data export friction isn't a bug—it's a filter for users who value depth over immediacy.
+
+**Monetization Strategy:**
+- $19 lifetime for CLI + themes + badges (impulse buy for developers)
+- $7/month for community + early access (Patreon model)
+- No payment processing infrastructure needed
+- One codebase, license key unlocks
 
 **If we get the first insight right, if it's shareable, if chat feels smart, and if the viral loop works—we win.**

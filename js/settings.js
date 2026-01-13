@@ -56,7 +56,9 @@ function getSettings() {
             // Advanced parameters
             topP: configOpenrouter.topP ?? 0.9,
             frequencyPenalty: configOpenrouter.frequencyPenalty ?? 0,
-            presencePenalty: configOpenrouter.presencePenalty ?? 0
+            presencePenalty: configOpenrouter.presencePenalty ?? 0,
+            // Context window configuration
+            contextWindow: configOpenrouter.contextWindow || 4096
         },
         // Ollama-specific settings
         ollama: {
@@ -118,7 +120,9 @@ async function getSettingsAsync() {
             // Advanced parameters
             topP: configOpenrouter.topP ?? 0.9,
             frequencyPenalty: configOpenrouter.frequencyPenalty ?? 0,
-            presencePenalty: configOpenrouter.presencePenalty ?? 0
+            presencePenalty: configOpenrouter.presencePenalty ?? 0,
+            // Context window configuration
+            contextWindow: configOpenrouter.contextWindow || 4096
         },
         // Ollama-specific settings
         ollama: {
@@ -215,6 +219,11 @@ function applySettingsOverrides(settings, parsed) {
         settings.openrouter.presencePenalty = parsed.openrouter.presencePenalty;
     }
 
+    // Context window configuration
+    if (parsed.openrouter?.contextWindow !== undefined) {
+        settings.openrouter.contextWindow = parsed.openrouter.contextWindow;
+    }
+
     // Ollama settings
     if (parsed.ollama) {
         Object.assign(settings.ollama, parsed.ollama);
@@ -260,6 +269,7 @@ async function saveSettings(settings) {
                 model: settings.openrouter.model,
                 maxTokens: settings.openrouter.maxTokens,
                 temperature: settings.openrouter.temperature,
+                contextWindow: settings.openrouter.contextWindow,
                 apiUrl: window.Config.openrouter?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions'
             };
         }
@@ -290,7 +300,6 @@ async function clearSettings() {
     localStorage.removeItem('rhythm_chamber_settings');
 }
 
-
 /**
  * Get a specific setting value
  */
@@ -302,6 +311,15 @@ function getSetting(path) {
         value = value?.[part];
     }
     return value;
+}
+
+/**
+ * Get context window from settings
+ * This is used by TokenCounter to get the configured context window
+ */
+function getContextWindow() {
+    const settings = getSettings();
+    return settings.openrouter?.contextWindow || 4096;
 }
 
 /**
@@ -465,6 +483,15 @@ function showSettingsModal() {
                                    min="0" max="2" step="0.1">
                             <span class="settings-hint" id="temp-value">${settings.openrouter.temperature} (${settings.openrouter.temperature < 0.4 ? 'focused' : settings.openrouter.temperature > 1.0 ? 'creative' : 'balanced'})</span>
                         </div>
+                    </div>
+
+                    <!-- Context Window Configuration -->
+                    <div class="settings-field">
+                        <label for="setting-context-window">Context Window Size</label>
+                        <input type="number" id="setting-context-window" 
+                               value="${settings.openrouter.contextWindow}" 
+                               min="1024" max="128000" step="1024">
+                        <span class="settings-hint">tokens (default: 4096, adjust based on your model)</span>
                     </div>
                     
                     <!-- Advanced Parameters (collapsible) -->
@@ -679,6 +706,7 @@ function saveFromModal() {
     const model = document.getElementById('setting-model')?.value || 'xiaomi/mimo-v2-flash:free';
     const maxTokens = parseInt(document.getElementById('setting-max-tokens')?.value) || 4500;
     const temperature = parseFloat(document.getElementById('setting-temperature')?.value) || 0.7;
+    const contextWindow = parseInt(document.getElementById('setting-context-window')?.value) || 4096;
 
     // Advanced parameters
     const topP = parseFloat(document.getElementById('setting-top-p')?.value) || 0.9;
@@ -701,6 +729,7 @@ function saveFromModal() {
             model,
             maxTokens: Math.min(Math.max(maxTokens, 100), 8000),
             temperature: Math.min(Math.max(temperature, 0), 2),
+            contextWindow: Math.min(Math.max(contextWindow, 1024), 128000),
             topP: Math.min(Math.max(topP, 0), 1),
             frequencyPenalty: Math.min(Math.max(frequencyPenalty, -2), 2),
             presencePenalty: Math.min(Math.max(presencePenalty, -2), 2)
@@ -1192,6 +1221,7 @@ window.Settings = {
     saveSettings,
     clearSettings,
     getSetting,
+    getContextWindow,
     hasApiKey,
     hasSpotifyConfig,
     showSettingsModal,
