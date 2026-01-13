@@ -65,7 +65,6 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 
 ---
 
-## The Competitive Moat
 
 ### What Stats.fm Can't Match
 
@@ -82,7 +81,6 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 - Appreciate transparency (no black box)
 - Willing to pay for their own infrastructure (sovereignty)
 
-**This is a feature, not a bug.**
 
 ---
 
