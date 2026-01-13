@@ -22,6 +22,46 @@ const EMBEDDING_DIMENSIONS = 4096; // qwen3-embedding-8b output dimension
 const API_TIMEOUT_MS = 60000; // 60 second timeout
 const EMBEDDING_RATE_LIMIT = 5; // Max 5 embedding batches per minute
 
+// Local embedding constants (different model, smaller dimensions)
+const LOCAL_EMBEDDING_DIMENSIONS = 384; // all-MiniLM-L6-v2 output dimension
+
+// ==========================================
+// Storage Mode Detection
+// HNW Hierarchy: Clear authority for local vs cloud decision
+// ==========================================
+
+/**
+ * Get current storage mode ('local' or 'qdrant')
+ * Defaults to 'local' if no Qdrant credentials are configured
+ * @returns {string} 'local' or 'qdrant'
+ */
+function getStorageMode() {
+    const config = getConfigSync();
+    // Default to local if no Qdrant credentials
+    if (!config?.hasCredentials) return 'local';
+    // Explicit mode setting takes precedence
+    return config?.storageMode || 'qdrant';
+}
+
+/**
+ * Check if using local vector storage mode
+ * @returns {boolean} True if in local mode
+ */
+function isLocalMode() {
+    return getStorageMode() === 'local';
+}
+
+/**
+ * Check if local embeddings are available in this browser
+ * @returns {Promise<{supported: boolean, reason?: string}>}
+ */
+async function checkLocalSupport() {
+    if (!window.LocalEmbeddings?.isSupported) {
+        return { supported: false, reason: 'LocalEmbeddings module not loaded' };
+    }
+    return await window.LocalEmbeddings.isSupported();
+}
+
 /**
  * Get collection name for Qdrant
  * 
@@ -577,7 +617,7 @@ async function getEmbedding(input) {
  * Test connection to Qdrant cluster
  */
 async function testConnection() {
-    const config = getConfig();
+    const config = await getConfig();
     if (!config?.qdrantUrl || !config?.qdrantApiKey) {
         throw new Error('Qdrant credentials not configured');
     }
@@ -600,7 +640,7 @@ async function testConnection() {
  * Uses namespace-isolated collection name
  */
 async function ensureCollection() {
-    const config = getConfig();
+    const config = await getConfig();
     if (!config?.qdrantUrl || !config?.qdrantApiKey) {
         throw new Error('Qdrant credentials not configured');
     }
@@ -648,7 +688,7 @@ async function ensureCollection() {
  * @param {Array} points - Array of { id, vector, payload } objects
  */
 async function upsertPoints(points) {
-    const config = getConfig();
+    const config = await getConfig();
     if (!config?.qdrantUrl || !config?.qdrantApiKey) {
         throw new Error('Qdrant credentials not configured');
     }
@@ -674,14 +714,19 @@ async function upsertPoints(points) {
 }
 
 /**
- * Search for similar vectors in Qdrant
- * Uses namespace-isolated collection
+ * Search for similar vectors in Qdrant or local store
+ * Automatically routes to local mode if no Qdrant credentials
  * @param {string} query - Search query text
  * @param {number} limit - Number of results to return
  * @returns {Promise<Array>} Search results with payloads
  */
 async function search(query, limit = 5) {
-    const config = getConfig();
+    // Route to local mode if applicable
+    if (isLocalMode()) {
+        return searchLocal(query, limit);
+    }
+
+    const config = await getConfig();
     if (!config?.qdrantUrl || !config?.qdrantApiKey) {
         throw new Error('Qdrant credentials not configured');
     }
@@ -717,11 +762,17 @@ async function search(query, limit = 5) {
 
 /**
  * Generate embeddings for all streaming data chunks
+ * Automatically routes to local mode if no Qdrant credentials
  * @param {Function} onProgress - Progress callback (current, total, message)
  * @param {object} options - Options including resume, mergeStrategy
  */
 async function generateEmbeddings(onProgress = () => { }, options = {}) {
-    const config = getConfig();
+    // Route to local mode if applicable
+    if (isLocalMode()) {
+        return generateLocalEmbeddings(onProgress, options);
+    }
+
+    const config = await getConfig();
     if (!config?.qdrantUrl || !config?.qdrantApiKey) {
         throw new Error('Please configure your Qdrant credentials first');
     }
@@ -742,7 +793,7 @@ async function generateEmbeddings(onProgress = () => { }, options = {}) {
     }
 
     const { resume = false, mergeStrategy = null } = options;
-    const checkpoint = resume ? getCheckpoint() : null;
+    const checkpoint = resume ? await getCheckpoint() : null;
 
     try {
         // Get streaming data
@@ -854,7 +905,7 @@ async function generateEmbeddings(onProgress = () => { }, options = {}) {
                 processed += batch.length;
 
                 // Save checkpoint after each batch
-                saveCheckpoint({
+                await saveCheckpoint({
                     lastBatch: batchIndex,
                     processed,
                     totalChunks,
@@ -866,7 +917,7 @@ async function generateEmbeddings(onProgress = () => { }, options = {}) {
             } catch (err) {
                 console.error('Batch processing error:', err);
                 // Save checkpoint so user can resume
-                saveCheckpoint({
+                await saveCheckpoint({
                     lastBatch: batchIndex - 1,
                     processed,
                     totalChunks,
@@ -883,10 +934,10 @@ async function generateEmbeddings(onProgress = () => { }, options = {}) {
         }
 
         // Clear checkpoint and mark complete
-        clearCheckpoint();
+        await clearCheckpoint();
 
         // Mark embeddings as generated with data hash
-        saveConfig({
+        await saveConfig({
             ...config,
             embeddingsGenerated: true,
             chunksCount: totalChunks,
@@ -1017,11 +1068,16 @@ function createChunks(streams) {
 }
 
 /**
- * Clear all embeddings from Qdrant
- * Uses namespace-isolated collection
+ * Clear all embeddings from Qdrant or local store
+ * Uses namespace-isolated collection for Qdrant
  */
 async function clearEmbeddings() {
-    const config = getConfig();
+    // Handle local mode
+    if (isLocalMode()) {
+        return clearLocalEmbeddings();
+    }
+
+    const config = await getConfig();
     if (!config?.qdrantUrl || !config?.qdrantApiKey) {
         throw new Error('Qdrant credentials not configured');
     }
@@ -1043,8 +1099,163 @@ async function clearEmbeddings() {
     delete newConfig.embeddingsGenerated;
     delete newConfig.chunksCount;
     delete newConfig.generatedAt;
-    saveConfig(newConfig);
+    await saveConfig(newConfig);
 
+    return { success: true };
+}
+
+// ==========================================
+// LOCAL MODE FUNCTIONS
+// HNW Network: Completely isolated from Qdrant operations
+// ==========================================
+
+/**
+ * Generate embeddings using local browser model
+ * @param {Function} onProgress - Progress callback (current, total, message)
+ * @param {object} options - Options
+ * @returns {Promise<{success: boolean, chunksProcessed: number, mode: string}>}
+ */
+async function generateLocalEmbeddings(onProgress = () => { }, options = {}) {
+    // Check if local embeddings are supported
+    const support = await checkLocalSupport();
+    if (!support.supported) {
+        throw new Error(`Local embeddings not supported: ${support.reason || 'Browser incompatible'}`);
+    }
+
+    // HNW Hierarchy: Acquire operation lock
+    let embeddingLockId = null;
+    if (window.OperationLock) {
+        try {
+            embeddingLockId = await window.OperationLock.acquire('embedding_generation');
+        } catch (lockError) {
+            throw new Error(`Cannot generate embeddings: ${lockError.message}`);
+        }
+    }
+
+    try {
+        onProgress(0, 100, 'Initializing local embedding model (~22MB download on first use)...');
+
+        // Initialize LocalEmbeddings (downloads model if needed)
+        await window.LocalEmbeddings.initialize((pct) => {
+            // Model loading is 0-50% of progress
+            onProgress(Math.round(pct / 2), 100, `Loading model... ${pct}%`);
+        });
+
+        onProgress(50, 100, 'Initializing local vector store...');
+
+        // Initialize LocalVectorStore
+        await window.LocalVectorStore.init();
+
+        // Get streaming data
+        const streams = await Storage.getStreams();
+        if (!streams || streams.length === 0) {
+            throw new Error('No streaming data found. Please upload your Spotify data first.');
+        }
+
+        // Create chunks from streaming data
+        const chunks = createChunks(streams);
+        const totalChunks = chunks.length;
+
+        console.log(`[RAG] Generating local embeddings for ${totalChunks} chunks...`);
+
+        // Generate embeddings for each chunk
+        for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+
+            try {
+                const embedding = await window.LocalEmbeddings.getEmbedding(chunk.text);
+
+                await window.LocalVectorStore.upsert(i + 1, embedding, {
+                    text: chunk.text,
+                    type: chunk.type,
+                    metadata: chunk.metadata
+                });
+
+                // Embedding progress is 50-100%
+                const progress = 50 + Math.round((i / totalChunks) * 50);
+                onProgress(progress, 100, `Embedding ${i + 1}/${totalChunks}...`);
+
+            } catch (err) {
+                console.error(`[RAG] Failed to embed chunk ${i}:`, err);
+                throw new Error(`Failed at chunk ${i + 1}: ${err.message}`);
+            }
+        }
+
+        // Update config to mark embeddings as generated
+        await saveConfig({
+            embeddingsGenerated: true,
+            storageMode: 'local',
+            chunksCount: totalChunks,
+            generatedAt: new Date().toISOString()
+        });
+
+        onProgress(100, 100, '✓ Local embeddings generated successfully!');
+
+        console.log(`[RAG] Local embeddings complete: ${totalChunks} chunks stored`);
+
+        return {
+            success: true,
+            chunksProcessed: totalChunks,
+            mode: 'local',
+            dimensions: LOCAL_EMBEDDING_DIMENSIONS
+        };
+
+    } finally {
+        // HNW Hierarchy: Always release operation lock
+        if (embeddingLockId && window.OperationLock) {
+            window.OperationLock.release('embedding_generation', embeddingLockId);
+        }
+    }
+}
+
+/**
+ * Search using local vector store
+ * @param {string} query - Search query text
+ * @param {number} limit - Number of results to return
+ * @returns {Promise<Array>} Search results with payloads
+ */
+async function searchLocal(query, limit = 5) {
+    if (!window.LocalEmbeddings?.isReady()) {
+        throw new Error('Local embeddings not initialized. Generate embeddings first.');
+    }
+
+    if (!window.LocalVectorStore?.isReady()) {
+        await window.LocalVectorStore.init();
+    }
+
+    // Generate embedding for query
+    const queryVector = await window.LocalEmbeddings.getEmbedding(query);
+
+    // Search in local vector store
+    const results = window.LocalVectorStore.search(queryVector, limit, 0.3);
+
+    // Transform to match Qdrant response format
+    return results.map(r => ({
+        id: r.id,
+        score: r.score,
+        payload: r.payload
+    }));
+}
+
+/**
+ * Clear local embeddings
+ * @returns {Promise<{success: boolean}>}
+ */
+async function clearLocalEmbeddings() {
+    if (window.LocalVectorStore) {
+        await window.LocalVectorStore.clear();
+    }
+
+    // Update config
+    const config = await getConfig() || {};
+    const newConfig = { ...config };
+    delete newConfig.embeddingsGenerated;
+    delete newConfig.chunksCount;
+    delete newConfig.generatedAt;
+    newConfig.storageMode = 'local';
+    await saveConfig(newConfig);
+
+    console.log('[RAG] Local embeddings cleared');
     return { success: true };
 }
 
@@ -1099,10 +1310,19 @@ window.RAG = {
     filterStreamsForIncremental,
     clearEmbeddingManifest,
 
+    // Local mode support (HNW Fallback)
+    isLocalMode,
+    getStorageMode,
+    checkLocalSupport,
+    generateLocalEmbeddings,
+    searchLocal,
+    clearLocalEmbeddings,
+
     // Constants
     COLLECTION_NAME: COLLECTION_NAME_BASE,
-    EMBEDDING_MODEL
+    EMBEDDING_MODEL,
+    LOCAL_EMBEDDING_DIMENSIONS
 };
 
 
-console.log('[RAG] RAG module loaded with incremental embedding support');
+console.log('[RAG] RAG module loaded with local fallback + incremental embedding support');

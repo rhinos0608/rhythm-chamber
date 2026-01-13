@@ -81,6 +81,65 @@ async function fetchWithRetry(url, options = {}, {
 }
 
 /**
+ * Fetch with authentication retry support
+ * Automatically retries on 401 errors after calling token refresh callback
+ * @param {string} url - URL to fetch
+ * @param {RequestInit} options - Fetch options
+ * @param {object} authConfig - Authentication configuration
+ * @returns {Promise<Response>}
+ */
+async function fetchWithAuth(url, options = {}, {
+    timeoutMs = 30000,
+    onAuthError = null,     // Callback to refresh token on 401
+    maxAuthRetries = 1,
+    getAuthHeader = null    // Callback to get updated auth header after refresh
+} = {}) {
+    let authRetries = 0;
+    let currentOptions = { ...options };
+
+    while (authRetries <= maxAuthRetries) {
+        try {
+            const response = await fetchWithTimeout(url, currentOptions, timeoutMs);
+
+            // Handle 401 Unauthorized - attempt token refresh
+            if (response.status === 401 && onAuthError && authRetries < maxAuthRetries) {
+                console.warn('[Utils] Got 401, attempting auth refresh...');
+                authRetries++;
+
+                const refreshed = await onAuthError();
+                if (refreshed) {
+                    // Update authorization header if callback provided
+                    if (getAuthHeader) {
+                        const newAuthHeader = await getAuthHeader();
+                        if (newAuthHeader) {
+                            currentOptions = {
+                                ...currentOptions,
+                                headers: {
+                                    ...currentOptions.headers,
+                                    'Authorization': newAuthHeader
+                                }
+                            };
+                        }
+                    }
+                    continue; // Retry with refreshed token
+                }
+
+                // Refresh failed - return original response
+                return response;
+            }
+
+            return response;
+        } catch (err) {
+            // Don't retry on network errors
+            throw err;
+        }
+    }
+
+    // Should not reach here, but safety fallback
+    throw new Error('Max auth retries exceeded');
+}
+
+/**
  * Sleep utility
  * @param {number} ms - Milliseconds to sleep
  */
@@ -142,6 +201,7 @@ function formatDuration(seconds) {
 window.Utils = {
     fetchWithTimeout,
     fetchWithRetry,
+    fetchWithAuth,
     sleep,
     simpleHash,
     debounce,

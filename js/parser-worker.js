@@ -29,24 +29,55 @@ let pendingAcks = 0;             // Current pending ACK count
 let ackId = 0;                   // Rolling ACK ID
 const ackResolvers = new Map();  // ackId -> resolve function
 
+// Cross-browser memory fallback: chunk-counting for Firefox/Safari
+let processedItemCount = 0;
+const PAUSE_EVERY_N_ITEMS = 50000; // Pause after every 50k items
+let lastPauseTime = 0;
+const MIN_PAUSE_INTERVAL_MS = 5000; // At least 5s between pauses
+
 /**
- * NEW: Check memory usage and pause if needed
+ * Pause processing for memory pressure relief
+ * @param {string} reason - Why we're pausing (memory_api or chunk_count)
+ * @param {number} metric - Usage metric for logging
+ */
+async function pauseForMemory(reason, metric) {
+    console.log(`[Worker] Memory pressure detected (${reason}: ${Math.round(metric * 100)}%) - pausing...`);
+    self.postMessage({ type: 'memory_warning', reason, metric });
+
+    // Wait for resume signal from main thread
+    await new Promise(resolve => {
+        pauseResolve = resolve;
+        isPaused = true;
+    });
+
+    console.log('[Worker] Resuming processing...');
+    self.postMessage({ type: 'memory_resumed' });
+}
+
+/**
+ * Cross-browser memory check with fallback strategies
+ * - Chrome: Uses navigator.memory.usedJSHeapSize / jsHeapSizeLimit
+ * - Firefox/Safari: Falls back to chunk-counting heuristic
  */
 async function checkMemoryAndPause() {
-    if (typeof navigator !== 'undefined' && navigator.memory) {
-        const usage = navigator.memory.usage;
+    // Strategy 1: Chrome Memory API (preferred, more accurate)
+    if (typeof navigator !== 'undefined' && navigator.memory?.usedJSHeapSize) {
+        const usage = navigator.memory.usedJSHeapSize / navigator.memory.jsHeapSizeLimit;
         if (usage > MEMORY_THRESHOLD) {
-            console.log(`[Worker] Memory usage ${Math.round(usage * 100)}% - pausing...`);
-            self.postMessage({ type: 'memory_warning', usage });
+            await pauseForMemory('memory_api', usage);
+            return;
+        }
+    }
 
-            // Wait for resume signal
-            await new Promise(resolve => {
-                pauseResolve = resolve;
-                isPaused = true;
-            });
-
-            console.log('[Worker] Resuming processing...');
-            self.postMessage({ type: 'memory_resumed' });
+    // Strategy 2: Chunk-counting fallback for Firefox/Safari
+    // Pause periodically to allow GC and prevent memory buildup
+    processedItemCount++;
+    if (processedItemCount >= PAUSE_EVERY_N_ITEMS) {
+        const now = Date.now();
+        if (now - lastPauseTime >= MIN_PAUSE_INTERVAL_MS) {
+            await pauseForMemory('chunk_count', processedItemCount / PAUSE_EVERY_N_ITEMS);
+            processedItemCount = 0;
+            lastPauseTime = now;
         }
     }
 }
