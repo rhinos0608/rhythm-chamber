@@ -11,8 +11,32 @@
 // Initialize centralized state
 AppState.init();
 
-// Backward compatibility: appState getter for incremental migration
-// TODO: Remove once all direct appState access is migrated
+/**
+ * DEPRECATED: appStateProxy for backward compatibility during migration
+ * 
+ * ⚠️ DEPRECATION NOTICE ⚠️
+ * 
+ * This proxy exists ONLY for incremental migration. New code MUST NOT use appState.
+ * 
+ * Migration Timeline:
+ * - Phase 1 (Current): Proxy redirects to AppState silently
+ * - Phase 2 (Session 18+): Add console.warn on access
+ * - Phase 3 (Session 20+): Remove proxy entirely
+ * 
+ * CORRECT Usage (new code):
+ *   // Read:
+ *   const streams = AppState.get('data').streams;
+ *   
+ *   // Write:
+ *   AppState.update('data', { streams: newStreams });
+ *   
+ *   // Subscribe to changes:
+ *   AppState.subscribe((state, changedDomains) => { ... });
+ * 
+ * INCORRECT Usage (legacy - do not add more):
+ *   appState.streams = newStreams;  // ❌ Deprecated
+ *   const x = appState.streams;     // ❌ Deprecated
+ */
 const appStateProxy = {
     get streams() { return AppState.get('data').streams; },
     set streams(v) { AppState.update('data', { streams: v }); },
@@ -73,9 +97,15 @@ let isPrimaryTab = true;
 
 /**
  * Initialize cross-tab coordination
- * Uses BroadcastChannel for instant, no-polling coordination
+ * Uses BroadcastChannel with deterministic leader election (lowest ID wins)
+ * 
+ * HNW Fix: Replaced 100ms timeout with proper coordination protocol
+ * - All tabs announce candidacy simultaneously
+ * - Wait 300ms for all candidates to announce (3x original timeout for safety)
+ * - Lowest lexicographic tab ID wins (deterministic resolution)
+ * - Eliminates race condition where two tabs both claim primary
  */
-function initTabCoordination() {
+async function initTabCoordination() {
     if (!('BroadcastChannel' in window)) {
         console.warn('[App] BroadcastChannel not supported, skipping cross-tab coordination');
         return;
@@ -83,8 +113,14 @@ function initTabCoordination() {
 
     tabCoordination = new BroadcastChannel('rhythm_chamber_coordination');
 
-    tabCoordination.addEventListener('message', (event) => {
-        if (event.data.type === 'CLAIM_PRIMARY' && event.data.tabId !== TAB_ID) {
+    // Collect candidates during election window
+    const candidates = new Set();
+    candidates.add(TAB_ID); // Include self
+
+    const electionHandler = (event) => {
+        if (event.data.type === 'CANDIDATE') {
+            candidates.add(event.data.tabId);
+        } else if (event.data.type === 'CLAIM_PRIMARY' && event.data.tabId !== TAB_ID) {
             // Another tab claimed primary - we become secondary
             if (isPrimaryTab) {
                 isPrimaryTab = false;
@@ -92,25 +128,46 @@ function initTabCoordination() {
                 disableWriteOperations();
             }
         } else if (event.data.type === 'RELEASE_PRIMARY') {
-            // Primary tab closed - we can try to claim
-            claimPrimaryTab();
-        } else if (event.data.type === 'QUERY_PRIMARY') {
-            // Another tab asking if there's a primary - respond if we're primary
-            if (isPrimaryTab) {
-                tabCoordination.postMessage({ type: 'CLAIM_PRIMARY', tabId: TAB_ID });
-            }
+            // Primary tab closed - initiate new election
+            candidates.clear();
+            candidates.add(TAB_ID);
+            runElection();
         }
-    });
+    };
 
-    // Query for existing primary tabs first
-    tabCoordination.postMessage({ type: 'QUERY_PRIMARY', tabId: TAB_ID });
+    tabCoordination.addEventListener('message', electionHandler);
 
-    // Wait briefly for responses, then claim if no one responds
-    setTimeout(() => {
-        if (isPrimaryTab) {
+    // Announce candidacy
+    tabCoordination.postMessage({ type: 'CANDIDATE', tabId: TAB_ID });
+
+    // Wait for other candidates (300ms - 3x original timeout for safety)
+    await new Promise(r => setTimeout(r, 300));
+
+    // Determine winner: lowest lexicographic ID (deterministic)
+    const sortedCandidates = Array.from(candidates).sort();
+    const winner = sortedCandidates[0];
+    isPrimaryTab = (winner === TAB_ID);
+
+    if (isPrimaryTab) {
+        claimPrimaryTab();
+        console.log(`[App] Won election against ${candidates.size - 1} other candidate(s)`);
+    } else {
+        console.log(`[App] Lost election to ${winner}. Becoming secondary.`);
+        showMultiTabWarning();
+        disableWriteOperations();
+    }
+
+    // Helper for re-elections when primary tab closes
+    async function runElection() {
+        tabCoordination.postMessage({ type: 'CANDIDATE', tabId: TAB_ID });
+        await new Promise(r => setTimeout(r, 300));
+        const sorted = Array.from(candidates).sort();
+        const newWinner = sorted[0];
+        if (newWinner === TAB_ID && !isPrimaryTab) {
+            isPrimaryTab = true;
             claimPrimaryTab();
         }
-    }, 100);
+    }
 
     // Release primary on unload
     window.addEventListener('beforeunload', () => {
@@ -464,19 +521,20 @@ async function loadDemoMode() {
     showProcessing();
     progressText.textContent = '🎭 Loading demo mode...';
 
-    // Mark as demo mode in state (NOT persisted)
-    AppState.update('demo', { isDemoMode: true });
-
     // Get demo data package
     const demoPackage = DemoData.getFullDemoPackage();
 
-    // Load demo data into state (IN MEMORY ONLY - not persisted to IndexedDB)
+    // Load demo data into ISOLATED demo domain (not main data domain)
+    // HNW: Prevents demo data from polluting real user data
     progressText.textContent = 'Loading sample streaming history...';
     await new Promise(r => setTimeout(r, 300));
 
-    appState.streams = demoPackage.streams;
-    appState.patterns = demoPackage.patterns;
-    appState.personality = demoPackage.personality;
+    AppState.update('demo', {
+        isDemoMode: true,
+        streams: demoPackage.streams,
+        patterns: demoPackage.patterns,
+        personality: demoPackage.personality
+    });
 
     progressText.textContent = 'Preparing demo experience...';
     await new Promise(r => setTimeout(r, 300));
@@ -490,7 +548,7 @@ async function loadDemoMode() {
     // Pre-load chat with demo-specific suggestions
     setupDemoChatSuggestions();
 
-    console.log('[App] Demo mode loaded successfully');
+    console.log('[App] Demo mode loaded successfully (data isolated in demo domain)');
 }
 
 /**
@@ -601,8 +659,10 @@ async function processFile(file) {
     }
     workerAbortController = new AbortController();
 
-    // Terminate any existing worker
+    // Terminate any existing worker (with proper cleanup to prevent memory leak)
     if (activeWorker) {
+        activeWorker.onmessage = null;
+        activeWorker.onerror = null;
         activeWorker.terminate();
         activeWorker = null;
     }
@@ -690,6 +750,8 @@ async function processFile(file) {
             }
 
             if (activeWorker) {
+                activeWorker.onmessage = null;
+                activeWorker.onerror = null;
                 activeWorker.terminate();
                 activeWorker = null;
             }
@@ -707,6 +769,8 @@ async function processFile(file) {
         progressText.textContent = `Error: ${err.message}`;
         setTimeout(() => showUpload(), 3000);
         if (activeWorker) {
+            activeWorker.onmessage = null;
+            activeWorker.onerror = null;
             activeWorker.terminate();
             activeWorker = null;
         }
@@ -720,6 +784,8 @@ async function processFile(file) {
     // NEW: Listen for abort signal
     workerAbortController.signal.addEventListener('abort', () => {
         if (activeWorker) {
+            activeWorker.onmessage = null;
+            activeWorker.onerror = null;
             activeWorker.terminate();
             activeWorker = null;
             console.log('[App] Worker aborted via signal');
@@ -1195,6 +1261,8 @@ async function $waitUntilAllWorkersAbort(abortController, timeoutMs) {
             // If still active, force terminate
             if (activeWorker) {
                 console.log('[App] Worker not responding to abort, forcing termination');
+                activeWorker.onmessage = null;
+                activeWorker.onerror = null;
                 activeWorker.terminate();
                 activeWorker = null;
                 return true;
@@ -1207,6 +1275,8 @@ async function $waitUntilAllWorkersAbort(abortController, timeoutMs) {
     // Timeout reached
     console.warn('[App] Worker abort timeout reached');
     if (activeWorker) {
+        activeWorker.onmessage = null;
+        activeWorker.onerror = null;
         activeWorker.terminate();
         activeWorker = null;
     }

@@ -33,6 +33,31 @@ async function hashData(data) {
  */
 const rateLimitBuckets = {};
 
+/**
+ * Client-side rate limiting check
+ * Tracks requests in memory (resets on page reload)
+ * 
+ * ⚠️ SECURITY NOTE - DEFENSE IN DEPTH ONLY ⚠️
+ * 
+ * This client-side rate limiting can be bypassed by:
+ * 1. Opening DevTools and overriding: Security.isRateLimited = () => false
+ * 2. Clearing the in-memory buckets
+ * 3. Refreshing the page (buckets reset)
+ * 
+ * REAL protection MUST come from server-side rate limits on:
+ * - OpenRouter API (per-key limits configured in their dashboard)
+ * - Qdrant Cloud (per-collection limits)
+ * - Spotify API (enforced by Spotify)
+ * 
+ * This exists to:
+ * 1. Prevent accidental API exhaustion by normal users
+ * 2. Provide helpful UX messaging ("slow down, you're being rate limited")
+ * 3. Slow down casual inspection (not determined attackers)
+ * 
+ * @param {string} key - Rate limit bucket key
+ * @param {number} maxPerMinute - Maximum requests per minute
+ * @returns {boolean} True if rate limited (should block)
+ */
 function isRateLimited(key, maxPerMinute = 5) {
     const now = Date.now();
     const windowMs = 60000; // 1 minute

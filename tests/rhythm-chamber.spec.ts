@@ -226,24 +226,29 @@ test.describe('Multi-Tab Coordination', () => {
         const page1 = await context.newPage();
         await page1.goto('/app.html', { waitUntil: 'networkidle' });
 
-        // Wait for tab coordination to initialize
-        await page1.waitForTimeout(200);
+        // Wait for tab coordination to initialize (300ms election + buffer)
+        await page1.waitForTimeout(500);
 
         // Open second tab in SAME context (required for BroadcastChannel)
         const page2 = await context.newPage();
         await page2.goto('/app.html', { waitUntil: 'networkidle' });
 
-        // Wait for coordination messages to propagate
-        await page2.waitForTimeout(500);
+        // Wait for multi-tab modal to appear
+        // NOTE: Election window is 300ms for deterministic leader election
+        // Using getByRole for more reliable matching
+        const multiTabHeading = page2.getByRole('heading', { name: /Multiple Tabs Detected/i });
+        const readOnlyButton = page2.getByRole('button', { name: /Read-Only/i });
 
-        // Second tab should show multi-tab modal OR have disabled inputs
-        const modalVisible = await page2.locator('#multi-tab-modal').isVisible();
-        const uploadDisabled = await page2.locator('#upload-zone').evaluate(el =>
-            window.getComputedStyle(el).pointerEvents === 'none'
-        );
-
-        // Either modal shown or inputs disabled indicates multi-tab detection worked
-        expect(modalVisible || uploadDisabled).toBeTruthy();
+        // Wait for either the heading or button to be visible
+        try {
+            await expect(multiTabHeading.or(readOnlyButton)).toBeVisible({ timeout: 5000 });
+        } catch {
+            // If modal didn't appear, check if uploads are disabled instead
+            const uploadDisabled = await page2.locator('#upload-zone').evaluate(el =>
+                window.getComputedStyle(el).pointerEvents === 'none'
+            );
+            expect(uploadDisabled).toBeTruthy();
+        }
 
         await page1.close();
         await page2.close();

@@ -10,6 +10,7 @@
 import * as Encryption from './encryption.js';
 import * as TokenBinding from './token-binding.js';
 import * as Anomaly from './anomaly.js';
+import './recovery-handlers.js'; // Side-effect import - sets up window.RecoveryHandlers
 
 /**
  * Unified error context system
@@ -222,6 +223,10 @@ const Security = {
     // Unified Error System (NEW)
     ErrorContext,
 
+    // Recovery Handlers (NEW) - execute recovery paths
+    executeRecovery: (path, details) => window.RecoveryHandlers?.execute(path, details),
+    hasRecoveryHandler: (path) => window.RecoveryHandlers?.hasHandler(path),
+
     // Utility
     generateRandomString: Encryption.generateRandomString,
     isDevToolsLikelyOpen,
@@ -245,5 +250,5 @@ export {
 // Also attach to window for backward compatibility
 if (typeof window !== 'undefined') {
     window.Security = Security;
-    console.log('[Security] Client-side security module loaded (AES-GCM + XSS Token Protection enabled)');
+    console.log('[Security] Client-side security module loaded (AES-GCM + XSS Token Protection + Recovery Handlers enabled)');
 }

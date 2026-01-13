@@ -51,8 +51,13 @@ const INITIAL_STATE = {
     },
 
     // Demo mode state - sandboxed sample data
+    // HNW: Complete isolation from main data domain to prevent cross-contamination
     demo: {
-        isDemoMode: false
+        isDemoMode: false,
+        // Demo data lives here, NOT in the main 'data' domain
+        streams: null,
+        patterns: null,
+        personality: null
     }
 };
 
@@ -355,6 +360,33 @@ const AppState = {
      */
     setSidebarCollapsed(collapsed) {
         return this.update('ui', { sidebarCollapsed: collapsed });
+    },
+
+    /**
+     * Get active data (demo or real) transparently
+     * HNW: Components use this to access data without knowing if demo mode is active
+     * @returns {{ streams: Array, patterns: Object, personality: Object, isDemoMode: boolean }}
+     */
+    getActiveData() {
+        if (!_state) return { streams: null, patterns: null, personality: null, isDemoMode: false };
+
+        const isDemoMode = _state.demo?.isDemoMode || false;
+
+        if (isDemoMode) {
+            return {
+                streams: _state.demo.streams,
+                patterns: _state.demo.patterns,
+                personality: _state.demo.personality,
+                isDemoMode: true
+            };
+        }
+
+        return {
+            streams: _state.data.streams,
+            patterns: _state.data.patterns,
+            personality: _state.data.personality,
+            isDemoMode: false
+        };
     },
 
     /**

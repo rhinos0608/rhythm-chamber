@@ -33,6 +33,7 @@
         loadScript('js/security/encryption.js'),
         loadScript('js/security/token-binding.js'),
         loadScript('js/security/anomaly.js'),
+        loadScript('js/security/recovery-handlers.js'),
         loadScript('js/security/index.js')
     ]).then(() => {
         console.log('[Security] All security modules loaded successfully');

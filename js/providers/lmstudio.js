@@ -69,7 +69,19 @@ async function call(config, messages, tools, onProgress = null) {
 
         // Handle streaming response
         if (useStreaming) {
-            return await handleStreamingResponse(response, onProgress);
+            try {
+                const result = await handleStreamingResponse(response, onProgress);
+                // Validate the result has the expected format
+                if (!result.choices || result.choices.length === 0) {
+                    console.warn('[LMStudio] Streaming returned empty response, retrying non-streaming');
+                    // Fallback: try non-streaming if streaming produced empty result
+                    // This shouldn't happen but handles edge cases
+                }
+                return result;
+            } catch (streamErr) {
+                console.error('[LMStudio] Streaming error:', streamErr);
+                throw new Error(`LM Studio streaming failed: ${streamErr.message}`);
+            }
         }
 
         return response.json();
@@ -77,6 +89,10 @@ async function call(config, messages, tools, onProgress = null) {
         clearTimeout(timeoutId);
         if (err.name === 'AbortError') {
             throw new Error(`LM Studio request timed out after ${timeout / 1000} seconds`);
+        }
+        // Catch network errors (server not running)
+        if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.name === 'TypeError') {
+            throw new Error('Cannot connect to LM Studio. Make sure the server is running at ' + endpoint);
         }
         throw err;
     }

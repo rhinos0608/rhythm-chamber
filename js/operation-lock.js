@@ -4,9 +4,39 @@
  * Provides mutual exclusion for destructive operations to prevent
  * concurrent state corruption. Part of HNW Hierarchy fix.
  * 
- * Usage:
+ * ═══════════════════════════════════════════════════════════════
+ * USAGE CONTRACT
+ * ═══════════════════════════════════════════════════════════════
+ * 
+ * PATTERN 1 - Guard (quick check, abort if locked):
+ *   Use when you want to give immediate UI feedback that an operation
+ *   is already running and the user should wait.
+ * 
+ *   if (OperationLock.isLocked('file_processing')) {
+ *       showToast('Upload already in progress, please wait');
+ *       return; // Abort without trying to acquire
+ *   }
+ * 
+ * PATTERN 2 - Acquire (blocking, exclusive access):
+ *   Use when you NEED exclusive access and the operation cannot proceed
+ *   without it. Always release in finally block.
+ * 
  *   const lockId = await OperationLock.acquire('file_processing');
- *   try { ... } finally { OperationLock.release('file_processing', lockId); }
+ *   try {
+ *       await doDestructiveWork();
+ *   } finally {
+ *       OperationLock.release('file_processing', lockId);
+ *   }
+ * 
+ * WHEN TO USE WHICH:
+ * - Pattern 1: UI event handlers (button clicks, drag-drop)
+ * - Pattern 2: Critical sections with data mutations
+ * 
+ * ⚠️ NEVER: Use isLocked() as a guard then immediately acquire()
+ *    This creates a race condition between check and acquire.
+ *    Either use pure guard pattern OR pure acquire pattern.
+ * 
+ * ═══════════════════════════════════════════════════════════════
  */
 
 // Named operations that can be locked

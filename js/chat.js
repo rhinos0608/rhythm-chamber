@@ -845,7 +845,14 @@ async function sendMessage(message, optionsOrKey = null) {
 
         // Initial API call - routes to correct provider, pass onProgress for local streaming
         let response = await callLLM(providerConfig, key, messages, useTools ? tools : undefined, isLocalProvider ? onProgress : null);
-        let responseMessage = response.choices[0]?.message;
+
+        // HNW Fix: Validate response structure before accessing choices
+        if (!response || !response.choices || response.choices.length === 0) {
+            const providerName = providerConfig.provider || 'LLM';
+            console.error('[Chat] Invalid response from provider:', providerName, response);
+            throw new Error(`${providerName} returned an invalid response. Check if the server is running and the model is loaded.`);
+        }
+        let responseMessage = response.choices[0].message;
 
         // Handle function calls (tool calls)
         if (responseMessage?.tool_calls && responseMessage.tool_calls.length > 0) {
@@ -1396,8 +1403,17 @@ function generateFallbackResponse(message, queryContext) {
         }
     }
 
-    // Default response
-    return `As ${personality.name}, ${personality.tagline.toLowerCase()} ${personality.allEvidence?.[0] || ''}\n\nTo explore deeper questions, connect an OpenRouter API key in settings. Until then, I can tell you about your patterns: ${patterns.summary?.totalHours || 'many'} hours of music across ${patterns.summary?.uniqueArtists || 'many'} artists.`;
+    // Default response - provider-aware messaging
+    const currentProvider = window.Settings?.getSettings?.()?.llm?.provider || 'openrouter';
+    const providerHint = currentProvider === 'openrouter'
+        ? 'connect an OpenRouter API key in settings'
+        : currentProvider === 'lmstudio'
+            ? 'ensure LM Studio is running with a model loaded'
+            : currentProvider === 'ollama'
+                ? 'ensure Ollama is running (ollama serve)'
+                : 'configure an LLM provider in settings';
+
+    return `As ${personality.name}, ${personality.tagline.toLowerCase()} ${personality.allEvidence?.[0] || ''}\n\nTo explore deeper questions, ${providerHint}. Until then, I can tell you about your patterns: ${patterns.summary?.totalHours || 'many'} hours of music across ${patterns.summary?.uniqueArtists || 'many'} artists.`;
 }
 
 /**
