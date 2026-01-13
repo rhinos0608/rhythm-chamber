@@ -231,6 +231,24 @@ async function init() {
         }
     }
 
+    // Check if user wants Demo Mode
+    if (urlParams.get('mode') === 'demo' && window.DemoData) {
+        console.log('[App] Demo mode activated');
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+
+        // Load demo data
+        await loadDemoMode();
+        setupEventListeners();
+        setupSpotifyButton();
+
+        // Initialize sidebar controller
+        if (window.SidebarController) {
+            await SidebarController.init();
+        }
+        return;
+    }
+
     // Check for existing data
     const existingData = await Storage.getPersonality();
     if (existingData) {
@@ -311,8 +329,8 @@ function setupEventListeners() {
         if (e.key === 'Enter') handleChatSend();
     });
 
-    // Suggestion chips
-    document.querySelectorAll('.suggestion-chip').forEach(chip => {
+    // Suggestion chips (exclude demo chips which have their own handlers)
+    document.querySelectorAll('.suggestion-chip:not(.demo-chip)').forEach(chip => {
         chip.addEventListener('click', () => {
             document.getElementById('chat-input').value = chip.dataset.question;
             handleChatSend();
@@ -428,6 +446,126 @@ async function handleSpotifyCallback(code) {
         console.error('Spotify callback error:', error);
         progressText.textContent = `Error: ${error.message}`;
         setTimeout(() => showUpload(), 3000);
+    }
+}
+
+// ==========================================
+// Demo Mode
+// HNW: Sandboxed loading - demo data never touches real storage
+// ==========================================
+
+/**
+ * Load demo mode with pre-computed "The Emo Teen" persona
+ * Uses in-memory storage to avoid mixing with user's real data
+ */
+async function loadDemoMode() {
+    console.log('[App] Loading demo data: "The Emo Teen"');
+
+    showProcessing();
+    progressText.textContent = '🎭 Loading demo mode...';
+
+    // Mark as demo mode in state (NOT persisted)
+    AppState.update('demo', { isDemoMode: true });
+
+    // Get demo data package
+    const demoPackage = DemoData.getFullDemoPackage();
+
+    // Load demo data into state (IN MEMORY ONLY - not persisted to IndexedDB)
+    progressText.textContent = 'Loading sample streaming history...';
+    await new Promise(r => setTimeout(r, 300));
+
+    appState.streams = demoPackage.streams;
+    appState.patterns = demoPackage.patterns;
+    appState.personality = demoPackage.personality;
+
+    progressText.textContent = 'Preparing demo experience...';
+    await new Promise(r => setTimeout(r, 300));
+
+    // Show reveal
+    showReveal();
+
+    // Add demo badge to UI
+    addDemoBadge();
+
+    // Pre-load chat with demo-specific suggestions
+    setupDemoChatSuggestions();
+
+    console.log('[App] Demo mode loaded successfully');
+}
+
+/**
+ * Add visual indicator that user is in demo mode
+ */
+function addDemoBadge() {
+    // Add badge to header
+    const headerLeft = document.querySelector('.header-left');
+    if (headerLeft && !document.getElementById('demo-badge')) {
+        const badge = document.createElement('span');
+        badge.id = 'demo-badge';
+        badge.className = 'demo-badge';
+        badge.innerHTML = '🎭 Demo Mode';
+        badge.title = 'You are viewing sample data. Upload your own data to see your real personality.';
+        badge.style.cssText = `
+            background: linear-gradient(135deg, var(--accent), var(--accent-secondary, #9b59b6));
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 12px;
+            cursor: help;
+        `;
+        headerLeft.appendChild(badge);
+    }
+
+    // Add exit demo mode button
+    const resetBtn = document.getElementById('reset-btn');
+    if (resetBtn) {
+        resetBtn.textContent = 'Exit Demo';
+        resetBtn.title = 'Exit demo mode and upload your own data';
+    }
+}
+
+/**
+ * Setup demo-specific chat suggestions tuned to sample data
+ * Note: We use data attributes and rely on existing event delegation from setupEventListeners
+ * to avoid duplicate click handlers
+ */
+function setupDemoChatSuggestions() {
+    const suggestions = document.getElementById('chat-suggestions');
+    if (suggestions) {
+        // Replace with demo-specific suggestions
+        // The event listeners from setupEventListeners() use querySelectorAll at init time,
+        // so these NEW elements need their own handlers
+        suggestions.innerHTML = `
+            <button class="suggestion-chip demo-chip" data-question="Tell me about my MCR obsession">
+                Tell me about my MCR obsession
+            </button>
+            <button class="suggestion-chip demo-chip" data-question="What was my emo phase like in 2019?">
+                What was my emo phase like in 2019?
+            </button>
+            <button class="suggestion-chip demo-chip" data-question="Why did I stop listening to Pierce The Veil?">
+                Why did I stop listening to Pierce The Veil?
+            </button>
+            <button class="suggestion-chip demo-chip" data-question="How has my taste evolved over the years?">
+                How has my taste evolved?
+            </button>
+        `;
+
+        // Attach event listeners to the NEW demo-specific chips
+        // These are new elements so won't have duplicate listeners
+        suggestions.querySelectorAll('.demo-chip').forEach(chip => {
+            chip.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation(); // Prevent any bubbling
+                const question = chip.dataset.question;
+                const input = document.getElementById('chat-input');
+                if (input) {
+                    input.value = question;
+                }
+                handleChatSend();
+            });
+        });
     }
 }
 

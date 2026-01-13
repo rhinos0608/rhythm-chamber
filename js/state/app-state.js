@@ -48,6 +48,11 @@ const INITIAL_STATE = {
         processingProgress: 0,
         processingMessage: '',
         error: null
+    },
+
+    // Demo mode state - sandboxed sample data
+    demo: {
+        isDemoMode: false
     }
 };
 
