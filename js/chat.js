@@ -676,6 +676,7 @@ function getMonthName(monthNum) {
 /**
  * Send a message and get response
  * Supports OpenAI-style function calling for dynamic data queries
+ * Now includes client-side token counting to prevent context window limits
  */
 async function sendMessage(message, optionsOrKey = null) {
     if (!userContext) {
@@ -754,11 +755,91 @@ async function sendMessage(message, optionsOrKey = null) {
     // Build provider-specific config
     const providerConfig = buildProviderConfig(provider, settings, config);
 
-    try {
-        // Get function schemas if available
-        const tools = window.Functions?.schemas || [];
-        const useTools = tools.length > 0 && streamsData && streamsData.length > 0;
+    // ==========================================
+    // TOKEN COUNTING & CONTEXT WINDOW MANAGEMENT
+    // ==========================================
 
+    // Get function schemas if available
+    const tools = window.Functions?.schemas || [];
+    let useTools = tools.length > 0 && streamsData && streamsData.length > 0;
+
+    // Calculate token usage before making API call
+    if (window.TokenCounter) {
+        const tokenInfo = window.TokenCounter.calculateRequestTokens({
+            systemPrompt: messages[0].content,
+            messages: messages.slice(1), // Exclude system prompt
+            ragContext: semanticContext,
+            tools: useTools ? tools : [],
+            model: providerConfig.model
+        });
+
+        console.log('[Chat] Token count:', tokenInfo);
+
+        // Check for warnings and apply strategies
+        if (tokenInfo.warnings.length > 0) {
+            const recommended = window.TokenCounter.getRecommendedAction(tokenInfo);
+
+            // Log warnings
+            tokenInfo.warnings.forEach(warning => {
+                console.warn(`[Chat] Token warning [${warning.level}]: ${warning.message}`);
+            });
+
+            // Apply truncation strategy if needed
+            if (recommended.action === 'truncate') {
+                console.log('[Chat] Applying truncation strategy...');
+
+                // Truncate the request parameters
+                const truncatedParams = window.TokenCounter.truncateToTarget({
+                    systemPrompt: messages[0].content,
+                    messages: messages.slice(1),
+                    ragContext: semanticContext,
+                    tools: useTools ? tools : [],
+                    model: providerConfig.model
+                }, Math.floor(tokenInfo.contextWindow * 0.9)); // Target 90% of context window
+
+                // Rebuild messages array with truncated content
+                const truncatedMessages = [
+                    { role: 'system', content: truncatedParams.systemPrompt },
+                    ...truncatedParams.messages
+                ];
+
+                // Update messages array for the API call
+                messages.length = 0;
+                messages.push(...truncatedMessages);
+
+                // Update semantic context and tools
+                semanticContext = truncatedParams.ragContext;
+                if (!truncatedParams.tools || truncatedParams.tools.length === 0) {
+                    // Disable tools if they were removed during truncation
+                    useTools = false;
+                }
+
+                // Notify UI about truncation
+                if (onProgress) onProgress({
+                    type: 'token_warning',
+                    message: 'Context too large - conversation truncated',
+                    tokenInfo: tokenInfo,
+                    truncated: true
+                });
+            } else if (recommended.action === 'warn_user') {
+                // Just warn the user but proceed
+                if (onProgress) onProgress({
+                    type: 'token_warning',
+                    message: recommended.message,
+                    tokenInfo: tokenInfo,
+                    truncated: false
+                });
+            }
+        }
+
+        // Always pass token info to UI for monitoring
+        if (onProgress) onProgress({
+            type: 'token_update',
+            tokenInfo: tokenInfo
+        });
+    }
+
+    try {
         // Notify UI: Thinking/Sending request
         if (onProgress) onProgress({ type: 'thinking' });
 
@@ -1071,7 +1152,7 @@ async function handleStreamingResponseLegacy(response, onProgress) {
                     if (delta?.content) {
                         const token = delta.content;
 
-                        if (token.includes('<think>')) {
+                        if (token.includes('</think>')) {
                             inThinking = true;
                             const parts = token.split('<think>');
                             if (parts[0]) {

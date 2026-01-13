@@ -9,7 +9,8 @@
 | LLM inference | $0 | OpenRouter (free tier) | No server costs = free tier is actually free |
 | Processing | $0 | User's browser | Privacy-first, no data breach risk |
 | Data storage | $0 | User's localStorage/IndexedDB | User controls their data, not us |
-| **Cloud Sync** | **$2/mo / $10 One-time** | **(Future)** User pays for server storage | **Optional**—users can stay 100% local |
+| **Supporter Features** | **$19 Lifetime** | **(Future)** User pays for CLI/themes/badges | **One-time unlock**—no recurring infrastructure |
+| **Patreon Perks** | **$7/month** | **(Future)** Discord access, voting, early beta | **Optional**—community engagement, not code access |
 | **Total (Base)** | **$0** | **Free Forever** | Stats.fm needs to monetize to survive |
 
 **Key Insight:** Stats.fm requires server infrastructure, which means:
@@ -415,6 +416,25 @@ async function sendMessage(message) {
 | Spotify OAuth (PKCE) | $0 |
 | **Total** | **$0** |
 
+### Supporter Tier ($19 Lifetime)
+
+| Resource | Cost |
+|----------|------|
+| CLI tool (Node.js wrapper) | $0 (uses existing JS) |
+| Premium themes (CSS) | $0 |
+| Badge generation (Canvas) | $0 |
+| Friend compare (JSON) | $0 |
+| **Total** | **$0 infrastructure** |
+
+### Patreon Tier ($7/month)
+
+| Resource | Cost |
+|----------|------|
+| Discord server | ~$5/month |
+| Early beta access | $0 (same codebase) |
+| Roadmap voting | $0 (community tool) |
+| **Total** | **~$5/month net** |
+
 ### With Premium LLM
 
 | Resource | Cost |
@@ -460,6 +480,20 @@ This application uses a **100% client-side security model**. All security measur
 4. Add redirect URI to Spotify app settings
 5. Deploy static files
 
+### CLI Tool Distribution (Supporter Tier)
+
+```bash
+# Node.js CLI wrapper
+npm install -g rhythm-chamber-cli
+
+# Commands
+rhythm-chamber analyze ./spotify-export.zip
+rhythm-chamber compare friend-profile.json
+rhythm-chamber generate-card --theme cyberpunk
+```
+
+**Implementation**: Wraps `js/parser.js` and `js/data-query.js` in Node.js CLI interface
+
 ### Local Development
 
 ```bash
@@ -474,8 +508,25 @@ npx serve .
 
 ## Future Enhancements (Post-MVP)
 
-- [ ] Cloud sync option (Qdrant/Pinecone)
+### Free Tier
+- [ ] Cloud sync option (Qdrant/Pinecone) - optional paid
 - [ ] WASM embeddings for semantic search
 - [ ] Playlist generation based on patterns
-- [ ] Social comparisons (opt-in)
-- [ ] Mobile app wrapper
+
+### Supporter Tier ($19 Lifetime)
+- [x] CLI tool for batch processing
+- [x] Premium themes (Dark, Cyberpunk, Minimal)
+- [x] "Verified" badge on cards
+- [x] Friend compare via JSON export/import
+
+### Patreon Tier ($7/month)
+- [ ] Dev Discord community
+- [ ] Roadmap voting rights
+- [ ] Early access to beta features
+- [ ] Priority support
+
+### Technical Architecture Notes
+- **One Codebase**: All features in main app, unlocked with license key
+- **No Separate Versions**: Avoids maintenance nightmare
+- **License Key System**: Simple check in `js/settings.js`
+- **Hacker-Resistant**: Accept that bypassing is possible, target supporters who want to pay

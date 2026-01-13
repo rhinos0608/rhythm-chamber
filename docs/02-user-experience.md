@@ -180,6 +180,25 @@ You mark time through sound.
 - Dashboard
 - Mood logging
 - PDF reports
-- Premium tiers
 - Apple Music
-- Friend comparisons
+- Cloud sync (optional paid feature)
+
+## Monetization Features (Post-MVP)
+
+### Supporter Tier ($19 Lifetime)
+- **CLI Tool**: Command-line interface for batch processing
+- **Premium Themes**: Dark, Cyberpunk, Minimal styles
+- **Verified Badge**: Visual indicator on shareable cards
+- **Friend Compare**: JSON export/import for local comparison
+
+### Patreon Tier ($7/month)
+- **Dev Discord**: Community access and support
+- **Roadmap Voting**: Influence feature priorities
+- **Early Beta Access**: Try new features before release
+- **Priority Support**: Faster response times
+
+### Implementation Strategy
+- All features in main app, unlocked with license key
+- No separate codebases
+- Simple key validation in settings
+- Accept that bypassing is possible, focus on supporters

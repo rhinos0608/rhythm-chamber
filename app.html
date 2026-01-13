@@ -195,6 +195,21 @@
                         </div>
                     </div>
 
+                    <!-- Token Counter Display -->
+                    <div class="token-counter" id="token-counter" style="display: none;">
+                        <div class="token-info">
+                            <span class="token-label">Tokens:</span>
+                            <span class="token-count" id="token-count">0</span>
+                            <span class="token-slash">/</span>
+                            <span class="token-limit" id="token-limit">0</span>
+                            <span class="token-percent" id="token-percent">(0%)</span>
+                        </div>
+                        <div class="token-bar">
+                            <div class="token-bar-fill" id="token-bar-fill"></div>
+                        </div>
+                        <div class="token-warnings" id="token-warnings"></div>
+                    </div>
+
                     <div class="chat-suggestions" id="chat-suggestions">
                         <button class="suggestion-chip" data-question="What was my music like in my data?">What was my
                             music
@@ -328,6 +343,8 @@
     <script src="js/personality.js"></script>
     <script src="js/data-query.js"></script>
     <script src="js/functions.js"></script>
+    <!-- Token Counter -->
+    <script src="js/token-counter.js"></script>
     <!-- LLM Provider Modules -->
     <script src="js/providers/provider-interface.js"></script>
     <script src="js/providers/openrouter.js"></script>
