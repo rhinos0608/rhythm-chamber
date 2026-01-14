@@ -82,5 +82,17 @@ const TEMPLATE_QUERY_SCHEMAS = [
     }
 ];
 
-// Export for module use
-window.TemplateQuerySchemas = TEMPLATE_QUERY_SCHEMAS;
+// Function names for template routing (used by functions/index.js)
+const TEMPLATE_FUNCTION_NAMES = TEMPLATE_QUERY_SCHEMAS.map(s => s.function.name);
+
+// ES Module export
+export { TEMPLATE_QUERY_SCHEMAS as TemplateQuerySchemas, TEMPLATE_FUNCTION_NAMES as TemplateFunctionNames };
+
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.TemplateQuerySchemas = TEMPLATE_QUERY_SCHEMAS;
+    window.TemplateFunctionNames = TEMPLATE_FUNCTION_NAMES;
+}
+
+console.log('[TemplateQuerySchemas] Module loaded');
+

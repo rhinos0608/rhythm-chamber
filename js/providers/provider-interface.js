@@ -239,7 +239,8 @@ function normalizeProviderError(error, provider) {
 // Public API
 // ==========================================
 
-window.ProviderInterface = {
+// ES Module export
+export const ProviderInterface = {
     // Configuration
     buildProviderConfig,
 
@@ -258,4 +259,10 @@ window.ProviderInterface = {
     TIMEOUTS: PROVIDER_TIMEOUTS
 };
 
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.ProviderInterface = ProviderInterface;
+}
+
 console.log('[ProviderInterface] LLM provider abstraction layer loaded');
+

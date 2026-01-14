@@ -341,7 +341,8 @@ function extractEntityFromQuery(query, streams) {
 // Public API
 // ==========================================
 
-window.DataQuery = {
+// ES Module export
+export const DataQuery = {
     queryByTimePeriod,
     queryByArtist,
     queryByTrack,
@@ -352,3 +353,11 @@ window.DataQuery = {
     parseDateQuery,
     extractEntityFromQuery
 };
+
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.DataQuery = DataQuery;
+}
+
+console.log('[DataQuery] Module loaded');
+

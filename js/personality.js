@@ -384,8 +384,10 @@ function calculateLiteConfidence(scores) {
     return Math.round(dominance * 80); // Cap at 80% for lite
 }
 
-// Public API
-window.Personality = {
+// ES Module exports
+export { PERSONALITY_TYPES, LITE_PERSONALITY_TYPES };
+
+export const Personality = {
     TYPES: PERSONALITY_TYPES,
     LITE_TYPES: LITE_PERSONALITY_TYPES,
     scorePersonality,
@@ -393,3 +395,10 @@ window.Personality = {
     classifyLitePersonality,
     generateRevealInsight
 };
+
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.Personality = Personality;
+}
+
+console.log('[Personality] Module loaded');

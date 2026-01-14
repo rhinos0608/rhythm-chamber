@@ -249,8 +249,8 @@ function formatPeriodLabel(params) {
     return 'All time';
 }
 
-// Export for module use
-window.FunctionValidation = {
+// ES Module export
+export const FunctionValidation = {
     validateStreams,
     validateDataQuery,
     validateYear,
@@ -260,3 +260,11 @@ window.FunctionValidation = {
     getMonthName,
     formatPeriodLabel
 };
+
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.FunctionValidation = FunctionValidation;
+}
+
+console.log('[FunctionValidation] Module loaded');
+

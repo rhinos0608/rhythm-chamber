@@ -183,7 +183,8 @@ async function listModels(apiKey) {
 // Public API
 // ==========================================
 
-window.OpenRouterProvider = {
+// ES Module export
+export const OpenRouterProvider = {
     // Core API
     call,
     callStreaming,
@@ -201,4 +202,10 @@ window.OpenRouterProvider = {
     type: 'cloud'
 };
 
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.OpenRouterProvider = OpenRouterProvider;
+}
+
 console.log('[OpenRouterProvider] Provider loaded');
+

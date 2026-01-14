@@ -67,10 +67,18 @@ async function withRetry(fn, functionName = 'function') {
     throw lastError;
 }
 
-// Export for module use
-window.FunctionRetry = {
+// ES Module export
+export const FunctionRetry = {
     MAX_RETRIES: MAX_FUNCTION_RETRIES,
     isTransientError,
     backoffDelay,
     withRetry
 };
+
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.FunctionRetry = FunctionRetry;
+}
+
+console.log('[FunctionRetry] Module loaded');
+
