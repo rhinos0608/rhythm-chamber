@@ -109,25 +109,6 @@ it since 2018. This matches your 'Emotional Archaeologist' pattern."
 > **Zero insights in a week is valid.** Silence is part of the product language.
 > Returning `None` is a feature. Forced "notability" causes pattern hallucination.
 
-### Monetization Integration
-
-#### Phase 1: Sovereign Community (Zero Cost to User)
-- **Free users**: Full chat experience with free models, BYOI, 100% local
-- **Supporters**: $19 Lifetime - Unlock PKM Export + Relationship Compatibility Reports
-  - **Purpose**: Funds external security audit & cloud infrastructure
-- **Transparency**: "Your $19 funds our security partnership"
-- **Patrons**: $7/month - Community access + early features
-- **No paywalls**: Personality reveal always free, builds trust
-
-#### Phase 2: Managed Cloud & AI (Trust-First Launch)
-- **Cloud Sync**: $50 lifetime + $10/month OR $15/month
-- **Features**: Multi-device sync, encrypted backup, managed AI setup
-- **Trust Signal**: "Secured by [External Firm]" badge
-- **Trigger**: Only after ~250-1,000 Supporters + security audit complete
-- **Architecture**: Hybrid (server-side DB + client-side E2EE)
-- **Two Points of Failure**: Users can switch between local and cloud modes
-- **Never Deprecate Local**: Free tier remains functional forever
-
 ---
 
 ## Insight Tone
@@ -260,7 +241,6 @@ You mark time through sound.
   - Example: "You and Sarah have 84% overlap in 'Melancholy' but divergent 'Energy' curves in 2021. Your common anthem is 'Bloodbuzz Ohio'."
 - **Verified Badge**: Visual indicator on shareable cards
 - **Purpose**: Funds external security audit & cloud infrastructure
-- **Transparency**: "Your $19 funds our security partnership"
 - **KPI**: Need ~250-1,000 Supporters to fund Phase 2
 
 #### Patreon Tier ($7/month) - Community
@@ -270,18 +250,6 @@ You mark time through sound.
 - **Priority Support**: Faster response times
 - **Purpose**: Sustainable community funding
 
-### Phase 2: Managed Cloud & AI (Trust-First Launch)
-
-#### Cloud Sync Tier ($40 yearly + $5/month OR $5/month(for just cloud sync no AI) )
-- **Multi-device Chat Sync**: Sync sessions across desktop/mobile
-- **Encrypted Cloud Backup**: E2EE storage of conversation history
-- **Managed AI Setup**: Pre-configured embeddings & API integration
-- **Security Signatures**: EV Code Signing + Apple notarization
-- **Hybrid Architecture**: Optional server-side layer alongside local-first core
-- **Two Points of Failure**: Users can switch between local and cloud modes
-- **Trust Signal**: "Secured by [External Firm]" badge
-- **Trigger**: Only after security audit complete and KPI met
-
 ### Implementation Strategy
 - **One Codebase**: All features in main app, unlocked with license key
 - **No Separate Versions**: Avoids maintenance nightmare
@@ -290,5 +258,4 @@ You mark time through sound.
 - **Never Deprecate Local**: Free tier remains functional forever
 - **Phase 2 Trigger**: Only after ~250-1,000 Supporters + security audit
 - **Revenue Allocation**: Supporter funds go directly to security audit
-- **Ongoing Costs**: $10/month covers API/embedding costs with margin
 - **Lifetime Protection**: Separates access fee from compute costs

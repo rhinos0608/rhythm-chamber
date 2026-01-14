@@ -13,7 +13,8 @@
 // Constants
 // ==========================================
 
-// CONVERSATION_STORAGE_KEY is already defined in chat.js (for migration)
+// Constants for legacy migration
+const CONVERSATION_STORAGE_KEY = 'rhythm_chamber_conversation';  // Legacy key from chat.js
 const SESSION_CURRENT_SESSION_KEY = 'rhythm_chamber_current_session';
 const SESSION_EMERGENCY_BACKUP_KEY = 'rhythm_chamber_emergency_backup';  // Sync backup for beforeunload
 const SESSION_EMERGENCY_BACKUP_MAX_AGE_MS = 3600000;  // 1 hour max age for emergency backups

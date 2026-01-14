@@ -100,7 +100,14 @@ function createMessageHandler() {
 
         switch (type) {
             case MESSAGE_TYPES.CANDIDATE:
-                // Another tab announced candidacy - will be collected in election
+                // Another tab announced candidacy - collect it for election
+                // If we're already primary, assert dominance so new tab knows leader exists
+                if (isPrimaryTab && tabId !== TAB_ID) {
+                    broadcastChannel?.postMessage({
+                        type: MESSAGE_TYPES.CLAIM_PRIMARY,
+                        tabId: TAB_ID
+                    });
+                }
                 break;
 
             case MESSAGE_TYPES.CLAIM_PRIMARY:

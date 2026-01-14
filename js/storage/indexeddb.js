@@ -306,6 +306,40 @@ async function getAllByIndex(storeName, indexName, direction = 'next') {
     });
 }
 
+/**
+ * Atomic read-modify-write operation using cursor
+ * This ensures true atomicity for append operations
+ * @param {string} storeName - Store name
+ * @param {IDBValidKey} key - Record key
+ * @param {function} modifier - Function that modifies the value
+ * @returns {Promise<any>} The updated value
+ */
+async function atomicUpdate(storeName, key, modifier) {
+    const database = await initDatabase();
+    return new Promise((resolve, reject) => {
+        const transaction = database.transaction(storeName, 'readwrite');
+        const store = transaction.objectStore(storeName);
+        const request = store.openCursor(key);
+
+        request.onsuccess = (event) => {
+            const cursor = event.target.result;
+            if (cursor) {
+                const currentValue = cursor.value;
+                const newValue = modifier(currentValue);
+                cursor.update(newValue);
+                resolve(newValue);
+            } else {
+                // Key doesn't exist, create new
+                const newValue = modifier(undefined);
+                const putRequest = store.put(newValue);
+                putRequest.onsuccess = () => resolve(newValue);
+                putRequest.onerror = () => reject(putRequest.error);
+            }
+        };
+        request.onerror = () => reject(request.error);
+    });
+}
+
 // ==========================================
 // Public API
 // ==========================================
@@ -335,7 +369,8 @@ export const IndexedDBCore = {
     delete: deleteRecord,
     count,
     transaction,
-    getAllByIndex
+    getAllByIndex,
+    atomicUpdate
 };
 
 // Keep window global for backwards compatibility during migration
@@ -344,4 +379,3 @@ if (typeof window !== 'undefined') {
 }
 
 console.log('[IndexedDBCore] Core module loaded');
-
