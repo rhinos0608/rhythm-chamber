@@ -577,6 +577,23 @@ function showSettingsModal() {
                             Protect physical access to this device as you would bank PINs or passwords.</p>
                         </div>
                     </div>
+
+                    <div class="security-warning travel-mode">
+                        <span class="warning-icon">🧭</span>
+                        <div class="warning-content">
+                            <strong>Traveling or on a VPN?</strong>
+                            <p>Geographic anomaly detection can block rapid location changes. Use travel mode to relax checks or verify with Spotify to prove it's you.</p>
+                            <div class="travel-actions">
+                                <button class="btn btn-secondary" id="travel-mode-btn" onclick="Settings.toggleTravelMode()">
+                                    I am traveling / on VPN
+                                </button>
+                                <button class="btn btn-primary" id="verify-identity-btn" onclick="Settings.verifyIdentity()">
+                                    Verify with Spotify
+                                </button>
+                            </div>
+                            <p class="settings-hint" id="travel-status-text">Helps prevent false lockouts while traveling.</p>
+                        </div>
+                    </div>
                     
                     <div class="settings-field">
                         <label for="setting-qdrant-url">Qdrant Cluster URL</label>
@@ -638,6 +655,9 @@ function showSettingsModal() {
 
     document.body.appendChild(modal);
 
+    // Initialize travel/VPN override status UI
+    refreshTravelStatusUI();
+
     // Add temperature slider listener
     const tempSlider = document.getElementById('setting-temperature');
     const tempValue = document.getElementById('temp-value');
@@ -690,6 +710,78 @@ function hideSettingsModal() {
     if (modal) {
         modal.classList.add('closing');
         setTimeout(() => modal.remove(), 200);
+    }
+}
+
+/**
+ * Update the travel/VPN override UI state
+ */
+function refreshTravelStatusUI() {
+    const statusEl = document.getElementById('travel-status-text');
+    const travelBtn = document.getElementById('travel-mode-btn');
+
+    if (!statusEl || !travelBtn) return;
+
+    const travelStatus = window.Security?.getTravelOverrideStatus?.() || { active: false };
+
+    if (travelStatus.active && travelStatus.expiresAt) {
+        const expires = new Date(travelStatus.expiresAt);
+        const sameDay = expires.toDateString() === new Date().toDateString();
+        const timeString = expires.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const datePrefix = sameDay ? '' : `${expires.toLocaleDateString()} `;
+
+        statusEl.textContent = `Travel mode is active until ${datePrefix}${timeString}. Geographic anomaly detection is relaxed while you travel.`;
+        travelBtn.textContent = 'Disable travel mode';
+    } else {
+        statusEl.textContent = 'Use this if VPN or travel triggers false lockouts. It relaxes geo checks for 12 hours.';
+        travelBtn.textContent = 'I am traveling / on VPN';
+    }
+}
+
+/**
+ * Toggle travel override to reduce false positives for VPN/travel
+ */
+function toggleTravelMode() {
+    if (!window.Security?.setTravelOverride || !window.Security?.getTravelOverrideStatus) {
+        showToast('Security module not loaded');
+        return;
+    }
+
+    const travelStatus = window.Security.getTravelOverrideStatus();
+
+    if (travelStatus.active) {
+        window.Security.clearTravelOverride?.();
+        showToast('Travel mode disabled. Geographic anomaly detection is back to normal.');
+    } else {
+        window.Security.setTravelOverride(12, 'user_travel_override');
+        window.Security.clearSecurityLockout?.();
+        showToast('Travel mode enabled for 12 hours. Geo anomaly checks are relaxed for VPN/travel.');
+    }
+
+    refreshTravelStatusUI();
+}
+
+/**
+ * Fallback identity verification for geo lockouts
+ * Rebinds via Spotify OAuth to prove legitimacy
+ */
+async function verifyIdentity() {
+    if (!window.Spotify?.isConfigured?.()) {
+        showToast('Add your Spotify Client ID before verifying identity.');
+        return;
+    }
+
+    try {
+        window.Security?.clearSecurityLockout?.();
+        window.Security?.setTravelOverride?.(12, 'verified_travel');
+        window.Security?.clearTokenBinding?.();
+        window.Spotify?.clearTokens?.();
+
+        showToast('Redirecting to Spotify to verify identity...');
+        await window.Spotify.initiateLogin();
+    } catch (error) {
+        console.error('[Settings] Identity verification failed:', error);
+        showToast('Could not start verification: ' + error.message);
     }
 }
 
@@ -1545,6 +1637,9 @@ window.Settings = {
     showSessionResetModal,
     hideSessionResetModal,
     confirmSessionReset,
+    refreshTravelStatusUI,
+    toggleTravelMode,
+    verifyIdentity,
     // Provider UI helpers
     onProviderChange,
     checkOllamaConnection,

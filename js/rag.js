@@ -25,6 +25,82 @@ const EMBEDDING_RATE_LIMIT = 5; // Max 5 embedding batches per minute
 // Local embedding constants (different model, smaller dimensions)
 const LOCAL_EMBEDDING_DIMENSIONS = 384; // all-MiniLM-L6-v2 output dimension
 
+// EmbeddingWorker instance (lazy-loaded)
+let embeddingWorker = null;
+
+/**
+ * Get or create the EmbeddingWorker instance
+ * Lazy-loads the worker to avoid blocking page load
+ * @returns {Worker|null} Worker instance or null if not supported
+ */
+function getEmbeddingWorker() {
+    if (embeddingWorker) return embeddingWorker;
+
+    if (typeof Worker === 'undefined') {
+        console.warn('[RAG] Web Workers not supported, falling back to main thread');
+        return null;
+    }
+
+    try {
+        embeddingWorker = new Worker('js/embedding-worker.js');
+        console.log('[RAG] EmbeddingWorker initialized');
+        return embeddingWorker;
+    } catch (err) {
+        console.warn('[RAG] Failed to create EmbeddingWorker:', err.message);
+        return null;
+    }
+}
+
+/**
+ * Create chunks using the worker (off-thread) or fallback to main thread
+ * @param {Array} streams - Streaming data
+ * @param {Function} onProgress - Progress callback (current, total, message)
+ * @returns {Promise<Array>} Chunks for embedding
+ */
+async function createChunksWithWorker(streams, onProgress = () => { }) {
+    const worker = getEmbeddingWorker();
+
+    // Fallback to main thread if worker not available
+    if (!worker) {
+        onProgress(0, 100, 'Creating chunks (main thread)...');
+        return createChunks(streams);
+    }
+
+    return new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+            reject(new Error('Worker timed out after 120 seconds'));
+        }, 120000);
+
+        worker.onmessage = (event) => {
+            const { type, current, total, message, chunks, message: errorMsg } = event.data;
+
+            switch (type) {
+                case 'progress':
+                    onProgress(current, total, message);
+                    break;
+                case 'complete':
+                    clearTimeout(timeoutId);
+                    resolve(chunks);
+                    break;
+                case 'error':
+                    clearTimeout(timeoutId);
+                    reject(new Error(errorMsg || 'Worker error'));
+                    break;
+            }
+        };
+
+        worker.onerror = (error) => {
+            clearTimeout(timeoutId);
+            console.warn('[RAG] Worker error, falling back to main thread:', error.message);
+            // Fallback to main thread on worker error
+            resolve(createChunks(streams));
+        };
+
+        // Send streams to worker
+        worker.postMessage({ type: 'createChunks', streams });
+    });
+}
+
 // ==========================================
 // Storage Mode Detection
 // HNW Hierarchy: Clear authority for local vs cloud decision
@@ -839,8 +915,8 @@ async function generateEmbeddings(onProgress = () => { }, options = {}) {
 
         onProgress(0, 100, 'Preparing data...');
 
-        // Create chunks from streaming data
-        const chunks = createChunks(streams);
+        // Create chunks from streaming data (uses worker to avoid UI jank)
+        const chunks = await createChunksWithWorker(streams, onProgress);
         const totalChunks = chunks.length;
 
         // Calculate time estimate (roughly 0.3s per chunk with batching)
@@ -1184,8 +1260,8 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}) {
             throw new Error('No streaming data found. Please upload your Spotify data first.');
         }
 
-        // Create chunks from streaming data
-        const chunks = createChunks(streams);
+        // Create chunks from streaming data (uses worker to avoid UI jank)
+        const chunks = await createChunksWithWorker(streams, onProgress);
         const totalChunks = chunks.length;
 
         console.log(`[RAG] Generating local embeddings for ${totalChunks} chunks...`);
