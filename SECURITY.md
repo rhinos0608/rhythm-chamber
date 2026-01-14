@@ -175,6 +175,15 @@ Tab visibility and navigation events are monitored for suspicious patterns:
 - Extended hidden tab periods (>30 min) trigger re-auth suggestion
 - Page unload events are logged for audit trail
 
+### 9. Fail-Closed Architecture (Safe Mode) (NEW)
+**Problem**: If security modules fail to load (e.g., spotty connection), the app should not fallback to unencrypted storage.
+
+**Solution**:
+- **Safe Mode**: When security modules fail, the app enters "Safe Mode".
+- **Visual Warning**: An orange banner alerts the user.
+- **Functionality Lock**: Data persistence (writing to storage) is **disabled**.
+- **Result**: You can browse existing data (read-only) but new sensitive data (credentials, checkpoints) is NEVER saved unencrypted.
+
 ---
 
 ## Attack Scenarios & Mitigations
