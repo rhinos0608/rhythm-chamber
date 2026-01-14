@@ -12,7 +12,7 @@
 
 | Tier | Cost | Features | Infrastructure | Purpose |
 |------|------|----------|----------------|----------|
-| **Free** | **$0** | Full local analysis, BYOK chat, basic cards, personality reveal, 100% Client-side. | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
+| **Free** | **$0** | Full local analysis, BYOI chat (your models/keys), basic cards, personality reveal, 100% Client-side. | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
 | **Supporter** | **$19 Lifetime** | CLI tool, premium themes (Dark/Cyberpunk/Minimal), "Verified" badge, friend compare JSON import | Client-side only | **Seed Capital**: Funds security audit & cloud infrastructure |
 | **Patron** | **$7/month** | Dev Discord access, roadmap voting rights, early beta features, priority support | Client-side + Discord | **Community**: Recurring revenue for ongoing support |
 
@@ -129,10 +129,13 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 │   ├── profile-synthesizer.js # AI-driven profile synthesis from templates
 │   ├── genre-enrichment.js # Genre metadata enrichment
 │   ├── local-embeddings.js # Local embedding generation
-│   ├── local-vector-store.js # Client-side vector search
+│   ├── local-vector-store.js # Client-side vector search (+ async Web Worker support)
 │   ├── embedding-worker.js # Web Worker for chunk creation
 │   ├── token-counter.js    # Token usage tracking
 │   ├── operation-lock.js   # Critical operation coordination
+│   │
+│   ├── workers/            # Web Workers (Background Processing)
+│   │   └── vector-search-worker.js # Cosine similarity offloading (60fps maintenance)
 │   │
 │   ├── functions/          # Function Calling Modules (Modular Architecture)
 │   │   ├── index.js        # Facade - unified execute() + schema access
@@ -236,18 +239,25 @@ The LLM can dynamically query user data using OpenAI-style function calling (`js
 
 The LLM decides when to call these functions based on user questions, enabling precise answers like "Show me my least played tracks from Q1 2022."
 
-### 3. In-App Settings
+### 3. Demo Mode (Isolated Sample Experience)
+- Precomputed "The Emo Teen" profile with full streams/patterns/personality
+- Data isolation in `AppState.demo` so sample data never pollutes real uploads
+- Demo badge + exit controls to keep users oriented
+- Demo-specific chat suggestions seeded for the sample persona
+- Uses shared view/controller plumbing to test UX without waiting on uploads
+
+### 4. In-App Settings
 Modal UI for configuring without editing config.js:
 - OpenRouter API key, model, max tokens, temperature
 - Spotify Client ID
 - Settings persist in localStorage, override config.js values
 
-### 4. Transparency Features
+### 5. Transparency Features
 - **Detection explainer**: Collapsible breakdown of personality scoring
 - **Data stats**: "Analyzed X streams from Y to Z"
 - **Incremental caching**: Partial saves during parsing (crash-safe)
 
-### 5. Template Profile System
+### 6. Template Profile System
 Curated listening profiles for comparison and inspiration, managed by `js/template-profiles.js` and synthesized by `js/profile-synthesizer.js`.
 
 **Template Profiles Store:**
@@ -257,10 +267,10 @@ Curated listening profiles for comparison and inspiration, managed by `js/templa
 - AI-driven synthesis from templates
 
 **Profile Synthesizer:**
-- AI-driven profile generation from selected templates
-- Keyword-based template matching
-- Integration with function calling for dynamic selection
-- Profile storage and management via `storage.js`
+- AI-driven profile generation from selected templates (function calling ready)
+- Keyword-based template matching with progress callbacks for UX
+- Generates synthetic streams, patterns, and personality classification for the new profile
+- Saves and retrieves synthesized profiles via `storage.js` + ProfileStorage for reuse
 
 **Template Functions (LLM-callable):**
 - `get_templates_by_genre(genre)` - Filter templates by musical genre
@@ -270,19 +280,19 @@ Curated listening profiles for comparison and inspiration, managed by `js/templa
 
 **Status:** Core infrastructure complete. Template data TBD from consenting friends/family.
 
-### 6. Semantic Search (Free)
+### 7. Semantic Search (Free)
 Integrated via `js/rag.js`. Users provide own Qdrant Cloud credentials.
 - In-memory vector generation (Transformer.js) or Cohere API.
 - Semantic search over listening history.
 - Context injection into LLM prompts.
 
-### 7. Data-Driven Prompt Engineering
+### 8. Data-Driven Prompt Engineering
 The AI persona is grounded in "Key Data Profiles" (`js/prompts.js`):
 - **Data Insights**: System prompt gets precise Wrapped-style metrics (Total Minutes, Top Artist, Percentile, Peak Day).
 - **Personality as Lens**: The "Personality Type" is used as a lens to interpret data, not just a label.
 - **Evidence Injection**: Detected patterns are passed as evidence to the LLM.
 
-### 8. Chat Session Storage
+### 9. Chat Session Storage
 Persistent chat conversations with ChatGPT-style sidebar:
 - **IndexedDB storage**: Sessions persist across browser restarts
 - **Collapsible sidebar**: Shows all past chats with title, date, message count
@@ -290,7 +300,7 @@ Persistent chat conversations with ChatGPT-style sidebar:
 - **Auto-save**: Debounced 2-second save after each message
 - **Auto-titling**: First user message becomes session title
 
-### 9. Security Features
+### 10. Security Features
 Client-side security module (`security.js`) providing defense-in-depth:
 
 | Feature | Purpose |
@@ -424,11 +434,11 @@ The app uses a layered configuration system:
 3.  **UI**: An in-app settings modal allows users to modify these
 4.  **Priority**: `config.js` > `localStorage`
 
-**BYOK Model (Bring Your Own Keys):**
-- Users provide their own OpenRouter API key
-- Users can provide their own Qdrant cluster for semantic search
-- Users control their AI model choice
-- **This appeals to power users who want control and transparency**
+**BYOI (Bring Your Own Intelligence):**
+- Users choose the intelligence layer: local (Ollama/LM Studio) or cloud (OpenRouter)
+- Keys are only needed for cloud calls; local models run keyless and offline
+- Users can point semantic search at their own Qdrant cluster or stay fully local
+- **Positioning shift:** "You own the intelligence and the data; we provide the orchestration."
 
 ---
 
@@ -698,7 +708,7 @@ async function sendMessage(message) {
 | Resource | Cost | Notes |
 |----------|------|-------|
 | Vercel hosting | $0 | Static files only |
-| OpenRouter free models | $0 | BYOK model |
+| OpenRouter free models | $0 | BYOI (your models/keys) |
 | localStorage/IndexedDB | $0 | Client-side storage |
 | Spotify OAuth (PKCE) | $0 | No backend needed |
 | **Total** | **$0** | **Zero infrastructure cost** |
@@ -777,7 +787,7 @@ This application uses a **100% client-side security model**. All security measur
 |---------|----------------|---------|
 | **AES-GCM Credential Encryption** | `security.js` | RAG credentials encrypted with session-derived keys |
 | **XSS Token Binding** | `security.js`, `spotify.js` | Spotify tokens bound to device fingerprint |
-| **Secure Context Enforcement** | `security.js` | Blocks operation in iframes, data: protocols |
+| **Secure Context Enforcement** | `security.js`, `token-binding.js` | Blocks operation in iframes, data: protocols; validates HTTPS/localhost/file:// |
 | **Session Versioning** | `security.js` | Keys invalidated on auth failures |
 | **Background Token Refresh** | `spotify.js` | Proactive refresh during long operations |
 | **Adaptive Lockout Thresholds** | `security.js` | Travel-aware threshold adjustment |
@@ -786,6 +796,10 @@ This application uses a **100% client-side security model**. All security measur
 | **Namespace Isolation** | `rag.js` | Per-user RAG collections |
 | **Unified Error Context** | `security.js` | Structured errors with recovery paths |
 | **Privacy Controls** | `storage.js` | Session-only mode, data cleanup |
+| **Origin Validation** | `token-binding.js` | Comprehensive protocol/hostname checking for HTTPS, localhost, file://, app://, capacitor:// |
+| **Prototype Pollution Prevention** | `security/index.js` | Object.freeze on critical prototypes + sanitizeObject() for JSON parsing |
+| **Dependency Hardening** | `app.js` | checkDependencies() validates all critical modules at startup |
+| **Vector Search Worker** | `workers/vector-search-worker.js` | Offloads cosine similarity to background thread for 60fps maintenance |
 
 ---
 
@@ -830,7 +844,7 @@ npx serve .
 ### Phase 1: Core Features
 
 #### Free Tier
-- [x] Full local analysis, BYOK chat, basic cards
+- [x] Full local analysis, BYOI chat, basic cards
 - [x] Semantic search (Qdrant, user-provided credentials)
 - [x] Chat data queries (function calling)
 - [ ] WASM embeddings for semantic search (v1.1)
@@ -891,6 +905,60 @@ npx serve .
 ---
 
 ## Session Log
+
+### Session 19 — 2026-01-14 (Security Hardening & Performance Optimization)
+
+**What was done:**
+
+1. **Vector Search Worker** (`js/workers/vector-search-worker.js`)
+   - Created Web Worker with Command Pattern for non-blocking cosine similarity
+   - Added `searchAsync()` method to LocalVectorStore
+   - Updated `rag.js` to use async search for 60fps maintenance
+   - Fallback to sync search for small vector sets (<500) or worker unavailability
+
+2. **Dependency Hardening** (`js/app.js`)
+   - Added `checkDependencies()` function validating 17 critical modules
+   - Checks both existence AND initialization state (e.g., `Spotify.isConfigured` is function)
+   - Detailed diagnostic UI with module status list
+   - "Copy Error Report" button for GitHub issue reporting
+   - Network status display (online/offline + connection type)
+
+3. **Origin Validation Enhancement** (`js/security/token-binding.js`)
+   - Comprehensive `checkSecureContext()` supporting:
+     - HTTPS: Always allowed
+     - HTTP localhost/127.0.0.1: Allowed (development)
+     - file://: Allowed with warning (offline use, crypto.subtle may fail)
+     - app://capacitor://: Allowed (native wrappers)
+     - Iframes: Cross-origin blocked
+     - data://blob://: Blocked (XSS vectors)
+
+4. **Prototype Pollution Prevention** (`js/security/index.js`)
+   - `sanitizeObject()` for recursive key filtering (__proto__, constructor, prototype)
+   - `safeJsonParse()` for untrusted JSON input
+   - `enablePrototypePollutionProtection()` freezes Object/Array/Function prototypes
+   - Called LAST in init() to avoid breaking legitimate library patches
+
+5. **CSS Updates** (`css/styles.css`)
+   - Added `.loading-error` state styling with diagnostic details accordion
+   - Mobile responsive error UI
+
+**Key Architectural Changes:**
+- **HNW Hierarchy**: Early-fail pattern catches script loading failures
+- **HNW Network**: Worker isolation separates math from storage operations
+- **HNW Wave**: Async search maintains UI responsiveness at 60fps
+
+**New Files:**
+- `js/workers/vector-search-worker.js` - Cosine similarity Web Worker
+
+**Modified Files:**
+- `js/local-vector-store.js` - Added searchAsync() method
+- `js/rag.js` - Updated to use async search
+- `js/app.js` - Added checkDependencies() + prototype freeze call
+- `js/security/token-binding.js` - Enhanced origin validation
+- `js/security/index.js` - Added prototype pollution prevention
+- `css/styles.css` - Loading error UI styles
+
+---
 
 ### Session 17 — 2026-01-14 (Architecture Documentation Update)
 
@@ -1069,7 +1137,7 @@ npx serve .
 
 **Key Features:**
 - **Semantic search**: Natural language queries over listening history
-- **User-provided credentials**: BYOK model for RAG
+- **User-provided credentials**: BYOI for RAG (choose local or cloud embeddings)
 - **Context-aware**: Search results inform LLM responses
 - **Free tier**: Works with user's own Qdrant cluster
 

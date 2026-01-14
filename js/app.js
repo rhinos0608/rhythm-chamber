@@ -45,6 +45,173 @@
 AppState.init();
 
 // ==========================================
+// Dependency Checking (HNW Hierarchy: Early-fail pattern)
+// ==========================================
+
+/**
+ * Critical dependencies that must be loaded and initialized
+ * Maps dependency name to { check: fn, required: boolean }
+ */
+const CRITICAL_DEPENDENCIES = {
+    // Core modules (required)
+    'AppState': { check: () => window.AppState && typeof window.AppState.init === 'function', required: true },
+    'Storage': { check: () => window.Storage && typeof window.Storage.init === 'function', required: true },
+    'Chat': { check: () => window.Chat && typeof window.Chat.sendMessage === 'function', required: true },
+    'Spotify': { check: () => window.Spotify && typeof window.Spotify.isConfigured === 'function', required: true },
+    'Patterns': { check: () => window.Patterns && typeof window.Patterns.detectAllPatterns === 'function', required: true },
+    'Personality': { check: () => window.Personality && typeof window.Personality.classifyPersonality === 'function', required: true },
+
+    // Services (required)
+    'TabCoordinator': { check: () => window.TabCoordinator && typeof window.TabCoordinator.init === 'function', required: true },
+    'SessionManager': { check: () => window.SessionManager && typeof window.SessionManager.init === 'function', required: true },
+    'MessageOperations': { check: () => window.MessageOperations && typeof window.MessageOperations.init === 'function', required: true },
+
+    // Controllers (required)
+    'ViewController': { check: () => window.ViewController && typeof window.ViewController.showChat === 'function', required: true },
+    'FileUploadController': { check: () => window.FileUploadController && typeof window.FileUploadController.init === 'function', required: true },
+    'SpotifyController': { check: () => window.SpotifyController && typeof window.SpotifyController.init === 'function', required: true },
+    'DemoController': { check: () => window.DemoController && typeof window.DemoController.init === 'function', required: true },
+    'ResetController': { check: () => window.ResetController && typeof window.ResetController.init === 'function', required: true },
+    'SidebarController': { check: () => window.SidebarController && typeof window.SidebarController.init === 'function', required: true },
+
+    // Security (required for token binding)
+    'Security': { check: () => window.Security && typeof window.Security.checkSecureContext === 'function', required: true },
+
+    // Optional modules (not required but useful)
+    'RAG': { check: () => window.RAG && typeof window.RAG.search === 'function', required: false },
+    'LocalVectorStore': { check: () => window.LocalVectorStore && typeof window.LocalVectorStore.init === 'function', required: false },
+    'LocalEmbeddings': { check: () => window.LocalEmbeddings && typeof window.LocalEmbeddings.initialize === 'function', required: false }
+};
+
+/**
+ * Verify all critical dependencies are loaded and properly initialized
+ * Checks both existence AND initialization state (not just window.X exists)
+ * @returns {{valid: boolean, loaded: string[], missing: string[], optional: string[]}}
+ */
+function checkDependencies() {
+    const loaded = [];
+    const missing = [];
+    const optional = [];
+
+    for (const [name, { check, required }] of Object.entries(CRITICAL_DEPENDENCIES)) {
+        try {
+            const isLoaded = check();
+            if (isLoaded) {
+                loaded.push(name);
+            } else if (required) {
+                missing.push(name);
+            } else {
+                optional.push(name);
+            }
+        } catch (e) {
+            // Check threw an error - module is broken
+            console.error(`[App] Dependency check failed for ${name}:`, e);
+            if (required) {
+                missing.push(`${name} (error: ${e.message})`);
+            } else {
+                optional.push(`${name} (error)`);
+            }
+        }
+    }
+
+    const valid = missing.length === 0;
+
+    if (!valid) {
+        console.error('[App] Missing critical dependencies:', missing);
+    }
+    if (optional.length > 0) {
+        console.warn('[App] Optional dependencies not loaded:', optional);
+    }
+
+    return { valid, loaded, missing, optional };
+}
+
+/**
+ * Show detailed loading error UI with diagnostic information
+ * @param {string[]} missing - Names of missing dependencies
+ * @param {string[]} optional - Names of optional dependencies not loaded
+ */
+function showLoadingError(missing, optional = []) {
+    const container = document.querySelector('.app-main');
+    if (!container) return;
+
+    // Generate dependency status list
+    const statusHtml = Object.entries(CRITICAL_DEPENDENCIES)
+        .map(([name, { required }]) => {
+            if (missing.includes(name) || missing.some(m => m.startsWith(name))) {
+                return `<li class="dep-missing">❌ ${name} ${required ? '(required)' : '(optional)'}</li>`;
+            } else if (optional.includes(name)) {
+                return `<li class="dep-optional">⚠️ ${name} (optional, not loaded)</li>`;
+            } else {
+                return `<li class="dep-loaded">✅ ${name}</li>`;
+            }
+        })
+        .join('');
+
+    // Generate error report for clipboard
+    const errorReport = {
+        timestamp: new Date().toISOString(),
+        userAgent: navigator.userAgent,
+        url: window.location.href,
+        missing,
+        optional,
+        online: navigator.onLine,
+        connection: navigator.connection ? {
+            type: navigator.connection.effectiveType,
+            downlink: navigator.connection.downlink,
+            rtt: navigator.connection.rtt
+        } : 'unavailable'
+    };
+
+    container.innerHTML = `
+        <div class="loading-error">
+            <div class="error-icon">⚠️</div>
+            <h2>Application Loading Error</h2>
+            <p class="error-message">
+                Some required modules failed to load. This often happens on slow or unstable network connections.
+            </p>
+            
+            <details class="diagnostics-details">
+                <summary>Show Diagnostics</summary>
+                <ul class="dependency-status">
+                    ${statusHtml}
+                </ul>
+                <p class="network-status">
+                    Network: ${navigator.onLine ? '🟢 Online' : '🔴 Offline'}
+                    ${navigator.connection ? ` | ${navigator.connection.effectiveType}` : ''}
+                </p>
+            </details>
+
+            <div class="error-actions">
+                <button class="btn btn-primary" onclick="location.reload()">
+                    Refresh Page
+                </button>
+                <button class="btn btn-secondary" onclick="copyErrorReport()">
+                    Copy Error Report
+                </button>
+            </div>
+            
+            <p class="error-help">
+                If this persists, please 
+                <a href="https://github.com/rhythm-chamber/issues" target="_blank">report the issue</a> 
+                with the error report.
+            </p>
+        </div>
+    `;
+
+    // Add copy function to window
+    window.copyErrorReport = function () {
+        const reportText = JSON.stringify(errorReport, null, 2);
+        navigator.clipboard.writeText(reportText).then(() => {
+            showToast('Error report copied to clipboard');
+        }).catch(() => {
+            // Fallback: show in alert
+            alert('Copy this error report:\n\n' + reportText);
+        });
+    };
+}
+
+// ==========================================
 // Controller Initialization
 // ==========================================
 
@@ -115,6 +282,16 @@ async function initializeControllers() {
  */
 async function init() {
     console.log('[App] Initializing with HNW modular architecture...');
+
+    // HNW Hierarchy: Early-fail if critical dependencies are missing
+    // This catches script loading failures on spotty mobile networks
+    const depCheck = checkDependencies();
+    if (!depCheck.valid) {
+        console.error('[App] Critical dependencies missing, showing error UI');
+        showLoadingError(depCheck.missing, depCheck.optional);
+        return; // Abort initialization
+    }
+    console.log(`[App] All ${depCheck.loaded.length} critical dependencies loaded`);
 
     // Initialize cross-tab coordination first (prevents race conditions)
     const isPrimary = await TabCoordinator.init();
@@ -206,6 +383,13 @@ async function init() {
 
     // Initialize sidebar controller
     await SidebarController.init();
+
+    // HNW Security: Enable prototype pollution protection LAST
+    // This must happen after all modules load to avoid breaking legitimate library patches
+    // Once enabled, Object.prototype and Array.prototype are frozen
+    if (window.Security?.enablePrototypePollutionProtection) {
+        window.Security.enablePrototypePollutionProtection();
+    }
 
     console.log('[App] Initialization complete');
 }

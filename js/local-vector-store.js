@@ -31,9 +31,71 @@ let vectors = new Map(); // id -> { id, vector, payload }
 let dbReady = false;
 let db = null;
 
+// Web Worker for async search (performance optimization)
+let searchWorker = null;
+let pendingSearches = new Map(); // id -> { resolve, reject }
+let requestIdCounter = 0;
+
 // ==========================================
-// IndexedDB Persistence
+// Web Worker Management
 // ==========================================
+
+/**
+ * Initialize the search worker
+ * @returns {Worker|null} The worker instance or null if unavailable
+ */
+function initSearchWorker() {
+    if (searchWorker) return searchWorker;
+
+    try {
+        searchWorker = new Worker('js/workers/vector-search-worker.js');
+
+        searchWorker.onmessage = (event) => {
+            const { type, id, results, stats, message } = event.data;
+
+            const pending = pendingSearches.get(id);
+            if (!pending) {
+                console.warn('[LocalVectorStore] Received response for unknown request:', id);
+                return;
+            }
+
+            pendingSearches.delete(id);
+
+            if (type === 'results') {
+                if (stats) {
+                    console.log(`[LocalVectorStore] Worker search: ${stats.vectorCount} vectors in ${stats.elapsedMs}ms`);
+                }
+                pending.resolve(results);
+            } else if (type === 'error') {
+                console.error('[LocalVectorStore] Worker error:', message);
+                pending.reject(new Error(message));
+            }
+        };
+
+        searchWorker.onerror = (error) => {
+            console.error('[LocalVectorStore] Worker error:', error);
+            // Reject all pending searches
+            for (const [id, pending] of pendingSearches) {
+                pending.reject(new Error('Worker crashed'));
+            }
+            pendingSearches.clear();
+            searchWorker = null;
+        };
+
+        console.log('[LocalVectorStore] Search worker initialized');
+        return searchWorker;
+    } catch (e) {
+        console.warn('[LocalVectorStore] Failed to initialize worker, using sync fallback:', e);
+        return null;
+    }
+}
+
+/**
+ * Generate unique request ID for worker correlation
+ */
+function generateRequestId() {
+    return `search-${++requestIdCounter}-${Date.now()}`;
+}
 
 /**
  * Initialize the IndexedDB database
@@ -221,8 +283,9 @@ const LocalVectorStore = {
     },
 
     /**
-     * Search for similar vectors
+     * Search for similar vectors (synchronous, main thread)
      * Uses brute-force cosine similarity (fast for ~1000 vectors)
+     * NOTE: For large vector sets, prefer searchAsync() to avoid UI blocking
      * 
      * @param {number[]} queryVector - The query embedding vector
      * @param {number} limit - Maximum results to return
@@ -252,6 +315,73 @@ const LocalVectorStore = {
         results.sort((a, b) => b.score - a.score);
 
         return results.slice(0, limit);
+    },
+
+    /**
+     * Search for similar vectors (asynchronous, Web Worker)
+     * Offloads cosine similarity computation to background thread
+     * Falls back to sync search if worker is unavailable
+     * 
+     * @param {number[]} queryVector - The query embedding vector
+     * @param {number} limit - Maximum results to return
+     * @param {number} threshold - Minimum similarity score (0-1)
+     * @returns {Promise<Array<{id, score, payload}>>} Sorted by similarity descending
+     */
+    async searchAsync(queryVector, limit = 5, threshold = 0.5) {
+        if (!queryVector || queryVector.length === 0) {
+            return [];
+        }
+
+        // Try to use worker for non-blocking search
+        const worker = initSearchWorker();
+
+        if (!worker) {
+            // Fallback to sync search
+            console.log('[LocalVectorStore] Worker unavailable, using sync search');
+            return this.search(queryVector, limit, threshold);
+        }
+
+        // Convert Map to Array for worker transfer
+        const vectorArray = Array.from(vectors.values());
+
+        // For small vector sets, use sync search (worker overhead not worth it)
+        if (vectorArray.length < 500) {
+            return this.search(queryVector, limit, threshold);
+        }
+
+        const requestId = generateRequestId();
+
+        return new Promise((resolve, reject) => {
+            // Timeout for worker response (30 seconds)
+            const timeout = setTimeout(() => {
+                pendingSearches.delete(requestId);
+                console.warn('[LocalVectorStore] Worker timeout, falling back to sync search');
+                resolve(this.search(queryVector, limit, threshold));
+            }, 30000);
+
+            pendingSearches.set(requestId, {
+                resolve: (results) => {
+                    clearTimeout(timeout);
+                    resolve(results);
+                },
+                reject: (error) => {
+                    clearTimeout(timeout);
+                    // Fallback to sync on worker error
+                    console.warn('[LocalVectorStore] Worker failed, falling back to sync:', error);
+                    resolve(this.search(queryVector, limit, threshold));
+                }
+            });
+
+            // Send search command to worker
+            worker.postMessage({
+                type: 'search',
+                id: requestId,
+                queryVector,
+                vectors: vectorArray,
+                limit,
+                threshold
+            });
+        });
     },
 
     /**

@@ -116,15 +116,15 @@ Free models have rate limits. Either:
 
 ## Power User Configuration
 
-### Bring Your Own Keys (BYOK)
+### Bring Your Own Intelligence (BYOI)
 
 Rhythm Chamber is designed for power users who want control:
 
-**Why BYOK is a feature:**
-- **Privacy**: You control your API keys
+**Why BYOI is a feature:**
+- **Privacy**: Local/offline models run keyless; cloud keys are optional when you want them
 - **Transparency**: No black box
-- **Flexibility**: Choose your model
-- **Cost**: Pay only for what you use
+- **Flexibility**: Choose your model and vector store
+- **Cost**: Pay only for what you use—or nothing if you stay local
 
 ### Local Model Support (Advanced)
 
@@ -281,9 +281,9 @@ Stats.fm requires:
 - Free forever
 - You control everything
 
-**BYOK model:**
-- You provide the keys
-- You control the AI
+**BYOI model:**
+- You decide the intelligence path (local/offline or your own keys for cloud)
+- You control the AI provider and vector store
 - You choose the model
 - You own your data
 
@@ -320,7 +320,7 @@ For teams or businesses needing help:
 
 **Rhythm Chamber is designed for power users who:**
 
-1. **Value privacy** → Local-first, BYOK
+1. **Value privacy** → Local-first, BYOI
 2. **Want control** → Transparent, configurable
 3. **Understand APIs** → Can set up keys
 4. **Appreciate simplicity** → Zero backend

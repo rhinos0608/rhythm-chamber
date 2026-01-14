@@ -22,6 +22,17 @@ flowchart TD
 
 ---
 
+## Path 0: Demo (Immediate, Sample Data)
+
+- Loads the pre-built "Emo Teen" persona with full streams/patterns/personality
+- Demo data is isolated in `AppState.demo` so nothing leaks into real uploads
+- Demo badge + exit CTA keep users oriented
+- Chat suggestions swap to demo-specific prompts to showcase depth instantly
+
+Use case: let users feel the reveal and chat quality without OAuth or upload friction.
+
+---
+
 ## Path A: Lite (Instant)
 
 **Spotify OAuth gives us:**
@@ -101,10 +112,10 @@ it since 2018. This matches your 'Emotional Archaeologist' pattern."
 ### Monetization Integration
 
 #### Phase 1: Sovereign Community (Zero Cost to User)
-- **Free users**: Full chat experience with free models, BYOK, 100% local
+- **Free users**: Full chat experience with free models, BYOI, 100% local
 - **Supporters**: $19 Lifetime - Unlock CLI, themes, badges, friend compare
   - **Purpose**: Funds external security audit & cloud infrastructure
-  - **Transparency**: "Your $19 funds our security partnership"
+- **Transparency**: "Your $19 funds our security partnership"
 - **Patrons**: $7/month - Community access + early features
 - **No paywalls**: Personality reveal always free, builds trust
 
@@ -179,6 +190,13 @@ You mark time through sound.
 
 **Chat = active exploration. Feed = ambient awareness.**
 
+## Profile Synthesizer UX
+
+- Users can ask, "Create a profile for my marathon training friend" → LLM calls `synthesize_profile` to build synthetic streams/patterns/personality.
+- Template search functions (`get_templates_by_genre/personality/pattern`) let chat surface curated personas for comparison.
+- Synthesized profiles are saved locally (ProfileStorage) so users can revisit, compare, or delete without touching real data.
+- Works alongside demo mode: try synthesis before ever uploading personal data.
+
 ---
 
 ## Shareable Cards (Viral Loop)
@@ -225,7 +243,7 @@ You mark time through sound.
 
 #### Free Tier ($0)
 - **Full Local Analysis**: Complete personality engine and pattern detection
-- **BYOK Chat**: Bring your own API keys for AI chat
+- **BYOI Chat**: Bring your own intelligence—local models or your own API keys
 - **Basic Cards**: Shareable personality cards
 - **100% Client-Side**: Zero server costs, maximum privacy
 - **Purpose**: Loss leader to build community and validate product

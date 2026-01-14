@@ -22,7 +22,7 @@ Plus: Get your listener personality type based on actual patterns in your data.
 | Charts and graphs | Identity and meaning |
 | Click to explore | Ask questions naturally |
 | Full history + real-time | Full history only (depth over speed) |
-| Low technical barrier | BYOK model (power users) |
+| Low technical barrier | BYOI model (power users bring their own intelligence) |
 
 ### The Zero-Backend Advantage
 
@@ -40,7 +40,7 @@ Plus: Get your listener personality type based on actual patterns in your data.
 |----------|-------------|
 | [Product Vision](docs/01-product-vision.md) | Chat-first positioning, competitive moat |
 | [User Experience](docs/02-user-experience.md) | Natural language queries, semantic search |
-| [Technical Architecture](docs/03-technical-architecture.md) | Zero-backend, BYOK model |
+| [Technical Architecture](docs/03-technical-architecture.md) | Zero-backend, BYOI architecture |
 | [Intelligence Engine](docs/04-intelligence-engine.md) | Personality types, data depth |
 | [Roadmap & Risks](docs/05-roadmap-and-risks.md) | 6-week timeline, competitive positioning |
 | [Advanced Features](docs/06-advanced-features.md) | Local models, transparency |
@@ -59,7 +59,7 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 1. **Chat-First Interface** — Natural language queries, not dashboard clicks
 2. **Semantic Search** — Ask "What was I like in 2019?" and get accurate answers
 3. **Zero-Backend Architecture** — Runs entirely in your browser
-4. **BYOK Model** — You control the AI, we provide the interface
+4. **BYOI Model** — You choose the intelligence (local or cloud), we orchestrate it
 5. **Privacy-First** — Your data never leaves your device
 6. **Power User Focus** — If you can set up an API key, you can use Rhythm Chamber
 
@@ -69,8 +69,10 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 ### What Stats.fm Can't Match
 
 - **"Your data never leaves your device"** — For the quantified-self crowd, this is hugely compelling
-- **"Bring Your Own Keys"** — Power users want control and transparency
+- **"Bring Your Own Intelligence"** — Run local models or your own cloud keys; you own the compute path
 - **"Chat with your complete history"** — ChatGPT can't handle your full Spotify export
+- **"Try before you upload"** — Demo mode ships with a full sample persona, isolated from real data
+- **"Template & Synth profiles"** — Generate synthetic profiles for comparison via the profile synthesizer
 - **"Identity over statistics"** — "You're an Emotional Archaeologist" vs "Top Artists: A, B, C"
 
 ### Why This Works
@@ -94,6 +96,11 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 
 ## Getting Started
 
+### 0. Demo Mode (Instant sample)
+- Load the built-in "Emo Teen" persona
+- Chat with pre-seeded insights without uploading anything
+- Exit demo to keep sample data isolated from your real analysis
+
 ### 1. Quick Snapshot (Instant)
 - Connect Spotify OAuth
 - Get current vibe analysis
@@ -105,7 +112,7 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 - Complete personality reveal + semantic search
 
 ### 3. Power User Setup
-- Add OpenRouter API key
+- Add OpenRouter API key (or use local models for BYOI)
 - Configure Qdrant for semantic search
 - Use local models for ultimate privacy
 
@@ -115,7 +122,7 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 
 | Tier | Price | What You Get |
 |------|-------|--------------|
-| **Free** | $0 | Full local analysis, BYOK chat, basic cards, personality reveal |
+| **Free** | $0 | Full local analysis, BYOI chat, basic cards, personality reveal |
 | **Supporter** | **$19 Lifetime** | CLI tool, premium themes, "Verified" badge, friend compare JSON import |
 | **Patron** | $7/month | Dev Discord access, roadmap voting, early beta features |
 
@@ -134,4 +141,4 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 
 We're not building a better stats.fm. We're building the next evolution of music self-discovery.
 
-**Your data. Your keys. Your control. Your insights.**
+**Your data. Your intelligence. Your control. Your insights.**

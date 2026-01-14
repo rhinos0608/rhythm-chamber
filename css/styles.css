@@ -2965,3 +2965,163 @@ a {
     white-space: normal;
   }
 }
+
+/* ==========================================
+   Loading Error State (Dependency Hardening)
+   ========================================== */
+
+.loading-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  text-align: center;
+  padding: var(--space-xl);
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.loading-error .error-icon {
+  font-size: 4rem;
+  margin-bottom: var(--space-lg);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.loading-error h2 {
+  color: var(--danger, #dc3545);
+  margin-bottom: var(--space-md);
+  font-size: 1.5rem;
+}
+
+.loading-error .error-message {
+  color: var(--text-secondary);
+  max-width: 450px;
+  margin-bottom: var(--space-lg);
+  line-height: 1.6;
+}
+
+/* Diagnostics Details Accordion */
+.diagnostics-details {
+  width: 100%;
+  max-width: 450px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-xl);
+  text-align: left;
+}
+
+.diagnostics-details summary {
+  padding: var(--space-md) var(--space-lg);
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-weight: 500;
+  transition: color var(--transition-fast);
+}
+
+.diagnostics-details summary:hover {
+  color: var(--text-primary);
+}
+
+.diagnostics-details[open] summary {
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: var(--space-sm);
+}
+
+/* Dependency Status List */
+.dependency-status {
+  list-style: none;
+  padding: var(--space-sm) var(--space-lg) var(--space-md);
+  margin: 0;
+  font-size: 0.85rem;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.dependency-status li {
+  padding: var(--space-xs) 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.dependency-status .dep-loaded {
+  color: var(--success, #28a745);
+}
+
+.dependency-status .dep-missing {
+  color: var(--danger, #dc3545);
+  font-weight: 600;
+}
+
+.dependency-status .dep-optional {
+  color: var(--warning, #ffc107);
+}
+
+.network-status {
+  padding: var(--space-sm) var(--space-lg);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-subtle);
+  margin: 0;
+}
+
+/* Error Actions */
+.error-actions {
+  display: flex;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: var(--space-lg);
+}
+
+.loading-error .error-help {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.loading-error .error-help a {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}
+
+.loading-error .error-help a:hover {
+  color: var(--accent-secondary);
+}
+
+/* Mobile Responsive for Loading Error */
+@media (max-width: 480px) {
+  .loading-error {
+    padding: var(--space-lg);
+  }
+
+  .loading-error .error-icon {
+    font-size: 3rem;
+  }
+
+  .loading-error h2 {
+    font-size: 1.25rem;
+  }
+
+  .error-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .error-actions .btn {
+    width: 100%;
+  }
+}

@@ -42,7 +42,7 @@ User's Browser
 ├── Chat via **Your AI** (Local or Cloud)
 │   ├── **Local AI**: Ollama (http://localhost:11434)
 │   ├── **Local AI**: LM Studio (http://localhost:1234/v1)
-│   └── **Cloud AI**: OpenRouter (optional, BYOK)
+│   └── **Cloud AI**: OpenRouter (optional, BYOI with your key)
 └── Generate shareable cards (Canvas API)
 
 Your "backend":
@@ -53,24 +53,23 @@ Your "backend":
 
 ---
 
-## Bring Your Own AI (BYOAI) Model
+## Bring Your Own Intelligence (BYOI)
 
-### Why Local AI is the Future
+### Why BYOI > BYOK
 
-**Traditional BYOK (Bring Your Own Key):**
+**Traditional BYOK (keys-only cloud):**
 - Users provide cloud API keys (OpenRouter, OpenAI)
 - Data leaves the device
 - Ongoing API costs
 - Privacy concerns
 
-**Our BYOAI (Bring Your Own AI):**
-- **Users bring their own AI infrastructure**
-- **Local models**: Ollama, LM Studio (100% private)
+**Our BYOI (you own the intelligence path):**
+- **Local models**: Ollama, LM Studio (100% private, keyless)
 - **Cloud models**: OpenRouter (optional, user-controlled)
-- **Zero data transmission** for local AI
-- **No API costs** for local AI
+- **Vector stores**: User-provided Qdrant or fully local embeddings
+- **Cost control**: Choose free local, free cloud, or premium as needed
 
-### Supported AI Providers
+### Supported Intelligence Providers
 
 | Provider | Type | Setup | Cost | Privacy | Best For |
 |----------|------|-------|------|---------|----------|
@@ -737,7 +736,7 @@ npx serve .
 ### Phase 1: Core Features
 
 #### Free Tier
-- [x] Full local analysis, BYOAI chat, basic cards
+- [x] Full local analysis, BYOI chat, basic cards
 - [x] Semantic search (Qdrant, user-provided credentials)
 - [x] Chat data queries (function calling)
 - [ ] WASM embeddings for semantic search (v1.1)
@@ -783,6 +782,29 @@ npx serve .
 ---
 
 ## Session Log
+
+### Session 19 — 2026-01-14 (Security Hardening & Performance Optimization)
+
+**What was done:**
+
+1. **Vector Search Worker** - Created `js/workers/vector-search-worker.js` with Command Pattern interface for non-blocking cosine similarity. Added `searchAsync()` to LocalVectorStore, updated `rag.js` to use async search.
+
+2. **Dependency Hardening** - Added `checkDependencies()` to `app.js` validating 17 critical modules at startup. Includes detailed diagnostic UI with module status, network info, and "Copy Error Report" button for GitHub issues.
+
+3. **Origin Validation** - Enhanced `checkSecureContext()` in `token-binding.js` with comprehensive protocol/hostname validation supporting HTTPS, localhost, file://, app://, capacitor://. File:// allowed with crypto.subtle warning.
+
+4. **Prototype Pollution Prevention** - Added `sanitizeObject()`, `safeJsonParse()`, and `enablePrototypePollutionProtection()` to security module. Freezes Object/Array/Function prototypes at END of init() to avoid breaking libraries.
+
+5. **CSS Updates** - Added `.loading-error` state styling with diagnostic details accordion and mobile responsive design.
+
+**Key Files:**
+- `js/workers/vector-search-worker.js` (NEW)
+- `js/local-vector-store.js` - Added searchAsync()
+- `js/app.js` - checkDependencies() + prototype freeze
+- `js/security/token-binding.js` - Enhanced origin validation
+- `js/security/index.js` - Prototype pollution prevention
+
+---
 
 ### Session 18 — 2026-01-14 (Function Module Refactoring)
 
@@ -987,7 +1009,7 @@ npx serve .
 
 **Key Features:**
 - **Semantic search**: Natural language queries over listening history
-- **User-provided credentials**: BYOK model for RAG
+- **User-provided credentials**: BYOI for RAG (local embeddings or user-supplied keys)
 - **Context-aware**: Search results inform LLM responses
 - **Free tier**: Works with user's own Qdrant cluster
 
