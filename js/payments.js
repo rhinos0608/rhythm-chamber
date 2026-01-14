@@ -82,8 +82,8 @@ function handlePaymentReturn() {
     // No-op for MVP - Stripe integration removed
 }
 
-// Public API
-window.Payments = {
+// ES Module export
+export const Payments = {
     isPremium,
     getPremiumStatus,
     upgradeToPremium,
@@ -108,3 +108,11 @@ window.Payments = {
         }
     }
 };
+
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.Payments = Payments;
+}
+
+console.log('[Payments] Module loaded');
+

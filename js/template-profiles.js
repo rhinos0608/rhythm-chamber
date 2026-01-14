@@ -513,7 +513,14 @@ const templateStore = new TemplateProfileStore();
 // Public API
 // ==========================================
 
-window.TemplateProfileStore = templateStore;
-window.TemplateProfileStoreClass = TemplateProfileStore; // For testing
+// ES Module exports
+export { templateStore as TemplateProfileStore, TemplateProfileStore as TemplateProfileStoreClass };
+
+// Keep window globals for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.TemplateProfileStore = templateStore;
+    window.TemplateProfileStoreClass = TemplateProfileStore;
+}
 
 console.log('[TemplateProfiles] Module loaded');
+

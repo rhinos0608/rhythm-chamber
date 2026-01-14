@@ -71,4 +71,13 @@ async function shareCard(personality) {
     return 'downloaded';
 }
 
-window.Cards = { generateCard, downloadCard, shareCard };
+// ES Module export
+export const Cards = { generateCard, downloadCard, shareCard };
+
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.Cards = Cards;
+}
+
+console.log('[Cards] Module loaded');
+

@@ -294,9 +294,17 @@ function loadScript(src, options = {}) {
     });
 }
 
-// Public API
-window.Parser = {
+// ES Module export
+export const Parser = {
     parseSpotifyExport,
     enrichStreams,
     generateChunks
 };
+
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.Parser = Parser;
+}
+
+console.log('[Parser] Module loaded');
+

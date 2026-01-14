@@ -248,13 +248,6 @@ async function saveConfig(config) {
                 qdrantApiKey: config.qdrantApiKey
             });
             console.log('[RAG] Credentials encrypted with AES-GCM');
-        } else {
-            // Fallback warning - credentials not properly secured
-            console.warn('[RAG] Security module not available - credentials stored unencrypted!');
-            const legacy = JSON.parse(localStorage.getItem(RAG_STORAGE_KEY) || '{}');
-            legacy.qdrantUrl = config.qdrantUrl;
-            legacy.qdrantApiKey = config.qdrantApiKey;
-            localStorage.setItem(RAG_STORAGE_KEY, JSON.stringify(legacy));
         }
     }
 }
@@ -1445,8 +1438,8 @@ async function getSemanticContext(query, limit = 3) {
     }
 }
 
-// Public API
-window.RAG = {
+// ES Module export
+export const RAG = {
     getConfig,
     getConfigSync,  // Sync version for UI checks
     saveConfig,
@@ -1484,5 +1477,10 @@ window.RAG = {
     LOCAL_EMBEDDING_DIMENSIONS
 };
 
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.RAG = RAG;
+}
 
 console.log('[RAG] RAG module loaded with local fallback + incremental embedding support');
+

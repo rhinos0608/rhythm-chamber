@@ -495,7 +495,14 @@ const profileSynthesizer = new ProfileSynthesizer();
 // Public API
 // ==========================================
 
-window.ProfileSynthesizer = profileSynthesizer;
-window.ProfileSynthesizerClass = ProfileSynthesizer; // For testing
+// ES Module exports
+export { profileSynthesizer as ProfileSynthesizer, ProfileSynthesizer as ProfileSynthesizerClass };
+
+// Keep window globals for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.ProfileSynthesizer = profileSynthesizer;
+    window.ProfileSynthesizerClass = ProfileSynthesizer;
+}
 
 console.log('[ProfileSynthesizer] Module loaded');
+

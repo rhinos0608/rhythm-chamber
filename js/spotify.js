@@ -836,6 +836,12 @@ const Spotify = (() => {
     };
 })();
 
-// Make available globally
-window.Spotify = Spotify;
+// ES Module export
+export { Spotify };
 
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.Spotify = Spotify;
+}
+
+console.log('[Spotify] Module loaded');

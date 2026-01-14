@@ -1616,8 +1616,8 @@ async function saveToolsAndClose() {
     showToast('Tool settings saved!');
 }
 
-// Public API
-window.Settings = {
+// ES Module export
+export const Settings = {
     getSettings,
     getSettingsAsync,
     saveSettings,
@@ -1658,3 +1658,11 @@ window.Settings = {
     LLM_PROVIDERS,
     DEFAULT_ENDPOINTS
 };
+
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.Settings = Settings;
+}
+
+console.log('[Settings] Module loaded');
+

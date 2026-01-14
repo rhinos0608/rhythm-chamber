@@ -1136,8 +1136,8 @@ if (typeof window !== 'undefined') {
     window.addEventListener('pagehide', emergencyBackupSync);
 }
 
-// Public API
-window.Chat = {
+// ES Module export
+export const Chat = {
     initChat,
     sendMessage,
     regenerateLastResponse,
@@ -1160,3 +1160,11 @@ window.Chat = {
     emergencyBackupSync,
     recoverEmergencyBackup
 };
+
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.Chat = Chat;
+}
+
+console.log('[Chat] Module loaded');
+
