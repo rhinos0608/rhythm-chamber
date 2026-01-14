@@ -1,46 +1,36 @@
 /**
  * Chat Integration Module
- * Handles conversation with OpenRouter API
+ * 
+ * ARCHITECTURE (HNW Compliant):
+ * - Chat orchestration: API calls, prompt building, function calling
+ * - Session state: DELEGATED to SessionManager (js/services/session-manager.js)
+ * - Message operations: DELEGATED to MessageOperations (js/services/message-operations.js)
+ * - LLM calls: DELEGATED to ProviderInterface (js/providers/provider-interface.js)
  * 
  * System prompts are defined in prompts.js for easy editing
  * Data queries are handled by data-query.js
  */
 
-const CONVERSATION_STORAGE_KEY = 'rhythm_chamber_conversation';  // Legacy, for migration
-const CURRENT_SESSION_KEY = 'rhythm_chamber_current_session';
-const EMERGENCY_BACKUP_KEY = 'rhythm_chamber_emergency_backup';  // Sync backup for beforeunload
-
 // HNW Fix: Timeout constants to prevent cascade failures
 const CHAT_API_TIMEOUT_MS = 60000;           // 60 second timeout for cloud API calls
 const LOCAL_LLM_TIMEOUT_MS = 90000;          // 90 second timeout for local LLM providers
 const CHAT_FUNCTION_TIMEOUT_MS = 30000;      // 30 second timeout for function execution
-const AUTO_SAVE_DELAY_MS = 2000;         // Debounce session saves
-const EMERGENCY_BACKUP_MAX_AGE_MS = 3600000;  // 1 hour max age for emergency backups
 
-let conversationHistory = [];
+// Chat-specific state (session state managed by SessionManager)
+// Chat-specific state (session state managed by SessionManager)
 let userContext = null;
 let streamsData = null;  // Actual streaming data for queries
 
-// Session management state
-let currentSessionId = null;
-let currentSessionCreatedAt = null;  // HNW Fix: Preserve createdAt across saves
-let autoSaveTimeoutId = null;
-let sessionUpdateListeners = [];
-
-/**
- * Generate a UUID for session IDs
- */
-function generateUUID() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
-}
+// ==========================================
+// DELEGATING TO SessionManager:
+// All session operations (create, load, save, switch, delete)
+// are handled by SessionManager. Chat.js only manages chat-specific
+// state (userContext, streamsData) and orchestrates API calls.
+// ==========================================
 
 /**
  * Initialize chat with user context and streams data
- * Now supports persistent session storage
+ * Delegates session management to SessionManager
  */
 async function initChat(personality, patterns, summary, streams = null) {
     userContext = {
@@ -52,61 +42,29 @@ async function initChat(personality, patterns, summary, streams = null) {
     // Store streams for data queries
     streamsData = streams;
 
-    // Recover any emergency backup from previous session (tab closed mid-save)
-    await recoverEmergencyBackup();
-
-    // Try to load current session or create new one
-    await loadOrCreateSession();
+    // Initialize SessionManager (handles emergency backup recovery)
+    if (window.SessionManager) {
+        window.SessionManager.setUserContext(personality);
+        await window.SessionManager.init();
+    }
 
     // Register for storage updates to refresh data
     if (window.Storage?.onUpdate) {
         window.Storage.onUpdate(handleStorageUpdate);
     }
 
+    // Initialize MessageOperations with dependencies
+    if (window.MessageOperations?.init) {
+        window.MessageOperations.init({
+            DataQuery: window.DataQuery,
+            RAG: window.RAG,
+            TokenCounter: window.TokenCounter
+        });
+        window.MessageOperations.setUserContext(userContext);
+        window.MessageOperations.setStreamsData(streams);
+    }
+
     return buildSystemPrompt();
-}
-
-/**
- * Load existing session or create a new one
- * Uses unified Storage API with localStorage fallback
- */
-async function loadOrCreateSession() {
-    // Try unified storage first for current session ID
-    let savedSessionId = null;
-    if (window.Storage?.getConfig) {
-        savedSessionId = await window.Storage.getConfig(CURRENT_SESSION_KEY);
-    }
-    // Fallback to localStorage
-    if (!savedSessionId) {
-        savedSessionId = localStorage.getItem(CURRENT_SESSION_KEY);
-    }
-
-    if (savedSessionId) {
-        const session = await loadSession(savedSessionId);
-        if (session) {
-            return session;
-        }
-    }
-
-
-    // Migrate from legacy sessionStorage if exists
-    try {
-        const legacyData = sessionStorage.getItem(CONVERSATION_STORAGE_KEY);
-        if (legacyData) {
-            const history = JSON.parse(legacyData);
-            if (history.length > 0) {
-                console.log('[Chat] Migrating legacy conversation to session storage');
-                await createNewSession(history);
-                sessionStorage.removeItem(CONVERSATION_STORAGE_KEY);
-                return;
-            }
-        }
-    } catch (e) {
-        console.warn('[Chat] Legacy migration failed:', e);
-    }
-
-    // No saved session, create new
-    await createNewSession();
 }
 
 /**
@@ -116,369 +74,158 @@ async function handleStorageUpdate(event) {
     if (event.type === 'streams' && event.count > 0) {
         console.log('[Chat] Data updated, refreshing streams...');
         streamsData = await window.Storage.getStreams();
+        // Update MessageOperations with new data
+        if (window.MessageOperations?.setStreamsData) {
+            window.MessageOperations.setStreamsData(streamsData);
+        }
     }
 }
 
 /**
  * Save conversation to IndexedDB (debounced)
+ * Delegates to SessionManager
  */
 function saveConversation() {
-    // Cancel any pending save
-    if (autoSaveTimeoutId) {
-        clearTimeout(autoSaveTimeoutId);
+    if (window.SessionManager?.saveConversation) {
+        window.SessionManager.saveConversation();
     }
-
-    // Debounce the save
-    autoSaveTimeoutId = setTimeout(async () => {
-        await saveCurrentSession();
-        autoSaveTimeoutId = null;
-    }, AUTO_SAVE_DELAY_MS);
 }
 
 /**
- * Flush pending save asynchronously - use when we have time (visibilitychange)
- * This has time to complete because tab is going hidden, not closing
+ * Flush pending save asynchronously
+ * Delegates to SessionManager
  */
 async function flushPendingSaveAsync() {
-    if (autoSaveTimeoutId) {
-        clearTimeout(autoSaveTimeoutId);
-        autoSaveTimeoutId = null;
-    }
-    if (currentSessionId && conversationHistory.length > 0) {
-        try {
-            await saveCurrentSession();
-            console.log('[Chat] Session flushed on visibility change');
-        } catch (e) {
-            console.error('[Chat] Flush save failed:', e);
-        }
+    if (window.SessionManager?.flushPendingSaveAsync) {
+        return window.SessionManager.flushPendingSaveAsync();
     }
 }
 
 /**
- * Emergency synchronous backup to localStorage - use when tab is closing
- * beforeunload requires sync completion; async saves will be abandoned
- * Next load will detect this and migrate to IndexedDB
+ * Emergency synchronous backup to localStorage
+ * Delegates to SessionManager
  */
 function emergencyBackupSync() {
-    if (!currentSessionId || conversationHistory.length === 0) return;
-
-    const backup = {
-        sessionId: currentSessionId,
-        createdAt: currentSessionCreatedAt,
-        messages: conversationHistory.slice(-100),
-        timestamp: Date.now()
-    };
-
-    try {
-        localStorage.setItem(EMERGENCY_BACKUP_KEY, JSON.stringify(backup));
-        console.log('[Chat] Emergency backup saved to localStorage');
-    } catch (e) {
-        // localStorage might be full or unavailable
-        console.error('[Chat] Emergency backup failed:', e);
+    if (window.SessionManager?.emergencyBackupSync) {
+        window.SessionManager.emergencyBackupSync();
     }
 }
 
 /**
- * Recover emergency backup on load - called during initChat()
- * If we have a backup newer than what's in IndexedDB, restore it
+ * Recover emergency backup on load
+ * Delegates to SessionManager (called automatically in SessionManager.init())
  */
 async function recoverEmergencyBackup() {
-    const backupStr = localStorage.getItem(EMERGENCY_BACKUP_KEY);
-    if (!backupStr) return false;
-
-    try {
-        const backup = JSON.parse(backupStr);
-
-        // Only recover if backup is recent (< 1 hour old)
-        if (Date.now() - backup.timestamp > EMERGENCY_BACKUP_MAX_AGE_MS) {
-            console.log('[Chat] Emergency backup too old, discarding');
-            localStorage.removeItem(EMERGENCY_BACKUP_KEY);
-            return false;
-        }
-
-        // Check if session exists with fewer messages
-        const existing = await window.Storage?.getSession?.(backup.sessionId);
-        if (existing) {
-            const existingCount = existing.messages?.length || 0;
-            const backupCount = backup.messages?.length || 0;
-
-            if (backupCount > existingCount) {
-                // Backup has more messages - update existing session
-                existing.messages = backup.messages;
-                existing.createdAt = backup.createdAt || existing.createdAt;
-                await window.Storage.saveSession(existing);
-                console.log('[Chat] Recovered', backupCount - existingCount, 'messages from emergency backup');
-            }
-        } else if (backup.messages && backup.messages.length > 0) {
-            // Session doesn't exist, create it from backup
-            await window.Storage?.saveSession?.({
-                id: backup.sessionId,
-                title: 'Recovered Chat',
-                createdAt: backup.createdAt || new Date().toISOString(),
-                messages: backup.messages
-            });
-            console.log('[Chat] Created new session from emergency backup');
-        }
-
-        localStorage.removeItem(EMERGENCY_BACKUP_KEY);
-        return true;
-    } catch (e) {
-        console.error('[Chat] Emergency backup recovery failed:', e);
-        localStorage.removeItem(EMERGENCY_BACKUP_KEY);
-        return false;
+    if (window.SessionManager?.recoverEmergencyBackup) {
+        return window.SessionManager.recoverEmergencyBackup();
     }
+    return false;
 }
 
 /**
  * Save current session to IndexedDB immediately
+ * Delegates to SessionManager
  */
 async function saveCurrentSession() {
-    if (!currentSessionId || !window.Storage?.saveSession) {
-        return;
+    if (window.SessionManager?.saveCurrentSession) {
+        return window.SessionManager.saveCurrentSession();
     }
-
-    try {
-        const session = {
-            id: currentSessionId,
-            title: generateSessionTitle(),
-            createdAt: currentSessionCreatedAt,  // HNW Fix: Preserve original createdAt
-            messages: conversationHistory.slice(-100), // Limit to 100 messages
-            metadata: {
-                personalityName: userContext?.personality?.name || 'Unknown',
-                personalityEmoji: userContext?.personality?.emoji || '🎵',
-                isLiteMode: false
-            }
-        };
-
-        await window.Storage.saveSession(session);
-        console.log('[Chat] Session saved:', currentSessionId);
-        notifySessionUpdate();
-    } catch (e) {
-        console.error('[Chat] Failed to save session:', e);
-    }
-}
-
-/**
- * Generate a title for the session based on first user message
- */
-function generateSessionTitle() {
-    const firstUserMsg = conversationHistory.find(m => m.role === 'user');
-    if (firstUserMsg?.content) {
-        const title = firstUserMsg.content.slice(0, 50);
-        return title.length < firstUserMsg.content.length ? title + '...' : title;
-    }
-    return 'New Chat';
 }
 
 /**
  * Create a new session
- * @param {Array} initialMessages - Optional initial messages (for migration)
+ * Delegates to SessionManager
  */
 async function createNewSession(initialMessages = []) {
-    // Flush any pending saves for previous session
-    if (autoSaveTimeoutId) {
-        clearTimeout(autoSaveTimeoutId);
-        await saveCurrentSession();
+    if (window.SessionManager?.createNewSession) {
+        return window.SessionManager.createNewSession(initialMessages);
     }
-
-    currentSessionId = generateUUID();
-    currentSessionCreatedAt = new Date().toISOString();  // HNW Fix: Set createdAt for new session
-    conversationHistory = [...initialMessages];
-
-    // Save current session ID to unified storage and localStorage
-    if (window.Storage?.setConfig) {
-        window.Storage.setConfig(CURRENT_SESSION_KEY, currentSessionId).catch(e =>
-            console.warn('[Chat] Failed to save session ID to unified storage:', e)
-        );
-    }
-    localStorage.setItem(CURRENT_SESSION_KEY, currentSessionId);
-
-
-    // Save immediately if we have messages
-    if (initialMessages.length > 0) {
-        await saveCurrentSession();
-    }
-
-    console.log('[Chat] Created new session:', currentSessionId);
-    notifySessionUpdate();
-    return currentSessionId;
 }
 
 /**
  * Load a session by ID
- * @param {string} sessionId - Session ID to load
- * @returns {Object|null} Session object or null if not found/invalid
+ * Delegates to SessionManager
  */
 async function loadSession(sessionId) {
-    if (!window.Storage?.getSession) {
-        console.warn('[Chat] Storage not available');
-        return null;
+    if (window.SessionManager?.loadSession) {
+        return window.SessionManager.loadSession(sessionId);
     }
-
-    try {
-        const session = await window.Storage.getSession(sessionId);
-
-        if (!session) {
-            console.warn(`[Chat] Session ${sessionId} not found`);
-            return null;
-        }
-
-        // Validate session structure (HNW defensive)
-        if (!validateSession(session)) {
-            console.warn(`[Chat] Session ${sessionId} is corrupted`);
-            return null;
-        }
-
-        currentSessionId = session.id;
-        currentSessionCreatedAt = session.createdAt;  // HNW Fix: Preserve createdAt from loaded session
-        conversationHistory = session.messages || [];
-
-        // Save current session ID to unified storage and localStorage
-        if (window.Storage?.setConfig) {
-            window.Storage.setConfig(CURRENT_SESSION_KEY, currentSessionId).catch(e =>
-                console.warn('[Chat] Failed to save session ID to unified storage:', e)
-            );
-        }
-        localStorage.setItem(CURRENT_SESSION_KEY, currentSessionId);
-
-        console.log('[Chat] Loaded session:', sessionId, 'with', conversationHistory.length, 'messages');
-        return session;
-
-    } catch (e) {
-        console.error('[Chat] Failed to load session:', e);
-        return null;
-    }
-}
-
-/**
- * Validate session structure (HNW defensive programming)
- */
-function validateSession(session) {
-    return session
-        && typeof session.id === 'string'
-        && Array.isArray(session.messages)
-        && typeof session.createdAt === 'string';
+    return null;
 }
 
 /**
  * Switch to a different session
- * @param {string} sessionId - Session ID to switch to
+ * Delegates to SessionManager
  */
 async function switchSession(sessionId) {
-    // Save current session first
-    if (currentSessionId && autoSaveTimeoutId) {
-        clearTimeout(autoSaveTimeoutId);
-        await saveCurrentSession();
-    }
-
-    const session = await loadSession(sessionId);
-    if (session) {
-        notifySessionUpdate();
-        return true;
+    if (window.SessionManager?.switchSession) {
+        return window.SessionManager.switchSession(sessionId);
     }
     return false;
 }
 
 /**
  * Get all sessions for sidebar display
+ * Delegates to SessionManager
  */
 async function listSessions() {
-    if (!window.Storage?.getAllSessions) {
-        return [];
+    if (window.SessionManager?.listSessions) {
+        return window.SessionManager.listSessions();
     }
-    try {
-        return await window.Storage.getAllSessions();
-    } catch (e) {
-        console.error('[Chat] Failed to list sessions:', e);
-        return [];
-    }
+    return [];
 }
 
 /**
  * Delete a session by ID
- * @param {string} sessionId - Session ID to delete
+ * Delegates to SessionManager
  */
 async function deleteSessionById(sessionId) {
-    if (!window.Storage?.deleteSession) {
-        return false;
+    if (window.SessionManager?.deleteSessionById) {
+        return window.SessionManager.deleteSessionById(sessionId);
     }
-
-    try {
-        await window.Storage.deleteSession(sessionId);
-
-        // If we deleted the current session, create a new one
-        if (sessionId === currentSessionId) {
-            await createNewSession();
-        }
-
-        notifySessionUpdate();
-        return true;
-    } catch (e) {
-        console.error('[Chat] Failed to delete session:', e);
-        return false;
-    }
+    return false;
 }
 
 /**
  * Rename a session
- * @param {string} sessionId - Session ID to rename
- * @param {string} newTitle - New title
+ * Delegates to SessionManager
  */
 async function renameSession(sessionId, newTitle) {
-    if (!window.Storage?.getSession || !window.Storage?.saveSession) {
-        return false;
+    if (window.SessionManager?.renameSession) {
+        return window.SessionManager.renameSession(sessionId, newTitle);
     }
-
-    try {
-        const session = await window.Storage.getSession(sessionId);
-        if (session) {
-            session.title = newTitle;
-            await window.Storage.saveSession(session);
-            notifySessionUpdate();
-            return true;
-        }
-        return false;
-    } catch (e) {
-        console.error('[Chat] Failed to rename session:', e);
-        return false;
-    }
+    return false;
 }
 
 /**
  * Get current session ID
+ * Delegates to SessionManager
  */
 function getCurrentSessionId() {
-    return currentSessionId;
+    if (window.SessionManager?.getCurrentSessionId) {
+        return window.SessionManager.getCurrentSessionId();
+    }
+    return null;
 }
 
 /**
  * Register a listener for session updates
+ * Delegates to SessionManager
  */
 function onSessionUpdate(callback) {
-    if (typeof callback === 'function') {
-        sessionUpdateListeners.push(callback);
+    if (window.SessionManager?.onSessionUpdate) {
+        window.SessionManager.onSessionUpdate(callback);
     }
 }
 
 /**
- * Notify all session update listeners
- */
-function notifySessionUpdate() {
-    sessionUpdateListeners.forEach(cb => {
-        try {
-            cb({ sessionId: currentSessionId });
-        } catch (e) {
-            console.error('[Chat] Error in session update listener:', e);
-        }
-    });
-}
-
-/**
  * Clear conversation history and create new session
+ * Delegates to SessionManager
  */
 function clearConversation() {
-    conversationHistory = [];
-    createNewSession();
+    if (window.SessionManager?.clearConversation) {
+        window.SessionManager.clearConversation();
+    }
 }
 
 /**
@@ -689,11 +436,13 @@ async function sendMessage(message, optionsOrKey = null) {
         throw new Error('Chat not initialized. Call initChat first.');
     }
 
-    // Add user message to history
-    conversationHistory.push({
-        role: 'user',
-        content: message
-    });
+    // Add user message to history via SessionManager
+    if (window.SessionManager?.addMessageToHistory) {
+        window.SessionManager.addMessageToHistory({
+            role: 'user',
+            content: message
+        });
+    }
 
     // Try to get semantic context from RAG if configured
     let semanticContext = null;
@@ -707,6 +456,9 @@ async function sendMessage(message, optionsOrKey = null) {
             console.warn('[Chat] RAG semantic search failed:', err.message);
         }
     }
+
+    // Get current history from SessionManager
+    const conversationHistory = window.SessionManager?.getHistory?.() || [];
 
     // Build messages array with system prompt (includes semantic context if available)
     const messages = [
@@ -746,10 +498,12 @@ async function sendMessage(message, optionsOrKey = null) {
         // Return a helpful message if no API key configured
         const queryContext = generateQueryContext(message);
         const fallbackResponse = generateFallbackResponse(message, queryContext);
-        conversationHistory.push({
-            role: 'assistant',
-            content: fallbackResponse
-        });
+        if (window.SessionManager?.addMessageToHistory) {
+            window.SessionManager.addMessageToHistory({
+                role: 'assistant',
+                content: fallbackResponse
+            });
+        }
         return {
             content: fallbackResponse,
             status: 'success', // Treat fallback as success for now to show message
@@ -869,10 +623,12 @@ async function sendMessage(message, optionsOrKey = null) {
         const assistantContent = responseMessage?.content || 'I couldn\'t generate a response.';
 
         // Add final response to history
-        conversationHistory.push({
-            role: 'assistant',
-            content: assistantContent
-        });
+        if (window.SessionManager?.addMessageToHistory) {
+            window.SessionManager.addMessageToHistory({
+                role: 'assistant',
+                content: assistantContent
+            });
+        }
 
         // Save conversation to session storage
         saveConversation();
@@ -890,11 +646,13 @@ async function sendMessage(message, optionsOrKey = null) {
         const fallbackResponse = generateFallbackResponse(message, queryContext);
 
         // Add fallback to history but mark as error context if needed
-        conversationHistory.push({
-            role: 'assistant',
-            content: fallbackResponse,
-            error: true
-        });
+        if (window.SessionManager?.addMessageToHistory) {
+            window.SessionManager.addMessageToHistory({
+                role: 'assistant',
+                content: fallbackResponse,
+                error: true
+            });
+        }
         saveConversation();
 
         return {
@@ -922,11 +680,13 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
     console.log('[Chat] LLM requested tool calls:', responseMessage.tool_calls.map(tc => tc.function.name));
 
     // Add assistant's tool call message to conversation
-    conversationHistory.push({
-        role: 'assistant',
-        content: responseMessage.content || null,
-        tool_calls: responseMessage.tool_calls
-    });
+    if (window.SessionManager?.addMessageToHistory) {
+        window.SessionManager.addMessageToHistory({
+            role: 'assistant',
+            content: responseMessage.content || null,
+            tool_calls: responseMessage.tool_calls
+        });
+    }
 
     // Execute each function call and add results
     // HNW Fix: Add timeout to prevent indefinite hangs
@@ -1002,17 +762,22 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
         if (onProgress) onProgress({ type: 'tool_end', tool: functionName, result });
 
         // Add tool result to conversation
-        conversationHistory.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            content: JSON.stringify(result)
-        });
+        if (window.SessionManager?.addMessageToHistory) {
+            window.SessionManager.addMessageToHistory({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                content: JSON.stringify(result)
+            });
+        }
     }
+
+    // Get updated history for follow-up call
+    const updatedHistory = window.SessionManager?.getHistory?.() || [];
 
     // Make follow-up call with function results
     const followUpMessages = [
         { role: 'system', content: buildSystemPrompt() },
-        ...conversationHistory
+        ...updatedHistory
     ];
 
     // Notify UI: Thinking again (processing tool results)
@@ -1111,8 +876,9 @@ function buildProviderConfig(provider, settings, baseConfig) {
 }
 
 /**
- * Unified LLM call routing - routes to appropriate provider
- * Delegates to provider modules when available
+ * Call the LLM provider
+ * Delegates to ProviderInterface for unified provider routing
+ * 
  * @param {object} config - Provider config from buildProviderConfig
  * @param {string} apiKey - API key (for OpenRouter)
  * @param {Array} messages - Chat messages
@@ -1121,227 +887,11 @@ function buildProviderConfig(provider, settings, baseConfig) {
  * @returns {Promise<object>} Response in OpenAI-compatible format
  */
 async function callLLM(config, apiKey, messages, tools, onProgress = null) {
-    // Try to use ProviderInterface for unified routing
-    if (window.ProviderInterface?.callProvider) {
-        try {
-            return await window.ProviderInterface.callProvider(config, apiKey, messages, tools, onProgress);
-        } catch (err) {
-            // If provider module fails, fall through to legacy handling
-            console.warn('[Chat] Provider module error, using fallback:', err.message);
-        }
+    if (!window.ProviderInterface?.callProvider) {
+        throw new Error('ProviderInterface not loaded. Ensure provider modules are included before chat.js.');
     }
 
-    // Legacy fallback - direct provider calls
-    switch (config.provider) {
-        case 'ollama':
-            return await callOllamaLegacy(config, messages, tools, onProgress);
-
-        case 'lmstudio':
-            return await callLMStudioLegacy(config, messages, tools, onProgress);
-
-        case 'openrouter':
-        default:
-            return await callOpenRouterLegacy(apiKey, config, messages, tools);
-    }
-}
-
-// ==========================================
-// Legacy Provider Functions (Fallbacks)
-// These are retained for backward compatibility if provider modules fail to load
-// ==========================================
-
-async function callOllamaLegacy(config, messages, tools, onProgress = null) {
-    if (!window.Ollama) {
-        throw new Error('Ollama module not loaded');
-    }
-
-    const available = await window.Ollama.isAvailable();
-    if (!available) {
-        throw new Error('Ollama server not running. Start with: ollama serve');
-    }
-
-    const useStreaming = typeof onProgress === 'function';
-
-    return await window.Ollama.chatCompletion(messages, {
-        ...config,
-        stream: useStreaming,
-        onToken: useStreaming ? (token, thinking) => {
-            onProgress({ type: 'token', token, thinking });
-        } : null
-    }, tools);
-}
-
-async function callLMStudioLegacy(config, messages, tools, onProgress = null) {
-    const useStreaming = typeof onProgress === 'function';
-
-    const body = {
-        model: config.model,
-        messages,
-        max_tokens: config.maxTokens,
-        temperature: config.temperature,
-        top_p: config.topP,
-        stream: useStreaming
-    };
-
-    if (tools && tools.length > 0) {
-        body.tools = tools;
-        body.tool_choice = 'auto';
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), LOCAL_LLM_TIMEOUT_MS);
-
-    try {
-        const response = await fetch(`${config.endpoint}/chat/completions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-            signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-            throw new Error(`LM Studio error: ${response.status}`);
-        }
-
-        if (useStreaming) {
-            return await handleStreamingResponseLegacy(response, onProgress);
-        }
-
-        return response.json();
-    } catch (err) {
-        clearTimeout(timeoutId);
-        if (err.name === 'AbortError') {
-            throw new Error(`LM Studio request timed out after ${LOCAL_LLM_TIMEOUT_MS / 1000} seconds`);
-        }
-        throw err;
-    }
-}
-
-async function handleStreamingResponseLegacy(response, onProgress) {
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-
-    let fullContent = '';
-    let thinkingContent = '';
-    let inThinking = false;
-    let lastMessage = null;
-
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n').filter(line => line.trim() !== '');
-
-        for (const line of lines) {
-            if (line.startsWith('data: ')) {
-                const data = line.slice(6);
-                if (data === '[DONE]') continue;
-
-                try {
-                    const parsed = JSON.parse(data);
-                    const delta = parsed.choices?.[0]?.delta;
-
-                    if (delta?.content) {
-                        const token = delta.content;
-
-                        if (token.includes('</think>')) {
-                            inThinking = true;
-                            const parts = token.split('<think>');
-                            if (parts[0]) {
-                                fullContent += parts[0];
-                                onProgress({ type: 'token', token: parts[0] });
-                            }
-                            thinkingContent += parts[1] || '';
-                            continue;
-                        }
-
-                        if (token.includes('</think>')) {
-                            inThinking = false;
-                            const parts = token.split('</think>');
-                            thinkingContent += parts[0] || '';
-                            onProgress({ type: 'thinking', content: thinkingContent });
-                            thinkingContent = '';
-                            if (parts[1]) {
-                                fullContent += parts[1];
-                                onProgress({ type: 'token', token: parts[1] });
-                            }
-                            continue;
-                        }
-
-                        if (inThinking) {
-                            thinkingContent += token;
-                        } else {
-                            fullContent += token;
-                            onProgress({ type: 'token', token });
-                        }
-                    }
-
-                    lastMessage = parsed;
-                } catch (e) {
-                    // Ignore parse errors
-                }
-            }
-        }
-    }
-
-    return {
-        choices: [{
-            message: { role: 'assistant', content: fullContent },
-            finish_reason: 'stop'
-        }],
-        model: lastMessage?.model,
-        thinking: thinkingContent || undefined
-    };
-}
-
-async function callOpenRouterLegacy(apiKey, config, messages, tools) {
-    const body = {
-        model: config.model,
-        messages,
-        max_tokens: config.maxTokens,
-        temperature: config.temperature
-    };
-
-    if (tools && tools.length > 0) {
-        body.tools = tools;
-        body.tool_choice = 'auto';
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), CHAT_API_TIMEOUT_MS);
-
-    try {
-        const response = await fetch(config.apiUrl, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-                'HTTP-Referer': config.app?.url || window.location.origin,
-                'X-Title': config.app?.name || 'Rhythm Chamber'
-            },
-            body: JSON.stringify(body),
-            signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('[Chat] API error:', response.status, errorText);
-            throw new Error(`API error: ${response.status}`);
-        }
-
-        return response.json();
-    } catch (err) {
-        clearTimeout(timeoutId);
-        if (err.name === 'AbortError') {
-            throw new Error(`API request timed out after ${CHAT_API_TIMEOUT_MS / 1000} seconds`);
-        }
-        throw err;
-    }
+    return window.ProviderInterface.callProvider(config, apiKey, messages, tools, onProgress);
 }
 
 /**
@@ -1349,6 +899,9 @@ async function callOpenRouterLegacy(apiKey, config, messages, tools) {
  * DELEGATES to MessageOperations
  */
 async function regenerateLastResponse(options = null) {
+    // Get history from SessionManager
+    const conversationHistory = window.SessionManager?.getHistory?.() || [];
+
     if (typeof window.MessageOperations !== 'undefined') {
         return window.MessageOperations.regenerateLastResponse(
             conversationHistory,
@@ -1361,32 +914,25 @@ async function regenerateLastResponse(options = null) {
     if (conversationHistory.length === 0) return null;
 
     // Remove messages from the end until we find the user message
-    // This handles both simple exchanges AND function call sequences:
-    // - Simple: user -> assistant
-    // - With tools: user -> assistant(tool_calls) -> tool* -> assistant
-    while (conversationHistory.length > 0) {
-        const lastMsg = conversationHistory[conversationHistory.length - 1];
-
-        if (lastMsg.role === 'user') {
-            // Found the user message - stop removing
-            break;
-        }
-
-        // Remove assistant, tool, or any other message type
-        conversationHistory.pop();
+    // Use SessionManager's truncate method
+    let lastMsgIndex = conversationHistory.length - 1;
+    while (lastMsgIndex >= 0) {
+        const lastMsg = conversationHistory[lastMsgIndex];
+        if (lastMsg.role === 'user') break;
+        lastMsgIndex--;
     }
 
-    // Check if we have a user message to regenerate from
-    const lastUserMsg = conversationHistory[conversationHistory.length - 1];
-    if (!lastUserMsg || lastUserMsg.role !== 'user') {
+    if (lastMsgIndex < 0) {
         return { error: 'No user message found to regenerate response for.' };
     }
 
-    // Get the last user message content
+    const lastUserMsg = conversationHistory[lastMsgIndex];
     const message = lastUserMsg.content;
 
-    // Remove the user message too because sendMessage will add it back
-    conversationHistory.pop();
+    // Truncate history to just before the user message
+    if (window.SessionManager?.truncateHistory) {
+        window.SessionManager.truncateHistory(lastMsgIndex);
+    }
 
     // Re-send
     return sendMessage(message, options);
@@ -1397,14 +943,20 @@ async function regenerateLastResponse(options = null) {
  * DELEGATES to MessageOperations
  */
 function deleteMessage(index) {
+    const conversationHistory = window.SessionManager?.getHistory?.() || [];
+
     if (typeof window.MessageOperations !== 'undefined') {
-        return window.MessageOperations.deleteMessage(index, conversationHistory);
+        const result = window.MessageOperations.deleteMessage(index, conversationHistory);
+        saveConversation();
+        return result;
     }
 
     // Fallback if MessageOperations not available
     if (index < 0 || index >= conversationHistory.length) return false;
 
-    conversationHistory.splice(index, 1);
+    if (window.SessionManager?.removeMessageFromHistory) {
+        window.SessionManager.removeMessageFromHistory(index);
+    }
     saveConversation();
     return true;
 }
@@ -1414,6 +966,8 @@ function deleteMessage(index) {
  * DELEGATES to MessageOperations
  */
 async function editMessage(index, newText, options = null) {
+    const conversationHistory = window.SessionManager?.getHistory?.() || [];
+
     if (typeof window.MessageOperations !== 'undefined') {
         return window.MessageOperations.editMessage(
             index,
@@ -1431,7 +985,9 @@ async function editMessage(index, newText, options = null) {
     if (msg.role !== 'user') return { error: 'Can only edit user messages' };
 
     // Truncate history to remove this message and everything after it
-    conversationHistory = conversationHistory.slice(0, index);
+    if (window.SessionManager?.truncateHistory) {
+        window.SessionManager.truncateHistory(index);
+    }
 
     // Send new message (this will add it to history and generate response)
     return sendMessage(newText, options);
@@ -1535,17 +1091,20 @@ function generateFallbackResponse(message, queryContext) {
 
 /**
  * Clear conversation history (also clears session storage)
+ * Delegates to SessionManager
  */
 function clearHistory() {
-    conversationHistory = [];
-    sessionStorage.removeItem(CONVERSATION_STORAGE_KEY);
+    if (window.SessionManager?.clearConversation) {
+        window.SessionManager.clearConversation();
+    }
 }
 
 /**
  * Get conversation history
+ * Delegates to SessionManager
  */
 function getHistory() {
-    return [...conversationHistory];
+    return window.SessionManager?.getHistory?.() || [];
 }
 
 /**

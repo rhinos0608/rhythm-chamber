@@ -210,6 +210,9 @@ const Security = {
     clearSecurityLockout: Anomaly.clearSecurityLockout,
     countRecentGeoChanges: Anomaly.countRecentGeoChanges,
     calculateAdaptiveThreshold: Anomaly.calculateAdaptiveThreshold,
+    setTravelOverride: Anomaly.setTravelOverride,
+    clearTravelOverride: Anomaly.clearTravelOverride,
+    getTravelOverrideStatus: Anomaly.getTravelOverrideStatus,
 
     // XSS Token Protection (NEW)
     checkSecureContext: TokenBinding.checkSecureContext,

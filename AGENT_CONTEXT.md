@@ -1,6 +1,6 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + **Modular Refactoring (Providers, Storage, Controllers) + Clean Architecture (77% reduction, zero defensive checks)**
+> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + **Modular Refactoring (Providers, Storage, Controllers) + Clean Architecture + chat.js Pure Orchestrator + EmbeddingWorker**
 
 ---
 
@@ -130,6 +130,7 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 │   ├── genre-enrichment.js # Genre metadata enrichment
 │   ├── local-embeddings.js # Local embedding generation
 │   ├── local-vector-store.js # Client-side vector search
+│   ├── embedding-worker.js # Web Worker for chunk creation
 │   ├── token-counter.js    # Token usage tracking
 │   ├── operation-lock.js   # Critical operation coordination
 │   │

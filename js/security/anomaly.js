@@ -8,6 +8,7 @@
 
 const FAILED_ATTEMPTS_KEY = 'rhythm_chamber_failed_attempts';
 const IP_HISTORY_KEY = 'rhythm_chamber_ip_history';
+const TRAVEL_OVERRIDE_KEY = 'rhythm_chamber_travel_override';
 
 /**
  * SHA-256 hash of data
@@ -164,6 +165,48 @@ function countRecentGeoChanges() {
 }
 
 /**
+ * Travel/VPN override status helpers
+ */
+function getTravelOverrideStatus() {
+    try {
+        const stored = localStorage.getItem(TRAVEL_OVERRIDE_KEY);
+        if (!stored) return { active: false };
+
+        const parsed = JSON.parse(stored);
+        if (!parsed.expiresAt || Date.now() > parsed.expiresAt) {
+            localStorage.removeItem(TRAVEL_OVERRIDE_KEY);
+            return { active: false };
+        }
+
+        return {
+            active: true,
+            expiresAt: parsed.expiresAt,
+            reason: parsed.reason || 'travel',
+            setAt: parsed.setAt || Date.now()
+        };
+    } catch (e) {
+        localStorage.removeItem(TRAVEL_OVERRIDE_KEY);
+        return { active: false };
+    }
+}
+
+function setTravelOverride(hours = 12, reason = 'travel_override') {
+    const expiresAt = Date.now() + hours * 60 * 60 * 1000;
+    const payload = {
+        expiresAt,
+        reason,
+        setAt: Date.now()
+    };
+    localStorage.setItem(TRAVEL_OVERRIDE_KEY, JSON.stringify(payload));
+    return { active: true, ...payload };
+}
+
+function clearTravelOverride() {
+    localStorage.removeItem(TRAVEL_OVERRIDE_KEY);
+    return { active: false };
+}
+
+/**
  * Check for suspicious activity patterns
  * Includes geographic anomaly detection for proxy/VPN attacks
  * 
@@ -178,6 +221,7 @@ async function checkSuspiciousActivity(operation, threshold = 5) {
 
         const attempts = JSON.parse(stored);
         const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+        const travelOverride = getTravelOverrideStatus();
 
         // Count recent failures for this operation
         const recentFailures = attempts.filter(
@@ -186,19 +230,28 @@ async function checkSuspiciousActivity(operation, threshold = 5) {
 
         // Check for geographic anomalies (rapid location changes)
         const geoChanges = countRecentGeoChanges();
-        const hasGeoAnomaly = geoChanges > 3; // >3 distinct locations in 1 hour is suspicious
+        const hasGeoAnomaly = !travelOverride.active && geoChanges > 3; // >3 distinct locations in 1 hour is suspicious
 
-        // Lower threshold if geographic anomaly detected (proxy attack pattern)
-        const effectiveThreshold = hasGeoAnomaly ? Math.floor(threshold / 2) : threshold;
+        // Adjust thresholds based on travel override
+        let effectiveThreshold = threshold;
+        if (travelOverride.active) {
+            effectiveThreshold = Math.ceil(threshold * 1.5);
+        } else if (hasGeoAnomaly) {
+            // Lower threshold if geographic anomaly detected (proxy attack pattern)
+            effectiveThreshold = Math.floor(threshold / 2);
+        }
 
         if (recentFailures.length >= effectiveThreshold) {
             return {
                 blocked: true,
                 failureCount: recentFailures.length,
                 geoAnomaly: hasGeoAnomaly,
-                message: hasGeoAnomaly
-                    ? `Geographic anomaly detected: ${geoChanges} locations in 1h with ${recentFailures.length} failures. Security lockout active.`
-                    : `Security lockout: ${recentFailures.length} failed ${operation} attempts in 24h. Please wait or clear app data.`
+                travelOverrideActive: travelOverride.active,
+                message: travelOverride.active
+                    ? `Travel mode is active but repeated failures persist. Verify your identity or try again after a stable connection.`
+                    : hasGeoAnomaly
+                        ? `Geographic anomaly detected: ${geoChanges} locations in 1h with ${recentFailures.length} failures. Security lockout active.`
+                        : `Security lockout: ${recentFailures.length} failed ${operation} attempts in 24h. Please wait or clear app data.`
             };
         }
 
@@ -206,6 +259,7 @@ async function checkSuspiciousActivity(operation, threshold = 5) {
             blocked: false,
             failureCount: recentFailures.length,
             geoAnomaly: hasGeoAnomaly,
+            travelOverrideActive: travelOverride.active,
             message: ''
         };
     } catch (e) {
@@ -230,6 +284,11 @@ function clearSecurityLockout() {
  * @returns {number} Adjusted threshold
  */
 function calculateAdaptiveThreshold(baseThreshold, operation) {
+    const travelOverride = getTravelOverrideStatus();
+    if (travelOverride.active) {
+        return Math.ceil(baseThreshold * 1.5);
+    }
+
     const geoChanges = countRecentGeoChanges();
 
     // Get timing pattern of geo changes
@@ -289,5 +348,10 @@ export {
     clearSecurityLockout,
 
     // Adaptive thresholds
-    calculateAdaptiveThreshold
+    calculateAdaptiveThreshold,
+
+    // Travel override helpers
+    setTravelOverride,
+    clearTravelOverride,
+    getTravelOverrideStatus
 };

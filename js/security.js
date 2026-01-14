@@ -52,6 +52,9 @@
                 recordFailedAttempt: async () => { },
                 checkSuspiciousActivity: async () => ({ blocked: false, failureCount: 0, message: '' }),
                 clearSecurityLockout: () => { },
+                setTravelOverride: () => ({ active: false }),
+                clearTravelOverride: () => { },
+                getTravelOverrideStatus: () => ({ active: false }),
                 ErrorContext: {
                     create: (code, rootCause, details) => ({ code, rootCause, details, timestamp: Date.now() })
                 }

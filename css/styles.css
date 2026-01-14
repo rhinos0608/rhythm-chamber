@@ -2166,6 +2166,26 @@ a {
   line-height: 1.4;
 }
 
+.security-warning.travel-mode {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.security-warning.travel-mode .warning-content strong {
+  color: #2563eb;
+}
+
+.travel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+.travel-actions .btn {
+  flex: 0 0 auto;
+}
+
 /* Session Controls */
 .session-controls {
   margin-top: var(--space-lg);
