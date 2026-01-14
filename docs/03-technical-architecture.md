@@ -350,6 +350,12 @@ flowchart LR
 - Time-of-day patterns
 - **Semantic search across entire history**
 
+### Path C: Demo Mode (Sample Persona)
+- Pre-built "Emo Teen" persona loaded from `demo-data.js`
+- Data stored in isolated `AppState.demo` domain so it never touches real uploads
+- Demo badge + exit controls update UI state
+- Demo-specific chat suggestions seeded for the sample persona
+
 ---
 
 ## Spotify OAuth: PKCE Flow (No Backend)

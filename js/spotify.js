@@ -639,6 +639,65 @@ const Spotify = (() => {
     }
 
     // ==========================================
+    // VISIBILITY-BASED STALENESS CHECK
+    // Proactively refreshes token when tab becomes visible
+    // ==========================================
+
+    let visibilityCheckRegistered = false;
+
+    /**
+     * Register visibility change listener for token staleness check
+     * Called once during module initialization
+     */
+    function registerVisibilityCheck() {
+        if (visibilityCheckRegistered) return;
+        if (typeof document === 'undefined') return;
+
+        document.addEventListener('visibilitychange', async () => {
+            if (document.visibilityState === 'visible') {
+                await checkTokenStalenessOnVisible();
+            }
+        });
+
+        visibilityCheckRegistered = true;
+        console.log('[Spotify] Visibility-based token staleness check registered');
+    }
+
+    /**
+     * Check token staleness when tab becomes visible
+     * Proactively refreshes if token is close to expiry
+     * This prevents API calls from failing after the user returns to a dormant tab
+     */
+    async function checkTokenStalenessOnVisible() {
+        const expiry = localStorage.getItem(STORAGE_KEYS.TOKEN_EXPIRY);
+        if (!expiry) return;
+
+        const expiryTime = parseInt(expiry, 10);
+        const timeUntilExpiry = expiryTime - Date.now();
+
+        // Proactively refresh if expiring within 5 minutes
+        if (timeUntilExpiry < 5 * 60 * 1000 && timeUntilExpiry > 0) {
+            console.log('[Spotify] Tab visible - proactive token refresh (expiring soon)');
+            try {
+                await refreshToken();
+            } catch (error) {
+                console.error('[Spotify] Visibility-triggered refresh failed:', error);
+            }
+        } else if (timeUntilExpiry <= 0) {
+            // Token already expired - try to refresh
+            console.log('[Spotify] Tab visible - token expired, attempting refresh');
+            try {
+                await refreshToken();
+            } catch (error) {
+                console.error('[Spotify] Visibility-triggered expired token refresh failed:', error);
+            }
+        }
+    }
+
+    // Register visibility check on module load
+    registerVisibilityCheck();
+
+    // ==========================================
     // Public API
     // ==========================================
 

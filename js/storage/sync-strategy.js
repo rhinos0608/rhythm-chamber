@@ -126,18 +126,22 @@ class LocalOnlySync extends SyncStrategy {
 }
 
 // ==========================================
-// CloudSync - Phase 2 Stub
+// DeviceBackup - Phase 2 Stub
 // ==========================================
 
 /**
- * Cloud backup sync strategy (STUB - NOT IMPLEMENTED)
+ * Device backup strategy (STUB - NOT IMPLEMENTED)
  * 
- * Will sync encrypted data to Supabase in Phase 2.
+ * Provides encrypted backup/restore between devices using Supabase.
+ * This is intentionally NOT "Cloud Sync" - it's manual backup/restore
+ * with "last-write-wins" semantics. No CRDTs, no conflict resolution,
+ * just encrypted blob storage.
+ * 
  * This class exists for interface definition only.
  */
-class CloudSync extends SyncStrategy {
+class DeviceBackup extends SyncStrategy {
     constructor(config = {}) {
-        super('cloud');
+        super('device-backup');
         this.config = {
             supabaseUrl: config.supabaseUrl || null,
             supabaseKey: config.supabaseKey || null,
@@ -147,25 +151,25 @@ class CloudSync extends SyncStrategy {
 
     async init() {
         // Phase 2: Initialize Supabase client
-        console.warn('[CloudSync] Not implemented - Phase 2 feature');
+        console.warn('[DeviceBackup] Not implemented - Phase 2 feature');
         this.initialized = false;
-        throw new Error('CloudSync is not yet implemented. Coming in Phase 2.');
+        throw new Error('DeviceBackup is not yet implemented. Coming in Phase 2.');
     }
 
     async push(data) {
         // Phase 2: 
         // 1. Encrypt data with Security.encryptData()
-        // 2. POST to /api/sync
+        // 2. POST to /api/backup (last-write-wins)
         // 3. Return version
-        throw new Error('CloudSync.push() not implemented - Phase 2 feature');
+        throw new Error('DeviceBackup.push() not implemented - Phase 2 feature');
     }
 
     async pull() {
         // Phase 2:
-        // 1. GET from /api/sync
+        // 1. GET from /api/backup
         // 2. Decrypt with Security.decryptData()
-        // 3. Return data
-        throw new Error('CloudSync.pull() not implemented - Phase 2 feature');
+        // 3. Return data (overwrites local)
+        throw new Error('DeviceBackup.pull() not implemented - Phase 2 feature');
     }
 
     async isAvailable() {
@@ -178,8 +182,8 @@ class CloudSync extends SyncStrategy {
             lastSync: null,
             version: 0,
             pending: false,
-            mode: 'cloud',
-            message: 'Cloud backup coming in Phase 2'
+            mode: 'device-backup',
+            message: 'Device backup coming in Phase 2 (last-write-wins)'
         };
     }
 }
@@ -195,7 +199,7 @@ const SyncManager = {
     _currentStrategy: null,
     _strategies: {
         local: LocalOnlySync,
-        cloud: CloudSync
+        'device-backup': DeviceBackup
     },
 
     /**
@@ -240,10 +244,10 @@ const SyncManager = {
     },
 
     /**
-     * Check if cloud sync is available for user
+     * Check if device backup is available for user
      * @returns {Promise<boolean>}
      */
-    async isCloudAvailable() {
+    async isDeviceBackupAvailable() {
         // Phase 2: Check user tier from user_metadata
         // For now, always return false
         return false;
@@ -256,7 +260,7 @@ const SyncManager = {
     getAvailableStrategies() {
         return [
             { name: 'local', available: true },
-            { name: 'cloud', available: false, reason: 'Coming in Phase 2' }
+            { name: 'device-backup', available: false, reason: 'Coming in Phase 2 (last-write-wins)' }
         ];
     }
 };
@@ -267,7 +271,7 @@ const SyncManager = {
 
 window.SyncStrategy = SyncStrategy;
 window.LocalOnlySync = LocalOnlySync;
-window.CloudSync = CloudSync;
+window.DeviceBackup = DeviceBackup;
 window.SyncManager = SyncManager;
 
 console.log('[SyncStrategy] Sync abstraction layer loaded (LocalOnlySync active)');
