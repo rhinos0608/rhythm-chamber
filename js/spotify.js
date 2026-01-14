@@ -99,8 +99,8 @@ const Spotify = (() => {
      * @returns {boolean}
      */
     function isConfigured() {
-        return Config?.spotify?.clientId &&
-            Config.spotify.clientId !== 'your-spotify-client-id';
+        return window.Config?.spotify?.clientId &&
+            window.Config.spotify.clientId !== 'your-spotify-client-id';
     }
 
     /**
@@ -120,9 +120,9 @@ const Spotify = (() => {
 
         const params = new URLSearchParams({
             response_type: 'code',
-            client_id: Config.spotify.clientId,
-            scope: Config.spotify.scopes.join(' '),
-            redirect_uri: Config.spotify.redirectUri,
+            client_id: window.Config.spotify.clientId,
+            scope: window.Config.spotify.scopes.join(' '),
+            redirect_uri: window.Config.spotify.redirectUri,
             code_challenge_method: 'S256',
             code_challenge: codeChallenge
         });
@@ -149,10 +149,10 @@ const Spotify = (() => {
                     'Content-Type': 'application/x-www-form-urlencoded'
                 },
                 body: new URLSearchParams({
-                    client_id: Config.spotify.clientId,
+                    client_id: window.Config.spotify.clientId,
                     grant_type: 'authorization_code',
                     code: code,
-                    redirect_uri: Config.spotify.redirectUri,
+                    redirect_uri: window.Config.spotify.redirectUri,
                     code_verifier: codeVerifier
                 })
             });
@@ -340,7 +340,7 @@ const Spotify = (() => {
                     'Content-Type': 'application/x-www-form-urlencoded'
                 },
                 body: new URLSearchParams({
-                    client_id: Config.spotify.clientId,
+                    client_id: window.Config.spotify.clientId,
                     grant_type: 'refresh_token',
                     refresh_token: refreshTokenValue
                 })

@@ -103,14 +103,14 @@ Power users WANT control:
 | Tier | Price | What You Get | Infrastructure | Purpose |
 |------|-------|--------------|----------------|----------|
 | **Free** | $0 | Full local analysis, BYOI chat, basic cards, personality reveal | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
-| **Supporter** | **$19/yearly** | **Obsidian/Notion Export + Relationship Compatibility Reports** | Client-side only | **Seed Capital**: Funds security audit & cloud infrastructure |
+| **Supporter** | **$39 - one time purchase** | **Obsidian/Notion Export + Relationship Compatibility Reports** | Client-side only | **Seed Capital**: Funds security audit & cloud infrastructure |
 | **Patron** | **$7/month** | Dev Discord access, roadmap voting, early beta features | Client-side + Discord | **Community**: Recurring revenue for ongoing support |
 
 ### Phase 2: Managed Cloud & AI (Trust-First Launch)
 
 | Tier | Price | What You Get | Infrastructure | Trust Signal |
 |------|-------|--------------|----------------|--------------|
-| **Cloud Sync** | **$40 yearly + $5/month** | Multi-device chat sync, encrypted cloud backup, **managed embeddings & AI setup - with transparent limits and token usage**, security signatures & validation | Hybrid (Server-side DB + Client-side E2EE) | **"Secured by [External Firm]"** |
+| **Cloud Sync** | **$60 yearly** | Multi-device chat sync, encrypted cloud backup, **managed embeddings & AI setup - with transparent limits and token usage**, security signatures & validation | Hybrid (Server-side DB + Client-side E2EE) | **"Secured by [External Firm]"** |
 | **Cloud Sync** | **$5/month** | Same as above, no lifetime payment | Hybrid (Server-side DB + Client-side E2EE) | **"Secured by [External Firm]"** |
 
 ### Why This Works
@@ -124,7 +124,6 @@ Power users WANT control:
 - **BYOI Model**: Appeals to privacy-conscious power users who want control and choice over models/keys
 - **Phase 2 Trigger**: Only after hitting Supporter KPI (~250-1,000) and security audit complete
 - **Revenue Allocation**: Supporter funds go directly to security audit and cloud infrastructure
-- **Ongoing Costs**: $10/month covers API/embedding costs with margin
 - **Lifetime Protection**: Separates access fee from compute costs
 - **Two Points of Failure**: Users can switch between local and cloud modes
 - **Never Deprecate Local**: Free tier remains functional forever
@@ -162,9 +161,18 @@ The data export friction is real, but the payoff is self-discovery and deeper co
 
 **Why it works:** The "Emotional Archaeologist" likely journals or tracks data. Giving them a "physical" digital copy of their history that connects to their other notes is huge value.
 
-+ Social resonance tier and deep enrichment tier
+**Value Prop:** Data Spotify doesn't give you. Use the local client to fetch public metadata that Spotify hides or doesn't track, creating a "Super-Metadata" version of their library.
 
-**Price:** $60 yearly or $10 monthly
+**The Feature:** "Enrichment Mode."
+
+**The app connects to public APIs (MusicBrainz, AcoustID) from the client side to fetch BPM, Key, Producer Credits, and Lyrics for top tracks.
+
+**Unlock:** "Show me my listening habits by Producer instead of Artist" (e.g., "You love Jack Antonoff productions, regardless of the singer").
+
+**Why it works:** It appeals to the "Discovery Junkie" and music nerds who feel limited by standard "Top Artist" charts
+
+- Integrated with AI bundle
+
 
 ### Strategy 2: The "Social Resonance" Tier
 **Value Prop:** Compare your data with others. Your docs mention a "Friend Compare via JSON". Currently, this is a feature. Make the Deep Comparison Report the paid product.
@@ -181,18 +189,7 @@ The data export friction is real, but the payoff is self-discovery and deeper co
 
 **Price:** $2 monthly (Lower friction to encourage viral adoption).
 
-### Strategy 3: The "Deep Enrichment" Tier
-**Value Prop:** Data Spotify doesn't give you. Use the local client to fetch public metadata that Spotify hides or doesn't track, creating a "Super-Metadata" version of their library.
 
-**The Feature:** "Enrichment Mode."
-
-**The app connects to public APIs (MusicBrainz, AcoustID) from the client side to fetch BPM, Key, Producer Credits, and Lyrics for top tracks.
-
-**Unlock:** "Show me my listening habits by Producer instead of Artist" (e.g., "You love Jack Antonoff productions, regardless of the singer").
-
-**Why it works:** It appeals to the "Discovery Junkie" and music nerds who feel limited by standard "Top Artist" charts.
-
-**Price:** $29 yearly or $5 monthly
 
 ### Recommendation
 Combine Strategy 1 (PKM Export) and Strategy 2 (Comparison) into the "Supporter" tier.
