@@ -200,8 +200,8 @@ async function withLock(operationName, fn) {
     }
 }
 
-// Public API
-const OperationLock = {
+// ES Module export
+export const OperationLock = {
     OPERATIONS,
     acquire,
     release,
@@ -212,9 +212,10 @@ const OperationLock = {
     withLock
 };
 
-// Make available globally
+// Keep window global for backwards compatibility
 if (typeof window !== 'undefined') {
     window.OperationLock = OperationLock;
 }
 
 console.log('[OperationLock] Module loaded');
+

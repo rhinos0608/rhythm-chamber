@@ -197,8 +197,8 @@ function formatDuration(seconds) {
     }
 }
 
-// Public API
-window.Utils = {
+// ES Module export
+export const Utils = {
     fetchWithTimeout,
     fetchWithRetry,
     fetchWithAuth,
@@ -207,3 +207,11 @@ window.Utils = {
     debounce,
     formatDuration
 };
+
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.Utils = Utils;
+}
+
+console.log('[Utils] Module loaded');
+

@@ -247,7 +247,7 @@ async function getBatchEmbeddings(texts, onProgress = () => { }) {
 // Public API
 // ==========================================
 
-window.LocalEmbeddings = {
+const LocalEmbeddings = {
     /**
      * Check if local embeddings are supported in this browser
      */
@@ -317,4 +317,13 @@ window.LocalEmbeddings = {
     }
 };
 
+// ES Module export
+export { LocalEmbeddings };
+
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.LocalEmbeddings = LocalEmbeddings;
+}
+
 console.log('[LocalEmbeddings] Module loaded. Call LocalEmbeddings.isSupported() to check compatibility.');
+

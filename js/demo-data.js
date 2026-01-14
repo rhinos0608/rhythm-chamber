@@ -416,7 +416,8 @@ const DEMO_DATA_INSIGHTS = {
 // Public API
 // ==========================================
 
-window.DemoData = {
+// ES Module export
+export const DemoData = {
     // Core data
     generateStreams: generateDemoStreams,
     personality: DEMO_PERSONALITY,
@@ -446,4 +447,10 @@ window.DemoData = {
     }
 };
 
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.DemoData = DemoData;
+}
+
 console.log('[DemoData] Module loaded. Use DemoData.isDemoMode() to check demo state.');
+

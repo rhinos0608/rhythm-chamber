@@ -584,7 +584,8 @@ async function fetchGenreFromMusicBrainz(artistName) {
 // Public API
 // ==========================================
 
-window.GenreEnrichment = {
+// ES Module export
+export const GenreEnrichment = {
     // Sync lookups (instant)
     getGenre,
     getGenres,
@@ -609,4 +610,10 @@ window.GenreEnrichment = {
     }
 };
 
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.GenreEnrichment = GenreEnrichment;
+}
+
 console.log(`[GenreEnrichment] Module loaded with ${getStaticMapSize()} artists in static map.`);
+

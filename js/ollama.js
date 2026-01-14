@@ -632,7 +632,8 @@ async function chatCompletion(messages, config, tools = null) {
 // Public API
 // ==========================================
 
-window.Ollama = {
+// ES Module export
+export const Ollama = {
     // Server detection
     detectServer,
     isAvailable,
@@ -657,3 +658,11 @@ window.Ollama = {
     RECOMMENDED_MODELS,
     TOOL_CAPABLE_MODELS
 };
+
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.Ollama = Ollama;
+}
+
+console.log('[Ollama] Module loaded');
+

@@ -215,12 +215,11 @@ const TokenCounter = {
     }
 };
 
-// Export for use in other modules
+// ES Module export
+export { TokenCounter };
+
+// Keep window global for backwards compatibility
 if (typeof window !== 'undefined') {
     window.TokenCounter = TokenCounter;
     console.log('[TokenCounter] Token counting module loaded');
-}
-
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = TokenCounter;
 }
