@@ -28,12 +28,33 @@ const Spotify = (() => {
 
     /**
      * Generate a random code verifier for PKCE
+     * Uses rejection sampling to avoid modulo bias
+     * 
+     * SECURITY: Previous implementation used x % 62 on random bytes [0-255],
+     * which biases toward the first 8 characters (256 % 62 = 8).
+     * This implementation rejects values >= 248 to ensure uniform distribution.
+     * 
      * @returns {string} 64-character random string
      */
     function generateCodeVerifier() {
         const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-        const values = crypto.getRandomValues(new Uint8Array(64));
-        return values.reduce((acc, x) => acc + possible[x % possible.length], '');
+        const maxValid = Math.floor(256 / possible.length) * possible.length; // 248
+
+        const result = [];
+        while (result.length < 64) {
+            // Request more bytes than needed to minimize iterations
+            const bytesNeeded = Math.max(1, (64 - result.length) * 2);
+            const values = crypto.getRandomValues(new Uint8Array(bytesNeeded));
+
+            for (const x of values) {
+                // Rejection sampling: only use values < 248 to avoid bias
+                if (x < maxValid && result.length < 64) {
+                    result.push(possible[x % possible.length]);
+                }
+            }
+        }
+
+        return result.join('');
     }
 
     /**
@@ -210,9 +231,94 @@ const Spotify = (() => {
     /**
      * HNW Fix: Refresh access token using refresh token
      * Prevents cliff-edge session expiry
+     * 
+     * SECURITY: Uses navigator.locks to prevent multi-tab race condition
+     * If multiple tabs detect an expired token simultaneously, only one will refresh
+     * This prevents Spotify's Refresh Token Rotation from invalidating all tokens
+     * 
      * @returns {Promise<boolean>} Success status
      */
     async function refreshToken() {
+        // Use Web Locks API to prevent multi-tab race condition (Chrome/Firefox/Edge)
+        if (typeof navigator.locks !== 'undefined') {
+            try {
+                return await navigator.locks.request(
+                    'spotify_token_refresh',
+                    { mode: 'exclusive', ifAvailable: false },
+                    async (lock) => {
+                        if (lock) {
+                            // Double-check if another tab already refreshed
+                            if (hasValidToken()) {
+                                console.log('[Spotify] Token already refreshed by another tab');
+                                return true;
+                            }
+                            return await performTokenRefresh();
+                        }
+                        // Lock not acquired (should not happen with ifAvailable: false)
+                        console.warn('[Spotify] Failed to acquire refresh lock');
+                        return false;
+                    }
+                );
+            } catch (lockError) {
+                console.warn('[Spotify] Web Locks API error, using fallback:', lockError.message);
+                return await performTokenRefreshWithFallbackLock();
+            }
+        }
+
+        // Fallback for Safari < 15 and older browsers: localStorage-based lock
+        return await performTokenRefreshWithFallbackLock();
+    }
+
+    /**
+     * localStorage-based mutex for browsers without Web Locks API
+     * Uses a simple lock with timeout to prevent deadlocks
+     */
+    async function performTokenRefreshWithFallbackLock() {
+        const LOCK_KEY = 'spotify_refresh_lock';
+        const LOCK_TIMEOUT_MS = 10000; // 10 second timeout
+
+        // Try to acquire lock
+        const now = Date.now();
+        const existingLock = localStorage.getItem(LOCK_KEY);
+
+        if (existingLock) {
+            const lockTime = parseInt(existingLock, 10);
+            if (now - lockTime < LOCK_TIMEOUT_MS) {
+                // Another tab is refreshing - wait and check if token is valid
+                console.log('[Spotify] Waiting for another tab to complete refresh...');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                // Check if the other tab succeeded
+                if (hasValidToken()) {
+                    console.log('[Spotify] Token refreshed by another tab');
+                    return true;
+                }
+                // Other tab may have failed, allow this tab to try
+            }
+            // Lock is stale, clear it
+        }
+
+        // Acquire lock
+        localStorage.setItem(LOCK_KEY, String(now));
+
+        try {
+            // Double-check token validity (another tab may have just refreshed)
+            if (hasValidToken()) {
+                console.log('[Spotify] Token already valid');
+                return true;
+            }
+
+            return await performTokenRefresh();
+        } finally {
+            // Release lock
+            localStorage.removeItem(LOCK_KEY);
+        }
+    }
+
+    /**
+     * Actual token refresh implementation (extracted for mutex wrappers)
+     */
+    async function performTokenRefresh() {
         const refreshTokenValue = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
 
         if (!refreshTokenValue) {
@@ -267,7 +373,7 @@ const Spotify = (() => {
             // Update tokens
             localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, data.access_token);
 
-            // New refresh token may be provided
+            // New refresh token may be provided (Refresh Token Rotation)
             if (data.refresh_token) {
                 localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, data.refresh_token);
             }

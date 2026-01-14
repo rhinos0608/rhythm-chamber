@@ -79,6 +79,10 @@ async function hashData(data) {
 /**
  * Derive a cryptographic key from password/token using PBKDF2
  * 
+ * SECURITY: Uses 600,000 iterations per OWASP 2024 recommendations
+ * for PBKDF2-SHA256. This provides strong resistance to GPU attacks.
+ * Key derivation takes ~200-400ms on modern hardware.
+ * 
  * @param {string} password - Password or token to derive from
  * @param {string} salt - Salt (use session salt or fixed app salt)
  * @returns {Promise<CryptoKey>} Derived key for encryption/decryption
@@ -97,7 +101,7 @@ async function deriveKey(password, salt = 'rhythm-chamber-v1') {
         {
             name: 'PBKDF2',
             salt: encoder.encode(salt),
-            iterations: 100000,
+            iterations: 600000, // OWASP 2024 recommendation
             hash: 'SHA-256'
         },
         keyMaterial,

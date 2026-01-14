@@ -61,9 +61,10 @@ async function createChunksWithWorker(streams, onProgress = () => { }) {
     const worker = getEmbeddingWorker();
 
     // Fallback to main thread if worker not available
+    // Uses async version with batching to prevent UI freeze
     if (!worker) {
-        onProgress(0, 100, 'Creating chunks (main thread)...');
-        return createChunks(streams);
+        onProgress(0, 100, 'Creating chunks (main thread - async fallback)...');
+        return await createChunks(streams, onProgress);
     }
 
     return new Promise((resolve, reject) => {
@@ -89,11 +90,16 @@ async function createChunksWithWorker(streams, onProgress = () => { }) {
             }
         };
 
-        worker.onerror = (error) => {
+        worker.onerror = async (error) => {
             clearTimeout(timeoutId);
-            console.warn('[RAG] Worker error, falling back to main thread:', error.message);
-            // Fallback to main thread on worker error
-            resolve(createChunks(streams));
+            console.warn('[RAG] Worker error, falling back to async main thread:', error.message);
+            // Fallback to async main thread version
+            try {
+                const chunks = await createChunks(streams, onProgress);
+                resolve(chunks);
+            } catch (fallbackError) {
+                reject(fallbackError);
+            }
         };
 
         // Send streams to worker
@@ -1077,21 +1083,42 @@ async function generateEmbeddings(onProgress = () => { }, options = {}) {
 /**
  * Create searchable chunks from streaming data
  * Groups data into meaningful segments for embedding
+ * 
+ * PERFORMANCE: This is an async function that yields to the event loop
+ * between batches to prevent UI freezing when processing large histories
+ * (100k+ streams). This is the fallback when Web Worker is unavailable.
+ * 
+ * @param {Array} streams - Streaming history data
+ * @param {Function} onProgress - Optional progress callback
+ * @returns {Promise<Array>} Chunks for embedding
  */
-function createChunks(streams) {
+async function createChunks(streams, onProgress = () => { }) {
     const chunks = [];
+    const BATCH_SIZE = 5000; // Process 5k streams at a time
 
-    // Group streams by month
+    // Phase 1: Group streams by month (with yielding)
     const byMonth = {};
-    streams.forEach(stream => {
-        const date = new Date(stream.ts || stream.endTime);
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        if (!byMonth[monthKey]) byMonth[monthKey] = [];
-        byMonth[monthKey].push(stream);
-    });
+    for (let i = 0; i < streams.length; i += BATCH_SIZE) {
+        const batch = streams.slice(i, Math.min(i + BATCH_SIZE, streams.length));
 
-    // Create monthly summary chunks
-    Object.entries(byMonth).forEach(([month, monthStreams]) => {
+        batch.forEach(stream => {
+            const date = new Date(stream.ts || stream.endTime);
+            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            if (!byMonth[monthKey]) byMonth[monthKey] = [];
+            byMonth[monthKey].push(stream);
+        });
+
+        // Yield to event loop every batch to keep UI responsive
+        if (i + BATCH_SIZE < streams.length) {
+            onProgress(Math.round((i / streams.length) * 30), 100, 'Grouping by month...');
+            await new Promise(resolve => setTimeout(resolve, 0));
+        }
+    }
+
+    // Phase 2: Create monthly summary chunks
+    const monthEntries = Object.entries(byMonth);
+    for (let i = 0; i < monthEntries.length; i++) {
+        const [month, monthStreams] = monthEntries[i];
         const artists = {};
         const tracks = {};
         let totalMs = 0;
@@ -1125,22 +1152,39 @@ function createChunks(streams) {
             text: `In ${monthName}, user listened for ${hours} hours with ${monthStreams.length} plays. Top artists: ${topArtists.join(', ')}. Top tracks: ${topTracks.join(', ')}.`,
             metadata: { month, plays: monthStreams.length, hours }
         });
-    });
 
-    // Create artist-focused chunks
+        // Yield every 10 months
+        if (i % 10 === 0 && i > 0) {
+            onProgress(30 + Math.round((i / monthEntries.length) * 20), 100, 'Creating monthly summaries...');
+            await new Promise(resolve => setTimeout(resolve, 0));
+        }
+    }
+
+    // Phase 3: Group streams by artist (with yielding)
     const byArtist = {};
-    streams.forEach(stream => {
-        const artist = stream.master_metadata_album_artist_name || stream.artistName || 'Unknown';
-        if (!byArtist[artist]) byArtist[artist] = [];
-        byArtist[artist].push(stream);
-    });
+    for (let i = 0; i < streams.length; i += BATCH_SIZE) {
+        const batch = streams.slice(i, Math.min(i + BATCH_SIZE, streams.length));
 
-    // Top 50 artists get individual chunks
+        batch.forEach(stream => {
+            const artist = stream.master_metadata_album_artist_name || stream.artistName || 'Unknown';
+            if (!byArtist[artist]) byArtist[artist] = [];
+            byArtist[artist].push(stream);
+        });
+
+        // Yield to event loop
+        if (i + BATCH_SIZE < streams.length) {
+            onProgress(50 + Math.round((i / streams.length) * 20), 100, 'Grouping by artist...');
+            await new Promise(resolve => setTimeout(resolve, 0));
+        }
+    }
+
+    // Phase 4: Top 50 artists get individual chunks
     const topArtistEntries = Object.entries(byArtist)
         .sort((a, b) => b[1].length - a[1].length)
         .slice(0, 50);
 
-    topArtistEntries.forEach(([artist, artistStreams]) => {
+    for (let i = 0; i < topArtistEntries.length; i++) {
+        const [artist, artistStreams] = topArtistEntries[i];
         const tracks = {};
         let totalMs = 0;
         let firstListen = null;
@@ -1170,8 +1214,15 @@ function createChunks(streams) {
             text: `Artist: ${artist}. Total plays: ${artistStreams.length}. Listening time: ${hours} hours. First listened: ${firstListen?.toLocaleDateString()}. Last listened: ${lastListen?.toLocaleDateString()}. Top tracks: ${topTracks.join(', ')}.`,
             metadata: { artist, plays: artistStreams.length, hours }
         });
-    });
 
+        // Yield every 10 artists
+        if (i % 10 === 0 && i > 0) {
+            onProgress(70 + Math.round((i / topArtistEntries.length) * 30), 100, 'Creating artist profiles...');
+            await new Promise(resolve => setTimeout(resolve, 0));
+        }
+    }
+
+    onProgress(100, 100, 'Chunks created');
     return chunks;
 }
 

@@ -113,19 +113,6 @@ function deobfuscate(obfuscated, key = null) {
     }
 }
 
-/**
- * Utility functions that need to be exposed
- */
-function isDevToolsLikelyOpen() {
-    const threshold = 160;
-    const widthDiff = window.outerWidth - window.innerWidth > threshold;
-    const heightDiff = window.outerHeight - window.innerHeight > threshold;
-
-    if (window.innerWidth < 600) return false;
-
-    return widthDiff || heightDiff;
-}
-
 function redactForLogging(obj, sensitiveKeys = ['apiKey', 'qdrantApiKey', 'token', 'secret']) {
     if (!obj || typeof obj !== 'object') return obj;
 
@@ -340,7 +327,6 @@ const Security = {
 
     // Utility
     generateRandomString: Encryption.generateRandomString,
-    isDevToolsLikelyOpen,
     redactForLogging,
     getUserNamespace,
     isSessionValid,
