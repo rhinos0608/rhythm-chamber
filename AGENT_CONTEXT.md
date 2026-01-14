@@ -23,7 +23,7 @@
 | **Cloud Backup** | **$50 Lifetime + $10/month** | Multi-device access, encrypted cloud backup, **managed embeddings & AI setup** | Hybrid (Server-side DB + Client-side E2EE) | **"Secured by [External Firm]"** |
 | **Cloud Backup** | **$15/month** | Same as above, no lifetime payment | Hybrid (Server-side DB + Client-side E2EE) | **"Secured by [External Firm]"** |
 
-> **Note on "Cloud Backup"**: This is intentionally NOT "Cloud Sync". It's manual backup/restore between devices — not real-time sync. No CRDTs, no conflict resolution, just "last-write-wins" encrypted blob storage. This keeps costs low (~$20-50/month for 1000 users) and complexity minimal.
+> **Note on "Device Backup"**: This is intentionally NOT "Cloud Sync". It's manual backup/restore between devices — not real-time sync. No CRDTs, no conflict resolution, just "last-write-wins" encrypted blob storage. This keeps costs low (~$20-50/month for 1000 users) and complexity minimal.
 
 **Key Strategy - "Sovereign-to-Managed" Pipeline:**
 - **Community First**: 100% free local tool builds trust and user base
@@ -162,7 +162,7 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 │   │   ├── config-api.js   # Config & Token storage
 │   │   ├── migration.js    # localStorage migration
 │   │   ├── profiles.js     # Profile storage (extracted from facade)
-│   │   └── sync-strategy.js # Sync strategy abstraction (Phase 2 prep)
+│   │   └── sync-strategy.js # Sync strategy abstraction (DeviceBackup Phase 2 prep)
 │   │
 │   ├── security/           # Security Submodules
 │   │   ├── encryption.js   # AES-GCM
@@ -306,15 +306,16 @@ Client-side security module (`security.js`) providing defense-in-depth:
 | Feature | Purpose |
 |---------|----------|
 | **AES-GCM Encryption** | RAG credentials encrypted with session-derived keys |
-| **XSS Token Binding** | Spotify tokens bound to device fingerprint (NEW) |
-| **Secure Context Check** | Blocks operation in iframes, data: protocols (NEW) |
+| **XSS Token Binding** | Spotify tokens bound to device fingerprint |
+| **Secure Context Check** | Blocks operation in iframes, data: protocols |
 | **Session Versioning** | Keys invalidated on auth failures |
-| **Background Token Refresh** | Proactive refresh during long operations (NEW) |
-| **Adaptive Lockouts** | Travel-aware threshold adjustment (NEW) |
+| **Background Token Refresh** | Proactive refresh during long operations |
+| **Visibility Staleness Check** | Token refresh triggered when tab becomes visible (NEW) |
+| **Adaptive Lockouts** | Travel-aware threshold adjustment |
 | **Rate Limiting** | Prevents credential stuffing attacks |
 | **Geographic Detection** | Detects proxy/VPN-based attacks |
 | **Namespace Isolation** | Per-user RAG collection separation |
-| **Unified Error Context** | Structured errors with recovery paths (NEW) |
+| **Unified Error Context** | Structured errors with recovery paths |
 
 > **Note:** This is client-side security, not equivalent to server-side. See `SECURITY.md` for full threat model.
 
