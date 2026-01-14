@@ -252,7 +252,7 @@ You mark time through sound.
 - **Premium Themes**: Dark, Cyberpunk, Minimal styles (FREE for all)
 - **Purpose**: Loss leader to build community and validate product
 
-#### Supporter Tier ($19 Lifetime) - Seed Capital
+#### Supporter Tier ($19 yearly) - Seed Capital
 - **Obsidian/Notion Export**: Generates folder of Markdown files with proper interlinking
   - One file per Artist, Month, and Era
   - Example: [[The National]] links to [[Sad Dad Era]] and [[March 2019]]
@@ -272,7 +272,7 @@ You mark time through sound.
 
 ### Phase 2: Managed Cloud & AI (Trust-First Launch)
 
-#### Cloud Sync Tier ($50 Lifetime + $10/month OR $15/month)
+#### Cloud Sync Tier ($40 yearly + $5/month OR $5/month(for just cloud sync no AI) )
 - **Multi-device Chat Sync**: Sync sessions across desktop/mobile
 - **Encrypted Cloud Backup**: E2EE storage of conversation history
 - **Managed AI Setup**: Pre-configured embeddings & API integration
