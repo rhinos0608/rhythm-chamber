@@ -603,79 +603,6 @@ async function sendMessage(message) {
 
 ---
 
-## Cost Analysis
-
-### Phase 1: Sovereign Community (Zero Cost to User)
-
-| Resource | Cost | Notes |
-|----------|------|-------|
-| Vercel hosting | $0 | Static files only |
-| **Local AI** | **$0** | **Ollama/LM Studio on your hardware** |
-| OpenRouter free models | $0 | Optional cloud provider |
-| localStorage/IndexedDB | $0 | Client-side storage |
-| Spotify OAuth (PKCE) | $0 | No backend needed |
-| **Total** | **$0** | **Zero infrastructure cost** |
-
-### Phase 1: Supporter Tier ($19 Lifetime) - Seed Capital
-
-| Resource | Cost | Purpose |
-|----------|------|----------|
-| PKM Export (Markdown generation) | $0 (uses existing JS) | Feature unlock |
-| Relationship Compatibility Reports | $0 (uses existing JS) | Feature unlock |
-| Badge generation (Canvas) | $0 | Feature unlock |
-| Friend compare (JSON) | $0 | Feature unlock |
-| **Security Audit Fund** | **$19 per user** | **External security firm** |
-| **Cloud Infrastructure Fund** | **$19 per user** | **Future hosting costs** |
-| **Total** | **$0 infrastructure** | **Revenue = Seed Capital** |
-
-**Purpose of Supporter Revenue:**
-- **Primary**: Fund external security audit & partnership (~$5k-20k)
-- **Secondary**: Build cloud infrastructure war chest
-- **Marketing**: "Secured by [External Firm]" badge
-- **KPI**: Need ~250-1,000 Supporters to fund Phase 2
-
-### Phase 1: Patreon Tier ($7/month) - Community
-
-| Resource | Cost | Purpose |
-|----------|------|----------|
-| Discord server | ~$5/month | Community hosting |
-| Early beta access | $0 (same codebase) | Feature unlock |
-| Roadmap voting | $0 (community tool) | Engagement |
-| **Total** | **~$5/month net** | **Sustainable community** |
-
-### Phase 2: Managed Cloud & AI Tier
-
-| Tier | Cost Structure | Notes |
-|------|----------------|-------|
-| **Cloud Sync** | **$50 Lifetime + $10/month** | Lifetime access + ongoing compute |
-| **Cloud Sync** | **$15/month** | Pure subscription model |
-
-**Cost Breakdown (per user):**
-| Resource | Monthly Cost |
-|----------|--------------|
-| Cloud database (Firebase/Supabase) | ~$2-3 |
-| Embeddings API (OpenRouter) | ~$3-5 |
-| LLM API calls (if managed) | ~$2-4 |
-| Security certificates (amortized) | ~$2 |
-| **Total Infrastructure** | **~$9-14/month** |
-| **Gross Margin** | **~$1-6/month** |
-
-**Lifetime Model Protection:**
-- $50 upfront covers ~5 months of infrastructure
-- $10/month ongoing covers compute costs indefinitely
-- **Break-even**: ~5 months for lifetime tier
-- **Risk mitigation**: Separates access from compute costs
-- **External Security**: Budget for ongoing security partnership
-
-### With Premium LLM
-
-| Resource | Cost |
-|----------|------|
-| Premium LLM models | ~$0.003/1K tokens |
-| **Total** | **~$1-5/month** |
-
----
-
 ## Security Considerations
 
 ### Core Security Model
@@ -776,7 +703,6 @@ npx serve .
 - **Infrastructure**: Firebase/Supabase for sync (Phase 1 revenue funded)
 - **Encryption**: Client-side keys, server cannot read data
 - **Trigger**: Only after Phase 1 market validation
-- **Pricing Model**: $50 upfront + $10/month ongoing covers compute costs
 - **Risk Mitigation**: Separates access fee from API costs
 
 ### Technical Architecture Notes

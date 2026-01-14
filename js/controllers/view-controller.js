@@ -101,10 +101,11 @@ function updateProgress(message, progress = 0) {
  */
 function showReveal() {
     const el = initElements();
-    const state = AppState.get();
-    const personality = state.data.personality;
-    const patterns = state.data.patterns;
-    const streams = state.data.streams;
+    // Use getActiveData to transparently support both demo and normal modes
+    const activeData = AppState.getActiveData();
+    const personality = activeData.personality;
+    const patterns = activeData.patterns || AppState.get().data.patterns;
+    const streams = activeData.streams;
 
     if (!personality) {
         console.warn('[ViewController] showReveal called without personality data');
@@ -237,8 +238,9 @@ function showLiteReveal() {
  */
 function showChat() {
     const el = initElements();
-    const state = AppState.get();
-    const personality = state.data.personality;
+    // Use getActiveData to transparently support both demo and normal modes
+    const activeData = AppState.getActiveData();
+    const personality = activeData.personality;
 
     if (!personality) {
         showUpload();

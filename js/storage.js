@@ -137,15 +137,21 @@ const Storage = {
 
   async appendStreams(newStreams) {
     return queuedOperation(async () => {
-      const existingData = await window.IndexedDBCore.get(STORES.STREAMS, 'all');
-      const existing = existingData?.data || [];
-      const merged = [...existing, ...newStreams];
-      const result = await window.IndexedDBCore.put(STORES.STREAMS, {
-        id: 'all',
-        data: merged,
-        savedAt: new Date().toISOString()
-      });
-      this._notifyUpdate('streams', merged.length);
+      // Use atomic update to prevent race conditions
+      const result = await window.IndexedDBCore.atomicUpdate(
+        STORES.STREAMS,
+        'all',
+        (currentValue) => {
+          const existing = currentValue?.data || [];
+          const merged = [...existing, ...newStreams];
+          return {
+            id: 'all',
+            data: merged,
+            savedAt: new Date().toISOString()
+          };
+        }
+      );
+      this._notifyUpdate('streams', result.data.length);
       return result;
     }, true);
   },

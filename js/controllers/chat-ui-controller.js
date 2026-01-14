@@ -29,15 +29,15 @@ function escapeHtml(text) {
     return String(text).replace(/[&<>"']/g, (char) => {
         switch (char) {
             case '&':
-                return '&amp;';
+                return '&';
             case '<':
-                return '&lt;';
+                return '<';
             case '>':
-                return '&gt;';
+                return '>';
             case '"':
-                return '&quot;';
+                return '"';
             case "'":
-                return '&#39;';
+                return ''';
             default:
                 return char;
         }
@@ -46,6 +46,7 @@ function escapeHtml(text) {
 
 /**
  * Parse markdown to HTML for chat messages (safe subset only)
+ * Improved version with better handling of nested patterns
  * @param {string} text - Raw markdown text
  * @returns {string} HTML string
  */
@@ -54,18 +55,46 @@ function parseMarkdown(text) {
 
     const escaped = escapeHtml(text);
 
-    return escaped
-        // Bold: **text** or __text__
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/__(.+?)__/g, '<strong>$1</strong>')
-        // Italic: *text* or _text_
-        .replace(/\*([^\*]+)\*/g, '<em>$1</em>')
-        .replace(/_([^_]+)_/g, '<em>$1</em>')
-        // Code inline: `code`
-        .replace(/`([^`]+)`/g, '<code>$1</code>')
-        // Line breaks
-        .replace(/\n\n/g, '</p><p>')
+    // Use a more robust approach that handles nesting better
+    // Process in order: code blocks, bold, italic, line breaks
+
+    // First, protect code blocks (inline code)
+    const codeBlocks = [];
+    let protected = escaped.replace(/`([^`]+)`/g, (match, code) => {
+        const placeholder = `__CODE_${codeBlocks.length}__`;
+        codeBlocks.push(`<code>${code}</code>`);
+        return placeholder;
+    });
+
+    // Process bold: **text** or __text__
+    // Use a more specific pattern to avoid matching within words
+    protected = protected
+        .replace(/\*\*([^\*\*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/__([^_]+)__/g, '<strong>$1</strong>');
+
+    // Process italic: *text* or _text_
+    // Use negative lookahead/lookbehind to avoid matching within bold
+    protected = protected
+        .replace(/(?<!\*)\*(?!\*)([^\*]+)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
+        .replace(/(?<!_)_(?!_)([^_]+)(?<!_)_(?!_)/g, '<em>$1</em>');
+
+    // Restore code blocks
+    codeBlocks.forEach((code, i) => {
+        protected = protected.replace(`__CODE_${i}__`, code);
+    });
+
+    // Process line breaks
+    // Convert double newlines to paragraph breaks, single to line breaks
+    protected = protected
+        .replace(/\n\n+/g, '</p><p>')
         .replace(/\n/g, '<br>');
+
+    // Wrap in paragraphs if we have content
+    if (protected.includes('</p><p>') || !protected.includes('<br>')) {
+        protected = `<p>${protected}</p>`;
+    }
+
+    return protected;
 }
 
 /**
@@ -578,4 +607,3 @@ if (typeof window !== 'undefined') {
 }
 
 console.log('[ChatUIController] Controller loaded');
-
