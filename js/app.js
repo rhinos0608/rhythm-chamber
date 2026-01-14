@@ -73,6 +73,7 @@ const CRITICAL_DEPENDENCIES = {
     'DemoController': { check: () => window.DemoController && typeof window.DemoController.init === 'function', required: true },
     'ResetController': { check: () => window.ResetController && typeof window.ResetController.init === 'function', required: true },
     'SidebarController': { check: () => window.SidebarController && typeof window.SidebarController.init === 'function', required: true },
+    'ChatUIController': { check: () => window.ChatUIController && typeof window.ChatUIController.addMessage === 'function', required: true },
 
     // Security (required for token binding)
     'Security': { check: () => window.Security && typeof window.Security.checkSecureContext === 'function', required: true },
@@ -606,8 +607,8 @@ async function handleChatSend() {
 
     input.value = '';
 
-    // Add user message
-    addMessage(message, 'user');
+    // Add user message via ChatUIController
+    ChatUIController.addMessage(message, 'user');
 
     // Hide suggestions
     const suggestions = document.getElementById('chat-suggestions');
@@ -621,11 +622,11 @@ async function handleChatSend() {
  * Process the response from Chat module with progress updates
  */
 async function processMessageResponse(actionFn) {
-    // Create loading placeholder
-    const loadingId = addLoadingMessage();
+    // Create loading placeholder via ChatUIController
+    const loadingId = ChatUIController.addLoadingMessage();
 
     const onProgress = (state) => {
-        updateLoadingMessage(loadingId, state);
+        ChatUIController.updateLoadingMessage(loadingId, state);
     };
 
     try {
@@ -633,328 +634,33 @@ async function processMessageResponse(actionFn) {
         const loadingEl = document.getElementById(loadingId);
 
         if (!response) {
-            removeMessageElement(loadingId);
-            addMessage('No response generated. Please try again.', 'assistant', true);
+            ChatUIController.removeMessageElement(loadingId);
+            ChatUIController.addMessage('No response generated. Please try again.', 'assistant', true);
             return;
         }
 
         if (response.error && !response.content) {
-            removeMessageElement(loadingId);
-            addMessage(response.error, 'assistant', true);
+            ChatUIController.removeMessageElement(loadingId);
+            ChatUIController.addMessage(response.error, 'assistant', true);
             return;
         }
 
         const wasStreaming = loadingEl?.dataset?.streaming === 'true';
 
         if (wasStreaming) {
-            loadingEl.classList.remove('streaming');
-            loadingEl.classList.add('assistant');
-            loadingEl.removeAttribute('id');
-            delete loadingEl.dataset.streaming;
-            finalizeStreamedMessage(loadingEl, response.content);
+            ChatUIController.finalizeStreamedMessage(loadingEl, response.content);
         } else {
-            removeMessageElement(loadingId);
+            ChatUIController.removeMessageElement(loadingId);
             if (response.status === 'error') {
-                addMessage(response.content, 'assistant', true);
+                ChatUIController.addMessage(response.content, 'assistant', true);
             } else {
-                addMessage(response.content, 'assistant');
+                ChatUIController.addMessage(response.content, 'assistant');
             }
         }
     } catch (err) {
-        removeMessageElement(loadingId);
-        addMessage(`Error: ${err.message}`, 'assistant', true);
+        ChatUIController.removeMessageElement(loadingId);
+        ChatUIController.addMessage(`Error: ${err.message}`, 'assistant', true);
     }
-}
-
-/**
- * Finalize a streamed message - add action buttons
- */
-function finalizeStreamedMessage(messageEl, fullContent) {
-    const contentEl = messageEl.querySelector('.streaming-content');
-    if (contentEl && fullContent) {
-        contentEl.innerHTML = parseMarkdown(fullContent);
-        contentEl.classList.remove('streaming-content');
-    }
-
-    const actionsDiv = document.createElement('div');
-    actionsDiv.className = 'message-actions';
-
-    // Regenerate button
-    const regenBtn = document.createElement('button');
-    regenBtn.className = 'action-btn regenerate';
-    regenBtn.innerHTML = '↻';
-    regenBtn.title = 'Regenerate';
-    regenBtn.onclick = async () => {
-        messageEl.remove();
-        await processMessageResponse((options) => Chat.regenerateLastResponse(options));
-    };
-    actionsDiv.appendChild(regenBtn);
-
-    // Delete button
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'action-btn delete';
-    deleteBtn.innerHTML = '×';
-    deleteBtn.title = 'Delete';
-    deleteBtn.onclick = () => {
-        const messages = document.getElementById('chat-messages');
-        const index = Array.from(messages.children).indexOf(messageEl);
-        if (Chat.deleteMessage(index)) {
-            messageEl.remove();
-        }
-    };
-    actionsDiv.appendChild(deleteBtn);
-
-    messageEl.appendChild(actionsDiv);
-}
-
-function addLoadingMessage() {
-    if (typeof ChatUIController !== 'undefined' && ChatUIController.addLoadingMessage) {
-        return ChatUIController.addLoadingMessage();
-    }
-
-    const id = 'msg-' + Date.now();
-    const messages = document.getElementById('chat-messages');
-    const div = document.createElement('div');
-    div.className = 'message assistant loading';
-    div.id = id;
-    div.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
-    messages.appendChild(div);
-    messages.scrollTop = messages.scrollHeight;
-    return id;
-}
-
-function updateLoadingMessage(id, state) {
-    if (typeof ChatUIController !== 'undefined' && ChatUIController.updateLoadingMessage) {
-        return ChatUIController.updateLoadingMessage(id, state);
-    }
-
-    const el = document.getElementById(id);
-    if (!el) return;
-
-    if (state.type === 'tool_start') {
-        el.className = 'message tool-execution';
-        el.innerHTML = `<span class="icon">⚡</span> Analyzing data with ${state.tool}...`;
-    } else if (state.type === 'tool_end') {
-        el.className = 'message assistant loading';
-        const hasError = state.error || state.result?.error;
-        el.innerHTML = `
-            <div class="tool-status ${hasError ? 'error' : 'success'}">
-                ${hasError ? '⚠️' : '✅'} ${state.tool || 'Tool'} ${hasError ? 'failed' : 'finished'}
-            </div>
-            <div class="typing-indicator"><span></span><span></span><span></span></div>
-        `;
-    } else if (state.type === 'thinking') {
-        if (!el.dataset.streaming) {
-            el.className = 'message assistant loading';
-            el.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
-        }
-    } else if (state.type === 'token') {
-        if (!el.dataset.streaming) {
-            el.dataset.streaming = 'true';
-            el.className = 'message assistant streaming';
-            el.innerHTML = '<div class="message-content streaming-content"></div>';
-        }
-        const contentEl = el.querySelector('.streaming-content');
-        if (contentEl && state.token) {
-            const escaped = escapeHtml(state.token).replace(/\n/g, '<br>');
-            contentEl.innerHTML += escaped;
-            const messages = document.getElementById('chat-messages');
-            if (messages) messages.scrollTop = messages.scrollHeight;
-        }
-    } else if (state.type === 'thinking' && state.content) {
-        let thinkingEl = el.querySelector('.thinking-block');
-        if (!thinkingEl) {
-            thinkingEl = document.createElement('details');
-            thinkingEl.className = 'thinking-block';
-            thinkingEl.innerHTML = '<summary>💭 Model reasoning</summary><div class="thinking-content"></div>';
-            el.insertBefore(thinkingEl, el.firstChild);
-        }
-        const content = thinkingEl.querySelector('.thinking-content');
-        if (content) {
-            content.textContent = state.content;
-        }
-    }
-}
-
-function removeMessageElement(id) {
-    if (typeof ChatUIController !== 'undefined' && ChatUIController.removeMessageElement) {
-        return ChatUIController.removeMessageElement(id);
-    }
-
-    const el = document.getElementById(id);
-    if (el) el.remove();
-}
-
-/**
- * Escape HTML to prevent injection in rendered content
- */
-function escapeHtml(text) {
-    return String(text).replace(/[&<>"']/g, (char) => {
-        switch (char) {
-            case '&':
-                return '&amp;';
-            case '<':
-                return '&lt;';
-            case '>':
-                return '&gt;';
-            case '"':
-                return '&quot;';
-            case "'":
-                return '&#39;';
-            default:
-                return char;
-        }
-    });
-}
-
-/**
- * Simple markdown to HTML converter
- */
-function parseMarkdown(text) {
-    if (typeof ChatUIController !== 'undefined' && ChatUIController.parseMarkdown) {
-        return ChatUIController.parseMarkdown(text);
-    }
-
-    if (!text) return '';
-    return escapeHtml(text)
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/__(.+?)__/g, '<strong>$1</strong>')
-        .replace(/\*([^\*]+)\*/g, '<em>$1</em>')
-        .replace(/_([^_]+)_/g, '<em>$1</em>')
-        .replace(/\n\n/g, '</p><p>')
-        .replace(/\n/g, '<br>')
-        .replace(/^(.+)$/, '<p>$1</p>');
-}
-
-/**
- * Add message to chat UI
- */
-function addMessage(text, role, isError = false) {
-    const messages = document.getElementById('chat-messages');
-    const div = document.createElement('div');
-    div.className = `message ${role} ${isError ? 'error' : ''}`;
-
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'message-content';
-
-    if (role === 'assistant') {
-        contentDiv.innerHTML = parseMarkdown(text);
-    } else {
-        contentDiv.textContent = text;
-    }
-    div.appendChild(contentDiv);
-
-    const actionsDiv = document.createElement('div');
-    actionsDiv.className = 'message-actions';
-
-    if (isError) {
-        const retryBtn = document.createElement('button');
-        retryBtn.className = 'retry-btn';
-        retryBtn.textContent = 'Try Again';
-        retryBtn.onclick = async () => {
-            div.remove();
-            await processMessageResponse((options) => Chat.regenerateLastResponse(options));
-        };
-        actionsDiv.appendChild(retryBtn);
-
-        const settingsBtn = document.createElement('button');
-        settingsBtn.className = 'retry-btn secondary';
-        settingsBtn.textContent = 'Change Model';
-        settingsBtn.style.marginLeft = '10px';
-        settingsBtn.onclick = () => {
-            const modal = document.getElementById('settings-modal');
-            if (modal) modal.style.display = 'block';
-        };
-        actionsDiv.appendChild(settingsBtn);
-    } else if (role === 'user') {
-        const editBtn = document.createElement('button');
-        editBtn.className = 'action-btn edit';
-        editBtn.innerHTML = '✎';
-        editBtn.title = 'Edit';
-        editBtn.onclick = () => enableEditMode(div, text);
-        actionsDiv.appendChild(editBtn);
-    } else {
-        const regenBtn = document.createElement('button');
-        regenBtn.className = 'action-btn regenerate';
-        regenBtn.innerHTML = '↻';
-        regenBtn.title = 'Regenerate';
-        regenBtn.onclick = async () => {
-            div.remove();
-            await processMessageResponse((options) => Chat.regenerateLastResponse(options));
-        };
-        actionsDiv.appendChild(regenBtn);
-    }
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'action-btn delete';
-    deleteBtn.innerHTML = '×';
-    deleteBtn.title = 'Delete';
-    deleteBtn.onclick = () => {
-        const index = Array.from(messages.children).indexOf(div);
-        if (Chat.deleteMessage(index)) {
-            div.remove();
-        }
-    };
-    actionsDiv.appendChild(deleteBtn);
-
-    div.appendChild(actionsDiv);
-    messages.appendChild(div);
-    messages.scrollTop = messages.scrollHeight;
-}
-
-function enableEditMode(messageDiv, currentText) {
-    const contentDiv = messageDiv.querySelector('.message-content');
-    const actionsDiv = messageDiv.querySelector('.message-actions');
-
-    actionsDiv.style.display = 'none';
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'edit-input-wrapper';
-
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'edit-input';
-    input.value = currentText;
-
-    const saveBtn = document.createElement('button');
-    saveBtn.className = 'action-btn';
-    saveBtn.innerText = 'Save';
-    saveBtn.onclick = async () => {
-        const newText = input.value.trim();
-        if (newText && newText !== currentText) {
-            const index = Array.from(messageDiv.parentElement.children).indexOf(messageDiv);
-
-            const allMessages = Array.from(messageDiv.parentElement.children);
-            for (let i = index; i < allMessages.length; i++) {
-                allMessages[i].remove();
-            }
-
-            addMessage(newText, 'user');
-            await processMessageResponse((options) => Chat.editMessage(index, newText, options));
-        } else {
-            cancelEdit();
-        }
-    };
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'action-btn';
-    cancelBtn.innerText = 'Cancel';
-    cancelBtn.onclick = cancelEdit;
-
-    function cancelEdit() {
-        contentDiv.style.display = '';
-        wrapper.remove();
-        actionsDiv.style.display = '';
-    }
-
-    wrapper.appendChild(input);
-    wrapper.appendChild(saveBtn);
-    wrapper.appendChild(cancelBtn);
-
-    contentDiv.style.display = 'none';
-    messageDiv.insertBefore(wrapper, actionsDiv);
-
-    input.focus();
 }
 
 // ==========================================

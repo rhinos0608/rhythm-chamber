@@ -130,7 +130,11 @@ const ProfileStorage = {
     }
 };
 
-// Make available globally
+// Export for ES Module consumers
+export { ProfileStorage };
+
+// Make available globally for backwards compatibility
 if (typeof window !== 'undefined') {
     window.ProfileStorage = ProfileStorage;
 }
+

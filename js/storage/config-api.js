@@ -213,7 +213,7 @@ async function clearAllTokens() {
 // Public API
 // ==========================================
 
-window.ConfigAPI = {
+export const ConfigAPI = {
     // Config operations
     getConfig,
     setConfig,
@@ -227,4 +227,10 @@ window.ConfigAPI = {
     clearAllTokens
 };
 
+// Keep window global for backwards compatibility during migration
+if (typeof window !== 'undefined') {
+    window.ConfigAPI = ConfigAPI;
+}
+
 console.log('[ConfigAPI] Unified config API loaded');
+

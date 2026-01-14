@@ -154,9 +154,13 @@ const RecoveryHandlers = {
     }
 };
 
-// Make available globally
+// Export for ES Module consumers
+export { RecoveryHandlers };
+
+// Make available globally for backwards compatibility
 if (typeof window !== 'undefined') {
     window.RecoveryHandlers = RecoveryHandlers;
 }
 
 console.log('[RecoveryHandlers] Module loaded - available paths:', RecoveryHandlers.getAvailablePaths());
+

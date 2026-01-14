@@ -440,4 +440,13 @@ const AppState = {
 // Export
 // ==========================================
 
-window.AppState = AppState;
+// ES Module export
+export { AppState, INITIAL_STATE, VALID_DOMAINS };
+
+// Keep window global for backwards compatibility during migration
+if (typeof window !== 'undefined') {
+    window.AppState = AppState;
+}
+
+console.log('[AppState] Centralized state management module loaded');
+

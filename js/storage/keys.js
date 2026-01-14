@@ -58,9 +58,13 @@ const STORAGE_KEYS = {
 // Freeze to prevent accidental modification
 Object.freeze(STORAGE_KEYS);
 
-// Make available globally
+// Export for ES Module consumers
+export { STORAGE_KEYS };
+
+// Keep window global for backwards compatibility during migration
 if (typeof window !== 'undefined') {
     window.STORAGE_KEYS = STORAGE_KEYS;
 }
 
 console.log('[Storage Keys] Centralized storage key constants loaded');
+

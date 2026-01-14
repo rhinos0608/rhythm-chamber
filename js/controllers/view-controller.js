@@ -276,7 +276,8 @@ function showChat() {
 // Public API
 // ==========================================
 
-window.ViewController = {
+// ES Module export
+export const ViewController = {
     showUpload,
     showProcessing,
     showReveal,
@@ -286,9 +287,17 @@ window.ViewController = {
     populateScoreBreakdown
 };
 
-// Backward compatibility: expose as global functions for existing code
-window.showUpload = showUpload;
-window.showProcessing = showProcessing;
-window.showReveal = showReveal;
-window.showLiteReveal = showLiteReveal;
-window.showChat = showChat;
+// Keep window globals for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.ViewController = ViewController;
+
+    // Backward compatibility: expose view functions globally
+    window.showUpload = showUpload;
+    window.showProcessing = showProcessing;
+    window.showReveal = showReveal;
+    window.showLiteReveal = showLiteReveal;
+    window.showChat = showChat;
+}
+
+console.log('[ViewController] Module loaded');
+
