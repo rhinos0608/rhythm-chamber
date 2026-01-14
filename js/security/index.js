@@ -286,6 +286,10 @@ function isPrototypeFreezeEnabled() {
 
 // Aggregate all modules into unified API
 const Security = {
+    // Fallback detection flags (real module = not in fallback)
+    _isFallback: false,
+    isFallbackMode: () => false,
+
     // Obfuscation (legacy, for non-critical data)
     obfuscate,
     deobfuscate,

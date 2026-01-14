@@ -41,8 +41,14 @@
         console.error('[Security] Failed to load security modules:', err);
 
         // Fallback: Create minimal security object to prevent crashes
+        // CRITICAL: Mark as fallback so app.js can detect and enter Safe Mode
         if (!window.Security) {
             window.Security = {
+                // Fallback detection flags
+                _isFallback: true,
+                isFallbackMode: () => true,
+
+                // Stub implementations - these return data UNENCRYPTED
                 obfuscate: (v) => v,
                 deobfuscate: (v) => v,
                 hashData: async () => 'fallback',
@@ -55,11 +61,12 @@
                 setTravelOverride: () => ({ active: false }),
                 clearTravelOverride: () => { },
                 getTravelOverrideStatus: () => ({ active: false }),
+                checkSecureContext: () => ({ secure: false, reason: 'Security module in fallback mode' }),
                 ErrorContext: {
                     create: (code, rootCause, details) => ({ code, rootCause, details, timestamp: Date.now() })
                 }
             };
-            console.warn('[Security] Loaded minimal fallback');
+            console.warn('[Security] FALLBACK MODE - Security modules failed to load. Data will NOT be encrypted!');
         }
     });
 })();

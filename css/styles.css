@@ -3125,3 +3125,64 @@ a {
     width: 100%;
   }
 }
+
+/* ==========================================
+   Safe Mode Warning Banner (Fail-Closed Security)
+   ========================================== */
+
+.safe-mode-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(90deg, #ff6b35, #ff9f1c);
+  color: #1a1a1a;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 10000;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.safe-mode-banner .icon {
+  font-size: 1.25em;
+}
+
+.safe-mode-banner .text {
+  flex: 1;
+}
+
+.safe-mode-banner button {
+  background: rgba(0, 0, 0, 0.2);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: inherit;
+  font-weight: 600;
+  transition: background var(--transition-fast);
+}
+
+.safe-mode-banner button:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Adjust app-container when Safe Mode banner is visible */
+body.has-safe-mode-banner .app-container {
+  padding-top: 52px;
+}
+
+@media (max-width: 600px) {
+  .safe-mode-banner {
+    flex-direction: column;
+    text-align: center;
+    gap: 8px;
+    padding: 10px 16px;
+  }
+
+  .safe-mode-banner .text {
+    font-size: 0.9rem;
+  }
+}

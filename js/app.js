@@ -86,12 +86,14 @@ const CRITICAL_DEPENDENCIES = {
 /**
  * Verify all critical dependencies are loaded and properly initialized
  * Checks both existence AND initialization state (not just window.X exists)
- * @returns {{valid: boolean, loaded: string[], missing: string[], optional: string[]}}
+ * Also detects Security fallback mode for "fail-closed" security
+ * @returns {{valid: boolean, safeMode: boolean, loaded: string[], missing: string[], optional: string[]}}
  */
 function checkDependencies() {
     const loaded = [];
     const missing = [];
     const optional = [];
+    let safeMode = false;
 
     for (const [name, { check, required }] of Object.entries(CRITICAL_DEPENDENCIES)) {
         try {
@@ -114,6 +116,13 @@ function checkDependencies() {
         }
     }
 
+    // HNW Security: Detect Security fallback mode (fail-closed architecture)
+    // If Security is using fallback stubs, data encryption is NOT available
+    if (window.Security?._isFallback || window.Security?.isFallbackMode?.()) {
+        console.warn('[App] Security module in FALLBACK mode - Safe Mode activated');
+        safeMode = true;
+    }
+
     const valid = missing.length === 0;
 
     if (!valid) {
@@ -123,7 +132,7 @@ function checkDependencies() {
         console.warn('[App] Optional dependencies not loaded:', optional);
     }
 
-    return { valid, loaded, missing, optional };
+    return { valid, safeMode, loaded, missing, optional };
 }
 
 /**
@@ -216,6 +225,58 @@ function showLoadingError(missing, optional = []) {
 // ==========================================
 
 /**
+ * Show Safe Mode warning banner when Security modules are in fallback mode
+ * This implements "fail-closed" security - users are warned that encryption is unavailable
+ */
+function showSafeModeWarning() {
+    console.warn('[App] Displaying Safe Mode warning banner');
+
+    // Check if banner already exists
+    if (document.querySelector('.safe-mode-banner')) return;
+
+    const banner = document.createElement('div');
+    banner.className = 'safe-mode-banner';
+    banner.setAttribute('role', 'alert');
+    banner.innerHTML = `
+        <span class="icon">⚠️</span>
+        <span class="text">
+            <strong>Safe Mode:</strong> Security modules failed to load. 
+            Data will not be encrypted. Sensitive features are disabled.
+        </span>
+        <button onclick="location.reload()">Retry</button>
+    `;
+
+    document.body.prepend(banner);
+    document.body.classList.add('has-safe-mode-banner');
+
+    // Store in AppState for other modules to check
+    if (window.AppState?.update) {
+        AppState.update('app', { safeMode: true });
+    }
+}
+
+// ==========================================
+// Safe Mode Guards
+// ==========================================
+
+/**
+ * Check if app is in Safe Mode (security modules failed)
+ * @returns {boolean}
+ */
+function isInSafeMode() {
+    return !!(window.AppState?.get?.('app')?.safeMode);
+}
+
+// Make available globally for other modules
+if (typeof window !== 'undefined') {
+    window.isInSafeMode = isInSafeMode;
+}
+
+// ==========================================
+// Controller Initialization (continued)
+// ==========================================
+
+/**
  * Initialize all controllers with their dependencies
  */
 async function initializeControllers() {
@@ -292,6 +353,12 @@ async function init() {
         return; // Abort initialization
     }
     console.log(`[App] All ${depCheck.loaded.length} critical dependencies loaded`);
+
+    // HNW Security: Check for Safe Mode (fail-closed architecture)
+    // If Security is in fallback, show warning and continue with limited functionality
+    if (depCheck.safeMode) {
+        showSafeModeWarning();
+    }
 
     // Initialize cross-tab coordination first (prevents race conditions)
     const isPrimary = await TabCoordinator.init();
@@ -384,12 +451,8 @@ async function init() {
     // Initialize sidebar controller
     await SidebarController.init();
 
-    // HNW Security: Enable prototype pollution protection LAST
-    // This must happen after all modules load to avoid breaking legitimate library patches
-    // Once enabled, Object.prototype and Array.prototype are frozen
-    if (window.Security?.enablePrototypePollutionProtection) {
-        window.Security.enablePrototypePollutionProtection();
-    }
+    // NOTE: Prototype pollution protection moved to window.onload handler
+    // to ensure all scripts (including async/deferred) have finished loading
 
     console.log('[App] Initialization complete');
 }
@@ -1002,3 +1065,20 @@ if (document.readyState === 'loading') {
 } else {
     init();
 }
+
+// ==========================================
+// Prototype Pollution Protection (window.onload)
+// ==========================================
+// This MUST happen after ALL resources load, including:
+// - Deferred scripts
+// - Third-party libraries  
+// - Polyfills
+// - Analytics scripts
+// Using window.onload ensures all resources are finished before freezing prototypes
+
+window.addEventListener('load', () => {
+    if (window.Security?.enablePrototypePollutionProtection) {
+        window.Security.enablePrototypePollutionProtection();
+        console.log('[App] Prototype pollution protection enabled (window.onload - after all resources loaded)');
+    }
+});
