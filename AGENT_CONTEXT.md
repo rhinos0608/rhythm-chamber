@@ -1,6 +1,6 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + **Modular Refactoring (Providers, Storage, Controllers) + Clean Architecture + chat.js Pure Orchestrator + EmbeddingWorker**
+> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys**
 
 ---
 
@@ -94,6 +94,8 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 | **Spotify OAuth** | ✅ Done | `js/spotify.js` (PKCE flow) |
 | **Settings UI** | ✅ Done | `js/settings.js` (modal config) |
 | **Transparency UI** | ✅ Done | Detection explainer + data stats |
+| **Fail-Closed Security** | ✅ Done | `js/security.js` (Safe Mode, banners) |
+| **Centralized Keys** | ✅ Done | `js/storage/keys.js` (Single source of truth) |
 | WASM embeddings | ⏳ v1.1 | Not implemented |
 
 ---
@@ -906,6 +908,23 @@ npx serve .
 ---
 
 ## Session Log
+
+### Session 20 — 2026-01-14 (Fail-Closed Security & Centralized Keys)
+
+**What was done:**
+
+1. **Fail-Closed Architecture**: Implemented Safe Mode to prevent unencrypted data storage when security modules fail to load. Added `_isFallback` detection and orange warning banner.
+
+2. **Prototype Pollution Protection Timing**: Moved protection to `window.onload` to ensure all third-party scripts and polyfills are loaded before freezing prototypes.
+
+3. **Centralized Storage Keys**: Created `js/storage/keys.js` as single source of truth for all localStorage/IndexedDB keys, eliminating magic strings.
+
+**Key Features:**
+- **Security**: Defense-in-depth against loading failures
+- **Reliability**: Prevents crashes from prototype freeze timing
+- **Maintainability**: Unified storage constants
+
+---
 
 ### Session 19 — 2026-01-14 (Security Hardening & Performance Optimization)
 

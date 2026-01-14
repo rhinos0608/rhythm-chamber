@@ -698,6 +698,7 @@ This application uses a **100% client-side security model**. All security measur
 | **Rate Limiting** | `security.js` | Prevents credential stuffing |
 | **Unified Error Context** | `security.js` | Structured errors with recovery paths |
 | **Privacy Controls** | `storage.js` | Session-only mode, data cleanup |
+| **Fail-Closed Security** | `security.js`, `app.js` | Safe Mode disables persistence on module failure |
 
 ---
 
