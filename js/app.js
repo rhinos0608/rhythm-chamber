@@ -762,15 +762,12 @@ if (typeof window !== 'undefined') {
 }
 
 // ==========================================
-// Start Application
+// ES Module Export
 // ==========================================
 
-// Initialize when DOM is ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-} else {
-    init();
-}
+// Export init for main.js bootstrap (ES Module pattern)
+// main.js handles DOMContentLoaded and calls init() after security checks
+export { init };
 
 // ==========================================
 // Prototype Pollution Protection (window.onload)
