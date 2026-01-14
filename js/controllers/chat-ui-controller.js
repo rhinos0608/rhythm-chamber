@@ -29,15 +29,15 @@ function escapeHtml(text) {
     return String(text).replace(/[&<>"']/g, (char) => {
         switch (char) {
             case '&':
-                return '&';
+                return '&amp;';
             case '<':
-                return '<';
+                return '&lt;';
             case '>':
-                return '>';
+                return '&gt;';
             case '"':
-                return '"';
+                return '&quot;';
             case "'":
-                return ''';
+                return '&#39;';
             default:
                 return char;
         }
@@ -60,7 +60,7 @@ function parseMarkdown(text) {
 
     // First, protect code blocks (inline code)
     const codeBlocks = [];
-    let protected = escaped.replace(/`([^`]+)`/g, (match, code) => {
+    let processedText = escaped.replace(/`([^`]+)`/g, (match, code) => {
         const placeholder = `__CODE_${codeBlocks.length}__`;
         codeBlocks.push(`<code>${code}</code>`);
         return placeholder;
@@ -68,33 +68,33 @@ function parseMarkdown(text) {
 
     // Process bold: **text** or __text__
     // Use a more specific pattern to avoid matching within words
-    protected = protected
+    processedText = processedText
         .replace(/\*\*([^\*\*]+)\*\*/g, '<strong>$1</strong>')
         .replace(/__([^_]+)__/g, '<strong>$1</strong>');
 
     // Process italic: *text* or _text_
     // Use negative lookahead/lookbehind to avoid matching within bold
-    protected = protected
+    processedText = processedText
         .replace(/(?<!\*)\*(?!\*)([^\*]+)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
         .replace(/(?<!_)_(?!_)([^_]+)(?<!_)_(?!_)/g, '<em>$1</em>');
 
     // Restore code blocks
     codeBlocks.forEach((code, i) => {
-        protected = protected.replace(`__CODE_${i}__`, code);
+        processedText = processedText.replace(`__CODE_${i}__`, code);
     });
 
     // Process line breaks
     // Convert double newlines to paragraph breaks, single to line breaks
-    protected = protected
+    processedText = processedText
         .replace(/\n\n+/g, '</p><p>')
         .replace(/\n/g, '<br>');
 
     // Wrap in paragraphs if we have content
-    if (protected.includes('</p><p>') || !protected.includes('<br>')) {
-        protected = `<p>${protected}</p>`;
+    if (processedText.includes('</p><p>') || !processedText.includes('<br>')) {
+        processedText = `<p>${processedText}</p>`;
     }
 
-    return protected;
+    return processedText;
 }
 
 /**
