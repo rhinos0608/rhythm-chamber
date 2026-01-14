@@ -269,9 +269,16 @@ const SyncManager = {
 // Public API
 // ==========================================
 
-window.SyncStrategy = SyncStrategy;
-window.LocalOnlySync = LocalOnlySync;
-window.DeviceBackup = DeviceBackup;
-window.SyncManager = SyncManager;
+// ES Module exports
+export { SyncStrategy, LocalOnlySync, DeviceBackup, SyncManager };
+
+// Keep window globals for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.SyncStrategy = SyncStrategy;
+    window.LocalOnlySync = LocalOnlySync;
+    window.DeviceBackup = DeviceBackup;
+    window.SyncManager = SyncManager;
+}
 
 console.log('[SyncStrategy] Sync abstraction layer loaded (LocalOnlySync active)');
+

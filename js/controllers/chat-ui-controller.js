@@ -549,7 +549,8 @@ function clearMessages() {
 // Public API
 // ==========================================
 
-window.ChatUIController = {
+// ES Module export
+export const ChatUIController = {
     // Message rendering
     parseMarkdown,
     createMessageElement,
@@ -571,4 +572,10 @@ window.ChatUIController = {
     enableEditMode
 };
 
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.ChatUIController = ChatUIController;
+}
+
 console.log('[ChatUIController] Controller loaded');
+

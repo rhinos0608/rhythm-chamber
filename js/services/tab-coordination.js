@@ -275,7 +275,10 @@ const TabCoordinator = {
     cleanup
 };
 
-// Make available globally
+// ES Module export
+export { TabCoordinator };
+
+// Make available globally for backwards compatibility
 if (typeof window !== 'undefined') {
     window.TabCoordinator = TabCoordinator;
 }

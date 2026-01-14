@@ -605,8 +605,12 @@ const Storage = {
   }
 };
 
-// Make available globally
-window.Storage = Storage;
+// Export for ES Module consumers
+export { Storage, STORES };
+
+// Make available globally for backwards compatibility during migration
+if (typeof window !== 'undefined') {
+  window.Storage = Storage;
+}
 
 console.log('[Storage] Facade loaded - delegates to IndexedDBCore, ConfigAPI, StorageMigration');
-

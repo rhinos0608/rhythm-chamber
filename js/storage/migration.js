@@ -234,7 +234,7 @@ async function migrateFromLocalStorage() {
 // Public API
 // ==========================================
 
-window.StorageMigration = {
+export const StorageMigration = {
     // Migration
     migrateFromLocalStorage,
     isMigrationNeeded,
@@ -251,4 +251,10 @@ window.StorageMigration = {
     EXEMPT_KEYS: MIGRATION_EXEMPT_KEYS
 };
 
+// Keep window global for backwards compatibility during migration
+if (typeof window !== 'undefined') {
+    window.StorageMigration = StorageMigration;
+}
+
 console.log('[StorageMigration] Migration module loaded');
+

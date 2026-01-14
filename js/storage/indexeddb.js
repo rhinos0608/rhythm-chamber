@@ -310,7 +310,13 @@ async function getAllByIndex(storeName, indexName, direction = 'next') {
 // Public API
 // ==========================================
 
-window.IndexedDBCore = {
+// Store constants export
+export const STORES = INDEXEDDB_STORES;
+export const DB_NAME = INDEXEDDB_NAME;
+export const DB_VERSION = INDEXEDDB_VERSION;
+
+// IndexedDBCore object for grouped exports
+export const IndexedDBCore = {
     // Connection management
     initDatabase,
     closeDatabase,
@@ -332,4 +338,10 @@ window.IndexedDBCore = {
     getAllByIndex
 };
 
+// Keep window global for backwards compatibility during migration
+if (typeof window !== 'undefined') {
+    window.IndexedDBCore = IndexedDBCore;
+}
+
 console.log('[IndexedDBCore] Core module loaded');
+
