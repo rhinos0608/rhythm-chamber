@@ -92,6 +92,8 @@
 | WASM embeddings | v1.1 |
 | **Cloud Sync** | **Phase 2 (Market Signal Triggered)** |
 | **Managed AI Setup** | **Phase 2 (Market Signal Triggered)** |
+| **CLI Tool** | **Open Source/Free (dropped from paid)** |
+| **Premium Themes** | **Free for all (dropped from paid)** |
 
 ---
 
@@ -197,7 +199,7 @@ Stats.fm requires server infrastructure, which means:
 
 #### Phase 1: Sovereign Community (Zero Cost to User)
 - **Free tier**: Full local analysis, BYOI chat (local or your keys), 100% client-side
-- **Supporter**: $19 Lifetime (CLI, themes, badges, friend compare)
+- **Supporter**: $19 Lifetime (PKM Export + Relationship Compatibility Reports)
   - **Purpose**: Seed capital for security audit & infrastructure
   - **Transparency**: "Your $19 funds our security partnership"
   - **KPI**: Need ~250-1,000 Supporters to fund Phase 2
@@ -242,7 +244,7 @@ Stats.fm requires server infrastructure, which means:
 **Differentiation:** We're not competing on stats. We're competing on self-discovery and power user features.
 - Stats.fm: "Look at your data" (charts, graphs)
 - Rhythm Chamber: "Look at yourself" (personality, chat)
-- **Plus**: CLI tool, zero-backend, BYOI, privacy-first, **optional cloud sync with external security**, demo mode + template/synth comparisons for instant evaluation
+- **Plus**: CLI tool (open source), zero-backend, BYOI, privacy-first, **optional cloud sync with external security**, demo mode + template/synth comparisons for instant evaluation
 
 ---
 
@@ -266,7 +268,7 @@ Stats.fm requires server infrastructure, which means:
 - Offer optional cloud sync (paid) with external security partnership
 - Keep local/offline models as the default intelligence path
 - Let users choose their level of control (local, their keys, or managed)
-- **Supporter tier** gives them CLI and themes without needing to self-host
+- **Supporter tier** gives them PKM Export and Relationship Reports without needing to self-host
 - **Trust Signal**: "Secured by [External Firm]" badge for cloud users
 
 ### Scenario 4: "Personality types feel like astrology"
@@ -321,5 +323,53 @@ The zero-backend architecture isn't a limitation—it's our moat. The BYOI model
 - **Key Insight**: Use Supporter revenue to hire external security firm, market their badge as trust signal
 - **KPI**: Need ~250-1,000 Supporters before launching cloud tier
 - **Protection**: Free tier never deprecated, users can switch between local and cloud
+
+**New Pricing Strategy Analysis:**
+
+### Strategy 1: The "Knowledge Graph" Tier (Recommended)
+**Value Prop:** Turn music history into a personal wiki. Build a powerful Export Engine that integrates with Personal Knowledge Management (PKM) tools like Obsidian, Notion, or Roam Research.
+
+**The Feature:** "Export to Obsidian Vault." The app generates a folder of Markdown files (one for every Artist, Month, Era) properly interlinked.
+
+**Example:** A user clicks "Export" and gets a local folder where [[The National]] links to [[Sad Dad Era]] and [[March 2019]].
+
+**Why it works:** The "Emotional Archaeologist" likely journals or tracks data. Giving them a "physical" digital copy of their history that connects to their other notes is huge value.
+
+**Price:** $19 Lifetime (Fits your "Sovereignty" angle).
+
+### Strategy 2: The "Social Resonance" Tier
+**Value Prop:** Compare your soul with others. Your docs mention a "Friend Compare via JSON". Currently, this is a feature. Make the Deep Comparison Report the paid product.
+
+**The Feature:** "Relationship Resonance Engine."
+
+**Free:** See your own stats.
+
+**Paid:** Upload a second person's zip file (or JSON export) to generate a "Relationship Compatibility Report."
+
+**Output:** "You and Sarah have 84% overlap in 'Melancholy' but divergent 'Energy' curves in 2021. Your common anthem is 'Bloodbuzz Ohio'."
+
+**Why it works:** It forces a viral loop. One user buys it to analyze their partner/friend. It sells the outcome (relationship insight), not the tool.
+
+**Price:** $10 Lifetime (Lower friction to encourage viral adoption).
+
+### Strategy 3: The "Deep Enrichment" Tier
+**Value Prop:** Data Spotify doesn't give you. Use the local client to fetch public metadata that Spotify hides or doesn't track, creating a "Super-Metadata" version of their library.
+
+**The Feature:** "Enrichment Mode."
+
+**The app connects to public APIs (MusicBrainz, AcoustID) from the client side to fetch BPM, Key, Producer Credits, and Lyrics for top tracks.
+
+**Unlock:** "Show me my listening habits by Producer instead of Artist" (e.g., "You love Jack Antonoff productions, regardless of the singer").
+
+**Why it works:** It appeals to the "Discovery Junkie" and music nerds who feel limited by standard "Top Artist" charts.
+
+**Price:** $15 Lifetime.
+
+### Recommendation
+Combine Strategy 1 (PKM Export) and Strategy 2 (Comparison) into the "Supporter" tier.
+
+Drop: CLI Tool (Make it open source/free to attract devs).
+Drop: Premium Themes (Keep them free to make the product look good for everyone).
+Add: "Obsidian/Notion Export" + "Relationship Compatibility Reports."
 
 **If we get the first insight right, if it's shareable, if chat feels smart, and if the viral loop works—we win.**

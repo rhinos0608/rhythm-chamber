@@ -9,7 +9,7 @@
 | LLM inference | $0 | **Your local AI** (Ollama/LM Studio) or OpenRouter (free tier) | **No cloud dependency** - run AI on your own hardware |
 | Processing | $0 | User's browser | Privacy-first, no data breach risk |
 | Data storage | $0 | User's localStorage/IndexedDB | User controls their data, not us |
-| **Supporter Features** | **$19 Lifetime** | **(Future)** User pays for CLI/themes/badges | **One-time unlock**—no recurring infrastructure |
+| **Supporter Features** | **$19 Lifetime** | **(Future)** User pays for PKM Export + Friend Compare | **One-time unlock**—no recurring infrastructure |
 | **Patreon Perks** | **$7/month** | **(Future)** Discord access, voting, early beta | **Optional**—community engagement, not code access |
 | **Total (Base)** | **$0** | **Free Forever** | Stats.fm needs to monetize to survive |
 
@@ -38,8 +38,8 @@ User's Browser
 │       ├── Parse JSON (Web Worker)
 │       └── Full personality classification
 │
-├── Store in localStorage/IndexedDB
-├── Chat via **Your AI** (Local or Cloud)
+│── Store in localStorage/IndexedDB
+│── Chat via **Your AI** (Local or Cloud)
 │   ├── **Local AI**: Ollama (http://localhost:11434)
 │   ├── **Local AI**: LM Studio (http://localhost:1234/v1)
 │   └── **Cloud AI**: OpenRouter (optional, BYOI with your key)
@@ -620,8 +620,8 @@ async function sendMessage(message) {
 
 | Resource | Cost | Purpose |
 |----------|------|----------|
-| CLI tool (Node.js wrapper) | $0 (uses existing JS) | Feature unlock |
-| Premium themes (CSS) | $0 | Feature unlock |
+| PKM Export (Markdown generation) | $0 (uses existing JS) | Feature unlock |
+| Relationship Compatibility Reports | $0 (uses existing JS) | Feature unlock |
 | Badge generation (Canvas) | $0 | Feature unlock |
 | Friend compare (JSON) | $0 | Feature unlock |
 | **Security Audit Fund** | **$19 per user** | **External security firm** |
@@ -712,9 +712,9 @@ This application uses a **100% client-side security model**. All security measur
 4. Add redirect URI to Spotify app settings
 5. Deploy static files
 
-### CLI Tool Distribution (Supporter Tier)
+### CLI Tool Distribution (Supporter Tier) - DROPPED
 
-```bash
+~~```bash
 # Node.js CLI wrapper
 npm install -g rhythm-chamber-cli
 
@@ -722,9 +722,9 @@ npm install -g rhythm-chamber-cli
 rhythm-chamber analyze ./spotify-export.zip
 rhythm-chamber compare friend-profile.json
 rhythm-chamber generate-card --theme cyberpunk
-```
+```~~
 
-**Implementation**: Wraps `js/parser.js` and `js/data-query.js` in Node.js CLI interface
+**Note:** CLI tool is now open source/free. Supporter tier focuses on PKM Export and Relationship Reports.
 
 ### Local Development
 
@@ -746,12 +746,13 @@ npx serve .
 - [x] Full local analysis, BYOI chat, basic cards
 - [x] Semantic search (Qdrant, user-provided credentials)
 - [x] Chat data queries (function calling)
+- [x] Premium themes (Dark, Cyberpunk, Minimal) - **FREE for all**
 - [ ] WASM embeddings for semantic search (v1.1)
 - [ ] Playlist generation based on patterns (v1.1)
 
 #### Supporter Tier ($19 Lifetime)
-- [x] CLI tool for batch processing
-- [x] Premium themes (Dark, Cyberpunk, Minimal)
+- [x] **Obsidian/Notion Export**: Generates folder of Markdown files with proper interlinking
+- [x] **Relationship Compatibility Reports**: Upload friend's data to generate insights
 - [x] "Verified" badge on cards
 - [x] Friend compare via JSON export/import
 

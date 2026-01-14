@@ -113,7 +113,7 @@ it since 2018. This matches your 'Emotional Archaeologist' pattern."
 
 #### Phase 1: Sovereign Community (Zero Cost to User)
 - **Free users**: Full chat experience with free models, BYOI, 100% local
-- **Supporters**: $19 Lifetime - Unlock CLI, themes, badges, friend compare
+- **Supporters**: $19 Lifetime - Unlock PKM Export + Relationship Compatibility Reports
   - **Purpose**: Funds external security audit & cloud infrastructure
 - **Transparency**: "Your $19 funds our security partnership"
 - **Patrons**: $7/month - Community access + early features
@@ -178,7 +178,8 @@ You mark time through sound.
 │  💭 Try: "Show me my breakup music"         │
 │  💭 Try: "When did I discover new artists?" │
 │                                             │
-│  [CLI Mode Available] ← Supporter feature   │
+│  [PKM Export Available] ← Supporter feature │
+│  [Friend Compare Available] ← Supporter     │
 └─────────────────────────────────────────────┘
 ```
 
@@ -215,7 +216,7 @@ You mark time through sound.
 ```
 
 **Supporter Features on Cards:**
-- Premium theme styling
+- Premium theme styling (FREE for all - dropped paid themes)
 - "Verified" badge (if supporter)
 - Custom backgrounds
 - Enhanced visual design
@@ -236,6 +237,8 @@ You mark time through sound.
 - PDF reports
 - Apple Music
 - **Cloud sync**: Phase 2 (Market Signal Triggered)
+- **CLI Tool**: Made open source/free (dropped from paid tier)
+- **Premium Themes**: Kept free for all users
 
 ## Monetization Features
 
@@ -246,13 +249,16 @@ You mark time through sound.
 - **BYOI Chat**: Bring your own intelligence—local models or your own API keys
 - **Basic Cards**: Shareable personality cards
 - **100% Client-Side**: Zero server costs, maximum privacy
+- **Premium Themes**: Dark, Cyberpunk, Minimal styles (FREE for all)
 - **Purpose**: Loss leader to build community and validate product
 
 #### Supporter Tier ($19 Lifetime) - Seed Capital
-- **CLI Tool**: Command-line interface for batch processing
-- **Premium Themes**: Dark, Cyberpunk, Minimal styles
+- **Obsidian/Notion Export**: Generates folder of Markdown files with proper interlinking
+  - One file per Artist, Month, and Era
+  - Example: [[The National]] links to [[Sad Dad Era]] and [[March 2019]]
+- **Relationship Compatibility Reports**: Upload friend's data to generate insights
+  - Example: "You and Sarah have 84% overlap in 'Melancholy' but divergent 'Energy' curves in 2021. Your common anthem is 'Bloodbuzz Ohio'."
 - **Verified Badge**: Visual indicator on shareable cards
-- **Friend Compare**: JSON export/import for local comparison
 - **Purpose**: Funds external security audit & cloud infrastructure
 - **Transparency**: "Your $19 funds our security partnership"
 - **KPI**: Need ~250-1,000 Supporters to fund Phase 2

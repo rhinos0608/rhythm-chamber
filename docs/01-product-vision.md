@@ -94,15 +94,6 @@ Power users WANT control:
 - Stats.fm needs servers → must monetize → controls your data
 - Rhythm Chamber: "Your data never leaves your device, runs in your browser, you control everything"
 
-**Monetization Alignment:**
-- Free tier: Full local analysis, BYOI chat
-- Supporter ($19): CLI tool for power users, themes, badges
-- Patron ($7/month): Community + early access
-- **No payment processing**: Just license keys
-- **No maintenance nightmare**: One codebase, simple unlocking
-
-For the quantified-self crowd, this is hugely compelling.
-
 ---
 
 ## Monetization
@@ -112,7 +103,7 @@ For the quantified-self crowd, this is hugely compelling.
 | Tier | Price | What You Get | Infrastructure | Purpose |
 |------|-------|--------------|----------------|----------|
 | **Free** | $0 | Full local analysis, BYOI chat, basic cards, personality reveal | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
-| **Supporter** | **$19 Lifetime** | CLI tool, premium themes, "Verified" badge, friend compare JSON import | Client-side only | **Seed Capital**: Funds security audit & cloud infrastructure |
+| **Supporter** | **$19 Lifetime** | **Obsidian/Notion Export + Relationship Compatibility Reports** | Client-side only | **Seed Capital**: Funds security audit & cloud infrastructure |
 | **Patron** | **$7/month** | Dev Discord access, roadmap voting, early beta features | Client-side + Discord | **Community**: Recurring revenue for ongoing support |
 
 ### Phase 2: Managed Cloud & AI (Trust-First Launch)
@@ -126,7 +117,8 @@ For the quantified-self crowd, this is hugely compelling.
 - **Zero Risk Entry**: Users try without payment barrier
 - **Community Investment**: Supporters feel ownership in security development
 - **Borrowed Trust**: External security firm reputation transfers to your product
-- **CLI Version**: Killer feature for power users who want scripting capabilities
+- **PKM Export**: "Physical" digital copy of their history that connects to their other notes
+- **Relationship Engine**: Viral loop - one user buys to analyze partner/friend, sells the outcome (relationship insight)
 - **Zero-Backend**: No payment processing infrastructure needed
 - **Viral Loop**: "Compare with Friend" via JSON exchange keeps data private
 - **BYOI Model**: Appeals to privacy-conscious power users who want control and choice over models/keys
@@ -137,18 +129,10 @@ For the quantified-self crowd, this is hugely compelling.
 - **Two Points of Failure**: Users can switch between local and cloud modes
 - **Never Deprecate Local**: Free tier remains functional forever
 
-### Patreon Integration Strategy
-- **One Codebase**: All features in main app, unlocked with license key
-- **No Maintenance Nightmare**: No separate codebases to sync
-- **Hacker-Resistant**: It's okay if people bypass - they weren't going to pay anyway
-- **Supporter Key**: Static key given to Patreon supporters
-- **Transparency**: Explicitly state "Your $19 funds our security audit"
-
 ### Feature Implementation
-- **CLI Version**: Wraps existing `js/parser.js` and `js/data-query.js` in Node.js
-- **Themes**: CSS-based, unlocked via license key in `js/settings.js`
-- **Badges**: Canvas-based visual elements on shareable cards
-- **Friend Compare**: Local JSON export/import, zero backend
+- **PKM Export**: Generates folder of Markdown files (one for every Artist, Month, Era) properly interlinked for Obsidian/Notion/Roam
+- **Relationship Compatibility Report**: Upload second person's zip/JSON to generate "You and Sarah have 84% overlap in 'Melancholy' but divergent 'Energy' curves in 2021. Your common anthem is 'Bloodbuzz Ohio'."
+- **Enrichment Mode** (Strategy 3): Connects to public APIs (MusicBrainz, AcoustID) to fetch BPM, Key, Producer Credits, Lyrics for top tracks
 - **Patreon Perks**: Discord access, voting rights, early access
 - **Phase 2**: Multi-device sync, encrypted cloud backup, managed AI setup, **external security partnership**
 
@@ -158,6 +142,56 @@ For the quantified-self crowd, this is hugely compelling.
 
 **Old framing:** Stats nerds who export data (~5M)
 
-**New framing:** Everyone who screenshots Wrapped (~100M+) + quantified-self enthusiasts
+**New framing:** Everyone who screenshots Wrapped (~100M+) + quantified-self enthusiasts + PKM users + relationship-focused users
 
-The data export friction is real, but the payoff is self-discovery, not just stats.
+The data export friction is real, but the payoff is self-discovery and deeper connections, not just stats.
+
+---
+
+## Pricing Strategy Analysis
+
+### Strategy 1: The "Knowledge Graph" Tier (Recommended)
+**Value Prop:** Turn music history into a personal wiki. Instead of a CLI tool, build a powerful Export Engine that integrates with Personal Knowledge Management (PKM) tools like Obsidian, Notion, or Roam Research.
+
+**The Feature:** "Export to Obsidian Vault." The app generates a folder of Markdown files (one for every Artist, Month, Era) properly interlinked.
+
+**Example:** A user clicks "Export" and gets a local folder where [[The National]] links to [[Sad Dad Era]] and [[March 2019]].
+
+**Why it works:** The "Emotional Archaeologist" likely journals or tracks data. Giving them a "physical" digital copy of their history that connects to their other notes is huge value.
+
+**Price:** $19 Lifetime (Fits your "Sovereignty" angle).
+
+### Strategy 2: The "Social Resonance" Tier
+**Value Prop:** Compare your data with others. Your docs mention a "Friend Compare via JSON". Currently, this is a feature. Make the Deep Comparison Report the paid product.
+
+**The Feature:** "Relationship Resonance Engine."
+
+**Free:** See your own stats.
+
+**Paid:** Upload a second person's zip file (or JSON export) to generate a "Relationship Compatibility Report."
+
+**Output:** "You and Sarah have 84% overlap in 'Melancholy' but divergent 'Energy' curves in 2021. Your common anthem is 'Bloodbuzz Ohio'."
+
+**Why it works:** It forces a viral loop. One user buys it to analyze their partner/friend. It sells the outcome (relationship insight), not the tool.
+
+**Price:** $10 Lifetime (Lower friction to encourage viral adoption).
+
+### Strategy 3: The "Deep Enrichment" Tier
+**Value Prop:** Data Spotify doesn't give you. Use the local client to fetch public metadata that Spotify hides or doesn't track, creating a "Super-Metadata" version of their library.
+
+**The Feature:** "Enrichment Mode."
+
+**The app connects to public APIs (MusicBrainz, AcoustID) from the client side to fetch BPM, Key, Producer Credits, and Lyrics for top tracks.
+
+**Unlock:** "Show me my listening habits by Producer instead of Artist" (e.g., "You love Jack Antonoff productions, regardless of the singer").
+
+**Why it works:** It appeals to the "Discovery Junkie" and music nerds who feel limited by standard "Top Artist" charts.
+
+**Price:** $15 Lifetime.
+
+### Recommendation
+Combine Strategy 1 (PKM Export) and Strategy 2 (Comparison) into the "Supporter" tier.
+
+Drop: CLI Tool (Make it open source/free to attract devs).
+Drop: Premium Themes (Keep them free to make the product look good for everyone).
+Add: "Obsidian/Notion Export" + "Relationship Compatibility Reports."
