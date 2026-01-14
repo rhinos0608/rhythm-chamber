@@ -240,6 +240,15 @@ What opened you up during that time?"
 
 ---
 
+## Template Profiles & Profile Synthesizer
+
+- **TemplateProfileStore** ships with 8 curated placeholders for grounding comparisons and chat suggestions.
+- **Profile Synthesizer** combines templates (keyword + function-calling selection) to generate synthetic streams, patterns, and personality types with progress feedback.
+- **Local storage only**: Synthetic profiles are saved via ProfileStorage and never mix with real uploads.
+- **Demo + onboarding support**: Demo mode and early chats can use these synthetic profiles to showcase depth before a user uploads data.
+
+---
+
 ## Known Limitations
 
 > [!WARNING]
@@ -269,7 +278,7 @@ What opened you up during that time?"
 ### Why This Can't Be Copied
 
 1. **Zero-backend architecture** — Stats.fm can't match our free tier
-2. **BYOK model** — Power users prefer our transparency
+2. **BYOI model** — Power users prefer owning their intelligence path (local or cloud)
 3. **Chat-first interface** — Natural language > clicking charts
 4. **Semantic search** — Deep data queries vs surface stats
 5. **Personality types** — Identity badges vs generic charts

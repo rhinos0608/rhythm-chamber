@@ -71,24 +71,31 @@ Plus: Get your listener personality type based on actual patterns in your data.
 
 **We're not competing for stats nerds.** We're competing for everyone who screenshots Wrapped and wants deeper self-understanding.
 
+## Instant Access + Synthetic Personas
+
+- **Demo Mode:** Pre-seeded "Emo Teen" persona with isolated demo data so users can explore chat, reveal, and cards before uploading anything.
+- **Quick Snapshot:** Spotify OAuth path for instant but shallow insights; upsells to full upload.
+- **Profile Synthesizer:** Template-driven synthetic profiles for friend comparisons, hypothesis testing, and onboarding without real data.
+- **Data Isolation:** Demo + synthetic profiles live in separate domains so they never pollute real uploads.
+
 ---
 
-## The BYOK Advantage
+## The BYOI Advantage
 
-**Bring Your Own Keys—this is a feature, not a bug:**
+**Bring Your Own Intelligence — this is a feature, not a bug:**
 
 Power users WANT control:
-- **Privacy-conscious**: Already exporting data, understand data sovereignty
-- **Technical**: Know what API keys are, appreciate transparency
-- **Sovereignty**: Willing to pay for their own infrastructure
-- **No black box**: They control the AI, we provide the interface
+- **Pick the compute**: Local models (Ollama/LM Studio) for zero cloud calls, or cloud via OpenRouter when convenient
+- **Own the keys**: Only provide keys when you want cloud; local stays keyless and offline
+- **Sovereignty**: Choose model + vector store, keep RAG credentials encrypted client-side
+- **No black box**: They control the intelligence, we provide the orchestration
 
 **Zero-backend architecture is our moat:**
 - Stats.fm needs servers → must monetize → controls your data
 - Rhythm Chamber: "Your data never leaves your device, runs in your browser, you control everything"
 
 **Monetization Alignment:**
-- Free tier: Full local analysis, BYOK chat
+- Free tier: Full local analysis, BYOI chat
 - Supporter ($19): CLI tool for power users, themes, badges
 - Patron ($7/month): Community + early access
 - **No payment processing**: Just license keys
@@ -104,7 +111,7 @@ For the quantified-self crowd, this is hugely compelling.
 
 | Tier | Price | What You Get | Infrastructure | Purpose |
 |------|-------|--------------|----------------|----------|
-| **Free** | $0 | Full local analysis, BYOK chat, basic cards, personality reveal | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
+| **Free** | $0 | Full local analysis, BYOI chat, basic cards, personality reveal | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
 | **Supporter** | **$19 Lifetime** | CLI tool, premium themes, "Verified" badge, friend compare JSON import | Client-side only | **Seed Capital**: Funds security audit & cloud infrastructure |
 | **Patron** | **$7/month** | Dev Discord access, roadmap voting, early beta features | Client-side + Discord | **Community**: Recurring revenue for ongoing support |
 
@@ -122,7 +129,7 @@ For the quantified-self crowd, this is hugely compelling.
 - **CLI Version**: Killer feature for power users who want scripting capabilities
 - **Zero-Backend**: No payment processing infrastructure needed
 - **Viral Loop**: "Compare with Friend" via JSON exchange keeps data private
-- **BYOK Model**: Appeals to privacy-conscious power users who want control
+- **BYOI Model**: Appeals to privacy-conscious power users who want control and choice over models/keys
 - **Phase 2 Trigger**: Only after hitting Supporter KPI (~250-1,000) and security audit complete
 - **Revenue Allocation**: Supporter funds go directly to security audit and cloud infrastructure
 - **Ongoing Costs**: $10/month covers API/embedding costs with margin

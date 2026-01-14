@@ -58,6 +58,7 @@
 | Risk | Mitigation | Status |
 |------|------------|--------|
 | Data export friction (5-30 day wait) | Lite version with instant OAuth | ✅ Mitigated |
+| Demo mode expectations mismatch | Demo badge + exit CTA + copy that highlights sample data | 🔄 Monitoring |
 | Pattern detection false positives | Only ship patterns detectable without API | ✅ Implemented |
 | Personality types feel generic | Use specific evidence from user data | ✅ Implemented |
 | Creepy line crossed | Aggregate patterns, ask don't tell | ✅ Designed |
@@ -127,6 +128,8 @@ Features implemented beyond original roadmap:
 - **Markdown in Chat** — Formatted AI responses
 - **AI Function Calling** — LLM can query data via tools (get_top_artists, etc.)
 - **Semantic Search** — RAG with Qdrant (now free for all users)
+- **Demo Mode** — Isolated "Emo Teen" sample persona with demo-specific chat prompts and exit CTA
+- **Template Profiles + Profile Synthesizer** — Template search + synthetic profiles (streams/patterns/personality) saved locally for comparisons
 
 ---
 
@@ -144,15 +147,12 @@ Stats.fm shows you **WHAT**. You show them **WHY and WHO**.
 | Full history + real-time | Full history only |
 | Low technical barrier (OAuth) | Medium (file upload OR OAuth) |
 
-### The BYOK Advantage
+### The BYOI Advantage
 
-**Power users WANT control:**
-- Already exporting data (privacy-conscious)
-- Understand API keys (technical)
-- Appreciate transparency (no black box)
-- Willing to pay for their own infra (sovereignty)
-
-**This isn't "too cheap to host AI"—it's "respecting power users' desire for control."** That's a feature, not a bug.
+- **Bring Your Own Intelligence:** Users pick local/offline models or cloud keys; we orchestrate either path.
+- **Trust by design:** Data stays local, credentials are optional for cloud calls, and RAG keys stay encrypted client-side.
+- **Cost control:** Free local + free cloud + premium options; user decides, not us.
+- **Faster evaluation:** Demo mode + template/profile synthesis let users feel the intelligence before uploading or buying.
 
 ### The Zero-Backend Moat
 
@@ -196,7 +196,7 @@ Stats.fm requires server infrastructure, which means:
 **Model:** Sovereign-to-Managed Pipeline (Community → Premium)
 
 #### Phase 1: Sovereign Community (Zero Cost to User)
-- **Free tier**: Full local analysis, BYOK chat, 100% client-side
+- **Free tier**: Full local analysis, BYOI chat (local or your keys), 100% client-side
 - **Supporter**: $19 Lifetime (CLI, themes, badges, friend compare)
   - **Purpose**: Seed capital for security audit & infrastructure
   - **Transparency**: "Your $19 funds our security partnership"
@@ -242,7 +242,7 @@ Stats.fm requires server infrastructure, which means:
 **Differentiation:** We're not competing on stats. We're competing on self-discovery and power user features.
 - Stats.fm: "Look at your data" (charts, graphs)
 - Rhythm Chamber: "Look at yourself" (personality, chat)
-- **Plus**: CLI tool, zero-backend, BYOK, privacy-first, **optional cloud sync with external security**
+- **Plus**: CLI tool, zero-backend, BYOI, privacy-first, **optional cloud sync with external security**, demo mode + template/synth comparisons for instant evaluation
 
 ---
 
@@ -257,14 +257,15 @@ Stats.fm requires server infrastructure, which means:
 ### Scenario 2: "Nobody wants to wait for data export"
 **Mitigation:**
 - Lite version provides instant value
+- Demo mode shows the full experience with sample data in seconds
 - Clear messaging about what full version offers
 - Progressive reveal of features
 
-### Scenario 3: "Power users don't actually want BYOK"
+### Scenario 3: "Power users don't actually want BYOI"
 **Mitigation:**
 - Offer optional cloud sync (paid) with external security partnership
-- Keep local-first as default
-- Let users choose their level of control
+- Keep local/offline models as the default intelligence path
+- Let users choose their level of control (local, their keys, or managed)
 - **Supporter tier** gives them CLI and themes without needing to self-host
 - **Trust Signal**: "Secured by [External Firm]" badge for cloud users
 
@@ -280,6 +281,12 @@ Stats.fm requires server infrastructure, which means:
 - **License key unlock**: Simple feature flag in settings
 - **Static keys**: No complex payment processing
 - **Accept piracy**: Focus on supporters who want to pay
+
+### Scenario 6: "Synthetic profiles feel fake or misleading"
+**Mitigation:**
+- Label synthesized profiles clearly and keep them in a separate storage domain
+- Only use synthesized profiles in chat when explicitly requested
+- Traceable sources: every synthetic persona lists the templates used
 
 ---
 
@@ -306,7 +313,7 @@ Stats.fm requires server infrastructure, which means:
 
 **We're not building a better stats.fm. We're building the next evolution of music self-discovery for power users.**
 
-The zero-backend architecture isn't a limitation—it's our moat. The BYOK model isn't a barrier—it's a feature for our target audience. The data export friction isn't a bug—it's a filter for users who value depth over immediacy.
+The zero-backend architecture isn't a limitation—it's our moat. The BYOI model isn't a barrier—it's a feature for our target audience. Demo mode + template/synth profiles reduce time-to-value while exports are pending. The data export friction isn't a bug—it's a filter for users who value depth over immediacy.
 
 **Sovereign-to-Managed Strategy:**
 - **Phase 1**: Free local tool builds community, $19 Supporters fund security audit

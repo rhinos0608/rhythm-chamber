@@ -8,7 +8,7 @@ This document describes the security model for Rhythm Chamber, a client-side mus
 
 ### 100% Client-Side Processing
 - **No Backend Servers**: All data processing happens in your browser
-- **BYOK (Bring Your Own Key)**: Users provide their own API keys
+- **BYOI (Bring Your Own Intelligence)**: Users choose local/offline models or supply their own API keys
 - **Local Storage Only**: Data stays on your device
 - **PKCE OAuth**: Secure Spotify authentication without backend
 
@@ -275,4 +275,3 @@ If you discover a security vulnerability in Rhythm Chamber:
 | 1.2 | 2026-01-13 | Clarified obfuscation vs encryption, removed namespace isolation (user owns Qdrant) |
 | 1.1 | 2026-01-12 | XSS token protection, adaptive lockouts, unified errors |
 | 1.0 | 2026-01-12 | Initial security model |
-

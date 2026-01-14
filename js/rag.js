@@ -1318,6 +1318,7 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}) {
 
 /**
  * Search using local vector store
+ * Uses async worker-based search for non-blocking UI during RAG queries
  * @param {string} query - Search query text
  * @param {number} limit - Number of results to return
  * @returns {Promise<Array>} Search results with payloads
@@ -1334,8 +1335,8 @@ async function searchLocal(query, limit = 5) {
     // Generate embedding for query
     const queryVector = await window.LocalEmbeddings.getEmbedding(query);
 
-    // Search in local vector store
-    const results = window.LocalVectorStore.search(queryVector, limit, 0.3);
+    // Use async search for non-blocking UI (falls back to sync if worker unavailable)
+    const results = await window.LocalVectorStore.searchAsync(queryVector, limit, 0.3);
 
     // Transform to match Qdrant response format
     return results.map(r => ({

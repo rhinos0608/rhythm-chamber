@@ -56,22 +56,65 @@ async function generateDeviceFingerprint() {
 }
 
 /**
- * Check if running in a secure context
+ * Allowed protocols for token binding operations
+ * Note: file:// is allowed with a warning since crypto.subtle may not work
+ */
+const ALLOWED_PROTOCOLS = ['https:', 'http:', 'app:', 'capacitor:'];
+
+/**
+ * Allowed hostnames for HTTP (non-HTTPS) connections
+ * These are considered safe for local development
+ */
+const ALLOWED_LOCAL_HOSTNAMES = ['localhost', '127.0.0.1'];
+
+/**
+ * Check if running in a secure context with comprehensive origin validation
  * Blocks sensitive operations in insecure environments (HTTP, embedded frames, etc.)
- * @returns {{secure: boolean, reason?: string}}
+ * 
+ * Enhanced validation per user feedback:
+ * - HTTPS: Always allowed
+ * - HTTP localhost/127.0.0.1: Allowed (local development)
+ * - app://capacitor://: Allowed (native wrappers)
+ * - file://: Allowed with warning (offline use, but crypto.subtle may fail)
+ * - Iframes: Cross-origin blocked
+ * - data://blob://: Blocked (XSS vectors)
+ * 
+ * @returns {{secure: boolean, reason?: string, warning?: string}}
  */
 function checkSecureContext() {
-    // Modern secure context check
-    if (typeof window.isSecureContext !== 'undefined' && !window.isSecureContext) {
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    const origin = window.location.origin;
+    const isLocalHost = ALLOWED_LOCAL_HOSTNAMES.includes(hostname);
+    const isHttps = protocol === 'https:';
+    const isFile = protocol === 'file:';
+    const isNativeWrapper = protocol === 'app:' || protocol === 'capacitor:';
+    const isHttp = protocol === 'http:';
+
+    // Check for HTTPS or valid local development
+    if (!isHttps && !isLocalHost && !isFile && !isNativeWrapper) {
+        // Insecure remote HTTP connection
         return {
             secure: false,
-            reason: 'Not running in a secure context (HTTPS required for sensitive operations)'
+            reason: `Insecure connection: ${origin}. Token binding requires HTTPS or localhost.`
         };
+    }
+
+    // Modern secure context check (browser-level)
+    if (typeof window.isSecureContext !== 'undefined' && !window.isSecureContext) {
+        // Browser says we're not in a secure context
+        // This can happen on HTTP even to localhost in some browsers
+        if (!isLocalHost && !isFile) {
+            return {
+                secure: false,
+                reason: 'Not running in a secure context (HTTPS required for sensitive operations)'
+            };
+        }
+        // Allow localhost even if isSecureContext is false (dev servers)
     }
 
     // Check for suspicious iframe embedding (clickjacking/XSS vector)
     if (window.top !== window.self) {
-        // We're in an iframe - this could be legitimate (dev tools) or malicious
         try {
             // If we can't access parent, it's cross-origin - highly suspicious
             const parentUrl = window.parent.location.href;
@@ -86,13 +129,37 @@ function checkSecureContext() {
     }
 
     // Check for data: or blob: protocols (common XSS vectors)
-    if (window.location.protocol === 'data:' || window.location.protocol === 'blob:') {
+    if (protocol === 'data:' || protocol === 'blob:') {
         return {
             secure: false,
             reason: 'Running in potentially malicious context (data: or blob: protocol)'
         };
     }
 
+    // Handle file:// protocol - allow with warning
+    // Users may run the app directly from their hard drive for offline use
+    // crypto.subtle may not work in this context
+    if (isFile) {
+        console.warn('[Security] Running from file:// - crypto.subtle may be unavailable');
+        return {
+            secure: true,
+            warning: 'Running from local file. Some security features may be limited.'
+        };
+    }
+
+    // Handle HTTP localhost - secure for development
+    if (isHttp && isLocalHost) {
+        console.log('[Security] Running on localhost HTTP - allowed for development');
+        return { secure: true };
+    }
+
+    // Handle native app wrappers (Electron, Capacitor)
+    if (isNativeWrapper) {
+        console.log(`[Security] Running in native wrapper (${protocol})`);
+        return { secure: true };
+    }
+
+    // HTTPS - fully secure
     return { secure: true };
 }
 

@@ -105,33 +105,17 @@ Instead of one-time export:
 
 ---
 
-## The BYOK Advantage (v2)
+## The BYOI Advantage (v2)
 
-### Why Power Users Want Control
+**Bring Your Own Intelligence = you own the compute path:**
+- **Privacy-first:** Local/offline models run keyless; cloud keys are optional when premium quality is desired.
+- **Transparency:** Users pick the provider (Ollama, LM Studio, OpenRouter) and vector store (local or their Qdrant).
+- **Sovereignty:** No lock-in or forced billing; cost and model selection stay with the user.
 
-**Privacy-conscious users:**
-- Already exporting data
-- Understand data sovereignty
-- Won't trust cloud-only services
-
-**Technical users:**
-- Know what API keys are
-- Appreciate transparency
-- Want to inspect the code
-
-**Sovereignty-focused users:**
-- Willing to pay for their own infrastructure
-- Don't want vendor lock-in
-- Prefer open standards
-
-### Implementation
-
-**Bring Your Own Keys:**
-- OpenRouter API key (for LLM)
-- Qdrant cluster URL + API key (for semantic search)
-- Optional: Local Ollama endpoint
-
-**This is a feature, not a bug.** For our target audience, control is the selling point.
+**Implementation:**
+- Local endpoints auto-detected; cloud endpoints require user-provided keys.
+- Settings UI + ConfigAPI let users toggle between local and cloud without code changes.
+- Consistent BYOI stance across chat, RAG, and synthesizer flows.
 
 ---
 
@@ -237,6 +221,15 @@ Data never touches our servers.
 
 ---
 
+## Template Profiles + Profile Synthesizer (v2)
+
+- **Template search functions** (`get_templates_by_*`) surface curated personas for chat comparisons.
+- **Profile Synthesizer** mixes templates (keyword/function-calling selection) to generate synthetic streams, patterns, and personality classifications with progress updates.
+- **Storage isolation**: Synthesized profiles are saved locally via ProfileStorage and do not mix with user uploads.
+- **Onboarding value**: Works with demo mode so users can explore deep analysis before providing real data.
+
+---
+
 ## The Power User Pitch
 
 ### Why They'll Switch
@@ -294,7 +287,7 @@ Data never touches our servers.
 
 **We're not building features for everyone. We're building features for power users who:**
 
-1. **Care about privacy** → Local-first, BYOK
+1. **Care about privacy** → Local-first, BYOI (local or your keys)
 2. **Want control** → Transparent, open-source
 3. **Value depth** → Semantic search, personality types
 4. **Understand tech** → API keys, self-hosting

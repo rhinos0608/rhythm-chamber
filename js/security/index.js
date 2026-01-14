@@ -180,6 +180,110 @@ function isSessionValid() {
     return true;
 }
 
+// ==========================================
+// Prototype Pollution Prevention
+// ==========================================
+
+/**
+ * Dangerous keys that can be used for prototype pollution attacks
+ */
+const PROTOTYPE_POLLUTION_KEYS = ['__proto__', 'constructor', 'prototype'];
+
+/**
+ * Sanitize object to prevent prototype pollution via JSON parsing
+ * Removes __proto__, constructor, and prototype keys recursively
+ * 
+ * Use this when parsing user-provided JSON (e.g., uploaded ZIP/JSON files)
+ * 
+ * @param {any} obj - Object to sanitize
+ * @returns {any} Sanitized object
+ */
+function sanitizeObject(obj) {
+    if (obj === null || typeof obj !== 'object') {
+        return obj;
+    }
+
+    // Handle arrays
+    if (Array.isArray(obj)) {
+        return obj.map(item => sanitizeObject(item));
+    }
+
+    // Handle objects
+    const sanitized = {};
+    for (const [key, value] of Object.entries(obj)) {
+        if (PROTOTYPE_POLLUTION_KEYS.includes(key)) {
+            console.warn(`[Security] Blocked prototype pollution attempt: ${key}`);
+            continue;
+        }
+        sanitized[key] = sanitizeObject(value);
+    }
+    return sanitized;
+}
+
+/**
+ * Safe JSON parse with prototype pollution protection
+ * Use instead of JSON.parse for untrusted input
+ * 
+ * @param {string} jsonString - JSON string to parse
+ * @returns {any} Parsed and sanitized object
+ */
+function safeJsonParse(jsonString) {
+    const parsed = JSON.parse(jsonString);
+    return sanitizeObject(parsed);
+}
+
+/**
+ * Enable prototype pollution protection
+ * Freezes Object.prototype and Array.prototype to prevent modification
+ * 
+ * IMPORTANT: Call this LAST in initialization, after all modules load
+ * This prevents legitimate library patches if called too early
+ * 
+ * @returns {boolean} True if protection was applied
+ */
+let prototypeFreezeEnabled = false;
+
+function enablePrototypePollutionProtection() {
+    if (prototypeFreezeEnabled) {
+        console.log('[Security] Prototype pollution protection already enabled');
+        return true;
+    }
+
+    try {
+        // Freeze core prototypes to prevent modification
+        Object.freeze(Object.prototype);
+        Object.freeze(Array.prototype);
+        Object.freeze(Function.prototype);
+
+        // Prevent __proto__ modification (additional layer)
+        // Note: Object.prototype is frozen, but this is belt-and-suspenders
+        try {
+            Object.defineProperty(Object.prototype, '__proto__', {
+                configurable: false,
+                enumerable: false,
+                writable: false,
+                value: Object.getPrototypeOf({})
+            });
+        } catch (e) {
+            // May fail if already frozen, which is fine
+        }
+
+        prototypeFreezeEnabled = true;
+        console.log('[Security] Prototype pollution protection enabled (Object/Array/Function prototypes frozen)');
+        return true;
+    } catch (e) {
+        console.error('[Security] Failed to enable prototype pollution protection:', e);
+        return false;
+    }
+}
+
+/**
+ * Check if prototype pollution protection is enabled
+ */
+function isPrototypeFreezeEnabled() {
+    return prototypeFreezeEnabled;
+}
+
 // Aggregate all modules into unified API
 const Security = {
     // Obfuscation (legacy, for non-critical data)
@@ -236,7 +340,13 @@ const Security = {
     redactForLogging,
     getUserNamespace,
     isSessionValid,
-    getSessionSalt: Encryption.getSessionSalt
+    getSessionSalt: Encryption.getSessionSalt,
+
+    // Prototype Pollution Prevention (NEW)
+    sanitizeObject,
+    safeJsonParse,
+    enablePrototypePollutionProtection,
+    isPrototypeFreezeEnabled
 };
 
 // Export for ES6 modules
