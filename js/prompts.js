@@ -105,5 +105,13 @@ IMPORTANT: Use the available functions to get precise data rather than guessing.
     ]
 };
 
-// Make available globally
-window.Prompts = Prompts;
+// ES Module export
+export { Prompts };
+
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.Prompts = Prompts;
+}
+
+console.log('[Prompts] Module loaded');
+

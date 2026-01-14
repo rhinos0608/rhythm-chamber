@@ -181,7 +181,8 @@ function getFunctionSchema(name) {
 // Public API
 // ==========================================
 
-window.Functions = {
+// ES Module export
+export const Functions = {
     // Execution
     execute: executeFunction,
 
@@ -203,24 +204,30 @@ window.Functions = {
     getFunctionSchema
 };
 
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.Functions = Functions;
+}
+
 // Populate static schema arrays after all modules load
 document.addEventListener('DOMContentLoaded', () => {
-    window.Functions.schemas = getDataSchemas();
-    window.Functions.templateSchemas = getTemplateSchemas();
-    window.Functions.allSchemas = getAllSchemas();
+    Functions.schemas = getDataSchemas();
+    Functions.templateSchemas = getTemplateSchemas();
+    Functions.allSchemas = getAllSchemas();
 
-    console.log(`[Functions] Loaded ${window.Functions.allSchemas.length} function schemas`);
+    console.log(`[Functions] Loaded ${Functions.allSchemas.length} function schemas`);
 });
 
 // Also try to populate immediately if DOM is already loaded
 if (document.readyState !== 'loading') {
     setTimeout(() => {
-        window.Functions.schemas = getDataSchemas();
-        window.Functions.templateSchemas = getTemplateSchemas();
-        window.Functions.allSchemas = getAllSchemas();
+        Functions.schemas = getDataSchemas();
+        Functions.templateSchemas = getTemplateSchemas();
+        Functions.allSchemas = getAllSchemas();
 
-        console.log(`[Functions] Loaded ${window.Functions.allSchemas.length} function schemas`);
+        console.log(`[Functions] Loaded ${Functions.allSchemas.length} function schemas`);
     }, 0);
 }
 
 console.log('[Functions] Facade module loaded');
+

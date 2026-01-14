@@ -338,7 +338,8 @@ function executeSearchTracks(args, streams) {
 // Executor Registry
 // ==========================================
 
-const DATA_EXECUTORS = {
+// ES Module export
+export const DataExecutors = {
     get_top_artists: executeGetTopArtists,
     get_top_tracks: executeGetTopTracks,
     get_artist_history: executeGetArtistHistory,
@@ -347,5 +348,10 @@ const DATA_EXECUTORS = {
     search_tracks: executeSearchTracks
 };
 
-// Export for module use
-window.DataExecutors = DATA_EXECUTORS;
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.DataExecutors = DataExecutors;
+}
+
+console.log('[DataExecutors] Module loaded');
+

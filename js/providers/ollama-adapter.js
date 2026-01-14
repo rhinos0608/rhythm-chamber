@@ -114,7 +114,8 @@ function supportsToolCalling(modelName) {
 // Public API
 // ==========================================
 
-window.OllamaProvider = {
+// ES Module export
+export const OllamaProvider = {
     // Core API (matches interface)
     call,
 
@@ -134,4 +135,10 @@ window.OllamaProvider = {
     type: 'local'
 };
 
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.OllamaProvider = OllamaProvider;
+}
+
 console.log('[OllamaProvider] Provider adapter loaded');
+

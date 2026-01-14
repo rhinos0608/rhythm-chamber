@@ -321,5 +321,13 @@ const ANALYTICS_QUERY_SCHEMAS = [
     }
 ];
 
-// Export for module use
-window.AnalyticsQuerySchemas = ANALYTICS_QUERY_SCHEMAS;
+// ES Module export
+export { ANALYTICS_QUERY_SCHEMAS as AnalyticsQuerySchemas };
+
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.AnalyticsQuerySchemas = ANALYTICS_QUERY_SCHEMAS;
+}
+
+console.log('[AnalyticsQuerySchemas] Module loaded');
+

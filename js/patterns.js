@@ -754,8 +754,8 @@ function detectImmediateVibe(liteData) {
     return insight.trim();
 }
 
-// Public API
-window.Patterns = {
+// ES Module export
+export const Patterns = {
     detectComfortDiscoveryRatio,
     detectEras,
     detectTimePatterns,
@@ -768,3 +768,11 @@ window.Patterns = {
     detectLitePatterns,
     detectImmediateVibe
 };
+
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.Patterns = Patterns;
+}
+
+console.log('[Patterns] Module loaded');
+

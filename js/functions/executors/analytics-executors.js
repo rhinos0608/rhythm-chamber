@@ -698,7 +698,8 @@ function executeGetOfflineListening(args, streams) {
 // Executor Registry
 // ==========================================
 
-const ANALYTICS_EXECUTORS = {
+// ES Module export
+export const AnalyticsExecutors = {
     // Stats.fm-style
     get_bottom_tracks: executeGetBottomTracks,
     get_bottom_artists: executeGetBottomArtists,
@@ -716,5 +717,10 @@ const ANALYTICS_EXECUTORS = {
     get_offline_listening: executeGetOfflineListening
 };
 
-// Export for module use
-window.AnalyticsExecutors = ANALYTICS_EXECUTORS;
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.AnalyticsExecutors = AnalyticsExecutors;
+}
+
+console.log('[AnalyticsExecutors] Module loaded');
+

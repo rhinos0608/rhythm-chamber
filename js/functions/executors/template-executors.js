@@ -126,16 +126,18 @@ async function executeSynthesizeProfile(args) {
 // Executor Registry
 // ==========================================
 
-const TEMPLATE_EXECUTORS = {
+// ES Module export
+export const TemplateExecutors = {
     get_templates_by_genre: executeGetTemplatesByGenre,
     get_templates_with_pattern: executeGetTemplatesWithPattern,
     get_templates_by_personality: executeGetTemplatesByPersonality,
     synthesize_profile: executeSynthesizeProfile
 };
 
-// List of functions that don't require user streams
-const TEMPLATE_FUNCTION_NAMES = Object.keys(TEMPLATE_EXECUTORS);
+// Keep window global for backwards compatibility
+if (typeof window !== 'undefined') {
+    window.TemplateExecutors = TemplateExecutors;
+}
 
-// Export for module use
-window.TemplateExecutors = TEMPLATE_EXECUTORS;
-window.TemplateFunctionNames = TEMPLATE_FUNCTION_NAMES;
+console.log('[TemplateExecutors] Module loaded');
+
