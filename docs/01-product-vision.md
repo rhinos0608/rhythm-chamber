@@ -103,15 +103,15 @@ Power users WANT control:
 | Tier | Price | What You Get | Infrastructure | Purpose |
 |------|-------|--------------|----------------|----------|
 | **Free** | $0 | Full local analysis, BYOI chat, basic cards, personality reveal | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
-| **Supporter** | **$19 Lifetime** | **Obsidian/Notion Export + Relationship Compatibility Reports** | Client-side only | **Seed Capital**: Funds security audit & cloud infrastructure |
+| **Supporter** | **$19/yearly** | **Obsidian/Notion Export + Relationship Compatibility Reports** | Client-side only | **Seed Capital**: Funds security audit & cloud infrastructure |
 | **Patron** | **$7/month** | Dev Discord access, roadmap voting, early beta features | Client-side + Discord | **Community**: Recurring revenue for ongoing support |
 
 ### Phase 2: Managed Cloud & AI (Trust-First Launch)
 
 | Tier | Price | What You Get | Infrastructure | Trust Signal |
 |------|-------|--------------|----------------|--------------|
-| **Cloud Sync** | **$50 Lifetime + $10/month** | Multi-device chat sync, encrypted cloud backup, **managed embeddings & AI setup**, security signatures & validation | Hybrid (Server-side DB + Client-side E2EE) | **"Secured by [External Firm]"** |
-| **Cloud Sync** | **$15/month** | Same as above, no lifetime payment | Hybrid (Server-side DB + Client-side E2EE) | **"Secured by [External Firm]"** |
+| **Cloud Sync** | **$40 yearly + $5/month** | Multi-device chat sync, encrypted cloud backup, **managed embeddings & AI setup - with transparent limits and token usage**, security signatures & validation | Hybrid (Server-side DB + Client-side E2EE) | **"Secured by [External Firm]"** |
+| **Cloud Sync** | **$5/month** | Same as above, no lifetime payment | Hybrid (Server-side DB + Client-side E2EE) | **"Secured by [External Firm]"** |
 
 ### Why This Works
 - **Zero Risk Entry**: Users try without payment barrier
@@ -132,6 +132,9 @@ Power users WANT control:
 ### Feature Implementation
 - **PKM Export**: Generates folder of Markdown files (one for every Artist, Month, Era) properly interlinked for Obsidian/Notion/Roam
 - **Relationship Compatibility Report**: Upload second person's zip/JSON to generate "You and Sarah have 84% overlap in 'Melancholy' but divergent 'Energy' curves in 2021. Your common anthem is 'Bloodbuzz Ohio'."
+
+ - AI uses function calls to query data from local database for specifity
+
 - **Enrichment Mode** (Strategy 3): Connects to public APIs (MusicBrainz, AcoustID) to fetch BPM, Key, Producer Credits, Lyrics for top tracks
 - **Patreon Perks**: Discord access, voting rights, early access
 - **Phase 2**: Multi-device sync, encrypted cloud backup, managed AI setup, **external security partnership**
@@ -159,7 +162,9 @@ The data export friction is real, but the payoff is self-discovery and deeper co
 
 **Why it works:** The "Emotional Archaeologist" likely journals or tracks data. Giving them a "physical" digital copy of their history that connects to their other notes is huge value.
 
-**Price:** $19 Lifetime (Fits your "Sovereignty" angle).
++ Social resonance tier and deep enrichment tier
+
+**Price:** $60 yearly or $10 monthly
 
 ### Strategy 2: The "Social Resonance" Tier
 **Value Prop:** Compare your data with others. Your docs mention a "Friend Compare via JSON". Currently, this is a feature. Make the Deep Comparison Report the paid product.
@@ -174,7 +179,7 @@ The data export friction is real, but the payoff is self-discovery and deeper co
 
 **Why it works:** It forces a viral loop. One user buys it to analyze their partner/friend. It sells the outcome (relationship insight), not the tool.
 
-**Price:** $10 Lifetime (Lower friction to encourage viral adoption).
+**Price:** $2 monthly (Lower friction to encourage viral adoption).
 
 ### Strategy 3: The "Deep Enrichment" Tier
 **Value Prop:** Data Spotify doesn't give you. Use the local client to fetch public metadata that Spotify hides or doesn't track, creating a "Super-Metadata" version of their library.
@@ -187,11 +192,10 @@ The data export friction is real, but the payoff is self-discovery and deeper co
 
 **Why it works:** It appeals to the "Discovery Junkie" and music nerds who feel limited by standard "Top Artist" charts.
 
-**Price:** $15 Lifetime.
+**Price:** $29 yearly or $5 monthly
 
 ### Recommendation
 Combine Strategy 1 (PKM Export) and Strategy 2 (Comparison) into the "Supporter" tier.
 
-Drop: CLI Tool (Make it open source/free to attract devs).
-Drop: Premium Themes (Keep them free to make the product look good for everyone).
+CLI Tool (Make it open source/free to attract devs). Premium Themes (Keep them free to make the product look good for everyone).
 Add: "Obsidian/Notion Export" + "Relationship Compatibility Reports."

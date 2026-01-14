@@ -36,7 +36,7 @@ import { Utils } from './utils.js';
 import { STORAGE_KEYS } from './storage/keys.js';
 import { IndexedDBCore, STORES } from './storage/indexeddb.js';
 import { ConfigAPI } from './storage/config-api.js';
-import { Migration } from './storage/migration.js';
+import { StorageMigration } from './storage/migration.js';
 import { SyncStrategy } from './storage/sync-strategy.js';
 import { ProfileStorage } from './storage/profiles.js';
 import { Storage } from './storage.js';
@@ -60,7 +60,7 @@ import { ProviderInterface } from './providers/provider-interface.js';
 import { OpenRouterProvider } from './providers/openrouter.js';
 import { LMStudioProvider } from './providers/lmstudio.js';
 import { Ollama } from './ollama.js';
-import { OllamaAdapter } from './providers/ollama-adapter.js';
+import { OllamaProvider } from './providers/ollama-adapter.js';
 
 // RAG and embeddings
 import { RAG } from './rag.js';
@@ -83,9 +83,9 @@ import { FunctionValidation } from './functions/utils/validation.js';
 import { DataQuerySchemas } from './functions/schemas/data-queries.js';
 import { TemplateQuerySchemas } from './functions/schemas/template-queries.js';
 import { AnalyticsQuerySchemas } from './functions/schemas/analytics-queries.js';
-import { DataQueryExecutors } from './functions/executors/data-executors.js';
-import { TemplateQueryExecutors } from './functions/executors/template-executors.js';
-import { AnalyticsQueryExecutors } from './functions/executors/analytics-executors.js';
+import { DataExecutors } from './functions/executors/data-executors.js';
+import { TemplateExecutors } from './functions/executors/template-executors.js';
+import { AnalyticsExecutors } from './functions/executors/analytics-executors.js';
 import { Functions } from './functions/index.js';
 
 // Services
