@@ -4,7 +4,7 @@
  * This is the single ES Module entry point for the application.
  * It handles:
  * 1. Security initialization (fail-fast if not secure)
- * 2. Module imports
+ * 2. Import ALL modules in dependency order
  * 3. Application startup
  * 
  * @module main
@@ -24,6 +24,94 @@ if (!securityCheck.secure) {
 }
 
 console.log('[Main] Security context validated');
+
+// ==========================================
+// Import ALL Modules (Dependency Order)
+// ==========================================
+
+// Core utilities (no dependencies)
+import { Utils } from './utils.js';
+
+// Storage layer (foundation for everything)
+import { STORAGE_KEYS } from './storage/keys.js';
+import { IndexedDBCore, STORES } from './storage/indexeddb.js';
+import { ConfigAPI } from './storage/config-api.js';
+import { Migration } from './storage/migration.js';
+import { SyncStrategy } from './storage/sync-strategy.js';
+import { ProfileStorage } from './storage/profiles.js';
+import { Storage } from './storage.js';
+
+// State management
+import { AppState } from './state/app-state.js';
+
+// Core analysis modules
+import { Patterns } from './patterns.js';
+import { Personality } from './personality.js';
+import { DataQuery } from './data-query.js';
+import { Prompts } from './prompts.js';
+import { Parser } from './parser.js';
+import { GenreEnrichment } from './genre-enrichment.js';
+
+// Token counter
+import { TokenCounter } from './token-counter.js';
+
+// LLM Providers
+import { ProviderInterface } from './providers/provider-interface.js';
+import { OpenRouterProvider } from './providers/openrouter.js';
+import { LMStudioProvider } from './providers/lmstudio.js';
+import { Ollama } from './ollama.js';
+import { OllamaAdapter } from './providers/ollama-adapter.js';
+
+// RAG and embeddings
+import { RAG } from './rag.js';
+import { LocalVectorStore } from './local-vector-store.js';
+import { LocalEmbeddings } from './local-embeddings.js';
+
+// Spotify
+import { Spotify } from './spotify.js';
+import { Settings } from './settings.js';
+
+// Chat
+import { Chat } from './chat.js';
+
+// Cards
+import { Cards } from './cards.js';
+
+// Function calling system
+import { FunctionRetry } from './functions/utils/retry.js';
+import { FunctionValidation } from './functions/utils/validation.js';
+import { DataQuerySchemas } from './functions/schemas/data-queries.js';
+import { TemplateQuerySchemas } from './functions/schemas/template-queries.js';
+import { AnalyticsQuerySchemas } from './functions/schemas/analytics-queries.js';
+import { DataQueryExecutors } from './functions/executors/data-executors.js';
+import { TemplateQueryExecutors } from './functions/executors/template-executors.js';
+import { AnalyticsQueryExecutors } from './functions/executors/analytics-executors.js';
+import { Functions } from './functions/index.js';
+
+// Services
+import { TabCoordinator } from './services/tab-coordination.js';
+import { SessionManager } from './services/session-manager.js';
+import { MessageOperations } from './services/message-operations.js';
+
+// Controllers
+import { ChatUIController } from './controllers/chat-ui-controller.js';
+import { SidebarController } from './controllers/sidebar-controller.js';
+import { ViewController } from './controllers/view-controller.js';
+import { FileUploadController } from './controllers/file-upload-controller.js';
+import { SpotifyController } from './controllers/spotify-controller.js';
+import { DemoController } from './controllers/demo-controller.js';
+import { ResetController } from './controllers/reset-controller.js';
+
+// Demo and template profiles
+import { DemoData } from './demo-data.js';
+import { TemplateProfileStore, TemplateProfileStoreClass } from './template-profiles.js';
+import { ProfileSynthesizer, ProfileSynthesizerClass } from './profile-synthesizer.js';
+
+// Utility modules
+import { OperationLock } from './operation-lock.js';
+import { Payments } from './payments.js';
+
+console.log('[Main] All modules imported');
 
 // ==========================================
 // Error UI for Security Failures
@@ -98,28 +186,6 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// ==========================================
-// Application Bootstrap
-// ==========================================
-
-/**
- * Initialize the application after security passes
- */
-async function bootstrap() {
-    console.log('[Main] Bootstrapping application...');
-
-    try {
-        // Import and initialize the application
-        const { init } = await import('./app.js');
-        await init();
-
-        console.log('[Main] Application initialized successfully');
-    } catch (error) {
-        console.error('[Main] Failed to initialize application:', error);
-        showLoadingError(error);
-    }
-}
-
 /**
  * Show generic loading error
  */
@@ -173,6 +239,28 @@ function showLoadingError(error) {
 }
 
 // ==========================================
+// Application Bootstrap
+// ==========================================
+
+/**
+ * Initialize the application after security passes
+ */
+async function bootstrap() {
+    console.log('[Main] Bootstrapping application...');
+
+    try {
+        // Import and initialize the application
+        const { init } = await import('./app.js');
+        await init();
+
+        console.log('[Main] Application initialized successfully');
+    } catch (error) {
+        console.error('[Main] Failed to initialize application:', error);
+        showLoadingError(error);
+    }
+}
+
+// ==========================================
 // Start Application
 // ==========================================
 
@@ -182,3 +270,4 @@ if (document.readyState === 'loading') {
 } else {
     bootstrap();
 }
+
