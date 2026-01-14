@@ -293,3 +293,282 @@ Data never touches our servers.
 4. **Understand tech** → API keys, self-hosting
 
 **Stats.fm is for casual users who want charts. Rhythm Chamber is for power users who want understanding.**
+
+---
+
+## New Pricing Strategy Features
+
+### Strategy 1: Knowledge Graph Export (Supporter Tier)
+
+**Feature:** "Export to Obsidian/Notion/Roam"
+
+**What it generates:**
+- Folder of Markdown files for every Artist, Month, and Era
+- Proper interlinking: `[[The National]]` → `[[Sad Dad Era]]` → `[[March 2019]]`
+- Backlinks for relationship mapping
+- Metadata tags for easy filtering
+
+**Use cases:**
+- **Emotional Archaeologists** can build a personal wiki of their music history
+- **Researchers** can cross-reference listening patterns with life events
+- **Writers** can use music history as creative prompts
+- **Therapists** can use exported data for music therapy sessions
+
+**Technical implementation:**
+- Client-side Markdown generation
+- Template system for different PKM platforms
+- Batch export with progress tracking
+- Optional compression for large histories
+
+### Strategy 2: Relationship Resonance Engine (Supporter Tier)
+
+**Feature:** "Deep Comparison Reports"
+
+**Free tier:**
+- See your own stats and patterns
+- Basic friend comparison (same personality type)
+
+**Supporter tier:**
+- Upload friend's JSON export
+- Generate compatibility report with specific insights
+- Example output: "You and Sarah have 84% overlap in 'Melancholy' but divergent 'Energy' curves in 2021. Your common anthem is 'Bloodbuzz Ohio'."
+
+**Use cases:**
+- **Couples** understanding musical compatibility
+- **Friends** discovering shared experiences
+- **Music groups** analyzing collective patterns
+- **Therapists** understanding relationship dynamics through music
+
+**Technical implementation:**
+- Local JSON parsing and comparison
+- Statistical analysis of pattern overlap
+- Natural language report generation
+- Privacy-first: all processing client-side
+
+### Strategy 3: Deep Enrichment Mode (Separate Tier)
+
+**Feature:** "Enrichment Mode"
+
+**What it does:**
+- Connects to MusicBrainz API for detailed metadata
+- Uses AcoustID for audio fingerprinting
+- Fetches BPM, Key, Producer Credits, Lyrics
+- Creates "Super-Metadata" library
+
+**Unlock features:**
+- "Show me my listening habits by Producer instead of Artist"
+- "What's the BPM distribution of my breakup music?"
+- "Which producers appear most in my comfort songs?"
+
+**Use cases:**
+- **Music nerds** wanting deeper analysis
+- **Producers** studying their own influences
+- **DJs** analyzing energy patterns
+- **Researchers** studying production trends
+
+**Technical implementation:**
+- Client-side API calls to public databases
+- Caching system to avoid rate limits
+- Metadata merging with Spotify data
+- New visualization types (BPM charts, key distributions)
+
+### Combined Supporter Tier
+
+**Price:** $19 Lifetime
+
+**Includes:**
+- ✅ Obsidian/Notion Export (Strategy 1)
+- ✅ Relationship Compatibility Reports (Strategy 2)
+- ✅ Verified Badge on cards
+- ✅ Priority support
+- ✅ Early access to new features
+
+**Dropped from paid:**
+- ❌ CLI Tool (now open source/free)
+- ❌ Premium Themes (free for all users)
+
+**Purpose:** Fund security audit and cloud infrastructure
+
+### Phase 2: Cloud Sync (Separate Tier)
+
+**Price:** $50 Lifetime + $10/month OR $15/month
+
+**Includes:**
+- Multi-device chat sync
+- Encrypted cloud backup
+- Managed AI setup
+- External security partnership badge
+
+**Trigger:** Only after 250-1,000 Supporters + security audit
+
+---
+
+## Implementation Notes
+
+### PKM Export Technical Details
+
+**File structure:**
+```
+rhythm-chamber-export/
+├── Artists/
+│   ├── The National.md
+│   ├── Bon Iver.md
+│   └── Radiohead.md
+├── Months/
+│   ├── 2020-03.md
+│   ├── 2020-04.md
+│   └── 2022-07.md
+├── Eras/
+│   ├── Sad Dad Era.md
+│   ├── Rebuilding Phase.md
+│   └── Discovery Period.md
+└── README.md
+```
+
+**Markdown format:**
+```markdown
+# The National
+
+**Total Plays:** 1,247
+**First Listen:** March 2018
+**Last Listen:** January 2025
+**Eras:** [[Sad Dad Era]], [[Rebuilding Phase]]
+
+## Patterns
+- High repeat rate (89%)
+- Evening preference (73% after 8pm)
+- Associated with breakup period
+
+## Related Artists
+- [[Bon Iver]] (shared era)
+- [[Radiohead]] (similar patterns)
+```
+
+### Relationship Report Technical Details
+
+**Comparison algorithm:**
+1. Parse both JSON exports
+2. Calculate pattern overlap (eras, skip behavior, time-of-day)
+3. Identify common artists/tracks
+4. Generate statistical insights
+5. Create natural language summary
+
+**Output format:**
+```
+Relationship Compatibility Report: You & Sarah
+
+Overall Compatibility: 78%
+
+Key Similarities:
+- 84% overlap in "Melancholy" patterns
+- Both show "Emotional Archaeologist" traits
+- Shared anthem: "Bloodbuzz Ohio" (played 47x each)
+
+Key Differences:
+- Your "Energy" curve peaked in 2021, Sarah's in 2020
+- You prefer mornings, Sarah prefers evenings
+- Sarah has higher "Discovery Junkie" score
+
+Insights:
+Your musical journeys diverged in 2021 but share emotional 
+core. Consider exploring Sarah's 2020 playlist for context.
+```
+
+### Enrichment Mode Technical Details
+
+**API integration:**
+- MusicBrainz: Artist/album metadata
+- AcoustID: Audio fingerprinting
+- Genius: Lyrics (optional)
+- Spotify Audio Features: BPM, key, energy
+
+**Caching strategy:**
+- Store enriched data locally
+- Rate limit handling (respect API limits)
+- Incremental updates (only fetch new tracks)
+- Offline mode (use cached data)
+
+**New analytics:**
+- Producer analysis: "Jack Antonoff appears in 23% of your library"
+- BPM distribution: "Your breakup music averages 85 BPM"
+- Key analysis: "You gravitate toward minor keys when sad"
+- Energy flow: "Your energy peaks in summer months"
+
+---
+
+## Market Positioning
+
+### Why This Works
+
+**For the Emotional Archaeologist:**
+- PKM export turns data into a personal archive
+- Relationship reports validate their music-as-memory approach
+- Enrichment provides deeper context for their analysis
+
+**For the Discovery Junkie:**
+- Enrichment reveals production details they crave
+- Relationship reports help find musically compatible friends
+- PKM export helps organize their vast library
+
+**For the Power User:**
+- All features work locally (privacy)
+- Export formats are open standards (longevity)
+- No vendor lock-in (can leave anytime)
+
+### Competitive Moat
+
+**Stats.fm can't compete because:**
+- They need server infrastructure (cost, privacy concerns)
+- They can't offer PKM integration (data leaves their platform)
+- They don't do relationship analysis (server-side processing)
+- They lack enrichment (API rate limits, cost)
+
+**Rhythm Chamber wins because:**
+- Zero-backend = zero infrastructure cost
+- Client-side = maximum privacy
+- Open formats = user ownership
+- Modular = easy to add features
+
+---
+
+## Success Metrics for New Features
+
+### PKM Export Adoption
+- Target: 30% of Supporters use export within first month
+- Success: Users share exported vaults on social media
+- Validation: Positive feedback on interlinking quality
+
+### Relationship Reports
+- Target: 50% of Supporters try friend comparison
+- Success: Viral loop - one user buys to analyze partner
+- Validation: Users report deeper understanding of relationships
+
+### Enrichment Mode
+- Target: 20% of Supporters enable enrichment
+- Success: Users discover new insights about producers/BPM
+- Validation: Requests for additional metadata sources
+
+---
+
+## The Bottom Line
+
+**New pricing strategy creates multiple value propositions:**
+
+1. **Free tier:** Full local analysis, BYOI chat, basic cards
+2. **Supporter ($19):** PKM Export + Relationship Reports + Badge
+3. **Patron ($7/month):** Community + early access
+4. **Cloud Sync ($50+):** Multi-device + managed AI
+
+**This aligns perfectly with the "Sovereignty" angle:**
+- Users get "physical" digital copies (PKM export)
+- Users control relationship data (local comparison)
+- Users choose their level of investment
+- No forced subscriptions, no data lock-in
+
+**The viral loop:**
+- Free users try demo → love the concept
+- One user buys Supporter for relationship insight
+- They share report → friend wants their own
+- Friend buys Supporter → cycle continues
+
+**Result:** Community growth without server costs, revenue for security audit, and features that power users actually want.
