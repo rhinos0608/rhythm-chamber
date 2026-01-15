@@ -7,6 +7,10 @@
  * - Message operations: DELEGATED to MessageOperations (js/services/message-operations.js)
  * - LLM calls: DELEGATED to ProviderInterface (js/providers/provider-interface.js)
  * - Tool strategies: DELEGATED to ToolStrategies (js/services/tool-strategies/)
+ * - Token counting: DELEGATED to TokenCountingService (js/services/token-counting-service.js)
+ * - Tool call handling: DELEGATED to ToolCallHandlingService (js/services/tool-call-handling-service.js)
+ * - LLM provider routing: DELEGATED to LLMProviderRoutingService (js/services/llm-provider-routing-service.js)
+ * - Fallback responses: DELEGATED to FallbackResponseService (js/services/fallback-response-service.js)
  * 
  * System prompts are defined in prompts.js for easy editing
  * Data queries are handled by data-query.js
@@ -17,9 +21,6 @@ import { NativeToolStrategy } from './services/tool-strategies/native-strategy.j
 import { PromptInjectionStrategy } from './services/tool-strategies/prompt-injection-strategy.js';
 import { IntentExtractionStrategy } from './services/tool-strategies/intent-extraction-strategy.js';
 import { ModuleRegistry } from './module-registry.js';
-
-// Tool strategies (initialized lazily)
-let toolStrategies = null;
 
 // HNW Fix: Timeout constants to prevent cascade failures
 const CHAT_API_TIMEOUT_MS = 60000;           // 60 second timeout for cloud API calls
@@ -74,6 +75,44 @@ async function initChat(personality, patterns, summary, streams = null) {
         window.MessageOperations.setStreamsData(streams);
     }
 
+    // Initialize TokenCountingService with dependencies
+    if (window.TokenCountingService?.init) {
+        window.TokenCountingService.init({
+            TokenCounter: window.TokenCounter
+        });
+    }
+
+    // Initialize ToolCallHandlingService with dependencies
+    if (window.ToolCallHandlingService?.init) {
+        window.ToolCallHandlingService.init({
+            CircuitBreaker: window.CircuitBreaker,
+            Functions: window.Functions,
+            SessionManager: window.SessionManager,
+            FunctionCallingFallback: window.FunctionCallingFallback,
+            buildSystemPrompt: buildSystemPrompt,
+            callLLM: callLLM,
+            streamsData: streamsData,
+            timeoutMs: CHAT_FUNCTION_TIMEOUT_MS
+        });
+    }
+
+    // Initialize LLMProviderRoutingService with dependencies
+    if (window.LLMProviderRoutingService?.init) {
+        window.LLMProviderRoutingService.init({
+            ProviderInterface: window.ProviderInterface,
+            Settings: window.Settings,
+            Config: window.Config
+        });
+    }
+
+    // Initialize FallbackResponseService with dependencies
+    if (window.FallbackResponseService?.init) {
+        window.FallbackResponseService.init({
+            MessageOperations: window.MessageOperations,
+            userContext: userContext
+        });
+    }
+
     return buildSystemPrompt();
 }
 
@@ -87,6 +126,10 @@ async function handleStorageUpdate(event) {
         // Update MessageOperations with new data
         if (window.MessageOperations?.setStreamsData) {
             window.MessageOperations.setStreamsData(streamsData);
+        }
+        // Update ToolCallHandlingService with new data
+        if (window.ToolCallHandlingService?.setStreamsData) {
+            window.ToolCallHandlingService.setStreamsData(streamsData);
         }
     }
 }
@@ -514,7 +557,7 @@ async function sendMessage(message, optionsOrKey = null) {
     if (!isLocalProvider && !isValidKey) {
         // Return a helpful message if no API key configured
         const queryContext = generateQueryContext(message);
-        const fallbackResponse = generateFallbackResponse(message, queryContext);
+        const fallbackResponse = window.FallbackResponseService.generateFallbackResponse(message, queryContext);
         if (window.SessionManager?.addMessageToHistory) {
             window.SessionManager.addMessageToHistory({
                 role: 'assistant',
@@ -530,7 +573,7 @@ async function sendMessage(message, optionsOrKey = null) {
     }
 
     // Build provider-specific config
-    const providerConfig = buildProviderConfig(provider, settings, config);
+    const providerConfig = window.LLMProviderRoutingService.buildProviderConfig(provider, settings, config);
 
     // ==========================================
     // FUNCTION CALLING CAPABILITY DETECTION
@@ -556,9 +599,9 @@ async function sendMessage(message, optionsOrKey = null) {
     // ==========================================
     let useTools = tools.length > 0 && streamsData && streamsData.length > 0;
 
-    // Calculate token usage before making API call
-    if (window.TokenCounter) {
-        const tokenInfo = window.TokenCounter.calculateRequestTokens({
+    // Calculate token usage before making API call using TokenCountingService
+    if (window.TokenCountingService) {
+        const tokenInfo = window.TokenCountingService.calculateTokenUsage({
             systemPrompt: messages[0].content,
             messages: messages.slice(1), // Exclude system prompt
             ragContext: semanticContext,
@@ -570,7 +613,7 @@ async function sendMessage(message, optionsOrKey = null) {
 
         // Check for warnings and apply strategies
         if (tokenInfo.warnings.length > 0) {
-            const recommended = window.TokenCounter.getRecommendedAction(tokenInfo);
+            const recommended = window.TokenCountingService.getRecommendedAction(tokenInfo);
 
             // Log warnings
             tokenInfo.warnings.forEach(warning => {
@@ -582,7 +625,7 @@ async function sendMessage(message, optionsOrKey = null) {
                 console.log('[Chat] Applying truncation strategy...');
 
                 // Truncate the request parameters
-                const truncatedParams = window.TokenCounter.truncateToTarget({
+                const truncatedParams = window.TokenCountingService.truncateToTarget({
                     systemPrompt: messages[0].content,
                     messages: messages.slice(1),
                     ragContext: semanticContext,
@@ -649,7 +692,7 @@ async function sendMessage(message, optionsOrKey = null) {
         }
 
         // Initial API call - routes to correct provider, pass onProgress for local streaming
-        let response = await callLLM(providerConfig, key, apiMessages, apiTools, isLocalProvider ? onProgress : null);
+        let response = await window.LLMProviderRoutingService.callLLM(providerConfig, key, apiMessages, apiTools, isLocalProvider ? onProgress : null);
 
         // HNW Fix: Validate response structure before accessing choices
         if (!response || !response.choices || response.choices.length === 0) {
@@ -660,7 +703,7 @@ async function sendMessage(message, optionsOrKey = null) {
         let responseMessage = response.choices[0].message;
 
         // Handle function calling with fallback support
-        const toolHandlingResult = await handleToolCallsWithFallback(
+        const toolHandlingResult = await window.ToolCallHandlingService.handleToolCallsWithFallback(
             responseMessage,
             providerConfig,
             key,
@@ -698,7 +741,7 @@ async function sendMessage(message, optionsOrKey = null) {
         console.error('Chat error:', error);
 
         const queryContext = generateQueryContext(message);
-        const fallbackResponse = generateFallbackResponse(message, queryContext);
+        const fallbackResponse = window.FallbackResponseService.generateFallbackResponse(message, queryContext);
 
         // Add fallback to history but mark as error context if needed
         if (window.SessionManager?.addMessageToHistory) {
@@ -717,361 +760,6 @@ async function sendMessage(message, optionsOrKey = null) {
             role: 'assistant'
         };
     }
-}
-
-// ==========================================
-// Tool Call Handling
-// ==========================================
-
-/**
- * Execute LLM-requested tool calls and return the follow-up response message.
- * If a tool fails, returns an early result for the caller to surface.
- * 
- * CIRCUIT BREAKER: Max 5 function calls per turn, 30s timeout per function.
- */
-async function handleToolCalls(responseMessage, providerConfig, key, onProgress) {
-    if (!responseMessage?.tool_calls || responseMessage.tool_calls.length === 0) {
-        return { responseMessage };
-    }
-
-    // Note: CircuitBreaker.resetTurn() is now called at the start of sendMessage()
-    // to ensure reset happens for all messages, not just those with tool calls
-
-    console.log('[Chat] LLM requested tool calls:', responseMessage.tool_calls.map(tc => tc.function.name));
-
-    // Add assistant's tool call message to conversation
-    if (window.SessionManager?.addMessageToHistory) {
-        window.SessionManager.addMessageToHistory({
-            role: 'assistant',
-            content: responseMessage.content || null,
-            tool_calls: responseMessage.tool_calls
-        });
-    }
-
-    // Execute each function call and add results
-    // HNW Fix: Add timeout to prevent indefinite hangs
-    // CIRCUIT BREAKER: Enforces max 5 calls per turn
-    for (const toolCall of responseMessage.tool_calls) {
-        // Check circuit breaker before each call
-        if (window.CircuitBreaker?.check) {
-            const breakerCheck = window.CircuitBreaker.check();
-            if (!breakerCheck.allowed) {
-                console.warn(`[Chat] Circuit breaker tripped: ${breakerCheck.reason}`);
-                if (onProgress) onProgress({ type: 'circuit_breaker_trip', reason: breakerCheck.reason });
-                return {
-                    earlyReturn: {
-                        status: 'error',
-                        content: window.CircuitBreaker.getErrorMessage(breakerCheck.reason),
-                        role: 'assistant',
-                        isCircuitBreakerError: true
-                    }
-                };
-            }
-            // Record this call
-            window.CircuitBreaker.recordCall();
-        }
-
-        const functionName = toolCall.function.name;
-        const rawArgs = toolCall.function.arguments || '{}';
-        let args;
-
-        try {
-            args = rawArgs ? JSON.parse(rawArgs) : {};
-        } catch (parseError) {
-            console.warn(`[Chat] Invalid tool call arguments for ${functionName}:`, rawArgs);
-
-            if (onProgress) onProgress({ type: 'tool_end', tool: functionName, error: true });
-
-            return {
-                earlyReturn: {
-                    status: 'error',
-                    content: buildToolCodeOnlyError(functionName, rawArgs),
-                    role: 'assistant',
-                    isFunctionError: true
-                }
-            };
-        }
-
-        console.log(`[Chat] Executing function: ${functionName}`, args);
-
-        // Notify UI: Tool start
-        if (onProgress) onProgress({ type: 'tool_start', tool: functionName });
-
-        // Execute the function with AbortController for true cancellation
-        // This enables proper cleanup when timeout occurs, rather than just ignoring the result
-        let result;
-        const abortController = new AbortController();
-        const timeoutId = setTimeout(() => {
-            abortController.abort();
-        }, CHAT_FUNCTION_TIMEOUT_MS);
-
-        try {
-            result = await window.Functions.execute(functionName, args, streamsData, {
-                signal: abortController.signal
-            });
-            clearTimeout(timeoutId);
-
-            // Check if aborted while executing
-            if (result?.aborted) {
-                throw new Error(`Function ${functionName} timed out after ${CHAT_FUNCTION_TIMEOUT_MS}ms`);
-            }
-        } catch (funcError) {
-            clearTimeout(timeoutId);
-            console.error(`[Chat] Function execution failed:`, funcError);
-
-            // Notify UI: Tool error (optional state update)
-            if (onProgress) onProgress({ type: 'tool_end', tool: functionName, error: true }); // Reset UI state
-
-            // Return error status to allow UI to show retry
-            return {
-                earlyReturn: {
-                    status: 'error',
-                    content: `Function call '${functionName}' failed: ${funcError.message}. Please try again or select a different model.`,
-                    role: 'assistant',
-                    isFunctionError: true
-                }
-            };
-        }
-
-        console.log(`[Chat] Function result:`, result);
-
-        // Note: isCodeLikeToolArguments check removed here. The JSON parse failure
-        // check above (line ~765) already catches malformed tool arguments including code.
-        // Checking rawArgs again after successful execution creates false positives.
-
-        // Notify UI: Tool end
-        if (onProgress) onProgress({ type: 'tool_end', tool: functionName, result });
-
-        // Add tool result to conversation
-        if (window.SessionManager?.addMessageToHistory) {
-            window.SessionManager.addMessageToHistory({
-                role: 'tool',
-                tool_call_id: toolCall.id,
-                content: JSON.stringify(result)
-            });
-        }
-    }
-
-    // Get updated history for follow-up call
-    const updatedHistory = window.SessionManager?.getHistory?.() || [];
-
-    // Make follow-up call with function results
-    const followUpMessages = [
-        { role: 'system', content: buildSystemPrompt() },
-        ...updatedHistory
-    ];
-
-    // Notify UI: Thinking again (processing tool results)
-    if (onProgress) onProgress({ type: 'thinking' });
-
-    const response = await callLLM(providerConfig, key, followUpMessages, undefined);
-    return { responseMessage: response.choices[0]?.message };
-}
-
-/**
- * Heuristic check for when the model returns code instead of JSON args
- */
-function isCodeLikeToolArguments(rawArgs = '') {
-    const trimmed = String(rawArgs || '').trim();
-
-    if (!trimmed) {
-        return false;
-    }
-
-    // Look for code-like patterns (backticks, declarations, arrows, function calls)
-    const codePattern = /```|function\s|\bconst\b|\blet\b|\bvar\b|=>|return\s|;|\n/;
-
-    if (codePattern.test(trimmed)) {
-        return true;
-    }
-
-    // Simple function call shape like fn(...)
-    return /^[A-Za-z_$][\w$]*\s*\(/.test(trimmed);
-}
-
-/**
- * Build a user-facing error message when tool calls look like code-only responses
- */
-function buildToolCodeOnlyError(functionName, rawArgs) {
-    const codeHint = isCodeLikeToolArguments(rawArgs);
-    if (codeHint) {
-        return `The AI tried to call '${functionName}' but only shared code for the call instead of executing it. Ask it to run the tool directly (no code blocks) or try again.`;
-    }
-    return `Function call '${functionName}' failed because the tool arguments were invalid. Please try again or select a different model.`;
-}
-
-// ==========================================
-// Tool Strategy Initialization
-// ==========================================
-
-/**
- * Initialize tool strategies (lazy initialization)
- * Strategies are created once and reused for all function calls
- */
-function initToolStrategies() {
-    if (toolStrategies) return;
-
-    const deps = {
-        CircuitBreaker: window.CircuitBreaker,
-        Functions: window.Functions,
-        SessionManager: window.SessionManager,
-        FunctionCallingFallback: window.FunctionCallingFallback,
-        timeoutMs: CHAT_FUNCTION_TIMEOUT_MS
-    };
-
-    toolStrategies = [
-        new NativeToolStrategy(deps),
-        new PromptInjectionStrategy(deps),
-        new IntentExtractionStrategy(deps)
-    ];
-
-    console.log('[Chat] Tool strategies initialized');
-}
-
-// ==========================================
-// Tool Call Handling with Fallback Support
-// ==========================================
-
-/**
- * Handle tool calls with fallback support for models without native function calling.
- * Uses Strategy pattern to delegate to appropriate handler based on capability level.
- * 
- * @param {object} responseMessage - LLM response message
- * @param {object} providerConfig - Provider configuration
- * @param {string} key - API key
- * @param {function} onProgress - Progress callback
- * @param {number} capabilityLevel - Detected capability level (1-4)
- * @param {Array} tools - Available function tools
- * @param {Array} messages - Original messages array
- * @param {string} userMessage - Original user message (for Level 4)
- * @returns {Promise<{responseMessage?: object, earlyReturn?: object}>}
- */
-async function handleToolCallsWithFallback(
-    responseMessage,
-    providerConfig,
-    key,
-    onProgress,
-    capabilityLevel,
-    tools,
-    messages,
-    userMessage
-) {
-    // Initialize strategies on first use
-    initToolStrategies();
-
-    // Build execution context
-    const context = {
-        responseMessage,
-        providerConfig,
-        key,
-        onProgress,
-        capabilityLevel,
-        tools,
-        messages,
-        userMessage,
-        streamsData,
-        buildSystemPrompt,
-        callLLM
-    };
-
-    // Try each strategy in order
-    for (const strategy of toolStrategies) {
-        if (strategy.canHandle(responseMessage, capabilityLevel)) {
-            console.log(`[Chat] Using ${strategy.constructor.name} (Level ${strategy.level})`);
-            return strategy.execute(context);
-        }
-    }
-
-    // Special case: Level 4 intent extraction (fallback of last resort)
-    const intentStrategy = toolStrategies.find(s => s instanceof IntentExtractionStrategy);
-    if (intentStrategy?.shouldAttemptExtraction?.(userMessage)) {
-        console.log('[Chat] Attempting Level 4 intent extraction');
-        return intentStrategy.execute(context);
-    }
-
-    // Check if we still have native tool_calls (fallback for unknown model capability)
-    if (responseMessage?.tool_calls?.length > 0) {
-        console.log('[Chat] Native tool calls found in response');
-        return handleToolCalls(responseMessage, providerConfig, key, onProgress);
-    }
-
-    // No function calls to handle
-    return { responseMessage };
-}
-
-// ==========================================
-// LLM Provider Routing (Delegated to Provider Modules)
-// ==========================================
-
-/**
- * Build provider-specific configuration
- * Delegates to ProviderInterface module
- * @param {string} provider - Provider name (openrouter, ollama, lmstudio)
- * @param {object} settings - User settings
- * @param {object} baseConfig - Base config from config.js
- * @returns {object} Provider-specific config
- */
-function buildProviderConfig(provider, settings, baseConfig) {
-    // Delegate to provider interface if available
-    if (window.ProviderInterface?.buildProviderConfig) {
-        return window.ProviderInterface.buildProviderConfig(provider, settings, baseConfig);
-    }
-
-    // Fallback for backward compatibility
-    switch (provider) {
-        case 'ollama':
-            return {
-                provider: 'ollama',
-                endpoint: settings.llm?.ollamaEndpoint || 'http://localhost:11434',
-                model: settings.ollama?.model || 'llama3.2',
-                temperature: settings.ollama?.temperature ?? settings.openrouter?.temperature ?? 0.7,
-                topP: settings.ollama?.topP ?? 0.9,
-                maxTokens: settings.ollama?.maxTokens || 2000
-            };
-
-        case 'lmstudio':
-            return {
-                provider: 'lmstudio',
-                endpoint: settings.llm?.lmstudioEndpoint || 'http://localhost:1234/v1',
-                model: settings.lmstudio?.model || 'local-model',
-                temperature: settings.lmstudio?.temperature ?? settings.openrouter?.temperature ?? 0.7,
-                topP: settings.lmstudio?.topP ?? 0.9,
-                maxTokens: settings.lmstudio?.maxTokens || 2000
-            };
-
-        case 'openrouter':
-        default:
-            return {
-                provider: 'openrouter',
-                ...baseConfig,
-                ...(settings.openrouter || {}),
-                model: settings.openrouter?.model || baseConfig.model,
-                temperature: settings.openrouter?.temperature ?? 0.7,
-                topP: settings.openrouter?.topP ?? 0.9,
-                maxTokens: settings.openrouter?.maxTokens || 4500,
-                frequencyPenalty: settings.openrouter?.frequencyPenalty ?? 0,
-                presencePenalty: settings.openrouter?.presencePenalty ?? 0
-            };
-    }
-}
-
-/**
- * Call the LLM provider
- * Delegates to ProviderInterface for unified provider routing
- * 
- * @param {object} config - Provider config from buildProviderConfig
- * @param {string} apiKey - API key (for OpenRouter)
- * @param {Array} messages - Chat messages
- * @param {Array} tools - Function calling tools (optional)
- * @param {function} onProgress - Progress callback for streaming (optional)
- * @returns {Promise<object>} Response in OpenAI-compatible format
- */
-async function callLLM(config, apiKey, messages, tools, onProgress = null) {
-    if (!window.ProviderInterface?.callProvider) {
-        throw new Error('ProviderInterface not loaded. Ensure provider modules are included before chat.js.');
-    }
-
-    return window.ProviderInterface.callProvider(config, apiKey, messages, tools, onProgress);
 }
 
 /**
@@ -1171,102 +859,6 @@ async function editMessage(index, newText, options = null) {
 
     // Send new message (this will add it to history and generate response)
     return sendMessage(newText, options);
-}
-
-/**
- * Generate a fallback response when API is unavailable
- * DELEGATES to MessageOperations
- */
-function generateFallbackResponse(message, queryContext) {
-    if (typeof window.MessageOperations !== 'undefined') {
-        return window.MessageOperations.generateFallbackResponse(message, queryContext);
-    }
-
-    // Fallback if MessageOperations not available
-    const { personality, patterns } = userContext;
-    const lowerMessage = message.toLowerCase();
-
-    // If we have query context, use it to build a response
-    if (queryContext) {
-        // Parse the context to extract key info
-        const lines = queryContext.split('\n').filter(l => l.trim());
-
-        // Check for time period data
-        if (queryContext.includes('DATA FOR')) {
-            const topArtistMatch = queryContext.match(/1\. ([^\(]+) \((\d+) plays\)/);
-            const hoursMatch = queryContext.match(/Listening time: (\d+) hours/);
-            const periodMatch = queryContext.match(/DATA FOR ([^:]+):/);
-
-            if (periodMatch && topArtistMatch) {
-                const period = periodMatch[1];
-                const topArtist = topArtistMatch[1].trim();
-                const plays = topArtistMatch[2];
-                const hours = hoursMatch ? hoursMatch[1] : 'many';
-
-                return `In ${period}, you listened to ${hours} hours of music. Your top artist was ${topArtist} with ${plays} plays. As ${personality.name}, this kind of deep listening is typical of how you engage with music.\n\nWant to explore what else was happening in that period?`;
-            }
-        }
-
-        // Check for artist data
-        if (queryContext.includes('DATA FOR ARTIST')) {
-            const artistMatch = queryContext.match(/DATA FOR ARTIST "([^"]+)":/);
-            const playsMatch = queryContext.match(/Total plays: (\d+)/);
-            const peakMatch = queryContext.match(/Peak period: ([^(]+)/);
-
-            if (artistMatch && playsMatch) {
-                const artist = artistMatch[1];
-                const plays = playsMatch[1];
-                const peak = peakMatch ? peakMatch[1].trim() : null;
-
-                let response = `You've played ${artist} ${plays} times total.`;
-                if (peak) {
-                    response += ` Your peak listening period was ${peak}.`;
-                }
-                response += `\n\nThis fits your ${personality.name} profile — ${personality.tagline.toLowerCase()}`;
-                return response;
-            }
-        }
-    }
-
-    // Existing fallback logic for common patterns
-    if (lowerMessage.includes('2020') || lowerMessage.includes('2021') ||
-        lowerMessage.includes('2022') || lowerMessage.includes('2023')) {
-        const year = message.match(/20\d{2}/)?.[0];
-        if (patterns.eras && patterns.eras.eras.length > 0) {
-            const era = patterns.eras.eras.find(e => e.start.includes(year));
-            if (era) {
-                return `During ${era.start}, you were really into ${era.topArtists.slice(0, 3).join(', ')}. That lasted about ${era.weeks} weeks. Want to know what shifted after that?`;
-            }
-        }
-        return `Looking at ${year}... I can see your listening patterns, but to really explore this I'd need the chat API connected. Your data shows ${patterns.summary?.uniqueArtists || 'many'} unique artists during this period.`;
-    }
-
-    if (lowerMessage.includes('ghost') || lowerMessage.includes('stop')) {
-        if (patterns.ghostedArtists && patterns.ghostedArtists.ghosted.length > 0) {
-            const ghost = patterns.ghostedArtists.ghosted[0];
-            return `${ghost.artist} stands out — you played them ${ghost.totalPlays} times, then just... stopped ${ghost.daysSince} days ago. That's a significant shift. Something changed?`;
-        }
-        return `I can see some artists you've moved on from, but the full picture needs the chat API. Your personality type suggests you process music emotionally, so these changes might be meaningful.`;
-    }
-
-    if (lowerMessage.includes('favorite') || lowerMessage.includes('love')) {
-        if (patterns.trueFavorites && patterns.trueFavorites.topByPlays) {
-            const top = patterns.trueFavorites.topByPlays;
-            return `By play count, it's ${top.artist} with ${top.plays} plays. But pure plays don't tell the whole story — completion rate matters too. ${personality.name}s like you often have a complex relationship with their "favorites."`;
-        }
-    }
-
-    // Default response - provider-aware messaging
-    const currentProvider = window.Settings?.getSettings?.()?.llm?.provider || 'openrouter';
-    const providerHint = currentProvider === 'openrouter'
-        ? 'connect an OpenRouter API key in settings'
-        : currentProvider === 'lmstudio'
-            ? 'ensure LM Studio is running with a model loaded'
-            : currentProvider === 'ollama'
-                ? 'ensure Ollama is running (ollama serve)'
-                : 'configure an LLM provider in settings';
-
-    return `As ${personality.name}, ${personality.tagline.toLowerCase()} ${personality.allEvidence?.[0] || ''}\n\nTo explore deeper questions, ${providerHint}. Until then, I can tell you about your patterns: ${patterns.summary?.totalHours || 'many'} hours of music across ${patterns.summary?.uniqueArtists || 'many'} artists.`;
 }
 
 /**

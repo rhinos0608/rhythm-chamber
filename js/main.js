@@ -333,6 +333,14 @@ async function bootstrap() {
             ]);
 
             console.log('[Main] Heavy modules loaded via ModuleRegistry');
+
+            // Pre-initialize LocalVectorStore to eagerly create worker
+            // This prevents race condition and user-facing delays on first search
+            const lvsModule = ModuleRegistry.getModuleSync('LocalVectorStore');
+            if (lvsModule?.LocalVectorStore) {
+                await lvsModule.LocalVectorStore.init();
+                console.log('[Main] LocalVectorStore worker pre-initialized');
+            }
         }
 
         // Import and initialize the application

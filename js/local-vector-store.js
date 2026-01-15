@@ -36,58 +36,87 @@ let searchWorker = null;
 let pendingSearches = new Map(); // id -> { resolve, reject }
 let requestIdCounter = 0;
 
+// Race condition fix: Single initialization promise ensures only one worker is created
+let workerInitPromise = null;
+let workerReady = false;
+
 // ==========================================
 // Web Worker Management
 // ==========================================
 
 /**
- * Initialize the search worker
- * @returns {Worker|null} The worker instance or null if unavailable
+ * Initialize the search worker asynchronously
+ * Uses promise-based initialization to prevent race condition when
+ * multiple concurrent calls try to create the worker simultaneously.
+ * 
+ * @returns {Promise<Worker|null>} The worker instance or null if unavailable
  */
-function initSearchWorker() {
-    if (searchWorker) return searchWorker;
+async function initWorkerAsync() {
+    // Already initialized
+    if (searchWorker && workerReady) return searchWorker;
 
-    try {
-        searchWorker = new Worker('js/workers/vector-search-worker.js');
+    // Initialization in progress - wait for it
+    if (workerInitPromise) return workerInitPromise;
 
-        searchWorker.onmessage = (event) => {
-            const { type, id, results, stats, message } = event.data;
+    // Start initialization - create single promise that all callers will share
+    workerInitPromise = new Promise((resolve) => {
+        try {
+            const worker = new Worker('js/workers/vector-search-worker.js');
 
-            const pending = pendingSearches.get(id);
-            if (!pending) {
-                console.warn('[LocalVectorStore] Received response for unknown request:', id);
-                return;
-            }
+            worker.onmessage = (event) => {
+                const { type, id, results, stats, message } = event.data;
 
-            pendingSearches.delete(id);
-
-            if (type === 'results') {
-                if (stats) {
-                    console.log(`[LocalVectorStore] Worker search: ${stats.vectorCount} vectors in ${stats.elapsedMs}ms`);
+                const pending = pendingSearches.get(id);
+                if (!pending) {
+                    console.warn('[LocalVectorStore] Received response for unknown request:', id);
+                    return;
                 }
-                pending.resolve(results);
-            } else if (type === 'error') {
-                console.error('[LocalVectorStore] Worker error:', message);
-                pending.reject(new Error(message));
-            }
-        };
 
-        searchWorker.onerror = (error) => {
-            console.error('[LocalVectorStore] Worker error:', error);
-            // Reject all pending searches
-            for (const [id, pending] of pendingSearches) {
-                pending.reject(new Error('Worker crashed'));
-            }
-            pendingSearches.clear();
-            searchWorker = null;
-        };
+                pendingSearches.delete(id);
 
-        console.log('[LocalVectorStore] Search worker initialized');
-        return searchWorker;
-    } catch (e) {
-        console.warn('[LocalVectorStore] Failed to initialize worker, using sync fallback:', e);
-        return null;
-    }
+                if (type === 'results') {
+                    if (stats) {
+                        console.log(`[LocalVectorStore] Worker search: ${stats.vectorCount} vectors in ${stats.elapsedMs}ms`);
+                    }
+                    pending.resolve(results);
+                } else if (type === 'error') {
+                    console.error('[LocalVectorStore] Worker error:', message);
+                    pending.reject(new Error(message));
+                }
+            };
+
+            worker.onerror = (error) => {
+                console.error('[LocalVectorStore] Worker error:', error);
+                // Reject all pending searches
+                for (const [id, pending] of pendingSearches) {
+                    pending.reject(new Error('Worker crashed'));
+                }
+                pendingSearches.clear();
+                searchWorker = null;
+                workerReady = false;
+                workerInitPromise = null; // Allow retry
+            };
+
+            searchWorker = worker;
+            workerReady = true;
+            console.log('[LocalVectorStore] Search worker initialized');
+            resolve(worker);
+        } catch (e) {
+            console.warn('[LocalVectorStore] Failed to initialize worker, using sync fallback:', e);
+            workerInitPromise = null; // Allow retry
+            resolve(null);
+        }
+    });
+
+    return workerInitPromise;
+}
+
+/**
+ * Synchronous worker getter for backward compatibility
+ * @returns {Worker|null} The worker if already initialized, null otherwise
+ */
+function getWorkerSync() {
+    return workerReady ? searchWorker : null;
 }
 
 /**
@@ -229,11 +258,17 @@ function cosineSimilarity(a, b) {
 const LocalVectorStore = {
     /**
      * Initialize the vector store
-     * Loads existing vectors from IndexedDB
+     * Loads existing vectors from IndexedDB and pre-initializes the search worker
      */
     async init() {
         await initDB();
         await loadFromDB();
+
+        // Pre-initialize worker to avoid user-facing delays during first search
+        await initWorkerAsync().catch(e => {
+            console.warn('[LocalVectorStore] Worker pre-init failed, will use sync fallback:', e);
+        });
+
         return this.count();
     },
 
@@ -332,8 +367,8 @@ const LocalVectorStore = {
             return [];
         }
 
-        // Try to use worker for non-blocking search
-        const worker = initSearchWorker();
+        // Try to use worker for non-blocking search (async initialization prevents race)
+        const worker = await initWorkerAsync();
 
         if (!worker) {
             // Fallback to sync search
@@ -463,6 +498,14 @@ const LocalVectorStore = {
      */
     isReady() {
         return dbReady;
+    },
+
+    /**
+     * Check if search worker is ready
+     * @returns {boolean} True if worker is initialized and ready
+     */
+    isWorkerReady() {
+        return workerReady;
     }
 };
 
