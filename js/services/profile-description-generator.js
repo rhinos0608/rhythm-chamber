@@ -94,8 +94,8 @@ function buildDescriptionPrompt(personality, patterns, summary) {
         context += `\n- Different music tastes between morning and evening`;
     }
 
-    if (patterns?.discoveryExplosions?.hasExplosions && 
-        Array.isArray(patterns.discoveryExplosions.explosions) && 
+    if (patterns?.discoveryExplosions?.hasExplosions &&
+        Array.isArray(patterns.discoveryExplosions.explosions) &&
         patterns.discoveryExplosions.explosions.length > 0) {
         const explosion = patterns.discoveryExplosions.explosions[0];
         context += `\n- Discovery explosion: ${explosion.newArtists} new artists in ${explosion.month}`;
@@ -147,32 +147,51 @@ async function generateDescription(personality, patterns, summary, onProgress = 
     }
 
     const prompt = buildDescriptionPrompt(personality, patterns, summary);
+    const systemPrompt = 'You are a creative writer specializing in music journalism. Be concise and insightful.';
 
     try {
-        // Use Chat module to call LLM (it handles all providers)
-        if (window.Chat?.sendMessageDirect) {
-            const response = await window.Chat.sendMessageDirect(prompt, {
-                systemPrompt: 'You are a creative writer specializing in music journalism. Be concise and insightful.',
-                maxTokens: 200,
-                temperature: 0.8
-            });
+        // Get settings and build provider config
+        const settings = window.Settings?.getSettings?.() || {};
+        const provider = settings.llm?.provider || availability.provider || 'ollama';
+        const baseConfig = window.Config?.openrouter || {};
 
-            if (response && response.content) {
-                // Clean up the response
-                let description = response.content.trim();
+        // Get API key for OpenRouter
+        const apiKey = settings.openrouter?.apiKey || baseConfig.apiKey || null;
+
+        // Use ProviderInterface to build config and call the provider
+        if (window.ProviderInterface?.buildProviderConfig && window.ProviderInterface?.callProvider) {
+            const providerConfig = window.ProviderInterface.buildProviderConfig(provider, settings, baseConfig);
+
+            // Override some settings for shorter generation
+            providerConfig.maxTokens = 200;
+            providerConfig.temperature = 0.8;
+
+            const messages = [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: prompt }
+            ];
+
+            const response = await window.ProviderInterface.callProvider(
+                providerConfig,
+                apiKey,
+                messages,
+                undefined, // no tools
+                null // no streaming for this
+            );
+
+            if (response?.choices?.[0]?.message?.content) {
+                let description = response.choices[0].message.content.trim();
                 // Remove quotes if the LLM wrapped it
                 if (description.startsWith('"') && description.endsWith('"')) {
                     description = description.slice(1, -1);
                 }
+                console.log('[ProfileDescGen] Generated description successfully');
                 return description;
             }
         }
 
-        // Fallback: try using the raw provider call
-        const settings = window.Settings?.getSettings?.();
-        const provider = settings?.llm?.provider || 'ollama';
-
-        if (provider === 'openrouter' && window.Config?.openrouter?.apiKey) {
+        // Fallback: try using OpenRouter directly if ProviderInterface not available
+        if (provider === 'openrouter' && apiKey) {
             const response = await callOpenRouterDirect(prompt, settings);
             return response;
         }
