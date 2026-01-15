@@ -11,6 +11,8 @@
  */
 
 import { ModuleRegistry } from '../module-registry.js';
+import { withTimeout, TimeoutError } from '../utils/timeout-wrapper.js';
+import { ProviderCircuitBreaker } from '../services/provider-circuit-breaker.js';
 
 // ==========================================
 // Timeout Constants
@@ -102,28 +104,72 @@ async function callProvider(config, apiKey, messages, tools, onProgress = null) 
         throw new Error(`Provider module '${config.provider}' not loaded`);
     }
 
-    // Route to appropriate provider
+    // HNW Network: Check circuit breaker before attempting call
+    const circuitCheck = ProviderCircuitBreaker.canExecute(config.provider);
+    if (!circuitCheck.allowed) {
+        const error = new Error(circuitCheck.reason);
+        error.type = 'circuit_open';
+        error.provider = config.provider;
+        error.recoverable = true;
+        error.cooldownRemaining = circuitCheck.cooldownRemaining;
+        error.suggestion = `${config.provider} is temporarily unavailable. ${circuitCheck.cooldownRemaining
+                ? `Try again in ${Math.ceil(circuitCheck.cooldownRemaining / 1000)}s.`
+                : 'Try a different provider.'
+            }`;
+        throw error;
+    }
+
+    // Get appropriate timeout for provider type
+    const timeoutMs = config.timeout || (config.isLocal ? PROVIDER_TIMEOUTS.local : PROVIDER_TIMEOUTS.cloud);
+    const startTime = Date.now();
+
+    // Route to appropriate provider with timeout protection
     let response;
-    switch (config.provider) {
-        case 'ollama':
-            response = await providerModule.call(config, messages, tools, onProgress);
-            break;
+    try {
+        response = await withTimeout(
+            async () => {
+                switch (config.provider) {
+                    case 'ollama':
+                        return await providerModule.call(config, messages, tools, onProgress);
 
-        case 'lmstudio':
-            response = await providerModule.call(config, messages, tools, onProgress);
-            break;
+                    case 'lmstudio':
+                        return await providerModule.call(config, messages, tools, onProgress);
 
-        case 'openrouter':
-        default:
-            response = await providerModule.call(apiKey, config, messages, tools, onProgress);
-            break;
+                    case 'openrouter':
+                    default:
+                        return await providerModule.call(apiKey, config, messages, tools, onProgress);
+                }
+            },
+            timeoutMs,
+            { operation: `${config.provider} LLM call` }
+        );
+
+        // Record success with duration
+        const durationMs = Date.now() - startTime;
+        ProviderCircuitBreaker.recordSuccess(config.provider, durationMs);
+
+    } catch (error) {
+        // Record failure for circuit breaker
+        ProviderCircuitBreaker.recordFailure(config.provider, error.message);
+
+        // Handle timeout with HNW-compliant recovery suggestion
+        if (error instanceof TimeoutError) {
+            const normalizedError = normalizeProviderError(error, config.provider);
+            normalizedError.suggestion = config.isLocal
+                ? 'Your local LLM is taking too long. Try a smaller model or check system resources.'
+                : 'The API request timed out. Try again or switch to a different model.';
+            throw normalizedError;
+        }
+        throw error;
     }
 
     // Validate response format from all providers
     if (!response || typeof response !== 'object') {
+        ProviderCircuitBreaker.recordFailure(config.provider, 'No response');
         throw new Error(`${config.provider} returned no response`);
     }
     if (!response.choices || !Array.isArray(response.choices)) {
+        ProviderCircuitBreaker.recordFailure(config.provider, 'Malformed response');
         console.warn('[ProviderInterface] Response missing choices array, will use fallback:', config.provider);
         throw new Error(`${config.provider} returned malformed response (missing choices array)`);
     }

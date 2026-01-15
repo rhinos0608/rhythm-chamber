@@ -51,7 +51,7 @@
  */
 
 // Import error classes
-let LockAcquisitionError, LockTimeoutError, LockReleaseError, LockForceReleaseError;
+let LockAcquisitionError, LockTimeoutError, LockReleaseError, LockForceReleaseError, DeadlockError;
 
 // Try to import error classes (works in both Node and browser)
 if (typeof require !== 'undefined') {
@@ -61,18 +61,21 @@ if (typeof require !== 'undefined') {
         LockTimeoutError = errors.LockTimeoutError;
         LockReleaseError = errors.LockReleaseError;
         LockForceReleaseError = errors.LockForceReleaseError;
+        DeadlockError = errors.DeadlockError;
     } catch (e) {
         // Fallback: use global if available
         LockAcquisitionError = window.LockAcquisitionError || Error;
         LockTimeoutError = window.LockTimeoutError || Error;
         LockReleaseError = window.LockReleaseError || Error;
         LockForceReleaseError = window.LockForceReleaseError || Error;
+        DeadlockError = window.DeadlockError || Error;
     }
 } else if (typeof window !== 'undefined') {
     LockAcquisitionError = window.LockAcquisitionError || Error;
     LockTimeoutError = window.LockTimeoutError || Error;
     LockReleaseError = window.LockReleaseError || Error;
     LockForceReleaseError = window.LockForceReleaseError || Error;
+    DeadlockError = window.DeadlockError || Error;
 }
 
 // Named operations that can be locked
@@ -98,6 +101,66 @@ const CONFLICT_MATRIX = {
 // Current locks state
 const activeLocks = new Map();  // operationName -> { ownerId, acquiredAt }
 let lockIdCounter = 0;
+
+// HNW Hierarchy: Pending lock requests for deadlock detection
+const pendingRequests = new Map();  // operationName -> Set<waitingFor>
+
+/**
+ * Build a dependency graph from pending requests and current locks
+ * @returns {Object} Graph where keys are operations and values are arrays of operations they're waiting for
+ */
+function buildLockDependencyGraph() {
+    const graph = {};
+
+    // Add pending request dependencies
+    for (const [op, waitingFor] of pendingRequests) {
+        graph[op] = [...waitingFor];
+    }
+
+    // Add active lock holders (they depend on completing their work)
+    for (const [op] of activeLocks) {
+        if (!graph[op]) {
+            graph[op] = [];
+        }
+    }
+
+    return graph;
+}
+
+/**
+ * Detect if there's a cycle in the dependency graph starting from a given node
+ * @param {Object} graph - Dependency graph
+ * @param {string} start - Starting node
+ * @param {Set} [visited] - Visited nodes
+ * @param {Array} [path] - Current path being explored
+ * @returns {string[]|null} The cycle if found, null otherwise
+ */
+function detectCycle(graph, start, visited = new Set(), path = []) {
+    if (path.includes(start)) {
+        // Found a cycle - return the cycle portion
+        const cycleStart = path.indexOf(start);
+        return [...path.slice(cycleStart), start];
+    }
+
+    if (visited.has(start)) {
+        return null;  // Already explored this node, no cycle through here
+    }
+
+    visited.add(start);
+    path.push(start);
+
+    const neighbors = graph[start] || [];
+    for (const neighbor of neighbors) {
+        // Check if the neighbor is currently holding a lock
+        if (activeLocks.has(neighbor)) {
+            const cycle = detectCycle(graph, neighbor, visited, path);
+            if (cycle) return cycle;
+        }
+    }
+
+    path.pop();
+    return null;
+}
 
 /**
  * Generate a unique lock owner ID
@@ -184,6 +247,66 @@ async function acquireWithTimeout(operationName, timeoutMs = 30000) {
         }
     }
 
+    throw new LockTimeoutError(operationName, timeoutMs);
+}
+
+/**
+ * Acquire a lock with deadlock detection
+ * 
+ * HNW Hierarchy: This function tracks pending requests and detects cycles
+ * in the dependency graph to prevent indefinite hangs from circular dependencies.
+ * 
+ * @param {string} operationName - The operation to lock
+ * @param {number} timeoutMs - Maximum wait time in milliseconds
+ * @returns {Promise<string>} Lock owner ID
+ * @throws {DeadlockError} If circular dependency detected
+ * @throws {LockTimeoutError} If timeout is reached
+ * @throws {LockAcquisitionError} If operation is blocked
+ */
+async function acquireWithDeadlockDetection(operationName, timeoutMs = 30000) {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeoutMs) {
+        try {
+            // Clean up any previous pending request
+            pendingRequests.delete(operationName);
+            return await acquire(operationName);
+        } catch (error) {
+            // If it's not a LockAcquisitionError, re-throw it
+            if (!(error instanceof LockAcquisitionError)) {
+                pendingRequests.delete(operationName);
+                throw error;
+            }
+
+            // Track what we're waiting for (for deadlock detection)
+            const { blockedBy } = canAcquire(operationName);
+            if (blockedBy && blockedBy.length > 0) {
+                pendingRequests.set(operationName, new Set(blockedBy));
+
+                // Check for deadlock (circular dependency)
+                const graph = buildLockDependencyGraph();
+                const cycle = detectCycle(graph, operationName);
+
+                if (cycle) {
+                    pendingRequests.delete(operationName);
+                    console.error(`[OperationLock] Deadlock detected: ${cycle.join(' → ')}`);
+                    throw new DeadlockError(operationName, cycle);
+                }
+            }
+
+            // If timeout is reached, throw timeout error
+            if (Date.now() - startTime >= timeoutMs) {
+                pendingRequests.delete(operationName);
+                console.warn(`[OperationLock] Timeout acquiring '${operationName}' after ${timeoutMs}ms`);
+                throw new LockTimeoutError(operationName, timeoutMs);
+            }
+
+            // Wait 100ms before retry
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+    }
+
+    pendingRequests.delete(operationName);
     throw new LockTimeoutError(operationName, timeoutMs);
 }
 
@@ -337,6 +460,7 @@ export const OperationLock = {
     OPERATIONS,
     acquire,
     acquireWithTimeout,
+    acquireWithDeadlockDetection,
     release,
     isLocked,
     canAcquire,
@@ -353,4 +477,4 @@ if (typeof window !== 'undefined') {
     window.OperationLock = OperationLock;
 }
 
-console.log('[OperationLock] Module loaded with enhanced diagnostics and timeout support');
+console.log('[OperationLock] Module loaded with deadlock detection, diagnostics and timeout support');

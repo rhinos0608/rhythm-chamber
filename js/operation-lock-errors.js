@@ -124,13 +124,57 @@ class LockForceReleaseError extends Error {
     }
 }
 
+/**
+ * Error thrown when a deadlock is detected (circular lock dependency)
+ * 
+ * HNW Hierarchy: Detects circular dependencies in lock acquisition to prevent
+ * indefinite hangs where Operation A waits for B, and B waits for A.
+ */
+class DeadlockError extends Error {
+    /**
+     * @param {string} operationName - The operation that detected the deadlock
+     * @param {string[]} cycle - The cycle of operations involved in the deadlock
+     */
+    constructor(operationName, cycle) {
+        const cycleStr = cycle.join(' → ');
+        super(`Deadlock detected for '${operationName}': circular dependency ${cycleStr}`);
+
+        this.name = 'DeadlockError';
+        this.operationName = operationName;
+        this.cycle = cycle;
+        this.timestamp = Date.now();
+        this.recoverable = false; // Requires breaking the cycle
+
+        if (Error.captureStackTrace) {
+            Error.captureStackTrace(this, DeadlockError);
+        }
+    }
+
+    /**
+     * Get human-readable description of the deadlock
+     * @returns {string}
+     */
+    getDescription() {
+        return `Operations ${this.cycle.join(', ')} are waiting for each other, creating a deadlock.`;
+    }
+
+    /**
+     * Get suggested resolution
+     * @returns {string}
+     */
+    getResolution() {
+        return 'Break the cycle by releasing one of the locks or restructuring the operation order.';
+    }
+}
+
 // Export for use in operation-lock.js and other modules
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         LockAcquisitionError,
         LockTimeoutError,
         LockReleaseError,
-        LockForceReleaseError
+        LockForceReleaseError,
+        DeadlockError
     };
 }
 
@@ -140,4 +184,5 @@ if (typeof window !== 'undefined') {
     window.LockTimeoutError = LockTimeoutError;
     window.LockReleaseError = LockReleaseError;
     window.LockForceReleaseError = LockForceReleaseError;
+    window.DeadlockError = DeadlockError;
 }
