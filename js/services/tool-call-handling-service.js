@@ -146,6 +146,12 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
         }, _timeoutMs);
 
         try {
+            // Guard: Check if Functions is available
+            if (!_Functions || typeof _Functions.execute !== 'function') {
+                clearTimeout(timeoutId);
+                throw new Error(`Functions service not available - cannot execute ${functionName}`);
+            }
+
             result = await _Functions.execute(functionName, args, _streamsData, {
                 signal: abortController.signal
             });
@@ -195,17 +201,33 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
     // Get updated history for follow-up call
     const updatedHistory = _SessionManager?.getHistory?.() || [];
 
+    // Build system prompt (guard against missing function)
+    const systemPrompt = typeof _buildSystemPrompt === 'function' ? _buildSystemPrompt() : '';
+
     // Make follow-up call with function results
     const followUpMessages = [
-        { role: 'system', content: _buildSystemPrompt() },
+        { role: 'system', content: systemPrompt },
         ...updatedHistory
     ];
 
     // Notify UI: Thinking again (processing tool results)
     if (onProgress) onProgress({ type: 'thinking' });
 
+    // Guard: Check if callLLM is available
+    if (typeof _callLLM !== 'function') {
+        console.error('[ToolCallHandlingService] _callLLM not available for follow-up call');
+        return {
+            earlyReturn: {
+                status: 'error',
+                content: 'LLM service not available for processing tool results. Please try again.',
+                role: 'assistant',
+                isFunctionError: true
+            }
+        };
+    }
+
     const response = await _callLLM(providerConfig, key, followUpMessages, undefined);
-    return { responseMessage: response.choices[0]?.message };
+    return { responseMessage: response.choices?.[0]?.message };
 }
 
 /**
@@ -270,6 +292,11 @@ function initToolStrategies() {
         new IntentExtractionStrategy(deps)
     ];
 
+    // Add identifier for each strategy (used instead of instanceof check)
+    toolStrategies.forEach(s => {
+        s.strategyName = s.constructor.name;
+    });
+
     console.log('[ToolCallHandlingService] Tool strategies initialized');
 }
 
@@ -324,7 +351,8 @@ async function handleToolCallsWithFallback(
     }
 
     // Special case: Level 4 intent extraction (fallback of last resort)
-    const intentStrategy = toolStrategies.find(s => s instanceof IntentExtractionStrategy);
+    // Use strategyName property instead of instanceof (class not in scope)
+    const intentStrategy = toolStrategies.find(s => s.strategyName === 'IntentExtractionStrategy');
     if (intentStrategy?.shouldAttemptExtraction?.(userMessage)) {
         console.log('[ToolCallHandlingService] Attempting Level 4 intent extraction');
         return intentStrategy.execute(context);
