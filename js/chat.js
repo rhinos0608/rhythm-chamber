@@ -1,6 +1,6 @@
 /**
  * Chat Integration Module
- * 
+ *
  * ARCHITECTURE (HNW Compliant):
  * - Chat orchestration: API calls, prompt building, function calling
  * - Session state: DELEGATED to SessionManager (js/services/session-manager.js)
@@ -11,7 +11,8 @@
  * - Tool call handling: DELEGATED to ToolCallHandlingService (js/services/tool-call-handling-service.js)
  * - LLM provider routing: DELEGATED to LLMProviderRoutingService (js/services/llm-provider-routing-service.js)
  * - Fallback responses: DELEGATED to FallbackResponseService (js/services/fallback-response-service.js)
- * 
+ * - Turn serialization: DELEGATED to TurnQueue (js/services/turn-queue.js)
+ *
  * System prompts are defined in prompts.js for easy editing
  * Data queries are handled by data-query.js
  */
@@ -21,6 +22,12 @@ import { NativeToolStrategy } from './services/tool-strategies/native-strategy.j
 import { PromptInjectionStrategy } from './services/tool-strategies/prompt-injection-strategy.js';
 import { IntentExtractionStrategy } from './services/tool-strategies/intent-extraction-strategy.js';
 import { ModuleRegistry } from './module-registry.js';
+
+// Turn serialization import
+import { TurnQueue } from './services/turn-queue.js';
+
+// Timeout budget import
+import { TimeoutBudget } from './services/timeout-budget-manager.js';
 
 // HNW Fix: Timeout constants to prevent cascade failures
 const CHAT_API_TIMEOUT_MS = 60000;           // 60 second timeout for cloud API calls
@@ -491,275 +498,311 @@ function getMonthName(monthNum) {
  * Send a message and get response
  * Supports OpenAI-style function calling for dynamic data queries
  * Now includes client-side token counting to prevent context window limits
+ *
+ * @param {string} message - User message
+ * @param {Object|string} optionsOrKey - Options object or API key string
+ * @param {Object} [options] - Additional options
+ * @param {boolean} [options.bypassQueue] - Bypass turn queue for internal operations
  */
-async function sendMessage(message, optionsOrKey = null) {
+async function sendMessage(message, optionsOrKey = null, options = {}) {
     if (!userContext) {
         throw new Error('Chat not initialized. Call initChat first.');
     }
 
-    // Reset circuit breaker for this turn (moved from handleToolCalls to ensure
-    // reset happens for every message, not just those with tool calls)
-    if (window.CircuitBreaker?.resetTurn) {
-        window.CircuitBreaker.resetTurn();
+    // Check if we should bypass the turn queue (for internal operations)
+    const bypassQueue = options?.bypassQueue === true;
+
+    // Wrap the actual message processing in TurnQueue for serialization
+    if (bypassQueue) {
+        // Bypass queue for internal operations (e.g., system messages, auto-responses)
+        console.log('[Chat] Bypassing turn queue for internal operation');
+        return processMessage(message, optionsOrKey);
+    } else {
+        // Use TurnQueue to serialize user message processing
+        return TurnQueue.push(message, optionsOrKey);
     }
+}
 
-    // Add user message to history via SessionManager
-    if (window.SessionManager?.addMessageToHistory) {
-        window.SessionManager.addMessageToHistory({
-            role: 'user',
-            content: message
-        });
-    }
-
-    // Try to get semantic context from RAG if configured
-    let semanticContext = null;
-    const RAG = ModuleRegistry.getModuleSync('RAG'); // Use registry instead of window global
-    if (RAG?.isConfigured()) {
-        try {
-            semanticContext = await RAG.getSemanticContext(message, 3);
-            if (semanticContext) {
-                console.log('[Chat] Semantic context retrieved from RAG');
-            }
-        } catch (err) {
-            console.warn('[Chat] RAG semantic search failed:', err.message);
-        }
-    }
-
-    // Get current history from SessionManager
-    const conversationHistory = window.SessionManager?.getHistory?.() || [];
-
-    // Build messages array with system prompt (includes semantic context if available)
-    const messages = [
-        { role: 'system', content: buildSystemPrompt(null, semanticContext) },
-        ...conversationHistory
-    ];
-
-    // Handle legacy apiKey argument or options object
-    const options = (typeof optionsOrKey === 'string')
-        ? { apiKey: optionsOrKey }
-        : (optionsOrKey || {});
-
-    const { apiKey, onProgress } = options;
-
-    // Get the merged settings (config.js as base, localStorage overrides)
-    const settings = window.Settings?.getSettings?.() || {};
-
-    // Determine which LLM provider to use
-    const provider = settings.llm?.provider || 'openrouter';
-    console.log('[Chat] Using LLM provider:', provider);
-
-    // For local providers (Ollama, LM Studio), no API key or openrouter config needed
-    const isLocalProvider = provider === 'ollama' || provider === 'lmstudio';
-
-    // Get configuration - only strictly required for OpenRouter
-    const config = window.Config?.openrouter || {};
-
-    // Get API key priority: parameter > merged settings > raw config
-    // The merged settings already handle the placeholder check
-    let key = apiKey || settings.openrouter?.apiKey || config.apiKey;
-
-    // Check if key is valid (not empty and not the placeholder)
-    const isValidKey = key && key !== '' && key !== 'your-api-key-here';
-
-    // For cloud providers, require API key; for local, check availability
-    if (!isLocalProvider && !isValidKey) {
-        // Return a helpful message if no API key configured
-        const queryContext = generateQueryContext(message);
-        const fallbackResponse = window.FallbackResponseService.generateFallbackResponse(message, queryContext);
-        if (window.SessionManager?.addMessageToHistory) {
-            window.SessionManager.addMessageToHistory({
-                role: 'assistant',
-                content: fallbackResponse
-            });
-        }
-        return {
-            content: fallbackResponse,
-            status: 'success', // Treat fallback as success for now to show message
-            role: 'assistant',
-            isFallback: true
-        };
-    }
-
-    // Build provider-specific config (guard against missing service)
-    const providerConfig = window.LLMProviderRoutingService?.buildProviderConfig?.(provider, settings, config) || {
-        provider: provider,
-        model: settings.llm?.model || 'default',
-        baseUrl: settings[provider]?.baseUrl || ''
-    };
-
-    // ==========================================
-    // FUNCTION CALLING - ALWAYS TRY NATIVE FIRST
-    // ==========================================
-    // No capability checking - we always try native function calling first.
-    // If it fails, the tool handling service will retry with fallback approaches.
-
-    // Get function schemas if available (filtered by user's enabled tools setting)
-    const tools = window.Functions?.getEnabledSchemas?.() || window.Functions?.schemas || [];
-
-    // Always use Level 1 (native) - fallbacks handled by ToolCallHandlingService
-    const capabilityLevel = 1;
-
-    // ==========================================
-    // TOKEN COUNTING & CONTEXT WINDOW MANAGEMENT
-    // ==========================================
-    let useTools = tools.length > 0 && streamsData && streamsData.length > 0;
-
-    // Calculate token usage before making API call using TokenCountingService
-    if (window.TokenCountingService) {
-        const tokenInfo = window.TokenCountingService.calculateTokenUsage({
-            systemPrompt: messages[0].content,
-            messages: messages.slice(1), // Exclude system prompt
-            ragContext: semanticContext,
-            tools: useTools ? tools : [],
-            model: providerConfig.model
-        });
-
-        console.log('[Chat] Token count:', tokenInfo);
-
-        // Check for warnings and apply strategies
-        if (tokenInfo.warnings.length > 0) {
-            const recommended = window.TokenCountingService.getRecommendedAction(tokenInfo);
-
-            // Log warnings
-            tokenInfo.warnings.forEach(warning => {
-                console.warn(`[Chat] Token warning [${warning.level}]: ${warning.message}`);
-            });
-
-            // Apply truncation strategy if needed
-            if (recommended.action === 'truncate') {
-                console.log('[Chat] Applying truncation strategy...');
-
-                // Truncate the request parameters
-                const truncatedParams = window.TokenCountingService.truncateToTarget({
-                    systemPrompt: messages[0].content,
-                    messages: messages.slice(1),
-                    ragContext: semanticContext,
-                    tools: useTools ? tools : [],
-                    model: providerConfig.model
-                }, Math.floor(tokenInfo.contextWindow * 0.9)); // Target 90% of context window
-
-                // Rebuild messages array with truncated content
-                const truncatedMessages = [
-                    { role: 'system', content: truncatedParams.systemPrompt },
-                    ...truncatedParams.messages
-                ];
-
-                // Update messages array for the API call
-                messages.length = 0;
-                messages.push(...truncatedMessages);
-
-                // Update semantic context and tools
-                semanticContext = truncatedParams.ragContext;
-                if (!truncatedParams.tools || truncatedParams.tools.length === 0) {
-                    // Disable tools if they were removed during truncation
-                    useTools = false;
-                }
-
-                // Notify UI about truncation
-                if (onProgress) onProgress({
-                    type: 'token_warning',
-                    message: 'Context too large - conversation truncated',
-                    tokenInfo: tokenInfo,
-                    truncated: true
-                });
-            } else if (recommended.action === 'warn_user') {
-                // Just warn the user but proceed
-                if (onProgress) onProgress({
-                    type: 'token_warning',
-                    message: recommended.message,
-                    tokenInfo: tokenInfo,
-                    truncated: false
-                });
-            }
-        }
-
-        // Always pass token info to UI for monitoring
-        if (onProgress) onProgress({
-            type: 'token_update',
-            tokenInfo: tokenInfo
-        });
-    }
+/**
+ * Process a message (internal implementation)
+ * This is the actual message processing logic that gets wrapped by TurnQueue
+ *
+ * @param {string} message - User message
+ * @param {Object|string} optionsOrKey - Options object or API key string
+ */
+async function processMessage(message, optionsOrKey = null) {
+    // Allocate timeout budget for the entire turn (60 seconds)
+    // This budget will be subdivided for function calls
+    const turnBudget = TimeoutBudget.allocate('chat_turn', 60000);
 
     try {
-        // Notify UI: Thinking/Sending request
-        if (onProgress) onProgress({ type: 'thinking' });
-
-        // Prepare messages for API call
-        let apiMessages = messages;
-        let apiTools = useTools ? tools : undefined;
-
-        // Initial API call - routes to correct provider, pass onProgress for local streaming
-        // Guard: Check if LLMProviderRoutingService is available
-        if (!window.LLMProviderRoutingService?.callLLM) {
-            throw new Error('LLMProviderRoutingService not loaded. Ensure provider modules are included before chat initialization.');
+        // Reset circuit breaker for this turn (moved from handleToolCalls to ensure
+        // reset happens for every message, not just those with tool calls)
+        if (window.CircuitBreaker?.resetTurn) {
+            window.CircuitBreaker.resetTurn();
         }
-        let response = await window.LLMProviderRoutingService.callLLM(providerConfig, key, apiMessages, apiTools, isLocalProvider ? onProgress : null);
 
-        // HNW Fix: Validate response structure before accessing choices
-        if (!response || !response.choices || response.choices.length === 0) {
-            const providerName = providerConfig.provider || 'LLM';
-            console.error('[Chat] Invalid response from provider:', providerName, response);
-            throw new Error(`${providerName} returned an invalid response. Check if the server is running and the model is loaded.`);
-        }
-        let responseMessage = response.choices[0].message;
-
-        // Handle function calling with fallback support
-        const toolHandlingResult = await window.ToolCallHandlingService.handleToolCallsWithFallback(
-            responseMessage,
-            providerConfig,
-            key,
-            onProgress,
-            capabilityLevel,
-            tools,
-            messages,
-            message // original user message for Level 4
-        );
-        if (toolHandlingResult?.earlyReturn) {
-            return toolHandlingResult.earlyReturn;
-        }
-        responseMessage = toolHandlingResult.responseMessage || responseMessage;
-
-        const assistantContent = responseMessage?.content || 'I couldn\'t generate a response.';
-
-        // Add final response to history
+        // Add user message to history via SessionManager
         if (window.SessionManager?.addMessageToHistory) {
             window.SessionManager.addMessageToHistory({
-                role: 'assistant',
-                content: assistantContent
+                role: 'user',
+                content: message
             });
         }
 
-        // Save conversation to session storage
-        saveConversation();
+        // Try to get semantic context from RAG if configured
+        let semanticContext = null;
+        const RAG = ModuleRegistry.getModuleSync('RAG'); // Use registry instead of window global
+        if (RAG?.isConfigured()) {
+            try {
+                semanticContext = await RAG.getSemanticContext(message, 3);
+                if (semanticContext) {
+                    console.log('[Chat] Semantic context retrieved from RAG');
+                }
+            } catch (err) {
+                console.warn('[Chat] RAG semantic search failed:', err.message);
+            }
+        }
 
-        return {
-            content: assistantContent,
-            status: 'success',
-            role: 'assistant'
-        };
+        // Get current history from SessionManager
+        const conversationHistory = window.SessionManager?.getHistory?.() || [];
 
-    } catch (error) {
-        console.error('Chat error:', error);
+        // Build messages array with system prompt (includes semantic context if available)
+        const messages = [
+            { role: 'system', content: buildSystemPrompt(null, semanticContext) },
+            ...conversationHistory
+        ];
 
-        const queryContext = generateQueryContext(message);
-        const fallbackResponse = window.FallbackResponseService.generateFallbackResponse(message, queryContext);
+        // Handle legacy apiKey argument or options object
+        const options = (typeof optionsOrKey === 'string')
+            ? { apiKey: optionsOrKey }
+            : (optionsOrKey || {});
 
-        // Add fallback to history but mark as error context if needed
-        if (window.SessionManager?.addMessageToHistory) {
-            window.SessionManager.addMessageToHistory({
-                role: 'assistant',
+        const { apiKey, onProgress } = options;
+
+        // Get the merged settings (config.js as base, localStorage overrides)
+        const settings = window.Settings?.getSettings?.() || {};
+
+        // Determine which LLM provider to use
+        const provider = settings.llm?.provider || 'openrouter';
+        console.log('[Chat] Using LLM provider:', provider);
+
+        // For local providers (Ollama, LM Studio), no API key or openrouter config needed
+        const isLocalProvider = provider === 'ollama' || provider === 'lmstudio';
+
+        // Get configuration - only strictly required for OpenRouter
+        const config = window.Config?.openrouter || {};
+
+        // Get API key priority: parameter > merged settings > raw config
+        // The merged settings already handle the placeholder check
+        let key = apiKey || settings.openrouter?.apiKey || config.apiKey;
+
+        // Check if key is valid (not empty and not the placeholder)
+        const isValidKey = key && key !== '' && key !== 'your-api-key-here';
+
+        // For cloud providers, require API key; for local, check availability
+        if (!isLocalProvider && !isValidKey) {
+            // Return a helpful message if no API key configured
+            const queryContext = generateQueryContext(message);
+            const fallbackResponse = window.FallbackResponseService.generateFallbackResponse(message, queryContext);
+            if (window.SessionManager?.addMessageToHistory) {
+                window.SessionManager.addMessageToHistory({
+                    role: 'assistant',
+                    content: fallbackResponse
+                });
+            }
+            return {
                 content: fallbackResponse,
-                error: true
+                status: 'success', // Treat fallback as success for now to show message
+                role: 'assistant',
+                isFallback: true
+            };
+        }
+
+        // Build provider-specific config (guard against missing service)
+        const providerConfig = window.LLMProviderRoutingService?.buildProviderConfig?.(provider, settings, config) || {
+            provider: provider,
+            model: settings.llm?.model || 'default',
+            baseUrl: settings[provider]?.baseUrl || ''
+        };
+
+        // ==========================================
+        // FUNCTION CALLING - ALWAYS TRY NATIVE FIRST
+        // ==========================================
+        // No capability checking - we always try native function calling first.
+        // If it fails, the tool handling service will retry with fallback approaches.
+
+        // Get function schemas if available (filtered by user's enabled tools setting)
+        const tools = window.Functions?.getEnabledSchemas?.() || window.Functions?.schemas || [];
+
+        // Always use Level 1 (native) - fallbacks handled by ToolCallHandlingService
+        const capabilityLevel = 1;
+
+        // ==========================================
+        // TOKEN COUNTING & CONTEXT WINDOW MANAGEMENT
+        // ==========================================
+        let useTools = tools.length > 0 && streamsData && streamsData.length > 0;
+
+        // Calculate token usage before making API call using TokenCountingService
+        if (window.TokenCountingService) {
+            const tokenInfo = window.TokenCountingService.calculateTokenUsage({
+                systemPrompt: messages[0].content,
+                messages: messages.slice(1), // Exclude system prompt
+                ragContext: semanticContext,
+                tools: useTools ? tools : [],
+                model: providerConfig.model
+            });
+
+            console.log('[Chat] Token count:', tokenInfo);
+
+            // Check for warnings and apply strategies
+            if (tokenInfo.warnings.length > 0) {
+                const recommended = window.TokenCountingService.getRecommendedAction(tokenInfo);
+
+                // Log warnings
+                tokenInfo.warnings.forEach(warning => {
+                    console.warn(`[Chat] Token warning [${warning.level}]: ${warning.message}`);
+                });
+
+                // Apply truncation strategy if needed
+                if (recommended.action === 'truncate') {
+                    console.log('[Chat] Applying truncation strategy...');
+
+                    // Truncate the request parameters
+                    const truncatedParams = window.TokenCountingService.truncateToTarget({
+                        systemPrompt: messages[0].content,
+                        messages: messages.slice(1),
+                        ragContext: semanticContext,
+                        tools: useTools ? tools : [],
+                        model: providerConfig.model
+                    }, Math.floor(tokenInfo.contextWindow * 0.9)); // Target 90% of context window
+
+                    // Rebuild messages array with truncated content
+                    const truncatedMessages = [
+                        { role: 'system', content: truncatedParams.systemPrompt },
+                        ...truncatedParams.messages
+                    ];
+
+                    // Update messages array for the API call
+                    messages.length = 0;
+                    messages.push(...truncatedMessages);
+
+                    // Update semantic context and tools
+                    semanticContext = truncatedParams.ragContext;
+                    if (!truncatedParams.tools || truncatedParams.tools.length === 0) {
+                        // Disable tools if they were removed during truncation
+                        useTools = false;
+                    }
+
+                    // Notify UI about truncation
+                    if (onProgress) onProgress({
+                        type: 'token_warning',
+                        message: 'Context too large - conversation truncated',
+                        tokenInfo: tokenInfo,
+                        truncated: true
+                    });
+                } else if (recommended.action === 'warn_user') {
+                    // Just warn the user but proceed
+                    if (onProgress) onProgress({
+                        type: 'token_warning',
+                        message: recommended.message,
+                        tokenInfo: tokenInfo,
+                        truncated: false
+                    });
+                }
+            }
+
+            // Always pass token info to UI for monitoring
+            if (onProgress) onProgress({
+                type: 'token_update',
+                tokenInfo: tokenInfo
             });
         }
-        saveConversation();
 
-        return {
-            content: fallbackResponse,
-            status: 'error',
-            error: error.message,
-            role: 'assistant'
-        };
+        try {
+            // Notify UI: Thinking/Sending request
+            if (onProgress) onProgress({ type: 'thinking' });
+
+            // Prepare messages for API call
+            let apiMessages = messages;
+            let apiTools = useTools ? tools : undefined;
+
+            // Initial API call - routes to correct provider, pass onProgress for local streaming
+            // Guard: Check if LLMProviderRoutingService is available
+            if (!window.LLMProviderRoutingService?.callLLM) {
+                throw new Error('LLMProviderRoutingService not loaded. Ensure provider modules are included before chat initialization.');
+            }
+            let response = await window.LLMProviderRoutingService.callLLM(providerConfig, key, apiMessages, apiTools, isLocalProvider ? onProgress : null);
+
+            // HNW Fix: Validate response structure before accessing choices
+            if (!response || !response.choices || response.choices.length === 0) {
+                const providerName = providerConfig.provider || 'LLM';
+                console.error('[Chat] Invalid response from provider:', providerName, response);
+                throw new Error(`${providerName} returned an invalid response. Check if the server is running and the model is loaded.`);
+            }
+            let responseMessage = response.choices[0].message;
+
+            // Handle function calling with fallback support
+            const toolHandlingResult = await window.ToolCallHandlingService.handleToolCallsWithFallback(
+                responseMessage,
+                providerConfig,
+                key,
+                onProgress,
+                capabilityLevel,
+                tools,
+                messages,
+                message // original user message for Level 4
+            );
+            if (toolHandlingResult?.earlyReturn) {
+                return toolHandlingResult.earlyReturn;
+            }
+            responseMessage = toolHandlingResult.responseMessage || responseMessage;
+
+            const assistantContent = responseMessage?.content || 'I couldn\'t generate a response.';
+
+            // Add final response to history
+            if (window.SessionManager?.addMessageToHistory) {
+                window.SessionManager.addMessageToHistory({
+                    role: 'assistant',
+                    content: assistantContent
+                });
+            }
+
+            // Save conversation to session storage
+            saveConversation();
+
+            return {
+                content: assistantContent,
+                status: 'success',
+                role: 'assistant'
+            };
+
+        } catch (error) {
+            console.error('Chat error:', error);
+
+            const queryContext = generateQueryContext(message);
+            const fallbackResponse = window.FallbackResponseService.generateFallbackResponse(message, queryContext);
+
+            // Add fallback to history but mark as error context if needed
+            if (window.SessionManager?.addMessageToHistory) {
+                window.SessionManager.addMessageToHistory({
+                    role: 'assistant',
+                    content: fallbackResponse,
+                    error: true
+                });
+            }
+            saveConversation();
+
+            return {
+                content: fallbackResponse,
+                status: 'error',
+                error: error.message,
+                role: 'assistant'
+            };
+        }
+    } finally {
+        // Release the timeout budget
+        TimeoutBudget.release(turnBudget);
     }
 }
 

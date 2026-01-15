@@ -102,6 +102,7 @@ Instead of one-time export:
 | Prompt editing | v2 | Safety review |
 | Local model support | v2 | Ollama integration |
 | Real-time sync | v2+ | Streaming API |
+| **Pattern Worker Pool Heartbeat** | **v1.1** | **Worker pool monitoring** |
 
 ---
 

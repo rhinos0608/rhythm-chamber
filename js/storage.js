@@ -9,6 +9,8 @@
  * @module storage
  */
 
+import { StorageTransaction } from './storage/transaction.js';
+
 // ==========================================
 // Privacy Controls
 // ==========================================
@@ -319,6 +321,24 @@ const Storage = {
   getToken: (key) => window.ConfigAPI.getToken(key),
   setToken: (key, value) => window.ConfigAPI.setToken(key, value),
   removeToken: (key) => window.ConfigAPI.removeToken(key),
+
+  // ==========================================
+  // Transactions (multi-backend atomic operations)
+  // ==========================================
+
+  /**
+   * Begin an atomic transaction across storage backends (IndexedDB + localStorage).
+   * Delegates to StorageTransaction.transaction for commit/rollback semantics.
+   *
+   * @param {function(import('./storage/transaction.js').TransactionContext): Promise<void>} callback
+   * @returns {Promise<{success: boolean, operationsCommitted: number}>}
+   */
+  async beginTransaction(callback) {
+    if (!StorageTransaction?.transaction) {
+      throw new Error('StorageTransaction not available');
+    }
+    return StorageTransaction.transaction(callback);
+  },
 
   // ==========================================
   // Migration (delegate to StorageMigration)

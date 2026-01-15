@@ -217,6 +217,7 @@ Extracted complex function calling logic from `chat.js` into dedicated strategie
 ### Wave
 - **Deterministic leader election**: 300ms window, lowest ID wins
 - **Heartbeat failover**: 5s heartbeat, 10s promotion threshold (NEW)
+- **Pattern Worker Pool Heartbeat**: Bidirectional liveness checks with automatic restart of stale workers (NEW)
 - **Async/sync separation**: visibilitychange (async) vs beforeunload (sync)
 - **Migration isolation**: Runs atomically before app initialization
 - **Migration checkpointing**: Resume from last checkpoint on crash recovery (NEW)
@@ -242,7 +243,8 @@ Comprehensive structural improvements based on HNW framework analysis:
 | Module | File | Purpose |
 |--------|------|---------|
 | Turn Queue | `js/services/turn-queue.js` | Sequential message processing |
-| Pattern Worker Pool | `js/workers/pattern-worker-pool.js` | Parallel pattern detection (3 workers) |
+| Pattern Worker Pool | `js/workers/pattern-worker-pool.js` | Parallel pattern detection (3 workers) with heartbeat monitoring |
+| Pattern Worker | `js/workers/pattern-worker.js` | Pattern detection worker with heartbeat response support |
 | Migration Checkpointing | `js/storage/migration.js` | Resumable migrations with progress |
 
 ---
@@ -303,6 +305,8 @@ rhythm-chamber/
 │   ├── operation-queue.js  # Retry queue for non-critical ops (NEW)
 │   │
 │   ├── workers/            # Web Workers (Background Processing)
+│   │   ├── pattern-worker-pool.js # Worker pool with heartbeat monitoring (NEW)
+│   │   ├── pattern-worker.js      # Pattern detection worker (ENHANCED - heartbeat support)
 │   │   └── vector-search-worker.js # Cosine similarity offloading (60fps maintenance)
 │   │
 │   ├── functions/          # Function Calling Modules (Modular Architecture)

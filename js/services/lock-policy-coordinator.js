@@ -1,12 +1,12 @@
 /**
  * Lock Policy Coordinator
- * 
+ *
  * Centralizes conflict matrix logic for operation locks.
  * Provides a single point of truth for which operations can run concurrently.
- * 
+ *
  * HNW Hierarchy: Controllers ask LockPolicy before acquiring locks,
  * enabling consistent conflict resolution across the application.
- * 
+ *
  * @module services/lock-policy-coordinator
  */
 
@@ -35,6 +35,34 @@ const CONFLICT_MATRIX = {
     // Chat save conflicts with spotify fetch
     'chat_save': ['spotify_fetch']
 };
+
+/**
+ * Operation levels for lock hierarchy (prevents deadlock)
+ * Lower levels should be acquired before higher levels
+ *
+ * Level 0: System operations (highest priority)
+ * Level 1: Data operations (medium priority)
+ * Level 2: User operations (lowest priority)
+ */
+const OPERATION_LEVELS = {
+    // Level 0: System operations (highest priority)
+    'privacy_clear': 0,
+    'file_processing': 0,
+    'embedding_generation': 0,
+
+    // Level 1: Data operations (medium priority)
+    'chat_save': 1,
+    'spotify_fetch': 1,
+
+    // Level 2: User operations (lowest priority)
+    'user_message': 2,
+    'user_query': 2
+};
+
+/**
+ * Default level for operations not explicitly defined
+ */
+const DEFAULT_LEVEL = 2;
 
 /**
  * Resolution strategies for conflicts
@@ -224,7 +252,7 @@ function operationsConflict(op1, op2) {
 
 /**
  * Register a custom conflict rule (for extensibility)
- * 
+ *
  * @param {string} operation - Operation name
  * @param {string[]} conflictsWith - Operations it conflicts with
  */
@@ -234,7 +262,7 @@ function registerConflict(operation, conflictsWith) {
 
 /**
  * Set default resolution for an operation
- * 
+ *
  * @param {string} operation - Operation name
  * @param {'abort'|'queue'|'force'} resolution - Resolution strategy
  */
@@ -243,6 +271,118 @@ function setDefaultResolution(operation, resolution) {
         throw new Error(`Invalid resolution: ${resolution}`);
     }
     DEFAULT_RESOLUTIONS[operation] = resolution;
+}
+
+/**
+ * Get the level of an operation
+ *
+ * @param {string} operation - Operation name
+ * @returns {number} Operation level (0-2)
+ */
+function getOperationLevel(operation) {
+    return OPERATION_LEVELS[operation] ?? DEFAULT_LEVEL;
+}
+
+/**
+ * Check if operations can be acquired in the given order (prevents deadlock)
+ *
+ * @param {string[]} requestedOperations - Operations to acquire
+ * @param {string[]} [activeOperations] - Currently active operations
+ * @returns {{
+ *   allowed: boolean,
+ *   conflicts: string[],
+ *   resolution: 'abort'|'queue'|'force',
+ *   reason: string
+ * }}
+ */
+function canAcquireInOrder(requestedOperations, activeOperations = null) {
+    // Normalize to array
+    const requested = Array.isArray(requestedOperations)
+        ? requestedOperations
+        : [requestedOperations];
+
+    // Get active operations from OperationLock if not provided
+    const active = activeOperations ?? getActiveOperations();
+
+    // Check for conflicts
+    const conflictResult = canAcquire(requested, active);
+    if (!conflictResult.allowed) {
+        return conflictResult;
+    }
+
+    // Check lock hierarchy (prevent deadlock)
+    // Operations should be acquired in order of increasing level
+    // Lower levels should be acquired before higher levels
+    const requestedLevels = requested.map(op => getOperationLevel(op));
+    const activeLevels = active.map(op => getOperationLevel(op));
+
+    // Check if any requested operation has a lower level than an active operation
+    // This would violate the lock hierarchy and could cause deadlock
+    for (const reqOp of requested) {
+        const reqLevel = getOperationLevel(reqOp);
+        for (const actOp of active) {
+            const actLevel = getOperationLevel(actOp);
+            if (reqLevel < actLevel) {
+                return {
+                    allowed: false,
+                    conflicts: [actOp],
+                    resolution: RESOLUTION_STRATEGIES.ABORT,
+                    reason: `Lock hierarchy violation: ${reqOp} (level ${reqLevel}) cannot be acquired after ${actOp} (level ${actLevel})`
+                };
+            }
+        }
+    }
+
+    return {
+        allowed: true,
+        conflicts: [],
+        resolution: null,
+        reason: 'No conflicts and lock hierarchy satisfied'
+    };
+}
+
+/**
+ * Get the level of an operation
+ *
+ * @param {string} operation - Operation name
+ * @returns {number} Operation level (0-2)
+ */
+function getLevel(operation) {
+    return getOperationLevel(operation);
+}
+
+/**
+ * Get all operations at a specific level
+ *
+ * @param {number} level - Operation level (0-2)
+ * @returns {string[]} Array of operation names
+ */
+function getOperationsByLevel(level) {
+    return Object.entries(OPERATION_LEVELS)
+        .filter(([_, opLevel]) => opLevel === level)
+        .map(([operation, _]) => operation);
+}
+
+/**
+ * Get the maximum level among operations
+ *
+ * @param {string[]} operations - Array of operation names
+ * @returns {number} Maximum level
+ */
+function getMaxLevel(operations) {
+    if (operations.length === 0) return DEFAULT_LEVEL;
+    return Math.max(...operations.map(op => getOperationLevel(op)));
+}
+
+/**
+ * Get the minimum level among operations
+ *
+ * @param {string[]} operations - Array of operation names
+ * @returns {number} Minimum level
+ */
+function getMinLevel(operations) {
+    if (operations.length === 0) return DEFAULT_LEVEL;
+    return Math.min(...operations.map(op => getOperationLevel(op)));
 }
 
 // ==========================================
@@ -259,6 +399,13 @@ const LockPolicy = {
     registerConflict,
     setDefaultResolution,
     getConflictMatrix,
+
+    // Level-based operations
+    canAcquireInOrder,
+    getLevel,
+    getOperationsByLevel,
+    getMaxLevel,
+    getMinLevel,
 
     // Constants
     RESOLUTION_STRATEGIES,

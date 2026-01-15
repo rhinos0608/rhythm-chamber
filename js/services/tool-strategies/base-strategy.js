@@ -1,14 +1,16 @@
 /**
  * Base Tool Strategy Interface
  * Implements Strategy pattern for function calling capability levels
- * 
+ *
  * HNW Architecture:
  * - Hierarchy: Strategies are selected based on capability level
  * - Network: Strategies communicate through shared context object
  * - Wave: Each strategy handles one execution cycle
- * 
+ *
  * @module tool-strategies/base-strategy
  */
+
+import { TimeoutBudget } from '../timeout-budget-manager.js';
 
 export class BaseToolStrategy {
     /**
@@ -118,6 +120,9 @@ export class BaseToolStrategy {
             throw new Error('Functions dependency not initialized - cannot execute tool calls');
         }
 
+        // Allocate timeout budget for this function call
+        const functionBudget = TimeoutBudget.allocate(`strategy_${functionName}`, this.TIMEOUT_MS);
+
         const abortController = new AbortController();
         const timeoutId = setTimeout(() => abortController.abort(), this.TIMEOUT_MS);
 
@@ -133,6 +138,9 @@ export class BaseToolStrategy {
                 throw new Error(`Function ${functionName} timed out after ${this.TIMEOUT_MS}ms`);
             }
             throw error;
+        } finally {
+            // Release the function budget
+            TimeoutBudget.release(functionBudget);
         }
     }
 

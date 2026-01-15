@@ -510,7 +510,16 @@ function detectAllPatterns(streams, chunks, onProgress) {
 // ==========================================
 
 self.onmessage = function (e) {
-    const { type, requestId, streams, chunks } = e.data;
+    const { type, requestId, streams, chunks, timestamp } = e.data;
+
+    // Handle heartbeat request
+    if (type === 'HEARTBEAT') {
+        self.postMessage({
+            type: 'HEARTBEAT_RESPONSE',
+            timestamp
+        });
+        return;
+    }
 
     if (type === 'detect') {
         try {
