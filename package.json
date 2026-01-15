@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "npx http-server . -p 8080 -c-1",
     "test": "npx playwright test",
+    "test:unit": "vitest run tests/unit/",
+    "test:unit:watch": "vitest tests/unit/",
     "test:ui": "npx playwright test --ui",
     "test:headed": "npx playwright test --headed",
     "test:report": "npx playwright show-report"
@@ -20,7 +22,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "bugs": {
     "url": "https://github.com/rhinos0608/rhythm-chamber/issues"
   },
@@ -28,6 +30,7 @@
   "devDependencies": {
     "@playwright/test": "^1.57.0",
     "@types/node": "^25.0.6",
-    "http-server": "^14.1.1"
+    "http-server": "^14.1.1",
+    "vitest": "^4.0.17"
   }
 }

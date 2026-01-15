@@ -540,10 +540,5 @@ export const DemoController = {
     DemoStorage
 };
 
-// Make available globally for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.DemoController = DemoController;
-    window.DemoStorage = DemoStorage;
-}
 
 console.log('[DemoController] Controller loaded');

@@ -315,9 +315,5 @@ export const SpotifyController = {
     transformForAnalysis
 };
 
-// Make available globally for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.SpotifyController = SpotifyController;
-}
 
 console.log('[SpotifyController] Controller loaded');

@@ -408,9 +408,5 @@ export const FileUploadController = {
     cleanupWorker
 };
 
-// Make available globally for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.FileUploadController = FileUploadController;
-}
 
 console.log('[FileUploadController] Controller loaded - race condition fixed');
