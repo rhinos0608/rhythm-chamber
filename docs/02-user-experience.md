@@ -4,7 +4,7 @@
 
 ```mermaid
 flowchart TD
-    A["Landing: 'Understand why your music matters'"] --> B{Choose path}
+    A["Landing: 'Your AI writes your musical story'"] --> B{Choose path}
     B -->|Instant| C[Connect Spotify OAuth]
     B -->|Full depth| D[Upload data export]
     C --> E["Lite Profile: Current vibe (50 songs)"]

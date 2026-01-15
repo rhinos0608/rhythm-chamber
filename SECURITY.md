@@ -1,8 +1,8 @@
 # Rhythm Chamber Security Model
 
-> **Privacy-First, Zero-Backend Architecture**
+> **Your AI writes your musical story. Every time you visit. On your device. Watching you evolve.**
 
-This document describes the security model for Rhythm Chamber, a client-side music analysis application that processes Spotify listening data entirely in the browser.
+This document describes the security model for Rhythm Chamber, a client-side music analysis application that processes Spotify listening data entirely in the browser. Our security model is built on three layers: **Emotional Value**, **Privacy Value**, and **Control Value**.
 
 ## Core Architecture Principles
 
@@ -17,20 +17,52 @@ True credential revocation and session invalidation require server infrastructur
 
 ---
 
+## The Three-Layer Security Value Stack
+
+### Layer 1: Emotional Value
+**Your AI notices your patterns. Writes personalized narratives. Witnesses your evolution. Creates meaning from data.**
+
+Security enables emotional value by:
+- **Preserving narrative continuity**: Your AI witness maintains context across sessions
+- **Protecting personal stories**: Your musical journey remains private and intact
+- **Enabling deep reflection**: Safe exploration of emotional patterns without external judgment
+
+### Layer 2: Privacy Value
+**Data never leaves your device. Your AI, not a company's AI. Structurally private by design. Verifiable through open source.**
+
+Security enables privacy value by:
+- **Zero data transmission**: No servers, no cloud storage, no data collection
+- **Client-side encryption**: AES-GCM encryption for credentials
+- **Session isolation**: Each browser session is cryptographically isolated
+- **Transparent architecture**: Open source code allows verification
+
+### Layer 3: Control Value
+**Choose your AI provider. Own your data completely. No vendor lock-in. Full transparency.**
+
+Security enables control value by:
+- **User-owned intelligence**: You control the AI model and API keys
+- **Data sovereignty**: You own your data completely
+- **No lock-in**: Export anytime, switch providers freely
+- **Full transparency**: See exactly how your data is processed
+
+---
+
 ## Threat Model
 
 ### What We Protect Against
 
-| Threat | Mitigation |
-|--------|-----------|
-| **Casual DevTools inspection** | AES-GCM encryption for credentials |
-| **Credential replay attacks** | Session-bound key derivation |
-| **Stale session persistence** | Session versioning with invalidation |
-| **Proxy/VPN credential stuffing** | Geographic anomaly detection |
-| **Timezone manipulation** | UTC-based time calculations |
-| **XSS token theft** | Device fingerprint binding |
-| **Token hijacking** | Secure context enforcement |
-| **False positive lockouts** | Travel-aware adaptive thresholds |
+| Threat | Mitigation | Value Layer |
+|--------|-----------|-------------|
+| **Casual DevTools inspection** | AES-GCM encryption for credentials | Privacy |
+| **Credential replay attacks** | Session-bound key derivation | Privacy |
+| **Stale session persistence** | Session versioning with invalidation | Privacy |
+| **Proxy/VPN credential stuffing** | Geographic anomaly detection | Privacy |
+| **Timezone manipulation** | UTC-based time calculations | Privacy |
+| **XSS token theft** | Device fingerprint binding | Privacy |
+| **Token hijacking** | Secure context enforcement | Privacy |
+| **False positive lockouts** | Travel-aware adaptive thresholds | Privacy |
+| **Narrative corruption** | Checksum validation for AI context | Emotional |
+| **Story fragmentation** | Session continuity preservation | Emotional |
 
 ### What We Cannot Protect Against
 
@@ -291,6 +323,7 @@ If you discover a security vulnerability in Rhythm Chamber:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.3 | 2026-01-15 | Updated to reflect three-layer value stack (Emotional, Privacy, Control) |
 | 1.2 | 2026-01-13 | Clarified obfuscation vs encryption, removed namespace isolation (user owns Qdrant) |
 | 1.1 | 2026-01-12 | XSS token protection, adaptive lockouts, unified errors |
 | 1.0 | 2026-01-12 | Initial security model |

@@ -588,23 +588,16 @@ async function sendMessage(message, optionsOrKey = null) {
     };
 
     // ==========================================
-    // FUNCTION CALLING CAPABILITY DETECTION
+    // FUNCTION CALLING - ALWAYS TRY NATIVE FIRST
     // ==========================================
+    // No capability checking - we always try native function calling first.
+    // If it fails, the tool handling service will retry with fallback approaches.
 
     // Get function schemas if available (filtered by user's enabled tools setting)
     const tools = window.Functions?.getEnabledSchemas?.() || window.Functions?.schemas || [];
 
-    // Detect function calling capability level
-    let capabilityLevel = 1; // Default to native
-    let fallbackInfo = null;
-    if (window.FunctionCallingFallback && tools.length > 0) {
-        fallbackInfo = window.FunctionCallingFallback.detectCapabilityLevel(
-            providerConfig.provider,
-            providerConfig.model
-        );
-        capabilityLevel = fallbackInfo.level;
-        console.log(`[Chat] Function calling capability: Level ${capabilityLevel} - ${fallbackInfo.reason}`);
-    }
+    // Always use Level 1 (native) - fallbacks handled by ToolCallHandlingService
+    const capabilityLevel = 1;
 
     // ==========================================
     // TOKEN COUNTING & CONTEXT WINDOW MANAGEMENT
@@ -691,19 +684,15 @@ async function sendMessage(message, optionsOrKey = null) {
         // Notify UI: Thinking/Sending request
         if (onProgress) onProgress({ type: 'thinking' });
 
-        // Prepare messages based on capability level
+        // Prepare messages for API call
         let apiMessages = messages;
         let apiTools = useTools ? tools : undefined;
 
-        // Level 2: Use prompt injection instead of native tools
-        if (capabilityLevel === 2 && useTools && window.FunctionCallingFallback) {
-            apiMessages = window.FunctionCallingFallback.buildLevel2Request(messages, tools);
-            apiTools = undefined; // Don't send tools - they're in the prompt
-            console.log('[Chat] Using Level 2 prompt injection for function calling');
-            if (onProgress) onProgress({ type: 'fallback_mode', level: 2 });
-        }
-
         // Initial API call - routes to correct provider, pass onProgress for local streaming
+        // Guard: Check if LLMProviderRoutingService is available
+        if (!window.LLMProviderRoutingService?.callLLM) {
+            throw new Error('LLMProviderRoutingService not loaded. Ensure provider modules are included before chat initialization.');
+        }
         let response = await window.LLMProviderRoutingService.callLLM(providerConfig, key, apiMessages, apiTools, isLocalProvider ? onProgress : null);
 
         // HNW Fix: Validate response structure before accessing choices

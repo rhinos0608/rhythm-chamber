@@ -817,7 +817,9 @@ async function processMessageResponse(actionFn) {
             ChatUIController.finalizeStreamedMessage(loadingEl, response.content);
         } else {
             ChatUIController.removeMessageElement(loadingId);
-            if (response.status === 'error') {
+            // Treat both errors and fallbacks as error messages (show retry button)
+            const isErrorOrFallback = response.status === 'error' || response.isFallback;
+            if (isErrorOrFallback) {
                 ChatUIController.addMessage(response.content, 'assistant', true);
             } else {
                 ChatUIController.addMessage(response.content, 'assistant');

@@ -7,6 +7,10 @@
  * @module services/tool-call-handling-service
  */
 
+import { NativeToolStrategy } from './tool-strategies/native-strategy.js';
+import { PromptInjectionStrategy } from './tool-strategies/prompt-injection-strategy.js';
+import { IntentExtractionStrategy } from './tool-strategies/intent-extraction-strategy.js';
+
 'use strict';
 
 // ==========================================
@@ -281,10 +285,7 @@ function initToolStrategies() {
         timeoutMs: _timeoutMs
     };
 
-    // Import strategies
-    const { NativeToolStrategy } = require('./tool-strategies/native-strategy.js');
-    const { PromptInjectionStrategy } = require('./tool-strategies/prompt-injection-strategy.js');
-    const { IntentExtractionStrategy } = require('./tool-strategies/intent-extraction-strategy.js');
+    // Strategies imported at module level via static ES imports
 
     toolStrategies = [
         new NativeToolStrategy(deps),

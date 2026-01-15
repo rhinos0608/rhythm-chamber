@@ -125,6 +125,10 @@ import { SecureTokenStore } from './security/secure-token-store.js';
 import { DataVersion } from './services/data-version.js';
 import { FunctionCallingFallback } from './services/function-calling-fallback.js';
 import { ProfileDescriptionGenerator } from './services/profile-description-generator.js';
+import { LLMProviderRoutingService } from './services/llm-provider-routing-service.js';
+import { TokenCountingService } from './services/token-counting-service.js';
+import { ToolCallHandlingService } from './services/tool-call-handling-service.js';
+import { FallbackResponseService } from './services/fallback-response-service.js';
 
 // ==========================================
 // Register ES Modules on Window (Backward Compatibility)
@@ -167,6 +171,12 @@ if (typeof window !== 'undefined') {
     window.FunctionCallingFallback = FunctionCallingFallback;
     window.ProfileDescriptionGenerator = ProfileDescriptionGenerator;
     window.DataVersion = DataVersion;
+
+    // LLM and Chat Services (required by chat.js)
+    window.LLMProviderRoutingService = LLMProviderRoutingService;
+    window.TokenCountingService = TokenCountingService;
+    window.ToolCallHandlingService = ToolCallHandlingService;
+    window.FallbackResponseService = FallbackResponseService;
 
     // Template/Profile modules
     window.DemoData = DemoData;

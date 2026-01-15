@@ -1921,6 +1921,27 @@ a {
   background: rgba(239, 68, 68, 0.1);
 }
 
+.action-btn.retry {
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--accent-primary);
+  font-weight: 500;
+  padding: 4px 10px;
+}
+
+.action-btn.retry:hover {
+  background: rgba(139, 92, 246, 0.25);
+  color: var(--text-primary);
+}
+
+.error-actions {
+  /* Always visible for error messages, position below content */
+  position: relative;
+  bottom: auto;
+  margin-top: var(--space-sm);
+  opacity: 1;
+  justify-content: flex-end;
+}
+
 /* Error Message Style */
 .message.error {
   border-color: rgba(239, 68, 68, 0.5);
