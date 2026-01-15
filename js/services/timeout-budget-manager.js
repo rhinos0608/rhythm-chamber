@@ -40,6 +40,7 @@ class TimeoutBudgetInstance {
         this.operation = operation;
         this.budgetMs = budgetMs;
         this.parent = parent;
+        this.id = null;
         this.startTime = Date.now();
         this.children = [];
         this.consumed = 0;
@@ -142,7 +143,6 @@ const DEFAULT_BUDGETS = {
 
     // Function calling
     function_call: 10000,       // 10 seconds per function call
-    max_function_calls: 5,      // Max 5 function calls per turn
 
     // Embedding operations
     embedding_generation: 30000, // 30 seconds
@@ -156,11 +156,24 @@ const DEFAULT_BUDGETS = {
     pattern_detection: 20000    // 20 seconds for pattern detection
 };
 
+/**
+ * Default non-time-based limits
+ */
+const DEFAULT_LIMITS = {
+    max_function_calls: 5       // Max 5 function calls per turn
+};
+
 // ==========================================
 // Active Budgets Tracking
 // ==========================================
 
 const activeBudgets = new Map();
+let budgetCounter = 0;
+
+function createBudgetId(operation) {
+    budgetCounter += 1;
+    return `${operation}:${budgetCounter}`;
+}
 
 // ==========================================
 // Core Functions
@@ -177,9 +190,10 @@ function allocate(operation, budgetMs = null) {
     const budget = budgetMs ?? DEFAULT_BUDGETS[operation] ?? 30000;
     const instance = new TimeoutBudgetInstance(operation, budget);
 
-    activeBudgets.set(operation, instance);
+    instance.id = createBudgetId(operation);
+    activeBudgets.set(instance.id, instance);
 
-    console.log(`[TimeoutBudget] Allocated ${budget}ms for ${operation}`);
+    console.log(`[TimeoutBudget] Allocated ${budget}ms for ${operation} (id: ${instance.id})`);
 
     return instance;
 }
@@ -191,19 +205,39 @@ function allocate(operation, budgetMs = null) {
  * @returns {TimeoutBudgetInstance|null}
  */
 function getBudget(operation) {
-    return activeBudgets.get(operation) || null;
+    let found = null;
+    for (const budget of activeBudgets.values()) {
+        if (budget.operation === operation) {
+            found = budget;
+        }
+    }
+    return found;
 }
 
 /**
  * Release a budget (cleanup)
  * 
- * @param {string} operation - Operation name
+ * @param {string|TimeoutBudgetInstance} operationOrInstance - Operation name or budget instance
  */
-function release(operation) {
-    const budget = activeBudgets.get(operation);
+function release(operationOrInstance) {
+    const isInstance = operationOrInstance instanceof TimeoutBudgetInstance ||
+        (operationOrInstance && typeof operationOrInstance === 'object' && 'operation' in operationOrInstance);
+
+    let budgetId = isInstance ? operationOrInstance.id : null;
+    const operation = isInstance ? operationOrInstance.operation : operationOrInstance;
+
+    if (!budgetId && operation) {
+        for (const [id, budget] of activeBudgets.entries()) {
+            if (budget.operation === operation) {
+                budgetId = id;
+            }
+        }
+    }
+
+    const budget = budgetId ? activeBudgets.get(budgetId) : null;
     if (budget) {
-        console.log(`[TimeoutBudget] Released ${operation}: elapsed ${budget.elapsed()}ms of ${budget.budgetMs}ms`);
-        activeBudgets.delete(operation);
+        console.log(`[TimeoutBudget] Released ${budget.operation}: elapsed ${budget.elapsed()}ms of ${budget.budgetMs}ms (id: ${budget.id})`);
+        activeBudgets.delete(budgetId);
     }
 }
 
@@ -217,11 +251,14 @@ function release(operation) {
  */
 async function withBudget(operation, budgetMs, fn) {
     const budget = allocate(operation, budgetMs);
+    const timeoutDelay = Number.isFinite(budgetMs)
+        ? budgetMs
+        : (budget?.budgetMs ?? 0);
 
     try {
         // Create AbortController for timeout
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), budgetMs);
+        const timeoutId = setTimeout(() => controller.abort(), timeoutDelay);
 
         try {
             const result = await Promise.race([
@@ -230,7 +267,7 @@ async function withBudget(operation, budgetMs, fn) {
                     controller.signal.addEventListener('abort', () => {
                         reject(new BudgetExhaustedError({
                             operation,
-                            allocated: budgetMs,
+                            allocated: timeoutDelay,
                             consumed: budget.elapsed(),
                             parent: null
                         }));
@@ -245,7 +282,7 @@ async function withBudget(operation, budgetMs, fn) {
             throw error;
         }
     } finally {
-        release(operation);
+        release(budget);
     }
 }
 
@@ -301,10 +338,11 @@ const TimeoutBudget = {
     BudgetExhaustedError,
 
     // Constants
-    DEFAULT_BUDGETS
+    DEFAULT_BUDGETS,
+    DEFAULT_LIMITS
 };
 
 // ES Module export
-export { TimeoutBudget, BudgetExhaustedError };
+export { TimeoutBudget, BudgetExhaustedError, DEFAULT_LIMITS };
 
 console.log('[TimeoutBudget] Timeout Budget Manager loaded');

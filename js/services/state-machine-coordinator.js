@@ -324,7 +324,9 @@ function subscribe(callback) {
  * @param {Object} metadata - Additional context
  */
 function notifySubscribers(event, previousState, newState, metadata) {
-    for (const subscriber of subscribers) {
+    const snapshot = [...subscribers];
+
+    for (const subscriber of snapshot) {
         try {
             subscriber(event, previousState, newState, metadata);
         } catch (err) {

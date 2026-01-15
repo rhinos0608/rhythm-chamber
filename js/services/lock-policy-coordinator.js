@@ -191,7 +191,16 @@ function getActiveOperations() {
  * @returns {Object}
  */
 function getConflictMatrix() {
-    return { ...CONFLICT_MATRIX };
+    if (typeof structuredClone === 'function') {
+        return structuredClone(CONFLICT_MATRIX);
+    }
+
+    return Object.fromEntries(
+        Object.entries(CONFLICT_MATRIX).map(([operation, conflicts]) => ([
+            operation,
+            Array.isArray(conflicts) ? [...conflicts] : { ...conflicts }
+        ]))
+    );
 }
 
 /**

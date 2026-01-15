@@ -63,7 +63,21 @@ class TransactionContext {
             ));
         } else if (backend === 'indexeddb') {
             const store = storeOrKey;
-            const dbKey = key || value?.id;
+            let dbKey = key || value?.id;
+
+            if (!dbKey) {
+                dbKey = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                    ? crypto.randomUUID()
+                    : `txn_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+                if (value && typeof value === 'object' && !value.id) {
+                    value = { ...value, id: dbKey };
+                }
+            }
+
+            const valueToStore = (value && typeof value === 'object' && value.id !== dbKey)
+                ? { ...value, id: dbKey }
+                : value;
 
             if (window.IndexedDBCore) {
                 try {
@@ -74,7 +88,7 @@ class TransactionContext {
             }
 
             this.operations.push(new TransactionOperation(
-                'indexeddb', 'put', store, dbKey, value, previousValue
+                'indexeddb', 'put', store, dbKey, valueToStore, previousValue
             ));
         } else {
             throw new Error(`Unknown backend: ${backend}`);
@@ -115,6 +129,8 @@ class TransactionContext {
             this.operations.push(new TransactionOperation(
                 'indexeddb', 'delete', store, key, null, previousValue
             ));
+        } else {
+            throw new Error(`Unknown backend: ${backend}`);
         }
     }
 
@@ -212,6 +228,19 @@ async function commit(ctx) {
     console.log(`[StorageTransaction] Committed ${ctx.operations.length} operations`);
 }
 
+async function revertIndexedDBOperation(op) {
+    if (!window.IndexedDBCore) {
+        console.warn('[StorageTransaction] IndexedDBCore not available for rollback');
+        return;
+    }
+
+    if (op.previousValue === null) {
+        await window.IndexedDBCore.delete(op.store, op.key);
+    } else {
+        await window.IndexedDBCore.put(op.store, op.previousValue);
+    }
+}
+
 /**
  * Rollback all committed operations in the transaction
  * 
@@ -233,12 +262,8 @@ async function rollback(ctx) {
                 } else {
                     localStorage.setItem(op.key, op.previousValue);
                 }
-            } else if (op.backend === 'indexeddb' && window.IndexedDBCore) {
-                if (op.previousValue === null) {
-                    await window.IndexedDBCore.delete(op.store, op.key);
-                } else {
-                    await window.IndexedDBCore.put(op.store, op.previousValue);
-                }
+            } else if (op.backend === 'indexeddb') {
+                await revertIndexedDBOperation(op);
             }
         } catch (rollbackError) {
             console.error('[StorageTransaction] Rollback failed for operation:', op, rollbackError);
@@ -270,7 +295,11 @@ async function rollbackToSavepoint(ctx, savepointIndex) {
     const toRollback = ctx.operations.slice(savepointIndex).reverse();
 
     for (const op of toRollback) {
-        if (op.committed) {
+        if (!op.committed) {
+            continue;
+        }
+
+        try {
             // Rollback this operation
             if (op.backend === 'localstorage') {
                 if (op.previousValue === null) {
@@ -278,7 +307,11 @@ async function rollbackToSavepoint(ctx, savepointIndex) {
                 } else {
                     localStorage.setItem(op.key, op.previousValue);
                 }
+            } else if (op.backend === 'indexeddb') {
+                await revertIndexedDBOperation(op);
             }
+        } catch (error) {
+            console.error('[StorageTransaction] Savepoint rollback failed for operation:', op, error);
         }
     }
 

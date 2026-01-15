@@ -97,11 +97,15 @@ async function saveCheckpoint(checkpoint) {
     if (!window.IndexedDBCore) {
         return;
     }
-    await window.IndexedDBCore.put(window.IndexedDBCore.STORES.MIGRATION, {
-        id: 'migration_checkpoint',
-        ...checkpoint,
-        timestamp: Date.now()
-    });
+    try {
+        await window.IndexedDBCore.put(window.IndexedDBCore.STORES.MIGRATION, {
+            id: 'migration_checkpoint',
+            ...checkpoint,
+            timestamp: Date.now()
+        });
+    } catch (err) {
+        console.warn('[Migration] Error saving checkpoint:', err);
+    }
 }
 
 /**
@@ -355,4 +359,3 @@ export const StorageMigration = {
 };
 
 console.log('[StorageMigration] Migration module loaded with checkpoint support');
-

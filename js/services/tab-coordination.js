@@ -389,7 +389,6 @@ function startHeartbeatMonitor() {
     lastLeaderHeartbeat = Date.now();
 
     heartbeatCheckInterval = setInterval(() => {
-        const timeSinceLastHeartbeat = Date.now() - lastLeaderHeartbeat;
         const maxAllowedGap = HEARTBEAT_INTERVAL_MS * MAX_MISSED_HEARTBEATS;
 
         // Also check localStorage fallback
@@ -405,6 +404,8 @@ function startHeartbeatMonitor() {
         } catch (e) {
             // Ignore localStorage errors
         }
+
+        const timeSinceLastHeartbeat = Date.now() - lastLeaderHeartbeat;
 
         if (timeSinceLastHeartbeat > maxAllowedGap) {
             console.log(`[TabCoordination] Leader heartbeat missed for ${timeSinceLastHeartbeat}ms, promoting to leader`);

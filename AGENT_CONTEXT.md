@@ -1,6 +1,6 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System** + **ToolStrategy Pattern (verification pending)** + **ES Module Migration (controllers complete)** + **Unit Testing (Vitest)** + **Chat Module Refactoring (under 1000 lines)**
+> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System** + **ToolStrategy Pattern (verification pending)** + **ES Module Migration (controllers complete)** + **Unit Testing (Vitest)** + **Chat Module Refactoring (under 1000 lines)** + **HNW Structural Improvements (9 modules)**
 
 ---
 
@@ -146,7 +146,8 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 │   ├── operation-queue.js  # Retry queue for non-critical ops (NEW)
 │   │
 │   ├── workers/            # Web Workers (Background Processing)
-│   │   └── vector-search-worker.js # Cosine similarity offloading (60fps maintenance)
+│   │   ├── vector-search-worker.js # Cosine similarity offloading (60fps maintenance)
+│   │   └── pattern-worker-pool.js  # Parallel pattern detection (NEW - HNW Wave)
 │   │
 │   ├── functions/          # Function Calling Modules (Modular Architecture)
 │   │   ├── index.js        # Facade - unified execute() + schema access
@@ -171,10 +172,11 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 │   ├── storage/            # Storage Submodules
 │   │   ├── indexeddb.js    # Core DB operations
 │   │   ├── config-api.js   # Config & Token storage
-│   │   ├── migration.js    # localStorage migration
+│   │   ├── migration.js    # localStorage migration (ENHANCED - checkpointing)
+│   │   ├── transaction.js  # Multi-backend atomic transactions (NEW - HNW Network)
 │   │   ├── profiles.js     # Profile storage (extracted from facade)
 │   │   ├── sync-strategy.js # Sync strategy abstraction (DeviceBackup Phase 2 prep)
-│   │   └── keys.js         # Centralized storage keys (NEW)
+│   │   └── keys.js         # Centralized storage keys
 │   │
 │   ├── security/           # Security Submodules
 │   │   ├── encryption.js   # AES-GCM
@@ -189,13 +191,17 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 │   ├── services/           # Services (Extracted from God objects)
 │   │   ├── message-operations.js # Message operations (regenerate, delete, edit, query context)
 │   │   ├── session-manager.js    # Session lifecycle (create, load, save, delete)
-│   │   ├── tab-coordination.js   # Cross-tab coordination (deterministic leader election)
+│   │   ├── tab-coordination.js   # Cross-tab coordination (ENHANCED - heartbeat failover)
 │   │   ├── token-counting-service.js # Token counting & context window management
-│   │   ├── tool-call-handling-service.js # Tool call handling with fallback support
+│   │   ├── tool-call-handling-service.js # Tool call handling (ENHANCED - strategy voting)
 │   │   ├── llm-provider-routing-service.js # LLM provider configuration & routing
 │   │   ├── fallback-response-service.js # Fallback response generation
+│   │   ├── state-machine-coordinator.js  # Cross-controller state transitions (NEW - HNW Hierarchy)
+│   │   ├── lock-policy-coordinator.js    # Operation conflict matrix (NEW - HNW Hierarchy)
+│   │   ├── timeout-budget-manager.js     # Hierarchical timeout allocation (NEW - HNW Hierarchy)
+│   │   ├── turn-queue.js                 # Message serialization (NEW - HNW Wave)
 │   │   └── tool-strategies/
-│   │       ├── base-strategy.js          # BaseToolStrategy
+│   │       ├── base-strategy.js          # BaseToolStrategy (ENHANCED - confidence scoring)
 │   │       ├── native-strategy.js        # NativeToolStrategy (Level 1)
 │   │       ├── prompt-injection-strategy.js # PromptInjectionStrategy (Levels 2/3)
 │   │       └── intent-extraction-strategy.js # IntentExtractionStrategy (Level 4)
@@ -213,7 +219,8 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 │   ├── rhythm-chamber.spec.ts  # E2E tests (Playwright)
 │   └── unit/               # Unit tests (Vitest)
 │       ├── schemas.test.js # Function schema validation
-│       └── patterns.test.js # Pattern detection algorithms
+│       ├── patterns.test.js # Pattern detection algorithms
+│       └── hnw-structural.test.js # HNW improvements (26 tests) (NEW)
 │
 ├── docs/
 │   ├── 03-technical-architecture.md
@@ -536,6 +543,60 @@ npm test                 # E2E tests (Playwright)
 - Required parameters defined correctly
 - Pattern detection algorithms (comfort/discovery, ghosted artists, time patterns, eras)
 - Edge cases (empty arrays, single streams)
+
+### 17. HNW Structural Improvements (NEW)
+**Problem:** Analysis of codebase using HNW (Hierarchy-Network-Wave) framework revealed structural vulnerabilities across all three domains: authority conflicts, network cascade risks, and wave timing issues.
+
+**Solution: 9 Structural Modules**
+
+| Domain | Module | File | Purpose |
+|--------|--------|------|---------|
+| **Hierarchy** | State Machine Coordinator | `js/services/state-machine-coordinator.js` | Centralized state transitions with validation |
+| **Hierarchy** | Lock Policy Coordinator | `js/services/lock-policy-coordinator.js` | Conflict matrix for concurrent operations |
+| **Hierarchy** | Timeout Budget Manager | `js/services/timeout-budget-manager.js` | Hierarchical timeout allocation |
+| **Network** | Storage Transaction Layer | `js/storage/transaction.js` | Atomic commit/rollback across backends |
+| **Network** | Tab Heartbeat | `js/services/tab-coordination.js` | Leader health monitoring (5s heartbeat) |
+| **Network** | Strategy Voting | `js/services/tool-call-handling-service.js` | Confidence-based strategy selection |
+| **Wave** | Turn Queue | `js/services/turn-queue.js` | Sequential message processing |
+| **Wave** | Pattern Worker Pool | `js/workers/pattern-worker-pool.js` | Parallel pattern detection (3 workers) |
+| **Wave** | Migration Checkpointing | `js/storage/migration.js` | Resumable migrations with progress |
+
+**Key APIs:**
+```javascript
+// State Machine - validated transitions
+await StateMachine.request('demo_enter');
+StateMachine.subscribe((event, prev, next) => { ... });
+
+// Lock Policy - conflict detection
+LockPolicy.canAcquire(['file_processing'], activeOps);
+// → { allowed: false, conflicts: [...], resolution: 'queue' }
+
+// Timeout Budget - hierarchical allocation
+const budget = TimeoutBudget.allocate('llm_call', 60000);
+const child = budget.subdivide('function_call', 10000);
+
+// Storage Transaction - atomic multi-backend
+await StorageTransaction.transaction(async (tx) => {
+    await tx.put('indexeddb', 'store', data);
+    await tx.put('localstorage', 'key', value);
+});
+
+// Turn Queue - message serialization
+await TurnQueue.push(message);
+TurnQueue.getStatusMessage(); // "Thinking about your previous message..."
+
+// Strategy Voting - confidence-based selection
+canHandle() → { confidence: 0.95, reason: 'Native tool_calls' }
+```
+
+**Testing:** 26 integration tests in `tests/unit/hnw-structural.test.js`
+
+**Verification Checklist:**
+- [x] All modules use pure ES exports (no window globals)
+- [x] 26/26 integration tests passing
+- [x] Tab heartbeat: 5s interval, 10s promotion threshold
+- [x] Strategy voting logs confidence scores for debugging
+- [x] Migration checkpoints every 100 records
 
 ---
 
