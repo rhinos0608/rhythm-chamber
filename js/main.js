@@ -37,6 +37,7 @@ if (safeModeReason === null) {
 
 // Core utilities (no dependencies)
 import { Utils } from './utils.js';
+import { ModuleRegistry } from './module-registry.js';
 
 // Storage layer (foundation for everything)
 import { STORAGE_KEYS } from './storage/keys.js';
@@ -66,11 +67,12 @@ import { ProviderInterface } from './providers/provider-interface.js';
 import { OpenRouterProvider } from './providers/openrouter.js';
 import { LMStudioProvider } from './providers/lmstudio.js';
 
-// Heavy modules loaded dynamically in bootstrap() to reduce initial bundle:
+// Heavy modules are registered with ModuleRegistry for lazy loading:
 // - Ollama (./ollama.js, ./providers/ollama-adapter.js)
 // - RAG (./rag.js)
 // - LocalVectorStore (./local-vector-store.js)
 // - LocalEmbeddings (./local-embeddings.js)
+// These are loaded in bootstrap() only if not in safe mode.
 
 // Spotify
 import { Spotify } from './spotify.js';
@@ -262,30 +264,27 @@ async function bootstrap() {
     console.log('[Main] Bootstrapping application...');
 
     try {
-        // Dynamically import heavy modules only if not in safe mode
-        // and the user will need them (Full Analysis path)
+        // Register heavy modules with ModuleRegistry for lazy loading
+        // These are only loaded if not in safe mode (Full Analysis path)
+        ModuleRegistry.register('Ollama', () => import('./ollama.js'), 'Ollama');
+        ModuleRegistry.register('OllamaProvider', () => import('./providers/ollama-adapter.js'), 'OllamaProvider');
+        ModuleRegistry.register('RAG', () => import('./rag.js'), 'RAG');
+        ModuleRegistry.register('LocalVectorStore', () => import('./local-vector-store.js'), 'LocalVectorStore');
+        ModuleRegistry.register('LocalEmbeddings', () => import('./local-embeddings.js'), 'LocalEmbeddings');
+
         if (!safeModeReason) {
-            console.log('[Main] Loading heavy modules dynamically...');
+            console.log('[Main] Pre-loading heavy modules...');
 
-            // Load Ollama provider
-            const [{ Ollama }, { OllamaProvider }] = await Promise.all([
-                import('./ollama.js'),
-                import('./providers/ollama-adapter.js')
+            // Pre-load all heavy modules via ModuleRegistry
+            await ModuleRegistry.preloadModules([
+                'Ollama',
+                'OllamaProvider',
+                'RAG',
+                'LocalVectorStore',
+                'LocalEmbeddings'
             ]);
-            window.Ollama = Ollama;
-            window.OllamaProvider = OllamaProvider;
 
-            // Load RAG and embeddings (only needed for Full Analysis)
-            const [{ RAG }, { LocalVectorStore }, { LocalEmbeddings }] = await Promise.all([
-                import('./rag.js'),
-                import('./local-vector-store.js'),
-                import('./local-embeddings.js')
-            ]);
-            window.RAG = RAG;
-            window.LocalVectorStore = LocalVectorStore;
-            window.LocalEmbeddings = LocalEmbeddings;
-
-            console.log('[Main] Heavy modules loaded');
+            console.log('[Main] Heavy modules loaded via ModuleRegistry');
         }
 
         // Import and initialize the application

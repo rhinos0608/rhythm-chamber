@@ -1,122 +1,137 @@
 /**
- * Spotify Data Parser Module
- * Parses .zip exports and extracts streaming history
+ * Spotify Data Parser Facade
+ * 
+ * This module acts as a facade that delegates all parsing work to a Web Worker.
+ * The actual parsing logic lives in js/parser-worker.js.
+ * 
+ * @module parser
  */
 
-const JSZIP_URL = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
-const JSZIP_INTEGRITY = 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG';
+'use strict';
+
+// ==========================================
+// Worker Management
+// ==========================================
+
+let workerInstance = null;
 
 /**
- * Parse a Spotify data export .zip file
- * @param {File} file - The .zip file
- * @param {Function} onProgress - Progress callback
- * @returns {Promise<Array>} Parsed streaming history
+ * Get or create the parser worker instance
+ * @returns {Worker}
  */
-async function parseSpotifyExport(file, onProgress = () => { }) {
-    onProgress('Loading JSZip library...');
-
-    // Dynamically load JSZip if not present
-    if (typeof JSZip === 'undefined') {
-        await loadScript(JSZIP_URL, {
-            integrity: JSZIP_INTEGRITY,
-            crossorigin: 'anonymous'
-        });
+function getWorker() {
+    if (!workerInstance) {
+        workerInstance = new Worker('js/parser-worker.js');
     }
-
-    onProgress('Extracting archive...');
-    const zip = await JSZip.loadAsync(file);
-
-    // Find streaming history files
-    const streamingFiles = [];
-    zip.forEach((relativePath, zipEntry) => {
-        if (relativePath.includes('StreamingHistory') && relativePath.endsWith('.json')) {
-            streamingFiles.push({ path: relativePath, entry: zipEntry });
-        }
-        // Also check for extended streaming history
-        if (relativePath.includes('endsong') && relativePath.endsWith('.json')) {
-            streamingFiles.push({ path: relativePath, entry: zipEntry });
-        }
-    });
-
-    if (streamingFiles.length === 0) {
-        throw new Error('No streaming history found in archive. Make sure this is a Spotify data export.');
-    }
-
-    onProgress(`Found ${streamingFiles.length} history files...`);
-
-    // Parse all streaming history files
-    let allStreams = [];
-
-    for (let i = 0; i < streamingFiles.length; i++) {
-        const { path, entry } = streamingFiles[i];
-        onProgress(`Parsing ${path}...`);
-
-        const content = await entry.async('text');
-        const data = JSON.parse(content);
-
-        // Normalize data format
-        const normalized = data.map(stream => normalizeStream(stream, path));
-        allStreams = allStreams.concat(normalized);
-    }
-
-    // Sort by timestamp
-    allStreams.sort((a, b) => new Date(a.playedAt) - new Date(b.playedAt));
-
-    // Remove duplicates (same song at exact same time)
-    const seen = new Set();
-    allStreams = allStreams.filter(stream => {
-        const key = `${stream.playedAt}-${stream.trackName}-${stream.artistName}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
-
-    onProgress(`Processed ${allStreams.length} streams`);
-
-    return allStreams;
+    return workerInstance;
 }
 
 /**
- * Normalize stream data from different Spotify export formats
+ * Terminate the worker to free resources
  */
-function normalizeStream(stream, filePath) {
-    // Extended streaming history format (endsong files)
-    if (stream.ts) {
-        return {
-            playedAt: stream.ts,
-            trackName: stream.master_metadata_track_name || 'Unknown Track',
-            artistName: stream.master_metadata_album_artist_name || 'Unknown Artist',
-            albumName: stream.master_metadata_album_album_name || 'Unknown Album',
-            msPlayed: stream.ms_played || 0,
-            platform: stream.platform || 'unknown',
-            shuffle: stream.shuffle || false,
-            skipped: stream.skipped || false,
-            offline: stream.offline || false,
-            reason_start: stream.reason_start,
-            reason_end: stream.reason_end,
-            source: 'extended'
+function terminateWorker() {
+    if (workerInstance) {
+        workerInstance.terminate();
+        workerInstance = null;
+    }
+}
+
+// ==========================================
+// Public API
+// ==========================================
+
+/**
+ * Parse a Spotify data export file (.zip or .json)
+ * Delegates to Web Worker for off-main-thread processing.
+ * 
+ * @param {File} file - The .zip or .json file
+ * @param {Function} onProgress - Progress callback (message: string)
+ * @param {Array} existingStreams - Optional existing streams for overlap detection
+ * @returns {Promise<{streams: Array, chunks: Array, stats: Object}>}
+ */
+async function parseSpotifyExport(file, onProgress = () => { }, existingStreams = null) {
+    return new Promise((resolve, reject) => {
+        const worker = getWorker();
+
+        // Set up message handler
+        const messageHandler = (e) => {
+            const { type, message, streams, chunks, stats, error, overlap } = e.data;
+
+            switch (type) {
+                case 'progress':
+                    onProgress(message);
+                    // Send ACK for backpressure
+                    if (e.data.ackId) {
+                        worker.postMessage({ type: 'ack', ackId: e.data.ackId });
+                    }
+                    break;
+
+                case 'partial':
+                    // Incremental save notification
+                    onProgress(`Processing file ${e.data.fileIndex}/${e.data.totalFiles}...`);
+                    // Send ACK for backpressure
+                    if (e.data.ackId) {
+                        worker.postMessage({ type: 'ack', ackId: e.data.ackId });
+                    }
+                    break;
+
+                case 'memory_warning':
+                    console.warn('[Parser] Memory pressure in worker:', e.data.reason);
+                    onProgress('Memory pressure detected, pausing...');
+                    // Auto-resume after a brief pause to allow GC
+                    setTimeout(() => {
+                        worker.postMessage({ type: 'resume' });
+                    }, 1000);
+                    break;
+
+                case 'memory_resumed':
+                    onProgress('Resuming processing...');
+                    break;
+
+                case 'overlap_detected':
+                    // For now, auto-merge (use unique new streams)
+                    // In future, could surface this to UI for user decision
+                    console.log('[Parser] Overlap detected:', overlap);
+                    onProgress(`Overlap detected: ${overlap.stats.exactDuplicates} duplicates, ${overlap.stats.uniqueNew} new`);
+                    // Re-parse with merge strategy by not passing existingStreams
+                    worker.postMessage({ type: 'parse', file, existingStreams: null });
+                    break;
+
+                case 'complete':
+                    worker.removeEventListener('message', messageHandler);
+                    worker.removeEventListener('error', errorHandler);
+                    resolve({ streams, chunks, stats });
+                    break;
+
+                case 'error':
+                    worker.removeEventListener('message', messageHandler);
+                    worker.removeEventListener('error', errorHandler);
+                    reject(new Error(error));
+                    break;
+            }
         };
-    }
 
-    // Basic streaming history format
-    return {
-        playedAt: stream.endTime || stream.ts,
-        trackName: stream.trackName || 'Unknown Track',
-        artistName: stream.artistName || 'Unknown Artist',
-        albumName: stream.albumName || 'Unknown Album',
-        msPlayed: stream.msPlayed || 0,
-        platform: 'unknown',
-        shuffle: false,
-        skipped: false,
-        offline: false,
-        reason_start: null,
-        reason_end: null,
-        source: 'basic'
-    };
+        const errorHandler = (error) => {
+            worker.removeEventListener('message', messageHandler);
+            worker.removeEventListener('error', errorHandler);
+            reject(new Error(`Worker error: ${error.message}`));
+        };
+
+        worker.addEventListener('message', messageHandler);
+        worker.addEventListener('error', errorHandler);
+
+        // Start parsing
+        worker.postMessage({ type: 'parse', file, existingStreams });
+    });
 }
 
 /**
- * Calculate derived metrics for streams
+ * Enrich streams with derived metrics.
+ * NOTE: This is primarily done in the worker. This function is provided
+ * for backwards compatibility if needed for post-processing.
+ * 
+ * @param {Array} streams - Parsed streams
+ * @returns {Array} Enriched streams
  */
 function enrichStreams(streams) {
     // Build track duration estimates (max observed play time)
@@ -161,7 +176,12 @@ function enrichStreams(streams) {
 }
 
 /**
- * Generate weekly and monthly listening chunks
+ * Generate weekly and monthly listening chunks.
+ * NOTE: This is primarily done in the worker. This function is provided
+ * for backwards compatibility if needed for post-processing.
+ * 
+ * @param {Array} streams - Enriched streams
+ * @returns {Array} Weekly and monthly chunks
  */
 function generateChunks(streams) {
     const weeklyChunks = {};
@@ -218,7 +238,9 @@ function generateChunks(streams) {
         uniqueTracks: chunk.tracks.size,
         topArtists: getTopN(chunk.streams, 'artistName', 5),
         topTracks: getTopN(chunk.streams, s => `${s.trackName} - ${s.artistName}`, 5),
-        avgCompletionRate: chunk.streams.reduce((sum, s) => sum + s.completionRate, 0) / chunk.streams.length,
+        avgCompletionRate: chunk.streams.length > 0
+            ? chunk.streams.reduce((sum, s) => sum + s.completionRate, 0) / chunk.streams.length
+            : 0,
         artists: [...chunk.artists],
         tracks: [...chunk.tracks],
         summary: generateChunkSummary(chunk)
@@ -271,34 +293,15 @@ function getWeekStart(date) {
     return new Date(d.setDate(diff));
 }
 
-/**
- * Load a script dynamically
- */
-function loadScript(src, options = {}) {
-    return new Promise((resolve, reject) => {
-        if (document.querySelector(`script[src="${src}"]`)) {
-            resolve();
-            return;
-        }
-        const script = document.createElement('script');
-        script.src = src;
-        if (options.integrity) {
-            script.integrity = options.integrity;
-        }
-        if (options.crossorigin) {
-            script.crossOrigin = options.crossorigin;
-        }
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
-    });
-}
+// ==========================================
+// ES Module Export
+// ==========================================
 
-// ES Module export
 export const Parser = {
     parseSpotifyExport,
     enrichStreams,
-    generateChunks
+    generateChunks,
+    terminateWorker
 };
 
 // Keep window global for backwards compatibility
@@ -306,5 +309,4 @@ if (typeof window !== 'undefined') {
     window.Parser = Parser;
 }
 
-console.log('[Parser] Module loaded');
-
+console.log('[Parser] Facade module loaded (delegates to parser-worker.js)');

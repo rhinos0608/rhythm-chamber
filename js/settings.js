@@ -6,6 +6,8 @@
  * and optionally override those settings via localStorage.
  */
 
+import { ModuleRegistry } from './module-registry.js';
+
 // Available LLM providers
 const LLM_PROVIDERS = [
     { id: 'ollama', name: 'Ollama (Local)', description: 'Run AI models on your own hardware - zero data transmission' },
@@ -606,7 +608,7 @@ function showSettingsModal() {
                     <div class="settings-field">
                         <label for="setting-qdrant-url">Qdrant Cluster URL</label>
                         <input type="text" id="setting-qdrant-url" 
-                               value="${window.RAG?.getConfig()?.qdrantUrl || ''}" 
+                               value="${ModuleRegistry.getModuleSync('RAG')?.getConfig()?.qdrantUrl || ''}" 
                                placeholder="https://xyz-abc.cloud.qdrant.io:6333"
                                autocomplete="off">
                         <span class="settings-hint">Get a free cluster at <a href="https://cloud.qdrant.io" target="_blank">cloud.qdrant.io</a></span>
@@ -615,7 +617,7 @@ function showSettingsModal() {
                     <div class="settings-field">
                         <label for="setting-qdrant-key">Qdrant API Key</label>
                         <input type="password" id="setting-qdrant-key" 
-                               value="${window.RAG?.getConfig()?.qdrantApiKey || ''}" 
+                               value="${ModuleRegistry.getModuleSync('RAG')?.getConfig()?.qdrantApiKey || ''}" 
                                placeholder="Enter your Qdrant API key"
                                autocomplete="off">
                         <button class="btn-show-password" onclick="Settings.togglePasswordVisibility('setting-qdrant-key', this)">Show</button>
@@ -623,16 +625,16 @@ function showSettingsModal() {
                     
                     <div class="settings-field">
                         <button class="btn btn-primary" id="generate-embeddings-btn" onclick="Settings.generateEmbeddings()">
-                            ${window.RAG?.isConfigured() ? '🔄 Regenerate Embeddings' : '⚡ Generate Embeddings'}
+                            ${ModuleRegistry.getModuleSync('RAG')?.isConfigured() ? '🔄 Regenerate Embeddings' : '⚡ Generate Embeddings'}
                         </button>
-                        ${window.RAG?.getCheckpoint?.() ? `
+                        ${ModuleRegistry.getModuleSync('RAG')?.getCheckpoint?.() ? `
                             <button class="btn btn-secondary" id="resume-embeddings-btn" onclick="Settings.resumeEmbeddings()">
                                 ▶️ Resume
                             </button>
                         ` : ''}
-                        ${window.RAG?.isConfigured() ? `
-                            <span class="settings-hint success">✓ ${window.RAG.getConfig()?.chunksCount || 0} chunks indexed</span>
-                        ` : window.RAG?.getCheckpoint?.() ? `
+                        ${ModuleRegistry.getModuleSync('RAG')?.isConfigured() ? `
+                            <span class="settings-hint success">✓ ${ModuleRegistry.getModuleSync('RAG').getConfig()?.chunksCount || 0} chunks indexed</span>
+                        ` : ModuleRegistry.getModuleSync('RAG')?.getCheckpoint?.() ? `
                             <span class="settings-hint warning">⚠️ Interrupted - click Resume to continue</span>
                         ` : `
                             <span class="settings-hint">Required after adding your Qdrant credentials</span>
@@ -865,13 +867,14 @@ function saveFromModal() {
     saveSettings(settings);
 
     // Save Qdrant settings
-    if (window.RAG) {
+    const RAG = ModuleRegistry.getModuleSync('RAG');
+    if (RAG) {
         const qdrantUrl = document.getElementById('setting-qdrant-url')?.value?.trim();
         const qdrantKey = document.getElementById('setting-qdrant-key')?.value?.trim();
 
         if (qdrantUrl || qdrantKey) {
-            const ragConfig = window.RAG.getConfig() || {};
-            window.RAG.saveConfig({
+            const ragConfig = RAG.getConfig() || {};
+            RAG.saveConfig({
                 ...ragConfig,
                 qdrantUrl: qdrantUrl || ragConfig.qdrantUrl,
                 qdrantApiKey: qdrantKey || ragConfig.qdrantApiKey
@@ -934,7 +937,8 @@ function showToast(message, duration = 2000) {
  * @param {boolean} resume - Whether to resume from checkpoint
  */
 async function generateEmbeddings(resume = false) {
-    if (!window.RAG) {
+    const RAG = ModuleRegistry.getModuleSync('RAG');
+    if (!RAG) {
         showToast('RAG module not loaded');
         return;
     }
@@ -949,8 +953,8 @@ async function generateEmbeddings(resume = false) {
     }
 
     // Save credentials
-    const ragConfig = window.RAG.getConfig() || {};
-    window.RAG.saveConfig({
+    const ragConfig = RAG.getConfig() || {};
+    RAG.saveConfig({
         ...ragConfig,
         qdrantUrl,
         qdrantApiKey: qdrantKey
@@ -972,7 +976,7 @@ async function generateEmbeddings(resume = false) {
         progressText.textContent = 'Testing Qdrant connection...';
 
         try {
-            await window.RAG.testConnection();
+            await RAG.testConnection();
         } catch (connErr) {
             showToast('Qdrant connection failed: ' + connErr.message);
             if (progressContainer) progressContainer.style.display = 'none';
@@ -982,7 +986,7 @@ async function generateEmbeddings(resume = false) {
         }
 
         // Generate embeddings with progress callback
-        await window.RAG.generateEmbeddings((current, total, message) => {
+        await RAG.generateEmbeddings((current, total, message) => {
             const percent = Math.round((current / total) * 100);
             if (progressFill) progressFill.style.width = `${percent}%`;
             if (progressText) progressText.textContent = message;
@@ -1000,7 +1004,7 @@ async function generateEmbeddings(resume = false) {
         console.error('Embedding generation error:', err);
 
         // Check if we have a checkpoint for resume
-        const checkpoint = window.RAG.getCheckpoint?.();
+        const checkpoint = RAG.getCheckpoint?.();
         if (checkpoint && checkpoint.processed > 0) {
             showToast(`Error at ${checkpoint.processed}/${checkpoint.totalChunks}: ${err.message}. Click Resume to continue.`);
         } else {
@@ -1011,7 +1015,7 @@ async function generateEmbeddings(resume = false) {
         if (generateBtn) generateBtn.disabled = false;
 
         // Check if we need to show resume button
-        if (window.RAG.getCheckpoint?.()) {
+        if (RAG.getCheckpoint?.()) {
             if (resumeBtn) {
                 resumeBtn.style.display = 'inline-block';
                 resumeBtn.disabled = false;
@@ -1228,7 +1232,8 @@ async function checkOllamaConnection() {
     `;
 
     try {
-        if (!window.Ollama) {
+        const Ollama = ModuleRegistry.getModuleSync('Ollama');
+        if (!Ollama) {
             statusEl.innerHTML = `
                 <span class="status-dot error"></span>
                 <span>Ollama module not loaded</span>
@@ -1236,7 +1241,7 @@ async function checkOllamaConnection() {
             return;
         }
 
-        const result = await window.Ollama.detectServer();
+        const result = await Ollama.detectServer();
 
         if (result.available) {
             statusEl.innerHTML = `
@@ -1266,7 +1271,8 @@ async function testOllamaConnection() {
     const endpointInput = document.getElementById('setting-ollama-endpoint');
     if (endpointInput) {
         // Temporarily update the endpoint in Ollama module
-        const originalEndpoint = window.Ollama?.getEndpoint?.();
+        const Ollama = ModuleRegistry.getModuleSync('Ollama');
+        const originalEndpoint = Ollama?.getEndpoint?.();
         // Note: The endpoint is read from settings, so we save first
         const tempSettings = getSettings();
         tempSettings.llm.ollamaEndpoint = endpointInput.value;
@@ -1282,10 +1288,11 @@ async function testOllamaConnection() {
  */
 async function refreshOllamaModels() {
     const modelSelect = document.getElementById('setting-ollama-model');
-    if (!modelSelect || !window.Ollama) return;
+    const Ollama = ModuleRegistry.getModuleSync('Ollama');
+    if (!modelSelect || !Ollama) return;
 
     try {
-        const models = await window.Ollama.listModels();
+        const models = await Ollama.listModels();
         const currentValue = modelSelect.value;
 
         // Clear and rebuild options

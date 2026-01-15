@@ -317,11 +317,6 @@ rhythm-chamber/
 │   ├── state/              # State Management
 │   │   └── app-state.js    # Centralized app state
 │   │
-│   ├── services/           # Services (Extracted from God objects)
-│   │   ├── message-operations.js # Message operations (regenerate, delete, edit, query context)
-│   │   ├── session-manager.js    # Session lifecycle (create, load, save, delete)
-│   │   └── tab-coordination.js   # Cross-tab coordination (deterministic leader election)
-│   │
 │   └── controllers/        # UI Controllers
 │       ├── chat-ui-controller.js
 │       ├── sidebar-controller.js

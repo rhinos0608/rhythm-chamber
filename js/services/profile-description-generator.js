@@ -71,7 +71,7 @@ function checkLLMAvailability() {
 function buildDescriptionPrompt(personality, patterns, summary) {
     const topArtist = patterns?.trueFavorites?.topByPlays?.artist || 'your favorite artist';
     const topEngaged = patterns?.trueFavorites?.topByEngagement?.artist || topArtist;
-    const ghostedArtists = patterns?.ghostedArtists?.ghosted?.slice(0, 3).map(a => a.artist) || [];
+    const ghostedArtists = (patterns?.ghostedArtists?.ghosted ?? []).slice(0, 3).map(a => a.artist) || [];
     const eras = patterns?.eras?.eras?.length || 0;
     const streamCount = summary?.totalStreams?.toLocaleString() || 'thousands of';
     const hours = summary?.totalHours?.toLocaleString() || 'many';
@@ -94,7 +94,9 @@ function buildDescriptionPrompt(personality, patterns, summary) {
         context += `\n- Different music tastes between morning and evening`;
     }
 
-    if (patterns?.discoveryExplosions?.hasExplosions) {
+    if (patterns?.discoveryExplosions?.hasExplosions && 
+        Array.isArray(patterns.discoveryExplosions.explosions) && 
+        patterns.discoveryExplosions.explosions.length > 0) {
         const explosion = patterns.discoveryExplosions.explosions[0];
         context += `\n- Discovery explosion: ${explosion.newArtists} new artists in ${explosion.month}`;
     }

@@ -3,42 +3,27 @@
  * Handles heavy parsing off the main thread
  */
 
-const JSZIP_URL = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
-const JSZIP_INTEGRITY = 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG';
+const JSZIP_LOCAL_PATH = './vendor/jszip.min.js'; // Bundled locally for offline support
 
 let jszipReadyPromise = null;
 
-async function loadScriptWithIntegrity(url, expectedIntegrity) {
-    if (!crypto?.subtle) {
-        throw new Error('Integrity checks require Web Crypto support.');
-    }
-
-    const response = await fetch(url, { mode: 'cors' });
-    if (!response.ok) {
-        throw new Error(`Failed to load script: ${response.status}`);
-    }
-
-    const scriptBuffer = await response.arrayBuffer();
-    const hashBuffer = await crypto.subtle.digest('SHA-384', scriptBuffer);
-    const hashBytes = new Uint8Array(hashBuffer);
-    let hashBinary = '';
-    for (let i = 0; i < hashBytes.length; i++) {
-        hashBinary += String.fromCharCode(hashBytes[i]);
-    }
-    const actualIntegrity = `sha384-${btoa(hashBinary)}`;
-
-    if (actualIntegrity !== expectedIntegrity) {
-        throw new Error('Integrity check failed for external script.');
-    }
-
-    const blobUrl = URL.createObjectURL(new Blob([scriptBuffer], { type: 'text/javascript' }));
-    importScripts(blobUrl);
-    URL.revokeObjectURL(blobUrl);
-}
-
 function ensureJsZipReady() {
     if (!jszipReadyPromise) {
-        jszipReadyPromise = loadScriptWithIntegrity(JSZIP_URL, JSZIP_INTEGRITY);
+        jszipReadyPromise = new Promise((resolve, reject) => {
+            try {
+                if (typeof self.JSZip === 'undefined') {
+                    importScripts(JSZIP_LOCAL_PATH);
+                }
+
+                if (typeof self.JSZip === 'undefined') {
+                    throw new Error('JSZip failed to load from bundled asset.');
+                }
+
+                resolve(self.JSZip);
+            } catch (error) {
+                reject(error);
+            }
+        });
     }
     return jszipReadyPromise;
 }

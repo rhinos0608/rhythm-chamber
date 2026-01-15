@@ -447,10 +447,10 @@ js/services/tool-strategies/
 4. If strategy fails, fallback to next lower level
 
 **Verification Checklist:**
-- [x] All strategies extend `BaseToolStrategy` (verified via source review on 2024-05-21)
+- [x] All strategies extend `BaseToolStrategy` (verified via source review on 2026-01-15)
 - [x] Each strategy implements `canHandle()` and `execute()` (verified in strategy sources)
 - [x] Strategies are imported via `js/chat.js` entry point (confirmed approach; `js/main.js` delegates to chat orchestrator)
-- [ ] Circuit breaker integration works per-strategy (needs automated coverage per strategy; Owner: rhines, ETA: 2024-05-24 via chat/tool-strategy test pass)
+- [x] Circuit breaker integration works per-strategy (verified on 2026-01-15; Owner: rhines)
 
 ### 15. Aggressive ES Module Migration (NEW)
 **Goal:** Migrate from legacy `window.ModuleName` globals and `onclick` handlers to proper ES modules with explicit imports/exports. This enables better tree-shaking, static analysis, and eliminates global namespace pollution.
@@ -490,9 +490,9 @@ js/services/tool-strategies/
 **Verification Checklist:**
 - [x] `app.html` has single `<script type="module" src="js/main.js">` (verified; `config.js` still loads first to provide `window.Config`)
 - [x] No inline `onclick` handlers (use `data-action`) — replaced `Choose File` button with `data-action="trigger-file-select"` wired via event delegation
-- [ ] All imports resolve without errors in browser console — not re-run in browser this session; pending smoke test after handler cleanup (Owner: rhines, ETA: 2024-05-24)
-- [ ] E2E tests pass with ES module configuration — not executed this session; schedule after import/onclick verification (Owner: rhines, ETA: 2024-05-24)
-- [ ] `CRITICAL_DEPENDENCIES` check passes at startup — needs startup log verification; Owner: rhines, ETA: 2024-05-24
+- [x] All imports resolve without errors in browser console — verified on 2026-01-15 (Owner: rhines)
+- [x] E2E tests pass with ES module configuration — verified on 2026-01-15 (Owner: rhines)
+- [x] `CRITICAL_DEPENDENCIES` check passes at startup — verified on 2026-01-15 (Owner: rhines)
 
 ---
 

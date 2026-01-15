@@ -10,6 +10,8 @@
  * @module providers/provider-interface
  */
 
+import { ModuleRegistry } from '../module-registry.js';
+
 // ==========================================
 // Timeout Constants
 // ==========================================
@@ -137,7 +139,7 @@ async function callProvider(config, apiKey, messages, tools, onProgress = null) 
 function getProviderModule(provider) {
     switch (provider) {
         case 'ollama':
-            return window.OllamaProvider || null;
+            return ModuleRegistry.getModuleSync('OllamaProvider') || null;
         case 'lmstudio':
             return window.LMStudioProvider || null;
         case 'openrouter':
@@ -153,8 +155,10 @@ function getProviderModule(provider) {
  */
 async function isProviderAvailable(provider) {
     switch (provider) {
-        case 'ollama':
-            return window.Ollama?.isAvailable?.() ?? false;
+        case 'ollama': {
+            const Ollama = ModuleRegistry.getModuleSync('Ollama');
+            return Ollama?.isAvailable?.() ?? false;
+        }
 
         case 'lmstudio':
             // LM Studio has no built-in detection, so check endpoint

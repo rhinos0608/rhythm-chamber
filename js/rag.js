@@ -25,6 +25,9 @@ const EMBEDDING_RATE_LIMIT = 5; // Max 5 embedding batches per minute
 // Local embedding constants (different model, smaller dimensions)
 const LOCAL_EMBEDDING_DIMENSIONS = 384; // all-MiniLM-L6-v2 output dimension
 
+// Import ModuleRegistry for accessing dynamically loaded modules
+import { ModuleRegistry } from './module-registry.js';
+
 // EmbeddingWorker instance (lazy-loaded)
 let embeddingWorker = null;
 
@@ -1287,8 +1290,16 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}) {
     try {
         onProgress(0, 100, 'Initializing local embedding model (~22MB download on first use)...');
 
+        // Get modules from ModuleRegistry
+        const LocalEmbeddings = ModuleRegistry.getModuleSync('LocalEmbeddings');
+        const LocalVectorStore = ModuleRegistry.getModuleSync('LocalVectorStore');
+
+        if (!LocalEmbeddings || !LocalVectorStore) {
+            throw new Error('Local embedding modules not loaded. Check browser compatibility.');
+        }
+
         // Initialize LocalEmbeddings (downloads model if needed)
-        await window.LocalEmbeddings.initialize((pct) => {
+        await LocalEmbeddings.initialize((pct) => {
             // Model loading is 0-50% of progress
             onProgress(Math.round(pct / 2), 100, `Loading model... ${pct}%`);
         });
@@ -1296,7 +1307,7 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}) {
         onProgress(50, 100, 'Initializing local vector store...');
 
         // Initialize LocalVectorStore
-        await window.LocalVectorStore.init();
+        await LocalVectorStore.init();
 
         // Get streaming data
         const streams = await Storage.getStreams();
@@ -1315,9 +1326,9 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}) {
             const chunk = chunks[i];
 
             try {
-                const embedding = await window.LocalEmbeddings.getEmbedding(chunk.text);
+                const embedding = await LocalEmbeddings.getEmbedding(chunk.text);
 
-                await window.LocalVectorStore.upsert(i + 1, embedding, {
+                await LocalVectorStore.upsert(i + 1, embedding, {
                     text: chunk.text,
                     type: chunk.type,
                     metadata: chunk.metadata
@@ -1368,19 +1379,22 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}) {
  * @returns {Promise<Array>} Search results with payloads
  */
 async function searchLocal(query, limit = 5) {
-    if (!window.LocalEmbeddings?.isReady()) {
+    const LocalEmbeddings = ModuleRegistry.getModuleSync('LocalEmbeddings');
+    const LocalVectorStore = ModuleRegistry.getModuleSync('LocalVectorStore');
+
+    if (!LocalEmbeddings?.isReady()) {
         throw new Error('Local embeddings not initialized. Generate embeddings first.');
     }
 
-    if (!window.LocalVectorStore?.isReady()) {
-        await window.LocalVectorStore.init();
+    if (!LocalVectorStore?.isReady()) {
+        await LocalVectorStore.init();
     }
 
     // Generate embedding for query
-    const queryVector = await window.LocalEmbeddings.getEmbedding(query);
+    const queryVector = await LocalEmbeddings.getEmbedding(query);
 
     // Use async search for non-blocking UI (falls back to sync if worker unavailable)
-    const results = await window.LocalVectorStore.searchAsync(queryVector, limit, 0.3);
+    const results = await LocalVectorStore.searchAsync(queryVector, limit, 0.3);
 
     // Transform to match Qdrant response format
     return results.map(r => ({
@@ -1395,8 +1409,9 @@ async function searchLocal(query, limit = 5) {
  * @returns {Promise<{success: boolean}>}
  */
 async function clearLocalEmbeddings() {
-    if (window.LocalVectorStore) {
-        await window.LocalVectorStore.clear();
+    const LocalVectorStore = ModuleRegistry.getModuleSync('LocalVectorStore');
+    if (LocalVectorStore) {
+        await LocalVectorStore.clear();
     }
 
     // Update config
@@ -1477,10 +1492,6 @@ export const RAG = {
     LOCAL_EMBEDDING_DIMENSIONS
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.RAG = RAG;
-}
-
+// ES Module export - use ModuleRegistry for access instead of window globals
 console.log('[RAG] RAG module loaded with local fallback + incremental embedding support');
 
