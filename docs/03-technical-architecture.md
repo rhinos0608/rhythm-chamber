@@ -133,11 +133,15 @@ UI logic extracted from `app.js` into focused controllers:
 - **DemoController** (`js/controllers/demo-controller.js`): Demo mode
 - **ResetController** (`js/controllers/reset-controller.js`): Reset operations
 
-### 4. Service Pattern (NEW - 3 Services)
+### 4. Service Pattern (NEW - 7 Services)
 Extracted from God objects into independent services:
 - **MessageOperations** (`js/services/message-operations.js`): Message operations (regenerate, delete, edit, query context)
 - **SessionManager** (`js/services/session-manager.js`): Session lifecycle (create, load, save, delete)
 - **TabCoordinator** (`js/services/tab-coordination.js`): Cross-tab coordination (deterministic leader election)
+- **TokenCountingService** (`js/services/token-counting-service.js`): Token counting & context window management
+- **ToolCallHandlingService** (`js/services/tool-call-handling-service.js`): Tool call handling with fallback support
+- **LLMProviderRoutingService** (`js/services/llm-provider-routing-service.js`): LLM provider configuration & routing
+- **FallbackResponseService** (`js/services/fallback-response-service.js`): Fallback response generation
 
 ### 5. State Management
 - **AppState** (`js/state/app-state.js`): Centralized state with demo isolation
@@ -160,21 +164,23 @@ Extracted from God objects into independent services:
 - ✅ **Event Delegation** - Single handler for all `data-action` UI events (replacing inline `onclick`)
 
 ### 7. Chat Module (chat.js)
-**New Structure:** ~1,350 lines (vs 1,486 original) - **Delegates to MessageOperations + ToolStrategy**
+**New Structure:** 941 lines (vs 1,486 original) - **36% reduction!**
 
 **Responsibilities:**
 - Chat orchestration
 - Session management (delegates to SessionManager)
 - Message operations (delegates to MessageOperations)
-- LLM provider routing
-- Tool execution (delegates to ToolStrategies)
-- Token counting (delegates to TokenCounter)
+- LLM provider routing (delegates to LLMProviderRoutingService)
+- Tool execution (delegates to ToolCallHandlingService)
+- Token counting (delegates to TokenCountingService)
+- Fallback responses (delegates to FallbackResponseService)
 
 **Key Improvements:**
-- ✅ **ToolStrategy Pattern** - Function calling logic refactored into strategies
-- ✅ **Delegates to MessageOperations** for message operations
-- ✅ **Delegates to SessionManager** for session operations
-- ✅ **Aggressive ES Module Migration** - No global window exports
+- ✅ **36% reduction in complexity** (941 vs 1,486 lines)
+- ✅ **Delegates to 4 dedicated services** for specialized concerns
+- ✅ **Cleaner separation** of concerns
+- ✅ **Maintains backward compatibility** with fallbacks
+- ✅ **Under 1000 lines** - Achieved target!
 
 ### 8. Tool Strategy Pattern (NEW)
 Extracted complex function calling logic from `chat.js` into dedicated strategies (`js/services/tool-strategies/`):
@@ -241,7 +247,7 @@ rhythm-chamber/
 │   ├── parser.js           # Parser facade (delegates to worker)
 │   ├── patterns.js         # 8 pattern algorithms + detectLitePatterns()
 │   ├── personality.js      # 5 types + lite types + score breakdown
-│   ├── chat.js             # Chat orchestration (Delegates to Providers + MessageOperations + SessionManager)
+│   ├── chat.js             # Chat orchestration (941 lines) - Delegates to 4 services
 │   ├── data-query.js       # Query streams by time/artist/track
 │   ├── cards.js            # Card generator + Web Share API
 │   ├── storage.js          # Storage Facade (Delegates to js/storage/ modules)
@@ -265,16 +271,6 @@ rhythm-chamber/
 │   ├── operation-lock.js   # Critical operation coordination (ENHANCED)
 │   ├── operation-lock-errors.js # Standardized error classes (NEW)
 │   ├── operation-queue.js  # Retry queue for non-critical ops (NEW)
-│   │
-│   ├── services/           # Services (Extracted from God objects)
-│   │   ├── message-operations.js # Message operations (regenerate, delete, edit, query context)
-│   │   ├── session-manager.js    # Session lifecycle (create, load, save, delete)
-│   │   ├── tab-coordination.js   # Cross-tab coordination (deterministic leader election)
-│   │   └── tool-strategies/
-│   │       ├── base-strategy.js          # BaseToolStrategy
-│   │       ├── native-strategy.js        # NativeToolStrategy (Level 1)
-│   │       ├── prompt-injection-strategy.js # PromptInjectionStrategy (Levels 2/3)
-│   │       └── intent-extraction-strategy.js # IntentExtractionStrategy (Level 4)
 │   │
 │   ├── workers/            # Web Workers (Background Processing)
 │   │   └── vector-search-worker.js # Cosine similarity offloading (60fps maintenance)
@@ -316,6 +312,20 @@ rhythm-chamber/
 │   │
 │   ├── state/              # State Management
 │   │   └── app-state.js    # Centralized app state
+│   │
+│   ├── services/           # Services (Extracted from God objects)
+│   │   ├── message-operations.js # Message operations (regenerate, delete, edit, query context)
+│   │   ├── session-manager.js    # Session lifecycle (create, load, save, delete)
+│   │   ├── tab-coordination.js   # Cross-tab coordination (deterministic leader election)
+│   │   ├── token-counting-service.js # Token counting & context window management
+│   │   ├── tool-call-handling-service.js # Tool call handling with fallback support
+│   │   ├── llm-provider-routing-service.js # LLM provider configuration & routing
+│   │   ├── fallback-response-service.js # Fallback response generation
+│   │   └── tool-strategies/
+│   │       ├── base-strategy.js          # BaseToolStrategy
+│   │       ├── native-strategy.js        # NativeToolStrategy (Level 1)
+│   │       ├── prompt-injection-strategy.js # PromptInjectionStrategy (Levels 2/3)
+│   │       └── intent-extraction-strategy.js # IntentExtractionStrategy (Level 4)
 │   │
 │   └── controllers/        # UI Controllers
 │       ├── chat-ui-controller.js
@@ -859,6 +869,68 @@ npx serve .
 
 ## Session Log
 
+### Session 20 — 2026-01-15 (Chat Module Refactoring - Under 1000 Lines)
+
+**What was done:**
+
+1. **TokenCountingService** (`js/services/token-counting-service.js`)
+   - Extracted token counting logic from chat.js
+   - Handles character-based estimation (1 token ≈ 4 characters)
+   - Provides context window management and truncation strategies
+   - Integrated with circuit breaker for token overflow prevention
+
+2. **ToolCallHandlingService** (`js/services/tool-call-handling-service.js`)
+   - Extracted tool call handling with fallback support
+   - Supports 4-level fallback network (native → prompt injection → intent extraction → direct query)
+   - Manages function execution with timeout and circuit breaker
+   - Integrates with ToolStrategy pattern for extensibility
+
+3. **LLMProviderRoutingService** (`js/services/llm-provider-routing-service.js`)
+   - Extracted LLM provider configuration and routing
+   - Supports OpenRouter, LM Studio, and Ollama
+   - Handles provider-specific configuration and API calls
+   - Provides unified interface for LLM interactions
+
+4. **FallbackResponseService** (`js/services/fallback-response-service.js`)
+   - Extracted fallback response generation
+   - Generates context-aware responses when API is unavailable
+   - Uses user context (personality, patterns, summary) for personalized responses
+   - Provides provider-aware messaging for different LLM providers
+
+5. **Chat Module Refactoring** (`js/chat.js`)
+   - Reduced from 1,350 lines to **941 lines** (30% reduction)
+   - Achieved target of under 1,000 lines
+   - Updated architecture comment to reflect new delegation pattern
+   - Replaced direct calls with service calls
+   - Removed redundant functions (generateFallbackResponse, etc.)
+   - Maintained full backward compatibility
+
+**Key Architectural Improvements:**
+
+- **HNW Hierarchy**: Clear delegation from Chat → 4 Services → Specialized concerns
+- **HNW Network**: Reduced coupling, each service has single responsibility
+- **HNW Wave**: Services can be initialized independently, fail gracefully
+
+**New Files:**
+- `js/services/token-counting-service.js` - Token counting & context window management
+- `js/services/tool-call-handling-service.js` - Tool call handling with fallback support
+- `js/services/llm-provider-routing-service.js` - LLM provider configuration & routing
+- `js/services/fallback-response-service.js` - Fallback response generation
+
+**Modified Files:**
+- `js/chat.js` - Reduced from 1,350 to 941 lines, integrated 4 services
+- `js/main.js` - Updated to import new services
+
+**Impact:**
+- **30% reduction in chat.js complexity** (1,350 → 941 lines)
+- **Achieved target** of under 1,000 lines
+- **Improved maintainability** through service separation
+- **Enhanced testability** - each service can be tested independently
+- **Better extensibility** - new providers or fallback strategies can be added without modifying chat.js
+- **Maintained backward compatibility** - all existing functionality preserved
+
+---
+
 ### Session 19 — 2026-01-15 (Operation Lock Contract & Race Condition Fixes)
 
 **What was done:**
@@ -866,30 +938,30 @@ npx serve .
 1. **Operation Lock Contract Documentation**: Created comprehensive `docs/operation-lock-contract.md` detailing failure propagation hierarchy across all application layers.
 
 2. **Standardized Error Classes**: Created `js/operation-lock-errors.js` with:
-    - `LockAcquisitionError` - Lock blocked by operations
-    - `LockTimeoutError` - Acquisition timeout
-    - `LockReleaseError` - Release failures
-    - `LockForceReleaseError` - Emergency releases
+   - `LockAcquisitionError` - Lock blocked by operations
+   - `LockTimeoutError` - Acquisition timeout
+   - `LockReleaseError` - Release failures
+   - `LockForceReleaseError` - Emergency releases
 
 3. **Enhanced OperationLock Module**: Updated `js/operation-lock.js` with:
-    - `acquireWithTimeout()` - Timeout mechanism (default 30s)
-    - `getLockStatus()` - Diagnostic API for lock state
-    - `getLockDetails()` - Detailed lock information
-    - `withLockAndTimeout()` - Wrapper with timeout support
-    - Uses new error classes for better error handling
+   - `acquireWithTimeout()` - Timeout mechanism (default 30s)
+   - `getLockStatus()` - Diagnostic API for lock state
+   - `getLockDetails()` - Detailed lock information
+   - `withLockAndTimeout()` - Wrapper with timeout support
+   - Uses new error classes for better error handling
 
 4. **Operation Queue System**: Created `js/operation-queue.js` for non-critical operations:
-    - Priority-based queuing (LOW, NORMAL, HIGH, CRITICAL)
-    - Automatic retry with configurable attempts
-    - Event listeners for queue state changes
-    - Cancellation support
-    - Status tracking and diagnostics
+   - Priority-based queuing (LOW, NORMAL, HIGH, CRITICAL)
+   - Automatic retry with configurable attempts
+   - Event listeners for queue state changes
+   - Cancellation support
+   - Status tracking and diagnostics
 
 5. **Race Condition Fixes**: Updated `js/controllers/file-upload-controller.js`:
-    - **Removed** `isLocked()` + `acquire()` pattern (race condition)
-    - **Fixed** with direct `acquire()` in try-catch
-    - Added proper error handling with new error classes
-    - Improved lock release error handling
+   - **Removed** `isLocked()` + `acquire()` pattern (race condition)
+   - **Fixed** with direct `acquire()` in try-catch
+   - Added proper error handling with new error classes
+   - Improved lock release error handling
 
 6. **Complete Documentation**: All failure propagation patterns documented with examples
 
@@ -940,36 +1012,36 @@ npx serve .
 **What was done:**
 
 1. **Vector Search Worker** (`js/workers/vector-search-worker.js`)
-    - Created Web Worker with Command Pattern for non-blocking cosine similarity
-    - Added `searchAsync()` method to LocalVectorStore
-    - Updated `rag.js` to use async search for 60fps maintenance
-    - Fallback to sync search for small vector sets (<500) or worker unavailability
+   - Created Web Worker with Command Pattern for non-blocking cosine similarity
+   - Added `searchAsync()` method to LocalVectorStore
+   - Updated `rag.js` to use async search for 60fps maintenance
+   - Fallback to sync search for small vector sets (<500) or worker unavailability
 
 2. **Dependency Hardening** (`js/app.js`)
-    - Added `checkDependencies()` function validating 17 critical modules
-    - Checks both existence AND initialization state (e.g., `Spotify.isConfigured` is function)
-    - Detailed diagnostic UI with module status list
-    - "Copy Error Report" button for GitHub issue reporting
-    - Network status display (online/offline + connection type)
+   - Added `checkDependencies()` function validating 17 critical modules
+   - Checks both existence AND initialization state (e.g., `Spotify.isConfigured` is function)
+   - Detailed diagnostic UI with module status list
+   - "Copy Error Report" button for GitHub issue reporting
+   - Network status display (online/offline + connection type)
 
 3. **Origin Validation Enhancement** (`js/security/token-binding.js`)
-    - Comprehensive `checkSecureContext()` supporting:
-      - HTTPS: Always allowed
-      - HTTP localhost/127.0.0.1: Allowed (development)
-      - file://: Allowed with warning (offline use, crypto.subtle may fail)
-      - app://capacitor://: Allowed (native wrappers)
-      - Iframes: Cross-origin blocked
-      - data://blob://: Blocked (XSS vectors)
+   - Comprehensive `checkSecureContext()` supporting:
+     - HTTPS: Always allowed
+     - HTTP localhost/127.0.0.1: Allowed (development)
+     - file://: Allowed with warning (offline use, crypto.subtle may fail)
+     - app://capacitor://: Allowed (native wrappers)
+     - Iframes: Cross-origin blocked
+     - data://blob://: Blocked (XSS vectors)
 
 4. **Prototype Pollution Prevention** (`js/security/index.js`)
-    - `sanitizeObject()` for recursive key filtering (__proto__, constructor, prototype)
-    - `safeJsonParse()` for untrusted JSON input
-    - `enablePrototypePollutionProtection()` freezes Object/Array/Function prototypes
-    - Called LAST in init() to avoid breaking legitimate library patches
+   - `sanitizeObject()` for recursive key filtering (__proto__, constructor, prototype)
+   - `safeJsonParse()` for untrusted JSON input
+   - `enablePrototypePollutionProtection()` freezes Object/Array/Function prototypes
+   - Called LAST in init() to avoid breaking legitimate library patches
 
 5. **CSS Updates** (`css/styles.css`)
-    - Added `.loading-error` state styling with diagnostic details accordion
-    - Mobile responsive error UI
+   - Added `.loading-error` state styling with diagnostic details accordion
+   - Mobile responsive error UI
 
 **Key Architectural Changes:**
 - **HNW Hierarchy**: Early-fail pattern catches script loading failures
