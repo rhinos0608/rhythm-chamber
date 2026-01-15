@@ -374,7 +374,7 @@ Data never touches our servers.
 
 ### Combined Supporter Tier
 
-**Price:** $19 Lifetime
+**Price:** $39 one-time OR $19 first year, then $9/year
 
 **Includes:**
 - ✅ Obsidian/Notion Export (Strategy 1)
@@ -555,7 +555,7 @@ core. Consider exploring Sarah's 2020 playlist for context.
 **New pricing strategy creates multiple value propositions:**
 
 1. **Free tier:** Full local analysis, BYOI chat, basic cards
-2. **Supporter ($19):** PKM Export + Relationship Reports + Badge
+2. **Supporter ($39 one-time OR $19 first year, then $9/year):** PKM Export + Relationship Reports + Badge
 3. **Patron ($7/month):** Community + early access
 4. **Cloud Sync ($50+):** Multi-device + managed AI
 

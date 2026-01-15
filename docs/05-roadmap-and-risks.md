@@ -199,9 +199,9 @@ Stats.fm requires server infrastructure, which means:
 
 #### Phase 1: Sovereign Community (Zero Cost to User)
 - **Free tier**: Full local analysis, BYOI chat (local or your keys), 100% client-side
-- **Supporter**: $19 Lifetime (PKM Export + Relationship Compatibility Reports)
+- **Supporter**: $39 one-time OR $19 first year, then $9/year (PKM Export + Relationship Compatibility Reports)
   - **Purpose**: Seed capital for security audit & infrastructure
-  - **Transparency**: "Your $19 funds our security partnership"
+  - **Transparency**: "Your Supporter funds our security partnership"
   - **KPI**: Need ~250-1,000 Supporters to fund Phase 2
 - **Patron**: $7/month (Discord, voting, early access)
   - **Purpose**: Sustainable community funding
@@ -235,7 +235,7 @@ Stats.fm requires server infrastructure, which means:
 ### User Acquisition
 **Strategy:** "Sovereign-to-Managed" funnel
 - **Stage 1**: Free local tool (loss leader) → Build community
-- **Stage 2**: $19 Supporters (seed capital) → Fund security
+- **Stage 2**: $39 one-time OR $19 first year, then $9/year Supporters (seed capital) → Fund security
 - **Stage 3**: $15 Cloud Sync (premium) → Scale revenue
 - **Target**: Power users, privacy enthusiasts, developers
 - **Viral Loop**: Free users become advocates, Supporters fund growth
@@ -318,7 +318,7 @@ Stats.fm requires server infrastructure, which means:
 The zero-backend architecture isn't a limitation—it's our moat. The BYOI model isn't a barrier—it's a feature for our target audience. Demo mode + template/synth profiles reduce time-to-value while exports are pending. The data export friction isn't a bug—it's a filter for users who value depth over immediacy.
 
 **Sovereign-to-Managed Strategy:**
-- **Phase 1**: Free local tool builds community, $19 Supporters fund security audit
+- **Phase 1**: Free local tool builds community, $39 one-time OR $19 first year, then $9/year Supporters fund security audit
 - **Phase 2**: Cloud sync with external security partnership, $50 + $10/month or $15/month
 - **Key Insight**: Use Supporter revenue to hire external security firm, market their badge as trust signal
 - **KPI**: Need ~250-1,000 Supporters before launching cloud tier
@@ -335,7 +335,7 @@ The zero-backend architecture isn't a limitation—it's our moat. The BYOI model
 
 **Why it works:** The "Emotional Archaeologist" likely journals or tracks data. Giving them a "physical" digital copy of their history that connects to their other notes is huge value.
 
-**Price:** $19 Lifetime (Fits your "Sovereignty" angle).
+**Price:** $39 one-time OR $19 first year, then $9/year (Fits your "Sovereignty" angle).
 
 ### Strategy 2: The "Social Resonance" Tier
 **Value Prop:** Compare your soul with others. Your docs mention a "Friend Compare via JSON". Currently, this is a feature. Make the Deep Comparison Report the paid product.
@@ -350,7 +350,7 @@ The zero-backend architecture isn't a limitation—it's our moat. The BYOI model
 
 **Why it works:** It forces a viral loop. One user buys it to analyze their partner/friend. It sells the outcome (relationship insight), not the tool.
 
-**Price:** $10 Lifetime (Lower friction to encourage viral adoption).
+**Price:** $39 one-time OR $19 first year, then $9/year (Lower friction to encourage viral adoption).
 
 ### Strategy 3: The "Deep Enrichment" Tier
 **Value Prop:** Data Spotify doesn't give you. Use the local client to fetch public metadata that Spotify hides or doesn't track, creating a "Super-Metadata" version of their library.
@@ -363,7 +363,7 @@ The zero-backend architecture isn't a limitation—it's our moat. The BYOI model
 
 **Why it works:** It appeals to the "Discovery Junkie" and music nerds who feel limited by standard "Top Artist" charts.
 
-**Price:** $15 Lifetime.
+**Price:** $39 one-time OR $19 first year, then $9/year.
 
 ### Recommendation
 Combine Strategy 1 (PKM Export) and Strategy 2 (Comparison) into the "Supporter" tier.

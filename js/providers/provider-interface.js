@@ -240,6 +240,257 @@ function normalizeProviderError(error, provider) {
 }
 
 // ==========================================
+// Provider Health Check System
+// HNW Network: Coordination between UI and provider layer
+// ==========================================
+
+/**
+ * Health check timeout in milliseconds
+ */
+const HEALTH_CHECK_TIMEOUT = 5000;
+
+/**
+ * Check OpenRouter health and API key validity
+ * @returns {Promise<ProviderHealthStatus>}
+ */
+async function checkOpenRouterHealth() {
+    const start = Date.now();
+    const apiKey = window.Settings?.get?.()?.openrouter?.apiKey || window.CONFIG?.apiKey;
+
+    if (!apiKey || apiKey === 'your-api-key-here') {
+        return {
+            available: false,
+            status: 'no_key',
+            reason: 'No API key configured',
+            models: [],
+            latencyMs: 0
+        };
+    }
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT);
+
+        const response = await fetch('https://openrouter.ai/api/v1/models', {
+            headers: { 'Authorization': `Bearer ${apiKey}` },
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        const latencyMs = Date.now() - start;
+
+        if (response.status === 401 || response.status === 403) {
+            return {
+                available: false,
+                status: 'invalid_key',
+                reason: 'API key is invalid or expired',
+                models: [],
+                latencyMs
+            };
+        }
+
+        if (!response.ok) {
+            return {
+                available: false,
+                status: 'error',
+                reason: `API error: ${response.status}`,
+                models: [],
+                latencyMs
+            };
+        }
+
+        const data = await response.json();
+        const models = data.data?.map(m => m.id) || [];
+
+        return {
+            available: true,
+            status: 'ready',
+            models: models.slice(0, 20), // Limit to first 20 for display
+            totalModels: models.length,
+            hasKey: true,
+            latencyMs
+        };
+    } catch (error) {
+        const latencyMs = Date.now() - start;
+        if (error.name === 'AbortError') {
+            return {
+                available: false,
+                status: 'timeout',
+                reason: 'Connection timeout - check your internet',
+                models: [],
+                latencyMs
+            };
+        }
+        return {
+            available: false,
+            status: 'error',
+            reason: error.message,
+            models: [],
+            latencyMs
+        };
+    }
+}
+
+/**
+ * Check Ollama health and available models
+ * @returns {Promise<ProviderHealthStatus>}
+ */
+async function checkOllamaHealth() {
+    const start = Date.now();
+    const endpoint = window.Settings?.get?.()?.llm?.ollamaEndpoint || 'http://localhost:11434';
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT);
+
+        const response = await fetch(`${endpoint}/api/tags`, {
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        const latencyMs = Date.now() - start;
+
+        if (!response.ok) {
+            return {
+                available: false,
+                status: 'not_running',
+                reason: `Ollama responded with error: ${response.status}`,
+                models: [],
+                latencyMs
+            };
+        }
+
+        const data = await response.json();
+        const models = data.models?.map(m => m.name) || [];
+
+        if (models.length === 0) {
+            return {
+                available: true,
+                status: 'running_no_models',
+                reason: 'No models installed. Run: ollama pull llama3.2',
+                models: [],
+                latencyMs
+            };
+        }
+
+        return {
+            available: true,
+            status: 'ready',
+            models,
+            latencyMs
+        };
+    } catch (error) {
+        const latencyMs = Date.now() - start;
+        if (error.name === 'AbortError') {
+            return {
+                available: false,
+                status: 'not_running',
+                reason: 'Connection timeout - is Ollama running? Try: ollama serve',
+                models: [],
+                latencyMs
+            };
+        }
+        // CORS or network error usually means Ollama isn't running
+        return {
+            available: false,
+            status: 'not_running',
+            reason: 'Cannot connect to Ollama. Start it with: ollama serve',
+            models: [],
+            latencyMs
+        };
+    }
+}
+
+/**
+ * Check LM Studio health and loaded models
+ * @returns {Promise<ProviderHealthStatus>}
+ */
+async function checkLMStudioHealth() {
+    const start = Date.now();
+    const endpoint = window.Settings?.get?.()?.llm?.lmstudioEndpoint || 'http://localhost:1234/v1';
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT);
+
+        const response = await fetch(`${endpoint}/models`, {
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        const latencyMs = Date.now() - start;
+
+        if (!response.ok) {
+            return {
+                available: false,
+                status: 'not_running',
+                reason: `LM Studio responded with error: ${response.status}`,
+                models: [],
+                latencyMs
+            };
+        }
+
+        const data = await response.json();
+        const models = data.data?.map(m => m.id) || [];
+
+        if (models.length === 0) {
+            return {
+                available: true,
+                status: 'running_no_models',
+                reason: 'No models loaded. Load a model in LM Studio.',
+                models: [],
+                latencyMs
+            };
+        }
+
+        return {
+            available: true,
+            status: 'ready',
+            models,
+            latencyMs
+        };
+    } catch (error) {
+        const latencyMs = Date.now() - start;
+        if (error.name === 'AbortError') {
+            return {
+                available: false,
+                status: 'not_running',
+                reason: 'Connection timeout - is LM Studio running with server enabled?',
+                models: [],
+                latencyMs
+            };
+        }
+        return {
+            available: false,
+            status: 'not_running',
+            reason: 'Cannot connect to LM Studio. Enable the local server in LM Studio settings.',
+            models: [],
+            latencyMs
+        };
+    }
+}
+
+/**
+ * Comprehensive health check for all providers
+ * Returns detailed status including model availability
+ * 
+ * @returns {Promise<{
+ *   openrouter: ProviderHealthStatus,
+ *   ollama: ProviderHealthStatus,
+ *   lmstudio: ProviderHealthStatus
+ * }>}
+ */
+async function checkHealth() {
+    const [openrouter, ollama, lmstudio] = await Promise.all([
+        checkOpenRouterHealth(),
+        checkOllamaHealth(),
+        checkLMStudioHealth()
+    ]);
+
+    return { openrouter, ollama, lmstudio };
+}
+
+// ==========================================
 // Public API
 // ==========================================
 
@@ -256,6 +507,12 @@ export const ProviderInterface = {
     getAvailableProviders,
     getProviderModule,
 
+    // Health Checks (NEW)
+    checkHealth,
+    checkOpenRouterHealth,
+    checkOllamaHealth,
+    checkLMStudioHealth,
+
     // Error handling
     normalizeProviderError,
 
@@ -268,5 +525,5 @@ if (typeof window !== 'undefined') {
     window.ProviderInterface = ProviderInterface;
 }
 
-console.log('[ProviderInterface] LLM provider abstraction layer loaded');
+console.log('[ProviderInterface] LLM provider abstraction layer loaded with health checks');
 

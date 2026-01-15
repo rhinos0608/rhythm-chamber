@@ -9,7 +9,7 @@
 | LLM inference | $0 | **Your local AI** (Ollama/LM Studio) or OpenRouter (free tier) | **No cloud dependency** - run AI on your own hardware |
 | Processing | $0 | User's browser | Privacy-first, no data breach risk |
 | Data storage | $0 | User's localStorage/IndexedDB | User controls their data, not us |
-| **Supporter Features** | **$19 Lifetime** | **(Future)** User pays for PKM Export + Friend Compare | **One-time unlock**—no recurring infrastructure |
+| **Supporter Features** | **$39 one-time OR $19 first year, then $9/year** | **(Future)** User pays for PKM Export + Friend Compare | **One-time unlock**—no recurring infrastructure |
 | **Patreon Perks** | **$7/month** | **(Future)** Discord access, voting, early beta | **Optional**—community engagement, not code access |
 | **Total (Base)** | **$0** | **Free Forever** | Stats.fm needs to monetize to survive |
 
@@ -819,7 +819,7 @@ npx serve .
 - [ ] WASM embeddings for semantic search (v1.1)
 - [ ] Playlist generation based on patterns (v1.1)
 
-#### Supporter Tier ($19 Lifetime)
+#### Supporter Tier ($39 one-time OR $19 first year, then $9/year)
 - [x] **Obsidian/Notion Export**: Generates folder of Markdown files with proper interlinking
 - [x] **Relationship Compatibility Reports**: Upload friend's data to generate insights
 - [x] "Verified" badge on cards

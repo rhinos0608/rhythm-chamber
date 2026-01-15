@@ -126,7 +126,55 @@ import { DataVersion } from './services/data-version.js';
 import { FunctionCallingFallback } from './services/function-calling-fallback.js';
 import { ProfileDescriptionGenerator } from './services/profile-description-generator.js';
 
-console.log('[Main] All modules imported');
+// ==========================================
+// Register ES Modules on Window (Backward Compatibility)
+// app.js checks for these on window.X for dependency validation
+// ==========================================
+
+if (typeof window !== 'undefined') {
+    // Core modules (required by app.js dependency checker)
+    window.AppState = AppState;
+    window.Storage = Storage;
+    window.Chat = Chat;
+    window.Spotify = Spotify;
+    window.Patterns = Patterns;
+    window.Personality = Personality;
+    window.Security = Security;
+
+    // Additional core modules used by app.js
+    window.DataQuery = DataQuery;
+    window.TokenCounter = TokenCounter;
+    window.Functions = Functions;
+    window.Cards = Cards;
+
+    // Controllers
+    window.ViewController = ViewController;
+    window.FileUploadController = FileUploadController;
+    window.SpotifyController = SpotifyController;
+    window.DemoController = DemoController;
+    window.ResetController = ResetController;
+    window.SidebarController = SidebarController;
+    window.ChatUIController = ChatUIController;
+
+    // Services
+    window.TabCoordinator = TabCoordinator;
+    window.SessionManager = SessionManager;
+    window.MessageOperations = MessageOperations;
+
+    // Utility modules that need window access
+    window.OperationLock = OperationLock;
+    window.CircuitBreaker = CircuitBreaker;
+    window.FunctionCallingFallback = FunctionCallingFallback;
+    window.ProfileDescriptionGenerator = ProfileDescriptionGenerator;
+    window.DataVersion = DataVersion;
+
+    // Template/Profile modules
+    window.DemoData = DemoData;
+    window.TemplateProfileStore = TemplateProfileStore;
+    window.ProfileSynthesizer = ProfileSynthesizer;
+}
+
+console.log('[Main] All modules imported and registered on window');
 
 // ==========================================
 // Error UI for Security Failures

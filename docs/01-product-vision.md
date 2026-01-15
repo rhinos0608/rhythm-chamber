@@ -104,16 +104,17 @@ Power users WANT control:
 |------|-------|--------------|----------------|----------|
 | **Free** | $0 | Full local analysis, BYOI chat, basic cards, personality reveal | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
 | **Supporter** | **$39 - one time purchase** | **Obsidian/Notion Export + Relationship Compatibility Reports** | Client-side only | **Seed Capital**: Funds security audit & cloud infrastructure |
+| **Supporter** | **$19 first year, then $9/year** | **Obsidian/Notion Export + Relationship Compatibility Reports** | Client-side only | **Recurring Revenue**: Ongoing support for security & features |
 | **Patron** | **$7/month** | Dev Discord access, roadmap voting, early beta features | Client-side + Discord | **Community**: Recurring revenue for ongoing support |
 
-### Phase 2: Managed Cloud & AI (Trust-First Launch)
+### Security Audit Stretch Goal
 
-| Tier | Price | What You Get | Infrastructure | Trust Signal |
-|------|-------|--------------|----------------|--------------|
-| **Cloud Sync** | **$60 yearly** | Multi-device chat sync, encrypted cloud backup, **managed embeddings & AI setup - with transparent limits and token usage**, security signatures & validation | Hybrid (Server-side DB + Client-side E2EE) | **"Secured by [External Firm]"** |
-| **Cloud Sync** | **$5/month** | Same as above, no lifetime payment | Hybrid (Server-side DB + Client-side E2EE) | **"Secured by [External Firm]"** |
+**$10,000 raised = Security audit unlocked**
+
+When we reach $10,000 in Supporter revenue, we will commission an external security audit to validate our zero-backend architecture and encryption implementation. This audit will be published publicly to build trust with our community.
 
 ### Why This Works
+
 - **Zero Risk Entry**: Users try without payment barrier
 - **Community Investment**: Supporters feel ownership in security development
 - **Borrowed Trust**: External security firm reputation transfers to your product
@@ -131,9 +132,6 @@ Power users WANT control:
 ### Feature Implementation
 - **PKM Export**: Generates folder of Markdown files (one for every Artist, Month, Era) properly interlinked for Obsidian/Notion/Roam
 - **Relationship Compatibility Report**: Upload second person's zip/JSON to generate "You and Sarah have 84% overlap in 'Melancholy' but divergent 'Energy' curves in 2021. Your common anthem is 'Bloodbuzz Ohio'."
-
- - AI uses function calls to query data from local database for specifity
-
 - **Enrichment Mode** (Strategy 3): Connects to public APIs (MusicBrainz, AcoustID) to fetch BPM, Key, Producer Credits, Lyrics for top tracks
 - **Patreon Perks**: Discord access, voting rights, early access
 - **Phase 2**: Multi-device sync, encrypted cloud backup, managed AI setup, **external security partnership**
