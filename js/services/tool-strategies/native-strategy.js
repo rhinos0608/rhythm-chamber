@@ -11,8 +11,18 @@ export class NativeToolStrategy extends BaseToolStrategy {
     get level() { return 1; }
 
     canHandle(responseMessage, capabilityLevel) {
-        return capabilityLevel === 1 &&
-            responseMessage?.tool_calls?.length > 0;
+        // Only handle native tool calls at capability level 1
+        if (capabilityLevel !== 1) {
+            return this.confidence(0, 'Capability level mismatch');
+        }
+
+        const toolCalls = responseMessage?.tool_calls;
+        if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+            return this.confidence(0, 'No tool_calls in response');
+        }
+
+        // High confidence when native tool_calls present
+        return this.confidence(0.95, `Native tool_calls detected: ${toolCalls.length} call(s)`);
     }
 
     async execute(context) {

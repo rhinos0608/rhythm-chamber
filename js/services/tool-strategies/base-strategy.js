@@ -37,12 +37,24 @@ export class BaseToolStrategy {
 
     /**
      * Check if this strategy can handle the given response
+     * Returns a confidence object for strategy voting
+     * 
      * @param {Object} responseMessage - LLM response message
      * @param {number} capabilityLevel - Detected capability level
-     * @returns {boolean}
+     * @returns {{ confidence: number, reason: string }} Confidence 0-1 with reason
      */
     canHandle(responseMessage, capabilityLevel) {
         throw new Error('Must implement canHandle');
+    }
+
+    /**
+     * Helper to create confidence result
+     * @param {number} confidence - 0-1 confidence score
+     * @param {string} reason - Human-readable reason
+     * @returns {{ confidence: number, reason: string }}
+     */
+    confidence(confidence, reason) {
+        return { confidence: Math.max(0, Math.min(1, confidence)), reason };
     }
 
     /**

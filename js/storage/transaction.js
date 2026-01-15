@@ -1,0 +1,311 @@
+/**
+ * Storage Transaction Layer
+ * 
+ * Wraps multi-backend operations with atomic commit/rollback semantics.
+ * Coordinates operations across IndexedDB and localStorage.
+ * 
+ * HNW Network: Provides transactional consistency for multi-backend operations,
+ * preventing partial writes that could corrupt application state.
+ * 
+ * @module storage/transaction
+ */
+
+// ==========================================
+// Transaction State
+// ==========================================
+
+/**
+ * Represents a pending operation in the transaction
+ */
+class TransactionOperation {
+    constructor(backend, type, store, key, value, previousValue = null) {
+        this.backend = backend;       // 'indexeddb' | 'localstorage'
+        this.type = type;             // 'put' | 'delete'
+        this.store = store;           // Store name (for IndexedDB) or null
+        this.key = key;               // Key identifier
+        this.value = value;           // Value to store
+        this.previousValue = previousValue;  // For rollback
+        this.committed = false;
+        this.timestamp = Date.now();
+    }
+}
+
+/**
+ * Transaction context passed to transaction callback
+ */
+class TransactionContext {
+    constructor() {
+        this.operations = [];
+        this.committed = false;
+        this.rolledBack = false;
+    }
+
+    /**
+     * Add a put operation to the transaction
+     * 
+     * @param {string} backend - 'indexeddb' or 'localstorage'
+     * @param {string} storeOrKey - Store name (IndexedDB) or key (localStorage)
+     * @param {*} value - Value to store
+     * @param {string} [key] - Key within store (IndexedDB only)
+     */
+    async put(backend, storeOrKey, value, key = null) {
+        if (this.committed || this.rolledBack) {
+            throw new Error('Transaction already completed');
+        }
+
+        let previousValue = null;
+
+        if (backend === 'localstorage') {
+            const storageKey = storeOrKey;
+            previousValue = localStorage.getItem(storageKey);
+            this.operations.push(new TransactionOperation(
+                'localstorage', 'put', null, storageKey, value, previousValue
+            ));
+        } else if (backend === 'indexeddb') {
+            const store = storeOrKey;
+            const dbKey = key || value?.id;
+
+            if (window.IndexedDBCore) {
+                try {
+                    previousValue = await window.IndexedDBCore.get(store, dbKey);
+                } catch {
+                    previousValue = null;
+                }
+            }
+
+            this.operations.push(new TransactionOperation(
+                'indexeddb', 'put', store, dbKey, value, previousValue
+            ));
+        } else {
+            throw new Error(`Unknown backend: ${backend}`);
+        }
+    }
+
+    /**
+     * Add a delete operation to the transaction
+     * 
+     * @param {string} backend - 'indexeddb' or 'localstorage'
+     * @param {string} storeOrKey - Store name (IndexedDB) or key (localStorage)
+     * @param {string} [key] - Key within store (IndexedDB only)
+     */
+    async delete(backend, storeOrKey, key = null) {
+        if (this.committed || this.rolledBack) {
+            throw new Error('Transaction already completed');
+        }
+
+        let previousValue = null;
+
+        if (backend === 'localstorage') {
+            const storageKey = storeOrKey;
+            previousValue = localStorage.getItem(storageKey);
+            this.operations.push(new TransactionOperation(
+                'localstorage', 'delete', null, storageKey, null, previousValue
+            ));
+        } else if (backend === 'indexeddb') {
+            const store = storeOrKey;
+
+            if (window.IndexedDBCore) {
+                try {
+                    previousValue = await window.IndexedDBCore.get(store, key);
+                } catch {
+                    previousValue = null;
+                }
+            }
+
+            this.operations.push(new TransactionOperation(
+                'indexeddb', 'delete', store, key, null, previousValue
+            ));
+        }
+    }
+
+    /**
+     * Get count of pending operations
+     * @returns {number}
+     */
+    getPendingCount() {
+        return this.operations.length;
+    }
+}
+
+// ==========================================
+// Core Functions
+// ==========================================
+
+/**
+ * Execute a transactional operation across multiple backends
+ * 
+ * @param {function(TransactionContext): Promise<void>} callback - Transaction callback
+ * @returns {Promise<{success: boolean, operationsCommitted: number}>}
+ */
+async function transaction(callback) {
+    const ctx = new TransactionContext();
+
+    try {
+        // Execute the transaction callback
+        await callback(ctx);
+
+        // Commit all operations
+        await commit(ctx);
+
+        return {
+            success: true,
+            operationsCommitted: ctx.operations.length
+        };
+    } catch (error) {
+        // Rollback on any error
+        console.error('[StorageTransaction] Transaction failed, rolling back:', error);
+        await rollback(ctx);
+
+        throw error;
+    }
+}
+
+/**
+ * Commit all operations in the transaction
+ * 
+ * @param {TransactionContext} ctx - Transaction context
+ */
+async function commit(ctx) {
+    if (ctx.committed) {
+        throw new Error('Transaction already committed');
+    }
+
+    const errors = [];
+
+    for (const op of ctx.operations) {
+        try {
+            if (op.backend === 'localstorage') {
+                if (op.type === 'put') {
+                    localStorage.setItem(op.key,
+                        typeof op.value === 'string' ? op.value : JSON.stringify(op.value)
+                    );
+                } else if (op.type === 'delete') {
+                    localStorage.removeItem(op.key);
+                }
+            } else if (op.backend === 'indexeddb') {
+                if (!window.IndexedDBCore) {
+                    throw new Error('IndexedDBCore not available');
+                }
+
+                if (op.type === 'put') {
+                    await window.IndexedDBCore.put(op.store, op.value);
+                } else if (op.type === 'delete') {
+                    await window.IndexedDBCore.delete(op.store, op.key);
+                }
+            }
+
+            op.committed = true;
+        } catch (error) {
+            errors.push({ operation: op, error });
+            // Stop committing on first error
+            break;
+        }
+    }
+
+    if (errors.length > 0) {
+        // Rollback committed operations
+        await rollback(ctx);
+        throw new Error(`Commit failed: ${errors[0].error.message}`);
+    }
+
+    ctx.committed = true;
+    console.log(`[StorageTransaction] Committed ${ctx.operations.length} operations`);
+}
+
+/**
+ * Rollback all committed operations in the transaction
+ * 
+ * @param {TransactionContext} ctx - Transaction context
+ */
+async function rollback(ctx) {
+    if (ctx.rolledBack) {
+        return;
+    }
+
+    // Rollback in reverse order
+    const toRollback = ctx.operations.filter(op => op.committed).reverse();
+
+    for (const op of toRollback) {
+        try {
+            if (op.backend === 'localstorage') {
+                if (op.previousValue === null) {
+                    localStorage.removeItem(op.key);
+                } else {
+                    localStorage.setItem(op.key, op.previousValue);
+                }
+            } else if (op.backend === 'indexeddb' && window.IndexedDBCore) {
+                if (op.previousValue === null) {
+                    await window.IndexedDBCore.delete(op.store, op.key);
+                } else {
+                    await window.IndexedDBCore.put(op.store, op.previousValue);
+                }
+            }
+        } catch (rollbackError) {
+            console.error('[StorageTransaction] Rollback failed for operation:', op, rollbackError);
+            // Continue rolling back other operations
+        }
+    }
+
+    ctx.rolledBack = true;
+    console.log(`[StorageTransaction] Rolled back ${toRollback.length} operations`);
+}
+
+/**
+ * Create a savepoint for nested transactions (future use)
+ * 
+ * @param {TransactionContext} ctx - Transaction context
+ * @returns {number} Savepoint index
+ */
+function savepoint(ctx) {
+    return ctx.operations.length;
+}
+
+/**
+ * Rollback to a savepoint
+ * 
+ * @param {TransactionContext} ctx - Transaction context
+ * @param {number} savepointIndex - Savepoint to rollback to
+ */
+async function rollbackToSavepoint(ctx, savepointIndex) {
+    const toRollback = ctx.operations.slice(savepointIndex).reverse();
+
+    for (const op of toRollback) {
+        if (op.committed) {
+            // Rollback this operation
+            if (op.backend === 'localstorage') {
+                if (op.previousValue === null) {
+                    localStorage.removeItem(op.key);
+                } else {
+                    localStorage.setItem(op.key, op.previousValue);
+                }
+            }
+        }
+    }
+
+    // Remove rolled back operations
+    ctx.operations = ctx.operations.slice(0, savepointIndex);
+}
+
+// ==========================================
+// Public API
+// ==========================================
+
+const StorageTransaction = {
+    // Core operations
+    transaction,
+
+    // For advanced use
+    TransactionContext,
+    TransactionOperation,
+    savepoint,
+    rollbackToSavepoint,
+
+    // Internal (for testing)
+    _commit: commit,
+    _rollback: rollback
+};
+
+// ES Module export
+export { StorageTransaction };
+
+console.log('[StorageTransaction] Storage Transaction Layer loaded');

@@ -66,8 +66,14 @@ const TAB_ID = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 const MESSAGE_TYPES = {
     CANDIDATE: 'CANDIDATE',
     CLAIM_PRIMARY: 'CLAIM_PRIMARY',
-    RELEASE_PRIMARY: 'RELEASE_PRIMARY'
+    RELEASE_PRIMARY: 'RELEASE_PRIMARY',
+    HEARTBEAT: 'HEARTBEAT'
 };
+
+// Heartbeat configuration
+const HEARTBEAT_INTERVAL_MS = 5000;  // Leader sends heartbeat every 5s
+const MAX_MISSED_HEARTBEATS = 2;     // Promote after 2 missed (10s dead leader)
+const HEARTBEAT_STORAGE_KEY = 'rhythm_chamber_leader_heartbeat';
 
 // ==========================================
 // State Management
@@ -77,6 +83,9 @@ let broadcastChannel = null;
 let isPrimaryTab = true;
 let electionTimeout = null;
 let messageHandler = null;
+let heartbeatInterval = null;
+let heartbeatCheckInterval = null;
+let lastLeaderHeartbeat = Date.now();
 
 // Module-scoped election state to prevent race conditions
 let electionCandidates = new Set();
@@ -148,6 +157,13 @@ async function init() {
     // Set up cleanup on unload
     window.addEventListener('beforeunload', cleanup);
 
+    // Set up heartbeat system
+    if (isPrimaryTab) {
+        startHeartbeat();
+    } else {
+        startHeartbeatMonitor();
+    }
+
     return isPrimaryTab;
 }
 
@@ -190,6 +206,13 @@ function createMessageHandler() {
                 // Primary tab closed - initiate new election
                 if (!isPrimaryTab) {
                     initiateReElection();
+                }
+                break;
+
+            case MESSAGE_TYPES.HEARTBEAT:
+                // Received heartbeat from leader
+                if (tabId !== TAB_ID && !isPrimaryTab) {
+                    lastLeaderHeartbeat = Date.now();
                 }
                 break;
         }
@@ -301,7 +324,105 @@ async function initiateReElection() {
     if (!isPrimaryTab && !electionAborted) {
         isPrimaryTab = true;
         claimPrimary();
+        startHeartbeat();
+        stopHeartbeatMonitor();
         console.log('[TabCoordination] Became primary after re-election');
+    }
+}
+
+/**
+ * Start sending heartbeats (leader only)
+ */
+function startHeartbeat() {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+    }
+
+    // Send initial heartbeat
+    sendHeartbeat();
+
+    // Start interval
+    heartbeatInterval = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
+    console.log('[TabCoordination] Started heartbeat as leader');
+}
+
+/**
+ * Send a heartbeat
+ */
+function sendHeartbeat() {
+    // Send via BroadcastChannel
+    broadcastChannel?.postMessage({
+        type: MESSAGE_TYPES.HEARTBEAT,
+        tabId: TAB_ID,
+        timestamp: Date.now()
+    });
+
+    // Also store in localStorage for cross-tab fallback
+    try {
+        localStorage.setItem(HEARTBEAT_STORAGE_KEY, JSON.stringify({
+            tabId: TAB_ID,
+            timestamp: Date.now()
+        }));
+    } catch (e) {
+        // Ignore localStorage errors
+    }
+}
+
+/**
+ * Stop sending heartbeats
+ */
+function stopHeartbeat() {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+    }
+}
+
+/**
+ * Start monitoring leader heartbeat (followers only)
+ */
+function startHeartbeatMonitor() {
+    if (heartbeatCheckInterval) {
+        clearInterval(heartbeatCheckInterval);
+    }
+
+    lastLeaderHeartbeat = Date.now();
+
+    heartbeatCheckInterval = setInterval(() => {
+        const timeSinceLastHeartbeat = Date.now() - lastLeaderHeartbeat;
+        const maxAllowedGap = HEARTBEAT_INTERVAL_MS * MAX_MISSED_HEARTBEATS;
+
+        // Also check localStorage fallback
+        try {
+            const stored = localStorage.getItem(HEARTBEAT_STORAGE_KEY);
+            if (stored) {
+                const { timestamp } = JSON.parse(stored);
+                const storedAge = Date.now() - timestamp;
+                if (storedAge < timeSinceLastHeartbeat) {
+                    lastLeaderHeartbeat = timestamp;
+                }
+            }
+        } catch (e) {
+            // Ignore localStorage errors
+        }
+
+        if (timeSinceLastHeartbeat > maxAllowedGap) {
+            console.log(`[TabCoordination] Leader heartbeat missed for ${timeSinceLastHeartbeat}ms, promoting to leader`);
+            stopHeartbeatMonitor();
+            initiateReElection();
+        }
+    }, HEARTBEAT_INTERVAL_MS);
+
+    console.log('[TabCoordination] Started heartbeat monitor as follower');
+}
+
+/**
+ * Stop monitoring heartbeat
+ */
+function stopHeartbeatMonitor() {
+    if (heartbeatCheckInterval) {
+        clearInterval(heartbeatCheckInterval);
+        heartbeatCheckInterval = null;
     }
 }
 
@@ -325,6 +446,10 @@ function getTabId() {
  * Cleanup on tab close/unload
  */
 function cleanup() {
+    // Stop heartbeat
+    stopHeartbeat();
+    stopHeartbeatMonitor();
+
     if (isPrimaryTab && broadcastChannel) {
         broadcastChannel.postMessage({
             type: MESSAGE_TYPES.RELEASE_PRIMARY,
@@ -357,15 +482,13 @@ const TabCoordinator = {
     init,
     isPrimary,
     getTabId,
-    cleanup
+    cleanup,
+    // Heartbeat (exposed for testing)
+    _startHeartbeat: startHeartbeat,
+    _stopHeartbeat: stopHeartbeat
 };
 
 // ES Module export
 export { TabCoordinator };
 
-// Make available globally for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.TabCoordinator = TabCoordinator;
-}
-
-console.log('[TabCoordination] Service loaded');
+console.log('[TabCoordination] Service loaded with heartbeat support');

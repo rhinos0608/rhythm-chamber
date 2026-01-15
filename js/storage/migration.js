@@ -69,6 +69,59 @@ async function isMigrationNeeded() {
     return !state || state.version < MIGRATION_MODULE_VERSION;
 }
 
+/**
+ * Get checkpoint state for resumable migration
+ * @returns {Promise<Object|null>}
+ */
+async function getCheckpoint() {
+    try {
+        if (!window.IndexedDBCore) {
+            return null;
+        }
+        return await window.IndexedDBCore.get(
+            window.IndexedDBCore.STORES.MIGRATION,
+            'migration_checkpoint'
+        );
+    } catch (err) {
+        console.warn('[Migration] Error getting checkpoint:', err);
+        return null;
+    }
+}
+
+/**
+ * Save checkpoint for resumable migration
+ * @param {Object} checkpoint - Checkpoint data
+ * @returns {Promise<void>}
+ */
+async function saveCheckpoint(checkpoint) {
+    if (!window.IndexedDBCore) {
+        return;
+    }
+    await window.IndexedDBCore.put(window.IndexedDBCore.STORES.MIGRATION, {
+        id: 'migration_checkpoint',
+        ...checkpoint,
+        timestamp: Date.now()
+    });
+}
+
+/**
+ * Clear checkpoint after successful migration
+ * @returns {Promise<void>}
+ */
+async function clearCheckpoint() {
+    if (!window.IndexedDBCore) {
+        return;
+    }
+    try {
+        await window.IndexedDBCore.delete(
+            window.IndexedDBCore.STORES.MIGRATION,
+            'migration_checkpoint'
+        );
+    } catch (err) {
+        // Ignore - checkpoint may not exist
+    }
+}
+
 // ==========================================
 // Backup and Rollback
 // ==========================================
@@ -155,9 +208,12 @@ async function rollbackMigration() {
 /**
  * Migrate data from localStorage to IndexedDB
  * Idempotent - safe to call multiple times
+ * Supports checkpointing for crash recovery
+ * 
+ * @param {function(number, number, string): void} [onProgress] - Progress callback (current, total, message)
  * @returns {Promise<{migrated: boolean, keysProcessed: number}>}
  */
-async function migrateFromLocalStorage() {
+async function migrateFromLocalStorage(onProgress = null) {
     // Check if already migrated
     const state = await getMigrationState();
     if (state && state.version >= MIGRATION_MODULE_VERSION) {
@@ -173,14 +229,29 @@ async function migrateFromLocalStorage() {
         return { migrated: false, keysProcessed: 0, deferred: true };
     }
 
-    // Step 1: Backup everything first (atomic safety)
-    await backupLocalStorage();
+    // Check for existing checkpoint (resume support)
+    const checkpoint = await getCheckpoint();
+    let startIndex = 0;
 
-    let keysProcessed = 0;
+    if (checkpoint) {
+        startIndex = checkpoint.lastProcessedIndex + 1;
+        console.log(`[Migration] Resuming from checkpoint at index ${startIndex}`);
+    } else {
+        // Step 1: Backup everything first (atomic safety)
+        await backupLocalStorage();
+    }
+
+    const allConfigKeys = [...MIGRATION_CONFIG_KEYS];
+    const allTokenKeys = [...MIGRATION_TOKEN_KEYS];
+    const totalKeys = allConfigKeys.length + allTokenKeys.length;
+    let keysProcessed = checkpoint?.keysProcessed || 0;
+    const CHECKPOINT_INTERVAL = 100; // Save checkpoint every 100 records (for larger migrations)
 
     // Step 2: Migrate config keys
-    for (const key of MIGRATION_CONFIG_KEYS) {
+    for (let i = Math.max(0, startIndex); i < allConfigKeys.length; i++) {
+        const key = allConfigKeys[i];
         const value = localStorage.getItem(key);
+
         if (value !== null) {
             try {
                 let parsedValue;
@@ -195,11 +266,29 @@ async function migrateFromLocalStorage() {
                 console.warn(`[Migration] Failed to migrate key '${key}':`, err);
             }
         }
+
+        // Report progress
+        if (onProgress) {
+            onProgress(i + 1, totalKeys, `Migrating ${key}...`);
+        }
+
+        // Checkpoint periodically (for large migrations)
+        if ((i + 1) % CHECKPOINT_INTERVAL === 0) {
+            await saveCheckpoint({
+                lastProcessedIndex: i,
+                keysProcessed,
+                totalKeys,
+                phase: 'config'
+            });
+        }
     }
 
     // Step 3: Migrate token keys
-    for (const key of MIGRATION_TOKEN_KEYS) {
+    const tokenStartIndex = Math.max(0, startIndex - allConfigKeys.length);
+    for (let i = tokenStartIndex; i < allTokenKeys.length; i++) {
+        const key = allTokenKeys[i];
         const value = localStorage.getItem(key);
+
         if (value !== null) {
             try {
                 await window.ConfigAPI.setToken(key, value);
@@ -207,6 +296,12 @@ async function migrateFromLocalStorage() {
             } catch (err) {
                 console.warn(`[Migration] Failed to migrate token '${key}':`, err);
             }
+        }
+
+        // Report progress
+        if (onProgress) {
+            const overallIndex = allConfigKeys.length + i + 1;
+            onProgress(overallIndex, totalKeys, `Migrating ${key}...`);
         }
     }
 
@@ -217,6 +312,9 @@ async function migrateFromLocalStorage() {
         completedAt: new Date().toISOString(),
         keysProcessed
     });
+
+    // Clear checkpoint on success
+    await clearCheckpoint();
 
     // Step 5: Clear migrated keys from localStorage (backup retained)
     for (const key of MIGRATION_CONFIG_KEYS) {
@@ -244,6 +342,11 @@ export const StorageMigration = {
     rollbackMigration,
     backupLocalStorage,
 
+    // Checkpointing
+    getCheckpoint,
+    saveCheckpoint,
+    clearCheckpoint,
+
     // Configuration
     VERSION: MIGRATION_MODULE_VERSION,
     KEYS_TO_MIGRATE: MIGRATION_CONFIG_KEYS,
@@ -251,10 +354,5 @@ export const StorageMigration = {
     EXEMPT_KEYS: MIGRATION_EXEMPT_KEYS
 };
 
-// Keep window global for backwards compatibility during migration
-if (typeof window !== 'undefined') {
-    window.StorageMigration = StorageMigration;
-}
-
-console.log('[StorageMigration] Migration module loaded');
+console.log('[StorageMigration] Migration module loaded with checkpoint support');
 
