@@ -94,15 +94,17 @@ export class IntentExtractionStrategy extends BaseToolStrategy {
             };
         }
 
-        const result = results[0];
-        if (onProgress) {
+        const hasResults = Array.isArray(results) && results.length > 0;
+        const safeResults = hasResults ? results : [];
+        const result = hasResults ? results[0] : undefined;
+        if (onProgress && hasResults) {
             onProgress({ type: 'tool_end', tool: intent.function, result: result?.result });
         }
 
         if (result && !result.result?.error) {
             // Inject results into the response for a data-grounded answer
-            const resultsMessage = this.FunctionCallingFallback?.buildFunctionResultsMessage?.(results) ||
-                `Function results: ${JSON.stringify(results, null, 2)}`;
+            const resultsMessage = this.FunctionCallingFallback?.buildFunctionResultsMessage?.(safeResults) ||
+                `Function results: ${JSON.stringify(safeResults, null, 2)}`;
 
             // Make a new call with the data context
             const enrichedMessages = [
@@ -123,7 +125,7 @@ export class IntentExtractionStrategy extends BaseToolStrategy {
                 }
                 // Fallback if no message in response
                 console.warn('[IntentExtractionStrategy] No message in enrichedResponse, using data context');
-                const dataContext = JSON.stringify(result.result, null, 2);
+                const dataContext = JSON.stringify(result?.result ?? {}, null, 2);
                 return {
                     responseMessage: {
                         role: 'assistant',
@@ -133,7 +135,7 @@ export class IntentExtractionStrategy extends BaseToolStrategy {
             } catch (error) {
                 console.error('[IntentExtractionStrategy] Enriched response failed:', error);
                 // Return the original response with data context added
-                const dataContext = JSON.stringify(result.result, null, 2);
+                const dataContext = JSON.stringify(result?.result ?? {}, null, 2);
                 return {
                     responseMessage: {
                         role: 'assistant',

@@ -267,32 +267,41 @@ function enableEditMode(messageEl, currentText) {
         const newText = textarea.value.trim();
         if (!newText) return;
 
-        // Update chat history
+        // Get message index in chat history
         const messages = document.getElementById(CHAT_UI_MESSAGE_CONTAINER_ID);
         const index = Array.from(messages.children).indexOf(messageEl);
 
-        if (window.Chat?.editMessage?.(index, newText)) {
-            // Remove edit UI
-            editContainer.remove();
+        // Validate we can edit
+        if (!window.Chat?.editMessage) {
+            console.error('[ChatUI] Chat.editMessage not available');
+            return;
+        }
 
-            // Update displayed content
-            if (contentEl) {
-                contentEl.textContent = newText;
-                contentEl.style.display = '';
-            }
-            if (actionsEl) actionsEl.style.display = '';
+        // Remove edit UI
+        editContainer.remove();
 
-            // Remove all messages after this one and regenerate
-            while (messageEl.nextElementSibling) {
-                messageEl.nextElementSibling.remove();
-            }
+        // Update displayed content
+        if (contentEl) {
+            contentEl.textContent = newText;
+            contentEl.style.display = '';
+        }
+        if (actionsEl) actionsEl.style.display = '';
 
-            // Regenerate response
-            if (window.processMessageResponse && window.Chat?.regenerateLastResponse) {
-                await window.processMessageResponse((options) =>
-                    window.Chat.regenerateLastResponse(options)
-                );
-            }
+        // Remove all messages after this one (AI responses to be regenerated)
+        while (messageEl.nextElementSibling) {
+            messageEl.nextElementSibling.remove();
+        }
+
+        // Use processMessageResponse to handle the edit with proper loading UI
+        // editMessage internally truncates history and calls sendMessage
+        if (window.processMessageResponse) {
+            await window.processMessageResponse((options) =>
+                window.Chat.editMessage(index, newText, options)
+            );
+        } else {
+            // Fallback: call editMessage directly without progress UI
+            console.warn('[ChatUI] processMessageResponse not available, using fallback');
+            await window.Chat.editMessage(index, newText);
         }
     };
 

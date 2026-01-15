@@ -319,6 +319,7 @@ async function initializeControllers() {
         AppState,
         DemoData,
         ViewController,
+        Patterns,
         showToast
     });
 
@@ -629,6 +630,14 @@ function setupEventListeners() {
                     console.error('[App] showPrivacyDashboard not available');
                 }
             },
+            'trigger-file-select': () => {
+                const fileInput = document.getElementById('file-input');
+                if (fileInput) {
+                    fileInput.click();
+                } else {
+                    console.error('[App] file-input not found for trigger-file-select');
+                }
+            },
 
             // Reset modal
             'hide-reset-modal': hideResetConfirmModal,
@@ -908,11 +917,13 @@ function showChat() {
 // ==========================================
 
 // Make modal functions available globally for onclick handlers
+// processMessageResponse is required by ChatUIController for regenerate/edit flows
 if (typeof window !== 'undefined') {
     window.executeReset = executeReset;
     window.hideResetConfirmModal = hideResetConfirmModal;
     window.showPrivacyDashboard = showPrivacyDashboard;
     window.clearSensitiveData = clearSensitiveData;
+    window.processMessageResponse = processMessageResponse;
 }
 
 // ==========================================

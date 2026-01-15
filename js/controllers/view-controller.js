@@ -126,16 +126,46 @@ function showReveal() {
     // Populate reveal content
     document.getElementById('personality-emoji').textContent = personality.emoji;
     document.getElementById('personality-name').textContent = personality.name;
-    document.getElementById('personality-description').textContent = personality.description;
 
-    // Data Stats
-    const streamCount = streams?.length || 0;
+    const descriptionEl = document.getElementById('personality-description');
     const summary = patterns?.summary || {};
-    document.getElementById('stream-count').textContent = streamCount.toLocaleString();
+
+    // Check if AI description should be generated
+    const canGenerateAI = window.ProfileDescriptionGenerator?.checkLLMAvailability?.()?.available;
+
+    if (canGenerateAI && descriptionEl) {
+        // Show loading state for description
+        descriptionEl.innerHTML = '<span class="ai-description-loading">✨ Crafting your personalized description...</span>';
+        descriptionEl.classList.add('generating');
+
+        // Generate AI description async
+        generateAIDescription(personality, patterns, summary, descriptionEl);
+    } else {
+        // Use generic description
+        if (descriptionEl) {
+            descriptionEl.textContent = personality.description;
+        }
+    }
+
+    // Data Stats - with highlight class for visual emphasis
+    const streamCount = streams?.length || 0;
+    const streamCountEl = document.getElementById('stream-count');
+    if (streamCountEl) {
+        streamCountEl.textContent = streamCount.toLocaleString();
+        streamCountEl.classList.add('stat-highlight');
+    }
 
     if (summary.dateRange) {
-        document.getElementById('date-range-start').textContent = summary.dateRange.start;
-        document.getElementById('date-range-end').textContent = summary.dateRange.end;
+        const startEl = document.getElementById('date-range-start');
+        const endEl = document.getElementById('date-range-end');
+        if (startEl) {
+            startEl.textContent = summary.dateRange.start;
+            startEl.classList.add('stat-highlight');
+        }
+        if (endEl) {
+            endEl.textContent = summary.dateRange.end;
+            endEl.classList.add('stat-highlight');
+        }
     }
 
     // Evidence
@@ -150,6 +180,39 @@ function showReveal() {
     // Init chat context with streams data for queries
     if (window.Chat?.initChat) {
         window.Chat.initChat(personality, patterns, summary, streams);
+    }
+}
+
+/**
+ * Generate AI description async and update the element
+ * @param {Object} personality - Personality data
+ * @param {Object} patterns - Patterns data
+ * @param {Object} summary - Summary data
+ * @param {HTMLElement} descriptionEl - Element to update
+ */
+async function generateAIDescription(personality, patterns, summary, descriptionEl) {
+    try {
+        const aiDescription = await window.ProfileDescriptionGenerator.generateDescription(
+            personality,
+            patterns,
+            summary
+        );
+
+        if (aiDescription) {
+            descriptionEl.textContent = aiDescription;
+            descriptionEl.classList.remove('generating');
+            descriptionEl.classList.add('ai-generated');
+            console.log('[ViewController] AI description generated successfully');
+        } else {
+            // Fallback to generic
+            descriptionEl.textContent = personality.description;
+            descriptionEl.classList.remove('generating');
+        }
+    } catch (error) {
+        console.error('[ViewController] AI description generation failed:', error);
+        // Fallback to generic
+        descriptionEl.textContent = personality.description;
+        descriptionEl.classList.remove('generating');
     }
 }
 

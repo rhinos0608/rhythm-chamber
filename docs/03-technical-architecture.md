@@ -156,7 +156,7 @@ Extracted from God objects into independent services:
 - ✅ **Clean modular architecture** - All UI logic delegated to ChatUIController
 - ✅ **Proper dependency injection** - All controllers initialized with dependencies
 - ✅ **Clear delegation pattern** - Direct calls to controllers/services
-- ✅ **No defensive checks** - Assumes modules are loaded via dependent imports
+- ✅ **Runtime assumes modules are loaded via dependent imports; initialization validation** - `checkDependencies()` runs during startup to verify critical modules, and steady-state execution omits additional defensive checks
 - ✅ **Event Delegation** - Single handler for all `data-action` UI events (replacing inline `onclick`)
 
 ### 7. Chat Module (chat.js)
@@ -265,6 +265,16 @@ rhythm-chamber/
 │   ├── operation-lock.js   # Critical operation coordination (ENHANCED)
 │   ├── operation-lock-errors.js # Standardized error classes (NEW)
 │   ├── operation-queue.js  # Retry queue for non-critical ops (NEW)
+│   │
+│   ├── services/           # Services (Extracted from God objects)
+│   │   ├── message-operations.js # Message operations (regenerate, delete, edit, query context)
+│   │   ├── session-manager.js    # Session lifecycle (create, load, save, delete)
+│   │   ├── tab-coordination.js   # Cross-tab coordination (deterministic leader election)
+│   │   └── tool-strategies/
+│   │       ├── base-strategy.js          # BaseToolStrategy
+│   │       ├── native-strategy.js        # NativeToolStrategy (Level 1)
+│   │       ├── prompt-injection-strategy.js # PromptInjectionStrategy (Levels 2/3)
+│   │       └── intent-extraction-strategy.js # IntentExtractionStrategy (Level 4)
 │   │
 │   ├── workers/            # Web Workers (Background Processing)
 │   │   └── vector-search-worker.js # Cosine similarity offloading (60fps maintenance)

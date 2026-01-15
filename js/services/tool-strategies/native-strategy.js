@@ -44,8 +44,11 @@ export class NativeToolStrategy extends BaseToolStrategy {
                 return { earlyReturn: breakerCheck.errorReturn };
             }
 
-            const functionName = toolCall.function.name;
-            const rawArgs = toolCall.function.arguments || '{}';
+            const functionCallData = toolCall?.function || {};
+            const functionName = functionCallData.name || '<unknown>';
+            const rawArgs = typeof functionCallData.arguments === 'string'
+                ? functionCallData.arguments
+                : JSON.stringify(functionCallData.arguments ?? {});
 
             // HNW Fix: Emit tool_start BEFORE parsing so listeners see start before any error
             if (onProgress) onProgress({ type: 'tool_start', tool: functionName });
@@ -105,10 +108,15 @@ export class NativeToolStrategy extends BaseToolStrategy {
 
         if (onProgress) onProgress({ type: 'thinking' });
 
-        const response = await callLLM(providerConfig, key, followUpMessages, undefined);
-        // HNW Fix: Safely handle missing choices array
-        const choices = Array.isArray(response?.choices) ? response.choices : [];
-        return { responseMessage: choices[0]?.message ?? null };
+        try {
+            const response = await callLLM(providerConfig, key, followUpMessages, undefined);
+            // HNW Fix: Safely handle missing choices array
+            const choices = Array.isArray(response?.choices) ? response.choices : [];
+            return { responseMessage: choices[0]?.message ?? null };
+        } catch (error) {
+            console.error('[NativeToolStrategy] Follow-up LLM call failed:', error);
+            return { responseMessage: null };
+        }
     }
 
     /**
