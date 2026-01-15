@@ -1,15 +1,16 @@
 /**
  * Tool Call Handling Service
- * 
+ *
  * Handles LLM-requested tool calls with fallback support for models without native function calling.
  * Extracted from chat.js to separate tool call concerns from chat orchestration.
- * 
+ *
  * @module services/tool-call-handling-service
  */
 
 import { NativeToolStrategy } from './tool-strategies/native-strategy.js';
 import { PromptInjectionStrategy } from './tool-strategies/prompt-injection-strategy.js';
 import { IntentExtractionStrategy } from './tool-strategies/intent-extraction-strategy.js';
+import { TimeoutBudget } from './timeout-budget-manager.js';
 
 'use strict';
 
@@ -141,6 +142,10 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
         // Notify UI: Tool start
         if (onProgress) onProgress({ type: 'tool_start', tool: functionName });
 
+        // Allocate timeout budget for this function call (max 10s per call)
+        // This ensures we don't exceed the 50s total budget for 5 calls
+        const functionBudget = TimeoutBudget.allocate(`function_${functionName}`, 10000);
+
         // Execute the function with AbortController for true cancellation
         // This enables proper cleanup when timeout occurs, rather than just ignoring the result
         let result;
@@ -181,6 +186,9 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
                     isFunctionError: true
                 }
             };
+        } finally {
+            // Release the function budget
+            TimeoutBudget.release(functionBudget);
         }
 
         console.log(`[ToolCallHandlingService] Function result:`, result);

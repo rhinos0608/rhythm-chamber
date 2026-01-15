@@ -132,6 +132,11 @@ Features implemented beyond original roadmap:
 - **Semantic Search** — RAG with Qdrant (now free for all users)
 - **Demo Mode** — Isolated "Emo Teen" sample persona with demo-specific chat prompts and exit CTA
 - **Template Profiles + Profile Synthesizer** — Template search + synthetic profiles (streams/patterns/personality) saved locally for comparisons
+- **Pattern Worker Pool with Heartbeat** — Bidirectional liveness checks with automatic restart of stale workers
+- **Turn Queue Serialization** — Prevents race conditions in concurrent chat operations
+- **Timeout Budget Management** — Prevents cascade failures with per-function and per-turn timeouts
+- **Lock Hierarchy** — Prevents deadlock in operation lock system
+- **Storage Transactions** — Atomic operations across IndexedDB and localStorage
 
 ---
 

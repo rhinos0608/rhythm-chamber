@@ -1,12 +1,15 @@
 /**
  * Pattern Worker Pool
- * 
+ *
  * Spawns multiple Web Workers for parallel pattern detection.
  * Distributes work across workers and aggregates results.
- * 
+ *
  * HNW Wave: Achieves 3x speedup on multi-core devices by
  * parallelizing independent pattern detection algorithms.
- * 
+ *
+ * HEARTBEAT: Bidirectional liveness checks with worker health monitoring
+ * and automatic restart of stale workers.
+ *
  * @module workers/pattern-worker-pool
  */
 
@@ -40,6 +43,12 @@ let workers = [];
 let initialized = false;
 let requestId = 0;
 const pendingRequests = new Map();
+
+// Heartbeat state
+let heartbeatInterval = null;
+const HEARTBEAT_INTERVAL_MS = 5000; // 5 seconds
+const STALE_WORKER_TIMEOUT_MS = 15000; // 15 seconds
+const workerLastHeartbeat = new Map(); // Track last heartbeat response from each worker
 
 // ==========================================
 // Core Functions
@@ -81,9 +90,16 @@ async function init(options = {}) {
                 busy: false,
                 processedCount: 0
             });
+
+            // Initialize heartbeat tracking for this worker
+            workerLastHeartbeat.set(worker, Date.now());
         }
 
         initialized = true;
+        
+        // Start heartbeat monitoring
+        startHeartbeat();
+        
         console.log('[PatternWorkerPool] Initialized successfully');
     } catch (error) {
         console.error('[PatternWorkerPool] Initialization failed:', error);
@@ -93,12 +109,21 @@ async function init(options = {}) {
 
 /**
  * Handle message from worker
- * 
+ *
  * @param {MessageEvent} event - Worker message event
  */
 function handleWorkerMessage(event) {
-    const { requestId: reqId, type, result, error, progress } = event.data;
+    const { requestId: reqId, type, result, error, progress, timestamp } = event.data;
     const workerInfo = workers.find(w => w.worker === event.target);
+
+    // Handle heartbeat response
+    if (type === 'HEARTBEAT_RESPONSE') {
+        if (workerInfo) {
+            workerLastHeartbeat.set(workerInfo.worker, timestamp);
+            console.log(`[PatternWorkerPool] Worker heartbeat received at ${new Date(timestamp).toISOString()}`);
+        }
+        return;
+    }
 
     const request = pendingRequests.get(reqId);
     if (!request) {
@@ -191,8 +216,134 @@ function handleWorkerError(error) {
 }
 
 /**
+ * Send heartbeat to all workers
+ *
+ * @returns {void}
+ */
+function sendHeartbeat() {
+    if (!initialized || workers.length === 0) {
+        return;
+    }
+
+    const timestamp = Date.now();
+    
+    workers.forEach((workerInfo, index) => {
+        try {
+            workerInfo.worker.postMessage({
+                type: 'HEARTBEAT',
+                timestamp
+            });
+        } catch (error) {
+            console.error(`[PatternWorkerPool] Failed to send heartbeat to worker ${index}:`, error);
+        }
+    });
+}
+
+/**
+ * Handle heartbeat response from worker
+ *
+ * @param {MessageEvent} event - Worker message event
+ */
+function handleHeartbeatResponse(event) {
+    const { type, timestamp } = event.data;
+    
+    if (type !== 'HEARTBEAT_RESPONSE') {
+        return;
+    }
+    
+    const workerInfo = workers.find(w => w.worker === event.target);
+    if (workerInfo) {
+        workerLastHeartbeat.set(workerInfo.worker, timestamp);
+        console.log(`[PatternWorkerPool] Worker heartbeat received at ${new Date(timestamp).toISOString()}`);
+    }
+}
+
+/**
+ * Check for stale workers and restart them
+ *
+ * @returns {void}
+ */
+function checkStaleWorkers() {
+    if (!initialized || workers.length === 0) {
+        return;
+    }
+
+    const now = Date.now();
+    const staleWorkers = [];
+
+    workers.forEach((workerInfo, index) => {
+        const lastHeartbeat = workerLastHeartbeat.get(workerInfo.worker);
+        
+        // If no heartbeat received or heartbeat is too old, mark as stale
+        if (!lastHeartbeat || (now - lastHeartbeat) > STALE_WORKER_TIMEOUT_MS) {
+            staleWorkers.push({ workerInfo, index });
+        }
+    });
+
+    // Restart stale workers
+    staleWorkers.forEach(({ workerInfo, index }) => {
+        console.warn(`[PatternWorkerPool] Worker ${index} is stale, restarting...`);
+        
+        try {
+            // Terminate the stale worker
+            workerInfo.worker.terminate();
+            
+            // Create a new worker
+            const newWorker = new Worker('./pattern-worker.js');
+            
+            // Setup message handler
+            newWorker.onmessage = handleWorkerMessage;
+            newWorker.onerror = handleWorkerError;
+            
+            // Update the worker info
+            workerInfo.worker = newWorker;
+            workerInfo.busy = false;
+            
+            // Reset heartbeat tracking
+            workerLastHeartbeat.set(newWorker, Date.now());
+            
+            console.log(`[PatternWorkerPool] Worker ${index} restarted successfully`);
+        } catch (error) {
+            console.error(`[PatternWorkerPool] Failed to restart worker ${index}:`, error);
+        }
+    });
+}
+
+/**
+ * Start the heartbeat interval
+ *
+ * @returns {void}
+ */
+function startHeartbeat() {
+    if (heartbeatInterval) {
+        console.log('[PatternWorkerPool] Heartbeat already running');
+        return;
+    }
+
+    console.log(`[PatternWorkerPool] Starting heartbeat (interval: ${HEARTBEAT_INTERVAL_MS}ms)`);
+    
+    heartbeatInterval = setInterval(() => {
+        sendHeartbeat();
+        checkStaleWorkers();
+    }, HEARTBEAT_INTERVAL_MS);
+}
+
+/**
+ * Stop the heartbeat interval
+ *
+ * @returns {void}
+ */
+function stopHeartbeat() {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+        console.log('[PatternWorkerPool] Heartbeat stopped');
+    }
+}
+
+/**
  * Detect all patterns in parallel using worker pool
- * 
+ *
  * @param {Array} streams - Streaming history data
  * @param {Array} chunks - Weekly/monthly chunks
  * @param {function} [onProgress] - Progress callback
@@ -359,6 +510,12 @@ function terminate() {
         request.reject(terminationError);
     }
     pendingRequests.clear();
+
+    // Stop heartbeat monitoring
+    stopHeartbeat();
+
+    // Clear heartbeat tracking
+    workerLastHeartbeat.clear();
 
     for (const workerInfo of workers) {
         workerInfo.worker.terminate();
