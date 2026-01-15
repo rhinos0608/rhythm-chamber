@@ -17,6 +17,7 @@ let _AppState = null;
 let _DemoData = null;
 let _ViewController = null;
 let _showToast = null;
+let _Patterns = null;
 
 // ==========================================
 // Demo Storage Namespace
@@ -164,6 +165,7 @@ function init(dependencies) {
     _DemoData = dependencies.DemoData;
     _ViewController = dependencies.ViewController;
     _showToast = dependencies.showToast;
+    _Patterns = dependencies.Patterns;
 
     console.log('[DemoController] Initialized with dependencies');
 }
@@ -193,18 +195,45 @@ async function loadDemoMode() {
         _ViewController.showProcessing();
         _ViewController.updateProgress('🎭 Loading demo mode...');
 
-        // Get demo data package
+        // Get demo data package (streams and personality)
         const demoPackage = _DemoData.getFullDemoPackage();
 
         // HNW Defensive: Initialize isolated demo storage
         DemoStorage.init();
+
+        // Compute patterns DYNAMICALLY from generated streams
+        // This ensures consistency between profile card stats and function call responses
+        _ViewController.updateProgress('Analyzing demo listening patterns...');
+        await new Promise(r => setTimeout(r, 300));
+
+        let computedPatterns = null;
+        if (_Patterns && typeof _Patterns.detectAllPatterns === 'function') {
+            computedPatterns = _Patterns.detectAllPatterns(demoPackage.streams, []);
+            if (!computedPatterns || typeof computedPatterns !== 'object') {
+                throw new Error('detectAllPatterns returned no patterns');
+            }
+            computedPatterns.isDemoData = true;
+            console.log('[DemoController] Computed patterns dynamically from streams');
+        } else {
+            // Fallback: use window.Patterns if dependency injection failed
+            if (window.Patterns?.detectAllPatterns) {
+                computedPatterns = window.Patterns.detectAllPatterns(demoPackage.streams, []);
+                if (!computedPatterns || typeof computedPatterns !== 'object') {
+                    throw new Error('detectAllPatterns returned no patterns');
+                }
+                computedPatterns.isDemoData = true;
+                console.warn('[DemoController] Using window.Patterns fallback');
+            } else {
+                throw new Error('Patterns module not available for demo pattern computation');
+            }
+        }
 
         // Store demo data in ISOLATED DemoStorage (session-only, never IndexedDB)
         _ViewController.updateProgress('Loading sample streaming history...');
         await new Promise(r => setTimeout(r, 300));
 
         DemoStorage.set('streams', demoPackage.streams);
-        DemoStorage.set('patterns', demoPackage.patterns);
+        DemoStorage.set('patterns', computedPatterns);
         DemoStorage.set('personality', demoPackage.personality);
         DemoStorage.set('loadedAt', Date.now());
 
@@ -219,7 +248,7 @@ async function loadDemoMode() {
         _AppState.update('demo', {
             isDemoMode: true,
             streams: demoPackage.streams,
-            patterns: demoPackage.patterns,
+            patterns: computedPatterns,
             personality: demoPackage.personality
         });
 

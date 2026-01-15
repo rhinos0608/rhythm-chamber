@@ -68,8 +68,7 @@
                     <h2>Drop your Spotify data here</h2>
                     <p>Upload a .zip export or .json streaming history. Your data stays on your device.</p>
                     <input type="file" id="file-input" accept=".zip,.json">
-                    <button class="btn btn-primary" style="margin-top: var(--space-xl);"
-                        onclick="document.getElementById('file-input').click()">
+                    <button class="btn btn-primary" style="margin-top: var(--space-xl);" data-action="trigger-file-select">
                         Choose File
                     </button>
 

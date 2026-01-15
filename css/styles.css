@@ -515,6 +515,33 @@ a {
   color: var(--text-secondary);
 }
 
+/* Stat Highlight - for emphasized data values in profile card */
+.stat-highlight {
+  color: var(--accent-secondary) !important;
+  font-weight: 600;
+  text-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+}
+
+/* AI Description Loading State */
+.personality-description.generating {
+  opacity: 0.7;
+}
+
+.ai-description-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+
+/* AI Generated Description */
+.personality-description.ai-generated {
+  border-left: 3px solid var(--accent-primary);
+  padding-left: var(--space-md);
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.05) 0%, transparent 100%);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
 /* Detection Explainer */
 .detection-explainer {
   text-align: left;

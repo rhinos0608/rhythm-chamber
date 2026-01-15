@@ -122,6 +122,7 @@ import { CircuitBreaker } from './services/circuit-breaker.js';
 import { SecureTokenStore } from './security/secure-token-store.js';
 import { DataVersion } from './services/data-version.js';
 import { FunctionCallingFallback } from './services/function-calling-fallback.js';
+import { ProfileDescriptionGenerator } from './services/profile-description-generator.js';
 
 console.log('[Main] All modules imported');
 

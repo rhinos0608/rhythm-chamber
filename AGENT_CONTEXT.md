@@ -1,6 +1,6 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System** + **ToolStrategy Pattern** + **Aggressive ES Module Migration**
+> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System** + **ToolStrategy Pattern (verification pending)** + **Aggressive ES Module Migration (in progress)**
 
 ---
 
@@ -80,7 +80,7 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 | Personality engine | ✅ Done | `js/personality.js` (5 types + lite types) |
 | Chat integration | ✅ Done | `js/chat.js` (OpenRouter + ToolStrategy Pattern + sessions) |
 | Data query system | ✅ Done | `js/data-query.js` (time/artist queries) |
-| **Tool Strategies** | ✅ Done | `js/services/tool-strategies/` (Native, Prompt Injection, Intent Extraction) |
+| **Tool Strategies** | 🟡 Implemented; verification pending | `js/services/tool-strategies/` (Native, Prompt Injection, Intent Extraction) |
 | **Function calling** | ✅ Done | `js/functions.js` (10 LLM-callable tools) |
 | **Template Profiles** | ✅ Done | `js/template-profiles.js` (8 curated profiles) |
 | **Profile Synthesizer** | ✅ Done | `js/profile-synthesizer.js` (AI synthesis) |
@@ -447,10 +447,10 @@ js/services/tool-strategies/
 4. If strategy fails, fallback to next lower level
 
 **Verification Checklist:**
-- [ ] All strategies extend `BaseToolStrategy`
-- [ ] Each strategy implements `canHandle()` and `execute()`
-- [ ] Strategies are imported in `js/main.js`
-- [ ] Circuit breaker integration works per-strategy
+- [x] All strategies extend `BaseToolStrategy` (verified via source review on 2024-05-21)
+- [x] Each strategy implements `canHandle()` and `execute()` (verified in strategy sources)
+- [x] Strategies are imported via `js/chat.js` entry point (confirmed approach; `js/main.js` delegates to chat orchestrator)
+- [ ] Circuit breaker integration works per-strategy (needs automated coverage per strategy; Owner: rhines, ETA: 2024-05-24 via chat/tool-strategy test pass)
 
 ### 15. Aggressive ES Module Migration (NEW)
 **Goal:** Migrate from legacy `window.ModuleName` globals and `onclick` handlers to proper ES modules with explicit imports/exports. This enables better tree-shaking, static analysis, and eliminates global namespace pollution.
@@ -465,6 +465,8 @@ js/services/tool-strategies/
 | `js/services/function-calling-fallback.js` | ✅ ES Module | Named exports |
 | `js/controllers/*` | ⚠️ Hybrid | Still expose `window.` for some compatibility |
 | `js/storage/*` | ⚠️ Hybrid | Core modules converted, facades remain |
+
+**Verification Status:** In progress (2/5 checklist items complete; runtime/E2E checks pending).
 
 **Breaking Changes:**
 - Default exports → Named exports (e.g., `export { init }` not `export default init`)
@@ -486,11 +488,11 @@ js/services/tool-strategies/
 3. Update test files to use dynamic `import()` or configure test runner for ESM
 
 **Verification Checklist:**
-- [ ] `app.html` has single `<script type="module" src="js/main.js">`
-- [ ] No inline `onclick` handlers (use `data-action`)
-- [ ] All imports resolve without errors in browser console
-- [ ] E2E tests pass with ES module configuration
-- [ ] `CRITICAL_DEPENDENCIES` check passes at startup
+- [x] `app.html` has single `<script type="module" src="js/main.js">` (verified; `config.js` still loads first to provide `window.Config`)
+- [x] No inline `onclick` handlers (use `data-action`) — replaced `Choose File` button with `data-action="trigger-file-select"` wired via event delegation
+- [ ] All imports resolve without errors in browser console — not re-run in browser this session; pending smoke test after handler cleanup (Owner: rhines, ETA: 2024-05-24)
+- [ ] E2E tests pass with ES module configuration — not executed this session; schedule after import/onclick verification (Owner: rhines, ETA: 2024-05-24)
+- [ ] `CRITICAL_DEPENDENCIES` check passes at startup — needs startup log verification; Owner: rhines, ETA: 2024-05-24
 
 ---
 

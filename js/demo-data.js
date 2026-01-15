@@ -185,6 +185,7 @@ function generateDemoStreams() {
 
                 streams.push({
                     ts: streamTime.toISOString(),
+                    playedAt: streamTime.toISOString(), // Required by patterns.js
                     master_metadata_track_name: track.name,
                     master_metadata_album_artist_name: artist.name,
                     master_metadata_album_album_name: track.album,
@@ -200,6 +201,8 @@ function generateDemoStreams() {
                     trackName: track.name,
                     albumName: track.album,
                     msPlayed: msPlayed,
+                    completionRate: completionRate, // Required by patterns.js trueFavorites
+                    playType: completionRate > 0.9 ? 'full' : (completionRate < 0.5 ? 'skip' : 'partial'),
                     date: streamTime.toISOString().split('T')[0],
                     year: streamTime.getFullYear(),
                     month: streamTime.getMonth(),
@@ -435,11 +438,14 @@ export const DemoData = {
     },
 
     // Get all demo data as a package
+    // NOTE: patterns should be computed by caller using Patterns.detectAllPatterns()
+    // to ensure consistency between profile card and function call responses
     getFullDemoPackage() {
+        const streams = generateDemoStreams();
         return {
-            streams: generateDemoStreams(),
+            streams,
             personality: DEMO_PERSONALITY,
-            patterns: DEMO_PATTERNS,
+            patterns: null, // Computed dynamically by caller
             chatHistory: DEMO_CHAT_HISTORY,
             insights: DEMO_DATA_INSIGHTS,
             isDemoData: true
