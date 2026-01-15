@@ -38,6 +38,7 @@
 // - Cards (share cards)
 import { SecurityChecklist } from './security.js';
 import { ModuleRegistry } from './module-registry.js';
+import { Settings } from './settings.js';
 // - SecurityChecklist (first-run security checklist)
 
 // ==========================================
@@ -91,7 +92,8 @@ const CRITICAL_DEPENDENCIES = {
     'SecurityChecklist': { check: () => SecurityChecklist && typeof SecurityChecklist.init === 'function', required: false },
 
     // Settings module (required for settings/tools modals)
-    'Settings': { check: () => window.Settings && typeof window.Settings.showSettingsModal === 'function', required: true }
+    // Uses imported Settings symbol, not window global
+    'Settings': { check: () => Settings && typeof Settings.showSettingsModal === 'function', required: true }
 };
 
 /**
@@ -609,17 +611,17 @@ function setupEventListeners() {
         // HNW Fix: Defensive handlers that check for function existence to prevent ReferenceError
         // Settings is accessed via window.Settings, delete chat functions via window.SidebarController
         const handlers = {
-            // Header actions (Settings module - required dependency)
+            // Header actions (Settings module - uses imported ES module)
             'show-settings': () => {
-                if (typeof window.Settings?.showSettingsModal === 'function') {
-                    window.Settings.showSettingsModal();
+                if (typeof Settings?.showSettingsModal === 'function') {
+                    Settings.showSettingsModal();
                 } else {
                     console.error('[App] Settings.showSettingsModal not available');
                 }
             },
             'show-tools': () => {
-                if (typeof window.Settings?.showToolsModal === 'function') {
-                    window.Settings.showToolsModal();
+                if (typeof Settings?.showToolsModal === 'function') {
+                    Settings.showToolsModal();
                 } else {
                     console.error('[App] Settings.showToolsModal not available');
                 }
