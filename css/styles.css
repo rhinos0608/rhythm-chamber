@@ -800,6 +800,225 @@ a {
   background: var(--border-subtle);
 }
 
+.divider-text span {
+  padding: 0 var(--space-md);
+}
+
+/* ==========================================
+   Security Checklist Modal
+   ========================================== */
+.security-checklist-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+.security-checklist-modal.closing {
+  opacity: 0;
+}
+
+.security-checklist-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+}
+
+.security-checklist-content {
+  position: relative;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-lg);
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 50px rgba(0, 0, 0, 0.5), var(--accent-glow);
+  animation: slide-up 0.3s ease-out;
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.security-checklist-header {
+  padding: var(--space-xl);
+  text-align: center;
+  border-bottom: 1px solid var(--border-subtle);
+  background: linear-gradient(to bottom, rgba(139, 92, 246, 0.1), transparent);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.security-icon {
+  font-size: 3rem;
+  margin-bottom: var(--space-md);
+  animation: float 3s ease-in-out infinite;
+}
+
+.security-checklist-header h2 {
+  margin-bottom: var(--space-xs);
+  color: var(--text-primary);
+}
+
+.security-checklist-header .subtitle {
+  color: var(--text-secondary);
+  font-size: 1rem;
+}
+
+.security-checklist-body {
+  padding: var(--space-xl);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.checklist-section {
+  margin-bottom: var(--space-xl);
+}
+
+.checklist-section h3 {
+  font-size: 1.1rem;
+  margin-bottom: var(--space-xs);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.section-description {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: var(--space-md);
+}
+
+.checklist-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.checklist-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.checklist-item:hover {
+  border-color: var(--accent-primary);
+  background: rgba(139, 92, 246, 0.05);
+}
+
+.checklist-item input[type="checkbox"] {
+  display: none;
+}
+
+.checklist-item .checkmark {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border-subtle);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.checklist-item input:checked+.checkmark {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.checklist-item input:checked+.checkmark::after {
+  content: '✓';
+  color: white;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+/* Limitations Section Styles */
+.limitations .checklist-item {
+  border-color: rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.05);
+  cursor: default;
+}
+
+.limitations .checklist-item.disabled {
+  opacity: 0.8;
+}
+
+.limitations .checkmark.disabled {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: var(--text-muted);
+}
+
+.limitations input:checked+.checkmark.disabled::after {
+  content: '✕';
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.security-summary {
+  margin-top: var(--space-lg);
+  padding: var(--space-md);
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.summary-box strong {
+  color: var(--accent-secondary);
+  display: block;
+  margin-bottom: var(--space-xs);
+}
+
+.summary-box p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.security-checklist-footer {
+  padding: var(--space-lg);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  justify-content: center;
+  background: var(--bg-glass);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+#security-checklist-acknowledge {
+  width: 100%;
+  max-width: 300px;
+  font-size: 1.1rem;
+  padding: var(--space-md) var(--space-xl);
+}
+
+
 .divider-text::before {
   margin-right: var(--space-md);
 }

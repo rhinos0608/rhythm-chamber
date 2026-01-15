@@ -32,9 +32,26 @@ const RECOMMENDED_MODELS = [
 ];
 
 // Models known to support function/tool calling
+// Updated 2026-01 with expanded Ollama tool support
 const TOOL_CAPABLE_MODELS = [
-    'llama3.2', 'llama3.1', 'mistral', 'mixtral',
-    'qwen2.5', 'deepseek-r1', 'command-r'
+    // Llama family
+    'llama3.2', 'llama3.1', 'llama3.3',
+    // Mistral family
+    'mistral', 'mistral-nemo', 'mixtral',
+    // Qwen family
+    'qwen2.5', 'qwen2.5-coder', 'qwen2',
+    // DeepSeek family
+    'deepseek-r1', 'deepseek-coder', 'deepseek-v2', 'deepseek',
+    // Cohere Command
+    'command-r', 'command-r-plus',
+    // Granite
+    'granite3-dense', 'granite3.1-dense',
+    // Hermes (fine-tuned for function calling)
+    'hermes3', 'nous-hermes', 'hermes',
+    // NVIDIA Nemotron
+    'nemotron',
+    // Functionary (specialized for function calling)
+    'functionary'
 ];
 
 // ==========================================

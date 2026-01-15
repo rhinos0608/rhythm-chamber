@@ -43,7 +43,7 @@ User's Browser
 │   ├── **Local AI**: Ollama (http://localhost:11434)
 │   ├── **Local AI**: LM Studio (http://localhost:1234/v1)
 │   └── **Cloud AI**: OpenRouter (optional, BYOI with your key)
-└── Generate shareable cards (Canvas API)
+└── Generate shareable cards (Canvas + Web Share API)
 
 Your "backend":
 └── Static HTML/JS files only (no serverless needed)
@@ -227,11 +227,12 @@ rhythm-chamber/
 │   ├── personality.js      # 5 types + lite types + score breakdown
 │   ├── chat.js             # Chat orchestration (Delegates to Providers + MessageOperations + SessionManager)
 │   ├── data-query.js       # Query streams by time/artist/track
-│   ├── cards.js            # Canvas card generator
+│   ├── cards.js            # Card generator + Web Share API
 │   ├── storage.js          # Storage Facade (Delegates to js/storage/ modules)
 │   ├── settings.js         # In-app settings modal (API key, model, etc.)
 │   ├── spotify.js          # Spotify OAuth PKCE + API calls + session invalidation
 │   ├── security.js         # Security Facade (Delegates to js/security/ modules)
+│   ├── security-checklist.js # First-run security waiver & education
 │   ├── payments.js         # Stripe Checkout + premium status
 │   ├── rag.js              # Embeddings + Qdrant vector search + encrypted credentials
 │   ├── prompts.js          # System prompt templates

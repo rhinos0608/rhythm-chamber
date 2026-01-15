@@ -186,6 +186,16 @@ Tab visibility and navigation events are monitored for suspicious patterns:
 
 ---
 
+### 10. Security Checklist (First-Run Waiver) (NEW)
+
+To ensure users understand the client-side security model, a mandatory checklist appears on first run:
+
+- **Education**: Users explicitly acknowledge that "Your device's security is your responsibility."
+- **Expectation Setting**: Clarifies that we cannot protect against OS-level compromises (keyloggers, screen capture).
+- **Best Practices**: Recommends HTTPS, disabling extensions, and avoiding public computers.
+
+---
+
 ## Attack Scenarios & Mitigations
 
 ### Scenario: DevTools Credential Theft

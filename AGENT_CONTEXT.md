@@ -1,6 +1,6 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes**
+> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System**
 
 ---
 
@@ -85,7 +85,7 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 | **Profile Synthesizer** | ✅ Done | `js/profile-synthesizer.js` (AI synthesis) |
 | **Payments** | ✅ Done | `js/payments.js` (Stubbed for Free MVP) |
 | **RAG/Semantic** | ✅ Done | `js/rag.js` (embeddings + Qdrant) |
-| Card generator | ✅ Done | `js/cards.js` (Canvas) |
+| Card generator | ✅ Done | `js/cards.js` (Canvas + Web Share API) |
 | **Storage** | ✅ Done | `js/storage/` (IndexedDB + ConfigAPI + Migration + Profiles) |
 | **LLM Providers** | ✅ Done | `js/providers/` (OpenRouter, LMStudio, Ollama) |
 | **Controllers** | ✅ Done | `js/controllers/` (ChatUI, Sidebar, View, FileUpload, Spotify, Demo, Reset) |
@@ -348,6 +348,60 @@ Client-side security module (`security.js`) providing defense-in-depth:
 **Files Modified:**
 - `js/operation-lock.js` - Enhanced with diagnostics and timeout
 - `js/controllers/file-upload-controller.js` - Race condition fixed
+
+### 12. Native Sharing (Web Share API)
+**Goal:** Reduce friction from "Generate → Download → Find File → Send" (4 steps) to "Share → Send" (2 steps).
+
+**Implementation:**
+- Uses modern `navigator.share()` API
+- Generates rich share payload:
+  - **Title:** "My Music Personality"
+  - **Text:** Personalized hook ("I'm an Emotional Archaeologist...")
+  - **URL:** Referral link (`?ref=share`)
+  - **File:** Direct image share (no saving required)
+- **Fallbacks:**
+  - Text-only share if files unsupported
+  - Download if API unavailable (Desktop)
+  - Smart article detection ("a/an") for personality names
+
+### 13. Function Calling Fallback System (NEW)
+**Problem:** LLM provider lock-in risk where function calling support varies across providers and models. When native function calling isn't supported, users get generic chat instead of data-grounded insights.
+
+**Solution: 4-Level Fallback Network**
+```
+Level 1: Native Function Calling (OpenAI-style tool_calls)
+    ↓ (Failed/Unsupported)
+Level 2: Prompt Injection (function definitions as text, parse <function_call> tags)
+    ↓ (Failed/Parse error)
+Level 3: Regex Parsing (extract structured data from natural language)
+    ↓ (Failed/No match)
+Level 4: Direct Query (extract intent from user message, run function directly)
+```
+
+**Implementation:**
+- `js/services/function-calling-fallback.js` - Fallback service with 4-level network
+- `detectCapabilityLevel(provider, model)` - Determines which level to use
+- `buildLevel2Request(messages, tools)` - Injects function definitions into prompt
+- `parseFunctionCallsFromText(content)` - Parses `<function_call>` tags from text
+- `extractQueryIntent(message)` - Level 4 intent extraction with pattern matching
+
+**Integration in chat.js:**
+- `handleToolCallsWithFallback()` - Wraps `handleToolCalls()` with fallback support
+- Capability detection before API call
+- Automatic fallback progression through levels
+
+**Supported Model Detection:**
+- OpenRouter: Extensive list of tool-capable models (GPT-4, Claude 3, Gemini, Mistral, etc.)
+- Ollama: 20+ model families (llama3.2/3.3, mistral, qwen2.5, deepseek, hermes3, etc.)
+- LM Studio: Base model patterns (llama-3, mistral, qwen2.5, etc.)
+
+**Files Created:**
+- `js/services/function-calling-fallback.js` - Fallback service
+
+**Files Modified:**
+- `js/chat.js` - Integrated fallback handling
+- `js/main.js` - Added import
+- `js/ollama.js` - Expanded TOOL_CAPABLE_MODELS list
 
 ---
 
