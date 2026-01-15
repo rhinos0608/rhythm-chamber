@@ -326,8 +326,12 @@ rhythm-chamber/
 │       ├── demo-controller.js
 │       └── reset-controller.js
 │
-├── workers/
-│   └── parser-worker.js    # Web Worker for .zip parsing
+├── tests/                  # Test Suite
+│   ├── rhythm-chamber.spec.ts  # E2E tests (Playwright)
+│   └── unit/               # Unit tests (Vitest)
+│       ├── schemas.test.js # Function schema validation
+│       └── patterns.test.js # Pattern detection algorithms
+│
 ├── docs/
 │   ├── 03-technical-architecture.md
 │   ├── operation-lock-contract.md (NEW - Complete documentation)

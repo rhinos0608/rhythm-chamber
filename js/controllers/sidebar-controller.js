@@ -450,17 +450,6 @@ export const SidebarController = {
     appendMessage
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.SidebarController = SidebarController;
-
-    // Backward compatibility: expose handlers globally
-    window.handleSessionClick = handleSessionClick;
-    window.handleSessionDelete = handleSessionDelete;
-    window.handleSessionRename = handleSessionRename;
-    window.hideDeleteChatModal = hideDeleteChatModal;
-    window.confirmDeleteChat = confirmDeleteChat;
-}
 
 console.log('[SidebarController] Controller loaded');
 

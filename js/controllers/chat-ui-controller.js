@@ -610,9 +610,5 @@ export const ChatUIController = {
     enableEditMode
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.ChatUIController = ChatUIController;
-}
 
 console.log('[ChatUIController] Controller loaded');

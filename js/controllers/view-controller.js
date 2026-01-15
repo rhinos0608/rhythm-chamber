@@ -196,7 +196,7 @@ async function generateAIDescription(personality, patterns, summary, description
         descriptionEl._generationId = 0;
     }
     const currentGenerationId = ++descriptionEl._generationId;
-    
+
     try {
         const aiDescription = await window.ProfileDescriptionGenerator.generateDescription(
             personality,
@@ -366,16 +366,5 @@ export const ViewController = {
     populateScoreBreakdown
 };
 
-// Keep window globals for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.ViewController = ViewController;
-
-    // Backward compatibility: expose view functions globally
-    window.showUpload = showUpload;
-    window.showProcessing = showProcessing;
-    window.showReveal = showReveal;
-    window.showLiteReveal = showLiteReveal;
-    window.showChat = showChat;
-}
 
 console.log('[ViewController] Module loaded');

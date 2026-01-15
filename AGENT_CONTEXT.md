@@ -1,6 +1,6 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System** + **ToolStrategy Pattern (verification pending)** + **Aggressive ES Module Migration (in progress)**
+> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System** + **ToolStrategy Pattern (verification pending)** + **ES Module Migration (controllers complete)** + **Unit Testing (Vitest)**
 
 ---
 
@@ -195,6 +195,12 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 │       ├── spotify-controller.js
 │       ├── demo-controller.js
 │       └── reset-controller.js
+│
+├── tests/                  # Test Suites
+│   ├── rhythm-chamber.spec.ts  # E2E tests (Playwright)
+│   └── unit/               # Unit tests (Vitest)
+│       ├── schemas.test.js # Function schema validation
+│       └── patterns.test.js # Pattern detection algorithms
 │
 ├── docs/
 │   ├── 03-technical-architecture.md
@@ -463,10 +469,10 @@ js/services/tool-strategies/
 | `js/security.js` | ✅ ES Module | Named exports |
 | `js/services/tool-strategies/*` | ✅ ES Module | All strategy classes |
 | `js/services/function-calling-fallback.js` | ✅ ES Module | Named exports |
-| `js/controllers/*` | ⚠️ Hybrid | Still expose `window.` for some compatibility |
+| `js/controllers/*` | ✅ ES Module | All controllers use proper exports, no window attachments |
 | `js/storage/*` | ⚠️ Hybrid | Core modules converted, facades remain |
 
-**Verification Status:** In progress (2/5 checklist items complete; runtime/E2E checks pending).
+**Verification Status:** Controllers complete (5/5 checklist items verified on 2026-01-15). Storage modules still hybrid.
 
 **Breaking Changes:**
 - Default exports → Named exports (e.g., `export { init }` not `export default init`)
@@ -493,6 +499,30 @@ js/services/tool-strategies/
 - [x] All imports resolve without errors in browser console — verified on 2026-01-15 (Owner: rhines)
 - [x] E2E tests pass with ES module configuration — verified on 2026-01-15 (Owner: rhines)
 - [x] `CRITICAL_DEPENDENCIES` check passes at startup — verified on 2026-01-15 (Owner: rhines)
+- [x] All controller `window.` attachments removed — verified on 2026-01-15
+- [x] Unit tests pass (37 tests via Vitest) — verified on 2026-01-15
+
+### 16. Unit Testing Infrastructure (NEW)
+**Framework:** Vitest (native ESM support, fast execution)
+
+**Test Suites:**
+| Suite | File | Tests | Coverage |
+|-------|------|-------|----------|
+| Schema Validation | `tests/unit/schemas.test.js` | 15 | Function calling schema structure |
+| Pattern Detection | `tests/unit/patterns.test.js` | 22 | Intelligence Engine algorithms |
+
+**Commands:**
+```bash
+npm run test:unit        # Run unit tests once
+npm run test:unit:watch  # Watch mode for development
+npm test                 # E2E tests (Playwright)
+```
+
+**What's Tested:**
+- Schema structure validation (OpenAI function format)
+- Required parameters defined correctly
+- Pattern detection algorithms (comfort/discovery, ghosted artists, time patterns, eras)
+- Edge cases (empty arrays, single streams)
 
 ---
 

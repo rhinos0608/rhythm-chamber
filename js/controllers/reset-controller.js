@@ -330,9 +330,5 @@ export const ResetController = {
     waitForWorkersAbort
 };
 
-// Make available globally for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.ResetController = ResetController;
-}
 
 console.log('[ResetController] Controller loaded');

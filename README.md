@@ -114,6 +114,31 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 - Configure Qdrant for semantic search
 - Use local models for ultimate privacy
 
+---
+
+## Development
+
+### Setup
+```bash
+npm install
+npm run dev     # Start local server on port 8080
+```
+
+### Testing
+```bash
+npm test           # E2E tests (Playwright)
+npm run test:unit  # Unit tests (Vitest) - schemas & patterns
+npm run test:unit:watch  # Watch mode for TDD
+```
+
+### Project Structure
+- `js/` - Application source code
+- `tests/unit/` - Unit tests (Vitest)
+- `tests/rhythm-chamber.spec.ts` - E2E tests (Playwright)
+- `docs/` - Documentation
+
+---
+
 **Rhythm Chamber is for power users who want to understand themselves through their music data.**
 
 We're not building a better stats.fm. We're building the next evolution of music self-discovery.
