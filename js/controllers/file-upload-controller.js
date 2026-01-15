@@ -66,17 +66,23 @@ async function handleFileUpload(file) {
         return;
     }
 
-    // Check for conflicting operations
-    if (_OperationLock.isLocked('file_processing')) {
-        _showToast('Upload already in progress, please wait');
-        return;
-    }
-
-    // Acquire operation lock
+    // ✅ FIXED: Remove race condition - directly attempt to acquire lock
+    // The acquire() method is atomic and will throw if blocked
     try {
         currentFileLockId = await _OperationLock.acquire('file_processing');
     } catch (lockError) {
-        _showToast(`Cannot upload: ${lockError.message}`);
+        // Use the new error class for better diagnostics
+        if (lockError.name === 'LockAcquisitionError') {
+            _showToast(`Cannot upload: ${lockError.message}`);
+
+            // Optional: Show recovery suggestion
+            if (lockError.getRecoverySuggestion) {
+                console.log(`[FileUploadController] Recovery: ${lockError.getRecoverySuggestion()}`);
+            }
+        } else {
+            // Unexpected error type
+            _showToast(`Cannot upload: ${lockError.message}`);
+        }
         return;
     }
 
@@ -115,7 +121,11 @@ async function handleFileUpload(file) {
     } finally {
         // Release operation lock
         if (currentFileLockId && _OperationLock) {
-            _OperationLock.release('file_processing', currentFileLockId);
+            try {
+                _OperationLock.release('file_processing', currentFileLockId);
+            } catch (releaseError) {
+                console.error('[FileUploadController] Lock release error:', releaseError);
+            }
             currentFileLockId = null;
         }
 
@@ -315,7 +325,11 @@ function handleWorkerAbort() {
 
     // Release operation lock on abort
     if (currentFileLockId && _OperationLock) {
-        _OperationLock.release('file_processing', currentFileLockId);
+        try {
+            _OperationLock.release('file_processing', currentFileLockId);
+        } catch (releaseError) {
+            console.error('[FileUploadController] Lock release error on abort:', releaseError);
+        }
         currentFileLockId = null;
     }
 }
@@ -365,7 +379,11 @@ function cancelProcessing() {
 
     // Release lock
     if (currentFileLockId && _OperationLock) {
-        _OperationLock.release('file_processing', currentFileLockId);
+        try {
+            _OperationLock.release('file_processing', currentFileLockId);
+        } catch (releaseError) {
+            console.error('[FileUploadController] Lock release error on cancel:', releaseError);
+        }
         currentFileLockId = null;
     }
 
@@ -395,4 +413,4 @@ if (typeof window !== 'undefined') {
     window.FileUploadController = FileUploadController;
 }
 
-console.log('[FileUploadController] Controller loaded');
+console.log('[FileUploadController] Controller loaded - race condition fixed');

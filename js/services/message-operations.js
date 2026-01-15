@@ -71,6 +71,20 @@ function setStreamsData(streams) {
 async function regenerateLastResponse(conversationHistory, sendMessageFn, options = null) {
     if (conversationHistory.length === 0) return null;
 
+    // Check for stale data context before regeneration
+    // The user may have uploaded new data since this message was generated
+    const lastAssistantMsg = conversationHistory.slice().reverse().find(m => m.role === 'assistant');
+    if (lastAssistantMsg && window.DataVersion?.checkRegenerationContext) {
+        const staleCheck = window.DataVersion.checkRegenerationContext(lastAssistantMsg);
+        if (staleCheck.shouldWarn) {
+            console.warn('[MessageOperations] Regenerating with stale data context:', staleCheck.message);
+            // Notify caller via callback if provided
+            if (options?.onStaleData) {
+                options.onStaleData(staleCheck.message);
+            }
+        }
+    }
+
     // Remove messages from the end until we find the user message
     // This handles both simple exchanges AND function call sequences:
     // - Simple: user -> assistant

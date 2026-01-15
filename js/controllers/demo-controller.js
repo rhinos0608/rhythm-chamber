@@ -38,6 +38,7 @@ function init(dependencies) {
 /**
  * Load demo mode with pre-computed "The Emo Teen" persona
  * Uses in-memory storage to avoid mixing with user's real data
+ * ATOMIC: Locks UI and flushes pending operations before state change
  * @returns {Promise<void>}
  */
 async function loadDemoMode() {
@@ -48,37 +49,108 @@ async function loadDemoMode() {
 
     console.log('[DemoController] Loading demo data: "The Emo Teen"');
 
-    _ViewController.showProcessing();
-    _ViewController.updateProgress('🎭 Loading demo mode...');
+    // ATOMIC: Lock UI during entire transition
+    lockUI();
 
-    // Get demo data package
-    const demoPackage = _DemoData.getFullDemoPackage();
+    try {
+        // Flush any pending operations before switching
+        await flushPendingOperations();
 
-    // Load demo data into ISOLATED demo domain (not main data domain)
-    // HNW: Prevents demo data from polluting real user data
-    _ViewController.updateProgress('Loading sample streaming history...');
-    await new Promise(r => setTimeout(r, 300));
+        _ViewController.showProcessing();
+        _ViewController.updateProgress('🎭 Loading demo mode...');
 
-    _AppState.update('demo', {
-        isDemoMode: true,
-        streams: demoPackage.streams,
-        patterns: demoPackage.patterns,
-        personality: demoPackage.personality
-    });
+        // Get demo data package
+        const demoPackage = _DemoData.getFullDemoPackage();
 
-    _ViewController.updateProgress('Preparing demo experience...');
-    await new Promise(r => setTimeout(r, 300));
+        // Load demo data into ISOLATED demo domain (not main data domain)
+        // HNW: Prevents demo data from polluting real user data
+        _ViewController.updateProgress('Loading sample streaming history...');
+        await new Promise(r => setTimeout(r, 300));
 
-    // Show reveal
-    _ViewController.showReveal();
+        _AppState.update('demo', {
+            isDemoMode: true,
+            streams: demoPackage.streams,
+            patterns: demoPackage.patterns,
+            personality: demoPackage.personality
+        });
 
-    // Add demo badge to UI
-    addDemoBadge();
+        _ViewController.updateProgress('Preparing demo experience...');
+        await new Promise(r => setTimeout(r, 300));
 
-    // Pre-load chat with demo-specific suggestions
-    setupDemoChatSuggestions();
+        // Show reveal
+        _ViewController.showReveal();
 
-    console.log('[DemoController] Demo mode loaded successfully (data isolated in demo domain)');
+        // Add demo badge to UI
+        addDemoBadge();
+
+        // Pre-load chat with demo-specific suggestions
+        setupDemoChatSuggestions();
+
+        console.log('[DemoController] Demo mode loaded successfully (data isolated in demo domain)');
+    } catch (error) {
+        console.error('[DemoController] Demo mode load failed:', error);
+        if (_showToast) {
+            _showToast('Failed to load demo mode. Please try again.');
+        }
+    } finally {
+        // ATOMIC: Always unlock UI
+        unlockUI();
+    }
+}
+
+/**
+ * Lock UI during demo transition
+ * Prevents user interaction during state change
+ */
+function lockUI() {
+    document.body.classList.add('demo-transitioning');
+    console.log('[DemoController] UI locked for demo transition');
+}
+
+/**
+ * Unlock UI after demo transition
+ */
+function unlockUI() {
+    document.body.classList.remove('demo-transitioning');
+    console.log('[DemoController] UI unlocked');
+}
+
+/**
+ * Flush all pending operations before state change
+ * Ensures data consistency during demo switch
+ * @returns {Promise<void>}
+ */
+async function flushPendingOperations() {
+    console.log('[DemoController] Flushing pending operations...');
+
+    const promises = [];
+
+    // Flush pending chat saves
+    if (window.Chat?.flushPendingSaveAsync) {
+        promises.push(
+            window.Chat.flushPendingSaveAsync().catch(e =>
+                console.warn('[DemoController] Chat flush failed:', e)
+            )
+        );
+    }
+
+    // Flush IndexedDB operations if available
+    if (window.IndexedDBCore?.getConnection) {
+        // Force any pending transactions to complete
+        const conn = window.IndexedDBCore.getConnection();
+        if (conn) {
+            // IndexedDB doesn't have a flush, but we can ensure transactions complete
+            // by doing a small read operation
+            promises.push(
+                window.IndexedDBCore.count?.('config').catch(() => { })
+            );
+        }
+    }
+
+    // Wait for all pending operations
+    await Promise.all(promises);
+
+    console.log('[DemoController] All pending operations flushed');
 }
 
 /**

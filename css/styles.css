@@ -3186,3 +3186,141 @@ body.has-safe-mode-banner .app-container {
     font-size: 0.9rem;
   }
 }
+
+/* ==========================================
+   Quota Monitoring Styles
+   ========================================== */
+
+/* Quota display in settings */
+.quota-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background: var(--bg-glass);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.quota-bar-container {
+  flex: 1;
+  height: 8px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.quota-bar {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width var(--transition-base), background var(--transition-base);
+}
+
+.quota-text {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.quota-percent {
+  font-size: 0.85rem;
+  font-weight: 600;
+  min-width: 3.5em;
+  text-align: right;
+}
+
+.quota-percent.ok {
+  color: var(--accent-secondary);
+}
+
+.quota-percent.warning {
+  color: #f39c12;
+}
+
+.quota-percent.critical {
+  color: #e74c3c;
+}
+
+/* Quota warning badge in header */
+.quota-warning-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: help;
+  transition: var(--transition-fast);
+}
+
+.quota-warning-badge.warning {
+  background: rgba(243, 156, 18, 0.15);
+  color: #f39c12;
+  border: 1px solid rgba(243, 156, 18, 0.3);
+}
+
+.quota-warning-badge.critical {
+  background: rgba(231, 76, 60, 0.15);
+  color: #e74c3c;
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  animation: pulse-glow 2s infinite;
+}
+
+.quota-warning-badge .quota-icon {
+  font-size: 1em;
+}
+
+/* ==========================================
+   Demo Transition Overlay
+   ========================================== */
+
+body.demo-transitioning {
+  pointer-events: none;
+  user-select: none;
+}
+
+body.demo-transitioning::after {
+  content: '🎭 Loading demo...';
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 15, 0.85);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* ==========================================
+   Circuit Breaker Warning
+   ========================================== */
+
+.circuit-breaker-warning {
+  background: rgba(231, 76, 60, 0.1);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  margin: var(--space-md) 0;
+  color: #e74c3c;
+}
+
+.circuit-breaker-warning .warning-icon {
+  margin-right: var(--space-sm);
+}
+
+/* ==========================================
+   Stale Data Indicator
+   ========================================== */
+
+.message.stale-data::before {
+  content: '⚠️ Response based on older data';
+  display: block;
+  font-size: 0.75rem;
+  color: #f39c12;
+  margin-bottom: var(--space-xs);
+  opacity: 0.8;
+}

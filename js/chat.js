@@ -671,10 +671,17 @@ async function sendMessage(message, optionsOrKey = null) {
 /**
  * Execute LLM-requested tool calls and return the follow-up response message.
  * If a tool fails, returns an early result for the caller to surface.
+ * 
+ * CIRCUIT BREAKER: Max 5 function calls per turn, 5s timeout per function.
  */
 async function handleToolCalls(responseMessage, providerConfig, key, onProgress) {
     if (!responseMessage?.tool_calls || responseMessage.tool_calls.length === 0) {
         return { responseMessage };
+    }
+
+    // Reset circuit breaker for this turn
+    if (window.CircuitBreaker?.resetTurn) {
+        window.CircuitBreaker.resetTurn();
     }
 
     console.log('[Chat] LLM requested tool calls:', responseMessage.tool_calls.map(tc => tc.function.name));
@@ -690,7 +697,27 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
 
     // Execute each function call and add results
     // HNW Fix: Add timeout to prevent indefinite hangs
+    // CIRCUIT BREAKER: Enforces max 5 calls per turn
     for (const toolCall of responseMessage.tool_calls) {
+        // Check circuit breaker before each call
+        if (window.CircuitBreaker?.check) {
+            const breakerCheck = window.CircuitBreaker.check();
+            if (!breakerCheck.allowed) {
+                console.warn(`[Chat] Circuit breaker tripped: ${breakerCheck.reason}`);
+                if (onProgress) onProgress({ type: 'circuit_breaker_trip', reason: breakerCheck.reason });
+                return {
+                    earlyReturn: {
+                        status: 'error',
+                        content: window.CircuitBreaker.getErrorMessage(breakerCheck.reason),
+                        role: 'assistant',
+                        isCircuitBreakerError: true
+                    }
+                };
+            }
+            // Record this call
+            window.CircuitBreaker.recordCall();
+        }
+
         const functionName = toolCall.function.name;
         const rawArgs = toolCall.function.arguments || '{}';
         let args;
