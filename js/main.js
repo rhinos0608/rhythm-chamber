@@ -18,12 +18,18 @@ import { Security } from './security/index.js';
 
 // Validate secure context immediately before ANY other imports
 const securityCheck = Security.checkSecureContext();
+let safeModeReason = null;
+
 if (!securityCheck.secure) {
-    showSecurityError(securityCheck.reason);
-    throw new Error(`Security check failed: ${securityCheck.reason}`);
+    // Don't throw - instead flag for Safe Mode and continue
+    // This allows the "Safe Mode" UI in app.js to render
+    console.warn('[Main] Security check failed, entering Safe Mode:', securityCheck.reason);
+    safeModeReason = securityCheck.reason;
 }
 
-console.log('[Main] Security context validated');
+if (safeModeReason === null) {
+    console.log('[Main] Security context validated');
+}
 
 // ==========================================
 // Import ALL Modules (Dependency Order)
@@ -55,17 +61,16 @@ import { GenreEnrichment } from './genre-enrichment.js';
 // Token counter
 import { TokenCounter } from './token-counter.js';
 
-// LLM Providers
+// LLM Providers (lightweight)
 import { ProviderInterface } from './providers/provider-interface.js';
 import { OpenRouterProvider } from './providers/openrouter.js';
 import { LMStudioProvider } from './providers/lmstudio.js';
-import { Ollama } from './ollama.js';
-import { OllamaProvider } from './providers/ollama-adapter.js';
 
-// RAG and embeddings
-import { RAG } from './rag.js';
-import { LocalVectorStore } from './local-vector-store.js';
-import { LocalEmbeddings } from './local-embeddings.js';
+// Heavy modules loaded dynamically in bootstrap() to reduce initial bundle:
+// - Ollama (./ollama.js, ./providers/ollama-adapter.js)
+// - RAG (./rag.js)
+// - LocalVectorStore (./local-vector-store.js)
+// - LocalEmbeddings (./local-embeddings.js)
 
 // Spotify
 import { Spotify } from './spotify.js';
@@ -256,9 +261,35 @@ async function bootstrap() {
     console.log('[Main] Bootstrapping application...');
 
     try {
+        // Dynamically import heavy modules only if not in safe mode
+        // and the user will need them (Full Analysis path)
+        if (!safeModeReason) {
+            console.log('[Main] Loading heavy modules dynamically...');
+
+            // Load Ollama provider
+            const [{ Ollama }, { OllamaProvider }] = await Promise.all([
+                import('./ollama.js'),
+                import('./providers/ollama-adapter.js')
+            ]);
+            window.Ollama = Ollama;
+            window.OllamaProvider = OllamaProvider;
+
+            // Load RAG and embeddings (only needed for Full Analysis)
+            const [{ RAG }, { LocalVectorStore }, { LocalEmbeddings }] = await Promise.all([
+                import('./rag.js'),
+                import('./local-vector-store.js'),
+                import('./local-embeddings.js')
+            ]);
+            window.RAG = RAG;
+            window.LocalVectorStore = LocalVectorStore;
+            window.LocalEmbeddings = LocalEmbeddings;
+
+            console.log('[Main] Heavy modules loaded');
+        }
+
         // Import and initialize the application
         const { init } = await import('./app.js');
-        await init();
+        await init({ safeModeReason });
 
         console.log('[Main] Application initialized successfully');
     } catch (error) {

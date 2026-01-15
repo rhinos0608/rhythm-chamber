@@ -347,9 +347,20 @@ async function initializeControllers() {
 
 /**
  * Initialize the application
+ * @param {Object} options - Initialization options
+ * @param {string|null} options.safeModeReason - If set, security check failed with this reason
  */
-async function init() {
+async function init(options = {}) {
     console.log('[App] Initializing with HNW modular architecture...');
+
+    // HNW Security: Check for Safe Mode from main.js security check
+    // This is the primary safe mode trigger (security context failed)
+    const safeModeFromMain = options.safeModeReason;
+    if (safeModeFromMain) {
+        console.warn('[App] Safe Mode activated from main.js:', safeModeFromMain);
+        showSafeModeWarning();
+        // Continue with limited functionality
+    }
 
     // HNW Hierarchy: Early-fail if critical dependencies are missing
     // This catches script loading failures on spotty mobile networks
@@ -363,7 +374,8 @@ async function init() {
 
     // HNW Security: Check for Safe Mode (fail-closed architecture)
     // If Security is in fallback, show warning and continue with limited functionality
-    if (depCheck.safeMode) {
+    if (depCheck.safeMode && !safeModeFromMain) {
+        // Only show warning if not already shown from main.js
         showSafeModeWarning();
     }
 
