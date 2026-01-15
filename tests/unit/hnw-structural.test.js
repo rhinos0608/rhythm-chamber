@@ -228,14 +228,119 @@ describe('TurnQueue', () => {
 
     it('should track pending count correctly', async () => {
         const queue = createTurnQueue();
-        const processor = async () => new Promise(r => setTimeout(r, 50));
+        let startedResolve;
+        const started = new Promise((resolve) => { startedResolve = resolve; });
+
+        const processor = async (msg) => {
+            if (msg === 'msg1') {
+                startedResolve();
+            }
+            await new Promise(r => setTimeout(r, 50));
+        };
 
         queue.push('msg1', processor);
         queue.push('msg2', processor);
 
-        // After first starts processing, one should remain pending
-        await new Promise(r => setTimeout(r, 5));
+        // Wait for the first processor to begin before checking pending count
+        await started;
         expect(queue.getPendingCount()).toBe(1);
+    });
+});
+
+// ==========================================
+// Pattern Worker Pool Tests
+// ==========================================
+
+describe('Pattern Worker Pool', () => {
+    let originalWorker;
+    let originalNavigator;
+    let navigatorDescriptor;
+    let PatternWorkerPool;
+
+    beforeEach(async () => {
+        vi.resetModules();
+        originalWorker = global.Worker;
+        originalNavigator = global.navigator;
+        navigatorDescriptor = Object.getOwnPropertyDescriptor(global, 'navigator');
+
+        let workerId = 0;
+        class FakeWorker {
+            constructor() {
+                this.id = ++workerId;
+                this.onmessage = null;
+                this.onerror = null;
+            }
+
+            postMessage(message) {
+                const { requestId } = message;
+                setTimeout(() => {
+                    this.onmessage?.({
+                        data: {
+                            requestId,
+                            type: 'result',
+                            result: { [`worker${this.id}`]: message.patterns }
+                        },
+                        target: this
+                    });
+                }, 0);
+            }
+
+            terminate() {
+                // no-op for tests
+            }
+        }
+
+        global.Worker = FakeWorker;
+        try {
+            Object.defineProperty(global, 'navigator', {
+                configurable: true,
+                value: { ...(originalNavigator || {}), hardwareConcurrency: 4 }
+            });
+        } catch {
+            if (global.navigator) {
+                global.navigator.hardwareConcurrency = 4;
+            }
+        }
+
+        ({ PatternWorkerPool } = await import('../../js/workers/pattern-worker-pool.js'));
+    });
+
+    afterEach(() => {
+        PatternWorkerPool?.terminate();
+        global.Worker = originalWorker;
+        try {
+            if (navigatorDescriptor) {
+                Object.defineProperty(global, 'navigator', navigatorDescriptor);
+            } else if (originalNavigator) {
+                Object.defineProperty(global, 'navigator', {
+                    configurable: true,
+                    value: originalNavigator
+                });
+            } else {
+                delete global.navigator;
+            }
+        } catch {
+            if (originalNavigator && global.navigator) {
+                Object.assign(global.navigator, originalNavigator);
+            }
+        }
+    });
+
+    it('should expose core API methods', () => {
+        expect(typeof PatternWorkerPool.init).toBe('function');
+        expect(typeof PatternWorkerPool.detectAllPatterns).toBe('function');
+        expect(typeof PatternWorkerPool.terminate).toBe('function');
+    });
+
+    it('should dispatch work and track completions', async () => {
+        await PatternWorkerPool.init({ workerCount: 2 });
+        const streams = new Array(1000).fill({});
+
+        const result = await PatternWorkerPool.detectAllPatterns(streams, []);
+        const status = PatternWorkerPool.getStatus();
+
+        expect(Object.keys(result)).toContain('worker1');
+        expect(status.totalProcessed).toBeGreaterThan(0);
     });
 });
 
@@ -488,7 +593,8 @@ describe('MigrationCheckpointing', () => {
         let keysProcessed = 0;
 
         async function migrate(onProgress) {
-            const startIndex = checkpoint?.lastProcessedIndex || 0;
+            keysProcessed = 0;
+            const startIndex = checkpoint?.lastProcessedIndex ?? 0;
 
             for (let i = startIndex; i < totalKeys; i++) {
                 // Simulate processing
@@ -499,7 +605,7 @@ describe('MigrationCheckpointing', () => {
 
                 // Save checkpoint every 10 keys
                 if ((i + 1) % 10 === 0) {
-                    checkpoint = { lastProcessedIndex: i, keysProcessed };
+                    checkpoint = { lastProcessedIndex: i + 1, keysProcessed };
                 }
             }
 
@@ -510,7 +616,7 @@ describe('MigrationCheckpointing', () => {
 
         function getCheckpoint() { return checkpoint; }
         function simulateCrash(atKey) {
-            checkpoint = { lastProcessedIndex: atKey, keysProcessed: atKey + 1 };
+            checkpoint = { lastProcessedIndex: atKey + 1, keysProcessed: atKey + 1 };
         }
 
         return { migrate, getCheckpoint, simulateCrash };
@@ -534,8 +640,8 @@ describe('MigrationCheckpointing', () => {
         // Resume migration
         const result = await migration.migrate();
 
-        // Should only process remaining 10 keys (16-25, 0-indexed from 16 to 24 = 9 iterations but count increments to 10)
-        expect(result.keysProcessed).toBe(10);
+        // Should only process remaining 9 keys (starting at index 16 through 24)
+        expect(result.keysProcessed).toBe(9);
     });
 
     it('should report progress during migration', async () => {

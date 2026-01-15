@@ -352,6 +352,10 @@ async function handleToolCallsWithFallback(
     const candidates = [];
 
     for (const strategy of toolStrategies) {
+        if (strategy.strategyName === 'IntentExtractionStrategy') {
+            continue; // handled separately to avoid duplicates
+        }
+
         const result = strategy.canHandle(responseMessage, capabilityLevel);
 
         if (result.confidence > 0) {

@@ -1896,6 +1896,13 @@ a {
   opacity: 1;
 }
 
+.message .error-actions {
+  justify-content: flex-end;
+  gap: 4px;
+  flex-wrap: nowrap;
+  margin-bottom: 0;
+}
+
 .action-btn {
   background: transparent;
   border: none;
@@ -3337,8 +3344,8 @@ a {
   margin: 0;
 }
 
-/* Error Actions */
-.error-actions {
+/* Loading Error Actions */
+.loading-error .error-actions {
   display: flex;
   gap: var(--space-md);
   flex-wrap: wrap;
@@ -3374,12 +3381,12 @@ a {
     font-size: 1.25rem;
   }
 
-  .error-actions {
+  .loading-error .error-actions {
     flex-direction: column;
     width: 100%;
   }
 
-  .error-actions .btn {
+  .loading-error .error-actions .btn {
     width: 100%;
   }
 }

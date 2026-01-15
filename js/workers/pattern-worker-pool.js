@@ -60,7 +60,11 @@ async function init(options = {}) {
 
     // Determine optimal worker count based on hardware
     const hardwareConcurrency = navigator?.hardwareConcurrency || 4;
-    const workerCount = options.workerCount || Math.min(DEFAULT_WORKER_COUNT, hardwareConcurrency - 1);
+    const computedMax = Math.max(1, hardwareConcurrency - 1);
+    const requestedCount = (typeof options.workerCount === 'number' && options.workerCount > 0)
+        ? options.workerCount
+        : null;
+    const workerCount = requestedCount ?? Math.min(DEFAULT_WORKER_COUNT, computedMax);
 
     console.log(`[PatternWorkerPool] Initializing with ${workerCount} workers (${hardwareConcurrency} cores)`);
 
@@ -94,9 +98,13 @@ async function init(options = {}) {
  */
 function handleWorkerMessage(event) {
     const { requestId: reqId, type, result, error, progress } = event.data;
+    const workerInfo = workers.find(w => w.worker === event.target);
 
     const request = pendingRequests.get(reqId);
     if (!request) {
+        if (workerInfo) {
+            workerInfo.busy = false;
+        }
         console.warn('[PatternWorkerPool] Received message for unknown request:', reqId);
         return;
     }
@@ -106,9 +114,17 @@ function handleWorkerMessage(event) {
         return;
     }
 
+    const markComplete = () => {
+        if (workerInfo) {
+            workerInfo.busy = false;
+            workerInfo.processedCount += 1;
+        }
+        request.completedWorkers++;
+    };
+
     if (type === 'result') {
         request.results.push(result);
-        request.completedWorkers++;
+        markComplete();
 
         // Check if all workers have completed
         if (request.completedWorkers >= request.totalWorkers) {
@@ -118,12 +134,10 @@ function handleWorkerMessage(event) {
             const aggregated = aggregateResults(request.results);
             request.resolve(aggregated);
         }
-    }
-
-    if (type === 'error') {
+    } else if (type === 'error') {
         console.error('[PatternWorkerPool] Worker error:', error);
         request.errors.push(error);
-        request.completedWorkers++;
+        markComplete();
 
         // Still check for completion
         if (request.completedWorkers >= request.totalWorkers) {
@@ -148,6 +162,32 @@ function handleWorkerMessage(event) {
  */
 function handleWorkerError(error) {
     console.error('[PatternWorkerPool] Worker error:', error);
+
+    const workerInfo = workers.find(w => w.worker === error?.target);
+    if (workerInfo) {
+        workerInfo.busy = false;
+        workerInfo.processedCount += 1;
+    }
+
+    for (const [reqId, request] of pendingRequests.entries()) {
+        if (request.completedWorkers >= request.totalWorkers) {
+            continue;
+        }
+
+        request.errors.push(error?.message || 'Worker error');
+        request.completedWorkers++;
+
+        if (request.completedWorkers >= request.totalWorkers) {
+            pendingRequests.delete(reqId);
+
+            if (request.results.length > 0) {
+                const aggregated = aggregateResults(request.results);
+                request.resolve(aggregated);
+            } else {
+                request.reject(new Error('All workers failed'));
+            }
+        }
+    }
 }
 
 /**
@@ -171,6 +211,13 @@ async function detectAllPatterns(streams, chunks, onProgress = null) {
     }
 
     const reqId = `pool_${++requestId}`;
+    const dispatchPlan = workers
+        .map((workerInfo, index) => ({
+            workerInfo,
+            patternGroup: PATTERN_GROUPS[index] || []
+        }))
+        .filter(entry => entry.patternGroup.length > 0);
+    const activeWorkerCount = dispatchPlan.length;
 
     return new Promise((resolve, reject) => {
         const request = {
@@ -180,16 +227,20 @@ async function detectAllPatterns(streams, chunks, onProgress = null) {
             results: [],
             errors: [],
             completedWorkers: 0,
-            totalWorkers: workers.length,
+            totalWorkers: activeWorkerCount,
             startTime: Date.now()
         };
 
         pendingRequests.set(reqId, request);
 
-        // Distribute work across workers
-        workers.forEach((workerInfo, index) => {
-            const patternGroup = PATTERN_GROUPS[index] || [];
+        if (activeWorkerCount === 0) {
+            pendingRequests.delete(reqId);
+            resolve({});
+            return;
+        }
 
+        // Distribute work across workers
+        dispatchPlan.forEach(({ workerInfo, patternGroup }) => {
             workerInfo.worker.postMessage({
                 type: 'DETECT_PATTERNS',
                 requestId: reqId,
@@ -201,7 +252,7 @@ async function detectAllPatterns(streams, chunks, onProgress = null) {
             workerInfo.busy = true;
         });
 
-        console.log(`[PatternWorkerPool] Dispatched request ${reqId} to ${workers.length} workers`);
+        console.log(`[PatternWorkerPool] Dispatched request ${reqId} to ${activeWorkerCount} workers`);
     });
 }
 
@@ -244,6 +295,8 @@ async function detectWithSingleWorker(streams, chunks, onProgress) {
             chunks,
             patterns: allPatterns
         });
+
+        workers[0].busy = true;
     });
 }
 
@@ -301,13 +354,18 @@ function getStatus() {
  * Terminate all workers
  */
 function terminate() {
+    const terminationError = new Error('Worker pool terminated');
+    for (const [, request] of pendingRequests.entries()) {
+        request.reject(terminationError);
+    }
+    pendingRequests.clear();
+
     for (const workerInfo of workers) {
         workerInfo.worker.terminate();
     }
 
     workers = [];
     initialized = false;
-    pendingRequests.clear();
 
     console.log('[PatternWorkerPool] Terminated all workers');
 }

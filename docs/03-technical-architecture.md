@@ -133,15 +133,19 @@ UI logic extracted from `app.js` into focused controllers:
 - **DemoController** (`js/controllers/demo-controller.js`): Demo mode
 - **ResetController** (`js/controllers/reset-controller.js`): Reset operations
 
-### 4. Service Pattern (NEW - 7 Services)
+### 4. Service Pattern (NEW - 11 Services)
 Extracted from God objects into independent services:
 - **MessageOperations** (`js/services/message-operations.js`): Message operations (regenerate, delete, edit, query context)
 - **SessionManager** (`js/services/session-manager.js`): Session lifecycle (create, load, save, delete)
-- **TabCoordinator** (`js/services/tab-coordination.js`): Cross-tab coordination (deterministic leader election)
+- **TabCoordinator** (`js/services/tab-coordination.js`): Cross-tab coordination (ENHANCED - heartbeat failover)
 - **TokenCountingService** (`js/services/token-counting-service.js`): Token counting & context window management
-- **ToolCallHandlingService** (`js/services/tool-call-handling-service.js`): Tool call handling with fallback support
+- **ToolCallHandlingService** (`js/services/tool-call-handling-service.js`): Tool call handling (ENHANCED - strategy voting)
 - **LLMProviderRoutingService** (`js/services/llm-provider-routing-service.js`): LLM provider configuration & routing
 - **FallbackResponseService** (`js/services/fallback-response-service.js`): Fallback response generation
+- **StateMachineCoordinator** (`js/services/state-machine-coordinator.js`): Cross-controller state transitions (NEW)
+- **LockPolicyCoordinator** (`js/services/lock-policy-coordinator.js`): Operation conflict matrix (NEW)
+- **TimeoutBudgetManager** (`js/services/timeout-budget-manager.js`): Hierarchical timeout allocation (NEW)
+- **TurnQueue** (`js/services/turn-queue.js`): Message serialization (NEW)
 
 ### 5. State Management
 - **AppState** (`js/state/app-state.js`): Centralized state with demo isolation
@@ -212,8 +216,34 @@ Extracted complex function calling logic from `chat.js` into dedicated strategie
 
 ### Wave
 - **Deterministic leader election**: 300ms window, lowest ID wins
+- **Heartbeat failover**: 5s heartbeat, 10s promotion threshold (NEW)
 - **Async/sync separation**: visibilitychange (async) vs beforeunload (sync)
 - **Migration isolation**: Runs atomically before app initialization
+- **Migration checkpointing**: Resume from last checkpoint on crash recovery (NEW)
+
+### 9. HNW Structural Improvements (NEW)
+Comprehensive structural improvements based on HNW framework analysis:
+
+**Hierarchy Improvements:**
+| Module | File | Purpose |
+|--------|------|---------|
+| State Machine Coordinator | `js/services/state-machine-coordinator.js` | Validated state transitions across controllers |
+| Lock Policy Coordinator | `js/services/lock-policy-coordinator.js` | Conflict matrix for concurrent operations |
+| Timeout Budget Manager | `js/services/timeout-budget-manager.js` | Hierarchical timeout allocation |
+
+**Network Improvements:**
+| Module | File | Purpose |
+|--------|------|---------|
+| Storage Transaction Layer | `js/storage/transaction.js` | Atomic commit/rollback across backends |
+| Tab Heartbeat | `js/services/tab-coordination.js` | Leader health monitoring (5s heartbeat) |
+| Strategy Voting | `js/services/tool-call-handling-service.js` | Confidence-based strategy selection |
+
+**Wave Improvements:**
+| Module | File | Purpose |
+|--------|------|---------|
+| Turn Queue | `js/services/turn-queue.js` | Sequential message processing |
+| Pattern Worker Pool | `js/workers/pattern-worker-pool.js` | Parallel pattern detection (3 workers) |
+| Migration Checkpointing | `js/storage/migration.js` | Resumable migrations with progress |
 
 ---
 
@@ -298,10 +328,11 @@ rhythm-chamber/
 │   ├── storage/            # Storage Submodules
 │   │   ├── indexeddb.js    # Core DB operations
 │   │   ├── config-api.js   # Config & Token storage
-│   │   ├── migration.js    # localStorage migration
+│   │   ├── migration.js    # localStorage migration (ENHANCED - checkpointing)
+│   │   ├── transaction.js  # Multi-backend atomic transactions (NEW)
 │   │   ├── profiles.js     # Profile storage (extracted from facade)
 │   │   ├── sync-strategy.js # Sync strategy abstraction (Phase 2 prep)
-│   │   └── keys.js         # Centralized storage keys (NEW)
+│   │   └── keys.js         # Centralized storage keys
 │   │
 │   ├── security/           # Security Submodules
 │   │   ├── encryption.js   # AES-GCM
@@ -314,17 +345,21 @@ rhythm-chamber/
 │   │   └── app-state.js    # Centralized app state
 │   │
 │   ├── services/           # Services (Extracted from God objects)
-│   │   ├── message-operations.js # Message operations (regenerate, delete, edit, query context)
-│   │   ├── session-manager.js    # Session lifecycle (create, load, save, delete)
-│   │   ├── tab-coordination.js   # Cross-tab coordination (deterministic leader election)
-│   │   ├── token-counting-service.js # Token counting & context window management
-│   │   ├── tool-call-handling-service.js # Tool call handling with fallback support
-│   │   ├── llm-provider-routing-service.js # LLM provider configuration & routing
-│   │   ├── fallback-response-service.js # Fallback response generation
+│   │   ├── message-operations.js # Message operations
+│   │   ├── session-manager.js    # Session lifecycle
+│   │   ├── tab-coordination.js   # Cross-tab (ENHANCED - heartbeat failover)
+│   │   ├── token-counting-service.js # Token counting
+│   │   ├── tool-call-handling-service.js # Tool calls (ENHANCED - strategy voting)
+│   │   ├── llm-provider-routing-service.js # LLM routing
+│   │   ├── fallback-response-service.js # Fallback responses
+│   │   ├── state-machine-coordinator.js  # State transitions (NEW)
+│   │   ├── lock-policy-coordinator.js    # Conflict matrix (NEW)
+│   │   ├── timeout-budget-manager.js     # Timeout allocation (NEW)
+│   │   ├── turn-queue.js                 # Message serialization (NEW)
 │   │   └── tool-strategies/
-│   │       ├── base-strategy.js          # BaseToolStrategy
+│   │       ├── base-strategy.js          # BaseToolStrategy (ENHANCED - confidence)
 │   │       ├── native-strategy.js        # NativeToolStrategy (Level 1)
-│   │       ├── prompt-injection-strategy.js # PromptInjectionStrategy (Levels 2/3)
+│   │       ├── prompt-injection-strategy.js # PromptInjectionStrategy (Level 2/3)
 │   │       └── intent-extraction-strategy.js # IntentExtractionStrategy (Level 4)
 │   │
 │   └── controllers/        # UI Controllers
@@ -339,8 +374,9 @@ rhythm-chamber/
 ├── tests/                  # Test Suite
 │   ├── rhythm-chamber.spec.ts  # E2E tests (Playwright)
 │   └── unit/               # Unit tests (Vitest)
-│       ├── schemas.test.js # Function schema validation
-│       └── patterns.test.js # Pattern detection algorithms
+│       ├── schemas.test.js   # Function schema validation
+│       ├── patterns.test.js  # Pattern detection algorithms
+│       └── hnw-structural.test.js # HNW improvements (26 tests, NEW)
 │
 ├── docs/
 │   ├── 03-technical-architecture.md
