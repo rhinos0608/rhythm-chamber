@@ -11,11 +11,22 @@ export class PromptInjectionStrategy extends BaseToolStrategy {
     get level() { return 2; }
 
     canHandle(responseMessage, capabilityLevel) {
-        if (capabilityLevel < 2) return false;
+        // Requires capability level 2 or higher
+        if (capabilityLevel < 2) {
+            return this.confidence(0, 'Capability level too low');
+        }
 
         const content = responseMessage?.content || '';
         const parsedCalls = this.FunctionCallingFallback?.parseFunctionCallsFromText?.(content) || [];
-        return parsedCalls.length > 0;
+
+        if (parsedCalls.length === 0) {
+            return this.confidence(0, 'No function calls parsed from text');
+        }
+
+        // Moderate-high confidence, scaled by number of calls found
+        // More calls = slightly higher confidence (max 0.85)
+        const confidence = Math.min(0.85, 0.75 + (parsedCalls.length * 0.02));
+        return this.confidence(confidence, `Parsed ${parsedCalls.length} function call(s) from text`);
     }
 
     async execute(context) {

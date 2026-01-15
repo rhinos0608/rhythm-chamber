@@ -12,9 +12,31 @@ export class IntentExtractionStrategy extends BaseToolStrategy {
     get level() { return 4; }
 
     canHandle(responseMessage, capabilityLevel) {
-        // This is the fallback - only use if higher levels didn't handle
-        // Check is done in the strategy orchestrator after other strategies fail
-        return false; // Handled specially by orchestrator
+        // This strategy is a last resort with lower confidence
+        // It can handle any case where intent can be extracted from user message
+        // However, it returns low confidence to defer to better strategies
+        return this.confidence(0, 'Intent extraction handles via shouldAttemptExtraction');
+    }
+
+    /**
+     * Get confidence for intent extraction (called by orchestrator)
+     * @param {string} userMessage - Original user message
+     * @returns {{ confidence: number, reason: string }}
+     */
+    getIntentConfidence(userMessage) {
+        if (!userMessage || !this.FunctionCallingFallback?.extractQueryIntent) {
+            return this.confidence(0, 'No user message or extraction not available');
+        }
+
+        const intent = this.FunctionCallingFallback.extractQueryIntent(userMessage);
+        if (!intent) {
+            return this.confidence(0, 'No intent extracted');
+        }
+
+        // Lower confidence as this is a fallback strategy
+        // Confidence increases slightly based on intent specificity
+        const confidence = intent.arguments && Object.keys(intent.arguments).length > 0 ? 0.6 : 0.5;
+        return this.confidence(confidence, `Extracted intent: ${intent.function}`);
     }
 
     /**
@@ -23,11 +45,7 @@ export class IntentExtractionStrategy extends BaseToolStrategy {
      * @returns {boolean}
      */
     shouldAttemptExtraction(userMessage) {
-        if (!userMessage || !this.FunctionCallingFallback?.extractQueryIntent) {
-            return false;
-        }
-        const intent = this.FunctionCallingFallback.extractQueryIntent(userMessage);
-        return intent !== null;
+        return this.getIntentConfidence(userMessage).confidence > 0;
     }
 
     async execute(context) {

@@ -343,25 +343,58 @@ async function handleToolCallsWithFallback(
         callLLM: _callLLM
     };
 
-    // Try each strategy in order
+    // ==========================================
+    // Strategy Voting System
+    // Collect confidence scores from all strategies,
+    // pick highest confidence (not first match)
+    // ==========================================
+
+    const candidates = [];
+
     for (const strategy of toolStrategies) {
-        if (strategy.canHandle(responseMessage, capabilityLevel)) {
-            console.log(`[ToolCallHandlingService] Using ${strategy.constructor.name} (Level ${strategy.level})`);
-            return strategy.execute(context);
+        const result = strategy.canHandle(responseMessage, capabilityLevel);
+
+        if (result.confidence > 0) {
+            candidates.push({
+                strategy,
+                confidence: result.confidence,
+                reason: result.reason
+            });
         }
     }
 
-    // Special case: Level 4 intent extraction (fallback of last resort)
-    // Use strategyName property instead of instanceof (class not in scope)
+    // Special case: IntentExtractionStrategy uses getIntentConfidence
     const intentStrategy = toolStrategies.find(s => s.strategyName === 'IntentExtractionStrategy');
-    if (intentStrategy?.shouldAttemptExtraction?.(userMessage)) {
-        console.log('[ToolCallHandlingService] Attempting Level 4 intent extraction');
-        return intentStrategy.execute(context);
+    if (intentStrategy?.getIntentConfidence) {
+        const intentResult = intentStrategy.getIntentConfidence(userMessage);
+        if (intentResult.confidence > 0) {
+            candidates.push({
+                strategy: intentStrategy,
+                confidence: intentResult.confidence,
+                reason: intentResult.reason
+            });
+        }
+    }
+
+    // Sort by confidence (highest first)
+    candidates.sort((a, b) => b.confidence - a.confidence);
+
+    // Log voting results for debugging
+    if (candidates.length > 0) {
+        console.log('[ToolCallHandlingService] Strategy voting results:',
+            candidates.map(c => `${c.strategy.strategyName}: ${c.confidence.toFixed(2)} (${c.reason})`));
+    }
+
+    // Execute highest confidence strategy
+    if (candidates.length > 0) {
+        const winner = candidates[0];
+        console.log(`[ToolCallHandlingService] Selected ${winner.strategy.strategyName} with confidence ${winner.confidence.toFixed(2)}`);
+        return winner.strategy.execute(context);
     }
 
     // Check if we still have native tool_calls (fallback for unknown model capability)
     if (responseMessage?.tool_calls?.length > 0) {
-        console.log('[ToolCallHandlingService] Native tool calls found in response');
+        console.log('[ToolCallHandlingService] Native tool calls found in response (fallback)');
         return handleToolCalls(responseMessage, providerConfig, key, onProgress);
     }
 
@@ -390,9 +423,4 @@ const ToolCallHandlingService = {
 // ES Module export
 export { ToolCallHandlingService };
 
-// Make available globally for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.ToolCallHandlingService = ToolCallHandlingService;
-}
-
-console.log('[ToolCallHandlingService] Service loaded');
+console.log('[ToolCallHandlingService] Service loaded with strategy voting');
