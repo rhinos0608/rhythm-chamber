@@ -422,14 +422,27 @@ try {
 }
 ```
 
-### Test Scenario 2: Concurrent Spotify Fetch
+### Test Scenario 2: Concurrent Spotify Fetch (Non-Reentrant Lock Behavior)
 ```javascript
 // Setup: Spotify fetch running
-await OperationLock.acquire('spotify_fetch');
-
-// Attempt: Another Spotify fetch (should succeed)
 const lockId = await OperationLock.acquire('spotify_fetch');
-assert.notEqual(lockId, null);
+
+// Attempt: Another Spotify fetch 
+// NOTE: spotify_fetch has empty conflict array, meaning it doesn't conflict
+// with OTHER operations. However, locks are NOT re-entrant - trying to
+// acquire the same lock twice will fail because it's already held.
+try {
+    await OperationLock.acquire('spotify_fetch');
+    assert.fail('Should have thrown - lock already held');
+} catch (error) {
+    // Expected: Cannot acquire same lock twice
+    assert.ok(error.message.includes('spotify_fetch'));
+}
+
+// Release and verify can acquire again
+OperationLock.release('spotify_fetch', lockId);
+const newLockId = await OperationLock.acquire('spotify_fetch');
+assert.notEqual(newLockId, null);
 ```
 
 ### Test Scenario 3: Reset During Active Operations

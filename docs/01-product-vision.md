@@ -2,7 +2,7 @@
 
 ## The Insight
 
-**Chat with your Spotify data—the way ChatGPT can't.**
+**Understand why your music matters.**
 
 Your complete listening history is too big for ChatGPT. We handle it locally, with privacy, semantic search, and accurate data queries. Upload your Spotify export and ask questions like:
 
@@ -169,7 +169,7 @@ The data export friction is real, but the payoff is self-discovery and deeper co
 
 **Unlock:** "Show me my listening habits by Producer instead of Artist" (e.g., "You love Jack Antonoff productions, regardless of the singer").
 
-**Why it works:** It appeals to the "Discovery Junkie" and music nerds who feel limited by standard "Top Artist" charts
+**Why it works:** It appeals to the "Discovery Junkie" and music nerds who feel limited by standard "Top Artist" charts.
 
 - Integrated with AI bundle
 

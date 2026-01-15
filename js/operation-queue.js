@@ -187,12 +187,17 @@ class OperationQueue {
         if (this.processing) return;
         this.processing = true;
 
+        // Max pre-check retries to avoid indefinite blocking
+        const MAX_PRE_CHECK_RETRIES = 10;
+        let preCheckRetries = 0;
+
         while (this.queue.length > 0) {
             const operation = this.queue[0];
 
             // Check if operation was cancelled
             if (operation.status === STATUS.CANCELLED) {
                 this.queue.shift();
+                preCheckRetries = 0; // Reset for next operation
                 continue;
             }
 
@@ -200,14 +205,31 @@ class OperationQueue {
             const check = OperationLock.canAcquire(operation.operationName);
 
             if (!check.canAcquire) {
+                preCheckRetries++;
+
+                // Fail if exceeded max retries to avoid indefinite blocking
+                if (preCheckRetries >= MAX_PRE_CHECK_RETRIES) {
+                    console.error(`[OperationQueue] Operation '${operation.operationName}' exceeded max pre-check retries (${MAX_PRE_CHECK_RETRIES})`);
+                    operation.status = STATUS.FAILED;
+                    operation.error = new Error(`Lock pre-check timeout after ${MAX_PRE_CHECK_RETRIES} retries`);
+                    this.queue.shift();
+                    operation.reject(operation.error);
+                    this.emit('failed', operation);
+                    preCheckRetries = 0; // Reset for next operation
+                    continue;
+                }
+
                 // Cannot acquire lock, wait and retry
                 const waitTime = operation.retryDelay;
-                console.log(`[OperationQueue] Waiting ${waitTime}ms for lock on '${operation.operationName}' (blocked by: ${check.blockedBy.join(', ')})`);
+                console.log(`[OperationQueue] Waiting ${waitTime}ms for lock on '${operation.operationName}' (blocked by: ${check.blockedBy.join(', ')}) [retry ${preCheckRetries}/${MAX_PRE_CHECK_RETRIES}]`);
 
                 // Wait before retry
                 await new Promise(resolve => setTimeout(resolve, waitTime));
                 continue;
             }
+
+            // Reset retry counter on successful check
+            preCheckRetries = 0;
 
             // Execute operation
             try {

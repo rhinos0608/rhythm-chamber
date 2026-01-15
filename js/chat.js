@@ -672,7 +672,7 @@ async function sendMessage(message, optionsOrKey = null) {
  * Execute LLM-requested tool calls and return the follow-up response message.
  * If a tool fails, returns an early result for the caller to surface.
  * 
- * CIRCUIT BREAKER: Max 5 function calls per turn, 5s timeout per function.
+ * CIRCUIT BREAKER: Max 5 function calls per turn, 30s timeout per function.
  */
 async function handleToolCalls(responseMessage, providerConfig, key, onProgress) {
     if (!responseMessage?.tool_calls || responseMessage.tool_calls.length === 0) {

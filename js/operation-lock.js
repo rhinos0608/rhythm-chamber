@@ -273,8 +273,7 @@ function getLockDetails() {
  * Force release all locks (emergency use only)
  * Use with caution - may leave operations in inconsistent state
  * @param {string} reason - Reason for force release (for logging)
- * @returns {string[]} Array of released operation names
- * @throws {LockForceReleaseError}
+ * @returns {{ released: string[], reason: string }} Released operations and reason
  */
 function forceReleaseAll(reason = 'Emergency') {
     const released = [...activeLocks.keys()];
@@ -283,7 +282,7 @@ function forceReleaseAll(reason = 'Emergency') {
     console.warn(`[OperationLock] Force released all locks: ${released.join(', ')} - Reason: ${reason}`);
     released.forEach(op => dispatchLockEvent('released', op));
 
-    throw new LockForceReleaseError(released, reason);
+    return { released, reason };
 }
 
 /**

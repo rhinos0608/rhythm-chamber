@@ -153,6 +153,40 @@ async function verifyBinding() {
     }
 }
 
+/**
+ * Verify device binding (READ-ONLY mode for diagnostics)
+ * Same checks as verifyBinding() but does NOT invalidate tokens on mismatch.
+ * Use this for status checks and diagnostics that should not mutate state.
+ * @returns {Promise<{ valid: boolean, reason?: string }>}
+ */
+async function verifyBindingReadOnly() {
+    // Always regenerate fingerprint for comparison
+    const currentFingerprint = await generateDeviceFingerprint();
+    _deviceFingerprint = currentFingerprint;
+
+    // Get stored binding
+    const bindingJson = localStorage.getItem(BINDING_KEY);
+
+    if (!bindingJson) {
+        // No binding exists yet
+        return { valid: true, reason: 'no_binding_yet' };
+    }
+
+    try {
+        const binding = JSON.parse(bindingJson);
+
+        if (binding.fingerprint !== currentFingerprint) {
+            // Return mismatch status WITHOUT invalidating tokens
+            return { valid: false, reason: 'fingerprint_mismatch' };
+        }
+
+        return { valid: true };
+    } catch (error) {
+        console.error('[SecureTokenStore] Binding verification error:', error);
+        return { valid: false, reason: 'binding_corrupted' };
+    }
+}
+
 // ==========================================
 // Token Operations (All require binding verification)
 // ==========================================
@@ -271,6 +305,15 @@ async function retrieve(tokenKey) {
  * @returns {Promise<boolean>}
  */
 async function invalidate(tokenKey) {
+    // MANDATORY: Verify binding first (consistent with store/retrieve)
+    const bindingResult = await verifyBinding();
+
+    if (!bindingResult.valid && bindingResult.reason !== 'no_binding_yet') {
+        console.error('[SecureTokenStore] Cannot invalidate: binding invalid -', bindingResult.reason);
+        audit('token_invalidate_blocked', { tokenKey, reason: bindingResult.reason });
+        return false;
+    }
+
     const storageKey = TOKEN_STORE_PREFIX + tokenKey;
 
     try {
@@ -298,10 +341,21 @@ async function invalidate(tokenKey) {
 async function invalidateAllTokens(reason) {
     console.warn('[SecureTokenStore] Invalidating ALL tokens - Reason:', reason);
 
+    let totalCleared = 0;
+
     try {
-        // Clear IndexedDB tokens
+        // Clear IndexedDB tokens and count them
         if (window.IndexedDBCore) {
-            await window.IndexedDBCore.clear(window.IndexedDBCore.STORES.TOKENS);
+            try {
+                // Try to get count before clearing if API available
+                if (window.IndexedDBCore.keys) {
+                    const idbKeys = await window.IndexedDBCore.keys(window.IndexedDBCore.STORES.TOKENS);
+                    totalCleared += idbKeys ? idbKeys.length : 0;
+                }
+                await window.IndexedDBCore.clear(window.IndexedDBCore.STORES.TOKENS);
+            } catch (idbError) {
+                console.warn('[SecureTokenStore] IndexedDB clear error:', idbError);
+            }
         }
 
         // Clear localStorage tokens
@@ -313,12 +367,13 @@ async function invalidateAllTokens(reason) {
             }
         }
         keysToRemove.forEach(key => localStorage.removeItem(key));
+        totalCleared += keysToRemove.length;
 
         // Clear binding
         localStorage.removeItem(BINDING_KEY);
         _bindingVerified = false;
 
-        audit('all_tokens_invalidated', { reason, count: keysToRemove.length });
+        audit('all_tokens_invalidated', { reason, count: totalCleared });
     } catch (error) {
         console.error('[SecureTokenStore] Invalidate all failed:', error);
     }
@@ -378,11 +433,12 @@ function clearAuditLog() {
 // ==========================================
 
 /**
- * Get store status
+ * Get store status (uses read-only binding check to avoid side effects)
  * @returns {Promise<Object>}
  */
 async function getStatus() {
-    const bindingResult = await verifyBinding();
+    // Use read-only verification to avoid side effects during diagnostics
+    const bindingResult = await verifyBindingReadOnly();
 
     return {
         initialized: _initialized,
