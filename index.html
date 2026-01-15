@@ -246,7 +246,12 @@
 
   <!-- Scripts -->
   <script src="js/config.js?v=1"></script>
-  <script src="js/settings.js?v=1"></script>
+  <!-- Settings module for landing page (ES module) -->
+  <script type="module">
+    import { Settings } from './js/settings.js';
+    // Expose to window for inline onclick handler in footer
+    window.Settings = Settings;
+  </script>
 </body>
 
 </html>
