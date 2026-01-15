@@ -47,8 +47,14 @@ function setUserContext(context) {
  * @returns {string} Fallback response
  */
 function generateFallbackResponse(message, queryContext) {
-    if (typeof _MessageOperations !== 'undefined') {
+    // Delegate to MessageOperations if available (truthy check since initialized to null)
+    if (_MessageOperations) {
         return _MessageOperations.generateFallbackResponse(message, queryContext);
+    }
+
+    // Guard: Return safe default if userContext not initialized
+    if (!_userContext || !_userContext.personality) {
+        return `I'm unable to process your request right now. Please try again after the chat is fully initialized.`;
     }
 
     // Fallback if MessageOperations not available

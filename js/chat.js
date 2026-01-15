@@ -84,13 +84,21 @@ async function initChat(personality, patterns, summary, streams = null) {
 
     // Initialize ToolCallHandlingService with dependencies
     if (window.ToolCallHandlingService?.init) {
+        // Pass a wrapper function for callLLM that routes through LLMProviderRoutingService
+        const callLLMWrapper = (...args) => {
+            if (window.LLMProviderRoutingService?.callLLM) {
+                return window.LLMProviderRoutingService.callLLM(...args);
+            }
+            throw new Error('LLMProviderRoutingService not available');
+        };
+
         window.ToolCallHandlingService.init({
             CircuitBreaker: window.CircuitBreaker,
             Functions: window.Functions,
             SessionManager: window.SessionManager,
             FunctionCallingFallback: window.FunctionCallingFallback,
             buildSystemPrompt: buildSystemPrompt,
-            callLLM: callLLM,
+            callLLM: callLLMWrapper,
             streamsData: streamsData,
             timeoutMs: CHAT_FUNCTION_TIMEOUT_MS
         });
@@ -572,8 +580,12 @@ async function sendMessage(message, optionsOrKey = null) {
         };
     }
 
-    // Build provider-specific config
-    const providerConfig = window.LLMProviderRoutingService.buildProviderConfig(provider, settings, config);
+    // Build provider-specific config (guard against missing service)
+    const providerConfig = window.LLMProviderRoutingService?.buildProviderConfig?.(provider, settings, config) || {
+        provider: provider,
+        model: settings.llm?.model || 'default',
+        baseUrl: settings[provider]?.baseUrl || ''
+    };
 
     // ==========================================
     // FUNCTION CALLING CAPABILITY DETECTION
