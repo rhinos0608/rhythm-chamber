@@ -165,11 +165,24 @@ function classifyPersonality(patterns) {
     const typeInfo = PERSONALITY_TYPES[primaryType];
     const primaryEvidence = evidence[primaryType];
 
-    // Collect all notable evidence
+    // Collect all notable evidence from scored patterns
     const allEvidence = [];
     for (const [type, items] of Object.entries(evidence)) {
         if (items.length > 0 && scores[type] > 0) {
             allEvidence.push(...items);
+        }
+    }
+
+    // Also include pattern descriptions that weren't in scored evidence
+    // This ensures users see ALL detected patterns, not just those that contributed to scoring
+    const patternFields = [
+        'comfortDiscovery', 'eras', 'timePatterns', 'socialPatterns',
+        'ghostedArtists', 'discoveryExplosions', 'moodSearching', 'trueFavorites'
+    ];
+    for (const field of patternFields) {
+        const pattern = patterns[field];
+        if (pattern?.description && !allEvidence.includes(pattern.description)) {
+            allEvidence.push(pattern.description);
         }
     }
 
@@ -187,7 +200,7 @@ function classifyPersonality(patterns) {
         confidence: calculateConfidence(scores),
         secondaryType: secondaryType ? PERSONALITY_TYPES[secondaryType].name : null,
         evidence: primaryEvidence,
-        allEvidence: [...new Set(allEvidence)].slice(0, 5),
+        allEvidence: [...new Set(allEvidence)].slice(0, 8),
         scores,
         breakdown,
         dataInsights // New field for prompt injection

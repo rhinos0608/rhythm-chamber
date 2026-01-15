@@ -322,7 +322,7 @@ For teams or businesses needing help:
 
 1. **Value privacy** → Local-first, BYOI
 2. **Want control** → Transparent, configurable
-3. **Understand APIs** → Can set up keys
+3. **Understand APIs** → Can set up keys, local models
 4. **Appreciate simplicity** → Zero backend
 
-**If you can set up an API key, you can use Rhythm Chamber. If you can't, it's not for you—and that's intentional.**
+

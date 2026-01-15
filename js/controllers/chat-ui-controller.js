@@ -69,8 +69,8 @@ function parseMarkdown(text) {
     // Process bold: **text** or __text__
     // Use a more specific pattern to avoid matching within words
     processedText = processedText
-        .replace(/\*\*([^\*\*]+)\*\*/g, '<strong>$1</strong>')
-        .replace(/__([^_]+)__/g, '<strong>$1</strong>');
+        .replace(/\*\*([\s\S]+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/__([\s\S]+?)__/g, '<strong>$1</strong>');
 
     // Process italic: *text* or _text_
     // Use negative lookahead/lookbehind to avoid matching within bold
@@ -90,7 +90,7 @@ function parseMarkdown(text) {
         .replace(/\n/g, '<br>');
 
     // Wrap in paragraphs if we have content
-    if (processedText.includes('</p><p>') || !processedText.includes('<br>')) {
+    if (!processedText.includes('<p>') && !processedText.includes('</p>')) {
         processedText = `<p>${processedText}</p>`;
     }
 
