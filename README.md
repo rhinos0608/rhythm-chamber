@@ -1,6 +1,6 @@
 # Rhythm Chamber
 
-**Understand why your music matters.**
+**Your AI writes your musical story. Every time you visit. On your device. Watching you evolve.**
 
 Your complete listening history is too big for ChatGPT. We handle it locally, with privacy, semantic search, and accurate data queries. Upload your Spotify export and ask questions like:
 
@@ -8,13 +8,14 @@ Your complete listening history is too big for ChatGPT. We handle it locally, wi
 - "How did my taste change after college?"
 - "When did I stop listening to The National, and why?"
 
-Plus: Get your listener personality type based on actual patterns in your data.
+Plus: Your AI notices your patterns and writes personalized narratives about your musical journey.
 
 ---
 
-## Why Rhythm Chamber?
+## The Three-Layer Value Stack
 
-### Stats.fm Shows **WHAT**. We Show **WHY & WHO**.
+### Layer 1: Emotional Value
+**Your AI notices your patterns. Writes personalized narratives. Witnesses your evolution. Creates meaning from data.**
 
 | Stats.fm | Rhythm Chamber |
 |----------|----------------|
@@ -24,7 +25,8 @@ Plus: Get your listener personality type based on actual patterns in your data.
 | Full history + real-time | Full history only (depth over speed) |
 | Low technical barrier | BYOI model (power users bring their own intelligence) |
 
-### The Zero-Backend Advantage
+### Layer 2: Privacy Value
+**Data never leaves your device. Your AI, not a company's AI. Structurally private by design. Verifiable through open source.**
 
 **Stats.fm needs servers** → They must monetize → They control your data → You depend on them
 
@@ -32,13 +34,21 @@ Plus: Get your listener personality type based on actual patterns in your data.
 
 **This isn't "too cheap to host AI" — it's "respecting power users' desire for control."**
 
+### Layer 3: Control Value
+**Choose your AI provider. Own your data completely. No vendor lock-in. Full transparency.**
+
+- **Pick the compute**: Local models (Ollama/LM Studio) for zero cloud calls, or cloud via OpenRouter when convenient
+- **Own the keys**: Only provide keys when you want cloud; local stays keyless and offline
+- **Sovereignty**: Choose model + vector store, keep RAG credentials encrypted client-side
+- **No black box**: They control the intelligence, we provide the orchestration
+
 ---
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
-| [Product Vision](docs/01-product-vision.md) | Chat-first positioning, competitive moat |
+| [Product Vision](docs/01-product-vision.md) | Emotional witness positioning, competitive moat |
 | [User Experience](docs/02-user-experience.md) | Natural language queries, semantic search |
 | [Technical Architecture](docs/03-technical-architecture.md) | Zero-backend, BYOI architecture |
 | [Intelligence Engine](docs/04-intelligence-engine.md) | Personality types, data depth |
@@ -63,7 +73,6 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 5. **Privacy-First** — Your data never leaves your device
 6. **Power User Focus** — If you can set up an API key, you can use Rhythm Chamber
 
-
 ### What Stats.fm Can't Match
 
 - **"Your data never leaves your device"** — For the quantified-self crowd, this is hugely compelling
@@ -80,7 +89,6 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 - Understand API keys (technical)
 - Appreciate transparency (no black box)
 - Willing to pay for their own infrastructure (sovereignty)
-
 
 ---
 
@@ -224,7 +232,6 @@ The data export friction is real, but the payoff is self-discovery and deeper co
 
 - Integrated with AI bundle
 
-
 ### Strategy 2: The "Social Resonance" Tier
 **Value Prop:** Compare your data with others. Your docs mention a "Friend Compare via JSON". Currently, this is a feature. Make the Deep Comparison Report the paid product.
 
@@ -239,8 +246,6 @@ The data export friction is real, but the payoff is self-discovery and deeper co
 **Why it works:** It forces a viral loop. One user buys it to analyze their partner/friend. It sells the outcome (relationship insight), not the tool.
 
 **Price:** $2 monthly (Lower friction to encourage viral adoption).
-
-
 
 ### Recommendation
 Combine Strategy 1 (PKM Export) and Strategy 2 (Comparison) into the "Supporter" tier.

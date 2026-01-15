@@ -18,7 +18,9 @@
 // Constants
 // ==========================================
 
-const MAX_CALLS_PER_TURN = 5;  // Max 5 function calls per message
+// Note: MAX_CALLS_PER_TURN removed per user request.
+// Function calls are now sequential (async/await), not limited.
+// Only timeout and circuit open/close states are enforced.
 const TIMEOUT_MS = 5000;       // 5 second timeout per function
 const COOLDOWN_MS = 60000;     // 1 minute cooldown after trip
 
@@ -73,19 +75,9 @@ function check() {
         }
     }
 
-    // Check call limit
-    if (turnCallCount >= MAX_CALLS_PER_TURN) {
-        trip('max_calls_exceeded');
-        return {
-            allowed: false,
-            reason: 'max_calls_exceeded',
-            callsRemaining: 0
-        };
-    }
-
+    // No call count limit - calls are sequential via async/await
     return {
-        allowed: true,
-        callsRemaining: MAX_CALLS_PER_TURN - turnCallCount
+        allowed: true
     };
 }
 
@@ -97,7 +89,7 @@ function recordCall() {
     turnCallCount++;
     stats.totalCalls++;
 
-    console.log(`[CircuitBreaker] Call ${turnCallCount}/${MAX_CALLS_PER_TURN}`);
+    console.log(`[CircuitBreaker] Call #${turnCallCount}`);
     // Note: State transition moved to recordSuccess() - only transition after fn() succeeds
 }
 
@@ -178,8 +170,6 @@ function getStatus() {
     return {
         state: currentState,
         turnCalls: turnCallCount,
-        maxCalls: MAX_CALLS_PER_TURN,
-        callsRemaining: MAX_CALLS_PER_TURN - turnCallCount,
         totalCalls: stats.totalCalls,
         totalTrips: stats.totalTrips,
         tripsThisTurn: stats.tripsThisTurn,
@@ -239,8 +229,6 @@ async function execute(functionName, fn) {
  */
 function getErrorMessage(reason) {
     switch (reason) {
-        case 'max_calls_exceeded':
-            return `⚠️ Too many function calls (max ${MAX_CALLS_PER_TURN} per message). Try simplifying your question.`;
         case 'circuit_open':
             return '⚠️ Function calling temporarily disabled. Please wait a moment and try again.';
         default:
@@ -254,7 +242,6 @@ function getErrorMessage(reason) {
 
 export const CircuitBreaker = {
     // Constants
-    MAX_CALLS_PER_TURN,
     TIMEOUT_MS,
     STATE,
 
@@ -284,4 +271,5 @@ if (typeof window !== 'undefined') {
     window.CircuitBreaker = CircuitBreaker;
 }
 
-console.log('[CircuitBreaker] Module loaded (max ' + MAX_CALLS_PER_TURN + ' calls/turn, ' + TIMEOUT_MS + 'ms timeout)');
+console.log('[CircuitBreaker] Module loaded (' + TIMEOUT_MS + 'ms timeout, no call limit)');
+

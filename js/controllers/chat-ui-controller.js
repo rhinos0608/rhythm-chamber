@@ -137,6 +137,9 @@ function addMessage(text, role, isError = false, options = {}) {
         addUserMessageActions(messageEl, text);
     } else if (role === 'assistant' && !isError && options.actions !== false) {
         addAssistantMessageActions(messageEl, text);
+    } else if (role === 'assistant' && isError) {
+        // Add retry button for error messages
+        addErrorMessageActions(messageEl);
     }
 
     messages.appendChild(messageEl);
@@ -231,6 +234,32 @@ function addAssistantMessageActions(messageEl, text) {
         }
     };
     actionsDiv.appendChild(deleteBtn);
+
+    messageEl.appendChild(actionsDiv);
+}
+
+/**
+ * Add action buttons to error messages (Try Again)
+ * @param {HTMLElement} messageEl - Message element
+ */
+function addErrorMessageActions(messageEl) {
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'message-actions error-actions';
+
+    // Try Again button
+    const retryBtn = document.createElement('button');
+    retryBtn.className = 'action-btn retry';
+    retryBtn.innerHTML = '↻ Try Again';
+    retryBtn.title = 'Try Again';
+    retryBtn.onclick = async () => {
+        if (window.processMessageResponse && window.Chat?.regenerateLastResponse) {
+            messageEl.remove();
+            await window.processMessageResponse((options) =>
+                window.Chat.regenerateLastResponse(options)
+            );
+        }
+    };
+    actionsDiv.appendChild(retryBtn);
 
     messageEl.appendChild(actionsDiv);
 }

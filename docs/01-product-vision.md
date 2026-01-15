@@ -2,7 +2,7 @@
 
 ## The Insight
 
-**Understand why your music matters.**
+**Your AI writes your musical story. Every time you visit. On your device. Watching you evolve.**
 
 Your complete listening history is too big for ChatGPT. We handle it locally, with privacy, semantic search, and accurate data queries. Upload your Spotify export and ask questions like:
 
@@ -10,7 +10,7 @@ Your complete listening history is too big for ChatGPT. We handle it locally, wi
 - "How did my taste change after college?"
 - "When did I stop listening to The National, and why?"
 
-Plus: Get your listener personality type based on actual patterns in your data.
+Plus: Your AI notices your patterns and writes personalized narratives about your musical journey.
 
 ---
 
@@ -23,7 +23,7 @@ Plus: Get your listener personality type based on actual patterns in your data.
 - Zero-backend architecture—your data never leaves your device
 
 > [!IMPORTANT]
-> **Core positioning:** We don't show you stats. We help you understand yourself.
+> **Core positioning:** We don't show you stats. We help you understand yourself through your AI witness.
 
 ---
 
@@ -171,7 +171,6 @@ The data export friction is real, but the payoff is self-discovery and deeper co
 
 - Integrated with AI bundle
 
-
 ### Strategy 2: The "Social Resonance" Tier
 **Value Prop:** Compare your data with others. Your docs mention a "Friend Compare via JSON". Currently, this is a feature. Make the Deep Comparison Report the paid product.
 
@@ -186,8 +185,6 @@ The data export friction is real, but the payoff is self-discovery and deeper co
 **Why it works:** It forces a viral loop. One user buys it to analyze their partner/friend. It sells the outcome (relationship insight), not the tool.
 
 **Price:** $2 monthly (Lower friction to encourage viral adoption).
-
-
 
 ### Recommendation
 Combine Strategy 1 (PKM Export) and Strategy 2 (Comparison) into the "Supporter" tier.
