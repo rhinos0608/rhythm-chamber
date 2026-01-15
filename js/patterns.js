@@ -788,6 +788,94 @@ function detectImmediateVibe(liteData) {
     return insight.trim();
 }
 
+// ==========================================
+// Async Pattern Detection (Web Worker)
+// ==========================================
+
+let patternWorker = null;
+
+/**
+ * Detect all patterns asynchronously using Web Worker
+ * Use for large datasets (100k+ streams) to avoid UI freezing
+ * 
+ * @param {Array} streams - Streaming history
+ * @param {Array} chunks - Weekly/monthly chunks
+ * @param {Function} onProgress - Progress callback (current, total, message)
+ * @returns {Promise<Object>} Detected patterns
+ */
+async function detectAllPatternsAsync(streams, chunks, onProgress = () => { }) {
+    // For small datasets, use sync detection (faster, no worker overhead)
+    const WORKER_THRESHOLD = 10000;
+    if (streams.length < WORKER_THRESHOLD) {
+        console.log('[Patterns] Using sync detection for small dataset');
+        return detectAllPatterns(streams, chunks);
+    }
+
+    // Check for Web Worker support
+    if (typeof Worker === 'undefined') {
+        console.warn('[Patterns] Web Workers not supported, falling back to sync');
+        return detectAllPatterns(streams, chunks);
+    }
+
+    // Create worker if not already created
+    if (!patternWorker) {
+        try {
+            patternWorker = new Worker('js/workers/pattern-worker.js');
+        } catch (e) {
+            console.warn('[Patterns] Failed to create worker, falling back to sync:', e.message);
+            return detectAllPatterns(streams, chunks);
+        }
+    }
+
+    return new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+            reject(new Error('Pattern detection timed out (60s)'));
+            cleanupPatternWorker();
+        }, 60000);
+
+        patternWorker.onmessage = (e) => {
+            const { type, patterns, current, total, message, error } = e.data;
+
+            switch (type) {
+                case 'progress':
+                    onProgress(current, total, message);
+                    break;
+
+                case 'complete':
+                    clearTimeout(timeoutId);
+                    resolve(patterns);
+                    break;
+
+                case 'error':
+                    clearTimeout(timeoutId);
+                    reject(new Error(error));
+                    cleanupPatternWorker();
+                    break;
+            }
+        };
+
+        patternWorker.onerror = (err) => {
+            clearTimeout(timeoutId);
+            reject(new Error(err.message || 'Worker error'));
+            cleanupPatternWorker();
+        };
+
+        // Start detection
+        onProgress(0, 8, 'Starting pattern detection...');
+        patternWorker.postMessage({ type: 'detect', streams, chunks });
+    });
+}
+
+/**
+ * Clean up pattern worker
+ */
+function cleanupPatternWorker() {
+    if (patternWorker) {
+        patternWorker.terminate();
+        patternWorker = null;
+    }
+}
+
 // ES Module export
 export const Patterns = {
     detectComfortDiscoveryRatio,
@@ -799,6 +887,8 @@ export const Patterns = {
     detectMoodSearching,
     detectTrueFavorites,
     detectAllPatterns,
+    detectAllPatternsAsync,
+    cleanupPatternWorker,
     detectLitePatterns,
     detectImmediateVibe
 };
@@ -808,4 +898,4 @@ if (typeof window !== 'undefined') {
     window.Patterns = Patterns;
 }
 
-console.log('[Patterns] Module loaded');
+console.log('[Patterns] Module loaded with async worker support');

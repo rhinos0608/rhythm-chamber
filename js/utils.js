@@ -197,6 +197,166 @@ function formatDuration(seconds) {
     }
 }
 
+// ==========================================
+// Storage Circuit Breaker
+// ==========================================
+
+/**
+ * Circuit breaker for storage fallback operations
+ * 
+ * Prevents 4 serial timeout attempts (2+ min waits) during onboarding
+ * by failing fast after consecutive failures.
+ * 
+ * Usage:
+ *   const breaker = StorageCircuitBreaker.getBreaker('indexeddb');
+ *   if (breaker.canAttempt()) {
+ *       try {
+ *           const result = await indexedDBOperation();
+ *           breaker.recordSuccess();
+ *           return result;
+ *       } catch (e) {
+ *           breaker.recordFailure();
+ *           // Fall back to next storage option
+ *       }
+ *   }
+ */
+const StorageCircuitBreaker = {
+    // Breaker instances by name
+    _breakers: {},
+
+    // Configuration
+    MAX_FAILURES: 2,           // Max consecutive failures before circuit opens
+    COOLDOWN_MS: 30000,        // 30 second cooldown before retry
+    HALF_OPEN_TIMEOUT_MS: 5000, // Fast timeout when testing after cooldown
+
+    /**
+     * Get or create a circuit breaker for a storage type
+     * @param {string} name - Storage type name (e.g., 'indexeddb', 'localStorage')
+     * @returns {Object} Circuit breaker instance
+     */
+    getBreaker(name) {
+        if (!this._breakers[name]) {
+            this._breakers[name] = {
+                name,
+                state: 'closed',      // closed, open, half-open
+                failureCount: 0,
+                lastFailureTime: null,
+                lastSuccessTime: null
+            };
+        }
+        return this._breakers[name];
+    },
+
+    /**
+     * Check if an operation can be attempted
+     * @param {string} name - Storage type name
+     * @returns {boolean} True if operation should be attempted
+     */
+    canAttempt(name) {
+        const breaker = this.getBreaker(name);
+
+        if (breaker.state === 'closed') {
+            return true;
+        }
+
+        if (breaker.state === 'open') {
+            // Check if cooldown has passed
+            if (Date.now() - breaker.lastFailureTime >= this.COOLDOWN_MS) {
+                breaker.state = 'half-open';
+                console.log(`[StorageCircuitBreaker] ${name}: Transitioning to half-open`);
+                return true;
+            }
+            return false;
+        }
+
+        // half-open: allow one test attempt
+        return true;
+    },
+
+    /**
+     * Record a successful operation
+     * @param {string} name - Storage type name
+     */
+    recordSuccess(name) {
+        const breaker = this.getBreaker(name);
+        breaker.failureCount = 0;
+        breaker.lastSuccessTime = Date.now();
+
+        if (breaker.state !== 'closed') {
+            breaker.state = 'closed';
+            console.log(`[StorageCircuitBreaker] ${name}: Circuit closed (success)`);
+        }
+    },
+
+    /**
+     * Record a failed operation
+     * @param {string} name - Storage type name
+     */
+    recordFailure(name) {
+        const breaker = this.getBreaker(name);
+        breaker.failureCount++;
+        breaker.lastFailureTime = Date.now();
+
+        if (breaker.state === 'half-open') {
+            // Failed during test - back to open
+            breaker.state = 'open';
+            console.log(`[StorageCircuitBreaker] ${name}: Back to open (test failed)`);
+        } else if (breaker.failureCount >= this.MAX_FAILURES) {
+            breaker.state = 'open';
+            console.warn(`[StorageCircuitBreaker] ${name}: Circuit opened after ${breaker.failureCount} failures`);
+        }
+    },
+
+    /**
+     * Get timeout for current attempt (shorter in half-open state)
+     * @param {string} name - Storage type name
+     * @param {number} defaultTimeout - Default timeout in ms
+     * @returns {number} Timeout to use
+     */
+    getTimeout(name, defaultTimeout = 30000) {
+        const breaker = this.getBreaker(name);
+        return breaker.state === 'half-open' ? this.HALF_OPEN_TIMEOUT_MS : defaultTimeout;
+    },
+
+    /**
+     * Get status of all breakers
+     * @returns {Object} Status object
+     */
+    getStatus() {
+        const status = {};
+        for (const [name, breaker] of Object.entries(this._breakers)) {
+            status[name] = {
+                state: breaker.state,
+                failures: breaker.failureCount,
+                lastFailure: breaker.lastFailureTime,
+                lastSuccess: breaker.lastSuccessTime
+            };
+        }
+        return status;
+    },
+
+    /**
+     * Reset a specific breaker
+     * @param {string} name - Storage type name
+     */
+    reset(name) {
+        if (this._breakers[name]) {
+            this._breakers[name].state = 'closed';
+            this._breakers[name].failureCount = 0;
+            console.log(`[StorageCircuitBreaker] ${name}: Reset`);
+        }
+    },
+
+    /**
+     * Reset all breakers
+     */
+    resetAll() {
+        for (const name of Object.keys(this._breakers)) {
+            this.reset(name);
+        }
+    }
+};
+
 // ES Module export
 export const Utils = {
     fetchWithTimeout,
@@ -205,13 +365,14 @@ export const Utils = {
     sleep,
     simpleHash,
     debounce,
-    formatDuration
+    formatDuration,
+    StorageCircuitBreaker
 };
 
 // Keep window global for backwards compatibility
 if (typeof window !== 'undefined') {
     window.Utils = Utils;
+    window.StorageCircuitBreaker = StorageCircuitBreaker;
 }
 
-console.log('[Utils] Module loaded');
-
+console.log('[Utils] Module loaded with StorageCircuitBreaker');
