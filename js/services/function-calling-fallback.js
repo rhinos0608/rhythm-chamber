@@ -82,12 +82,9 @@ const FUNCTION_CALL_PATTERNS = {
     codeBlock: /```function_call\s*\n([\s\S]*?)\n```/gi,
 
     // JSON object with name and arguments (less reliable)
-    // NOTE: This is a last-resort fallback pattern. It uses a more permissive regex to allow
-    // nested braces in arguments, but may still not perfectly handle arbitrarily deep nesting.
-    // The pattern captures the function name and attempts to match the arguments object with
-    // simple nesting (one level deep). For complex nested structures, the XML tag or code block
-    // patterns above are more reliable.
-    jsonObject: /\{"name"\s*:\s*"(\w+)"\s*,\s*"arguments"\s*:\s*(\{[\s\S]*?\})\s*\}/gi
+    // NOTE: This is a last-resort fallback pattern. It only captures the function name and
+    // the start of the arguments object; the arguments payload is parsed using brace balancing.
+    jsonObject: /\{\s*"name"\s*:\s*"(\w+)"\s*,\s*"arguments"\s*:\s*\{/gi
 };
 
 /**
@@ -316,6 +313,44 @@ export function parseFunctionCallsFromText(content) {
     if (!content || typeof content !== 'string') return [];
 
     const calls = [];
+    const extractArgumentsObject = (text, startIndex) => {
+        if (text[startIndex] !== '{') return null;
+
+        let depth = 0;
+        let inString = false;
+
+        const isEscaped = (index) => {
+            let backslashCount = 0;
+            let cursor = index - 1;
+            while (cursor >= 0 && text[cursor] === '\\') {
+                backslashCount++;
+                cursor--;
+            }
+            return backslashCount % 2 === 1;
+        };
+
+        for (let i = startIndex; i < text.length; i++) {
+            const char = text[i];
+
+            if (char === '"' && !isEscaped(i)) {
+                inString = !inString;
+                continue;
+            }
+
+            if (inString) continue;
+
+            if (char === '{') {
+                depth++;
+            } else if (char === '}') {
+                depth--;
+                if (depth === 0) {
+                    return text.slice(startIndex, i + 1);
+                }
+            }
+        }
+
+        return null;
+    };
 
     // Try XML tag pattern first (most reliable)
     let match;
@@ -357,14 +392,24 @@ export function parseFunctionCallsFromText(content) {
     // Last resort: try JSON object pattern (higher false positive risk)
     const jsonRegex = new RegExp(FUNCTION_CALL_PATTERNS.jsonObject.source, 'gi');
     while ((match = jsonRegex.exec(content)) !== null) {
+        const matchedString = match[0];
+        const functionName = match[1];
+        const argsStartIndex = match.index + matchedString.length - 1; // Opening brace for arguments
+        const argsString = extractArgumentsObject(content, argsStartIndex);
+
+        if (!argsString) {
+            console.warn('[FunctionFallback] Failed to locate balanced arguments for JSON function call');
+            continue;
+        }
+
         try {
-            const args = JSON.parse(match[2]);
+            const args = JSON.parse(argsString);
             calls.push({
-                name: match[1],
+                name: functionName,
                 arguments: args
             });
         } catch (e) {
-            console.warn('[FunctionFallback] Failed to parse JSON function call');
+            console.warn('[FunctionFallback] Failed to parse JSON function call arguments');
         }
     }
 
