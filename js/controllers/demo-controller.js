@@ -19,6 +19,139 @@ let _ViewController = null;
 let _showToast = null;
 
 // ==========================================
+// Demo Storage Namespace
+// HNW Defensive: Complete isolation of demo data from user data
+// ==========================================
+
+const DEMO_STORAGE_PREFIX = 'demo_';
+const DEMO_SESSION_KEY = 'rhythm_chamber_demo_session';
+
+/**
+ * Demo-specific storage wrapper
+ * Uses prefixed keys to ensure complete isolation from user data
+ * All data is session-only - never persisted to IndexedDB
+ */
+const DemoStorage = {
+    // In-memory cache for demo session data
+    _cache: new Map(),
+    _initialized: false,
+
+    /**
+     * Initialize demo storage with safeguards
+     */
+    init() {
+        if (this._initialized) return;
+
+        this._cache.clear();
+        this._initialized = true;
+        console.log('[DemoStorage] Initialized with isolated namespace');
+    },
+
+    /**
+     * Set demo data (session-only, never persisted)
+     * @param {string} key - Data key
+     * @param {*} value - Data value (any serializable type)
+     */
+    set(key, value) {
+        if (!this._initialized) this.init();
+
+        const prefixedKey = DEMO_STORAGE_PREFIX + key;
+        this._cache.set(prefixedKey, value);
+
+        // Also store in sessionStorage for tab persistence
+        try {
+            sessionStorage.setItem(prefixedKey, JSON.stringify(value));
+        } catch (e) {
+            console.warn('[DemoStorage] SessionStorage write failed:', e.message);
+        }
+    },
+
+    /**
+     * Get demo data
+     * @param {string} key - Data key
+     * @returns {*} Stored value or null
+     */
+    get(key) {
+        if (!this._initialized) this.init();
+
+        const prefixedKey = DEMO_STORAGE_PREFIX + key;
+
+        // Check memory cache first
+        if (this._cache.has(prefixedKey)) {
+            return this._cache.get(prefixedKey);
+        }
+
+        // Fall back to sessionStorage
+        try {
+            const stored = sessionStorage.getItem(prefixedKey);
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                this._cache.set(prefixedKey, parsed);
+                return parsed;
+            }
+        } catch (e) {
+            console.warn('[DemoStorage] SessionStorage read failed:', e.message);
+        }
+
+        return null;
+    },
+
+    /**
+     * Clear all demo data
+     */
+    clear() {
+        this._cache.clear();
+
+        // Clear all demo-prefixed sessionStorage keys
+        try {
+            const keysToRemove = [];
+            for (let i = 0; i < sessionStorage.length; i++) {
+                const key = sessionStorage.key(i);
+                if (key && key.startsWith(DEMO_STORAGE_PREFIX)) {
+                    keysToRemove.push(key);
+                }
+            }
+            keysToRemove.forEach(key => sessionStorage.removeItem(key));
+        } catch (e) {
+            console.warn('[DemoStorage] SessionStorage clear failed:', e.message);
+        }
+
+        this._initialized = false;
+        console.log('[DemoStorage] Cleared all demo data');
+    },
+
+    /**
+     * Check if demo storage has data
+     * @returns {boolean}
+     */
+    hasData() {
+        return this._cache.size > 0 || this.get('streams') !== null;
+    },
+
+    /**
+     * Validate demo data integrity
+     * @returns {{ valid: boolean, reason?: string }}
+     */
+    validate() {
+        const streams = this.get('streams');
+        const patterns = this.get('patterns');
+        const personality = this.get('personality');
+
+        if (!streams || !Array.isArray(streams)) {
+            return { valid: false, reason: 'Missing or invalid demo streams' };
+        }
+        if (!patterns || typeof patterns !== 'object') {
+            return { valid: false, reason: 'Missing or invalid demo patterns' };
+        }
+        if (!personality || typeof personality !== 'object') {
+            return { valid: false, reason: 'Missing or invalid demo personality' };
+        }
+
+        return { valid: true };
+    }
+};
+
+// ==========================================
 // Core Functions
 // ==========================================
 
@@ -38,6 +171,7 @@ function init(dependencies) {
 /**
  * Load demo mode with pre-computed "The Emo Teen" persona
  * Uses in-memory storage to avoid mixing with user's real data
+ * HNW Defensive: Uses DemoStorage for complete isolation from IndexedDB
  * ATOMIC: Locks UI and flushes pending operations before state change
  * @returns {Promise<void>}
  */
@@ -62,11 +196,26 @@ async function loadDemoMode() {
         // Get demo data package
         const demoPackage = _DemoData.getFullDemoPackage();
 
-        // Load demo data into ISOLATED demo domain (not main data domain)
-        // HNW: Prevents demo data from polluting real user data
+        // HNW Defensive: Initialize isolated demo storage
+        DemoStorage.init();
+
+        // Store demo data in ISOLATED DemoStorage (session-only, never IndexedDB)
         _ViewController.updateProgress('Loading sample streaming history...');
         await new Promise(r => setTimeout(r, 300));
 
+        DemoStorage.set('streams', demoPackage.streams);
+        DemoStorage.set('patterns', demoPackage.patterns);
+        DemoStorage.set('personality', demoPackage.personality);
+        DemoStorage.set('loadedAt', Date.now());
+
+        // Validate demo data integrity before proceeding
+        const validation = DemoStorage.validate();
+        if (!validation.valid) {
+            throw new Error(validation.reason);
+        }
+
+        // Also update AppState for UI components that read from it
+        // But the authoritative source is now DemoStorage
         _AppState.update('demo', {
             isDemoMode: true,
             streams: demoPackage.streams,
@@ -86,7 +235,7 @@ async function loadDemoMode() {
         // Pre-load chat with demo-specific suggestions
         setupDemoChatSuggestions();
 
-        console.log('[DemoController] Demo mode loaded successfully (data isolated in demo domain)');
+        console.log('[DemoController] Demo mode loaded (isolated in DemoStorage + AppState)');
     } catch (error) {
         console.error('[DemoController] Demo mode load failed:', error);
         if (_showToast) {
@@ -287,12 +436,16 @@ function getActiveData() {
 
 /**
  * Exit demo mode
+ * HNW Defensive: Clears both DemoStorage and AppState to ensure complete cleanup
  * @returns {Promise<void>}
  */
 async function exitDemoMode() {
     if (!_AppState || !_ViewController) return;
 
-    // Clear demo state
+    // HNW Defensive: Clear isolated demo storage first
+    DemoStorage.clear();
+
+    // Clear demo state from AppState
     _AppState.update('demo', {
         isDemoMode: false,
         streams: null,
@@ -353,12 +506,15 @@ export const DemoController = {
     isDemoMode,
     getActiveData,
     exitDemoMode,
-    validateDemoData
+    validateDemoData,
+    // HNW Defensive: Export DemoStorage for testing and debugging
+    DemoStorage
 };
 
 // Make available globally for backwards compatibility
 if (typeof window !== 'undefined') {
     window.DemoController = DemoController;
+    window.DemoStorage = DemoStorage;
 }
 
 console.log('[DemoController] Controller loaded');

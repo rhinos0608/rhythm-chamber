@@ -18,6 +18,8 @@
  * Execute a function call against the user's streaming data
  * Routes to appropriate executor based on function name
  * 
+ * HNW Defensive: Validates arguments against schema to catch drift early
+ * 
  * @param {string} functionName - Name of the function to execute
  * @param {Object} args - Arguments passed by the LLM
  * @param {Array} streams - User's streaming data
@@ -26,6 +28,22 @@
 async function executeFunction(functionName, args, streams) {
     const validation = window.FunctionValidation;
     const retry = window.FunctionRetry;
+
+    // HNW Hierarchy: Check function exists before any processing
+    if (!hasFunction(functionName)) {
+        console.warn(`[Functions] Unknown function requested: ${functionName}`);
+        return { error: `Unknown function: ${functionName}` };
+    }
+
+    // HNW Defensive: Validate arguments against schema
+    const argsValidation = validateFunctionArgs(functionName, args);
+    if (!argsValidation.valid) {
+        console.warn(`[Functions] Schema validation failed for ${functionName}:`, argsValidation.errors);
+        return {
+            error: `Invalid arguments for ${functionName}: ${argsValidation.errors.join(', ')}`,
+            validationErrors: argsValidation.errors
+        };
+    }
 
     // Template functions don't require user streams
     const templateFunctionNames = window.TemplateFunctionNames || [];
@@ -84,6 +102,78 @@ async function executeFunction(functionName, args, streams) {
     } catch (err) {
         return { error: `Failed to execute ${functionName}: ${err.message}` };
     }
+}
+
+// ==========================================
+// Schema Validation
+// ==========================================
+
+/**
+ * Validate function arguments against schema definition
+ * HNW Defensive: Catches schema drift and invalid LLM outputs
+ * 
+ * @param {string} functionName - Name of function
+ * @param {Object} args - Arguments to validate
+ * @returns {{ valid: boolean, errors: string[] }}
+ */
+function validateFunctionArgs(functionName, args) {
+    const errors = [];
+
+    // Get schema for this function
+    const schema = getFunctionSchema(functionName);
+    if (!schema) {
+        // No schema = no validation (fail-open for backwards compatibility)
+        return { valid: true, errors: [] };
+    }
+
+    const properties = schema.function?.parameters?.properties || {};
+    const required = schema.function?.parameters?.required || [];
+
+    // Check required parameters
+    for (const param of required) {
+        if (args?.[param] === undefined || args?.[param] === null) {
+            errors.push(`Missing required parameter: ${param}`);
+        }
+    }
+
+    // Validate parameter types
+    if (args && typeof args === 'object') {
+        for (const [key, value] of Object.entries(args)) {
+            const paramSchema = properties[key];
+
+            // Unknown parameter (not in schema) - log but don't fail
+            if (!paramSchema) {
+                console.warn(`[Functions] Unknown parameter '${key}' for ${functionName}`);
+                continue;
+            }
+
+            // Type validation
+            const expectedType = paramSchema.type;
+            const actualType = Array.isArray(value) ? 'array' : typeof value;
+
+            if (expectedType && actualType !== expectedType) {
+                // Allow string to number coercion for LLM outputs
+                if (expectedType === 'integer' && typeof value === 'number') {
+                    continue; // integers are numbers in JS
+                }
+                if (expectedType === 'number' && typeof value === 'string' && !isNaN(Number(value))) {
+                    continue; // coercible string
+                }
+
+                errors.push(`Parameter '${key}' expected ${expectedType}, got ${actualType}`);
+            }
+
+            // Enum validation
+            if (paramSchema.enum && !paramSchema.enum.includes(value)) {
+                errors.push(`Parameter '${key}' must be one of: ${paramSchema.enum.join(', ')}`);
+            }
+        }
+    }
+
+    return {
+        valid: errors.length === 0,
+        errors
+    };
 }
 
 // ==========================================

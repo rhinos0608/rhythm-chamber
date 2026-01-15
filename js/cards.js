@@ -102,10 +102,11 @@ async function shareCard(personality, options = {}) {
         if (fallbackToDownload) {
             console.log('[Cards] Attempting fallback download due to blob generation failure');
             try {
-                downloadCard(personality);
+                await downloadCard(personality);
                 return 'downloaded';
             } catch (downloadError) {
                 console.error('[Cards] Fallback download also failed:', downloadError);
+                return 'failed';
             }
         }
         throw new Error(`Failed to generate shareable image for personality "${personality?.name || 'unknown'}". The canvas may be tainted by cross-origin content.`);
@@ -161,8 +162,13 @@ async function shareCard(personality, options = {}) {
 
     // Fallback: Download the card if Web Share is unavailable or failed
     if (fallbackToDownload) {
-        downloadCard(personality);
-        return 'downloaded';
+        try {
+            await downloadCard(personality);
+            return 'downloaded';
+        } catch (downloadError) {
+            console.error('[Cards] Fallback download failed:', downloadError);
+            return 'failed';
+        }
     }
 
     return 'cancelled';

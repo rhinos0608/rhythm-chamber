@@ -12,7 +12,54 @@
 // ==========================================
 
 const CHANNEL_NAME = 'rhythm_chamber_coordination';
-const ELECTION_WINDOW_MS = 300; // Wait time for all candidates to announce
+
+/**
+ * Calculate adaptive election window based on device performance
+ * HNW Wave: Accounts for device speed variations to ensure reliable elections
+ * 
+ * @returns {number} Election window in milliseconds (300-600ms range)
+ */
+function calculateElectionWindow() {
+    // Default baseline for fast devices
+    const BASELINE_MS = 300;
+    const MAX_WINDOW_MS = 600;
+
+    // Defensive: If Performance API unavailable, use baseline
+    if (typeof performance === 'undefined' || !performance.now) {
+        console.log('[TabCoordination] Performance API unavailable, using baseline');
+        return BASELINE_MS;
+    }
+
+    try {
+        // Calibration task: measure device speed
+        const iterations = 10000;
+        const start = performance.now();
+
+        // Simple compute task that correlates with overall device speed
+        let sum = 0;
+        for (let i = 0; i < iterations; i++) {
+            sum += Math.random();
+        }
+
+        const duration = performance.now() - start;
+
+        // Scale window based on duration:
+        // Fast device (< 1ms): 300ms
+        // Slow device (> 5ms): use proportional scaling up to 600ms
+        // Formula: duration * 60 + 300, clamped to [300, 600]
+        const calculated = Math.round(Math.min(MAX_WINDOW_MS, Math.max(BASELINE_MS, duration * 60 + BASELINE_MS)));
+
+        console.log(`[TabCoordination] Device calibration: ${duration.toFixed(2)}ms → ${calculated}ms election window`);
+        return calculated;
+    } catch (e) {
+        // Defensive: fallback to baseline on any error
+        console.warn('[TabCoordination] Calibration failed, using baseline:', e.message);
+        return BASELINE_MS;
+    }
+}
+
+// Calculate once on module load
+const ELECTION_WINDOW_MS = calculateElectionWindow();
 const TAB_ID = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
 // Message types

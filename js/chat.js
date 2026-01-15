@@ -936,12 +936,16 @@ async function handleToolCallsWithFallback(
                 onProgress({ type: 'fallback_parsing', level: capabilityLevel, calls: parsedCalls.length });
             }
 
-            // Circuit breaker check for fallback path (mirrors handleToolCalls behavior)
+            // Circuit breaker reset for fallback path
             if (window.CircuitBreaker?.resetTurn) {
                 window.CircuitBreaker.resetTurn();
             }
 
+            // Execute each parsed function call with circuit breaker check before each
+            // (mirrors handleToolCalls behavior - check+record immediately before execution)
+            const results = [];
             for (const call of parsedCalls) {
+                // Check circuit breaker BEFORE executing each call
                 if (window.CircuitBreaker?.check) {
                     const breakerCheck = window.CircuitBreaker.check();
                     if (!breakerCheck.allowed) {
@@ -956,40 +960,38 @@ async function handleToolCallsWithFallback(
                             }
                         };
                     }
+                    // Record immediately before execution
                     window.CircuitBreaker.recordCall();
                 }
-            }
 
-            // Execute the parsed function calls with timeout protection (mirrors handleToolCalls)
-            let results;
-            try {
-                results = await Promise.race([
-                    window.FunctionCallingFallback.executeFunctionCalls(parsedCalls, streamsData),
-                    new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error(`Fallback function calls timed out after ${CHAT_FUNCTION_TIMEOUT_MS}ms`)), CHAT_FUNCTION_TIMEOUT_MS)
-                    )
-                ]);
-            } catch (timeoutError) {
-                console.error('[Chat] Fallback function execution failed:', timeoutError);
-                if (onProgress) onProgress({ type: 'tool_end', tool: parsedCalls[0]?.name || 'unknown', error: true });
-                return {
-                    earlyReturn: {
-                        status: 'error',
-                        content: `Function calls timed out: ${timeoutError.message}. Please try again or select a different model.`,
-                        role: 'assistant',
-                        isFunctionError: true
-                    }
-                };
-            }
+                // Notify UI: Tool start
+                if (onProgress) onProgress({ type: 'tool_start', tool: call.name });
 
-            // Notify UI about function execution
-            for (let i = 0; i < parsedCalls.length; i++) {
-                const call = parsedCalls[i];
-                const result = results[i];
-                if (onProgress) {
-                    onProgress({ type: 'tool_start', tool: call.name });
-                    onProgress({ type: 'tool_end', tool: call.name, result: result?.result });
+                // Execute with timeout protection
+                let result;
+                try {
+                    result = await Promise.race([
+                        window.Functions?.execute?.(call.name, call.arguments, streamsData) ?? Promise.resolve({ error: 'Functions module not available' }),
+                        new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error(`Function ${call.name} timed out after ${CHAT_FUNCTION_TIMEOUT_MS}ms`)), CHAT_FUNCTION_TIMEOUT_MS)
+                        )
+                    ]);
+                } catch (execError) {
+                    console.error(`[Chat] Fallback function execution failed for ${call.name}:`, execError);
+                    if (onProgress) onProgress({ type: 'tool_end', tool: call.name, error: true });
+                    return {
+                        earlyReturn: {
+                            status: 'error',
+                            content: `Function '${call.name}' failed: ${execError.message}. Please try again or select a different model.`,
+                            role: 'assistant',
+                            isFunctionError: true
+                        }
+                    };
                 }
+
+                // Notify UI: Tool end
+                if (onProgress) onProgress({ type: 'tool_end', tool: call.name, result });
+                results.push({ name: call.name, result });
             }
 
             // Build follow-up message with results

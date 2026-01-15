@@ -197,9 +197,9 @@ You mark time through sound.
 ```
 
 **Enhanced Sharing (Web Share API):**
-- **Native Share Sheet**: Direct integration with iOS/Android/Desktop share dialogs
-- **Rich Payload**: Includes image, title, personalized text, and referral link
-- **One-Tap**: Share directly to Instagram, Messages, etc. without saving first
+- **Native Share Sheet**: Direct integration with iOS/Android share dialogs (desktop support limited to Chrome on Windows/ChromeOS) [verification needed on desktop browsers]
+- **Rich Payload**: Includes image, title, personalized text, and referral link (file sharing requires platform permissions and isn't universally supported)
+- **Platform-Dependent**: Instagram and some apps don't support direct posting via Web Share API—users typically save the image first, then post manually [verification needed]
 
 **Supporter Features on Cards:**
 - Premium theme styling (FREE for all - dropped paid themes)
