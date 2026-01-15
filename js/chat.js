@@ -16,6 +16,7 @@
 import { NativeToolStrategy } from './services/tool-strategies/native-strategy.js';
 import { PromptInjectionStrategy } from './services/tool-strategies/prompt-injection-strategy.js';
 import { IntentExtractionStrategy } from './services/tool-strategies/intent-extraction-strategy.js';
+import { ModuleRegistry } from './module-registry.js';
 
 // Tool strategies (initialized lazily)
 let toolStrategies = null;
@@ -66,7 +67,7 @@ async function initChat(personality, patterns, summary, streams = null) {
     if (window.MessageOperations?.init) {
         window.MessageOperations.init({
             DataQuery: window.DataQuery,
-            RAG: window.RAG,
+            RAG: ModuleRegistry.getModuleSync('RAG'), // Use registry instead of window global
             TokenCounter: window.TokenCounter
         });
         window.MessageOperations.setUserContext(userContext);
@@ -461,9 +462,10 @@ async function sendMessage(message, optionsOrKey = null) {
 
     // Try to get semantic context from RAG if configured
     let semanticContext = null;
-    if (window.RAG?.isConfigured()) {
+    const RAG = ModuleRegistry.getModuleSync('RAG'); // Use registry instead of window global
+    if (RAG?.isConfigured()) {
         try {
-            semanticContext = await window.RAG.getSemanticContext(message, 3);
+            semanticContext = await RAG.getSemanticContext(message, 3);
             if (semanticContext) {
                 console.log('[Chat] Semantic context retrieved from RAG');
             }

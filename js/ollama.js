@@ -676,10 +676,6 @@ export const Ollama = {
     TOOL_CAPABLE_MODELS
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.Ollama = Ollama;
-}
-
+// ES Module export - use ModuleRegistry for access instead of window globals
 console.log('[Ollama] Module loaded');
 

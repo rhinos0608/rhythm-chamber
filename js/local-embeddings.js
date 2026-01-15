@@ -320,10 +320,6 @@ const LocalEmbeddings = {
 // ES Module export
 export { LocalEmbeddings };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.LocalEmbeddings = LocalEmbeddings;
-}
-
+// ES Module export - use ModuleRegistry for access instead of window globals
 console.log('[LocalEmbeddings] Module loaded. Call LocalEmbeddings.isSupported() to check compatibility.');
 

@@ -10,6 +10,8 @@
  * @module providers/ollama-adapter
  */
 
+import { ModuleRegistry } from '../module-registry.js';
+
 // ==========================================
 // Provider Adapter
 // ==========================================
@@ -23,12 +25,13 @@
  * @returns {Promise<object>} OpenAI-compatible response
  */
 async function call(config, messages, tools, onProgress = null) {
-    if (!window.Ollama) {
+    const Ollama = ModuleRegistry.getModuleSync('Ollama');
+    if (!Ollama) {
         throw new Error('Ollama module not loaded. Ensure ollama.js is included before this adapter.');
     }
 
     // Check if Ollama is available
-    const available = await window.Ollama.isAvailable();
+    const available = await Ollama.isAvailable();
     if (!available) {
         throw new Error('Ollama server not running. Start with: ollama serve');
     }
@@ -37,7 +40,7 @@ async function call(config, messages, tools, onProgress = null) {
     const useStreaming = typeof onProgress === 'function';
 
     // Delegate to the main Ollama module's chatCompletion
-    return await window.Ollama.chatCompletion(messages, {
+    return await Ollama.chatCompletion(messages, {
         ...config,
         stream: useStreaming,
         onToken: useStreaming ? (token, thinking) => {
@@ -55,7 +58,7 @@ async function call(config, messages, tools, onProgress = null) {
  * @returns {object|null} Ollama module
  */
 function getOllamaModule() {
-    return window.Ollama || null;
+    return ModuleRegistry.getModuleSync('Ollama') || null;
 }
 
 /**
@@ -63,8 +66,9 @@ function getOllamaModule() {
  * @returns {Promise<boolean>}
  */
 async function isAvailable() {
-    if (!window.Ollama) return false;
-    return window.Ollama.isAvailable();
+    const Ollama = ModuleRegistry.getModuleSync('Ollama');
+    if (!Ollama) return false;
+    return Ollama.isAvailable();
 }
 
 /**
@@ -72,10 +76,11 @@ async function isAvailable() {
  * @returns {Promise<object>}
  */
 async function detectServer() {
-    if (!window.Ollama) {
+    const Ollama = ModuleRegistry.getModuleSync('Ollama');
+    if (!Ollama) {
         return { available: false, error: 'Ollama module not loaded' };
     }
-    return window.Ollama.detectServer();
+    return Ollama.detectServer();
 }
 
 /**
@@ -83,10 +88,11 @@ async function detectServer() {
  * @returns {Promise<Array>}
  */
 async function listModels() {
-    if (!window.Ollama) {
+    const Ollama = ModuleRegistry.getModuleSync('Ollama');
+    if (!Ollama) {
         throw new Error('Ollama module not loaded');
     }
-    return window.Ollama.listModels();
+    return Ollama.listModels();
 }
 
 /**
@@ -94,10 +100,11 @@ async function listModels() {
  * @returns {Promise<Array>}
  */
 async function getRecommendedModels() {
-    if (!window.Ollama) {
+    const Ollama = ModuleRegistry.getModuleSync('Ollama');
+    if (!Ollama) {
         throw new Error('Ollama module not loaded');
     }
-    return window.Ollama.getRecommendedModels();
+    return Ollama.getRecommendedModels();
 }
 
 /**
@@ -106,8 +113,9 @@ async function getRecommendedModels() {
  * @returns {boolean}
  */
 function supportsToolCalling(modelName) {
-    if (!window.Ollama) return false;
-    return window.Ollama.supportsToolCalling(modelName);
+    const Ollama = ModuleRegistry.getModuleSync('Ollama');
+    if (!Ollama) return false;
+    return Ollama.supportsToolCalling(modelName);
 }
 
 // ==========================================
@@ -135,10 +143,6 @@ export const OllamaProvider = {
     type: 'local'
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.OllamaProvider = OllamaProvider;
-}
-
+// ES Module export - use ModuleRegistry for access instead of window globals
 console.log('[OllamaProvider] Provider adapter loaded');
 

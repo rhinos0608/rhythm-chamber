@@ -473,10 +473,6 @@ const LocalVectorStore = {
 // ES Module export
 export { LocalVectorStore };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.LocalVectorStore = LocalVectorStore;
-}
-
+// ES Module export - use ModuleRegistry for access instead of window globals
 console.log('[LocalVectorStore] Module loaded. Call LocalVectorStore.init() to initialize.');
 

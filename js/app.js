@@ -37,6 +37,7 @@
 // - DemoData (demo data)
 // - Cards (share cards)
 import { SecurityChecklist } from './security.js';
+import { ModuleRegistry } from './module-registry.js';
 // - SecurityChecklist (first-run security checklist)
 
 // ==========================================
@@ -80,10 +81,10 @@ const CRITICAL_DEPENDENCIES = {
     // Security (required for token binding)
     'Security': { check: () => window.Security && typeof window.Security.checkSecureContext === 'function', required: true },
 
-    // Optional modules (not required but useful)
-    'RAG': { check: () => window.RAG && typeof window.RAG.search === 'function', required: false },
-    'LocalVectorStore': { check: () => window.LocalVectorStore && typeof window.LocalVectorStore.init === 'function', required: false },
-    'LocalEmbeddings': { check: () => window.LocalEmbeddings && typeof window.LocalEmbeddings.initialize === 'function', required: false },
+    // Optional modules (not required but useful) - use ModuleRegistry for dynamically loaded modules
+    'RAG': { check: () => ModuleRegistry.isLoaded('RAG'), required: false },
+    'LocalVectorStore': { check: () => ModuleRegistry.isLoaded('LocalVectorStore'), required: false },
+    'LocalEmbeddings': { check: () => ModuleRegistry.isLoaded('LocalEmbeddings'), required: false },
 
     // Security checklist (optional - only shows on first run)
     // Uses imported SecurityChecklist symbol, not window global
@@ -339,7 +340,7 @@ async function initializeControllers() {
         DataQuery: window.DataQuery,
         TokenCounter: window.TokenCounter,
         Functions: window.Functions,
-        RAG: window.RAG
+        RAG: ModuleRegistry.getModuleSync('RAG') // Use registry instead of window global
     });
 
     console.log('[App] Controllers initialized');

@@ -191,12 +191,24 @@ function showReveal() {
  * @param {HTMLElement} descriptionEl - Element to update
  */
 async function generateAIDescription(personality, patterns, summary, descriptionEl) {
+    // Create/increment generation ID to prevent race conditions
+    if (!descriptionEl._generationId) {
+        descriptionEl._generationId = 0;
+    }
+    const currentGenerationId = ++descriptionEl._generationId;
+    
     try {
         const aiDescription = await window.ProfileDescriptionGenerator.generateDescription(
             personality,
             patterns,
             summary
         );
+
+        // Only update if this is still the current generation
+        if (descriptionEl._generationId !== currentGenerationId) {
+            console.log('[ViewController] Skipping outdated AI description generation');
+            return;
+        }
 
         if (aiDescription) {
             descriptionEl.textContent = aiDescription;
@@ -210,9 +222,11 @@ async function generateAIDescription(personality, patterns, summary, description
         }
     } catch (error) {
         console.error('[ViewController] AI description generation failed:', error);
-        // Fallback to generic
-        descriptionEl.textContent = personality.description;
-        descriptionEl.classList.remove('generating');
+        // Only fallback if this is still the current generation
+        if (descriptionEl._generationId === currentGenerationId) {
+            descriptionEl.textContent = personality.description;
+            descriptionEl.classList.remove('generating');
+        }
     }
 }
 

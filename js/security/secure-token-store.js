@@ -24,6 +24,7 @@ const TOKEN_STORE_PREFIX = 'secure_token_';
 const BINDING_KEY = 'rhythm_chamber_secure_binding';
 const AUDIT_KEY = 'rhythm_chamber_token_audit';
 const SALT_KEY = 'rhythm_chamber_token_salt';
+const DEVICE_ID_KEY = 'rhythm_chamber_device_id';
 const MAX_AUDIT_ENTRIES = 100;
 
 // ==========================================
@@ -37,38 +38,57 @@ let _deviceFingerprint = null;
 let _bindingVerified = false;
 
 // ==========================================
-// Device Fingerprinting
+// Secure Context Enforcement
 // ==========================================
 
 /**
- * Generate a stable device fingerprint
- * @returns {Promise<string>}
+ * Ensure we're running in a Secure Context with crypto.subtle available.
+ * Fails fast if requirements are not met.
+ * @throws {Error} If not in a Secure Context or crypto.subtle unavailable
+ */
+function requireSecureContext() {
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+        throw new Error(
+            '[SecureTokenStore] Secure Context required. ' +
+            'Please access the app via HTTPS or localhost.'
+        );
+    }
+    if (!crypto?.subtle) {
+        throw new Error(
+            '[SecureTokenStore] crypto.subtle unavailable. ' +
+            'Please access the app via HTTPS or localhost.'
+        );
+    }
+}
+
+// Enforce secure context at module load
+requireSecureContext();
+
+// ==========================================
+// Device Fingerprinting (Stable UUID-based)
+// ==========================================
+
+/**
+ * Generate a stable device fingerprint using a stored UUID.
+ * Uses a UUID stored in localStorage for stability - browser characteristics
+ * like screen size and userAgent are mutable and cause false binding mismatches.
+ * @returns {Promise<string>} SHA-256 hash of the stable device UUID
  */
 async function generateDeviceFingerprint() {
-    const components = [
-        navigator.userAgent,
-        navigator.language,
-        screen.width + 'x' + screen.height,
-        screen.colorDepth,
-        Intl.DateTimeFormat().resolvedOptions().timeZone,
-        navigator.hardwareConcurrency || 'unknown',
-        navigator.deviceMemory || 'unknown'
-    ];
-
-    const data = components.join('|');
-
-    // Hash the fingerprint
-    try {
-        const encoder = new TextEncoder();
-        const dataBuffer = encoder.encode(data);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    } catch (error) {
-        // Fallback for non-secure contexts
-        console.warn('[SecureTokenStore] crypto.subtle unavailable, using fallback');
-        return btoa(data).substring(0, 64);
+    // Get or create stable device ID
+    let deviceId = localStorage.getItem(DEVICE_ID_KEY);
+    if (!deviceId) {
+        deviceId = crypto.randomUUID();
+        localStorage.setItem(DEVICE_ID_KEY, deviceId);
+        console.log('[SecureTokenStore] Generated new device ID');
     }
+
+    // Hash the device ID for the fingerprint
+    const encoder = new TextEncoder();
+    const dataBuffer = encoder.encode(deviceId);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
