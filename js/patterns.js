@@ -793,10 +793,67 @@ function detectImmediateVibe(liteData) {
 // ==========================================
 
 let patternWorker = null;
+let patternWorkerInitialized = false;
+let patternRequestId = 0;
+const pendingPatternRequests = new Map();
+
+/**
+ * Initialize pattern worker global handlers (called once)
+ */
+function initPatternWorkerHandlers() {
+    if (patternWorkerInitialized || !patternWorker) return;
+    patternWorkerInitialized = true;
+
+    patternWorker.onmessage = (e) => {
+        const { type, requestId, patterns, current, total, message, error } = e.data;
+
+        const pending = pendingPatternRequests.get(requestId);
+        if (!pending) {
+            console.warn('[Patterns] Received message for unknown requestId:', requestId);
+            return;
+        }
+
+        switch (type) {
+            case 'progress':
+                pending.onProgress(current, total, message);
+                break;
+
+            case 'complete':
+                clearTimeout(pending.timeoutId);
+                pendingPatternRequests.delete(requestId);
+                pending.resolve(patterns);
+                if (pendingPatternRequests.size === 0) {
+                    cleanupPatternWorker();
+                }
+                break;
+
+            case 'error':
+                clearTimeout(pending.timeoutId);
+                pendingPatternRequests.delete(requestId);
+                pending.reject(new Error(error));
+                if (pendingPatternRequests.size === 0) {
+                    cleanupPatternWorker();
+                }
+                break;
+        }
+    };
+
+    patternWorker.onerror = (err) => {
+        // On global error, reject all pending requests
+        for (const [requestId, pending] of pendingPatternRequests) {
+            clearTimeout(pending.timeoutId);
+            pending.reject(new Error(err.message || 'Worker error'));
+        }
+        pendingPatternRequests.clear();
+        cleanupPatternWorker();
+    };
+}
 
 /**
  * Detect all patterns asynchronously using Web Worker
  * Use for large datasets (100k+ streams) to avoid UI freezing
+ * 
+ * Uses request ID pattern to prevent race conditions when called concurrently.
  * 
  * @param {Array} streams - Streaming history
  * @param {Array} chunks - Weekly/monthly chunks
@@ -821,48 +878,39 @@ async function detectAllPatternsAsync(streams, chunks, onProgress = () => { }) {
     if (!patternWorker) {
         try {
             patternWorker = new Worker('js/workers/pattern-worker.js');
+            patternWorkerInitialized = false;
         } catch (e) {
             console.warn('[Patterns] Failed to create worker, falling back to sync:', e.message);
             return detectAllPatterns(streams, chunks);
         }
     }
 
+    // Initialize global handlers once
+    initPatternWorkerHandlers();
+
+    // Generate unique request ID for this call
+    const requestId = ++patternRequestId;
+
     return new Promise((resolve, reject) => {
         const timeoutId = setTimeout(() => {
+            pendingPatternRequests.delete(requestId);
             reject(new Error('Pattern detection timed out (60s)'));
-            cleanupPatternWorker();
+            if (pendingPatternRequests.size === 0) {
+                cleanupPatternWorker();
+            }
         }, 60000);
 
-        patternWorker.onmessage = (e) => {
-            const { type, patterns, current, total, message, error } = e.data;
+        // Store pending request
+        pendingPatternRequests.set(requestId, {
+            resolve,
+            reject,
+            onProgress,
+            timeoutId
+        });
 
-            switch (type) {
-                case 'progress':
-                    onProgress(current, total, message);
-                    break;
-
-                case 'complete':
-                    clearTimeout(timeoutId);
-                    resolve(patterns);
-                    break;
-
-                case 'error':
-                    clearTimeout(timeoutId);
-                    reject(new Error(error));
-                    cleanupPatternWorker();
-                    break;
-            }
-        };
-
-        patternWorker.onerror = (err) => {
-            clearTimeout(timeoutId);
-            reject(new Error(err.message || 'Worker error'));
-            cleanupPatternWorker();
-        };
-
-        // Start detection
+        // Start detection with requestId
         onProgress(0, 8, 'Starting pattern detection...');
-        patternWorker.postMessage({ type: 'detect', streams, chunks });
+        patternWorker.postMessage({ type: 'detect', requestId, streams, chunks });
     });
 }
 

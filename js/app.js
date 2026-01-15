@@ -86,7 +86,8 @@ const CRITICAL_DEPENDENCIES = {
     'LocalEmbeddings': { check: () => window.LocalEmbeddings && typeof window.LocalEmbeddings.initialize === 'function', required: false },
 
     // Security checklist (optional - only shows on first run)
-    'SecurityChecklist': { check: () => window.SecurityChecklist && typeof window.SecurityChecklist.init === 'function', required: false }
+    // Uses imported SecurityChecklist symbol, not window global
+    'SecurityChecklist': { check: () => SecurityChecklist && typeof SecurityChecklist.init === 'function', required: false }
 };
 
 /**
@@ -458,9 +459,10 @@ async function init() {
     await SidebarController.init();
 
     // Show security checklist on first run (after other UI is ready)
-    if (window.SecurityChecklist) {
+    // Use imported SecurityChecklist symbol for consistency
+    if (SecurityChecklist && typeof SecurityChecklist.init === 'function') {
         setTimeout(() => {
-            window.SecurityChecklist.init();
+            SecurityChecklist.init();
         }, 1000);
     }
 

@@ -30,17 +30,18 @@ function detectComfortDiscoveryRatio(streams) {
         artistPlays[artist] = (artistPlays[artist] || 0) + 1;
     });
 
-    const artists = Object.keys(artistPlays);
+    const artists = Object.keys(artistPlays).filter(a => a !== 'Unknown');
     const totalPlays = streams.length;
     const uniqueArtists = artists.length;
-    const playsPerArtist = totalPlays / uniqueArtists;
+    // Guard against division by zero
+    const playsPerArtist = uniqueArtists === 0 ? 0 : totalPlays / uniqueArtists;
 
     return {
         totalArtists: uniqueArtists,
         totalPlays: totalPlays,
         playsPerArtist: Math.round(playsPerArtist * 10) / 10,
-        isComfortCurator: playsPerArtist > 50,
-        isDiscoveryJunkie: playsPerArtist < 10
+        isComfortCurator: uniqueArtists > 0 && playsPerArtist > 50,
+        isDiscoveryJunkie: uniqueArtists > 0 && playsPerArtist < 10
     };
 }
 
@@ -78,7 +79,9 @@ function detectEras(streams, chunks) {
         );
 
         const overlap = [...prevArtists].filter(a => currArtists.has(a)).length;
-        const overlapRatio = overlap / Math.max(prevArtists.size, currArtists.size);
+        // Guard against division by zero
+        const maxSize = Math.max(prevArtists.size, currArtists.size);
+        const overlapRatio = maxSize === 0 ? 0 : overlap / maxSize;
 
         if (overlapRatio < 0.4 && currentEra.weeks >= 4) {
             currentEra.end = weeks[i - 1];
@@ -117,7 +120,8 @@ function detectTimePatterns(streams) {
 
     streams.forEach(s => {
         const date = new Date(s.ts || s.endTime);
-        const hour = s.hourUTC !== undefined ? s.hourUTC : date.getHours();
+        // Use UTC consistently to avoid DST issues
+        const hour = s.hourUTC !== undefined ? s.hourUTC : date.getUTCHours();
         const artist = s.master_metadata_album_artist_name || s.artistName || 'Unknown';
 
         if (hour >= 6 && hour < 12) {
@@ -184,9 +188,12 @@ function detectGhostedArtists(streams) {
         return { ghosted: [], ghostedCount: 0 };
     }
 
-    // Find dataset boundaries
-    const dates = streams.map(s => new Date(s.ts || s.endTime));
-    const endDate = new Date(Math.max(...dates));
+    // Find dataset boundaries using iterative reduce (avoids stack overflow with large arrays)
+    const maxTime = streams.reduce((max, s) => {
+        const time = new Date(s.ts || s.endTime).getTime();
+        return time > max ? time : max;
+    }, -Infinity);
+    const endDate = maxTime === -Infinity ? new Date() : new Date(maxTime);
     const oneYearAgo = new Date(endDate);
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
@@ -318,6 +325,11 @@ function detectMoodSearching(streams) {
         }
     }
 
+    // Evaluate final window after loop ends
+    if (skipsInWindow >= 5) {
+        moodSearchSessions++;
+    }
+
     return {
         sessions: moodSearchSessions,
         hasMoodSearchingSignal: moodSearchSessions >= 3
@@ -413,9 +425,16 @@ function generateDataInsights(streams) {
  * Generate pattern summary
  */
 function generatePatternSummary(streams, patterns) {
-    const dates = streams.map(s => new Date(s.ts || s.endTime));
-    const startDate = new Date(Math.min(...dates));
-    const endDate = new Date(Math.max(...dates));
+    // Use iterative reduce to find min/max timestamps (avoids stack overflow with large arrays)
+    let minTime = Infinity;
+    let maxTime = -Infinity;
+    for (const s of streams) {
+        const time = new Date(s.ts || s.endTime).getTime();
+        if (time < minTime) minTime = time;
+        if (time > maxTime) maxTime = time;
+    }
+    const startDate = minTime === Infinity ? new Date() : new Date(minTime);
+    const endDate = maxTime === -Infinity ? new Date() : new Date(maxTime);
 
     return {
         streamCount: streams.length,
@@ -491,17 +510,17 @@ function detectAllPatterns(streams, chunks, onProgress) {
 // ==========================================
 
 self.onmessage = function (e) {
-    const { type, streams, chunks } = e.data;
+    const { type, requestId, streams, chunks } = e.data;
 
     if (type === 'detect') {
         try {
             const patterns = detectAllPatterns(streams, chunks, (current, total, message) => {
-                self.postMessage({ type: 'progress', current, total, message });
+                self.postMessage({ type: 'progress', requestId, current, total, message });
             });
 
-            self.postMessage({ type: 'complete', patterns });
+            self.postMessage({ type: 'complete', requestId, patterns });
         } catch (error) {
-            self.postMessage({ type: 'error', error: error.message });
+            self.postMessage({ type: 'error', requestId, error: error.message });
         }
     }
 };
