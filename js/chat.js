@@ -436,6 +436,12 @@ async function sendMessage(message, optionsOrKey = null) {
         throw new Error('Chat not initialized. Call initChat first.');
     }
 
+    // Reset circuit breaker for this turn (moved from handleToolCalls to ensure
+    // reset happens for every message, not just those with tool calls)
+    if (window.CircuitBreaker?.resetTurn) {
+        window.CircuitBreaker.resetTurn();
+    }
+
     // Add user message to history via SessionManager
     if (window.SessionManager?.addMessageToHistory) {
         window.SessionManager.addMessageToHistory({
@@ -717,10 +723,8 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
         return { responseMessage };
     }
 
-    // Reset circuit breaker for this turn
-    if (window.CircuitBreaker?.resetTurn) {
-        window.CircuitBreaker.resetTurn();
-    }
+    // Note: CircuitBreaker.resetTurn() is now called at the start of sendMessage()
+    // to ensure reset happens for all messages, not just those with tool calls
 
     console.log('[Chat] LLM requested tool calls:', responseMessage.tool_calls.map(tc => tc.function.name));
 
@@ -782,16 +786,26 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
         // Notify UI: Tool start
         if (onProgress) onProgress({ type: 'tool_start', tool: functionName });
 
-        // Execute the function with timeout protection
+        // Execute the function with AbortController for true cancellation
+        // This enables proper cleanup when timeout occurs, rather than just ignoring the result
         let result;
+        const abortController = new AbortController();
+        const timeoutId = setTimeout(() => {
+            abortController.abort();
+        }, CHAT_FUNCTION_TIMEOUT_MS);
+
         try {
-            result = await Promise.race([
-                Promise.resolve(window.Functions.execute(functionName, args, streamsData)),
-                new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error(`Function ${functionName} timed out after ${CHAT_FUNCTION_TIMEOUT_MS}ms`)), CHAT_FUNCTION_TIMEOUT_MS)
-                )
-            ]);
+            result = await window.Functions.execute(functionName, args, streamsData, {
+                signal: abortController.signal
+            });
+            clearTimeout(timeoutId);
+
+            // Check if aborted while executing
+            if (result?.aborted) {
+                throw new Error(`Function ${functionName} timed out after ${CHAT_FUNCTION_TIMEOUT_MS}ms`);
+            }
         } catch (funcError) {
+            clearTimeout(timeoutId);
             console.error(`[Chat] Function execution failed:`, funcError);
 
             // Notify UI: Tool error (optional state update)
@@ -810,18 +824,9 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
 
         console.log(`[Chat] Function result:`, result);
 
-        // If the model returned code instead of real arguments, surface that explicitly
-        if (result?.error && isCodeLikeToolArguments(rawArgs)) {
-            if (onProgress) onProgress({ type: 'tool_end', tool: functionName, result });
-            return {
-                earlyReturn: {
-                    status: 'error',
-                    content: buildToolCodeOnlyError(functionName, rawArgs),
-                    role: 'assistant',
-                    isFunctionError: true
-                }
-            };
-        }
+        // Note: isCodeLikeToolArguments check removed here. The JSON parse failure
+        // check above (line ~765) already catches malformed tool arguments including code.
+        // Checking rawArgs again after successful execution creates false positives.
 
         // Notify UI: Tool end
         if (onProgress) onProgress({ type: 'tool_end', tool: functionName, result });

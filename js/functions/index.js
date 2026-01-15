@@ -23,11 +23,19 @@
  * @param {string} functionName - Name of the function to execute
  * @param {Object} args - Arguments passed by the LLM
  * @param {Array} streams - User's streaming data
+ * @param {Object} [options] - Optional configuration
+ * @param {AbortSignal} [options.signal] - AbortController signal for cancellation
  * @returns {Promise<Object>} Result to send back to the LLM
  */
-async function executeFunction(functionName, args, streams) {
+async function executeFunction(functionName, args, streams, options = {}) {
+    const { signal } = options;
     const validation = window.FunctionValidation;
     const retry = window.FunctionRetry;
+
+    // Check for abort before any processing
+    if (signal?.aborted) {
+        return { error: 'Operation cancelled', aborted: true };
+    }
 
     // HNW Hierarchy: Check function exists before any processing
     if (!hasFunction(functionName)) {
