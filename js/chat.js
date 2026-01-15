@@ -6,10 +6,19 @@
  * - Session state: DELEGATED to SessionManager (js/services/session-manager.js)
  * - Message operations: DELEGATED to MessageOperations (js/services/message-operations.js)
  * - LLM calls: DELEGATED to ProviderInterface (js/providers/provider-interface.js)
+ * - Tool strategies: DELEGATED to ToolStrategies (js/services/tool-strategies/)
  * 
  * System prompts are defined in prompts.js for easy editing
  * Data queries are handled by data-query.js
  */
+
+// Tool Strategy imports (ToolStrategy pattern for function calling)
+import { NativeToolStrategy } from './services/tool-strategies/native-strategy.js';
+import { PromptInjectionStrategy } from './services/tool-strategies/prompt-injection-strategy.js';
+import { IntentExtractionStrategy } from './services/tool-strategies/intent-extraction-strategy.js';
+
+// Tool strategies (initialized lazily)
+let toolStrategies = null;
 
 // HNW Fix: Timeout constants to prevent cascade failures
 const CHAT_API_TIMEOUT_MS = 60000;           // 60 second timeout for cloud API calls
@@ -890,17 +899,40 @@ function buildToolCodeOnlyError(functionName, rawArgs) {
 }
 
 // ==========================================
+// Tool Strategy Initialization
+// ==========================================
+
+/**
+ * Initialize tool strategies (lazy initialization)
+ * Strategies are created once and reused for all function calls
+ */
+function initToolStrategies() {
+    if (toolStrategies) return;
+
+    const deps = {
+        CircuitBreaker: window.CircuitBreaker,
+        Functions: window.Functions,
+        SessionManager: window.SessionManager,
+        FunctionCallingFallback: window.FunctionCallingFallback,
+        timeoutMs: CHAT_FUNCTION_TIMEOUT_MS
+    };
+
+    toolStrategies = [
+        new NativeToolStrategy(deps),
+        new PromptInjectionStrategy(deps),
+        new IntentExtractionStrategy(deps)
+    ];
+
+    console.log('[Chat] Tool strategies initialized');
+}
+
+// ==========================================
 // Tool Call Handling with Fallback Support
 // ==========================================
 
 /**
  * Handle tool calls with fallback support for models without native function calling.
- * 
- * Fallback Levels:
- * 1. Native: Use native tool_calls from response
- * 2. Prompt Injection: Parse <function_call> tags from text response
- * 3. Regex Parsing: Extract function calls from structured text patterns
- * 4. Direct Query: Extract intent from user message and execute function directly
+ * Uses Strategy pattern to delegate to appropriate handler based on capability level.
  * 
  * @param {object} responseMessage - LLM response message
  * @param {object} providerConfig - Provider configuration
@@ -922,200 +954,40 @@ async function handleToolCallsWithFallback(
     messages,
     userMessage
 ) {
-    // Level 1: Native function calling - use existing handler
-    if (capabilityLevel === 1 && responseMessage?.tool_calls?.length > 0) {
-        console.log('[Chat] Level 1: Processing native tool calls');
-        return handleToolCalls(responseMessage, providerConfig, key, onProgress);
-    }
+    // Initialize strategies on first use
+    initToolStrategies();
 
-    // Levels 2/3: Try to parse function calls from text response
-    if (capabilityLevel >= 2 && window.FunctionCallingFallback) {
-        const content = responseMessage?.content || '';
-        const parsedCalls = window.FunctionCallingFallback.parseFunctionCallsFromText(content);
+    // Build execution context
+    const context = {
+        responseMessage,
+        providerConfig,
+        key,
+        onProgress,
+        capabilityLevel,
+        tools,
+        messages,
+        userMessage,
+        streamsData,
+        buildSystemPrompt,
+        callLLM
+    };
 
-        if (parsedCalls.length > 0) {
-            console.log(`[Chat] Level ${capabilityLevel}: Parsed ${parsedCalls.length} function calls from text`);
-
-            // Notify UI about fallback parsing
-            if (onProgress) {
-                onProgress({ type: 'fallback_parsing', level: capabilityLevel, calls: parsedCalls.length });
-            }
-
-            // Circuit breaker reset for fallback path
-            if (window.CircuitBreaker?.resetTurn) {
-                window.CircuitBreaker.resetTurn();
-            }
-
-            // Execute each parsed function call with circuit breaker check before each
-            // (mirrors handleToolCalls behavior - check+record immediately before execution)
-            const results = [];
-            for (const call of parsedCalls) {
-                // Check circuit breaker BEFORE executing each call
-                if (window.CircuitBreaker?.check) {
-                    const breakerCheck = window.CircuitBreaker.check();
-                    if (!breakerCheck.allowed) {
-                        console.warn(`[Chat] Circuit breaker tripped in fallback path: ${breakerCheck.reason}`);
-                        if (onProgress) onProgress({ type: 'circuit_breaker_trip', reason: breakerCheck.reason });
-                        return {
-                            earlyReturn: {
-                                status: 'error',
-                                content: window.CircuitBreaker.getErrorMessage(breakerCheck.reason),
-                                role: 'assistant',
-                                isCircuitBreakerError: true
-                            }
-                        };
-                    }
-                    // Record immediately before execution
-                    window.CircuitBreaker.recordCall();
-                }
-
-                // Notify UI: Tool start
-                if (onProgress) onProgress({ type: 'tool_start', tool: call.name });
-
-                // Execute with timeout protection
-                let result;
-                try {
-                    result = await Promise.race([
-                        window.Functions?.execute?.(call.name, call.arguments, streamsData) ?? Promise.resolve({ error: 'Functions module not available' }),
-                        new Promise((_, reject) =>
-                            setTimeout(() => reject(new Error(`Function ${call.name} timed out after ${CHAT_FUNCTION_TIMEOUT_MS}ms`)), CHAT_FUNCTION_TIMEOUT_MS)
-                        )
-                    ]);
-                } catch (execError) {
-                    console.error(`[Chat] Fallback function execution failed for ${call.name}:`, execError);
-                    if (onProgress) onProgress({ type: 'tool_end', tool: call.name, error: true });
-                    return {
-                        earlyReturn: {
-                            status: 'error',
-                            content: `Function '${call.name}' failed: ${execError.message}. Please try again or select a different model.`,
-                            role: 'assistant',
-                            isFunctionError: true
-                        }
-                    };
-                }
-
-                // Notify UI: Tool end
-                if (onProgress) onProgress({ type: 'tool_end', tool: call.name, result });
-                results.push({ name: call.name, result });
-            }
-
-            // Build follow-up message with results
-            const resultsMessage = window.FunctionCallingFallback.buildFunctionResultsMessage(results);
-
-            // Add results to conversation history
-            if (window.SessionManager?.addMessageToHistory) {
-                window.SessionManager.addMessageToHistory({
-                    role: 'assistant',
-                    content: content // Original response with function calls
-                });
-                window.SessionManager.addMessageToHistory({
-                    role: 'user',
-                    content: resultsMessage,
-                    isSystem: true // Mark as system-generated
-                });
-            }
-
-            // Make follow-up call with function results
-            const followUpMessages = [
-                { role: 'system', content: buildSystemPrompt() },
-                ...(window.SessionManager?.getHistory?.() || [])
-            ];
-
-            if (onProgress) onProgress({ type: 'thinking' });
-
-            try {
-                const followUpResponse = await callLLM(providerConfig, key, followUpMessages, undefined);
-                return { responseMessage: followUpResponse.choices[0]?.message };
-            } catch (error) {
-                console.error('[Chat] Follow-up call failed:', error);
-                // Return results directly if follow-up fails
-                const directResponse = results.map(r =>
-                    `${r.name}: ${JSON.stringify(r.result, null, 2)}`
-                ).join('\n\n');
-                return {
-                    responseMessage: {
-                        role: 'assistant',
-                        content: `I found this data for you:\n\n${directResponse}`
-                    }
-                };
-            }
-        }
-
-        // Level 4: Extract intent from user message and execute directly
-        if (capabilityLevel >= 4 || (parsedCalls.length === 0 && userMessage)) {
-            const intent = window.FunctionCallingFallback.extractQueryIntent(userMessage);
-
-            if (intent) {
-                console.log(`[Chat] Level 4: Extracted intent "${intent.function}" from user message`);
-
-                if (onProgress) {
-                    onProgress({ type: 'fallback_intent', level: 4, function: intent.function });
-                    onProgress({ type: 'tool_start', tool: intent.function });
-                }
-
-                // Execute the extracted function with timeout protection
-                let results;
-                try {
-                    results = await Promise.race([
-                        window.FunctionCallingFallback.executeFunctionCalls([intent], streamsData),
-                        new Promise((_, reject) =>
-                            setTimeout(
-                                () => reject(new Error(`Fallback function calls timed out after ${CHAT_FUNCTION_TIMEOUT_MS}ms`)),
-                                CHAT_FUNCTION_TIMEOUT_MS
-                            )
-                        )
-                    ]);
-                } catch (timeoutError) {
-                    console.error('[Chat] Fallback function execution failed:', timeoutError);
-                    if (onProgress) onProgress({ type: 'tool_end', tool: intent.function, error: true });
-                    return {
-                        earlyReturn: {
-                            status: 'error',
-                            content: `Function calls timed out: ${timeoutError.message}. Please try again or select a different model.`,
-                            role: 'assistant',
-                            isFunctionError: true
-                        }
-                    };
-                }
-                const result = results[0];
-
-                if (onProgress) {
-                    onProgress({ type: 'tool_end', tool: intent.function, result: result?.result });
-                }
-
-                if (result && !result.result?.error) {
-                    // Inject results into the response for a data-grounded answer
-                    const resultsMessage = window.FunctionCallingFallback.buildFunctionResultsMessage(results);
-
-                    // Make a new call with the data context
-                    const enrichedMessages = [
-                        { role: 'system', content: buildSystemPrompt() },
-                        ...(window.SessionManager?.getHistory?.() || []),
-                        { role: 'user', content: resultsMessage, isSystem: true }
-                    ];
-
-                    if (onProgress) onProgress({ type: 'thinking' });
-
-                    try {
-                        const enrichedResponse = await callLLM(providerConfig, key, enrichedMessages, undefined);
-                        return { responseMessage: enrichedResponse.choices[0]?.message };
-                    } catch (error) {
-                        console.error('[Chat] Enriched response failed:', error);
-                        // Return the original response with data context added
-                        const dataContext = JSON.stringify(result.result, null, 2);
-                        return {
-                            responseMessage: {
-                                role: 'assistant',
-                                content: `${responseMessage?.content || ''}\n\n**Data from your listening history:**\n\`\`\`json\n${dataContext}\n\`\`\``
-                            }
-                        };
-                    }
-                }
-            }
+    // Try each strategy in order
+    for (const strategy of toolStrategies) {
+        if (strategy.canHandle(responseMessage, capabilityLevel)) {
+            console.log(`[Chat] Using ${strategy.constructor.name} (Level ${strategy.level})`);
+            return strategy.execute(context);
         }
     }
 
-    // Check if we still have native tool_calls (Level 1 fallback for OpenRouter with unknown models)
+    // Special case: Level 4 intent extraction (fallback of last resort)
+    const intentStrategy = toolStrategies.find(s => s instanceof IntentExtractionStrategy);
+    if (intentStrategy?.shouldAttemptExtraction?.(userMessage)) {
+        console.log('[Chat] Attempting Level 4 intent extraction');
+        return intentStrategy.execute(context);
+    }
+
+    // Check if we still have native tool_calls (fallback for unknown model capability)
     if (responseMessage?.tool_calls?.length > 0) {
         console.log('[Chat] Native tool calls found in response');
         return handleToolCalls(responseMessage, providerConfig, key, onProgress);

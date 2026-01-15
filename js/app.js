@@ -55,10 +55,10 @@ AppState.init();
  * Maps dependency name to { check: fn, required: boolean }
  */
 const CRITICAL_DEPENDENCIES = {
-    // Core modules (required)
-    'AppState': { check: () => window.AppState && typeof window.AppState.init === 'function', required: true },
-    'Storage': { check: () => window.Storage && typeof window.Storage.init === 'function', required: true },
-    'Chat': { check: () => window.Chat && typeof window.Chat.sendMessage === 'function', required: true },
+    // Core modules (required) - use isReady() where available, fallback to old checks
+    'AppState': { check: () => window.AppState?.isReady?.() ?? (window.AppState && typeof window.AppState.init === 'function'), required: true },
+    'Storage': { check: () => window.Storage?.isReady?.() ?? (window.Storage && typeof window.Storage.init === 'function'), required: true },
+    'Chat': { check: () => window.Chat?.isReady?.() ?? (window.Chat && typeof window.Chat.sendMessage === 'function'), required: true },
     'Spotify': { check: () => window.Spotify && typeof window.Spotify.isConfigured === 'function', required: true },
     'Patterns': { check: () => window.Patterns && typeof window.Patterns.detectAllPatterns === 'function', required: true },
     'Personality': { check: () => window.Personality && typeof window.Personality.classifyPersonality === 'function', required: true },
@@ -87,7 +87,10 @@ const CRITICAL_DEPENDENCIES = {
 
     // Security checklist (optional - only shows on first run)
     // Uses imported SecurityChecklist symbol, not window global
-    'SecurityChecklist': { check: () => SecurityChecklist && typeof SecurityChecklist.init === 'function', required: false }
+    'SecurityChecklist': { check: () => SecurityChecklist && typeof SecurityChecklist.init === 'function', required: false },
+
+    // Settings module (required for settings/tools modals)
+    'Settings': { check: () => window.Settings && typeof window.Settings.showSettingsModal === 'function', required: true }
 };
 
 /**
@@ -459,6 +462,28 @@ async function init(options = {}) {
             AppState.update('data', {
                 patterns: Patterns.detectAllPatterns(state.streams, state.chunks)
             });
+
+            // HNW Fix: Initialize Chat with loaded data (ensures chat has context on reload)
+            const streams = state.streams;
+            // HNW Fix: Filter out null/undefined artist names before counting unique artists
+            const validArtistNames = streams
+                .map(s => s.master_metadata_album_artist_name)
+                .filter(Boolean); // Remove null/undefined entries
+            const summary = {
+                dateRange: {
+                    start: streams[0]?.ts?.split('T')[0] || 'Unknown',
+                    end: streams[streams.length - 1]?.ts?.split('T')[0] || 'Unknown'
+                },
+                totalHours: Math.round(streams.reduce((acc, s) => acc + (s.ms_played || 0), 0) / 3600000),
+                uniqueArtists: new Set(validArtistNames).size
+            };
+            await Chat.initChat(
+                existingData,
+                AppState.get('data').patterns,
+                summary,
+                streams
+            );
+
             showReveal();
         }
     }
@@ -558,6 +583,97 @@ function setupEventListeners() {
                 handleChatSend();
             }
         });
+    });
+
+    // ==========================================
+    // Event Delegation for data-action buttons
+    // (HNW: Replaces inline onclick handlers for ES module compatibility)
+    // ==========================================
+    document.addEventListener('click', (e) => {
+        const actionEl = e.target.closest('[data-action]');
+        if (!actionEl) return;
+
+        const action = actionEl.dataset.action;
+        console.log(`[App] Action triggered: ${action}`);
+
+        // HNW Fix: Defensive handlers that check for function existence to prevent ReferenceError
+        // Settings is accessed via window.Settings, delete chat functions via window.SidebarController
+        const handlers = {
+            // Header actions (Settings module - required dependency)
+            'show-settings': () => {
+                if (typeof window.Settings?.showSettingsModal === 'function') {
+                    window.Settings.showSettingsModal();
+                } else {
+                    console.error('[App] Settings.showSettingsModal not available');
+                }
+            },
+            'show-tools': () => {
+                if (typeof window.Settings?.showToolsModal === 'function') {
+                    window.Settings.showToolsModal();
+                } else {
+                    console.error('[App] Settings.showToolsModal not available');
+                }
+            },
+            'show-privacy-dashboard': () => {
+                if (typeof showPrivacyDashboard === 'function') {
+                    showPrivacyDashboard();
+                } else {
+                    console.error('[App] showPrivacyDashboard not available');
+                }
+            },
+
+            // Reset modal
+            'hide-reset-modal': hideResetConfirmModal,
+            'execute-reset': executeReset,
+
+            // Delete chat modal (from SidebarController via window)
+            'hide-delete-modal': () => {
+                if (typeof window.hideDeleteChatModal === 'function') {
+                    window.hideDeleteChatModal();
+                } else if (typeof window.SidebarController?.hideDeleteChatModal === 'function') {
+                    window.SidebarController.hideDeleteChatModal();
+                } else {
+                    // Fallback: try to hide modal directly
+                    const modal = document.getElementById('delete-chat-modal');
+                    if (modal) modal.style.display = 'none';
+                }
+            },
+            'confirm-delete-chat': async () => {
+                if (typeof window.confirmDeleteChat === 'function') {
+                    await window.confirmDeleteChat();
+                } else if (typeof window.SidebarController?.confirmDeleteChat === 'function') {
+                    await window.SidebarController.confirmDeleteChat();
+                } else {
+                    console.error('[App] confirmDeleteChat not available');
+                }
+            },
+
+            // Multi-tab modal
+            'close-multi-tab-modal': () => {
+                const modal = document.getElementById('multi-tab-modal');
+                if (modal) modal.style.display = 'none';
+            },
+
+            // Privacy dashboard modal
+            'clear-sensitive-data': () => {
+                if (typeof clearSensitiveData === 'function') {
+                    clearSensitiveData();
+                } else {
+                    console.error('[App] clearSensitiveData not available');
+                }
+            },
+            'close-privacy-modal': () => {
+                const modal = document.getElementById('privacy-dashboard-modal');
+                if (modal) modal.style.display = 'none';
+            }
+        };
+
+        const handler = handlers[action];
+        if (handler) {
+            handler();
+        } else {
+            console.warn(`[App] Unknown action: ${action}`);
+        }
     });
 }
 

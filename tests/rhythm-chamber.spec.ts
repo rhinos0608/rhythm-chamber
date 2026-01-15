@@ -59,6 +59,9 @@ function generateSampleStreamingHistory(count: number) {
 /**
  * Helper to clear IndexedDB for clean test state
  * Should be called before navigating to the app page
+ * 
+ * NOTE: Uses direct IndexedDB API instead of window.Storage
+ * to maintain compatibility with ES module architecture.
  */
 async function clearIndexedDB(page: Page) {
     await page.evaluate(async () => {
@@ -66,13 +69,7 @@ async function clearIndexedDB(page: Page) {
         localStorage.clear();
         sessionStorage.clear();
 
-        // Close any existing DB connections
-        if ((window as any).Storage?.db) {
-            (window as any).Storage.db.close?.();
-            (window as any).Storage.db = null;
-        }
-
-        // Delete specific known databases
+        // Direct IndexedDB deletion - no window globals needed
         const deleteDb = (name: string): Promise<void> => {
             return new Promise((resolve) => {
                 const request = indexedDB.deleteDatabase(name);

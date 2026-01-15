@@ -1,6 +1,6 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System**
+> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System** + **ToolStrategy Pattern** + **Aggressive ES Module Migration**
 
 ---
 
@@ -78,8 +78,9 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 | Data parser | ✅ Done | `js/parser-worker.js` (Web Worker) |
 | Pattern detection | ✅ Done | `js/patterns.js` (8 algorithms + lite mode) |
 | Personality engine | ✅ Done | `js/personality.js` (5 types + lite types) |
-| Chat integration | ✅ Done | `js/chat.js` (OpenRouter + function calling + sessions) |
+| Chat integration | ✅ Done | `js/chat.js` (OpenRouter + ToolStrategy Pattern + sessions) |
 | Data query system | ✅ Done | `js/data-query.js` (time/artist queries) |
+| **Tool Strategies** | ✅ Done | `js/services/tool-strategies/` (Native, Prompt Injection, Intent Extraction) |
 | **Function calling** | ✅ Done | `js/functions.js` (10 LLM-callable tools) |
 | **Template Profiles** | ✅ Done | `js/template-profiles.js` (8 curated profiles) |
 | **Profile Synthesizer** | ✅ Done | `js/profile-synthesizer.js` (AI synthesis) |
@@ -462,7 +463,7 @@ Extracted from God objects into independent services:
 
 **Responsibilities:**
 - Initialization orchestration
-- Event listener setup
+- Event listener setup (Event Delegation)
 - Delegation to services/controllers
 - Global exports
 

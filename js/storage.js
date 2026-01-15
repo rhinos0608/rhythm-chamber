@@ -405,6 +405,27 @@ const Storage = {
   // Utility
   // ==========================================
 
+  /**
+   * Check if Storage is ready for use
+   * Note: Returns true if module is loaded with required methods.
+   * Use isInitialized() to check if database connection is established.
+   * @returns {boolean} True if Storage module is loaded and has required methods
+   */
+  isReady() {
+    // Check if module has required methods (don't require DB connection yet)
+    return typeof this.init === 'function' &&
+      typeof this.getStreams === 'function' &&
+      typeof this.saveStreams === 'function';
+  },
+
+  /**
+   * Check if Storage has an active database connection
+   * @returns {boolean} True if IndexedDB is initialized
+   */
+  isInitialized() {
+    return !!(window.IndexedDBCore?.getConnection?.());
+  },
+
   async clear() {
     for (const storeName of Object.values(STORES)) {
       await window.IndexedDBCore.clear(storeName);

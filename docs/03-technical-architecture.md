@@ -156,23 +156,39 @@ Extracted from God objects into independent services:
 - ✅ **Clean modular architecture** - All UI logic delegated to ChatUIController
 - ✅ **Proper dependency injection** - All controllers initialized with dependencies
 - ✅ **Clear delegation pattern** - Direct calls to controllers/services
-- ✅ **No defensive checks** - Assumes modules are loaded (they are!)
+- ✅ **No defensive checks** - Assumes modules are loaded via dependent imports
+- ✅ **Event Delegation** - Single handler for all `data-action` UI events (replacing inline `onclick`)
 
 ### 7. Chat Module (chat.js)
-**New Structure:** 1,518 lines (vs 1,486 original) - **Delegates to MessageOperations**
+**New Structure:** ~1,350 lines (vs 1,486 original) - **Delegates to MessageOperations + ToolStrategy**
 
 **Responsibilities:**
 - Chat orchestration
 - Session management (delegates to SessionManager)
 - Message operations (delegates to MessageOperations)
 - LLM provider routing
+- Tool execution (delegates to ToolStrategies)
 - Token counting (delegates to TokenCounter)
 
 **Key Improvements:**
+- ✅ **ToolStrategy Pattern** - Function calling logic refactored into strategies
 - ✅ **Delegates to MessageOperations** for message operations
 - ✅ **Delegates to SessionManager** for session operations
-- ✅ **Cleaner separation** of concerns
-- ✅ **Maintains backward compatibility** with fallbacks
+- ✅ **Aggressive ES Module Migration** - No global window exports
+
+### 8. Tool Strategy Pattern (NEW)
+Extracted complex function calling logic from `chat.js` into dedicated strategies (`js/services/tool-strategies/`):
+
+- **BaseToolStrategy**: Shared logic (Circuit Breaker, Timeout, Session access)
+- **NativeToolStrategy** (Level 1): Handles standard OpenAI `tool_calls`
+- **PromptInjectionStrategy** (Level 2/3): Parses `<function_call>` tags from text
+- **IntentExtractionStrategy** (Level 4): Extracts user intent for direct function execution
+
+**Benefits:**
+- Reduces `handleToolCallsWithFallback` complexity (~200 lines → ~30 lines)
+- Isolates parsing logic for different fallback levels
+- Makes adding new fallback methods easier
+- Improves testability of individual strategies
 
 ---
 
