@@ -31,6 +31,11 @@ let isPrimaryTab = true;
 let electionTimeout = null;
 let messageHandler = null;
 
+// Module-scoped election state to prevent race conditions
+let electionCandidates = new Set();
+let receivedPrimaryClaim = false;
+let electionAborted = false;
+
 // ==========================================
 // Core Functions
 // ==========================================
@@ -59,8 +64,10 @@ async function init() {
     messageHandler = createMessageHandler();
     broadcastChannel.addEventListener('message', messageHandler);
 
-    // Start election
-    const candidates = new Set([TAB_ID]);
+    // Reset election state
+    electionCandidates = new Set([TAB_ID]);
+    receivedPrimaryClaim = false;
+    electionAborted = false;
 
     // Announce candidacy
     broadcastChannel.postMessage({
@@ -73,16 +80,22 @@ async function init() {
         electionTimeout = setTimeout(resolve, ELECTION_WINDOW_MS);
     });
 
-    // Determine winner
-    const sortedCandidates = Array.from(candidates).sort();
-    const winner = sortedCandidates[0];
-    isPrimaryTab = (winner === TAB_ID);
+    // Determine winner - but only if election wasn't aborted by a CLAIM_PRIMARY
+    if (!electionAborted) {
+        const sortedCandidates = Array.from(electionCandidates).sort();
+        const winner = sortedCandidates[0];
+        isPrimaryTab = (winner === TAB_ID);
 
-    if (isPrimaryTab) {
-        claimPrimary();
-        console.log(`[TabCoordination] Won election against ${candidates.size - 1} other candidate(s)`);
+        if (isPrimaryTab) {
+            claimPrimary();
+            console.log(`[TabCoordination] Won election against ${electionCandidates.size - 1} other candidate(s)`);
+        } else {
+            console.log(`[TabCoordination] Lost election to ${winner}. Becoming secondary.`);
+        }
     } else {
-        console.log(`[TabCoordination] Lost election to ${winner}. Becoming secondary.`);
+        // Election was aborted by receiving a CLAIM_PRIMARY during the window
+        // isPrimaryTab was already set to false by the handler
+        console.log(`[TabCoordination] Election aborted due to primary claim from another tab`);
     }
 
     // Set up cleanup on unload
@@ -108,13 +121,21 @@ function createMessageHandler() {
                         tabId: TAB_ID
                     });
                 }
+                // Collect candidate for election
+                electionCandidates.add(tabId);
                 break;
 
             case MESSAGE_TYPES.CLAIM_PRIMARY:
                 // Another tab claimed primary - we become secondary
-                if (isPrimaryTab && tabId !== TAB_ID) {
-                    isPrimaryTab = false;
-                    handleSecondaryMode();
+                if (tabId !== TAB_ID) {
+                    // Update module-scoped state to prevent race condition
+                    receivedPrimaryClaim = true;
+                    electionAborted = true;
+
+                    if (isPrimaryTab) {
+                        isPrimaryTab = false;
+                        handleSecondaryMode();
+                    }
                 }
                 break;
 
@@ -211,6 +232,11 @@ async function initiateReElection() {
         clearTimeout(electionTimeout);
     }
 
+    // Reset election state
+    electionCandidates = new Set([TAB_ID]);
+    receivedPrimaryClaim = false;
+    electionAborted = false;
+
     // Announce candidacy
     broadcastChannel?.postMessage({
         type: MESSAGE_TYPES.CANDIDATE,
@@ -225,7 +251,7 @@ async function initiateReElection() {
     // Check if we should become primary
     // For simplicity, we'll assume we win if no other claims within window
     // In a more robust implementation, we'd collect all candidates again
-    if (!isPrimaryTab) {
+    if (!isPrimaryTab && !electionAborted) {
         isPrimaryTab = true;
         claimPrimary();
         console.log('[TabCoordination] Became primary after re-election');
@@ -267,6 +293,11 @@ function cleanup() {
     if (electionTimeout) {
         clearTimeout(electionTimeout);
     }
+
+    // Reset election state
+    electionCandidates = new Set();
+    receivedPrimaryClaim = false;
+    electionAborted = false;
 
     console.log('[TabCoordination] Cleanup complete');
 }

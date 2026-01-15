@@ -104,7 +104,7 @@ function showReveal() {
     // Use getActiveData to transparently support both demo and normal modes
     const activeData = AppState.getActiveData();
     const personality = activeData.personality;
-    const patterns = activeData.patterns || AppState.get().data.patterns;
+    const patterns = activeData.patterns ?? AppState.get()?.data?.patterns;
     const streams = activeData.streams;
 
     if (!personality) {
@@ -302,4 +302,3 @@ if (typeof window !== 'undefined') {
 }
 
 console.log('[ViewController] Module loaded');
-

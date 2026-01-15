@@ -194,10 +194,27 @@ function detectSocialPatterns(streams) {
 
 /**
  * Detect ghosted artists (100+ plays → 0 plays for 1+ year)
+ * 
+ * CORRECTION: Uses dataset end date instead of current date to avoid false positives
+ * when data ends before the "ghosted" period would normally begin.
+ * 
+ * Guardrail: Artists within 7 days of dataset end are NOT considered ghosted
  */
 function detectGhostedArtists(streams) {
-    const now = new Date();
+    if (!streams || streams.length === 0) {
+        return { ghosted: [], hasGhosted: false, count: 0, description: null };
+    }
+
+    // Find the actual end date of the dataset
+    const datasetEndDate = new Date(Math.max(...streams.map(s => new Date(s.playedAt))));
+
+    // Use dataset end date as "now" for ghosted detection
+    const now = datasetEndDate;
     const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+
+    // Guardrail threshold: artists within 7 days of dataset end are "active until data ends"
+    const GUARDRAIL_DAYS = 7;
+    const guardrailDate = new Date(now.getTime() - GUARDRAIL_DAYS * 24 * 60 * 60 * 1000);
 
     // Build artist timelines
     const artistData = {};
@@ -227,14 +244,19 @@ function detectGhostedArtists(streams) {
 
     // Find ghosted artists
     const ghosted = [];
+    const activeUntilEnd = [];
 
     for (const [artist, data] of Object.entries(artistData)) {
-        if (data.plays >= 100 && data.lastPlay < oneYearAgo) {
-            // Check for cliff decline (sudden stop vs gradual fade)
-            const months = Object.entries(data.months || {}).sort((a, b) => a[0].localeCompare(b[0]));
-            const lastMonths = months.slice(-3);
-            const peakMonths = months.sort((a, b) => b[1] - a[1]).slice(0, 3);
-
+        // Check if artist meets ghosted criteria
+        if (data.lastPlay >= guardrailDate) {
+            activeUntilEnd.push({
+                artist,
+                totalPlays: data.plays,
+                lastPlayed: data.lastPlay.toISOString().split('T')[0],
+                daysSince: Math.floor((now - data.lastPlay) / (24 * 60 * 60 * 1000))
+            });
+        } else if (data.plays >= 100 && data.lastPlay < oneYearAgo) {
+            // True ghosted artist
             ghosted.push({
                 artist,
                 totalPlays: data.plays,
@@ -246,14 +268,26 @@ function detectGhostedArtists(streams) {
 
     // Sort by play count
     ghosted.sort((a, b) => b.totalPlays - a.totalPlays);
+    activeUntilEnd.sort((a, b) => b.totalPlays - a.totalPlays);
+
+    // Generate description based on what we found
+    let description = null;
+    if (ghosted.length > 0 && activeUntilEnd.length > 0) {
+        description = `${ghosted.length} artist(s) you used to love but haven't played in over a year, plus ${activeUntilEnd.length} active until data ends`;
+    } else if (ghosted.length > 0) {
+        description = `${ghosted.length} artist(s) you used to love but haven't played in over a year`;
+    } else if (activeUntilEnd.length > 0) {
+        description = `${activeUntilEnd.length} artist(s) active until data ends (recently played)`;
+    }
 
     return {
         ghosted: ghosted.slice(0, 5),
+        activeUntilEnd: activeUntilEnd.slice(0, 5),
         hasGhosted: ghosted.length > 0,
         count: ghosted.length,
-        description: ghosted.length > 0
-            ? `${ghosted.length} artist(s) you used to love but haven't played in over a year`
-            : null
+        activeCount: activeUntilEnd.length,
+        description,
+        datasetEndDate: datasetEndDate.toISOString().split('T')[0]
     };
 }
 
@@ -689,8 +723,8 @@ function generateLiteSummary(liteData, patterns) {
 
 /**
  * NEW: Detect immediate vibe from first 5 minutes of data
-* Used for instant insight in Quick Snapshot mode
-*/
+ * Used for instant insight in Quick Snapshot mode
+ */
 function detectImmediateVibe(liteData) {
     const { recentStreams, topArtists, topTracks } = liteData;
 
@@ -775,4 +809,3 @@ if (typeof window !== 'undefined') {
 }
 
 console.log('[Patterns] Module loaded');
-
