@@ -144,6 +144,13 @@ function showSecurityChecklist() {
     const overlay = modal.querySelector('.security-checklist-overlay');
     const acknowledgeBtn = modal.querySelector('#security-checklist-acknowledge');
 
+    let escHandler;
+    const cleanupChecklist = () => {
+        if (escHandler) {
+            document.removeEventListener('keydown', escHandler);
+        }
+    };
+
     // Close on overlay click
     overlay.addEventListener('click', () => {
         acknowledgeChecklist();
@@ -155,10 +162,9 @@ function showSecurityChecklist() {
     });
 
     // Close on Escape key
-    const escHandler = (e) => {
+    escHandler = (e) => {
         if (e.key === 'Escape') {
             acknowledgeChecklist();
-            document.removeEventListener('keydown', escHandler);
         }
     };
     document.addEventListener('keydown', escHandler);
@@ -169,6 +175,7 @@ function showSecurityChecklist() {
     });
 
     function acknowledgeChecklist() {
+        cleanupChecklist();
         markChecklistSeen();
         modal.classList.add('closing');
         setTimeout(() => {

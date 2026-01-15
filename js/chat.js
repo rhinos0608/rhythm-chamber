@@ -1046,8 +1046,30 @@ async function handleToolCallsWithFallback(
                     onProgress({ type: 'tool_start', tool: intent.function });
                 }
 
-                // Execute the extracted function
-                const results = await window.FunctionCallingFallback.executeFunctionCalls([intent], streamsData);
+                // Execute the extracted function with timeout protection
+                let results;
+                try {
+                    results = await Promise.race([
+                        window.FunctionCallingFallback.executeFunctionCalls([intent], streamsData),
+                        new Promise((_, reject) =>
+                            setTimeout(
+                                () => reject(new Error(`Fallback function calls timed out after ${CHAT_FUNCTION_TIMEOUT_MS}ms`)),
+                                CHAT_FUNCTION_TIMEOUT_MS
+                            )
+                        )
+                    ]);
+                } catch (timeoutError) {
+                    console.error('[Chat] Fallback function execution failed:', timeoutError);
+                    if (onProgress) onProgress({ type: 'tool_end', tool: intent.function, error: true });
+                    return {
+                        earlyReturn: {
+                            status: 'error',
+                            content: `Function calls timed out: ${timeoutError.message}. Please try again or select a different model.`,
+                            role: 'assistant',
+                            isFunctionError: true
+                        }
+                    };
+                }
                 const result = results[0];
 
                 if (onProgress) {
@@ -1444,4 +1466,3 @@ if (typeof window !== 'undefined') {
 }
 
 console.log('[Chat] Module loaded');
-
