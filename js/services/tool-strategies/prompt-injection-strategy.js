@@ -100,10 +100,8 @@ export class PromptInjectionStrategy extends BaseToolStrategy {
                         content: partialResultsMessage,
                         isSystem: true
                     });
-                    // Emit progress for successful calls
-                    for (const successResult of results) {
-                        if (onProgress) onProgress({ type: 'tool_end', tool: successResult.name, error: false });
-                    }
+                    // Note: tool_end events for successful calls were already emitted during the loop
+                    // so we don't re-emit them here to avoid duplicate progress events
                 }
 
                 return {

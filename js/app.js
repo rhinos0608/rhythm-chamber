@@ -465,6 +465,14 @@ async function init(options = {}) {
 
             // HNW Fix: Initialize Chat with loaded data (ensures chat has context on reload)
             const streams = state.streams;
+
+            // HNW Guard: Handle empty streams array case
+            if (!streams || streams.length === 0) {
+                console.warn('[App] No streams available, skipping Chat initialization');
+                showReveal();
+                return; // Exit early - no valid data to initialize Chat with
+            }
+
             // HNW Fix: Filter out null/undefined artist names before counting unique artists
             const validArtistNames = streams
                 .map(s => s.master_metadata_album_artist_name)
@@ -670,7 +678,11 @@ function setupEventListeners() {
 
         const handler = handlers[action];
         if (handler) {
-            handler();
+            // HNW Fix: Properly await async handlers so errors propagate
+            // Some handlers like 'confirm-delete-chat' are async
+            Promise.resolve(handler()).catch(err => {
+                console.error(`[App] Handler '${action}' failed:`, err);
+            });
         } else {
             console.warn(`[App] Unknown action: ${action}`);
         }

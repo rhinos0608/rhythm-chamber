@@ -27,7 +27,7 @@ export class NativeToolStrategy extends BaseToolStrategy {
         } = context;
 
         console.log('[NativeToolStrategy] Processing native tool calls:',
-            responseMessage.tool_calls.map(tc => tc.function.name));
+            responseMessage.tool_calls.map(tc => tc?.function?.name || tc?.id || '<missing>'));
 
         // Add assistant's tool call message to conversation
         this.addToHistory({
