@@ -98,12 +98,7 @@ function recordCall() {
     stats.totalCalls++;
 
     console.log(`[CircuitBreaker] Call ${turnCallCount}/${MAX_CALLS_PER_TURN}`);
-
-    // If half-open and call succeeds, close the circuit
-    if (currentState === STATE.HALF_OPEN) {
-        currentState = STATE.CLOSED;
-        console.log('[CircuitBreaker] Test call succeeded, circuit CLOSED');
-    }
+    // Note: State transition moved to recordSuccess() - only transition after fn() succeeds
 }
 
 /**
@@ -113,6 +108,12 @@ function recordCall() {
  */
 function recordSuccess(functionName, durationMs) {
     console.log(`[CircuitBreaker] ${functionName} succeeded in ${durationMs}ms`);
+
+    // If half-open and call succeeds, transition to closed
+    if (currentState === STATE.HALF_OPEN) {
+        currentState = STATE.CLOSED;
+        console.log('[CircuitBreaker] Test call succeeded, circuit CLOSED');
+    }
 }
 
 /**
@@ -123,8 +124,11 @@ function recordSuccess(functionName, durationMs) {
 function recordFailure(functionName, error) {
     console.warn(`[CircuitBreaker] ${functionName} failed: ${error}`);
 
-    // Consecutive failures could trip the circuit
-    // For now, we just log - could add failure counting
+    // If in HALF_OPEN, transition back to OPEN on failure
+    if (currentState === STATE.HALF_OPEN) {
+        trip('half_open_failure');
+        console.log('[CircuitBreaker] Test call failed, returning to OPEN');
+    }
 }
 
 /**
@@ -222,8 +226,9 @@ async function execute(functionName, fn) {
 
         return { success: true, result, durationMs: duration };
     } catch (error) {
-        recordFailure(functionName, error.message);
-        return { success: false, error: error.message };
+        const message = error instanceof Error ? error.message : String(error);
+        recordFailure(functionName, message);
+        return { success: false, error: message };
     }
 }
 

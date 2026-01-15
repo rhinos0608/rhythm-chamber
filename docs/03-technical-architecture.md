@@ -840,30 +840,30 @@ npx serve .
 1. **Operation Lock Contract Documentation**: Created comprehensive `docs/operation-lock-contract.md` detailing failure propagation hierarchy across all application layers.
 
 2. **Standardized Error Classes**: Created `js/operation-lock-errors.js` with:
-   - `LockAcquisitionError` - Lock blocked by operations
-   - `LockTimeoutError` - Acquisition timeout
-   - `LockReleaseError` - Release failures
-   - `LockForceReleaseError` - Emergency releases
+    - `LockAcquisitionError` - Lock blocked by operations
+    - `LockTimeoutError` - Acquisition timeout
+    - `LockReleaseError` - Release failures
+    - `LockForceReleaseError` - Emergency releases
 
 3. **Enhanced OperationLock Module**: Updated `js/operation-lock.js` with:
-   - `acquireWithTimeout()` - Timeout mechanism (default 30s)
-   - `getLockStatus()` - Diagnostic API for lock state
-   - `getLockDetails()` - Detailed lock information
-   - `withLockAndTimeout()` - Wrapper with timeout support
-   - Uses new error classes for better error handling
+    - `acquireWithTimeout()` - Timeout mechanism (default 30s)
+    - `getLockStatus()` - Diagnostic API for lock state
+    - `getLockDetails()` - Detailed lock information
+    - `withLockAndTimeout()` - Wrapper with timeout support
+    - Uses new error classes for better error handling
 
 4. **Operation Queue System**: Created `js/operation-queue.js` for non-critical operations:
-   - Priority-based queuing (LOW, NORMAL, HIGH, CRITICAL)
-   - Automatic retry with configurable attempts
-   - Event listeners for queue state changes
-   - Cancellation support
-   - Status tracking and diagnostics
+    - Priority-based queuing (LOW, NORMAL, HIGH, CRITICAL)
+    - Automatic retry with configurable attempts
+    - Event listeners for queue state changes
+    - Cancellation support
+    - Status tracking and diagnostics
 
 5. **Race Condition Fixes**: Updated `js/controllers/file-upload-controller.js`:
-   - **Removed** `isLocked()` + `acquire()` pattern (race condition)
-   - **Fixed** with direct `acquire()` in try-catch
-   - Added proper error handling with new error classes
-   - Improved lock release error handling
+    - **Removed** `isLocked()` + `acquire()` pattern (race condition)
+    - **Fixed** with direct `acquire()` in try-catch
+    - Added proper error handling with new error classes
+    - Improved lock release error handling
 
 6. **Complete Documentation**: All failure propagation patterns documented with examples
 
@@ -914,36 +914,36 @@ npx serve .
 **What was done:**
 
 1. **Vector Search Worker** (`js/workers/vector-search-worker.js`)
-   - Created Web Worker with Command Pattern for non-blocking cosine similarity
-   - Added `searchAsync()` method to LocalVectorStore
-   - Updated `rag.js` to use async search for 60fps maintenance
-   - Fallback to sync search for small vector sets (<500) or worker unavailability
+    - Created Web Worker with Command Pattern for non-blocking cosine similarity
+    - Added `searchAsync()` method to LocalVectorStore
+    - Updated `rag.js` to use async search for 60fps maintenance
+    - Fallback to sync search for small vector sets (<500) or worker unavailability
 
 2. **Dependency Hardening** (`js/app.js`)
-   - Added `checkDependencies()` function validating 17 critical modules
-   - Checks both existence AND initialization state (e.g., `Spotify.isConfigured` is function)
-   - Detailed diagnostic UI with module status list
-   - "Copy Error Report" button for GitHub issue reporting
-   - Network status display (online/offline + connection type)
+    - Added `checkDependencies()` function validating 17 critical modules
+    - Checks both existence AND initialization state (e.g., `Spotify.isConfigured` is function)
+    - Detailed diagnostic UI with module status list
+    - "Copy Error Report" button for GitHub issue reporting
+    - Network status display (online/offline + connection type)
 
 3. **Origin Validation Enhancement** (`js/security/token-binding.js`)
-   - Comprehensive `checkSecureContext()` supporting:
-     - HTTPS: Always allowed
-     - HTTP localhost/127.0.0.1: Allowed (development)
-     - file://: Allowed with warning (offline use, crypto.subtle may fail)
-     - app://capacitor://: Allowed (native wrappers)
-     - Iframes: Cross-origin blocked
-     - data://blob://: Blocked (XSS vectors)
+    - Comprehensive `checkSecureContext()` supporting:
+      - HTTPS: Always allowed
+      - HTTP localhost/127.0.0.1: Allowed (development)
+      - file://: Allowed with warning (offline use, crypto.subtle may fail)
+      - app://capacitor://: Allowed (native wrappers)
+      - Iframes: Cross-origin blocked
+      - data://blob://: Blocked (XSS vectors)
 
 4. **Prototype Pollution Prevention** (`js/security/index.js`)
-   - `sanitizeObject()` for recursive key filtering (__proto__, constructor, prototype)
-   - `safeJsonParse()` for untrusted JSON input
-   - `enablePrototypePollutionProtection()` freezes Object/Array/Function prototypes
-   - Called LAST in init() to avoid breaking legitimate library patches
+    - `sanitizeObject()` for recursive key filtering (__proto__, constructor, prototype)
+    - `safeJsonParse()` for untrusted JSON input
+    - `enablePrototypePollutionProtection()` freezes Object/Array/Function prototypes
+    - Called LAST in init() to avoid breaking legitimate library patches
 
 5. **CSS Updates** (`css/styles.css`)
-   - Added `.loading-error` state styling with diagnostic details accordion
-   - Mobile responsive error UI
+    - Added `.loading-error` state styling with diagnostic details accordion
+    - Mobile responsive error UI
 
 **Key Architectural Changes:**
 - **HNW Hierarchy**: Early-fail pattern catches script loading failures

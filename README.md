@@ -1,6 +1,6 @@
 # Rhythm Chamber
 
-**Chat with your Spotify data — the way ChatGPT can't.**
+**Understand why your music matters.**
 
 Your complete listening history is too big for ChatGPT. We handle it locally, with privacy, semantic search, and accurate data queries. Upload your Spotify export and ask questions like:
 

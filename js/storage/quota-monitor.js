@@ -73,11 +73,22 @@ async function getStorageEstimate() {
 function formatBytes(bytes, decimals = 1) {
     if (bytes === 0) return '0 Bytes';
 
+    // Handle non-finite values
+    if (!Number.isFinite(bytes)) return 'Unknown';
+
+    // Handle negative values
+    const negative = bytes < 0;
+    const absBytes = Math.abs(bytes);
+
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    let i = Math.floor(Math.log(absBytes) / Math.log(k));
 
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + ' ' + sizes[i];
+    // Clamp to valid range to avoid out-of-bounds access
+    i = Math.max(0, Math.min(i, sizes.length - 1));
+
+    const value = parseFloat((absBytes / Math.pow(k, i)).toFixed(decimals));
+    return (negative ? '-' : '') + value + ' ' + sizes[i];
 }
 
 /**
@@ -110,7 +121,7 @@ async function getQuotaStatus() {
     }
 
     const displayText = estimate.quota > 0
-        ? `Using ${formatBytes(estimate.used)} of ${formatBytes(estimate.quota)} available`
+        ? `Using ${formatBytes(estimate.used)} of ${formatBytes(estimate.quota)} total`
         : 'Storage quota unknown';
 
     return {
