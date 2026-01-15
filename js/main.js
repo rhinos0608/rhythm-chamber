@@ -111,6 +111,12 @@ import { ProfileSynthesizer, ProfileSynthesizerClass } from './profile-synthesiz
 import { OperationLock } from './operation-lock.js';
 import { Payments } from './payments.js';
 
+// New feature modules (robustness and security enhancements)
+import { QuotaMonitor } from './storage/quota-monitor.js';
+import { CircuitBreaker } from './services/circuit-breaker.js';
+import { SecureTokenStore } from './security/secure-token-store.js';
+import { DataVersion } from './services/data-version.js';
+
 console.log('[Main] All modules imported');
 
 // ==========================================

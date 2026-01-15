@@ -28,9 +28,20 @@
  *       OperationLock.release('file_processing', lockId);
  *   }
  * 
+ * PATTERN 3 - Acquire with Timeout (for long operations):
+ *   Use when you want to avoid indefinite blocking.
+ * 
+ *   const lockId = await OperationLock.acquireWithTimeout('embedding_generation', 60000);
+ *   try {
+ *       await longRunningOperation();
+ *   } finally {
+ *       OperationLock.release('embedding_generation', lockId);
+ *   }
+ * 
  * WHEN TO USE WHICH:
  * - Pattern 1: UI event handlers (button clicks, drag-drop)
  * - Pattern 2: Critical sections with data mutations
+ * - Pattern 3: Operations that might take a long time
  * 
  * ⚠️ NEVER: Use isLocked() as a guard then immediately acquire()
  *    This creates a race condition between check and acquire.
@@ -38,6 +49,31 @@
  * 
  * ═══════════════════════════════════════════════════════════════
  */
+
+// Import error classes
+let LockAcquisitionError, LockTimeoutError, LockReleaseError, LockForceReleaseError;
+
+// Try to import error classes (works in both Node and browser)
+if (typeof require !== 'undefined') {
+    try {
+        const errors = require('./operation-lock-errors.js');
+        LockAcquisitionError = errors.LockAcquisitionError;
+        LockTimeoutError = errors.LockTimeoutError;
+        LockReleaseError = errors.LockReleaseError;
+        LockForceReleaseError = errors.LockForceReleaseError;
+    } catch (e) {
+        // Fallback: use global if available
+        LockAcquisitionError = window.LockAcquisitionError || Error;
+        LockTimeoutError = window.LockTimeoutError || Error;
+        LockReleaseError = window.LockReleaseError || Error;
+        LockForceReleaseError = window.LockForceReleaseError || Error;
+    }
+} else if (typeof window !== 'undefined') {
+    LockAcquisitionError = window.LockAcquisitionError || Error;
+    LockTimeoutError = window.LockTimeoutError || Error;
+    LockReleaseError = window.LockReleaseError || Error;
+    LockForceReleaseError = window.LockForceReleaseError || Error;
+}
 
 // Named operations that can be locked
 const OPERATIONS = {
@@ -93,15 +129,14 @@ function canAcquire(operationName) {
  * Acquire a lock for an operation
  * @param {string} operationName - The operation to lock
  * @returns {Promise<string>} Lock owner ID (needed for release)
- * @throws {Error} If operation is blocked by conflicting locks
+ * @throws {LockAcquisitionError} If operation is blocked by conflicting locks
  */
 async function acquire(operationName) {
     const { canAcquire: allowed, blockedBy } = canAcquire(operationName);
 
     if (!allowed) {
-        const msg = `Operation '${operationName}' blocked by: ${blockedBy.join(', ')}`;
-        console.warn(`[OperationLock] ${msg}`);
-        throw new Error(msg);
+        console.warn(`[OperationLock] Operation '${operationName}' blocked by: ${blockedBy.join(', ')}`);
+        throw new LockAcquisitionError(operationName, blockedBy);
     }
 
     const ownerId = generateOwnerId();
@@ -117,22 +152,59 @@ async function acquire(operationName) {
 }
 
 /**
+ * Acquire a lock with timeout
+ * @param {string} operationName - The operation to lock
+ * @param {number} timeoutMs - Maximum wait time in milliseconds
+ * @returns {Promise<string>} Lock owner ID
+ * @throws {LockTimeoutError} If timeout is reached
+ * @throws {LockAcquisitionError} If operation is blocked
+ */
+async function acquireWithTimeout(operationName, timeoutMs = 30000) {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeoutMs) {
+        try {
+            return await acquire(operationName);
+        } catch (error) {
+            // If it's not a LockAcquisitionError, re-throw it
+            if (!(error instanceof LockAcquisitionError)) {
+                throw error;
+            }
+
+            // If timeout is reached, throw timeout error
+            if (Date.now() - startTime >= timeoutMs) {
+                console.warn(`[OperationLock] Timeout acquiring '${operationName}' after ${timeoutMs}ms`);
+                throw new LockTimeoutError(operationName, timeoutMs);
+            }
+
+            // Wait 100ms before retry
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+    }
+
+    throw new LockTimeoutError(operationName, timeoutMs);
+}
+
+/**
  * Release a lock
  * @param {string} operationName - The operation to unlock
  * @param {string} ownerId - The owner ID from acquire()
  * @returns {boolean} True if released, false if lock didn't match
+ * @throws {LockReleaseError} If release fails
  */
 function release(operationName, ownerId) {
     const lock = activeLocks.get(operationName);
 
     if (!lock) {
-        console.warn(`[OperationLock] No lock found for '${operationName}'`);
-        return false;
+        const error = new LockReleaseError(operationName, ownerId, null);
+        console.warn(`[OperationLock] ${error.message}`);
+        throw error;
     }
 
     if (lock.ownerId !== ownerId) {
-        console.warn(`[OperationLock] Owner mismatch for '${operationName}': expected ${lock.ownerId}, got ${ownerId}`);
-        return false;
+        const error = new LockReleaseError(operationName, ownerId, lock.ownerId);
+        console.warn(`[OperationLock] ${error.message}`);
+        throw error;
     }
 
     const duration = Date.now() - lock.acquiredAt;
@@ -162,15 +234,56 @@ function getActiveLocks() {
 }
 
 /**
+ * Get detailed lock status for diagnostics
+ * @param {string} operationName - The operation to check
+ * @returns {{ canAcquire: boolean, blockedBy?: string[], activeLocks: string[], timestamp: number }}
+ */
+function getLockStatus(operationName) {
+    const check = canAcquire(operationName);
+    const active = getActiveLocks();
+
+    return {
+        canAcquire: check.canAcquire,
+        blockedBy: check.blockedBy,
+        activeLocks: active,
+        timestamp: Date.now()
+    };
+}
+
+/**
+ * Get lock information including duration held
+ * @returns {Array<{operation: string, heldFor: number, ownerId: string}>}
+ */
+function getLockDetails() {
+    const now = Date.now();
+    const details = [];
+
+    for (const [operation, lock] of activeLocks.entries()) {
+        details.push({
+            operation,
+            heldFor: now - lock.acquiredAt,
+            ownerId: lock.ownerId
+        });
+    }
+
+    return details;
+}
+
+/**
  * Force release all locks (emergency use only)
  * Use with caution - may leave operations in inconsistent state
+ * @param {string} reason - Reason for force release (for logging)
+ * @returns {string[]} Array of released operation names
+ * @throws {LockForceReleaseError}
  */
-function forceReleaseAll() {
+function forceReleaseAll(reason = 'Emergency') {
     const released = [...activeLocks.keys()];
     activeLocks.clear();
-    console.warn(`[OperationLock] Force released all locks: ${released.join(', ')}`);
+
+    console.warn(`[OperationLock] Force released all locks: ${released.join(', ')} - Reason: ${reason}`);
     released.forEach(op => dispatchLockEvent('released', op));
-    return released;
+
+    throw new LockForceReleaseError(released, reason);
 }
 
 /**
@@ -190,9 +303,27 @@ function dispatchLockEvent(action, operationName) {
  * @param {string} operationName - The operation to lock
  * @param {Function} fn - Async function to execute
  * @returns {Promise<*>} Result of fn
+ * @throws {LockAcquisitionError} If lock cannot be acquired
  */
 async function withLock(operationName, fn) {
     const ownerId = await acquire(operationName);
+    try {
+        return await fn();
+    } finally {
+        release(operationName, ownerId);
+    }
+}
+
+/**
+ * Wrap an async function with automatic lock acquisition/release and timeout
+ * @param {string} operationName - The operation to lock
+ * @param {Function} fn - Async function to execute
+ * @param {number} timeoutMs - Timeout in milliseconds
+ * @returns {Promise<*>} Result of fn
+ * @throws {LockTimeoutError} If timeout is reached
+ */
+async function withLockAndTimeout(operationName, fn, timeoutMs = 30000) {
+    const ownerId = await acquireWithTimeout(operationName, timeoutMs);
     try {
         return await fn();
     } finally {
@@ -204,12 +335,16 @@ async function withLock(operationName, fn) {
 export const OperationLock = {
     OPERATIONS,
     acquire,
+    acquireWithTimeout,
     release,
     isLocked,
     canAcquire,
     getActiveLocks,
+    getLockStatus,
+    getLockDetails,
     forceReleaseAll,
-    withLock
+    withLock,
+    withLockAndTimeout
 };
 
 // Keep window global for backwards compatibility
@@ -217,5 +352,4 @@ if (typeof window !== 'undefined') {
     window.OperationLock = OperationLock;
 }
 
-console.log('[OperationLock] Module loaded');
-
+console.log('[OperationLock] Module loaded with enhanced diagnostics and timeout support');

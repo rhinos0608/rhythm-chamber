@@ -463,10 +463,15 @@ function getHistory() {
 
 /**
  * Add message to current session
+ * Automatically tags message with dataVersion for stale data detection
  * @param {Object} message - Message object with role and content
  */
 function addMessageToHistory(message) {
     if (typeof window !== 'undefined' && window._sessionData) {
+        // Tag message with current data version for stale detection
+        if (window.DataVersion?.tagMessage) {
+            window.DataVersion.tagMessage(message);
+        }
         window._sessionData.messages.push(message);
     }
 }

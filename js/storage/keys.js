@@ -52,7 +52,14 @@ const STORAGE_KEYS = {
     // Migration Keys
     // ==========================================
     MIGRATION_COMPLETED: 'rhythm_chamber_migration_completed',
-    MIGRATION_VERSION: 'rhythm_chamber_migration_version'
+    MIGRATION_VERSION: 'rhythm_chamber_migration_version',
+
+    // ==========================================
+    // SecureTokenStore Keys
+    // ==========================================
+    SECURE_TOKEN_BINDING: 'rhythm_chamber_secure_binding',
+    SECURE_TOKEN_AUDIT: 'rhythm_chamber_token_audit',
+    SECURE_TOKEN_SALT: 'rhythm_chamber_token_salt'
 };
 
 // Freeze to prevent accidental modification
