@@ -13,7 +13,7 @@
 | Tier | Cost | Features | Infrastructure | Purpose |
 |------|------|----------|----------------|----------|
 | **Free** | **$0** | Full local analysis, BYOI chat (your models/keys), basic cards, personality reveal, 100% Client-side. | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
-| **Supporter** | **$19 Lifetime** | CLI tool, premium themes (Dark/Cyberpunk/Minimal), "Verified" badge, friend compare JSON import | Client-side only | **Seed Capital**: Funds security audit & cloud infrastructure |
+| **Supporter** | **$39 one-time OR $19 first year, then $9/year** | **Obsidian/Notion Export + Relationship Compatibility Reports**, "Verified" badge, friend compare JSON import | Client-side only | **Seed Capital**: Funds security audit & cloud infrastructure |
 | **Patron** | **$7/month** | Dev Discord access, roadmap voting rights, early beta features, priority support | Client-side + Discord | **Community**: Recurring revenue for ongoing support |
 
 ### Phase 2: Managed Cloud & AI (Trust-First Launch)
@@ -27,11 +27,11 @@
 
 **Key Strategy - "Sovereign-to-Managed" Pipeline:**
 - **Community First**: 100% free local tool builds trust and user base
-- **Seed Funding**: $19 Supporter tier acts as "crowdfunding" for security
+- **Seed Funding**: $39 one-time OR $19 first year, then $9/year Supporter tier acts as "crowdfunding" for security
 - **External Security**: Revenue funds reputable security firm audit & partnership
 - **Marketing Asset**: "Audited by X" badge becomes sales feature for Phase 2
 - **Clear KPI**: Need ~250-1,000 Supporters before launching cloud tier
-- **Transparency**: Explicitly state "Your $19 funds our security audit"
+- **Transparency**: Explicitly state "Your Supporter funds our security audit"
 - **One Codebase**: All features in main app, unlocked with license key
 - **Hacker-Resistant**: Accept bypassing, target supporters who want to pay
 - **CLI version**: Wraps existing `js/parser.js` and `js/data-query.js` in Node.js
@@ -472,7 +472,7 @@ js/services/tool-strategies/
 | `js/controllers/*` | ✅ ES Module | All controllers use proper exports, no window attachments |
 | `js/storage/*` | ⚠️ Hybrid | Core modules converted, facades remain |
 
-**Verification Status:** Controllers complete (5/5 checklist items verified on 2026-01-15). Storage modules still hybrid.
+**Verification Status:** Controllers complete (7/7 checklist items verified on 2026-01-15). Storage modules still hybrid.
 
 **Breaking Changes:**
 - Default exports → Named exports (e.g., `export { init }` not `export default init`)
@@ -919,16 +919,16 @@ async function sendMessage(message) {
 | Spotify OAuth (PKCE) | $0 | No backend needed |
 | **Total** | **$0** | **Zero infrastructure cost** |
 
-### Phase 1: Supporter Tier ($19 Lifetime) - Seed Capital
+### Phase 1: Supporter Tier ($39 one-time OR $19 first year, then $9/year) - Seed Capital
 
 | Resource | Cost | Purpose |
 |----------|------|----------|
-| CLI tool (Node.js wrapper) | $0 (uses existing JS) | Feature unlock |
-| Premium themes (CSS) | $0 | Feature unlock |
+| PKM Export (Markdown) | $0 | Feature unlock |
+| Relationship Reports | $0 | Feature unlock |
 | Badge generation (Canvas) | $0 | Feature unlock |
 | Friend compare (JSON) | $0 | Feature unlock |
-| **Security Audit Fund** | **$19 per user** | **External security firm** |
-| **Cloud Infrastructure Fund** | **$19 per user** | **Future hosting costs** |
+| **Security Audit Fund** | **Supporter revenue** | **External security firm** |
+| **Cloud Infrastructure Fund** | **Supporter revenue** | **Future hosting costs** |
 | **Total** | **$0 infrastructure** | **Revenue = Seed Capital** |
 
 **Purpose of Supporter Revenue:**
@@ -1017,9 +1017,9 @@ npx serve .
 - [ ] WASM embeddings for semantic search (v1.1)
 - [ ] Playlist generation based on patterns (v1.1)
 
-#### Supporter Tier ($19 Lifetime)
-- [x] CLI tool for batch processing
-- [x] Premium themes (Dark, Cyberpunk, Minimal)
+#### Supporter Tier ($39 one-time OR $19 first year, then $9/year)
+- [x] **Obsidian/Notion Export**: Generates folder of Markdown files with proper interlinking
+- [x] **Relationship Compatibility Reports**: Upload friend's data to generate insights
 - [x] "Verified" badge on cards
 - [x] Friend compare via JSON export/import
 

@@ -238,7 +238,7 @@ You mark time through sound.
 - **Premium Themes**: Dark, Cyberpunk, Minimal styles (FREE for all)
 - **Purpose**: Loss leader to build community and validate product
 
-#### Supporter Tier ($19 yearly) - Seed Capital
+#### Supporter Tier ($39 one-time) - Seed Capital
 - **Obsidian/Notion Export**: Generates folder of Markdown files with proper interlinking
   - One file per Artist, Month, and Era
   - Example: [[The National]] links to [[Sad Dad Era]] and [[March 2019]]
@@ -248,12 +248,28 @@ You mark time through sound.
 - **Purpose**: Funds external security audit & cloud infrastructure
 - **KPI**: Need ~250-1,000 Supporters to fund Phase 2
 
+#### Supporter Tier ($19 first year, then $9/year) - Recurring Revenue
+- **Obsidian/Notion Export**: Generates folder of Markdown files with proper interlinking
+  - One file per Artist, Month, and Era
+  - Example: [[The National]] links to [[Sad Dad Era]] and [[March 2019]]
+- **Relationship Compatibility Reports**: Upload friend's data to generate insights
+  - Example: "You and Sarah have 84% overlap in 'Melancholy' but divergent 'Energy' curves in 2021. Your common anthem is 'Bloodbuzz Ohio'."
+- **Verified Badge**: Visual indicator on shareable cards
+- **Purpose**: Ongoing support for security & features
+- **KPI**: Need ~250-1,000 Supporters to fund Phase 2
+
 #### Patreon Tier ($7/month) - Community
 - **Dev Discord**: Community access and support
 - **Roadmap Voting**: Influence feature priorities
 - **Early Beta Access**: Try new features before release
 - **Priority Support**: Faster response times
 - **Purpose**: Sustainable community funding
+
+### Security Audit Stretch Goal
+
+**$10,000 raised = Security audit unlocked**
+
+When we reach $10,000 in Supporter revenue, we will commission an external security audit to validate our zero-backend architecture and encryption implementation. This audit will be published publicly to build trust with our community.
 
 ### Implementation Strategy
 - **One Codebase**: All features in main app, unlocked with license key

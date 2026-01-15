@@ -146,3 +146,104 @@ We're not building a better stats.fm. We're building the next evolution of music
 **Your data. Your intelligence. Your control. Your insights.**
 
 **New Strategy:** Focus on PKM export and relationship insights for Supporters, drop CLI and paid themes, keep everything else free and local.
+
+---
+
+## Pricing Strategy
+
+### Phase 1: Sovereign Community (Zero Cost to User)
+
+| Tier | Price | What You Get | Infrastructure | Purpose |
+|------|-------|--------------|----------------|----------|
+| **Free** | $0 | Full local analysis, BYOI chat, basic cards, personality reveal | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
+| **Supporter** | **$39 - one time purchase** | **Obsidian/Notion Export + Relationship Compatibility Reports** | Client-side only | **Seed Capital**: Funds security audit & cloud infrastructure |
+| **Supporter** | **$19 first year, then $9/year** | **Obsidian/Notion Export + Relationship Compatibility Reports** | Client-side only | **Recurring Revenue**: Ongoing support for security & features |
+| **Patron** | **$7/month** | Dev Discord access, roadmap voting, early beta features | Client-side + Discord | **Community**: Recurring revenue for ongoing support |
+
+### Security Audit Stretch Goal
+
+**$10,000 raised = Security audit unlocked**
+
+When we reach $10,000 in Supporter revenue, we will commission an external security audit to validate our zero-backend architecture and encryption implementation. This audit will be published publicly to build trust with our community.
+
+### Why This Works
+
+- **Zero Risk Entry**: Users try without payment barrier
+- **Community Investment**: Supporters feel ownership in security development
+- **Borrowed Trust**: External security firm reputation transfers to your product
+- **PKM Export**: "Physical" digital copy of their history that connects to their other notes
+- **Relationship Engine**: Viral loop - one user buys to analyze partner/friend, sells the outcome (relationship insight)
+- **Zero-Backend**: No payment processing infrastructure needed
+- **Viral Loop**: "Compare with Friend" via JSON exchange keeps data private
+- **BYOI Model**: Appeals to privacy-conscious power users who want control and choice over models/keys
+- **Phase 2 Trigger**: Only after hitting Supporter KPI (~250-1,000) and security audit complete
+- **Revenue Allocation**: Supporter funds go directly to security audit and cloud infrastructure
+- **Lifetime Protection**: Separates access fee from compute costs
+- **Two Points of Failure**: Users can switch between local and cloud modes
+- **Never Deprecate Local**: Free tier remains functional forever
+
+### Feature Implementation
+- **PKM Export**: Generates folder of Markdown files (one for every Artist, Month, Era) properly interlinked for Obsidian/Notion/Roam
+- **Relationship Compatibility Report**: Upload second person's zip/JSON to generate "You and Sarah have 84% overlap in 'Melancholy' but divergent 'Energy' curves in 2021. Your common anthem is 'Bloodbuzz Ohio'."
+- **Enrichment Mode** (Strategy 3): Connects to public APIs (MusicBrainz, AcoustID) to fetch BPM, Key, Producer Credits, Lyrics for top tracks
+- **Patreon Perks**: Discord access, voting rights, early access
+- **Phase 2**: Multi-device sync, encrypted cloud backup, managed AI setup, **external security partnership**
+
+---
+
+## Target Audience
+
+**Old framing:** Stats nerds who export data (~5M)
+
+**New framing:** Everyone who screenshots Wrapped (~100M+) + quantified-self enthusiasts + PKM users + relationship-focused users
+
+The data export friction is real, but the payoff is self-discovery and deeper connections, not just stats.
+
+---
+
+## Pricing Strategy Analysis
+
+### Strategy 1: The "Knowledge Graph" Tier (Recommended)
+**Value Prop:** Turn music history into a personal wiki. Instead of a CLI tool, build a powerful Export Engine that integrates with Personal Knowledge Management (PKM) tools like Obsidian, Notion, or Roam Research.
+
+**The Feature:** "Export to Obsidian Vault." The app generates a folder of Markdown files (one for every Artist, Month, Era) properly interlinked.
+
+**Example:** A user clicks "Export" and gets a local folder where [[The National]] links to [[Sad Dad Era]] and [[March 2019]].
+
+**Why it works:** The "Emotional Archaeologist" likely journals or tracks data. Giving them a "physical" digital copy of their history that connects to their other notes is huge value.
+
+**Value Prop:** Data Spotify doesn't give you. Use the local client to fetch public metadata that Spotify hides or doesn't track, creating a "Super-Metadata" version of their library.
+
+**The Feature:** "Enrichment Mode."
+
+**The app connects to public APIs (MusicBrainz, AcoustID) from the client side to fetch BPM, Key, Producer Credits, and Lyrics for top tracks.
+
+**Unlock:** "Show me my listening habits by Producer instead of Artist" (e.g., "You love Jack Antonoff productions, regardless of the singer").
+
+**Why it works:** It appeals to the "Discovery Junkie" and music nerds who feel limited by standard "Top Artist" charts.
+
+- Integrated with AI bundle
+
+
+### Strategy 2: The "Social Resonance" Tier
+**Value Prop:** Compare your data with others. Your docs mention a "Friend Compare via JSON". Currently, this is a feature. Make the Deep Comparison Report the paid product.
+
+**The Feature:** "Relationship Resonance Engine."
+
+**Free:** See your own stats.
+
+**Paid:** Upload a second person's zip file (or JSON export) to generate a "Relationship Compatibility Report."
+
+**Output:** "You and Sarah have 84% overlap in 'Melancholy' but divergent 'Energy' curves in 2021. Your common anthem is 'Bloodbuzz Ohio'."
+
+**Why it works:** It forces a viral loop. One user buys it to analyze their partner/friend. It sells the outcome (relationship insight), not the tool.
+
+**Price:** $2 monthly (Lower friction to encourage viral adoption).
+
+
+
+### Recommendation
+Combine Strategy 1 (PKM Export) and Strategy 2 (Comparison) into the "Supporter" tier.
+
+CLI Tool (Make it open source/free to attract devs). Premium Themes (Keep them free to make the product look good for everyone).
+Add: "Obsidian/Notion Export" + "Relationship Compatibility Reports."
