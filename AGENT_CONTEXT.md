@@ -376,14 +376,22 @@ Level 2: Prompt Injection (function definitions as text, parse <function_call> t
     ↓ (Failed/Parse error)
 Level 3: Regex Parsing (extract structured data from natural language)
     ↓ (Failed/No match)
-Level 4: Direct Query (extract intent from user message, run function directly)
+Level 4: Direct Query/Intent Extraction (extract intent from user message, run function directly)
 ```
 
-**Implementation:**
-- `js/services/function-calling-fallback.js` - Fallback service with 4-level network
+**Implementation Architecture:**
+- `js/services/function-calling-fallback.js` - Fallback detection and utility functions
+- `js/services/tool-strategies/` - **Strategy Pattern implementation** (refactored from monolithic handleToolCallsWithFallback)
+  - `base-strategy.js` - Base class with shared functionality
+  - `native-strategy.js` - Level 1: Native OpenAI-style tool_calls
+  - `prompt-injection-strategy.js` - Levels 2/3: `<function_call>` tag parsing + regex fallback
+  - `intent-extraction-strategy.js` - Level 4: User intent extraction
+  - `index.js` - Strategy exports
+
+**Key Functions:**
 - `detectCapabilityLevel(provider, model)` - Determines which level to use
 - `buildLevel2Request(messages, tools)` - Injects function definitions into prompt
-- `parseFunctionCallsFromText(content)` - Parses `<function_call>` tags from text
+- `parseFunctionCallsFromText(content)` - Parses `<function_call>` tags from text (Level 2/3)
 - `extractQueryIntent(message)` - Level 4 intent extraction with pattern matching
 
 **Integration in chat.js:**
@@ -396,13 +404,93 @@ Level 4: Direct Query (extract intent from user message, run function directly)
 - Ollama: 20+ model families (llama3.2/3.3, mistral, qwen2.5, deepseek, hermes3, etc.)
 - LM Studio: Base model patterns (llama-3, mistral, qwen2.5, etc.)
 
-**Files Created:**
-- `js/services/function-calling-fallback.js` - Fallback service
-
-**Files Modified:**
+**Files:**
+- `js/services/function-calling-fallback.js` - Fallback detection service
+- `js/services/tool-strategies/` - Strategy pattern implementations (4 strategies)
 - `js/chat.js` - Integrated fallback handling
-- `js/main.js` - Added import
-- `js/ollama.js` - Expanded TOOL_CAPABLE_MODELS list
+- `js/main.js` - ES module imports
+
+### 14. ToolStrategy Pattern (NEW)
+**Problem:** The original `handleToolCallsWithFallback()` function was a 200+ line monolithic block with nested conditionals for each capability level. This violated single-responsibility principle, made testing difficult, and adding new strategies required modifying a fragile core function.
+
+**Solution: Strategy Pattern**
+Refactored to use the Gang of Four Strategy pattern, where each capability level is encapsulated in its own class.
+
+**Benefits:**
+- **Extensibility**: Add new strategies without touching existing code
+- **Testability**: Each strategy can be unit tested in isolation
+- **Fallback**: Strategies fail gracefully and defer to lower levels
+- **Maintainability**: Clear separation of concerns per capability level
+
+**Implementation:**
+```
+js/services/tool-strategies/
+├── base-strategy.js          # BaseToolStrategy - shared functionality
+├── native-strategy.js        # NativeToolStrategy (Level 1)
+├── prompt-injection-strategy.js  # PromptInjectionStrategy (Level 2/3)
+├── intent-extraction-strategy.js # IntentExtractionStrategy (Level 4)
+└── index.js                  # Exports all strategies
+```
+
+**Key Classes & Methods:**
+| Symbol | Location | Purpose |
+|--------|----------|--------|
+| `BaseToolStrategy` | `base-strategy.js` | Base class with `executeWithTimeout()`, `checkCircuitBreaker()`, `addToHistory()` |
+| `NativeToolStrategy` | `native-strategy.js` | Handles OpenAI-style `tool_calls` responses |
+| `PromptInjectionStrategy` | `prompt-injection-strategy.js` | Parses `<function_call>` tags from text |
+| `IntentExtractionStrategy` | `intent-extraction-strategy.js` | Extracts intent from user message |
+
+**Strategy Selection Flow:**
+1. `chat.js` calls capability detection
+2. Based on capability level, appropriate strategy's `canHandle()` is checked
+3. First matching strategy's `execute()` is invoked
+4. If strategy fails, fallback to next lower level
+
+**Verification Checklist:**
+- [ ] All strategies extend `BaseToolStrategy`
+- [ ] Each strategy implements `canHandle()` and `execute()`
+- [ ] Strategies are imported in `js/main.js`
+- [ ] Circuit breaker integration works per-strategy
+
+### 15. Aggressive ES Module Migration (NEW)
+**Goal:** Migrate from legacy `window.ModuleName` globals and `onclick` handlers to proper ES modules with explicit imports/exports. This enables better tree-shaking, static analysis, and eliminates global namespace pollution.
+
+**Migration Status:**
+| Module | Status | Notes |
+|--------|--------|-------|
+| `js/main.js` | ✅ ES Module | Entry point (`type="module"`) |
+| `js/app.js` | ✅ ES Module | Exports `init()` |
+| `js/security.js` | ✅ ES Module | Named exports |
+| `js/services/tool-strategies/*` | ✅ ES Module | All strategy classes |
+| `js/services/function-calling-fallback.js` | ✅ ES Module | Named exports |
+| `js/controllers/*` | ⚠️ Hybrid | Still expose `window.` for some compatibility |
+| `js/storage/*` | ⚠️ Hybrid | Core modules converted, facades remain |
+
+**Breaking Changes:**
+- Default exports → Named exports (e.g., `export { init }` not `export default init`)
+- `require()` → `import` (Node.js/bundler compatibility)
+- `window.ModuleName` access → Imported modules
+- `onclick="fn()"` → `data-action` + event delegation in `app.js`
+
+**Migration Strategy:**
+1. **Script Tags**: Replace `<script src="...">` with `<script type="module" src="js/main.js">`
+2. **Entry Point**: `main.js` imports all modules, calls `App.init()`
+3. **Event Delegation**: Replace inline `onclick` with `data-action` attributes
+4. **Dependency Injection**: Controllers receive dependencies via `init({ dep1, dep2 })`
+5. **Window Fallbacks**: For backward compatibility, some modules still expose on `window`
+
+**Developer Steps to Update Imports:**
+1. Change: `const Module = window.Module;`
+   To: `import { Module } from './module.js';`
+2. Ensure `package.json` has `"type": "module"` if using Node.js tooling
+3. Update test files to use dynamic `import()` or configure test runner for ESM
+
+**Verification Checklist:**
+- [ ] `app.html` has single `<script type="module" src="js/main.js">`
+- [ ] No inline `onclick` handlers (use `data-action`)
+- [ ] All imports resolve without errors in browser console
+- [ ] E2E tests pass with ES module configuration
+- [ ] `CRITICAL_DEPENDENCIES` check passes at startup
 
 ---
 

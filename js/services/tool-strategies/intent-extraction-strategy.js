@@ -49,7 +49,14 @@ export class IntentExtractionStrategy extends BaseToolStrategy {
             return { responseMessage };
         }
 
-        const intent = this.FunctionCallingFallback.extractQueryIntent(userMessage);
+        // HNW Guard: Also verify executeFunctionCalls exists before we proceed
+        const fc = this.FunctionCallingFallback;
+        if (typeof fc.executeFunctionCalls !== 'function') {
+            console.warn('[IntentExtractionStrategy] FunctionCallingFallback.executeFunctionCalls not available');
+            return { responseMessage };
+        }
+
+        const intent = fc.extractQueryIntent(userMessage);
 
         if (!intent) {
             return { responseMessage };
@@ -62,11 +69,11 @@ export class IntentExtractionStrategy extends BaseToolStrategy {
             onProgress({ type: 'tool_start', tool: intent.function });
         }
 
-        // Execute the extracted function
+        // Execute the extracted function using the validated reference
         let results;
         try {
             results = await Promise.race([
-                this.FunctionCallingFallback.executeFunctionCalls([intent], streamsData),
+                fc.executeFunctionCalls([intent], streamsData),
                 new Promise((_, reject) =>
                     setTimeout(
                         () => reject(new Error(`Fallback function calls timed out after ${this.TIMEOUT_MS}ms`)),
