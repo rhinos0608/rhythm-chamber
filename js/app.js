@@ -36,6 +36,8 @@
 // - Spotify (Spotify API)
 // - DemoData (demo data)
 // - Cards (share cards)
+import { SecurityChecklist } from './security.js';
+// - SecurityChecklist (first-run security checklist)
 
 // ==========================================
 // State Management
@@ -81,7 +83,10 @@ const CRITICAL_DEPENDENCIES = {
     // Optional modules (not required but useful)
     'RAG': { check: () => window.RAG && typeof window.RAG.search === 'function', required: false },
     'LocalVectorStore': { check: () => window.LocalVectorStore && typeof window.LocalVectorStore.init === 'function', required: false },
-    'LocalEmbeddings': { check: () => window.LocalEmbeddings && typeof window.LocalEmbeddings.initialize === 'function', required: false }
+    'LocalEmbeddings': { check: () => window.LocalEmbeddings && typeof window.LocalEmbeddings.initialize === 'function', required: false },
+
+    // Security checklist (optional - only shows on first run)
+    'SecurityChecklist': { check: () => window.SecurityChecklist && typeof window.SecurityChecklist.init === 'function', required: false }
 };
 
 /**
@@ -451,6 +456,13 @@ async function init() {
 
     // Initialize sidebar controller
     await SidebarController.init();
+
+    // Show security checklist on first run (after other UI is ready)
+    if (window.SecurityChecklist) {
+        setTimeout(() => {
+            window.SecurityChecklist.init();
+        }, 1000);
+    }
 
     // NOTE: Prototype pollution protection moved to window.onload handler
     // to ensure all scripts (including async/deferred) have finished loading

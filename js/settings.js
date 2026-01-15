@@ -443,6 +443,14 @@ function showSettingsModal() {
             : 'Configure your OpenRouter API key. Get a free key at <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a>'}
                         </p>
                         
+                        <div class="security-warning warning-small">
+                            <span class="warning-icon">☁️</span>
+                            <div class="warning-content">
+                                <strong>Data Privacy Notice</strong>
+                                <p>Using OpenRouter sends your conversation data to external servers. Use Local AI for zero data transmission.</p>
+                            </div>
+                        </div>
+                        
                         <div class="settings-field">
                             <label for="setting-api-key">API Key ${hasConfigKey ? '(from config.js)' : ''}</label>
                             <input type="password" id="setting-api-key" 

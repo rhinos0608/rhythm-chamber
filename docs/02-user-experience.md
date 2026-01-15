@@ -196,6 +196,11 @@ You mark time through sound.
 └─────────────────────────────────────┘
 ```
 
+**Enhanced Sharing (Web Share API):**
+- **Native Share Sheet**: Direct integration with iOS/Android/Desktop share dialogs
+- **Rich Payload**: Includes image, title, personalized text, and referral link
+- **One-Tap**: Share directly to Instagram, Messages, etc. without saving first
+
 **Supporter Features on Cards:**
 - Premium theme styling (FREE for all - dropped paid themes)
 - "Verified" badge (if supporter)
