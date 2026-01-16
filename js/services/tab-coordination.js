@@ -7,7 +7,7 @@
  * @module services/tab-coordination
  */
 
-import { LamportClock } from './lamport-clock.js';
+import { VectorClock } from './vector-clock.js';
 import { WaveTelemetry } from './wave-telemetry.js';
 
 // ==========================================
@@ -64,12 +64,12 @@ function calculateElectionWindow() {
 // Calculate once on module load
 let ELECTION_WINDOW_MS = calculateElectionWindow();
 
-// Initialize Lamport clock for this tab
-LamportClock.init();
+// Initialize Vector clock for this tab (provides better conflict detection than Lamport)
+const vectorClock = new VectorClock();
 
-// Use Lamport timestamp for deterministic ordering instead of Date.now()
-// This eliminates clock skew issues between tabs
-const TAB_ID = `${LamportClock.tick()}-${LamportClock.getId().substring(0, 8)}`;
+// Use Vector clock for deterministic ordering instead of Date.now()
+// This eliminates clock skew issues between tabs and detects concurrent updates
+const TAB_ID = `${vectorClock.tick()[vectorClock.processId]}-${vectorClock.processId.substring(0, 8)}`;
 
 // Message types
 const MESSAGE_TYPES = {
@@ -237,7 +237,7 @@ let messageHandler = null;
 let heartbeatInterval = null;
 let heartbeatCheckInterval = null;
 let lastLeaderHeartbeat = Date.now();
-let lastLeaderLamportTime = LamportClock.getTime(); // Track Lamport time for heartbeat
+let lastLeaderVectorClock = vectorClock.toJSON(); // Track Vector clock for heartbeat
 
 // Module-scoped election state to prevent race conditions
 let electionCandidates = new Set();
@@ -278,11 +278,13 @@ async function init() {
     receivedPrimaryClaim = false;
     electionAborted = false;
 
-    // Announce candidacy with Lamport timestamp for deterministic ordering
-    broadcastChannel.postMessage(LamportClock.stamp({
+    // Announce candidacy with Vector clock for deterministic ordering
+    broadcastChannel.postMessage({
         type: MESSAGE_TYPES.CANDIDATE,
-        tabId: TAB_ID
-    }));
+        tabId: TAB_ID,
+        vectorClock: vectorClock.tick(),
+        senderId: vectorClock.processId
+    });
 
     // Wait for other candidates
     await new Promise(resolve => {
@@ -325,12 +327,12 @@ async function init() {
  */
 function createMessageHandler() {
     return (event) => {
-        const { type, tabId, lamportTimestamp } = event.data;
+        const { type, tabId, vectorClock: remoteClock } = event.data;
 
-        // Sync Lamport clock with received message
-        // This ensures logical ordering across all tabs
-        if (typeof lamportTimestamp === 'number') {
-            LamportClock.update(lamportTimestamp);
+        // Sync Vector clock with received message
+        // This ensures logical ordering and conflict detection across all tabs
+        if (remoteClock && typeof remoteClock === 'object') {
+            vectorClock.merge(remoteClock);
         }
 
         switch (type) {
@@ -338,10 +340,12 @@ function createMessageHandler() {
                 // Another tab announced candidacy - collect it for election
                 // If we're already primary, assert dominance so new tab knows leader exists
                 if (isPrimaryTab && tabId !== TAB_ID) {
-                    broadcastChannel?.postMessage(LamportClock.stamp({
+                    broadcastChannel?.postMessage({
                         type: MESSAGE_TYPES.CLAIM_PRIMARY,
-                        tabId: TAB_ID
-                    }));
+                        tabId: TAB_ID,
+                        vectorClock: vectorClock.tick(),
+                        senderId: vectorClock.processId
+                    });
                 }
                 // Collect candidate for election with its timestamp for deterministic ordering
                 electionCandidates.add(tabId);
@@ -521,12 +525,12 @@ function startHeartbeat() {
 }
 
 /**
- * Send a heartbeat with both wall-clock and Lamport timestamps
+ * Send a heartbeat with both wall-clock and Vector clock timestamps
  * HNW Wave: Dual timestamp system prevents clock skew issues
  */
 function sendHeartbeat() {
     const wallClockTime = Date.now();
-    const lamportTime = LamportClock.tick();
+    const currentVectorClock = vectorClock.tick();
 
     // Record actual heartbeat interval for WaveTelemetry
     if (lastHeartbeatSentTime > 0) {
@@ -535,20 +539,21 @@ function sendHeartbeat() {
     }
     lastHeartbeatSentTime = wallClockTime;
 
-    // Send via BroadcastChannel with both timestamps
-    broadcastChannel?.postMessage(LamportClock.stamp({
+    // Send via BroadcastChannel with Vector clock
+    broadcastChannel?.postMessage({
         type: MESSAGE_TYPES.HEARTBEAT,
         tabId: TAB_ID,
         timestamp: wallClockTime,
-        lamportTimestamp: lamportTime
-    }));
+        vectorClock: currentVectorClock,
+        senderId: vectorClock.processId
+    });
 
     // Also store in localStorage for cross-tab fallback
     try {
         localStorage.setItem(HEARTBEAT_STORAGE_KEY, JSON.stringify({
             tabId: TAB_ID,
             timestamp: wallClockTime,
-            lamportTimestamp: lamportTime
+            vectorClock: currentVectorClock
         }));
     } catch (e) {
         // Ignore localStorage errors
@@ -575,7 +580,7 @@ function startHeartbeatMonitor() {
     }
 
     lastLeaderHeartbeat = clockSkewTracker.adjustTimestamp(Date.now());
-    lastLeaderLamportTime = LamportClock.getTime();
+    lastLeaderVectorClock = vectorClock.toJSON();
 
     heartbeatCheckInterval = setInterval(() => {
         const maxAllowedGap = HEARTBEAT_INTERVAL_MS * MAX_MISSED_HEARTBEATS;
@@ -586,11 +591,12 @@ function startHeartbeatMonitor() {
         try {
             const stored = localStorage.getItem(HEARTBEAT_STORAGE_KEY);
             if (stored) {
-                const { timestamp, lamportTimestamp } = JSON.parse(stored);
+                const { timestamp, vectorClock: storedVectorClock } = JSON.parse(stored);
 
-                // Update Lamport time from stored heartbeat
-                if (lamportTimestamp && lamportTimestamp > lastLeaderLamportTime) {
-                    lastLeaderLamportTime = lamportTimestamp;
+                // Merge stored Vector clock for conflict detection
+                if (storedVectorClock && typeof storedVectorClock === 'object') {
+                    vectorClock.merge(storedVectorClock);
+                    lastLeaderVectorClock = storedVectorClock;
                 }
 
                 // Calculate stored age with skew adjustment
@@ -791,6 +797,11 @@ const TabCoordinator = {
     getClockSkewHistory: () => [...clockSkewTracker.skewSamples],
     resetClockSkewTracking: () => clockSkewTracker.reset(),
 
+    // VectorClock API (HNW Network - for conflict detection)
+    getVectorClock: () => vectorClock.clone(),
+    getVectorClockState: () => vectorClock.toJSON(),
+    isConflict: (remoteClock) => vectorClock.isConcurrent(remoteClock),
+
     // Heartbeat (exposed for testing)
     _startHeartbeat: startHeartbeat,
     _stopHeartbeat: stopHeartbeat
@@ -799,5 +810,4 @@ const TabCoordinator = {
 // ES Module export
 export { TabCoordinator };
 
-console.log('[TabCoordination] Service loaded with heartbeat, authority control, and clock skew handling');
-
+console.log('[TabCoordination] Service loaded with VectorClock, heartbeat, authority control, and clock skew handling');

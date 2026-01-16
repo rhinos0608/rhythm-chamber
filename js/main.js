@@ -148,55 +148,88 @@ console.log('[Main] All modules imported via ES modules - no window globals');
 
 /**
  * Show security error UI and block app loading
+ * Uses DOM element creation instead of innerHTML for XSS safety
  * @param {string} reason - Why security check failed
  */
 function showSecurityError(reason) {
     // Wait for DOM to be ready
     const showError = () => {
         const container = document.querySelector('.app-main') || document.body;
-        container.innerHTML = `
-            <div class="security-error" style="
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                min-height: 60vh;
-                text-align: center;
-                padding: 2rem;
-            ">
-                <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
-                <h2 style="color: var(--danger, #dc3545); margin-bottom: 1rem;">Security Check Failed</h2>
-                <p style="max-width: 500px; margin-bottom: 1.5rem; color: var(--text-muted, #6c757d);">
-                    ${escapeHtml(reason)}
-                </p>
-                <div style="
-                    background: var(--bg-tertiary, #f8f9fa);
-                    padding: 1rem;
-                    border-radius: 8px;
-                    max-width: 500px;
-                    text-align: left;
-                ">
-                    <p style="margin-bottom: 0.5rem;"><strong>Common causes:</strong></p>
-                    <ul style="margin: 0; padding-left: 1.5rem;">
-                        <li>Page loaded in an iframe</li>
-                        <li>Non-secure protocol (must use HTTPS, localhost, or file://)</li>
-                        <li>Browser security features disabled</li>
-                    </ul>
-                </div>
-                <button onclick="location.reload()" style="
-                    margin-top: 1.5rem;
-                    padding: 0.75rem 1.5rem;
-                    background: var(--accent, #6f42c1);
-                    color: white;
-                    border: none;
-                    border-radius: 8px;
-                    cursor: pointer;
-                    font-size: 1rem;
-                ">
-                    Retry
-                </button>
-            </div>
+        container.innerHTML = ''; // Clear existing content
+
+        // Create container div
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'security-error';
+        errorDiv.style.cssText = `
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 60vh;
+            text-align: center;
+            padding: 2rem;
         `;
+
+        // Icon
+        const icon = document.createElement('div');
+        icon.style.cssText = 'font-size: 4rem; margin-bottom: 1rem;';
+        icon.textContent = '🔒';
+        errorDiv.appendChild(icon);
+
+        // Title
+        const title = document.createElement('h2');
+        title.style.cssText = 'color: var(--danger, #dc3545); margin-bottom: 1rem;';
+        title.textContent = 'Security Check Failed';
+        errorDiv.appendChild(title);
+
+        // Message
+        const message = document.createElement('p');
+        message.style.cssText = 'max-width: 500px; margin-bottom: 1.5rem; color: var(--text-muted, #6c757d);';
+        message.textContent = reason;
+        errorDiv.appendChild(message);
+
+        // Common causes box
+        const causesBox = document.createElement('div');
+        causesBox.style.cssText = `
+            background: var(--bg-tertiary, #f8f9fa);
+            padding: 1rem;
+            border-radius: 8px;
+            max-width: 500px;
+            text-align: left;
+        `;
+
+        const causesTitle = document.createElement('p');
+        causesTitle.style.marginBottom = '0.5rem';
+        causesTitle.innerHTML = '<strong>Common causes:</strong>';
+        causesBox.appendChild(causesTitle);
+
+        const causesList = document.createElement('ul');
+        causesList.style.cssText = 'margin: 0; padding-left: 1.5rem;';
+        ['Page loaded in an iframe', 'Non-secure protocol (must use HTTPS, localhost, or file://)', 'Browser security features disabled'].forEach(cause => {
+            const li = document.createElement('li');
+            li.textContent = cause;
+            causesList.appendChild(li);
+        });
+        causesBox.appendChild(causesList);
+        errorDiv.appendChild(causesBox);
+
+        // Retry button - using addEventListener instead of onclick
+        const retryBtn = document.createElement('button');
+        retryBtn.style.cssText = `
+            margin-top: 1.5rem;
+            padding: 0.75rem 1.5rem;
+            background: var(--accent, #6f42c1);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+        `;
+        retryBtn.textContent = 'Retry';
+        retryBtn.addEventListener('click', () => location.reload());
+        errorDiv.appendChild(retryBtn);
+
+        container.appendChild(errorDiv);
     };
 
     if (document.readyState === 'loading') {
@@ -217,59 +250,165 @@ function escapeHtml(text) {
 
 /**
  * Show generic loading error
+ * Uses DOM element creation instead of innerHTML for XSS safety
  */
 function showLoadingError(error) {
     const container = document.querySelector('.app-main') || document.body;
-    container.innerHTML = `
-        <div class="loading-error" style="
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 60vh;
-            text-align: center;
-            padding: 2rem;
-        ">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">⚠️</div>
-            <h2 style="margin-bottom: 1rem;">Application Loading Error</h2>
-            <p style="max-width: 500px; margin-bottom: 1.5rem; color: var(--text-muted, #6c757d);">
-                An error occurred while loading the application. 
-                This may be due to a network issue or browser compatibility.
-            </p>
-            <details style="
-                background: var(--bg-tertiary, #f8f9fa);
-                padding: 1rem;
-                border-radius: 8px;
-                max-width: 500px;
-                text-align: left;
-                margin-bottom: 1rem;
-            ">
-                <summary style="cursor: pointer;">Technical Details</summary>
-                <pre style="
-                    margin-top: 0.5rem;
-                    font-size: 0.85rem;
-                    overflow-x: auto;
-                    white-space: pre-wrap;
-                ">${escapeHtml(error.message)}\n\n${escapeHtml(error.stack || '')}</pre>
-            </details>
-            <button onclick="location.reload()" style="
-                padding: 0.75rem 1.5rem;
-                background: var(--accent, #6f42c1);
-                color: white;
-                border: none;
-                border-radius: 8px;
-                cursor: pointer;
-                font-size: 1rem;
-            ">
-                Refresh Page
-            </button>
-        </div>
+    container.innerHTML = ''; // Clear existing content
+
+    // Create container div
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'loading-error';
+    errorDiv.style.cssText = `
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 60vh;
+        text-align: center;
+        padding: 2rem;
     `;
+
+    // Icon
+    const icon = document.createElement('div');
+    icon.style.cssText = 'font-size: 4rem; margin-bottom: 1rem;';
+    icon.textContent = '⚠️';
+    errorDiv.appendChild(icon);
+
+    // Title
+    const title = document.createElement('h2');
+    title.style.marginBottom = '1rem';
+    title.textContent = 'Application Loading Error';
+    errorDiv.appendChild(title);
+
+    // Message
+    const message = document.createElement('p');
+    message.style.cssText = 'max-width: 500px; margin-bottom: 1.5rem; color: var(--text-muted, #6c757d);';
+    message.textContent = 'An error occurred while loading the application. This may be due to a network issue or browser compatibility.';
+    errorDiv.appendChild(message);
+
+    // Details panel
+    const details = document.createElement('details');
+    details.style.cssText = `
+        background: var(--bg-tertiary, #f8f9fa);
+        padding: 1rem;
+        border-radius: 8px;
+        max-width: 500px;
+        text-align: left;
+        margin-bottom: 1rem;
+    `;
+
+    const summary = document.createElement('summary');
+    summary.style.cursor = 'pointer';
+    summary.textContent = 'Technical Details';
+    details.appendChild(summary);
+
+    const pre = document.createElement('pre');
+    pre.style.cssText = `
+        margin-top: 0.5rem;
+        font-size: 0.85rem;
+        overflow-x: auto;
+        white-space: pre-wrap;
+    `;
+    pre.textContent = `${error.message}\n\n${error.stack || ''}`;
+    details.appendChild(pre);
+
+    errorDiv.appendChild(details);
+
+    // Refresh button - using addEventListener instead of onclick
+    const refreshBtn = document.createElement('button');
+    refreshBtn.style.cssText = `
+        padding: 0.75rem 1.5rem;
+        background: var(--accent, #6f42c1);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 1rem;
+    `;
+    refreshBtn.textContent = 'Refresh Page';
+    refreshBtn.addEventListener('click', () => location.reload());
+    errorDiv.appendChild(refreshBtn);
+
+    container.appendChild(errorDiv);
 }
 
 // ==========================================
 // Application Bootstrap
 // ==========================================
+
+/**
+ * Initialize the application after security passes
+ */
+/**
+ * Flag to track if heavy modules have been loaded
+ * Prevents duplicate loading attempts
+ */
+let heavyModulesLoaded = false;
+let heavyModulesLoading = null;
+
+/**
+ * Load heavy RAG/Vector modules on user intent
+ * Called when user clicks "Start Analysis" or enters Chat tab
+ * This defers expensive module loading until actually needed
+ * 
+ * @returns {Promise<boolean>} True if modules loaded successfully
+ */
+async function loadHeavyModulesOnIntent() {
+    // Already loaded
+    if (heavyModulesLoaded) {
+        return true;
+    }
+
+    // Loading in progress - wait for it
+    if (heavyModulesLoading) {
+        return heavyModulesLoading;
+    }
+
+    // Can't load in safe mode
+    if (safeModeReason) {
+        console.warn('[Main] Cannot load heavy modules in Safe Mode');
+        return false;
+    }
+
+    console.log('[Main] Loading heavy modules on user intent...');
+
+    heavyModulesLoading = (async () => {
+        try {
+            // Load all heavy modules via ModuleRegistry
+            await ModuleRegistry.preloadModules([
+                'Ollama',
+                'OllamaProvider',
+                'RAG',
+                'LocalVectorStore',
+                'LocalEmbeddings'
+            ]);
+
+            console.log('[Main] Heavy modules loaded via ModuleRegistry');
+
+            // Initialize LocalVectorStore worker
+            const lvsModule = ModuleRegistry.getModuleSync('LocalVectorStore');
+            if (lvsModule?.LocalVectorStore) {
+                await lvsModule.LocalVectorStore.init();
+                console.log('[Main] LocalVectorStore worker initialized');
+            }
+
+            heavyModulesLoaded = true;
+            return true;
+        } catch (error) {
+            console.error('[Main] Failed to load heavy modules:', error);
+            heavyModulesLoading = null; // Allow retry
+            return false;
+        }
+    })();
+
+    return heavyModulesLoading;
+}
+
+// Export for use by other modules (app.js, chat.js, etc.)
+if (typeof window !== 'undefined') {
+    window.loadHeavyModulesOnIntent = loadHeavyModulesOnIntent;
+}
 
 /**
  * Initialize the application after security passes
@@ -282,35 +421,17 @@ async function bootstrap() {
         installGlobalErrorHandler();
 
         // Register heavy modules with ModuleRegistry for lazy loading
-        // These are only loaded if not in safe mode (Full Analysis path)
+        // These are NOT preloaded at startup - loaded on user intent instead
         ModuleRegistry.register('Ollama', () => import('./ollama.js'), 'Ollama');
         ModuleRegistry.register('OllamaProvider', () => import('./providers/ollama-adapter.js'), 'OllamaProvider');
         ModuleRegistry.register('RAG', () => import('./rag.js'), 'RAG');
         ModuleRegistry.register('LocalVectorStore', () => import('./local-vector-store.js'), 'LocalVectorStore');
         ModuleRegistry.register('LocalEmbeddings', () => import('./local-embeddings.js'), 'LocalEmbeddings');
 
-        if (!safeModeReason) {
-            console.log('[Main] Pre-loading heavy modules...');
-
-            // Pre-load all heavy modules via ModuleRegistry
-            await ModuleRegistry.preloadModules([
-                'Ollama',
-                'OllamaProvider',
-                'RAG',
-                'LocalVectorStore',
-                'LocalEmbeddings'
-            ]);
-
-            console.log('[Main] Heavy modules loaded via ModuleRegistry');
-
-            // Pre-initialize LocalVectorStore to eagerly create worker
-            // This prevents race condition and user-facing delays on first search
-            const lvsModule = ModuleRegistry.getModuleSync('LocalVectorStore');
-            if (lvsModule?.LocalVectorStore) {
-                await lvsModule.LocalVectorStore.init();
-                console.log('[Main] LocalVectorStore worker pre-initialized');
-            }
-        }
+        // Heavy modules are now loaded on-demand when user shows intent
+        // (clicks "Start Analysis" or enters Chat tab)
+        // See loadHeavyModulesOnIntent() above
+        console.log('[Main] Heavy modules registered for on-demand loading');
 
         // Import and initialize the application
         const { init } = await import('./app.js');

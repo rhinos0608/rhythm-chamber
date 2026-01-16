@@ -74,8 +74,8 @@ import { ProfileSynthesizer } from './profile-synthesizer.js';
 // State Management
 // ==========================================
 
-// Initialize centralized state
-AppState.init();
+// NOTE: AppState initialization moved into init() function to prevent race conditions
+// This ensures Safe Mode check completes before any storage operations
 
 
 // ==========================================
@@ -234,10 +234,10 @@ function showLoadingError(missing, optional = []) {
             </details>
 
             <div class="error-actions">
-                <button class="btn btn-primary" onclick="location.reload()">
+                <button class="btn btn-primary" data-action="refresh-page">
                     Refresh Page
                 </button>
-                <button class="btn btn-secondary" onclick="copyErrorReport()">
+                <button class="btn btn-secondary" data-action="copy-error-report">
                     Copy Error Report
                 </button>
             </div>
@@ -250,7 +250,7 @@ function showLoadingError(missing, optional = []) {
         </div>
     `;
 
-    // Add copy function to window
+    // Make copyErrorReport available for event delegation
     window.copyErrorReport = function () {
         const reportText = JSON.stringify(errorReport, null, 2);
         navigator.clipboard.writeText(reportText).then(() => {
@@ -285,7 +285,7 @@ function showSafeModeWarning() {
             <strong>Safe Mode:</strong> Security modules failed to load. 
             Data will not be encrypted. Sensitive features are disabled.
         </span>
-        <button onclick="location.reload()">Retry</button>
+        <button data-action="refresh-page">Retry</button>
     `;
 
     document.body.prepend(banner);
@@ -437,12 +437,13 @@ async function initializeControllers() {
         showToast
     });
 
-    // Initialize MessageOperations
+    // Initialize MessageOperations WITHOUT heavy modules
+    // RAG will be loaded on-demand when Chat features are accessed
+    // This prevents aggressive preloading and improves startup performance
     MessageOperations.init({
         DataQuery,      // Now using imported module
         TokenCounter,   // Now using imported module
-        Functions,      // Now using imported module
-        RAG: ModuleRegistry.getModuleSync('RAG') // Still use registry for lazy-loaded modules
+        Functions       // Now using imported module
     });
 
     console.log('[App] Controllers initialized');
@@ -468,6 +469,10 @@ async function init(options = {}) {
         showSafeModeWarning();
         // Continue with limited functionality
     }
+
+    // Initialize centralized state AFTER security check
+    // This prevents storage access before Safe Mode determination
+    AppState.init();
 
     // HNW Hierarchy: Early-fail if critical dependencies are missing
     // This catches script loading failures on spotty mobile networks
@@ -792,6 +797,18 @@ function setupEventListeners() {
             'close-privacy-modal': () => {
                 const modal = document.getElementById('privacy-dashboard-modal');
                 if (modal) modal.style.display = 'none';
+            },
+
+            // Error page actions
+            'refresh-page': () => {
+                location.reload();
+            },
+            'copy-error-report': () => {
+                if (typeof window.copyErrorReport === 'function') {
+                    window.copyErrorReport();
+                } else {
+                    console.error('[App] copyErrorReport not available');
+                }
             }
         };
 

@@ -307,6 +307,32 @@ export class ErrorRecoveryCoordinator {
         this._eventBus.subscribe('STORAGE:ERROR', async (event, data) => {
             await this._handleStorageError(data);
         }, { priority: 1000 });
+
+        // Listen for delegated recovery requests via BroadcastChannel
+        this._setupRecoveryDelegationListener();
+    }
+
+    /**
+     * Setup BroadcastChannel listener for recovery delegation
+     * @private
+     */
+    _setupRecoveryDelegationListener() {
+        if (typeof BroadcastChannel === 'undefined') {
+            console.log('[ErrorRecoveryCoordinator] BroadcastChannel not available, skipping delegation listener');
+            return;
+        }
+
+        try {
+            this._recoveryChannel = new BroadcastChannel('rhythm_chamber_recovery');
+            this._recoveryChannel.onmessage = async (event) => {
+                if (event.data?.type === 'RECOVERY_DELEGATION') {
+                    await this._handleDelegatedRecovery(event.data);
+                }
+            };
+            console.log('[ErrorRecoveryCoordinator] Recovery delegation listener active');
+        } catch (e) {
+            console.warn('[ErrorRecoveryCoordinator] Failed to setup delegation listener:', e);
+        }
     }
 
     /**
@@ -758,6 +784,96 @@ export class ErrorRecoveryCoordinator {
             tabId: request.tabId,
             domain: request.domain
         });
+    }
+
+    /**
+     * Broadcast recovery request to leader tab for delegation
+     * HNW Network: Non-leader tabs delegate recovery to leader for coordination
+     * 
+     * @public
+     * @param {RecoveryRequest} request - Recovery request to delegate
+     * @returns {Promise<{ delegated: boolean, reason: string }>}
+     */
+    async broadcastRecoveryRequest(request) {
+        const tabCoordinator = await this._getTabCoordinator();
+
+        // If we're the leader or no tab coordinator, handle locally
+        if (!tabCoordinator || tabCoordinator.isPrimary()) {
+            return { delegated: false, reason: 'is_leader' };
+        }
+
+        try {
+            // Get VectorClock for causal ordering
+            const vectorClock = tabCoordinator.getVectorClockState?.() || {};
+
+            // Create BroadcastChannel for recovery delegation
+            const channel = new BroadcastChannel('rhythm_chamber_recovery');
+
+            const delegationMessage = {
+                type: 'RECOVERY_DELEGATION',
+                request: {
+                    id: request.id,
+                    domain: request.domain,
+                    priority: request.priority,
+                    error: request.error?.message || 'Unknown error',
+                    context: request.context,
+                    timestamp: request.timestamp
+                },
+                vectorClock,
+                sourceTabId: tabCoordinator.getTabId(),
+                delegatedAt: Date.now()
+            };
+
+            channel.postMessage(delegationMessage);
+            channel.close();
+
+            console.log(`[ErrorRecoveryCoordinator] Delegated recovery ${request.id} to leader tab`);
+
+            this._eventBus.emit('RECOVERY:DELEGATED', {
+                recoveryId: request.id,
+                sourceTabId: tabCoordinator.getTabId()
+            });
+
+            return { delegated: true, reason: 'delegated_to_leader' };
+
+        } catch (error) {
+            console.warn('[ErrorRecoveryCoordinator] Failed to broadcast recovery:', error);
+            return { delegated: false, reason: 'broadcast_failed' };
+        }
+    }
+
+    /**
+     * Handle incoming delegated recovery requests (leader only)
+     * @private
+     * @param {Object} message - Delegated recovery message
+     * @returns {Promise<void>}
+     */
+    async _handleDelegatedRecovery(message) {
+        if (!this._isPrimaryTab) {
+            console.log('[ErrorRecoveryCoordinator] Ignoring delegated recovery - not leader');
+            return;
+        }
+
+        const tabCoordinator = await this._getTabCoordinator();
+
+        // Merge VectorClock for causal ordering
+        if (message.vectorClock && tabCoordinator?.getVectorClock) {
+            const localClock = tabCoordinator.getVectorClock();
+            localClock.merge(message.vectorClock);
+        }
+
+        // Reconstruct request
+        const request = {
+            ...message.request,
+            error: new Error(message.request.error),
+            tabId: message.sourceTabId,
+            dependencies: []
+        };
+
+        console.log(`[ErrorRecoveryCoordinator] Processing delegated recovery from tab ${message.sourceTabId}`);
+
+        // Process the recovery
+        await this.coordinateRecovery(request);
     }
 
     /**
