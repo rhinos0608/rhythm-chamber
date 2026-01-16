@@ -125,11 +125,23 @@ async function startStream(streams, options = {}) {
 
         const allPatterns = Object.fromEntries(detectedPatterns);
         const duration = Date.now() - startTime;
+        const aborted = currentAbortController?.signal.aborted === true;
+
+        if (aborted) {
+            EventBus.emit('pattern:aborted', {
+                patterns: allPatterns,
+                duration,
+                aborted: true
+            });
+            console.log(`[PatternStream] Aborted after ${detectedPatterns.size} patterns in ${duration}ms`);
+            return allPatterns;
+        }
 
         // Emit completion
         EventBus.emit('pattern:all_complete', {
             patterns: allPatterns,
-            duration
+            duration,
+            aborted: false
         });
 
         if (onComplete) {

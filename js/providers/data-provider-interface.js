@@ -124,7 +124,7 @@ const DataProviderContract = {
  */
 function registerProvider(type, provider) {
     // Validate provider implements required methods
-    const required = ['getType', 'isReady', 'getStreams', 'getPatterns', 'getPersonality'];
+    const required = Object.keys(DataProviderContract);
     const missing = required.filter(method => typeof provider[method] !== 'function');
 
     if (missing.length > 0) {
@@ -153,6 +153,14 @@ async function switchProvider(type) {
     const provider = providerRegistry.get(type);
     if (!provider) {
         console.error(`[DataProvider] Unknown provider type: ${type}`);
+        return false;
+    }
+
+    // Re-validate provider against contract before switching
+    const required = Object.keys(DataProviderContract);
+    const missing = required.filter(method => typeof provider[method] !== 'function');
+    if (missing.length > 0) {
+        console.error(`[DataProvider] Invalid provider "${type}" missing methods: ${missing.join(', ')}`);
         return false;
     }
 

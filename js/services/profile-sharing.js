@@ -90,8 +90,15 @@ async function encryptProfile(data, passphrase) {
     combined.set(iv, SALT_LENGTH);
     combined.set(new Uint8Array(ciphertext), SALT_LENGTH + IV_LENGTH);
 
-    // Encode as base64
-    return btoa(String.fromCharCode(...combined));
+    // Encode as base64 in chunks to avoid stack overflow on large payloads
+    const chunkSize = 8192;
+    let binary = '';
+    for (let i = 0; i < combined.length; i += chunkSize) {
+        const chunk = combined.subarray(i, i + chunkSize);
+        binary += String.fromCharCode.apply(null, chunk);
+    }
+
+    return btoa(binary);
 }
 
 /**

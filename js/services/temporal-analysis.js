@@ -28,6 +28,8 @@ const TIME_RANGES = {
     LAST_MONTH: 'month'
 };
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 // ==========================================
 // Core Analysis Functions
 // ==========================================
@@ -56,6 +58,10 @@ function getTasteEvolution(streams, options = {}) {
         const topArtists = getTopN(yearStreams, 'master_metadata_album_artist_name', 10);
         const uniqueArtists = new Set(yearStreams.map(s => s.master_metadata_album_artist_name)).size;
         const totalStreams = yearStreams.length;
+        const yearNumber = parseInt(year);
+        const daysInPeriod = yearNumber === new Date().getFullYear()
+            ? getElapsedDaysInYear(yearNumber)
+            : getDaysInYear(yearNumber);
 
         // Calculate discovery rate (% of artists listened to for first time this year)
         const discoveryRate = calculateDiscoveryRate(
@@ -65,12 +71,12 @@ function getTasteEvolution(streams, options = {}) {
         );
 
         return {
-            year: parseInt(year),
+            year: yearNumber,
             totalStreams,
             uniqueArtists,
             topArtists,
             discoveryRate,
-            avgDailyStreams: Math.round(totalStreams / getDaysInYear(year))
+            avgDailyStreams: daysInPeriod > 0 ? Math.round(totalStreams / daysInPeriod) : 0
         };
     });
 
@@ -119,20 +125,35 @@ function getDiversityTrend(streams) {
         : 0;
 
     // Calculate trend direction (last 6 months vs previous 6 months)
-    const recentAvg = trend.slice(-6).reduce((s, t) => s + t.diversityScore, 0) / 6;
-    const previousAvg = trend.slice(-12, -6).reduce((s, t) => s + t.diversityScore, 0) / 6;
-    const trendDirection = recentAvg > previousAvg ? 'increasing' :
-        recentAvg < previousAvg ? 'decreasing' : 'stable';
+    const recentSlice = trend.slice(-6);
+    const previousSlice = trend.slice(-12, -6);
+    const recentAvg = recentSlice.length
+        ? recentSlice.reduce((s, t) => s + t.diversityScore, 0) / recentSlice.length
+        : null;
+    const previousAvg = previousSlice.length
+        ? previousSlice.reduce((s, t) => s + t.diversityScore, 0) / previousSlice.length
+        : null;
+    let trendDirection = 'insufficient_data';
+    if (recentAvg !== null && previousAvg !== null) {
+        trendDirection = recentAvg > previousAvg ? 'increasing' :
+            recentAvg < previousAvg ? 'decreasing' : 'stable';
+    }
+    let insight;
+    if (trendDirection === 'increasing') {
+        insight = 'Your music taste is becoming more diverse!';
+    } else if (trendDirection === 'decreasing') {
+        insight = 'You\'re focusing on a core set of artists';
+    } else if (trendDirection === 'insufficient_data') {
+        insight = 'Not enough data to determine your diversity trend yet';
+    } else {
+        insight = 'Your listening diversity is consistent';
+    }
 
     return {
         trend,
         averageDiversity,
         trendDirection,
-        insight: trendDirection === 'increasing'
-            ? 'Your music taste is becoming more diverse!'
-            : trendDirection === 'decreasing'
-                ? 'You\'re focusing on a core set of artists'
-                : 'Your listening diversity is consistent'
+        insight
     };
 }
 
@@ -198,8 +219,15 @@ function getDiscoveryPrediction(streams) {
     }
 
     // Confidence based on data consistency
-    const variance = calculateVariance(recentRates.map(r => r.discoveries));
-    const confidence = Math.max(20, Math.min(90, Math.round(100 - variance)));
+    const recentDiscoveries = recentRates.map(r => r.discoveries);
+    const variance = calculateVariance(recentDiscoveries);
+    const meanRecent = recentDiscoveries.length > 0
+        ? recentDiscoveries.reduce((s, v) => s + v, 0) / recentDiscoveries.length
+        : 0;
+    const stddev = Math.sqrt(variance);
+    const cov = meanRecent === 0 ? Infinity : stddev / meanRecent;
+    const rawConfidence = 100 - (Number.isFinite(cov) ? cov * 100 : 100);
+    const confidence = Math.max(20, Math.min(90, Math.round(rawConfidence)));
 
     return {
         historicalData: discoveryRates.slice(-12),
@@ -218,6 +246,24 @@ function getDiscoveryPrediction(streams) {
  * @returns {Object} Comparison data
  */
 function getYearComparison(streams, year1, year2) {
+    if (!Array.isArray(streams)) {
+        if (streams === null || streams === undefined) {
+            streams = [];
+        } else {
+            throw new TypeError('getYearComparison expects "streams" to be an array');
+        }
+    }
+
+    if (streams.length === 0) {
+        return {
+            year1: { year: year1, totalStreams: 0, uniqueArtists: 0, topArtists: [] },
+            year2: { year: year2, totalStreams: 0, uniqueArtists: 0, topArtists: [] },
+            changes: { streamsChange: 0, artistsChange: 0 },
+            consistentArtists: [],
+            consistentArtistCount: 0
+        };
+    }
+
     const byYear = groupByYear(streams);
     const y1Streams = byYear[year1] || [];
     const y2Streams = byYear[year2] || [];
@@ -322,6 +368,20 @@ function calculateDiscoveryRate(artistsThisYear, byYear, currentYear) {
     return artistsThisYear.size > 0
         ? Math.round((newArtists / artistsThisYear.size) * 100)
         : 0;
+}
+
+/**
+ * Get elapsed days in a given year up to today (inclusive)
+ */
+function getElapsedDaysInYear(year) {
+    const now = new Date();
+    const startOfYear = new Date(year, 0, 1);
+    if (now.getFullYear() !== year) {
+        return getDaysInYear(year);
+    }
+
+    const elapsed = Math.floor((now - startOfYear) / MS_PER_DAY) + 1;
+    return Math.max(elapsed, 1);
 }
 
 /**

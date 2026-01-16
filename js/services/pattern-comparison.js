@@ -98,14 +98,18 @@ function comparePersonalities(p1, p2) {
         const allTraits = new Set([...Object.keys(p1.traits), ...Object.keys(p2.traits)]);
         let matchScore = 0;
 
-        for (const trait of allTraits) {
-            const v1 = p1.traits[trait] || 0;
-            const v2 = p2.traits[trait] || 0;
-            const diff = Math.abs(v1 - v2);
-            matchScore += (100 - diff) / 100;
-        }
+        if (allTraits.size > 0) {
+            for (const trait of allTraits) {
+                const v1 = p1.traits[trait] || 0;
+                const v2 = p2.traits[trait] || 0;
+                const diff = Math.abs(v1 - v2);
+                matchScore += (100 - diff) / 100;
+            }
 
-        traitSimilarity = Math.round((matchScore / allTraits.size) * 100);
+            traitSimilarity = Math.round((matchScore / allTraits.size) * 100);
+        } else {
+            traitSimilarity = 0;
+        }
     }
 
     return {
@@ -133,7 +137,8 @@ function comparePatterns(pat1, pat2) {
     if (pat1.timeOfDay && pat2.timeOfDay) {
         const peak1 = pat1.timeOfDay.peakHour || 0;
         const peak2 = pat2.timeOfDay.peakHour || 0;
-        const timeDiff = Math.abs(peak1 - peak2);
+        const diff = Math.abs(peak1 - peak2);
+        const timeDiff = Math.min(diff, 24 - diff);
         comparisons.timeOfDay = {
             similarity: Math.round((1 - timeDiff / 12) * 100),
             insight: timeDiff <= 2
@@ -240,7 +245,12 @@ function compareArtists(streams1, streams2) {
             profile1: unique1.slice(0, 10),
             profile2: unique2.slice(0, 10)
         },
-        overlapPercentage: Math.round((shared.length / Math.max(artists1.size, artists2.size)) * 100)
+        overlapPercentage: (() => {
+            const denom = Math.max(artists1.size, artists2.size);
+            return denom === 0
+                ? 0
+                : Math.round((shared.length / denom) * 100);
+        })()
     };
 }
 

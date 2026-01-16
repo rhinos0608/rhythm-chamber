@@ -185,7 +185,10 @@ describe('DataProvider Edge Cases', () => {
 
         // This should not throw
         const streams = await DataProvider.getStreams();
-        expect(Array.isArray(streams) || streams === null || streams.length === 0).toBe(true);
+        expect(
+            streams === null ||
+            (Array.isArray(streams) && streams.length === 0)
+        ).toBe(true);
     });
 
     it('should handle provider returning null gracefully', async () => {
