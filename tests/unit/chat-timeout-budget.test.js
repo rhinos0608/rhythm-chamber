@@ -165,18 +165,23 @@ describe('Chat TimeoutBudget Integration', () => {
     beforeEach(async () => {
         vi.resetModules();
         vi.clearAllMocks();
-        
+
         // Setup mock window
         mockWindow = createMockWindow();
+
+        // Add missing window methods
+        mockWindow.addEventListener = vi.fn();
+        mockWindow.removeEventListener = vi.fn();
+
         globalThis.window = mockWindow;
-        
+
         // Import Chat module
         Chat = (await import('../../js/chat.js')).Chat;
     });
 
     it('should allocate timeout budget for chat turn', async () => {
         const { TimeoutBudget } = await import('../../js/services/timeout-budget-manager.js');
-        
+
         // Initialize chat
         await Chat.initChat(
             { name: 'Test', tagline: 'Test', dataInsights: 'Test data' },
@@ -194,7 +199,7 @@ describe('Chat TimeoutBudget Integration', () => {
 
     it('should release timeout budget after processing', async () => {
         const { TimeoutBudget } = await import('../../js/services/timeout-budget-manager.js');
-        
+
         // Initialize chat
         await Chat.initChat(
             { name: 'Test', tagline: 'Test', dataInsights: 'Test data' },
@@ -212,7 +217,7 @@ describe('Chat TimeoutBudget Integration', () => {
 
     it('should allocate budget with correct operation name', async () => {
         const { TimeoutBudget } = await import('../../js/services/timeout-budget-manager.js');
-        
+
         // Initialize chat
         await Chat.initChat(
             { name: 'Test', tagline: 'Test', dataInsights: 'Test data' },
@@ -230,7 +235,7 @@ describe('Chat TimeoutBudget Integration', () => {
 
     it('should handle errors and still release budget', async () => {
         const { TimeoutBudget } = await import('../../js/services/timeout-budget-manager.js');
-        
+
         // Make LLM call fail
         mockWindow.LLMProviderRoutingService.callLLM.mockRejectedValue(new Error('LLM error'));
 
@@ -254,7 +259,7 @@ describe('Chat TimeoutBudget Integration', () => {
 
     it('should not allocate budget when chat is not initialized', async () => {
         const { TimeoutBudget } = await import('../../js/services/timeout-budget-manager.js');
-        
+
         // Try to send message without initialization
         await expect(Chat.sendMessage('Test message')).rejects.toThrow('Chat not initialized');
 
@@ -264,7 +269,7 @@ describe('Chat TimeoutBudget Integration', () => {
 
     it('should use default budget from TimeoutBudget.DEFAULT_BUDGETS', async () => {
         const { TimeoutBudget } = await import('../../js/services/timeout-budget-manager.js');
-        
+
         // Initialize chat
         await Chat.initChat(
             { name: 'Test', tagline: 'Test', dataInsights: 'Test data' },

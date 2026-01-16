@@ -141,18 +141,23 @@ describe('Chat TurnQueue Integration', () => {
     beforeEach(async () => {
         vi.resetModules();
         vi.clearAllMocks();
-        
+
         // Setup mock window
         mockWindow = createMockWindow();
+
+        // Add missing window methods
+        mockWindow.addEventListener = vi.fn();
+        mockWindow.removeEventListener = vi.fn();
+
         globalThis.window = mockWindow;
-        
+
         // Import Chat module
         Chat = (await import('../../js/chat.js')).Chat;
     });
 
     it('should use TurnQueue.push for normal message processing', async () => {
         const { TurnQueue } = await import('../../js/services/turn-queue.js');
-        
+
         // Initialize chat
         await Chat.initChat(
             { name: 'Test', tagline: 'Test', dataInsights: 'Test data' },
@@ -175,7 +180,7 @@ describe('Chat TurnQueue Integration', () => {
 
     it('should bypass TurnQueue for internal operations', async () => {
         const { TurnQueue } = await import('../../js/services/turn-queue.js');
-        
+
         // Initialize chat
         await Chat.initChat(
             { name: 'Test', tagline: 'Test', dataInsights: 'Test data' },
@@ -189,7 +194,7 @@ describe('Chat TurnQueue Integration', () => {
 
         // Verify TurnQueue.push was NOT called
         expect(TurnQueue.push).not.toHaveBeenCalled();
-        
+
         // Verify the message was processed directly
         expect(mockWindow.SessionManager.addMessageToHistory).toHaveBeenCalledWith({
             role: 'user',
@@ -199,7 +204,7 @@ describe('Chat TurnQueue Integration', () => {
 
     it('should handle multiple messages in sequence via TurnQueue', async () => {
         const { TurnQueue } = await import('../../js/services/turn-queue.js');
-        
+
         // Initialize chat
         await Chat.initChat(
             { name: 'Test', tagline: 'Test', dataInsights: 'Test data' },
@@ -222,7 +227,7 @@ describe('Chat TurnQueue Integration', () => {
 
     it('should pass options to TurnQueue.push', async () => {
         const { TurnQueue } = await import('../../js/services/turn-queue.js');
-        
+
         // Initialize chat
         await Chat.initChat(
             { name: 'Test', tagline: 'Test', dataInsights: 'Test data' },
@@ -241,7 +246,7 @@ describe('Chat TurnQueue Integration', () => {
 
     it('should handle errors from TurnQueue', async () => {
         const { TurnQueue } = await import('../../js/services/turn-queue.js');
-        
+
         // Make TurnQueue.push throw an error
         TurnQueue.push.mockRejectedValue(new Error('Queue error'));
 
@@ -259,7 +264,7 @@ describe('Chat TurnQueue Integration', () => {
 
     it('should not use TurnQueue when not initialized', async () => {
         const { TurnQueue } = await import('../../js/services/turn-queue.js');
-        
+
         // Try to send message without initialization
         await expect(Chat.sendMessage('Test message')).rejects.toThrow('Chat not initialized');
 
