@@ -61,7 +61,7 @@ function calculateElectionWindow() {
 }
 
 // Calculate once on module load
-const ELECTION_WINDOW_MS = calculateElectionWindow();
+let ELECTION_WINDOW_MS = calculateElectionWindow();
 
 // Initialize Lamport clock for this tab
 LamportClock.init();
@@ -111,15 +111,24 @@ const TimingConfig = {
  * @param {Object} updates - Configuration updates to apply
  */
 function configureTiming(updates) {
-    Object.assign(TimingConfig, updates);
+    // Deep merge for nested objects
+    if (updates.election) {
+        Object.assign(TimingConfig.election, updates.election);
+    }
+    if (updates.heartbeat) {
+        Object.assign(TimingConfig.heartbeat, updates.heartbeat);
+    }
+    if (updates.failover) {
+        Object.assign(TimingConfig.failover, updates.failover);
+    }
 
     // Recalculate dependent values
     if (updates.election) {
-        globalThis.ELECTION_WINDOW_MS = calculateElectionWindow();
+        ELECTION_WINDOW_MS = calculateElectionWindow();
     }
     if (updates.heartbeat) {
-        globalThis.HEARTBEAT_INTERVAL_MS = TimingConfig.heartbeat.intervalMs;
-        globalThis.MAX_MISSED_HEARTBEATS = TimingConfig.heartbeat.maxMissed;
+        HEARTBEAT_INTERVAL_MS = TimingConfig.heartbeat.intervalMs;
+        MAX_MISSED_HEARTBEATS = TimingConfig.heartbeat.maxMissed;
     }
 }
 
@@ -595,15 +604,8 @@ function startHeartbeatMonitor() {
             initiateReElection();
         }
 
-        // Also check Lamport time for logical ordering (backup check)
-        const lamportDiff = LamportClock.getTime() - lastLeaderLamportTime;
-        const maxLamportDiff = HEARTBEAT_INTERVAL_MS * MAX_MISSED_HEARTBEATS * 2; // More lenient for Lamport
-
-        if (lamportDiff > maxLamportDiff && timeSinceLastHeartbeat > maxAllowedGap / 2) {
-            console.log(`[TabCoordination] Lamport clock indicates leader stale (${lamportDiff}ms), promoting to leader`);
-            stopHeartbeatMonitor();
-            initiateReElection();
-        }
+        // Note: Lamport time comparison removed as it mixes event counts with wall-clock time
+        // Using wall-clock heartbeat monitoring only, which is more reliable for failover detection
     }, HEARTBEAT_INTERVAL_MS);
 
     console.log('[TabCoordination] Started heartbeat monitor as follower with skew tolerance');
@@ -768,7 +770,9 @@ const TabCoordinator = {
 
     // Timing configuration (HNW Wave)
     configureTiming,
-    getTimingConfig: () => ({ ...TimingConfig }),
+    getTimingConfig() {
+        return structuredClone ? structuredClone(TimingConfig) : JSON.parse(JSON.stringify(TimingConfig));
+    },
 
     // Clock skew tracking (HNW Wave)
     getClockSkew: () => clockSkewTracker.getSkew(),

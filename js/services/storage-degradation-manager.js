@@ -358,7 +358,18 @@ export class StorageDegradationManager {
      */
     async _estimateStorageFromIndexedDB() {
         try {
-            const db = await indexedDB.open('RhythmChamber', 1);
+            const db = await new Promise((resolve, reject) => {
+                const request = indexedDB.open('RhythmChamber', 1);
+
+                request.onerror = () => {
+                    reject(new Error(`Failed to open database: ${request.error}`));
+                };
+
+                request.onsuccess = () => {
+                    resolve(request.result);
+                };
+            });
+
             const usageBytes = await this._calculateDatabaseSize(db);
             db.close();
 

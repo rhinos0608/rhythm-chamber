@@ -200,19 +200,17 @@ export class ErrorRecoveryCoordinator {
     /**
      * Lazy load OperationLock
      * @private
-     * @returns {OperationLock|null} OperationLock instance or null
+     * @returns {Promise<OperationLock|null>} OperationLock instance or null
      */
-    _getOperationLock() {
+    async _getOperationLock() {
         if (!_OperationLock) {
             try {
                 // Dynamic import to avoid circular dependency
-                import('../operation-lock.js').then(module => {
-                    _OperationLock = module.OperationLock;
-                }).catch(() => {
-                    console.warn('[ErrorRecoveryCoordinator] Failed to lazy load OperationLock');
-                });
+                const module = await import('../operation-lock.js');
+                _OperationLock = module.OperationLock;
             } catch (e) {
-                console.warn('[ErrorRecoveryCoordinator] OperationLock unavailable');
+                console.warn('[ErrorRecoveryCoordinator] Failed to lazy load OperationLock:', e);
+                return null;
             }
         }
         return _OperationLock;
@@ -221,18 +219,16 @@ export class ErrorRecoveryCoordinator {
     /**
      * Lazy load TabCoordinator
      * @private
-     * @returns {TabCoordinator|null} TabCoordinator instance or null
+     * @returns {Promise<TabCoordinator|null>} TabCoordinator instance or null
      */
-    _getTabCoordinator() {
+    async _getTabCoordinator() {
         if (!_TabCoordinator) {
             try {
-                import('./tab-coordination.js').then(module => {
-                    _TabCoordinator = module.TabCoordinator;
-                }).catch(() => {
-                    console.warn('[ErrorRecoveryCoordinator] Failed to lazy load TabCoordinator');
-                });
+                const module = await import('./tab-coordination.js');
+                _TabCoordinator = module.TabCoordinator;
             } catch (e) {
-                console.warn('[ErrorRecoveryCoordinator] TabCoordinator unavailable');
+                console.warn('[ErrorRecoveryCoordinator] Failed to lazy load TabCoordinator:', e);
+                return null;
             }
         }
         return _TabCoordinator;
@@ -241,18 +237,16 @@ export class ErrorRecoveryCoordinator {
     /**
      * Lazy load StateMachineCoordinator
      * @private
-     * @returns {StateMachineCoordinator|null} StateMachineCoordinator instance or null
+     * @returns {Promise<StateMachineCoordinator|null>} StateMachineCoordinator instance or null
      */
-    _getStateMachine() {
+    async _getStateMachine() {
         if (!_StateMachineCoordinator) {
             try {
-                import('./state-machine-coordinator.js').then(module => {
-                    _StateMachineCoordinator = module.StateMachineCoordinator;
-                }).catch(() => {
-                    console.warn('[ErrorRecoveryCoordinator] Failed to lazy load StateMachineCoordinator');
-                });
+                const module = await import('./state-machine-coordinator.js');
+                _StateMachineCoordinator = module.StateMachineCoordinator;
             } catch (e) {
-                console.warn('[ErrorRecoveryCoordinator] StateMachineCoordinator unavailable');
+                console.warn('[ErrorRecoveryCoordinator] Failed to lazy load StateMachineCoordinator:', e);
+                return null;
             }
         }
         return _StateMachineCoordinator;
@@ -319,10 +313,10 @@ export class ErrorRecoveryCoordinator {
      * Monitor tab leadership status
      * @private
      */
-    _monitorTabLeadership() {
+    async _monitorTabLeadership() {
         // Update primary tab status (graceful degradation if TabCoordinator unavailable)
-        const checkLeadership = () => {
-            const tabCoordinator = this._getTabCoordinator();
+        const checkLeadership = async () => {
+            const tabCoordinator = await this._getTabCoordinator();
             if (tabCoordinator && tabCoordinator.isPrimary) {
                 this._isPrimaryTab = tabCoordinator.isPrimary();
             } else {
@@ -331,10 +325,10 @@ export class ErrorRecoveryCoordinator {
             }
         };
 
-        checkLeadership();
+        await checkLeadership();
 
         // Subscribe to leadership changes if TabCoordinator is available
-        const tabCoordinator = this._getTabCoordinator();
+        const tabCoordinator = await this._getTabCoordinator();
         if (tabCoordinator && tabCoordinator.on) {
             try {
                 tabCoordinator.on('leadership-change', checkLeadership);
@@ -361,7 +355,7 @@ export class ErrorRecoveryCoordinator {
             const priority = this._determineRecoveryPriority(data);
 
             // Create recovery request
-            const request = this._createRecoveryRequest(domain, priority, data);
+            const request = await this._createRecoveryRequest(domain, priority, data);
 
             // Process recovery
             await this.coordinateRecovery(request);
@@ -432,9 +426,12 @@ export class ErrorRecoveryCoordinator {
      * @param {RecoveryDomain} domain - Recovery domain
      * @param {RecoveryPriority} priority - Recovery priority
      * @param {Object} errorData - Error data
-     * @returns {RecoveryRequest} Recovery request
+     * @returns {Promise<RecoveryRequest>} Recovery request
      */
-    _createRecoveryRequest(domain, priority, errorData) {
+    async _createRecoveryRequest(domain, priority, errorData) {
+        const tabCoordinator = await this._getTabCoordinator();
+        const tabId = tabCoordinator ? tabCoordinator.getTabId() : 'unknown';
+
         return {
             id: `recovery_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             domain,
@@ -443,7 +440,7 @@ export class ErrorRecoveryCoordinator {
             context: errorData.context || {},
             dependencies: errorData.dependencies || [],
             timestamp: Date.now(),
-            tabId: this._tabCoordinator.getTabId()
+            tabId
         };
     }
 
@@ -551,19 +548,8 @@ export class ErrorRecoveryCoordinator {
         // Add to pending recoveries
         this._eventBus.emit('RECOVERY:QUEUED', { request });
 
-        // Wait for current recovery to complete with timeout
-        const startTime = Date.now();
-        while (this._currentState !== RecoveryState.IDLE) {
-            // Check timeout
-            if (Date.now() - startTime > this._queueTimeoutMs) {
-                const error = new Error(`Recovery queue timeout (${this._queueTimeoutMs}ms)`);
-                error.code = 'RECOVERY_QUEUE_TIMEOUT';
-                throw error;
-            }
-
-            // Wait before checking again
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
+        // Wait for current recovery to complete with event-driven approach
+        await this._waitForIdleState(this._queueTimeoutMs);
 
         // Retry recovery
         try {
@@ -641,8 +627,10 @@ export class ErrorRecoveryCoordinator {
         this._currentState = RecoveryState.RECOVERING;
         this._currentRecoveryId = plan.request.id;
         this._activeRecoveries.set(plan.request.id, plan.request);
+        this._emitStateChange();
 
         performance.mark('recovery-execution-start');
+        const executionStartTime = performance.now();
 
         try {
             // Acquire lock if required
@@ -665,7 +653,7 @@ export class ErrorRecoveryCoordinator {
 
             // Release lock if acquired
             if (lockId) {
-                const operationLock = this._getOperationLock();
+                const operationLock = await this._getOperationLock();
                 if (operationLock && operationLock.release) {
                     try {
                         operationLock.release(plan.lockName, lockId);
@@ -676,7 +664,7 @@ export class ErrorRecoveryCoordinator {
             }
 
             const success = !lastError;
-            const duration = performance.now() - performance.now();
+            const duration = performance.now() - executionStartTime;
 
             return {
                 success,
@@ -695,7 +683,7 @@ export class ErrorRecoveryCoordinator {
             return {
                 success: false,
                 action: 'recovery_failed',
-                durationMs: performance.now() - performance.now(),
+                durationMs: performance.now() - executionStartTime,
                 error,
                 metadata: {
                     recoveryId: plan.request.id,
@@ -706,6 +694,7 @@ export class ErrorRecoveryCoordinator {
             this._currentState = RecoveryState.IDLE;
             this._currentRecoveryId = null;
             this._activeRecoveries.delete(plan.request.id);
+            this._emitStateChange();
             performance.measure('recovery-execution', 'recovery-execution-start');
         }
     }
@@ -717,7 +706,7 @@ export class ErrorRecoveryCoordinator {
      * @returns {Promise<string>} Lock ID
      */
     async _acquireRecoveryLock(lockName) {
-        const operationLock = this._getOperationLock();
+        const operationLock = await this._getOperationLock();
         if (!operationLock) {
             console.warn('[ErrorRecoveryCoordinator] OperationLock unavailable, skipping lock');
             return null; // Return null to indicate lock not acquired
@@ -739,7 +728,7 @@ export class ErrorRecoveryCoordinator {
      * @returns {Promise<void>}
      */
     async _validateRecoveryState(request) {
-        const stateMachine = this._getStateMachine();
+        const stateMachine = await this._getStateMachine();
         if (!stateMachine) {
             // Allow recovery if state machine unavailable (defensive)
             console.warn('[ErrorRecoveryCoordinator] StateMachine unavailable, skipping state validation');
@@ -941,11 +930,66 @@ export class ErrorRecoveryCoordinator {
         const recovery = this._activeRecoveries.get(recoveryId);
         if (recovery) {
             this._activeRecoveries.delete(recoveryId);
-            this._currentState = RecoveryState.CANCELLED;
+            if (this._currentRecoveryId === recoveryId) {
+                this._currentState = RecoveryState.CANCELLED;
+            }
             this._eventBus.emit('RECOVERY:CANCELLED', { recoveryId });
             return true;
         }
         return false;
+    }
+
+    /**
+     * Wait for idle state with event-driven approach
+     * @private
+     * @param {number} timeoutMs - Timeout in milliseconds
+     * @returns {Promise<void>} Resolves when idle, rejects on timeout
+     */
+    async _waitForIdleState(timeoutMs) {
+        return new Promise((resolve, reject) => {
+            // Check immediately if already idle
+            if (this._currentState === RecoveryState.IDLE) {
+                resolve();
+                return;
+            }
+
+            let timeoutHandle = null;
+            let unsubscribe = null;
+
+            // Setup timeout
+            timeoutHandle = setTimeout(() => {
+                if (unsubscribe) {
+                    unsubscribe();
+                }
+                const error = new Error(`Recovery queue timeout (${timeoutMs}ms)`);
+                error.code = 'RECOVERY_QUEUE_TIMEOUT';
+                reject(error);
+            }, timeoutMs);
+
+            // Subscribe to state changes
+            unsubscribe = this._eventBus.subscribe('RECOVERY:STATE_CHANGE', (event, data) => {
+                if (data.state === RecoveryState.IDLE) {
+                    if (timeoutHandle) {
+                        clearTimeout(timeoutHandle);
+                    }
+                    if (unsubscribe) {
+                        unsubscribe();
+                    }
+                    resolve();
+                }
+            });
+        });
+    }
+
+    /**
+     * Emit state change event
+     * @private
+     */
+    _emitStateChange() {
+        this._eventBus.emit('RECOVERY:STATE_CHANGE', {
+            state: this._currentState,
+            recoveryId: this._currentRecoveryId
+        });
     }
 
     /**
@@ -978,8 +1022,5 @@ export class ErrorRecoveryCoordinator {
 
 // Export singleton instance
 export default new ErrorRecoveryCoordinator({
-    eventBus: EventBus,
-    operationLock: OperationLock,
-    tabCoordinator: TabCoordinator,
-    stateMachine: StateMachineCoordinator
+    eventBus: EventBus
 });

@@ -289,6 +289,7 @@ export class PerformanceProfiler {
             name,
             category,
             startTime: entry.startTime,
+            endTime: entry.startTime + entry.duration,
             duration: entry.duration,
             metadata: metadata || {},
             timestamp: new Date().toISOString()
@@ -559,11 +560,12 @@ export class PerformanceProfiler {
 }
 
 // Export singleton instance
-export default new PerformanceProfiler();
+const PerformanceProfilerSingleton = new PerformanceProfiler();
+export default PerformanceProfilerSingleton;
 
 // Convenience exports for common patterns
-export const mark = (name, options) => PerformanceProfiler.mark(name, options);
-export const measure = (name, startMark, endMark, options) => PerformanceProfiler.measure(name, startMark, endMark, options);
-export const startOperation = (name, options) => PerformanceProfiler.startOperation(name, options);
-export const measureAsync = (name, operation, options) => PerformanceProfiler.measureAsync(name, operation, options);
-export const getPerformanceReport = () => PerformanceProfiler.getPerformanceReport();
+export const mark = (name, options) => PerformanceProfilerSingleton.mark(name, options);
+export const measure = (name, startMark, endMark, options) => PerformanceProfilerSingleton.measure(name, startMark, endMark, options);
+export const startOperation = (name, options) => PerformanceProfilerSingleton.startOperation(name, options);
+export const measureAsync = (name, operation, options) => PerformanceProfilerSingleton.measureAsync(name, operation, options);
+export const getPerformanceReport = () => PerformanceProfilerSingleton.getPerformanceReport();
