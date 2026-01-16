@@ -67,7 +67,7 @@ export const ProviderHealth = Object.freeze({
  * @typedef {Object} FallbackChainResult
  * @property {boolean} success - Whether any provider succeeded
  * @property {string} provider - Provider that succeeded
- * @property {number} attempts - Number of provider attempts
+ * @property {number} attemptsCount - Number of provider attempts
  * @property {Array<ProviderAttempt>} attempts - All provider attempts
  * @property {Object} response - Provider response (if successful)
  * @property {Error|null} error - Final error (if all failed)
@@ -293,7 +293,7 @@ export class ProviderFallbackChain {
         }
 
         // Check blacklist status
-        if (this._isProviderBlacklisted(providerName)) {
+        if (await this._isProviderBlacklisted(providerName)) {
             return ProviderHealth.BLACKLISTED;
         }
 
@@ -471,15 +471,15 @@ export class ProviderFallbackChain {
      * Check if provider is blacklisted
      * @private
      * @param {string} providerName - Provider name
-     * @returns {boolean} True if provider is blacklisted
+     * @returns {Promise<boolean>} True if provider is blacklisted
      */
-    _isProviderBlacklisted(providerName) {
+    async _isProviderBlacklisted(providerName) {
         const expiry = this._providerBlacklist.get(providerName);
         if (!expiry) return false;
 
         if (Date.now() > expiry) {
             // Blacklist expired, remove it
-            this._removeProviderFromBlacklist(providerName);
+            await this._removeProviderFromBlacklist(providerName);
             return false;
         }
 
@@ -505,7 +505,7 @@ export class ProviderFallbackChain {
 
         for (const providerName of providersToTry) {
             // Skip blacklisted providers
-            if (this._isProviderBlacklisted(providerName)) {
+            if (await this._isProviderBlacklisted(providerName)) {
                 console.log(`[ProviderFallbackChain] Skipping blacklisted provider: ${providerName}`);
                 attempts.push({
                     provider: providerName,
@@ -541,7 +541,7 @@ export class ProviderFallbackChain {
                     return {
                         success: true,
                         provider: providerName,
-                        attempts: attempts.length,
+                        attemptsCount: attempts.length,
                         attempts,
                         response: result.response
                     };
@@ -582,7 +582,7 @@ export class ProviderFallbackChain {
         return {
             success: false,
             provider: null,
-            attempts: attempts.length,
+            attemptsCount: attempts.length,
             attempts,
             response: null,
             error: new Error('All providers failed')

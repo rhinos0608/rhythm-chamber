@@ -186,7 +186,7 @@ async function exportProfile(passphrase, options = {}) {
                 : null;
     }
 
-    const streamCount = streams?.length || (dataProviderAvailable
+    const streamCount = streams?.length ?? (dataProviderAvailable
         ? await DataProvider.getStreamCount()
         : 0);
 
