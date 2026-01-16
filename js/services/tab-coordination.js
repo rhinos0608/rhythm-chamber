@@ -8,6 +8,7 @@
  */
 
 import { LamportClock } from './lamport-clock.js';
+import { WaveTelemetry } from './wave-telemetry.js';
 
 // ==========================================
 // Constants
@@ -242,6 +243,7 @@ let lastLeaderLamportTime = LamportClock.getTime(); // Track Lamport time for he
 let electionCandidates = new Set();
 let receivedPrimaryClaim = false;
 let electionAborted = false;
+let lastHeartbeatSentTime = 0; // Track for WaveTelemetry
 
 // ==========================================
 // Core Functions
@@ -507,6 +509,9 @@ function startHeartbeat() {
         clearInterval(heartbeatInterval);
     }
 
+    // Set expected heartbeat interval for WaveTelemetry
+    WaveTelemetry.setExpected('heartbeat_interval', HEARTBEAT_INTERVAL_MS);
+
     // Send initial heartbeat
     sendHeartbeat();
 
@@ -522,6 +527,13 @@ function startHeartbeat() {
 function sendHeartbeat() {
     const wallClockTime = Date.now();
     const lamportTime = LamportClock.tick();
+
+    // Record actual heartbeat interval for WaveTelemetry
+    if (lastHeartbeatSentTime > 0) {
+        const actualInterval = wallClockTime - lastHeartbeatSentTime;
+        WaveTelemetry.record('heartbeat_interval', actualInterval);
+    }
+    lastHeartbeatSentTime = wallClockTime;
 
     // Send via BroadcastChannel with both timestamps
     broadcastChannel?.postMessage(LamportClock.stamp({

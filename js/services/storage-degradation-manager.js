@@ -1094,6 +1094,150 @@ export class StorageDegradationManager {
             };
         }
     }
+
+    // ==========================================
+    // P2.7: Embedding Freeze During Storage Crisis
+    // ==========================================
+
+    /**
+     * Check if embedding generation should be frozen
+     * HNW Hierarchy: Prevents storage crisis from worsening during high-usage tiers
+     * 
+     * @public
+     * @returns {boolean} True if embedding generation should be paused
+     */
+    isEmbeddingFrozen() {
+        // Freeze embeddings at CRITICAL tier or above
+        const frozenTiers = [
+            DegradationTier.CRITICAL,
+            DegradationTier.EXCEEDED,
+            DegradationTier.EMERGENCY
+        ];
+        return frozenTiers.includes(this._currentTier);
+    }
+
+    /**
+     * Check if a specific operation should be blocked
+     * @public
+     * @param {string} operationType - Operation type to check
+     * @returns {{ blocked: boolean, reason?: string }}
+     */
+    shouldBlockOperation(operationType) {
+        if (operationType === 'embedding') {
+            if (this.isEmbeddingFrozen()) {
+                return {
+                    blocked: true,
+                    reason: `Embedding generation paused: storage at ${this._currentTier} tier`
+                };
+            }
+        }
+
+        if (this._isReadOnlyMode && ['write', 'update', 'delete'].includes(operationType)) {
+            return {
+                blocked: true,
+                reason: 'Storage is in read-only mode due to quota constraints'
+            };
+        }
+
+        return { blocked: false };
+    }
+
+    // ==========================================
+    // P2.4: Storage Breakdown by Category
+    // ==========================================
+
+    /**
+     * Get storage breakdown by category
+     * HNW Network: Shows storage distribution for informed cleanup decisions
+     * 
+     * @public
+     * @returns {Promise<Object>} Storage breakdown with sizes and percentages
+     */
+    async getStorageBreakdown() {
+        const breakdown = {
+            sessions: { count: 0, estimatedBytes: 0, priority: 'medium' },
+            embeddings: { count: 0, estimatedBytes: 0, priority: 'aggressive' },
+            chunks: { count: 0, estimatedBytes: 0, priority: 'high' },
+            streams: { count: 0, estimatedBytes: 0, priority: 'high' },
+            personality: { count: 0, estimatedBytes: 0, priority: 'never' },
+            settings: { count: 0, estimatedBytes: 0, priority: 'never' }
+        };
+
+        try {
+            // Sessions
+            const sessions = await Storage.getAllChatSessions?.() || [];
+            breakdown.sessions.count = sessions.length;
+            breakdown.sessions.estimatedBytes = JSON.stringify(sessions).length;
+
+            // Streams
+            const streams = await Storage.getStreams?.() || [];
+            breakdown.streams.count = streams.length;
+            breakdown.streams.estimatedBytes = JSON.stringify(streams).length;
+
+            // Chunks (estimate)
+            const chunks = await Storage.getChunks?.() || [];
+            breakdown.chunks.count = chunks.length;
+            breakdown.chunks.estimatedBytes = JSON.stringify(chunks).length;
+
+            // Personality
+            const personality = await Storage.getPersonalityResult?.();
+            if (personality) {
+                breakdown.personality.count = 1;
+                breakdown.personality.estimatedBytes = JSON.stringify(personality).length;
+            }
+
+            // Settings
+            const settings = await Storage.getAllSettings?.() || {};
+            breakdown.settings.count = Object.keys(settings).length;
+            breakdown.settings.estimatedBytes = JSON.stringify(settings).length;
+
+            // Embeddings - estimate from LRU cache if available
+            try {
+                const { LocalVectorStore } = await import('../local-vector-store.js');
+                if (LocalVectorStore?.getStats) {
+                    const stats = LocalVectorStore.getStats();
+                    breakdown.embeddings.count = stats.vectorCount || 0;
+                    // Estimate 2KB per embedding (384 dims * 4 bytes + overhead)
+                    breakdown.embeddings.estimatedBytes = breakdown.embeddings.count * 2048;
+                }
+            } catch (e) {
+                // Vector store not available
+            }
+
+            // Calculate totals and percentages
+            const totalBytes = Object.values(breakdown).reduce((sum, cat) => sum + cat.estimatedBytes, 0);
+            for (const category of Object.keys(breakdown)) {
+                breakdown[category].percentage = totalBytes > 0
+                    ? Math.round((breakdown[category].estimatedBytes / totalBytes) * 100)
+                    : 0;
+            }
+
+            breakdown.total = {
+                estimatedBytes: totalBytes,
+                formattedSize: this._formatBytes(totalBytes)
+            };
+
+            return breakdown;
+
+        } catch (error) {
+            console.error('[StorageDegradationManager] Failed to get storage breakdown:', error);
+            return breakdown;
+        }
+    }
+
+    /**
+     * Format bytes to human-readable string
+     * @private
+     * @param {number} bytes - Bytes to format
+     * @returns {string} Formatted string
+     */
+    _formatBytes(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
 }
 
 // Export singleton instance
