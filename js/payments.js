@@ -37,18 +37,28 @@ function isProductionBuild() {
  * @returns {boolean} True if user has valid license
  */
 function checkLicenseStatus() {
-    // Check localStorage for cached license
-    const licenseData = localStorage.getItem('rhythm_chamber_license');
-    if (licenseData) {
-        try {
+    // Check environment and storage availability
+    if (typeof window === 'undefined') {
+        return false;
+    }
+
+    if (typeof window.localStorage === 'undefined') {
+        return false;
+    }
+
+    try {
+        // Check localStorage for cached license
+        const licenseData = localStorage.getItem('rhythm_chamber_license');
+        if (licenseData) {
             const license = JSON.parse(licenseData);
             // Simple expiry check - production should verify server-side
             if (license.validUntil && new Date(license.validUntil) > new Date()) {
                 return true;
             }
-        } catch (e) {
-            console.warn('[Payments] Invalid license data:', e);
         }
+    } catch (e) {
+        // Handle localStorage access errors (SSR, storage disabled, quota exceeded, etc.)
+        console.warn('[Payments] Cannot access localStorage:', e);
     }
 
     // No valid license found
@@ -80,11 +90,26 @@ function isPremium() {
 function getPremiumStatus() {
     if (isProductionBuild()) {
         const hasLicense = checkLicenseStatus();
+        let activatedAt = null;
+
+        if (hasLicense) {
+            try {
+                const licenseData = localStorage.getItem('rhythm_chamber_license');
+                if (licenseData) {
+                    const license = JSON.parse(licenseData);
+                    // Extract activation date from license object
+                    activatedAt = license.activatedAt || license.date || null;
+                }
+            } catch (e) {
+                console.warn('[Payments] Failed to parse license for activation date:', e);
+            }
+        }
+
         return {
             active: hasLicense,
             plan: hasLicense ? 'supporter' : 'free',
             productionBuild: true,
-            activatedAt: hasLicense ? localStorage.getItem('rhythm_chamber_license_date') : null,
+            activatedAt,
             description: hasLicense ? 'Supporter Tier - Premium Features Enabled' : 'Free Tier - Upgrade for Premium Features'
         };
     }

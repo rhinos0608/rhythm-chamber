@@ -137,9 +137,13 @@ async function initWorkerAsync() {
 
                 searchWorker = null;
                 workerReady = false;
-                workerInitPromise = null; // Allow retry only for non-network errors
 
-                // For network errors, don't retry immediately 
+                // Only clear workerInitPromise for non-network errors to prevent retry loops
+                if (!isNetworkError) {
+                    workerInitPromise = null;
+                }
+
+                // For network errors, don't retry immediately
                 // The sync fallback will handle all searches
                 resolve(null);
             };
