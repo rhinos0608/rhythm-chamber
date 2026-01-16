@@ -420,9 +420,5 @@ export const TemporalAnalysis = {
     TIME_RANGES
 };
 
-// Expose on window for debugging
-if (typeof window !== 'undefined') {
-    window.TemporalAnalysis = TemporalAnalysis;
-}
 
 console.log('[TemporalAnalysis] Temporal analysis service loaded');

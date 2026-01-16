@@ -118,9 +118,5 @@ export const DemoDataProvider = {
     }
 };
 
-// Expose on window for debugging
-if (typeof window !== 'undefined') {
-    window.DemoDataProvider = DemoDataProvider;
-}
 
 console.log('[DemoDataProvider] Demo data provider loaded');

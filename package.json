@@ -32,6 +32,7 @@
   "devDependencies": {
     "@playwright/test": "^1.57.0",
     "@types/node": "^25.0.6",
+    "happy-dom": "^20.3.1",
     "http-server": "^14.1.1",
     "vitest": "^4.0.17"
   }

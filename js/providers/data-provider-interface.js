@@ -299,9 +299,5 @@ export const DataProvider = {
     DataProviderContract
 };
 
-// Expose on window for debugging
-if (typeof window !== 'undefined') {
-    window.DataProvider = DataProvider;
-}
 
 console.log('[DataProvider] Data provider interface loaded');

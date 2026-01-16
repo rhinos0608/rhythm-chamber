@@ -130,6 +130,7 @@ import { LLMProviderRoutingService } from './services/llm-provider-routing-servi
 import { TokenCountingService } from './services/token-counting-service.js';
 import { ToolCallHandlingService } from './services/tool-call-handling-service.js';
 import { FallbackResponseService } from './services/fallback-response-service.js';
+import { ErrorBoundary, installGlobalErrorHandler } from './services/error-boundary.js';
 
 // ==========================================
 // ES Module Architecture (No more window.X pollution!)
@@ -277,6 +278,9 @@ async function bootstrap() {
     console.log('[Main] Bootstrapping application...');
 
     try {
+        // Install global error handlers for fallback error handling
+        installGlobalErrorHandler();
+
         // Register heavy modules with ModuleRegistry for lazy loading
         // These are only loaded if not in safe mode (Full Analysis path)
         ModuleRegistry.register('Ollama', () => import('./ollama.js'), 'Ollama');

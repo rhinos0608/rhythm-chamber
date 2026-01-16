@@ -614,9 +614,4 @@ export const EventBus = {
     EVENT_SCHEMAS
 };
 
-// Expose on window for console debugging
-if (typeof window !== 'undefined') {
-    window.EventBus = EventBus;
-}
-
 console.log('[EventBus] Centralized event system loaded');

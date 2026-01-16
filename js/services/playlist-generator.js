@@ -404,9 +404,5 @@ export const PlaylistGenerator = {
     PLAYLIST_TYPES
 };
 
-// Expose on window for debugging
-if (typeof window !== 'undefined') {
-    window.PlaylistGenerator = PlaylistGenerator;
-}
 
 console.log('[PlaylistGenerator] Playlist generation service loaded');

@@ -118,9 +118,5 @@ export const UserDataProvider = {
     }
 };
 
-// Expose on window for debugging
-if (typeof window !== 'undefined') {
-    window.UserDataProvider = UserDataProvider;
-}
 
 console.log('[UserDataProvider] User data provider loaded');

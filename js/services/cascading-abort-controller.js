@@ -404,9 +404,5 @@ export const CascadingAbort = {
     CascadingAbortError
 };
 
-// Window export for debugging
-if (typeof window !== 'undefined') {
-    window.CascadingAbort = CascadingAbort;
-}
 
 console.log('[CascadingAbort] Cascading Abort Controller loaded');
