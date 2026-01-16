@@ -68,9 +68,11 @@ Plus: Your AI notices your patterns and writes personalized narratives about you
 | Full history + real-time | Full history only |
 | Low technical barrier (OAuth) | Medium (file upload OR OAuth) |
 | Click to explore | Ask questions naturally |
-| **Server-dependent** | **Zero-backend with heartbeat monitoring** |
+| **Server-dependent** | **Zero-backend: client-side heartbeat health checks** |
 
 **We're not competing for stats nerds.** We're competing for everyone who screenshots Wrapped and wants deeper self-understanding.
+
+Heartbeat = local-only timers that watch in-browser modules (no remote pings, no data leaves the device). If we ever add an optional remote heartbeat, it will be opt-in, send only minimal uptime metadata, and ship with explicit consent + privacy caveats.
 
 ## Instant Access + Synthetic Personas
 

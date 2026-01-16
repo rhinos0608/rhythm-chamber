@@ -119,7 +119,7 @@ describe('LockPolicy Hierarchy', () => {
             expect(result.conflicts).toEqual([]);
         });
 
-        it('should allow acquiring operations at same level', () => {
+        it('should block acquiring operations at same level when conflicts exist', () => {
             // Both are level 1
             const result = LockPolicy.canAcquireInOrder(['chat_save'], ['spotify_fetch']);
             expect(result.allowed).toBe(false);
@@ -143,7 +143,7 @@ describe('LockPolicy Hierarchy', () => {
             expect(result.reason).toContain('Blocked by');
         });
 
-        it('should allow acquiring data operation after system operation', () => {
+        it('should block acquiring data operation after system operation', () => {
             // privacy_clear (level 0) is active, trying to acquire chat_save (level 1)
             const result = LockPolicy.canAcquireInOrder(['chat_save'], ['privacy_clear']);
             expect(result.allowed).toBe(false);
