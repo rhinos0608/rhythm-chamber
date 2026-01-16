@@ -151,27 +151,42 @@ async function exportProfile(passphrase, options = {}) {
     }
 
     // Get data from DataProvider or Storage
+    // Check if modules are actually usable before calling methods
+    const dataProviderAvailable = DataProvider &&
+        typeof DataProvider.getPersonality === 'function' &&
+        typeof DataProvider.getPatterns === 'function' &&
+        typeof DataProvider.getSummary === 'function' &&
+        typeof DataProvider.getStreams === 'function' &&
+        typeof DataProvider.getStreamCount === 'function';
 
-    const personality = DataProvider
+    const storageAvailable = Storage &&
+        typeof Storage.getPersonality === 'function' &&
+        typeof Storage.getStreams === 'function';
+
+    const personality = dataProviderAvailable
         ? await DataProvider.getPersonality()
-        : await Storage?.getPersonality?.();
+        : storageAvailable
+            ? await Storage.getPersonality()
+            : null;
 
-    const patterns = DataProvider
+    const patterns = dataProviderAvailable
         ? await DataProvider.getPatterns()
         : personality?.patterns;
 
-    const summary = DataProvider
+    const summary = dataProviderAvailable
         ? await DataProvider.getSummary()
         : personality?.summary;
 
     let streams = null;
     if (includeStreams) {
-        streams = DataProvider
+        streams = dataProviderAvailable
             ? await DataProvider.getStreams()
-            : await Storage?.getStreams?.();
+            : storageAvailable
+                ? await Storage.getStreams()
+                : null;
     }
 
-    const streamCount = streams?.length || (DataProvider
+    const streamCount = streams?.length || (dataProviderAvailable
         ? await DataProvider.getStreamCount()
         : 0);
 
