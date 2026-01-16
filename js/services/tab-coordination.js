@@ -78,10 +78,143 @@ const MESSAGE_TYPES = {
     HEARTBEAT: 'HEARTBEAT'
 };
 
-// Heartbeat configuration
-const HEARTBEAT_INTERVAL_MS = 5000;  // Leader sends heartbeat every 5s
-const MAX_MISSED_HEARTBEATS = 2;     // Promote after 2 missed (10s dead leader)
+/**
+ * Timing configuration - can be overridden at runtime
+ * HNW Wave: Configurable timing for different environments
+ */
+const TimingConfig = {
+    // Election timing
+    election: {
+        baselineMs: 300,
+        maxWindowMs: 600,
+        calibrationIterations: 10000,
+        adaptiveMultiplier: 60
+    },
+
+    // Heartbeat timing
+    heartbeat: {
+        intervalMs: 5000,
+        maxMissed: 2,
+        skewToleranceMs: 2000  // Allow 2 seconds clock skew
+    },
+
+    // Failover timing
+    failover: {
+        promotionDelayMs: 100,
+        verificationMs: 500
+    }
+};
+
+/**
+ * Runtime configuration override
+ * Allows changing timing parameters for testing or different environments
+ * @param {Object} updates - Configuration updates to apply
+ */
+function configureTiming(updates) {
+    Object.assign(TimingConfig, updates);
+
+    // Recalculate dependent values
+    if (updates.election) {
+        globalThis.ELECTION_WINDOW_MS = calculateElectionWindow();
+    }
+    if (updates.heartbeat) {
+        globalThis.HEARTBEAT_INTERVAL_MS = TimingConfig.heartbeat.intervalMs;
+        globalThis.MAX_MISSED_HEARTBEATS = TimingConfig.heartbeat.maxMissed;
+    }
+}
+
+// Heartbeat configuration (with defaults from TimingConfig)
+let HEARTBEAT_INTERVAL_MS = TimingConfig.heartbeat.intervalMs;
+let MAX_MISSED_HEARTBEATS = TimingConfig.heartbeat.maxMissed;
 const HEARTBEAT_STORAGE_KEY = 'rhythm_chamber_leader_heartbeat';
+const CLOCK_SKEW_TOLERANCE_MS = TimingConfig.heartbeat.skewToleranceMs;
+
+/**
+ * Clock skew tracking state
+ * HNW Wave: Detect and compensate for wall-clock differences between tabs
+ */
+const clockSkewTracker = {
+    detectedSkewMs: 0,
+    lastSkewDetection: 0,
+    skewSamples: [],
+    maxSamples: 10,
+
+    /**
+     * Record a clock skew sample
+     * @param {number} remoteTimestamp - Remote wall-clock timestamp
+     * @param {number} localTimestamp - Local wall-clock timestamp
+     */
+    recordSkew(remoteTimestamp, localTimestamp) {
+        const skew = remoteTimestamp - localTimestamp;
+        this.skewSamples.push({
+            skew,
+            timestamp: Date.now()
+        });
+
+        // Keep only recent samples
+        if (this.skewSamples.length > this.maxSamples) {
+            this.skewSamples.shift();
+        }
+
+        // Update detected skew (average of recent samples)
+        const recentSamples = this.skewSamples.slice(-5);
+
+        // Guard against division by zero and empty samples
+        if (!recentSamples || recentSamples.length === 0) {
+            // Default to zero skew when no data available
+            this.detectedSkewMs = 0;
+            this.lastSkewDetection = Date.now();
+            return;
+        }
+
+        const avgSkew = recentSamples.reduce((sum, s) => sum + s.skew, 0) / recentSamples.length;
+
+        this.detectedSkewMs = avgSkew;
+        this.lastSkewDetection = Date.now();
+
+        // Log significant skew
+        if (Math.abs(avgSkew) > 1000) {
+            console.warn(`[TabCoordination] Detected ${avgSkew.toFixed(0)}ms clock skew`);
+        }
+    },
+
+    /**
+     * Get current clock skew estimate
+     * @returns {number} Estimated clock skew in milliseconds
+     */
+    getSkew() {
+        return this.detectedSkewMs;
+    },
+
+    /**
+     * Adjust local timestamp by detected skew
+     * @param {number} localTimestamp - Local wall-clock timestamp
+     * @returns {number} Skew-adjusted timestamp
+     */
+    adjustTimestamp(localTimestamp) {
+        return localTimestamp + this.detectedSkewMs;
+    },
+
+    /**
+     * Check if timestamps are within skew tolerance
+     * @param {number} timestamp1 - First timestamp
+     * @param {number} timestamp2 - Second timestamp
+     * @returns {boolean} True if within tolerance
+     */
+    isWithinTolerance(timestamp1, timestamp2) {
+        const diff = Math.abs(timestamp1 - timestamp2);
+        return diff <= CLOCK_SKEW_TOLERANCE_MS;
+    },
+
+    /**
+     * Reset skew tracking
+     */
+    reset() {
+        this.detectedSkewMs = 0;
+        this.lastSkewDetection = 0;
+        this.skewSamples = [];
+    }
+};
 
 // ==========================================
 // State Management
@@ -94,6 +227,7 @@ let messageHandler = null;
 let heartbeatInterval = null;
 let heartbeatCheckInterval = null;
 let lastLeaderHeartbeat = Date.now();
+let lastLeaderLamportTime = LamportClock.getTime(); // Track Lamport time for heartbeat
 
 // Module-scoped election state to prevent race conditions
 let electionCandidates = new Set();
@@ -226,7 +360,17 @@ function createMessageHandler() {
             case MESSAGE_TYPES.HEARTBEAT:
                 // Received heartbeat from leader
                 if (tabId !== TAB_ID && !isPrimaryTab) {
-                    lastLeaderHeartbeat = Date.now();
+                    // Record clock skew from remote timestamp
+                    if (event.data.timestamp) {
+                        const localNow = Date.now();
+                        clockSkewTracker.recordSkew(event.data.timestamp, localNow);
+                    }
+
+                    // Update both wall-clock and Lamport time tracking
+                    lastLeaderHeartbeat = clockSkewTracker.adjustTimestamp(Date.now());
+                    if (event.data.lamportTimestamp) {
+                        lastLeaderLamportTime = event.data.lamportTimestamp;
+                    }
                 }
                 break;
         }
@@ -363,21 +507,27 @@ function startHeartbeat() {
 }
 
 /**
- * Send a heartbeat
+ * Send a heartbeat with both wall-clock and Lamport timestamps
+ * HNW Wave: Dual timestamp system prevents clock skew issues
  */
 function sendHeartbeat() {
-    // Send via BroadcastChannel
-    broadcastChannel?.postMessage({
+    const wallClockTime = Date.now();
+    const lamportTime = LamportClock.tick();
+
+    // Send via BroadcastChannel with both timestamps
+    broadcastChannel?.postMessage(LamportClock.stamp({
         type: MESSAGE_TYPES.HEARTBEAT,
         tabId: TAB_ID,
-        timestamp: Date.now()
-    });
+        timestamp: wallClockTime,
+        lamportTimestamp: lamportTime
+    }));
 
     // Also store in localStorage for cross-tab fallback
     try {
         localStorage.setItem(HEARTBEAT_STORAGE_KEY, JSON.stringify({
             tabId: TAB_ID,
-            timestamp: Date.now()
+            timestamp: wallClockTime,
+            lamportTimestamp: lamportTime
         }));
     } catch (e) {
         // Ignore localStorage errors
@@ -395,42 +545,68 @@ function stopHeartbeat() {
 }
 
 /**
- * Start monitoring leader heartbeat (followers only)
+ * Start monitoring leader heartbeat with skew tolerance (followers only)
+ * HNW Wave: Uses both Lamport and wall-clock time with skew compensation
  */
 function startHeartbeatMonitor() {
     if (heartbeatCheckInterval) {
         clearInterval(heartbeatCheckInterval);
     }
 
-    lastLeaderHeartbeat = Date.now();
+    lastLeaderHeartbeat = clockSkewTracker.adjustTimestamp(Date.now());
+    lastLeaderLamportTime = LamportClock.getTime();
 
     heartbeatCheckInterval = setInterval(() => {
         const maxAllowedGap = HEARTBEAT_INTERVAL_MS * MAX_MISSED_HEARTBEATS;
+        const now = Date.now();
+        let timeSinceLastHeartbeat = 0;
 
-        // Also check localStorage fallback
+        // Check localStorage fallback with skew tolerance
         try {
             const stored = localStorage.getItem(HEARTBEAT_STORAGE_KEY);
             if (stored) {
-                const { timestamp } = JSON.parse(stored);
-                const storedAge = Date.now() - timestamp;
-                if (storedAge < timeSinceLastHeartbeat) {
-                    lastLeaderHeartbeat = timestamp;
+                const { timestamp, lamportTimestamp } = JSON.parse(stored);
+
+                // Update Lamport time from stored heartbeat
+                if (lamportTimestamp && lamportTimestamp > lastLeaderLamportTime) {
+                    lastLeaderLamportTime = lamportTimestamp;
+                }
+
+                // Calculate stored age with skew adjustment
+                const storedAge = now - timestamp;
+                const adjustedStoredAge = clockSkewTracker.adjustTimestamp(now) - timestamp;
+
+                // Use the most recent timestamp
+                if (adjustedStoredAge < (now - lastLeaderHeartbeat)) {
+                    lastLeaderHeartbeat = clockSkewTracker.adjustTimestamp(timestamp);
                 }
             }
         } catch (e) {
             // Ignore localStorage errors
         }
 
-        const timeSinceLastHeartbeat = Date.now() - lastLeaderHeartbeat;
+        // Calculate time since last heartbeat with skew tolerance
+        timeSinceLastHeartbeat = clockSkewTracker.adjustTimestamp(now) - lastLeaderHeartbeat;
 
+        // Check if heartbeat is overdue with skew tolerance
         if (timeSinceLastHeartbeat > maxAllowedGap) {
-            console.log(`[TabCoordination] Leader heartbeat missed for ${timeSinceLastHeartbeat}ms, promoting to leader`);
+            console.log(`[TabCoordination] Leader heartbeat missed for ${timeSinceLastHeartbeat}ms (skew: ${clockSkewTracker.getSkew().toFixed(0)}ms), promoting to leader`);
+            stopHeartbeatMonitor();
+            initiateReElection();
+        }
+
+        // Also check Lamport time for logical ordering (backup check)
+        const lamportDiff = LamportClock.getTime() - lastLeaderLamportTime;
+        const maxLamportDiff = HEARTBEAT_INTERVAL_MS * MAX_MISSED_HEARTBEATS * 2; // More lenient for Lamport
+
+        if (lamportDiff > maxLamportDiff && timeSinceLastHeartbeat > maxAllowedGap / 2) {
+            console.log(`[TabCoordination] Lamport clock indicates leader stale (${lamportDiff}ms), promoting to leader`);
             stopHeartbeatMonitor();
             initiateReElection();
         }
     }, HEARTBEAT_INTERVAL_MS);
 
-    console.log('[TabCoordination] Started heartbeat monitor as follower');
+    console.log('[TabCoordination] Started heartbeat monitor as follower with skew tolerance');
 }
 
 /**
@@ -590,6 +766,15 @@ const TabCoordinator = {
     assertWriteAuthority,
     onAuthorityChange,
 
+    // Timing configuration (HNW Wave)
+    configureTiming,
+    getTimingConfig: () => ({ ...TimingConfig }),
+
+    // Clock skew tracking (HNW Wave)
+    getClockSkew: () => clockSkewTracker.getSkew(),
+    getClockSkewHistory: () => [...clockSkewTracker.skewSamples],
+    resetClockSkewTracking: () => clockSkewTracker.reset(),
+
     // Heartbeat (exposed for testing)
     _startHeartbeat: startHeartbeat,
     _stopHeartbeat: stopHeartbeat
@@ -598,5 +783,5 @@ const TabCoordinator = {
 // ES Module export
 export { TabCoordinator };
 
-console.log('[TabCoordination] Service loaded with heartbeat and authority control');
+console.log('[TabCoordination] Service loaded with heartbeat, authority control, and clock skew handling');
 
