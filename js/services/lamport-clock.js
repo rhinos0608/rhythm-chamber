@@ -49,6 +49,10 @@ function tick() {
  * @returns {number} Updated local timestamp
  */
 function update(receivedTimestamp) {
+    // Input validation: ensure receivedTimestamp is a finite numeric value
+    if (!Number.isFinite(receivedTimestamp)) {
+        throw new TypeError(`LamportClock.update() received invalid timestamp: ${receivedTimestamp}. Expected a finite number.`);
+    }
     counter = Math.max(counter, receivedTimestamp) + 1;
     return counter;
 }

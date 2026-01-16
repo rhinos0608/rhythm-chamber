@@ -226,7 +226,11 @@ function getConnection() {
 async function put(storeName, data, options = {}) {
     // Check write authority unless bypassed
     if (!options.bypassAuthority && !checkWriteAuthority(storeName, 'put')) {
-        throw new Error(`Write denied: Tab is in read-only mode`);
+        if (AUTHORITY_CONFIG.strictMode) {
+            throw new Error(`Write denied: Tab is in read-only mode`);
+        } else {
+            return; // No-op in non-strict mode
+        }
     }
 
     const database = await initDatabase();
@@ -285,7 +289,11 @@ async function getAll(storeName) {
 async function clear(storeName, options = {}) {
     // Check write authority unless bypassed
     if (!options.bypassAuthority && !checkWriteAuthority(storeName, 'clear')) {
-        throw new Error(`Write denied: Tab is in read-only mode`);
+        if (AUTHORITY_CONFIG.strictMode) {
+            throw new Error(`Write denied: Tab is in read-only mode`);
+        } else {
+            return; // No-op in non-strict mode
+        }
     }
 
     const database = await initDatabase();
@@ -310,7 +318,11 @@ async function clear(storeName, options = {}) {
 async function deleteRecord(storeName, key, options = {}) {
     // Check write authority unless bypassed
     if (!options.bypassAuthority && !checkWriteAuthority(storeName, 'delete')) {
-        throw new Error(`Write denied: Tab is in read-only mode`);
+        if (AUTHORITY_CONFIG.strictMode) {
+            throw new Error(`Write denied: Tab is in read-only mode`);
+        } else {
+            return; // No-op in non-strict mode
+        }
     }
 
     const database = await initDatabase();

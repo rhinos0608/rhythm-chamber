@@ -1,11 +1,10 @@
 /**
  * Unit Tests for HNW Advanced Improvements
- * 
+ *
  * Tests for:
  * - Lamport Clock
  * - Cascading Abort Controller
  * - EventBus Circuit Breaker
- * - Strategy Budget Exhaustion
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -255,7 +254,8 @@ describe('EventBus Circuit Breaker', () => {
     });
 
     describe('storm detection', () => {
-        it('should emit storm warning when threshold exceeded', () => {
+        it('should emit storm warning when threshold exceeded', async () => {
+            vi.useFakeTimers();
             const stormHandler = vi.fn();
             EventBus.on('eventbus:storm', stormHandler);
             EventBus.on('test:flood', () => { });
@@ -265,10 +265,16 @@ describe('EventBus Circuit Breaker', () => {
                 EventBus.emit('test:flood', { i });
             }
 
-            // Storm is only detected at window boundary, so we may not see it immediately
-            // Check that status reflects high event count
+            // Advance past the storm detection window (1000ms)
+            vi.advanceTimersByTime(1100);
+
+            // Check that storm was detected
             const status = EventBus.getCircuitBreakerStatus();
-            expect(status.pendingEventCount).toBeGreaterThan(0);
+            expect(status.stormActive).toBe(true);
+            expect(stormHandler).toHaveBeenCalled();
+
+            // Restore real timers
+            vi.useRealTimers();
         });
     });
 });

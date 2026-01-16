@@ -4,16 +4,19 @@
  * In-memory + IndexedDB vector storage for local semantic search
  * without Qdrant Cloud dependency.
  * 
- * Design validated by HNW analysis:
- * - Storage size for 1000 chunks × 384 dimensions × 4 bytes ≈ 1.5MB (negligible)
- * - Brute-force cosine similarity is fast enough for ~1000 vectors
- * - Uses Web Worker for non-blocking search (future optimization)
+ * Features:
+ * - LRU eviction policy to prevent IndexedDB bloat
+ * - Configurable max vectors (default: 5000)
+ * - Auto-scale option based on storage quota
+ * - Web Worker for non-blocking search
  * 
  * HNW Considerations:
  * - Hierarchy: LocalVectorStore is the authority for local mode
  * - Network: Isolated from cloud Qdrant - no accidental mixing
  * - Wave: Persistence is async, search is sync for responsiveness
  */
+
+import { LRUCache, DEFAULT_VECTOR_MAX_SIZE } from './storage/lru-cache.js';
 
 // ==========================================
 // Constants
@@ -22,14 +25,20 @@
 const DB_NAME = 'rhythm_chamber_vectors';
 const DB_VERSION = 1;
 const STORE_NAME = 'vectors';
+const SETTINGS_KEY = 'vector_store_settings';
 
 // ==========================================
-// In-Memory Vector Storage
+// In-Memory Vector Storage (LRU Cache)
 // ==========================================
 
-let vectors = new Map(); // id -> { id, vector, payload }
+// Create LRU cache with eviction callback for IndexedDB cleanup
+let vectors = null; // Lazy initialized with LRU cache
 let dbReady = false;
 let db = null;
+
+// Configuration
+let currentMaxVectors = DEFAULT_VECTOR_MAX_SIZE;
+let autoScaleEnabled = false;
 
 // Web Worker for async search (performance optimization)
 let searchWorker = null;
@@ -39,6 +48,7 @@ let requestIdCounter = 0;
 // Race condition fix: Single initialization promise ensures only one worker is created
 let workerInitPromise = null;
 let workerReady = false;
+
 
 // ==========================================
 // Web Worker Management
@@ -161,7 +171,8 @@ async function initDB() {
 }
 
 /**
- * Load all vectors from IndexedDB into memory
+ * Load all vectors from IndexedDB into LRU cache
+ * Note: If there are more vectors in DB than maxVectors, oldest will be evicted
  */
 async function loadFromDB() {
     if (!db) await initDB();
@@ -172,16 +183,60 @@ async function loadFromDB() {
         const request = store.getAll();
 
         request.onsuccess = () => {
+            // Initialize LRU cache if not already done
+            if (!vectors) {
+                initializeVectorsCache();
+            }
+
             vectors.clear();
             for (const item of request.result) {
                 vectors.set(item.id, item);
             }
-            console.log(`[LocalVectorStore] Loaded ${vectors.size} vectors from IndexedDB`);
+
+            // Process any evictions
+            processEvictions();
+
+            console.log(`[LocalVectorStore] Loaded ${vectors.size} vectors from IndexedDB (max: ${currentMaxVectors})`);
             resolve(vectors.size);
         };
 
         request.onerror = () => reject(request.error);
     });
+}
+
+/**
+ * Initialize the LRU cache for vectors
+ */
+function initializeVectorsCache() {
+    vectors = new LRUCache(currentMaxVectors, {
+        onEvict: (key) => {
+            // Mark for async delete from IndexedDB
+            console.log(`[LocalVectorStore] Evicting vector ${key} from LRU cache`);
+        }
+    });
+}
+
+/**
+ * Process pending evictions from LRU cache by deleting from IndexedDB
+ */
+async function processEvictions() {
+    if (!vectors || !db) return;
+
+    const evicted = vectors.getPendingEvictions();
+    if (evicted.length === 0) return;
+
+    try {
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+
+        for (const id of evicted) {
+            store.delete(id);
+        }
+
+        console.log(`[LocalVectorStore] Cleaned up ${evicted.length} evicted vectors from IndexedDB`);
+    } catch (e) {
+        console.warn('[LocalVectorStore] Failed to clean up evicted vectors:', e);
+    }
 }
 
 /**
@@ -259,10 +314,26 @@ const LocalVectorStore = {
     /**
      * Initialize the vector store
      * Loads existing vectors from IndexedDB and pre-initializes the search worker
+     * @param {Object} options - Configuration options
+     * @param {number} options.maxVectors - Maximum vectors before eviction (default: 5000)
+     * @param {boolean} options.autoScale - Auto-scale based on storage quota
      */
-    async init() {
+    async init(options = {}) {
+        // Apply configuration
+        if (options.maxVectors) {
+            currentMaxVectors = options.maxVectors;
+        }
+
+        // Initialize LRU cache
+        initializeVectorsCache();
+
         await initDB();
         await loadFromDB();
+
+        // Enable auto-scale if requested
+        if (options.autoScale) {
+            await this.enableAutoScale(true);
+        }
 
         // Pre-initialize worker to avoid user-facing delays during first search
         await initWorkerAsync().catch(e => {
@@ -274,18 +345,26 @@ const LocalVectorStore = {
 
     /**
      * Add or update a vector
+     * May trigger LRU eviction if at capacity
      * @param {number|string} id - Unique identifier for this vector
      * @param {number[]} vector - The embedding vector (e.g., 384 dimensions)
      * @param {Object} payload - Metadata (text, type, etc.)
      */
     async upsert(id, vector, payload = {}) {
+        if (!vectors) initializeVectorsCache();
+
         const item = { id, vector, payload };
-        vectors.set(id, item);
+        const evicted = vectors.set(id, item);
 
         // Async persist to IndexedDB (non-blocking)
         persistVector(item).catch(e => {
             console.warn('[LocalVectorStore] Persist failed:', e);
         });
+
+        // Clean up any evicted items from IndexedDB
+        if (evicted) {
+            processEvictions();
+        }
 
         return true;
     },
@@ -458,14 +537,24 @@ const LocalVectorStore = {
     },
 
     /**
-     * Get store statistics
+     * Get store statistics including LRU eviction metrics
      */
     getStats() {
+        if (!vectors) {
+            return {
+                count: 0,
+                maxVectors: currentMaxVectors,
+                dimensions: { min: 0, max: 0, avg: 0 },
+                storage: { bytes: 0, megabytes: 0 },
+                lru: { evictionCount: 0, hitRate: 0, autoScaleEnabled: false }
+            };
+        }
+
         let totalDimensions = 0;
         let minDimensions = Infinity;
         let maxDimensions = 0;
 
-        for (const [, item] of vectors) {
+        for (const item of vectors.values()) {
             const dims = item.vector?.length || 0;
             totalDimensions += dims;
             minDimensions = Math.min(minDimensions, dims);
@@ -479,8 +568,13 @@ const LocalVectorStore = {
         const estimatedBytes = totalDimensions * 4;
         const estimatedMB = (estimatedBytes / (1024 * 1024)).toFixed(2);
 
+        // Get LRU stats
+        const lruStats = vectors.getStats();
+
         return {
             count,
+            maxVectors: currentMaxVectors,
+            utilization: count / currentMaxVectors,
             dimensions: {
                 min: minDimensions === Infinity ? 0 : minDimensions,
                 max: maxDimensions,
@@ -489,6 +583,13 @@ const LocalVectorStore = {
             storage: {
                 bytes: estimatedBytes,
                 megabytes: parseFloat(estimatedMB)
+            },
+            lru: {
+                evictionCount: lruStats.evictionCount,
+                hitRate: lruStats.hitRate,
+                hitCount: lruStats.hitCount,
+                missCount: lruStats.missCount,
+                autoScaleEnabled: autoScaleEnabled
             }
         };
     },
@@ -506,6 +607,52 @@ const LocalVectorStore = {
      */
     isWorkerReady() {
         return workerReady;
+    },
+
+    /**
+     * Set maximum vectors (triggers eviction if new limit is lower)
+     * @param {number} maxVectors - New maximum
+     */
+    setMaxVectors(maxVectors) {
+        currentMaxVectors = Math.max(100, maxVectors); // Minimum 100
+        if (vectors) {
+            vectors.setMaxSize(currentMaxVectors);
+            processEvictions();
+        }
+        console.log(`[LocalVectorStore] Max vectors set to ${currentMaxVectors}`);
+    },
+
+    /**
+     * Get current max vectors setting
+     * @returns {number}
+     */
+    getMaxVectors() {
+        return currentMaxVectors;
+    },
+
+    /**
+     * Enable/disable auto-scale based on storage quota
+     * @param {boolean} enabled - Whether to enable auto-scale
+     * @returns {Promise<number>} The new max vectors value
+     */
+    async enableAutoScale(enabled = true) {
+        autoScaleEnabled = enabled;
+
+        if (enabled && vectors) {
+            const newMax = await vectors.enableAutoScale(true);
+            currentMaxVectors = newMax;
+            return newMax;
+        }
+
+        return currentMaxVectors;
+    },
+
+    /**
+     * Check if auto-scale is enabled
+     * @returns {boolean}
+     */
+    isAutoScaleEnabled() {
+        return autoScaleEnabled;
     }
 };
 

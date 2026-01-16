@@ -56,17 +56,25 @@ class TimeoutBudgetInstance {
 
         // Link to external signal if provided
         if (this._externalSignal) {
+            // Store bound handler for later removal
+            this._onExternalSignalAbort = () => {
+                this._abortController.abort(this._externalSignal.reason || 'Parent aborted');
+                clearTimeout(this._timeoutId);
+            };
+            
             if (this._externalSignal.aborted) {
                 this._abortController.abort(this._externalSignal.reason);
             } else {
-                this._externalSignal.addEventListener('abort', () => {
-                    this._abortController.abort(this._externalSignal.reason || 'Parent aborted');
-                });
+                this._externalSignal.addEventListener('abort', this._onExternalSignalAbort);
             }
         }
 
         // Auto-abort when budget time expires
         this._timeoutId = setTimeout(() => {
+            // Check if already aborted to prevent double execution
+            if (this._abortController.signal.aborted) {
+                return;
+            }
             this.exhausted = true;
             this._abortController.abort(`Budget exhausted: ${operation}`);
             this._runAbortHandlers(`Budget exhausted after ${budgetMs}ms`);
@@ -168,6 +176,11 @@ class TimeoutBudgetInstance {
     dispose() {
         clearTimeout(this._timeoutId);
         this._abortHandlers = [];
+        
+        // Remove external signal event listener to prevent memory leak
+        if (this._externalSignal && this._onExternalSignalAbort) {
+            this._externalSignal.removeEventListener('abort', this._onExternalSignalAbort);
+        }
     }
 
     /**
@@ -192,8 +205,8 @@ class TimeoutBudgetInstance {
 
         // Child inherits parent's signal by default
         const childOptions = {
-            signal: options.signal || this.signal,
-            ...options
+            ...options,
+            signal: options.signal ?? this.signal
         };
 
         const child = new TimeoutBudgetInstance(childOperation, childBudgetMs, this, childOptions);

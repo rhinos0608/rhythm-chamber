@@ -243,6 +243,7 @@ function claimPrimary() {
         tabId: TAB_ID
     });
     console.log('[TabCoordination] Claimed primary tab:', TAB_ID);
+    notifyAuthorityChange();
 }
 
 /**
@@ -266,6 +267,7 @@ function handleSecondaryMode() {
 
     // Disable write operations
     disableWriteOperations();
+    notifyAuthorityChange();
 }
 
 /**

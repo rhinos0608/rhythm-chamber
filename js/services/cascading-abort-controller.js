@@ -319,6 +319,36 @@ function getActiveStatus() {
 }
 
 /**
+ * Extract a useful message from signal.reason
+ * @param {*} reason - The abort reason
+ * @param {string} defaultMessage - Default message if reason is invalid
+ * @returns {string}
+ */
+function extractAbortReason(reason, defaultMessage = 'Operation aborted') {
+    if (reason === null || reason === undefined) {
+        return defaultMessage;
+    }
+    
+    // If reason is an object with a .reason string property, use that
+    if (typeof reason === 'object' && reason !== null && typeof reason.reason === 'string') {
+        return reason.reason;
+    }
+    
+    // If reason is an Error, use its message
+    if (reason instanceof Error) {
+        return reason.message;
+    }
+    
+    // If reason is a string, use it
+    if (typeof reason === 'string') {
+        return reason;
+    }
+    
+    // Otherwise, convert to string
+    return String(reason);
+}
+
+/**
  * Wrap a promise to be abortable
  * @param {Promise} promise - Promise to wrap
  * @param {AbortSignal} signal - Abort signal
@@ -327,12 +357,14 @@ function getActiveStatus() {
  */
 function wrapPromise(promise, signal, operation = 'promise') {
     if (signal.aborted) {
-        return Promise.reject(new CascadingAbortError(operation, signal.reason?.reason || 'Already aborted'));
+        const reason = extractAbortReason(signal.reason, 'Already aborted');
+        return Promise.reject(new CascadingAbortError(operation, reason));
     }
 
     return new Promise((resolve, reject) => {
         const abortHandler = () => {
-            reject(new CascadingAbortError(operation, signal.reason?.reason || 'Operation aborted'));
+            const reason = extractAbortReason(signal.reason, 'Operation aborted');
+            reject(new CascadingAbortError(operation, reason));
         };
 
         signal.addEventListener('abort', abortHandler, { once: true });
