@@ -36,6 +36,45 @@ const PATTERN_GROUPS = [
 const DEFAULT_WORKER_COUNT = 3;
 
 // ==========================================
+// SharedArrayBuffer Detection & Memory Pooling
+// ==========================================
+
+/**
+ * Check if SharedArrayBuffer is available
+ * Requires COOP/COEP headers: Cross-Origin-Opener-Policy: same-origin
+ *                             Cross-Origin-Embedder-Policy: require-corp
+ */
+function isSharedArrayBufferAvailable() {
+    try {
+        // Check if SAB exists and is actually usable
+        if (typeof SharedArrayBuffer === 'undefined') {
+            return false;
+        }
+
+        // Try to create a test buffer - will fail if cross-origin isolated is not set
+        const testBuffer = new SharedArrayBuffer(8);
+        return testBuffer.byteLength === 8;
+    } catch (e) {
+        console.log('[PatternWorkerPool] SharedArrayBuffer not available:', e.message);
+        return false;
+    }
+}
+
+// Detect on module load
+const SHARED_MEMORY_AVAILABLE = isSharedArrayBufferAvailable();
+
+/**
+ * Memory pooling configuration
+ */
+const MEMORY_CONFIG = {
+    useSharedMemory: SHARED_MEMORY_AVAILABLE,
+    partitionData: !SHARED_MEMORY_AVAILABLE, // Fallback: partition instead of duplicate
+    logMemoryUsage: true
+};
+
+console.log(`[PatternWorkerPool] Memory mode: ${SHARED_MEMORY_AVAILABLE ? 'SharedArrayBuffer' : 'Partitioned'}`);
+
+// ==========================================
 // Worker Pool State
 // ==========================================
 
@@ -96,10 +135,10 @@ async function init(options = {}) {
         }
 
         initialized = true;
-        
+
         // Start heartbeat monitoring
         startHeartbeat();
-        
+
         console.log('[PatternWorkerPool] Initialized successfully');
     } catch (error) {
         console.error('[PatternWorkerPool] Initialization failed:', error);
@@ -139,6 +178,33 @@ function handleWorkerMessage(event) {
         return;
     }
 
+    // Handle partial results - store immediately in case worker dies
+    // HNW Wave: Enables recovery of partial work
+    if (type === 'partial') {
+        const { pattern, result: partialResult, progress: progressPercent } = message.data;
+
+        // Initialize partial results storage if needed
+        if (!request.partialResults) {
+            request.partialResults = {};
+        }
+
+        // Store partial result
+        request.partialResults[pattern] = partialResult;
+
+        // Notify progress
+        if (request.onProgress) {
+            request.onProgress({
+                type: 'partial',
+                pattern,
+                progress: progressPercent,
+                result: partialResult
+            });
+        }
+
+        console.log(`[PatternWorkerPool] Partial result: ${pattern} (${Math.round(progressPercent * 100)}%)`);
+        return;
+    }
+
     const markComplete = () => {
         if (workerInfo) {
             workerInfo.busy = false;
@@ -168,7 +234,11 @@ function handleWorkerMessage(event) {
         if (request.completedWorkers >= request.totalWorkers) {
             pendingRequests.delete(reqId);
 
-            if (request.results.length > 0) {
+            // Use partial results if available
+            if (request.partialResults && Object.keys(request.partialResults).length > 0) {
+                console.log('[PatternWorkerPool] Using partial results due to worker error');
+                request.resolve(request.partialResults);
+            } else if (request.results.length > 0) {
                 // Partial success
                 const aggregated = aggregateResults(request.results);
                 request.resolve(aggregated);
@@ -226,7 +296,7 @@ function sendHeartbeat() {
     }
 
     const timestamp = Date.now();
-    
+
     workers.forEach((workerInfo, index) => {
         try {
             workerInfo.worker.postMessage({
@@ -246,11 +316,11 @@ function sendHeartbeat() {
  */
 function handleHeartbeatResponse(event) {
     const { type, timestamp } = event.data;
-    
+
     if (type !== 'HEARTBEAT_RESPONSE') {
         return;
     }
-    
+
     const workerInfo = workers.find(w => w.worker === event.target);
     if (workerInfo) {
         workerLastHeartbeat.set(workerInfo.worker, timestamp);
@@ -273,7 +343,7 @@ function checkStaleWorkers() {
 
     workers.forEach((workerInfo, index) => {
         const lastHeartbeat = workerLastHeartbeat.get(workerInfo.worker);
-        
+
         // If no heartbeat received or heartbeat is too old, mark as stale
         if (!lastHeartbeat || (now - lastHeartbeat) > STALE_WORKER_TIMEOUT_MS) {
             staleWorkers.push({ workerInfo, index });
@@ -283,25 +353,25 @@ function checkStaleWorkers() {
     // Restart stale workers
     staleWorkers.forEach(({ workerInfo, index }) => {
         console.warn(`[PatternWorkerPool] Worker ${index} is stale, restarting...`);
-        
+
         try {
             // Terminate the stale worker
             workerInfo.worker.terminate();
-            
+
             // Create a new worker
             const newWorker = new Worker('./pattern-worker.js');
-            
+
             // Setup message handler
             newWorker.onmessage = handleWorkerMessage;
             newWorker.onerror = handleWorkerError;
-            
+
             // Update the worker info
             workerInfo.worker = newWorker;
             workerInfo.busy = false;
-            
+
             // Reset heartbeat tracking
             workerLastHeartbeat.set(newWorker, Date.now());
-            
+
             console.log(`[PatternWorkerPool] Worker ${index} restarted successfully`);
         } catch (error) {
             console.error(`[PatternWorkerPool] Failed to restart worker ${index}:`, error);
@@ -321,7 +391,7 @@ function startHeartbeat() {
     }
 
     console.log(`[PatternWorkerPool] Starting heartbeat (interval: ${HEARTBEAT_INTERVAL_MS}ms)`);
-    
+
     heartbeatInterval = setInterval(() => {
         sendHeartbeat();
         checkStaleWorkers();
@@ -540,6 +610,54 @@ function getSpeedupFactor() {
     return Math.min(activeWorkers * 0.8, cores - 1);
 }
 
+/**
+ * Partition data for workers when SharedArrayBuffer unavailable
+ * HNW Network: Reduces memory by partitioning instead of duplicating
+ * 
+ * @param {Array} data - Data to partition
+ * @param {number} numPartitions - Number of partitions (same as worker count)
+ * @returns {Array<Array>} - Partitioned data arrays
+ */
+function partitionData(data, numPartitions) {
+    if (!data || !Array.isArray(data) || numPartitions < 1) {
+        return [data];
+    }
+
+    const partitionSize = Math.ceil(data.length / numPartitions);
+    const partitions = [];
+
+    for (let i = 0; i < numPartitions; i++) {
+        const start = i * partitionSize;
+        const end = Math.min(start + partitionSize, data.length);
+        partitions.push(data.slice(start, end));
+    }
+
+    if (MEMORY_CONFIG.logMemoryUsage) {
+        const originalSize = JSON.stringify(data).length;
+        const partitionedSize = partitions.reduce((sum, p) => sum + JSON.stringify(p).length, 0);
+        console.log(`[PatternWorkerPool] Memory: ${(originalSize / 1024).toFixed(1)}KB original → ${(partitionedSize / 1024).toFixed(1)}KB partitioned (${numPartitions} partitions)`);
+    }
+
+    return partitions;
+}
+
+/**
+ * Get memory configuration status
+ * @returns {Object} Memory config and status
+ */
+function getMemoryConfig() {
+    return {
+        sharedArrayBufferAvailable: SHARED_MEMORY_AVAILABLE,
+        useSharedMemory: MEMORY_CONFIG.useSharedMemory,
+        partitionData: MEMORY_CONFIG.partitionData,
+        workerCount: workers.length,
+        crossOriginIsolated: typeof crossOriginIsolated !== 'undefined' ? crossOriginIsolated : 'unknown',
+        recommendation: SHARED_MEMORY_AVAILABLE
+            ? 'SharedArrayBuffer enabled - optimal memory usage'
+            : 'Add COOP/COEP headers for SharedArrayBuffer: Cross-Origin-Opener-Policy: same-origin, Cross-Origin-Embedder-Policy: require-corp'
+    };
+}
+
 // ==========================================
 // Public API
 // ==========================================
@@ -556,11 +674,17 @@ const PatternWorkerPool = {
     getStatus,
     getSpeedupFactor,
 
+    // Memory configuration (HNW Network)
+    getMemoryConfig,
+    partitionData,
+
     // Configuration
-    PATTERN_GROUPS
+    PATTERN_GROUPS,
+    SHARED_MEMORY_AVAILABLE
 };
 
 // ES Module export
 export { PatternWorkerPool };
 
 console.log('[PatternWorkerPool] Pattern Worker Pool loaded');
+

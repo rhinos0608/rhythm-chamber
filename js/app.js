@@ -286,6 +286,50 @@ if (typeof window !== 'undefined') {
 }
 
 // ==========================================
+// Authority UI Feedback (HNW)
+// ==========================================
+
+/**
+ * Update UI to reflect current tab authority status
+ * HNW Hierarchy: Visual feedback for read-only mode
+ * 
+ * @param {Object} authority - Authority status from TabCoordinator
+ */
+function updateAuthorityUI(authority) {
+    const indicator = document.getElementById('authority-indicator');
+    const banner = document.getElementById('read-only-banner');
+
+    if (!indicator) {
+        console.log('[App] Authority indicator element not found');
+        return;
+    }
+
+    // Update indicator
+    const statusText = indicator.querySelector('.status-text');
+    if (authority.level === 'primary') {
+        indicator.classList.remove('secondary');
+        indicator.classList.add('primary');
+        if (statusText) statusText.textContent = 'Primary';
+        indicator.title = 'Full access - You can make changes';
+
+        // Remove read-only mode from body
+        document.body.classList.remove('read-only-mode');
+        if (banner) banner.classList.remove('active');
+    } else {
+        indicator.classList.remove('primary');
+        indicator.classList.add('secondary');
+        if (statusText) statusText.textContent = 'Read-only';
+        indicator.title = 'Read-only mode - Close other tabs to enable editing';
+
+        // Add read-only mode to body
+        document.body.classList.add('read-only-mode');
+        if (banner) banner.classList.add('active');
+    }
+
+    console.log(`[App] Authority UI updated: ${authority.level}`);
+}
+
+// ==========================================
 // Controller Initialization (continued)
 // ==========================================
 
@@ -390,6 +434,13 @@ async function init(options = {}) {
     const isPrimary = await TabCoordinator.init();
     if (!isPrimary) {
         console.log('[App] Secondary tab detected - write operations disabled');
+    }
+
+    // HNW: Subscribe to authority changes for visual feedback
+    if (typeof TabCoordinator.onAuthorityChange === 'function') {
+        TabCoordinator.onAuthorityChange((authority) => {
+            updateAuthorityUI(authority);
+        });
     }
 
     // Initialize unified storage

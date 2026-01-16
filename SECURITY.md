@@ -93,7 +93,7 @@ Security.storeEncryptedCredentials('qdrant_credentials', {
 const creds = await Security.getEncryptedCredentials('qdrant_credentials');
 ```
 
-**Key derivation**: PBKDF2 with 100,000 iterations from session salt + Spotify refresh token + session version.
+**Key derivation**: PBKDF2 with 600,000 iterations from session salt + Spotify refresh token + session version.
 
 ### 2. Session Versioning & Invalidation
 
@@ -186,7 +186,7 @@ if (Security.isRateLimited('embedding', 5)) {
 
 **Obfuscation** (`Security.obfuscate()`) uses simple XOR with a session salt. It prevents casual reading but is NOT cryptographically secure.
 
-**Encryption** (`Security.encryptData()`) uses AES-GCM with PBKDF2 key derivation (100k iterations). This is real encryption, though keys are still client-side.
+**Encryption** (`Security.encryptData()`) uses AES-GCM with PBKDF2 key derivation (600k iterations). This is real encryption, though keys are still client-side.
 
 ### 7. Unified Error Context (NEW)
 

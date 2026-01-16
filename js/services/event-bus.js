@@ -135,6 +135,18 @@ const EVENT_PRIORITIES = {
 };
 
 // ==========================================
+// Circuit Breaker Configuration
+// ==========================================
+
+const CIRCUIT_BREAKER_CONFIG = {
+    maxQueueSize: 1000,              // Max pending events before overflow
+    overflowStrategy: 'drop_low_priority', // 'drop_low_priority', 'drop_oldest', 'reject_all'
+    stormThreshold: 100,             // Events per second to trigger storm warning
+    stormWindowMs: 1000,             // Window for storm detection
+    cooldownMs: 5000                 // Cooldown after storm
+};
+
+// ==========================================
 // Internal State
 // ==========================================
 
@@ -150,6 +162,15 @@ const MAX_TRACE_SIZE = 100;
 
 /** @type {number} */
 let handlerId = 0;
+
+// Circuit breaker state
+/** @type {Array<{eventType: string, timestamp: number, priority: number}>} */
+const pendingEvents = [];
+let eventsThisWindow = 0;
+let windowStart = Date.now();
+let stormActive = false;
+let stormCooldownUntil = 0;
+let droppedCount = 0;
 
 // ==========================================
 // Core Functions
@@ -228,10 +249,90 @@ function off(eventType, handlerId) {
  * @param {Object} [payload={}] - Event payload
  * @param {Object} [options] - Emit options
  * @param {boolean} [options.skipValidation=false] - Skip payload validation
+ * @param {boolean} [options.bypassCircuitBreaker=false] - Skip circuit breaker checks
  * @returns {boolean} True if any handlers were called
  */
 function emit(eventType, payload = {}, options = {}) {
     const timestamp = Date.now();
+    const priority = EVENT_PRIORITIES[eventType] ?? PRIORITY.NORMAL;
+
+    // Circuit breaker: Storm detection
+    if (!options.bypassCircuitBreaker) {
+        // Update storm window
+        if (timestamp - windowStart > CIRCUIT_BREAKER_CONFIG.stormWindowMs) {
+            // Check if storm threshold was exceeded
+            if (eventsThisWindow > CIRCUIT_BREAKER_CONFIG.stormThreshold && !stormActive) {
+                stormActive = true;
+                stormCooldownUntil = timestamp + CIRCUIT_BREAKER_CONFIG.cooldownMs;
+                console.warn(`[EventBus] Event storm detected: ${eventsThisWindow} events in ${CIRCUIT_BREAKER_CONFIG.stormWindowMs}ms`);
+                // Emit storm warning (bypass circuit breaker to avoid recursion)
+                emit('eventbus:storm', {
+                    eventsPerSecond: eventsThisWindow,
+                    threshold: CIRCUIT_BREAKER_CONFIG.stormThreshold
+                }, { bypassCircuitBreaker: true, skipValidation: true });
+            }
+            // Reset window
+            windowStart = timestamp;
+            eventsThisWindow = 0;
+            // Check cooldown
+            if (stormActive && timestamp > stormCooldownUntil) {
+                stormActive = false;
+                console.log('[EventBus] Event storm cooldown complete');
+            }
+        }
+        eventsThisWindow++;
+
+        // Queue overflow handling
+        if (pendingEvents.length >= CIRCUIT_BREAKER_CONFIG.maxQueueSize) {
+            const strategy = CIRCUIT_BREAKER_CONFIG.overflowStrategy;
+
+            if (strategy === 'reject_all') {
+                droppedCount++;
+                if (debugMode) {
+                    console.warn(`[EventBus] Event rejected (queue full): ${eventType}`);
+                }
+                return false;
+            } else if (strategy === 'drop_low_priority') {
+                // Find lowest priority event to drop
+                const lowestPriorityIndex = pendingEvents.reduce((lowest, event, index) => {
+                    if (pendingEvents[lowest].priority < event.priority) {
+                        return index;
+                    }
+                    return lowest;
+                }, 0);
+
+                // Only drop if new event has higher priority
+                if (priority > pendingEvents[lowestPriorityIndex].priority) {
+                    droppedCount++;
+                    if (debugMode) {
+                        console.warn(`[EventBus] Event rejected (lower priority than queue): ${eventType}`);
+                    }
+                    return false;
+                }
+
+                // Drop lowest priority event
+                const dropped = pendingEvents.splice(lowestPriorityIndex, 1)[0];
+                droppedCount++;
+                if (debugMode) {
+                    console.warn(`[EventBus] Dropped low-priority event: ${dropped.eventType}`);
+                }
+            } else if (strategy === 'drop_oldest') {
+                const dropped = pendingEvents.shift();
+                droppedCount++;
+                if (debugMode) {
+                    console.warn(`[EventBus] Dropped oldest event: ${dropped?.eventType}`);
+                }
+            }
+        }
+
+        // Add to pending queue for tracking
+        pendingEvents.push({ eventType, timestamp, priority });
+
+        // Trim queue to max size
+        while (pendingEvents.length > CIRCUIT_BREAKER_CONFIG.maxQueueSize) {
+            pendingEvents.shift();
+        }
+    }
 
     // Validate payload against schema if available
     if (!options.skipValidation && EVENT_SCHEMAS[eventType]) {
@@ -273,7 +374,8 @@ function emit(eventType, payload = {}, options = {}) {
     const eventMeta = {
         type: eventType,
         timestamp,
-        priority: EVENT_PRIORITIES[eventType] ?? PRIORITY.NORMAL
+        priority,
+        stormActive
     };
 
     // Call handlers in priority order
@@ -434,8 +536,37 @@ function getSchemas() {
 function clearAll() {
     subscribers.clear();
     eventTrace.length = 0;
+    pendingEvents.length = 0;
     handlerId = 0;
-    console.log('[EventBus] All subscribers cleared');
+    eventsThisWindow = 0;
+    stormActive = false;
+    droppedCount = 0;
+    console.log('[EventBus] All subscribers and circuit breaker state cleared');
+}
+
+/**
+ * Get circuit breaker status
+ * @returns {Object}
+ */
+function getCircuitBreakerStatus() {
+    return {
+        pendingEventCount: pendingEvents.length,
+        maxQueueSize: CIRCUIT_BREAKER_CONFIG.maxQueueSize,
+        queueUtilization: (pendingEvents.length / CIRCUIT_BREAKER_CONFIG.maxQueueSize * 100).toFixed(1) + '%',
+        stormActive,
+        eventsThisWindow,
+        droppedCount,
+        overflowStrategy: CIRCUIT_BREAKER_CONFIG.overflowStrategy
+    };
+}
+
+/**
+ * Configure circuit breaker settings
+ * @param {Object} config - Partial configuration
+ */
+function configureCircuitBreaker(config) {
+    Object.assign(CIRCUIT_BREAKER_CONFIG, config);
+    console.log('[EventBus] Circuit breaker configured:', CIRCUIT_BREAKER_CONFIG);
 }
 
 // ==========================================
@@ -459,6 +590,10 @@ export const EventBus = {
     getRegisteredEvents,
     getSubscriberCount,
     getSchemas,
+
+    // Circuit breaker
+    getCircuitBreakerStatus,
+    configureCircuitBreaker,
 
     // Testing
     clearAll,

@@ -1,6 +1,6 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System** + **ToolStrategy Pattern** + **ES Module Migration (controllers complete)** + **Unit Testing (Vitest)** + **Chat Module Refactoring** + **HNW Structural Improvements (9 modules)** + **Phase 1 Architecture (EventBus, DataProvider)** + **Phase 2 Advanced Features (Sharing, Temporal, Playlist)**
+> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System** + **ToolStrategy Pattern** + **ES Module Migration (controllers complete)** + **Unit Testing (Vitest)** + **Chat Module Refactoring** + **HNW Structural Improvements (9 modules)** + **HNW Phase 2 Advanced Improvements (8 modules)** + **Phase 1 Architecture (EventBus, DataProvider)** + **Phase 2 Advanced Features (Sharing, Temporal, Playlist)**
 
 ---
 
@@ -612,6 +612,64 @@ canHandle() → { confidence: 0.95, reason: 'Native tool_calls' }
 - [x] Strategy voting logs confidence scores for debugging
 - [x] Migration checkpoints every 100 records
 
+### 18. HNW Phase 2: Advanced Improvements (NEW)
+
+**Phase 2 Modules:**
+
+| Domain | Module | File | Purpose |
+|--------|--------|------|---------|
+| **Hierarchy** | Cascading Abort Controller | `js/services/cascading-abort-controller.js` | Parent-child AbortController hierarchy for cleanup |
+| **Network** | Lamport Clock | `js/services/lamport-clock.js` | Logical timestamps for deterministic ordering |
+| **Network** | EventBus Circuit Breaker | `js/services/event-bus.js` | Queue overflow handling, storm detection |
+| **Wave** | Shared Strategy Budget | `js/services/tool-call-handling-service.js` | 30s total across all strategies (not per-strategy) |
+| **Wave** | Worker Partial Results | `js/workers/pattern-worker.js` | Stream partial results as patterns complete |
+
+**Key APIs:**
+```javascript
+// Cascading Abort - parent signals children
+const turn = CascadingAbort.create('turn_123');
+const llm = turn.child('llm_call');
+turn.abort('User cancelled'); // Aborts both turn and llm
+
+// Lamport Clock - logical ordering
+const stamped = LamportClock.stamp({ type: 'ELECT', tabId });
+LamportClock.compare(a, b); // Deterministic ordering
+
+// EventBus Circuit Breaker - overflow handling
+EventBus.getCircuitBreakerStatus();
+// → { pendingEventCount, maxQueueSize, stormActive, droppedCount }
+```
+
+### SSE / Streaming Order Guarantees
+
+> [!NOTE]
+> **Assumption:** OpenRouter and LLM providers deliver SSE chunks in-order within a single HTTP/2 stream. No sequence number validation is implemented.
+
+**Ordering Behavior:**
+- SSE (Server-Sent Events) uses HTTP/2 which guarantees in-order delivery
+- No reordering buffer needed for standard streaming responses
+- Chunk concatenation in `ChatUIController.updateStreamingMessage()` relies on this order
+
+**Edge Cases:**
+- Network interruptions may cause partial chunks → graceful fallback to non-streaming
+- If a provider violates order guarantees, add sequence numbers with a reordering buffer
+
+**If reordering needed in future:**
+```javascript
+// Simple sequence number approach
+const buffer = new Map(); // sequence → chunk
+let nextExpected = 0;
+function processChunk(seq, data) {
+    buffer.set(seq, data);
+    while (buffer.has(nextExpected)) {
+        render(buffer.get(nextExpected));
+        buffer.delete(nextExpected++);
+    }
+}
+```
+
+**Testing:** 21 tests in `tests/unit/hnw-improvements.test.js`
+
 ---
 
 ## Personality Types
@@ -1201,7 +1259,7 @@ npx serve .
    - **Playlist Generator**: `PlaylistGenerator` creating Era, Energy, Discovery, and Time Machine playlists with Spotify API integration. (6 tests)
 
 3. **Verification:**
-   - Added 3 new test files and 56 new unit tests.
+   - Added 5 new test files and 78 new unit tests.
    - Total test suite now **250 tests** covering all new architecture and features.
 
 **Key Architectural Improvements:**

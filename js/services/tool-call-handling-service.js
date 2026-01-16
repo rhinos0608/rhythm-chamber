@@ -313,6 +313,9 @@ function initToolStrategies() {
  * Handle tool calls with fallback support for models without native function calling.
  * Uses Strategy pattern to delegate to appropriate handler based on capability level.
  * 
+ * SHARED BUDGET: All strategies share a single 30s budget. This prevents 120s hangs
+ * from 30s × 4 strategies. Budget is allocated dynamically to each strategy.
+ * 
  * @param {object} responseMessage - LLM response message
  * @param {object} providerConfig - Provider configuration
  * @param {string} key - API key
@@ -336,82 +339,159 @@ async function handleToolCallsWithFallback(
     // Initialize strategies on first use
     initToolStrategies();
 
-    // Build execution context
-    const context = {
-        responseMessage,
-        providerConfig,
-        key,
-        onProgress,
-        capabilityLevel,
-        tools,
-        messages,
-        userMessage,
-        streamsData: _streamsData,
-        buildSystemPrompt: _buildSystemPrompt,
-        callLLM: _callLLM
-    };
-
     // ==========================================
-    // Strategy Voting System
-    // Collect confidence scores from all strategies,
-    // pick highest confidence (not first match)
+    // SHARED BUDGET: 30s total across all strategies
     // ==========================================
+    const TOTAL_STRATEGY_BUDGET_MS = 30000;
+    const strategyBudget = TimeoutBudget.allocate('strategy_fallback', TOTAL_STRATEGY_BUDGET_MS);
 
-    const candidates = [];
+    try {
+        // Build execution context
+        const context = {
+            responseMessage,
+            providerConfig,
+            key,
+            onProgress,
+            capabilityLevel,
+            tools,
+            messages,
+            userMessage,
+            streamsData: _streamsData,
+            buildSystemPrompt: _buildSystemPrompt,
+            callLLM: _callLLM
+        };
 
-    for (const strategy of toolStrategies) {
-        if (strategy.strategyName === 'IntentExtractionStrategy') {
-            continue; // handled separately to avoid duplicates
+        // ==========================================
+        // Strategy Voting System
+        // Collect confidence scores from all strategies,
+        // pick highest confidence (not first match)
+        // ==========================================
+
+        const candidates = [];
+
+        for (const strategy of toolStrategies) {
+            if (strategy.strategyName === 'IntentExtractionStrategy') {
+                continue; // handled separately to avoid duplicates
+            }
+
+            const result = strategy.canHandle(responseMessage, capabilityLevel);
+
+            if (result.confidence > 0) {
+                candidates.push({
+                    strategy,
+                    confidence: result.confidence,
+                    reason: result.reason
+                });
+            }
         }
 
-        const result = strategy.canHandle(responseMessage, capabilityLevel);
-
-        if (result.confidence > 0) {
-            candidates.push({
-                strategy,
-                confidence: result.confidence,
-                reason: result.reason
-            });
+        // Special case: IntentExtractionStrategy uses getIntentConfidence
+        const intentStrategy = toolStrategies.find(s => s.strategyName === 'IntentExtractionStrategy');
+        if (intentStrategy?.getIntentConfidence) {
+            const intentResult = intentStrategy.getIntentConfidence(userMessage);
+            if (intentResult.confidence > 0) {
+                candidates.push({
+                    strategy: intentStrategy,
+                    confidence: intentResult.confidence,
+                    reason: intentResult.reason
+                });
+            }
         }
-    }
 
-    // Special case: IntentExtractionStrategy uses getIntentConfidence
-    const intentStrategy = toolStrategies.find(s => s.strategyName === 'IntentExtractionStrategy');
-    if (intentStrategy?.getIntentConfidence) {
-        const intentResult = intentStrategy.getIntentConfidence(userMessage);
-        if (intentResult.confidence > 0) {
-            candidates.push({
-                strategy: intentStrategy,
-                confidence: intentResult.confidence,
-                reason: intentResult.reason
-            });
+        // Sort by confidence (highest first)
+        candidates.sort((a, b) => b.confidence - a.confidence);
+
+        // Log voting results for debugging
+        if (candidates.length > 0) {
+            console.log('[ToolCallHandlingService] Strategy voting results:',
+                candidates.map(c => `${c.strategy.strategyName}: ${c.confidence.toFixed(2)} (${c.reason})`));
         }
+
+        // Try strategies in order of confidence until one succeeds or budget exhausted
+        for (const candidate of candidates) {
+            // Check if budget exhausted before trying next strategy
+            if (strategyBudget.isExhausted()) {
+                const budgetInfo = strategyBudget.getAccounting();
+                console.warn(`[ToolCallHandlingService] Strategy budget exhausted after ${budgetInfo.elapsed}ms`);
+
+                // Notify UI about timeout
+                if (onProgress) {
+                    onProgress({ type: 'strategy_timeout', elapsed: budgetInfo.elapsed });
+                }
+
+                return {
+                    earlyReturn: {
+                        status: 'error',
+                        content: buildTimeoutExhaustedError(budgetInfo.elapsed),
+                        role: 'assistant',
+                        isTimeoutError: true
+                    }
+                };
+            }
+
+            // Provide remaining budget to strategy
+            const remainingMs = strategyBudget.remaining();
+            context.timeoutMs = remainingMs;
+
+            console.log(`[ToolCallHandlingService] Trying ${candidate.strategy.strategyName} (confidence: ${candidate.confidence.toFixed(2)}, budget: ${remainingMs}ms remaining)`);
+
+            try {
+                const result = await candidate.strategy.execute(context);
+
+                // Strategy succeeded
+                if (result && !result.earlyReturn?.status?.includes('error')) {
+                    return result;
+                }
+
+                // Strategy returned an error - continue to next if budget permits
+                if (result?.earlyReturn) {
+                    console.log(`[ToolCallHandlingService] ${candidate.strategy.strategyName} returned error, trying next strategy`);
+                    continue;
+                }
+
+                return result;
+            } catch (strategyError) {
+                // Strategy threw - log and continue to next
+                console.error(`[ToolCallHandlingService] ${candidate.strategy.strategyName} threw:`, strategyError);
+                continue;
+            }
+        }
+
+        // No winning strategy or all failed - check for native tool_calls fallback
+        if (responseMessage?.tool_calls?.length > 0) {
+            console.log('[ToolCallHandlingService] Native tool calls found in response (fallback)');
+            return handleToolCalls(responseMessage, providerConfig, key, onProgress);
+        }
+
+        // No function calls to handle
+        return { responseMessage };
+
+    } finally {
+        // Always release budget
+        TimeoutBudget.release(strategyBudget);
     }
+}
 
-    // Sort by confidence (highest first)
-    candidates.sort((a, b) => b.confidence - a.confidence);
+/**
+ * Build user-friendly error message for strategy timeout exhaustion
+ * @param {number} elapsedMs - Time elapsed before timeout
+ * @returns {string}
+ */
+function buildTimeoutExhaustedError(elapsedMs) {
+    const seconds = Math.round(elapsedMs / 1000);
+    return `⏱️ **Request timed out** after ${seconds} seconds.
 
-    // Log voting results for debugging
-    if (candidates.length > 0) {
-        console.log('[ToolCallHandlingService] Strategy voting results:',
-            candidates.map(c => `${c.strategy.strategyName}: ${c.confidence.toFixed(2)} (${c.reason})`));
-    }
+This can happen when:
+• The AI model is slow to respond
+• Your query requires complex data processing
+• Network latency is high
 
-    // Execute highest confidence strategy
-    if (candidates.length > 0) {
-        const winner = candidates[0];
-        console.log(`[ToolCallHandlingService] Selected ${winner.strategy.strategyName} with confidence ${winner.confidence.toFixed(2)}`);
-        return winner.strategy.execute(context);
-    }
+**Suggestions:**
+1. **Try a faster model** — Switch to a lighter model like "gpt-4o-mini" or enable "Ollama" for local processing
+2. **Simplify your question** — Ask about a specific year or artist instead of your entire history
+3. **Wait and retry** — The service may be temporarily overloaded
 
-    // Check if we still have native tool_calls (fallback for unknown model capability)
-    if (responseMessage?.tool_calls?.length > 0) {
-        console.log('[ToolCallHandlingService] Native tool calls found in response (fallback)');
-        return handleToolCalls(responseMessage, providerConfig, key, onProgress);
-    }
-
-    // No function calls to handle
-    return { responseMessage };
+You can change your AI model in Settings (⚙️).`;
 }
 
 // ==========================================
