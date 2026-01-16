@@ -80,7 +80,11 @@ const EVENT_SCHEMAS = {
     },
     'pattern:all_complete': {
         description: 'All pattern detection finished',
-        payload: { patterns: 'object', duration: 'number' }
+        payload: { patterns: 'object', duration: 'number', aborted: 'boolean?' }
+    },
+    'pattern:aborted': {
+        description: 'Pattern detection aborted before completion',
+        payload: { patterns: 'object', duration: 'number', aborted: 'boolean?' }
     },
 
     // Chat events
@@ -252,7 +256,7 @@ function emit(eventType, payload = {}, options = {}) {
     }
 
     if (debugMode) {
-        console.log(`[EventBus] Emit "${eventType}"`, payload);
+        console.log(`[EventBus] Emit "${eventType}"`, sanitizePayload(payload));
     }
 
     // Get handlers for this event + wildcard handlers

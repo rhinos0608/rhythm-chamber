@@ -139,7 +139,7 @@ UI logic extracted from `app.js` into focused controllers:
 - **DemoController** (`js/controllers/demo-controller.js`): Demo mode
 - **ResetController** (`js/controllers/reset-controller.js`): Reset operations
 
-### 4. Service Pattern (NEW - 11 Services)
+### 4. Service Pattern (NEW - 17 Services)
 Extracted from God objects into independent services:
 - **MessageOperations** (`js/services/message-operations.js`): Message operations (regenerate, delete, edit, query context)
 - **SessionManager** (`js/services/session-manager.js`): Session lifecycle (create, load, save, delete)
@@ -152,6 +152,12 @@ Extracted from God objects into independent services:
 - **LockPolicyCoordinator** (`js/services/lock-policy-coordinator.js`): Operation conflict matrix (NEW)
 - **TimeoutBudgetManager** (`js/services/timeout-budget-manager.js`): Hierarchical timeout allocation (NEW)
 - **TurnQueue** (`js/services/turn-queue.js`): Message serialization (NEW)
+- **EventBus** (`js/services/event-bus.js`): Centralized typed event system (Phase 1)
+- **PatternStream** (`js/services/pattern-stream.js`): Incremental pattern display (Phase 1)
+- **ProfileSharing** (`js/services/profile-sharing.js`): Encrypted profile export/import (Phase 2)
+- **PatternComparison** (`js/services/pattern-comparison.js`): Collaborative analysis engine (Phase 2)
+- **TemporalAnalysis** (`js/services/temporal-analysis.js`): 5-year trend visualization (Phase 2)
+- **PlaylistGenerator** (`js/services/playlist-generator.js`): AI playlist creation (Phase 2)
 
 ### 5. State Management
 - **AppState** (`js/state/app-state.js`): Centralized state with demo isolation

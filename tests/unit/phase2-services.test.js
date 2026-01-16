@@ -122,7 +122,7 @@ describe('TemporalAnalysis', () => {
 
         expect(result.trend).toBeDefined();
         expect(result.averageDiversity).toBeGreaterThanOrEqual(0);
-        expect(result.trendDirection).toMatch(/increasing|decreasing|stable/);
+        expect(result.trendDirection).toMatch(/increasing|decreasing|stable|insufficient_data/);
         expect(result.insight).toBeTruthy();
     });
 

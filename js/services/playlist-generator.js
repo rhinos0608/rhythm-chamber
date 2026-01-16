@@ -60,14 +60,15 @@ function createPlaylistFromEra(streams, options = {}) {
     // Get top tracks from era
     const trackCounts = {};
     for (const s of eraStreams) {
-        const track = s.spotify_track_uri || s.master_metadata_track_name;
-        const key = track || `${s.master_metadata_album_artist_name} - ${s.master_metadata_track_name}`;
+        const name = s.master_metadata_track_name;
+        const artist = s.master_metadata_album_artist_name;
+        const key = s.spotify_track_uri || (artist && name ? `${artist} - ${name}` : name);
         if (key) {
             if (!trackCounts[key]) {
                 trackCounts[key] = {
-                    name: s.master_metadata_track_name,
-                    artist: s.master_metadata_album_artist_name,
-                    uri: s.spotify_track_uri,
+                    name,
+                    artist,
+                    uri: s.spotify_track_uri || null,
                     count: 0
                 };
             }
@@ -305,7 +306,8 @@ async function createOnSpotify(playlist, options = {}) {
     }
 
     // Check if we have the required scope
-    const hasScope = await spotify.hasScope?.('playlist-modify-private');
+    const requiredScope = isPublic ? 'playlist-modify-public' : 'playlist-modify-private';
+    const hasScope = await spotify.hasScope?.(requiredScope);
     if (!hasScope) {
         throw new Error('Playlist creation permission not granted. Please re-connect Spotify.');
     }

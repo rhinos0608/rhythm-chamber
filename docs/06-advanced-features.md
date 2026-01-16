@@ -270,11 +270,13 @@ Data never touches our servers.
 "You and Alex both have 'Emotional Archaeologist' patterns."
 ```
 
-### Playlist Generation
+### Playlist Generation (Implemented Phase 2)
 
 ```
 "Based on your breakup pattern, here's a healing playlist."
 ```
+
+**Implementation:** `js/services/playlist-generator.js` uses AI to select tracks matching specific patterns (Eras, Energy, Discovery) and exports them to Spotify.
 
 ### Life Event Detection
 
@@ -321,9 +323,9 @@ Data never touches our servers.
 - Batch export with progress tracking
 - Optional compression for large histories
 
-### Strategy 2: Relationship Resonance Engine (Supporter Tier)
+### Strategy 2: Relationship Resonance Engine (Implemented Phase 2)
 
-**Feature:** "Deep Comparison Reports"
+**Feature:** "Deep Comparison Reports" (Powered by `js/services/pattern-comparison.js`)
 
 **Free tier:**
 - See your own stats and patterns

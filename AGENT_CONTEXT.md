@@ -1,6 +1,6 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System** + **ToolStrategy Pattern (verification pending)** + **ES Module Migration (controllers complete)** + **Unit Testing (Vitest)** + **Chat Module Refactoring (under 1000 lines)** + **HNW Structural Improvements (9 modules)**
+> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System** + **ToolStrategy Pattern** + **ES Module Migration (controllers complete)** + **Unit Testing (Vitest)** + **Chat Module Refactoring** + **HNW Structural Improvements (9 modules)** + **Phase 1 Architecture (EventBus, DataProvider)** + **Phase 2 Advanced Features (Sharing, Temporal, Playlist)**
 
 ---
 
@@ -103,6 +103,14 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 | **Tool Call Handling Service** | ✅ Done | `js/services/tool-call-handling-service.js` (Extracted from chat.js) |
 | **LLM Provider Routing Service** | ✅ Done | `js/services/llm-provider-routing-service.js` (Extracted from chat.js) |
 | **Fallback Response Service** | ✅ Done | `js/services/fallback-response-service.js` (Extracted from chat.js) |
+| **EventBus** | ✅ Done | `js/services/event-bus.js` (Phase 1: Centralized Events) |
+| **DataProvider** | ✅ Done | `js/providers/` (User & Demo data unified) |
+| **Universal Schema** | ✅ Done | `js/functions/schemas/universal-schema.js` (OpenAI/Claude/Gemini adapters) |
+| **Pattern Stream** | ✅ Done | `js/services/pattern-stream.js` (Incremental display) |
+| **Profile Sharing** | ✅ Done | `js/services/profile-sharing.js` (E2E Encrypted) |
+| **Collaborative Analysis** | ✅ Done | `js/services/pattern-comparison.js` (Compatibility engine) |
+| **Temporal Analysis** | ✅ Done | `js/services/temporal-analysis.js` (5-year trends) |
+| **Playlist Generator** | ✅ Done | `js/services/playlist-generator.js` (AI-powered creation) |
 | WASM embeddings | ⏳ v1.1 | Not implemented |
 
 ---
@@ -193,13 +201,19 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 │   │   ├── session-manager.js    # Session lifecycle (create, load, save, delete)
 │   │   ├── tab-coordination.js   # Cross-tab coordination (ENHANCED - heartbeat failover)
 │   │   ├── token-counting-service.js # Token counting & context window management
-│   │   ├── tool-call-handling-service.js # Tool call handling (ENHANCED - strategy voting)
+│   │   ├── tool-call-handling-service.js # Tool call handling (ENHANCED — strategy voting)
 │   │   ├── llm-provider-routing-service.js # LLM provider configuration & routing
 │   │   ├── fallback-response-service.js # Fallback response generation
 │   │   ├── state-machine-coordinator.js  # Cross-controller state transitions (NEW - HNW Hierarchy)
 │   │   ├── lock-policy-coordinator.js    # Operation conflict matrix (NEW - HNW Hierarchy)
 │   │   ├── timeout-budget-manager.js     # Hierarchical timeout allocation (NEW - HNW Hierarchy)
 │   │   ├── turn-queue.js                 # Message serialization (NEW - HNW Wave)
+│   │   ├── event-bus.js                  # Centralized typed event system (Phase 1)
+│   │   ├── pattern-stream.js             # Incremental pattern display (Phase 1)
+│   │   ├── profile-sharing.js            # Encrypted profile export/import (Phase 2)
+│   │   ├── pattern-comparison.js         # Collaborative analysis engine (Phase 2)
+│   │   ├── temporal-analysis.js          # 5-year trend visualization (Phase 2)
+│   │   ├── playlist-generator.js         # AI playlist creation (Phase 2)
 │   │   └── tool-strategies/
 │   │       ├── base-strategy.js          # BaseToolStrategy (ENHANCED - confidence scoring)
 │   │       ├── native-strategy.js        # NativeToolStrategy (Level 1)
@@ -1169,6 +1183,58 @@ npx serve .
 ---
 
 ## Session Log
+
+### Session 21 — 2026-01-16 (Phase 1 & Phase 2 Completion)
+
+**What was done:**
+
+1. **Architectural Improvements (Phase 1):**
+   - **EventBus**: Centralized, typed event system with priority dispatch and schema validation. Replace bespoke listeners in `Storage` and `SessionManager`. (22 tests)
+   - **DataProvider**: Unified abstraction for `UserDataProvider` (IndexedDB) and `DemoDataProvider` (static persona), decoupling UI from storage. (15 tests)
+   - **Universal Schema**: Provider-agnostic function definition format with adapters for OpenAI, Anthropic, and Gemini. (9 tests)
+   - **Pattern Stream**: Incremental pattern visualization service using EventBus. (10 tests)
+
+2. **Advanced Features (Phase 2):**
+   - **Profile Sharing**: AES-256-GCM encrypted export/import (E2EE) using user passphrases. Client-side only. (5 tests)
+   - **Collaborative Analysis**: `PatternComparison` engine for compatibility scoring, shared artists, and personality overlap. (5 tests)
+   - **Temporal Analysis**: `TemporalAnalysis` service for 5-year taste evolution, diversity trends, and year-over-year comparisons. (6 tests)
+   - **Playlist Generator**: `PlaylistGenerator` creating Era, Energy, Discovery, and Time Machine playlists with Spotify API integration. (6 tests)
+
+3. **Verification:**
+   - Added 3 new test files and 56 new unit tests.
+   - Total test suite now **250 tests** covering all new architecture and features.
+
+**Key Architectural Improvements:**
+- **HNW Network**: EventBus decouples producers (detectors) from consumers (UI).
+- **HNW Hierarchy**: DataProvider abstracts source authority (Real vs Demo).
+- **HNW Wave**: PatternStream enables progressive UI updates, smoothing the "reveal" wave.
+- **Security**: Zero-knowledge sharing architecture (E2EE).
+
+**New Files:**
+- `js/services/event-bus.js`
+- `js/services/pattern-stream.js`
+- `js/services/profile-sharing.js`
+- `js/services/pattern-comparison.js`
+- `js/services/temporal-analysis.js`
+- `js/services/playlist-generator.js`
+- `js/providers/data-provider-interface.js`
+- `js/providers/user-data-provider.js`
+- `js/providers/demo-data-provider.js`
+- `js/functions/schemas/universal-schema.js`
+- *Plus 5 new test files*
+
+**Modified Files:**
+- `js/storage.js` (EventBus integration)
+- `js/services/session-manager.js` (EventBus integration)
+- `AGENT_CONTEXT.md` (Docs update)
+
+**Impact:**
+- Complete foundation for "relationship resonance" and social features without backend.
+- Future-proofed against LLM provider schema changes.
+- Significant UX improvement potential with pattern streaming.
+
+
+---
 
 ### Session 20 — 2026-01-15 (Chat Module Refactoring - Under 1000 Lines)
 
