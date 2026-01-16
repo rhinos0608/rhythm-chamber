@@ -7,6 +7,8 @@
  * @module services/tab-coordination
  */
 
+import { LamportClock } from './lamport-clock.js';
+
 // ==========================================
 // Constants
 // ==========================================
@@ -60,7 +62,13 @@ function calculateElectionWindow() {
 
 // Calculate once on module load
 const ELECTION_WINDOW_MS = calculateElectionWindow();
-const TAB_ID = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+// Initialize Lamport clock for this tab
+LamportClock.init();
+
+// Use Lamport timestamp for deterministic ordering instead of Date.now()
+// This eliminates clock skew issues between tabs
+const TAB_ID = `${LamportClock.tick()}-${LamportClock.getId().substring(0, 8)}`;
 
 // Message types
 const MESSAGE_TYPES = {
@@ -125,11 +133,11 @@ async function init() {
     receivedPrimaryClaim = false;
     electionAborted = false;
 
-    // Announce candidacy
-    broadcastChannel.postMessage({
+    // Announce candidacy with Lamport timestamp for deterministic ordering
+    broadcastChannel.postMessage(LamportClock.stamp({
         type: MESSAGE_TYPES.CANDIDATE,
         tabId: TAB_ID
-    });
+    }));
 
     // Wait for other candidates
     await new Promise(resolve => {
@@ -172,19 +180,25 @@ async function init() {
  */
 function createMessageHandler() {
     return (event) => {
-        const { type, tabId } = event.data;
+        const { type, tabId, lamportTimestamp } = event.data;
+
+        // Sync Lamport clock with received message
+        // This ensures logical ordering across all tabs
+        if (typeof lamportTimestamp === 'number') {
+            LamportClock.update(lamportTimestamp);
+        }
 
         switch (type) {
             case MESSAGE_TYPES.CANDIDATE:
                 // Another tab announced candidacy - collect it for election
                 // If we're already primary, assert dominance so new tab knows leader exists
                 if (isPrimaryTab && tabId !== TAB_ID) {
-                    broadcastChannel?.postMessage({
+                    broadcastChannel?.postMessage(LamportClock.stamp({
                         type: MESSAGE_TYPES.CLAIM_PRIMARY,
                         tabId: TAB_ID
-                    });
+                    }));
                 }
-                // Collect candidate for election
+                // Collect candidate for election with its timestamp for deterministic ordering
                 electionCandidates.add(tabId);
                 break;
 
@@ -443,6 +457,89 @@ function getTabId() {
     return TAB_ID;
 }
 
+// ==========================================
+// Visual Authority Feedback (HNW Hierarchy)
+// ==========================================
+
+/**
+ * Check if write operations are allowed
+ * HNW Hierarchy: Central authority check for all write operations
+ * 
+ * @returns {boolean} - True if this tab has write authority
+ */
+function isWriteAllowed() {
+    return isPrimaryTab;
+}
+
+/**
+ * Get the current authority level
+ * HNW Hierarchy: Returns authority status for UI feedback
+ * 
+ * @returns {Object} Authority status
+ */
+function getAuthorityLevel() {
+    return {
+        level: isPrimaryTab ? 'primary' : 'secondary',
+        canWrite: isPrimaryTab,
+        canRead: true,
+        tabId: TAB_ID,
+        mode: isPrimaryTab ? 'full_access' : 'read_only',
+        message: isPrimaryTab
+            ? 'Full access - You can make changes'
+            : 'Read-only mode - Another tab has primary control'
+    };
+}
+
+/**
+ * Assert write authority - throws if not allowed
+ * Use this before critical write operations
+ * 
+ * @param {string} [operation] - Operation name for error message
+ * @throws {Error} If write not allowed
+ */
+function assertWriteAuthority(operation = 'write operation') {
+    if (!isPrimaryTab) {
+        const error = new Error(`Write authority denied: ${operation}. This tab is in read-only mode.`);
+        error.code = 'WRITE_AUTHORITY_DENIED';
+        error.isSecondaryTab = true;
+        error.suggestion = 'Close other tabs or refresh this page to become primary';
+        throw error;
+    }
+}
+
+/**
+ * Subscribe to authority changes
+ * @param {Function} callback - Called with authority level when it changes
+ * @returns {Function} Unsubscribe function
+ */
+const authorityChangeListeners = [];
+
+function onAuthorityChange(callback) {
+    authorityChangeListeners.push(callback);
+
+    // Immediately call with current state
+    callback(getAuthorityLevel());
+
+    return () => {
+        const idx = authorityChangeListeners.indexOf(callback);
+        if (idx >= 0) authorityChangeListeners.splice(idx, 1);
+    };
+}
+
+/**
+ * Notify listeners of authority change
+ */
+function notifyAuthorityChange() {
+    const level = getAuthorityLevel();
+    for (const listener of authorityChangeListeners) {
+        try {
+            listener(level);
+        } catch (e) {
+            console.error('[TabCoordination] Authority listener error:', e);
+        }
+    }
+}
+
 /**
  * Cleanup on tab close/unload
  */
@@ -484,6 +581,13 @@ const TabCoordinator = {
     isPrimary,
     getTabId,
     cleanup,
+
+    // Visual Authority Feedback (HNW)
+    isWriteAllowed,
+    getAuthorityLevel,
+    assertWriteAuthority,
+    onAuthorityChange,
+
     // Heartbeat (exposed for testing)
     _startHeartbeat: startHeartbeat,
     _stopHeartbeat: stopHeartbeat
@@ -492,4 +596,5 @@ const TabCoordinator = {
 // ES Module export
 export { TabCoordinator };
 
-console.log('[TabCoordination] Service loaded with heartbeat support');
+console.log('[TabCoordination] Service loaded with heartbeat and authority control');
+

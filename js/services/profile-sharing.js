@@ -28,7 +28,7 @@ import { EventBus } from './event-bus.js';
 const PROFILE_VERSION = '1.0.0';
 const SALT_LENGTH = 16;
 const IV_LENGTH = 12;
-const KEY_ITERATIONS = 100000;
+const KEY_ITERATIONS = 600000;
 
 // ==========================================
 // Encryption Utilities

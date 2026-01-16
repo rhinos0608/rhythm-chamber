@@ -3589,3 +3589,111 @@ body.demo-transitioning::after {
   margin-bottom: var(--space-xs);
   opacity: 0.8;
 }
+
+/* ==========================================
+   Tab Authority Indicator (HNW)
+   ========================================== */
+
+.authority-indicator {
+  position: fixed;
+  bottom: var(--space-lg);
+  right: var(--space-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-glass);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  z-index: 1000;
+  transition: var(--transition-base);
+  opacity: 0.7;
+}
+
+.authority-indicator:hover {
+  opacity: 1;
+}
+
+.authority-indicator .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Primary tab - green */
+.authority-indicator.primary .status-dot {
+  background: #10b981;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+}
+
+.authority-indicator.primary {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+/* Secondary/read-only tab - amber */
+.authority-indicator.secondary .status-dot {
+  background: #f59e0b;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+}
+
+.authority-indicator.secondary {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+/* Read-only mode banner */
+.read-only-banner {
+  display: none;
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.3);
+  padding: var(--space-sm) var(--space-lg);
+  text-align: center;
+  font-size: 0.85rem;
+  color: #f59e0b;
+}
+
+.read-only-banner.active {
+  display: block;
+}
+
+.read-only-banner .icon {
+  margin-right: var(--space-sm);
+}
+
+/* Read-only mode: Disable interactive elements */
+body.read-only-mode .btn-primary:not(.btn-readonly-allowed),
+body.read-only-mode button:not(.btn-readonly-allowed):not(.chat-send) {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+body.read-only-mode .upload-zone {
+  opacity: 0.5;
+  pointer-events: none;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+body.read-only-mode .upload-zone::after {
+  content: '🔒 Read-only mode';
+  display: block;
+  margin-top: var(--space-md);
+  color: #f59e0b;
+  font-size: 0.9rem;
+}
+
+/* Chat in read-only: Allow reading but disable input */
+body.read-only-mode .chat-input-wrapper {
+  opacity: 0.6;
+}
+
+body.read-only-mode .chat-input {
+  pointer-events: none;
+}
+
+body.read-only-mode .chat-input::placeholder {
+  content: 'Read-only mode - close other tabs to enable chat';
+}

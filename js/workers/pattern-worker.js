@@ -453,54 +453,69 @@ function generatePatternSummary(streams, patterns) {
 }
 
 /**
- * Run all pattern detection
+ * Run all pattern detection with partial result emission
+ * HNW Wave: Emits partial results after each pattern, allowing recovery if worker hangs
+ * 
+ * @param {Array} streams - Stream data
+ * @param {Array} chunks - Chunk data
+ * @param {Function} onProgress - Progress callback
+ * @param {Function} onPartial - Partial result callback (pattern name, result, progress %)
  */
-function detectAllPatterns(streams, chunks, onProgress) {
-    const total = 8;
+function detectAllPatterns(streams, chunks, onProgress, onPartial = null) {
+    const patternNames = [
+        'ratio',
+        'eras',
+        'timePatterns',
+        'socialPatterns',
+        'ghosted',
+        'discoveryExplosions',
+        'moodSearching',
+        'trueFavorites',
+        'insights',
+        'summary'
+    ];
+    const total = patternNames.length;
     let current = 0;
 
-    const report = (message) => {
+    const patterns = {};
+
+    const emitPartial = (patternName, result) => {
+        patterns[patternName] = result;
         current++;
-        onProgress(current, total, message);
+        if (onPartial) {
+            onPartial(patternName, result, current / total);
+        }
     };
 
-    report('Analyzing listening ratio...');
-    const ratio = detectComfortDiscoveryRatio(streams);
+    onProgress(current, total, 'Analyzing listening ratio...');
+    emitPartial('ratio', detectComfortDiscoveryRatio(streams));
 
-    report('Detecting listening eras...');
-    const eras = detectEras(streams, chunks);
+    onProgress(current, total, 'Detecting listening eras...');
+    emitPartial('eras', detectEras(streams, chunks));
 
-    report('Analyzing time patterns...');
-    const timePatterns = detectTimePatterns(streams);
+    onProgress(current, total, 'Analyzing time patterns...');
+    emitPartial('timePatterns', detectTimePatterns(streams));
 
-    report('Detecting social patterns...');
-    const socialPatterns = detectSocialPatterns(streams);
+    onProgress(current, total, 'Detecting social patterns...');
+    emitPartial('socialPatterns', detectSocialPatterns(streams));
 
-    report('Finding ghosted artists...');
-    const ghosted = detectGhostedArtists(streams);
+    onProgress(current, total, 'Finding ghosted artists...');
+    emitPartial('ghosted', detectGhostedArtists(streams));
 
-    report('Detecting discovery explosions...');
-    const discoveryExplosions = detectDiscoveryExplosions(streams, chunks);
+    onProgress(current, total, 'Detecting discovery explosions...');
+    emitPartial('discoveryExplosions', detectDiscoveryExplosions(streams, chunks));
 
-    report('Analyzing mood searching...');
-    const moodSearching = detectMoodSearching(streams);
+    onProgress(current, total, 'Analyzing mood searching...');
+    emitPartial('moodSearching', detectMoodSearching(streams));
 
-    report('Finding true favorites...');
-    const trueFavorites = detectTrueFavorites(streams);
+    onProgress(current, total, 'Finding true favorites...');
+    emitPartial('trueFavorites', detectTrueFavorites(streams));
 
-    const patterns = {
-        ratio,
-        eras,
-        timePatterns,
-        socialPatterns,
-        ghosted,
-        discoveryExplosions,
-        moodSearching,
-        trueFavorites
-    };
+    onProgress(current, total, 'Generating insights...');
+    emitPartial('insights', generateDataInsights(streams));
 
-    patterns.insights = generateDataInsights(streams);
-    patterns.summary = generatePatternSummary(streams, patterns);
+    onProgress(current, total, 'Generating summary...');
+    emitPartial('summary', generatePatternSummary(streams, patterns));
 
     return patterns;
 }
@@ -523,9 +538,24 @@ self.onmessage = function (e) {
 
     if (type === 'detect') {
         try {
-            const patterns = detectAllPatterns(streams, chunks, (current, total, message) => {
+            // Progress callback
+            const onProgress = (current, total, message) => {
                 self.postMessage({ type: 'progress', requestId, current, total, message });
-            });
+            };
+
+            // Partial result callback - emit as each pattern completes
+            // HNW Wave: Allows saving work if worker is terminated
+            const onPartial = (patternName, result, progressPercent) => {
+                self.postMessage({
+                    type: 'partial',
+                    requestId,
+                    pattern: patternName,
+                    result,
+                    progress: progressPercent
+                });
+            };
+
+            const patterns = detectAllPatterns(streams, chunks, onProgress, onPartial);
 
             self.postMessage({ type: 'complete', requestId, patterns });
         } catch (error) {
@@ -534,4 +564,4 @@ self.onmessage = function (e) {
     }
 };
 
-console.log('[PatternWorker] Worker loaded');
+console.log('[PatternWorker] Worker loaded with partial result streaming');

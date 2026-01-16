@@ -33,10 +33,11 @@ class BudgetExhaustedError extends Error {
 // ==========================================
 
 /**
- * Represents an allocated timeout budget
+ * Represents an allocated timeout budget with abort signal integration
+ * HNW Hierarchy: Links timeout budgets to AbortControllers for cascading cleanup
  */
 class TimeoutBudgetInstance {
-    constructor(operation, budgetMs, parent = null) {
+    constructor(operation, budgetMs, parent = null, options = {}) {
         this.operation = operation;
         this.budgetMs = budgetMs;
         this.parent = parent;
@@ -45,6 +46,48 @@ class TimeoutBudgetInstance {
         this.children = [];
         this.consumed = 0;
         this.exhausted = false;
+
+        // AbortController integration
+        // If external signal provided, link to it; otherwise create our own
+        this._abortController = new AbortController();
+        this._externalSignal = options.signal || null;
+        this._timeoutId = null;
+        this._abortHandlers = [];
+
+        // Link to external signal if provided
+        if (this._externalSignal) {
+            if (this._externalSignal.aborted) {
+                this._abortController.abort(this._externalSignal.reason);
+            } else {
+                this._externalSignal.addEventListener('abort', () => {
+                    this._abortController.abort(this._externalSignal.reason || 'Parent aborted');
+                });
+            }
+        }
+
+        // Auto-abort when budget time expires
+        this._timeoutId = setTimeout(() => {
+            this.exhausted = true;
+            this._abortController.abort(`Budget exhausted: ${operation}`);
+            this._runAbortHandlers(`Budget exhausted after ${budgetMs}ms`);
+        }, budgetMs);
+    }
+
+    /**
+     * Get the abort signal for this budget
+     * Use this signal in fetch(), Promise.race(), etc.
+     * @returns {AbortSignal}
+     */
+    get signal() {
+        return this._abortController.signal;
+    }
+
+    /**
+     * Check if this budget has been aborted
+     * @returns {boolean}
+     */
+    get aborted() {
+        return this._abortController.signal.aborted;
     }
 
     /**
@@ -52,6 +95,7 @@ class TimeoutBudgetInstance {
      * @returns {number}
      */
     remaining() {
+        if (this.aborted) return 0;
         const elapsed = Date.now() - this.startTime;
         return Math.max(0, this.budgetMs - elapsed);
     }
@@ -61,7 +105,69 @@ class TimeoutBudgetInstance {
      * @returns {boolean}
      */
     isExhausted() {
-        return this.remaining() <= 0;
+        return this.aborted || this.remaining() <= 0;
+    }
+
+    /**
+     * Register handler to run when budget is aborted
+     * @param {Function} handler - Callback receiving abort reason
+     * @returns {Function} Unsubscribe function
+     */
+    onAbort(handler) {
+        this._abortHandlers.push(handler);
+
+        // If already aborted, call immediately
+        if (this.aborted) {
+            try {
+                handler(this._abortController.signal.reason);
+            } catch (e) {
+                console.error('[TimeoutBudget] Abort handler error:', e);
+            }
+        }
+
+        return () => {
+            const idx = this._abortHandlers.indexOf(handler);
+            if (idx >= 0) this._abortHandlers.splice(idx, 1);
+        };
+    }
+
+    /**
+     * Abort this budget manually
+     * @param {string} [reason] - Abort reason
+     */
+    abort(reason = 'Manual abort') {
+        if (this.aborted) return;
+
+        clearTimeout(this._timeoutId);
+        this._abortController.abort(reason);
+        this._runAbortHandlers(reason);
+
+        // Cascade to children
+        for (const child of this.children) {
+            child.abort(`Parent aborted: ${reason}`);
+        }
+    }
+
+    /**
+     * Run all abort handlers
+     * @private
+     */
+    _runAbortHandlers(reason) {
+        for (const handler of this._abortHandlers) {
+            try {
+                handler(reason);
+            } catch (e) {
+                console.error('[TimeoutBudget] Abort handler error:', e);
+            }
+        }
+    }
+
+    /**
+     * Cleanup resources (call when done with budget)
+     */
+    dispose() {
+        clearTimeout(this._timeoutId);
+        this._abortHandlers = [];
     }
 
     /**
@@ -69,9 +175,10 @@ class TimeoutBudgetInstance {
      * 
      * @param {string} childOperation - Child operation name
      * @param {number} childBudgetMs - Budget for child (must fit within remaining)
+     * @param {Object} [options] - Options including signal
      * @returns {TimeoutBudgetInstance}
      */
-    subdivide(childOperation, childBudgetMs) {
+    subdivide(childOperation, childBudgetMs, options = {}) {
         const available = this.remaining();
 
         if (childBudgetMs > available) {
@@ -83,7 +190,13 @@ class TimeoutBudgetInstance {
             });
         }
 
-        const child = new TimeoutBudgetInstance(childOperation, childBudgetMs, this);
+        // Child inherits parent's signal by default
+        const childOptions = {
+            signal: options.signal || this.signal,
+            ...options
+        };
+
+        const child = new TimeoutBudgetInstance(childOperation, childBudgetMs, this, childOptions);
         this.children.push(child);
 
         return child;
@@ -124,6 +237,7 @@ class TimeoutBudgetInstance {
             elapsed: this.elapsed(),
             remaining: this.remaining(),
             exhausted: this.isExhausted(),
+            aborted: this.aborted,
             children: this.children.map(c => c.getAccounting())
         };
     }
@@ -184,11 +298,13 @@ function createBudgetId(operation) {
  * 
  * @param {string} operation - Operation name
  * @param {number} [budgetMs] - Budget in milliseconds (uses default if not specified)
+ * @param {Object} [options] - Options including signal for external AbortController
+ * @param {AbortSignal} [options.signal] - External abort signal to link to
  * @returns {TimeoutBudgetInstance}
  */
-function allocate(operation, budgetMs = null) {
+function allocate(operation, budgetMs = null, options = {}) {
     const budget = budgetMs ?? DEFAULT_BUDGETS[operation] ?? 30000;
-    const instance = new TimeoutBudgetInstance(operation, budget);
+    const instance = new TimeoutBudgetInstance(operation, budget, null, options);
 
     instance.id = createBudgetId(operation);
     activeBudgets.set(instance.id, instance);

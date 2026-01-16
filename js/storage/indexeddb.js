@@ -4,8 +4,12 @@
  * Low-level IndexedDB operations for the Storage layer.
  * Provides primitive operations: put, get, getAll, clear, delete.
  * 
+ * HNW Hierarchy: Respects TabCoordinator write authority for multi-tab safety.
+ * 
  * @module storage/indexeddb
  */
+
+import { TabCoordinator } from '../services/tab-coordination.js';
 
 // ==========================================
 // Database Configuration
@@ -28,6 +32,65 @@ const INDEXEDDB_STORES = {
 
 // Database connection
 let indexedDBConnection = null;
+
+// ==========================================
+// Write Authority Configuration (HNW)
+// ==========================================
+
+/**
+ * Configuration for write authority enforcement
+ */
+const AUTHORITY_CONFIG = {
+    // Enable/disable write authority checks
+    enforceWriteAuthority: true,
+
+    // Stores exempt from authority checks (e.g., migration state)
+    exemptStores: new Set(['migration']),
+
+    // Whether to throw or just warn on authority violation
+    strictMode: false
+};
+
+/**
+ * Check write authority before performing write operation
+ * HNW Hierarchy: Ensures only primary tab can write
+ * 
+ * @param {string} storeName - Store being written to
+ * @param {string} operation - Operation name (for logging)
+ * @returns {boolean} True if write is allowed
+ * @throws {Error} In strict mode, throws if write not allowed
+ */
+function checkWriteAuthority(storeName, operation) {
+    // Skip check if disabled
+    if (!AUTHORITY_CONFIG.enforceWriteAuthority) {
+        return true;
+    }
+
+    // Skip check for exempt stores
+    if (AUTHORITY_CONFIG.exemptStores.has(storeName)) {
+        return true;
+    }
+
+    // Check with TabCoordinator
+    const isAllowed = TabCoordinator?.isWriteAllowed?.() ?? true;
+
+    if (!isAllowed) {
+        const message = `[IndexedDB] Write authority denied for ${operation} on ${storeName}. Tab is in read-only mode.`;
+
+        if (AUTHORITY_CONFIG.strictMode) {
+            const error = new Error(message);
+            error.code = 'WRITE_AUTHORITY_DENIED';
+            error.storeName = storeName;
+            error.operation = operation;
+            throw error;
+        } else {
+            console.warn(message);
+            return false;
+        }
+    }
+
+    return true;
+}
 
 // ==========================================
 // Connection Management
@@ -156,9 +219,16 @@ function getConnection() {
  * Put (insert or update) a record
  * @param {string} storeName - Store name
  * @param {object} data - Data to store
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.bypassAuthority] - Skip write authority check
  * @returns {Promise<IDBValidKey>} The key of the stored record
  */
-async function put(storeName, data) {
+async function put(storeName, data, options = {}) {
+    // Check write authority unless bypassed
+    if (!options.bypassAuthority && !checkWriteAuthority(storeName, 'put')) {
+        throw new Error(`Write denied: Tab is in read-only mode`);
+    }
+
     const database = await initDatabase();
     return new Promise((resolve, reject) => {
         const transaction = database.transaction(storeName, 'readwrite');
@@ -208,9 +278,16 @@ async function getAll(storeName) {
 /**
  * Clear all records from a store
  * @param {string} storeName - Store name
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.bypassAuthority] - Skip write authority check
  * @returns {Promise<void>}
  */
-async function clear(storeName) {
+async function clear(storeName, options = {}) {
+    // Check write authority unless bypassed
+    if (!options.bypassAuthority && !checkWriteAuthority(storeName, 'clear')) {
+        throw new Error(`Write denied: Tab is in read-only mode`);
+    }
+
     const database = await initDatabase();
     return new Promise((resolve, reject) => {
         const transaction = database.transaction(storeName, 'readwrite');
@@ -226,9 +303,16 @@ async function clear(storeName) {
  * Delete a single record by key
  * @param {string} storeName - Store name
  * @param {IDBValidKey} key - Record key
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.bypassAuthority] - Skip write authority check
  * @returns {Promise<void>}
  */
-async function deleteRecord(storeName, key) {
+async function deleteRecord(storeName, key, options = {}) {
+    // Check write authority unless bypassed
+    if (!options.bypassAuthority && !checkWriteAuthority(storeName, 'delete')) {
+        throw new Error(`Write denied: Tab is in read-only mode`);
+    }
+
     const database = await initDatabase();
     return new Promise((resolve, reject) => {
         const transaction = database.transaction(storeName, 'readwrite');
