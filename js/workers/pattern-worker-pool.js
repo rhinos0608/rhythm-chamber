@@ -152,7 +152,7 @@ async function init(options = {}) {
  * @param {MessageEvent} event - Worker message event
  */
 function handleWorkerMessage(event) {
-    const { requestId: reqId, type, result, error, progress, timestamp } = event.data;
+    const { requestId: reqId, type, result, error, progress, timestamp, pattern } = event.data;
     const workerInfo = workers.find(w => w.worker === event.target);
 
     // Handle heartbeat response
@@ -181,8 +181,9 @@ function handleWorkerMessage(event) {
     // Handle partial results - store immediately in case worker dies
     // HNW Wave: Enables recovery of partial work
     if (type === 'partial') {
-        const { pattern, result: partialResult, progress: progressPercent } = message.data;
-
+        const partialResult = result;
+        const progressPercent = progress;
+        
         // Initialize partial results storage if needed
         if (!request.partialResults) {
             request.partialResults = {};

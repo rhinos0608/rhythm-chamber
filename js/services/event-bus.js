@@ -301,11 +301,11 @@ function emit(eventType, payload = {}, options = {}) {
                     return lowest;
                 }, 0);
 
-                // Only drop if new event has higher priority
-                if (priority > pendingEvents[lowestPriorityIndex].priority) {
+                // Only drop if new event has equal or lower priority
+                if (priority >= pendingEvents[lowestPriorityIndex].priority) {
                     droppedCount++;
                     if (debugMode) {
-                        console.warn(`[EventBus] Event rejected (lower priority than queue): ${eventType}`);
+                        console.warn(`[EventBus] Event rejected (equal or lower priority than queue): ${eventType}`);
                     }
                     return false;
                 }
@@ -326,7 +326,8 @@ function emit(eventType, payload = {}, options = {}) {
         }
 
         // Add to pending queue for tracking
-        pendingEvents.push({ eventType, timestamp, priority });
+        const pendingEventEntry = { eventType, timestamp, priority };
+        pendingEvents.push(pendingEventEntry);
 
         // Trim queue to max size
         while (pendingEvents.length > CIRCUIT_BREAKER_CONFIG.maxQueueSize) {
@@ -385,6 +386,16 @@ function emit(eventType, payload = {}, options = {}) {
         } catch (error) {
             console.error(`[EventBus] Handler ${id} threw error for "${eventType}":`, error);
             // Don't stop other handlers from executing
+        }
+    }
+
+    // Remove the pending event entry after handlers complete
+    if (!options.bypassCircuitBreaker) {
+        const pendingIndex = pendingEvents.findIndex(
+            e => e.eventType === eventType && e.timestamp === timestamp && e.priority === priority
+        );
+        if (pendingIndex !== -1) {
+            pendingEvents.splice(pendingIndex, 1);
         }
     }
 

@@ -3693,7 +3693,3 @@ body.read-only-mode .chat-input-wrapper {
 body.read-only-mode .chat-input {
   pointer-events: none;
 }
-
-body.read-only-mode .chat-input::placeholder {
-  content: 'Read-only mode - close other tabs to enable chat';
-}

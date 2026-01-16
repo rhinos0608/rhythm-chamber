@@ -8,38 +8,67 @@
  */
 
 // ==========================================
-// Dependencies
+// ES Module Imports (No more window.X dependencies!)
 // ==========================================
 
-// Import modules (loaded in order via script tags in HTML)
-// Services
-// - TabCoordinator (cross-tab coordination)
-// - SessionManager (session lifecycle)
-// - MessageOperations (message operations)
-// - OperationLock (operation locking)
-// Controllers
-// - FileUploadController (file processing)
-// - SpotifyController (Spotify OAuth)
-// - DemoController (demo mode)
-// - ResetController (reset operations)
-// - ChatUIController (chat UI)
-// - SidebarController (sidebar)
-// - ViewController (view transitions)
-// State
-// - AppState (centralized state)
-// Storage
-// - Storage (unified storage API)
-// Core
-// - Patterns (pattern detection)
-// - Personality (personality classification)
-// - Chat (chat orchestration)
-// - Spotify (Spotify API)
-// - DemoData (demo data)
-// - Cards (share cards)
-import { SecurityChecklist } from './security.js';
+// Security (must be first for fail-fast behavior)
+import { Security, SecurityChecklist } from './security.js';
+
+// Core utilities
 import { ModuleRegistry } from './module-registry.js';
+
+// State management
+import { AppState } from './state/app-state.js';
+
+// Storage layer
+import { Storage } from './storage.js';
+
+// Core analysis modules
+import { Patterns } from './patterns.js';
+import { Personality } from './personality.js';
+import { DataQuery } from './data-query.js';
+import { Prompts } from './prompts.js';
+
+// Token counter
+import { TokenCounter } from './token-counter.js';
+
+// Functions system
+import { Functions } from './functions/index.js';
+
+// Cards
+import { Cards } from './cards.js';
+
+// Spotify
+import { Spotify } from './spotify.js';
 import { Settings } from './settings.js';
-// - SecurityChecklist (first-run security checklist)
+
+// Chat
+import { Chat } from './chat.js';
+
+// Controllers
+import { ViewController } from './controllers/view-controller.js';
+import { FileUploadController } from './controllers/file-upload-controller.js';
+import { SpotifyController } from './controllers/spotify-controller.js';
+import { DemoController } from './controllers/demo-controller.js';
+import { ResetController } from './controllers/reset-controller.js';
+import { SidebarController } from './controllers/sidebar-controller.js';
+import { ChatUIController } from './controllers/chat-ui-controller.js';
+
+// Services
+import { TabCoordinator } from './services/tab-coordination.js';
+import { SessionManager } from './services/session-manager.js';
+import { MessageOperations } from './services/message-operations.js';
+
+// Utility modules
+import { OperationLock } from './operation-lock.js';
+import { CircuitBreaker } from './services/circuit-breaker.js';
+import { FunctionCallingFallback } from './services/function-calling-fallback.js';
+import { DataVersion } from './services/data-version.js';
+
+// Demo and template data
+import { DemoData } from './demo-data.js';
+import { TemplateProfileStore } from './template-profiles.js';
+import { ProfileSynthesizer } from './profile-synthesizer.js';
 
 // ==========================================
 // State Management
@@ -48,39 +77,41 @@ import { Settings } from './settings.js';
 // Initialize centralized state
 AppState.init();
 
+
 // ==========================================
 // Dependency Checking (HNW Hierarchy: Early-fail pattern)
 // ==========================================
 
 /**
  * Critical dependencies that must be loaded and initialized
+ * Now uses ES imports instead of window.X checks for proper module resolution
  * Maps dependency name to { check: fn, required: boolean }
  */
 const CRITICAL_DEPENDENCIES = {
-    // Core modules (required) - use isReady() where available, fallback to old checks
-    'AppState': { check: () => window.AppState?.isReady?.() ?? (window.AppState && typeof window.AppState.init === 'function'), required: true },
-    'Storage': { check: () => window.Storage?.isReady?.() ?? (window.Storage && typeof window.Storage.init === 'function'), required: true },
-    'Chat': { check: () => window.Chat?.isReady?.() ?? (window.Chat && typeof window.Chat.sendMessage === 'function'), required: true },
-    'Spotify': { check: () => window.Spotify && typeof window.Spotify.isConfigured === 'function', required: true },
-    'Patterns': { check: () => window.Patterns && typeof window.Patterns.detectAllPatterns === 'function', required: true },
-    'Personality': { check: () => window.Personality && typeof window.Personality.classifyPersonality === 'function', required: true },
+    // Core modules (required) - use imported ES modules directly
+    'AppState': { check: () => AppState?.isReady?.() ?? (AppState && typeof AppState.init === 'function'), required: true },
+    'Storage': { check: () => Storage?.isReady?.() ?? (Storage && typeof Storage.init === 'function'), required: true },
+    'Chat': { check: () => Chat?.isReady?.() ?? (Chat && typeof Chat.sendMessage === 'function'), required: true },
+    'Spotify': { check: () => Spotify && typeof Spotify.isConfigured === 'function', required: true },
+    'Patterns': { check: () => Patterns && typeof Patterns.detectAllPatterns === 'function', required: true },
+    'Personality': { check: () => Personality && typeof Personality.classifyPersonality === 'function', required: true },
 
-    // Services (required)
-    'TabCoordinator': { check: () => window.TabCoordinator && typeof window.TabCoordinator.init === 'function', required: true },
-    'SessionManager': { check: () => window.SessionManager && typeof window.SessionManager.init === 'function', required: true },
-    'MessageOperations': { check: () => window.MessageOperations && typeof window.MessageOperations.init === 'function', required: true },
+    // Services (required) - using imported modules
+    'TabCoordinator': { check: () => TabCoordinator && typeof TabCoordinator.init === 'function', required: true },
+    'SessionManager': { check: () => SessionManager && typeof SessionManager.init === 'function', required: true },
+    'MessageOperations': { check: () => MessageOperations && typeof MessageOperations.init === 'function', required: true },
 
-    // Controllers (required)
-    'ViewController': { check: () => window.ViewController && typeof window.ViewController.showChat === 'function', required: true },
-    'FileUploadController': { check: () => window.FileUploadController && typeof window.FileUploadController.init === 'function', required: true },
-    'SpotifyController': { check: () => window.SpotifyController && typeof window.SpotifyController.init === 'function', required: true },
-    'DemoController': { check: () => window.DemoController && typeof window.DemoController.init === 'function', required: true },
-    'ResetController': { check: () => window.ResetController && typeof window.ResetController.init === 'function', required: true },
-    'SidebarController': { check: () => window.SidebarController && typeof window.SidebarController.init === 'function', required: true },
-    'ChatUIController': { check: () => window.ChatUIController && typeof window.ChatUIController.addMessage === 'function', required: true },
+    // Controllers (required) - using imported modules
+    'ViewController': { check: () => ViewController && typeof ViewController.showChat === 'function', required: true },
+    'FileUploadController': { check: () => FileUploadController && typeof FileUploadController.init === 'function', required: true },
+    'SpotifyController': { check: () => SpotifyController && typeof SpotifyController.init === 'function', required: true },
+    'DemoController': { check: () => DemoController && typeof DemoController.init === 'function', required: true },
+    'ResetController': { check: () => ResetController && typeof ResetController.init === 'function', required: true },
+    'SidebarController': { check: () => SidebarController && typeof SidebarController.init === 'function', required: true },
+    'ChatUIController': { check: () => ChatUIController && typeof ChatUIController.addMessage === 'function', required: true },
 
-    // Security (required for token binding)
-    'Security': { check: () => window.Security && typeof window.Security.checkSecureContext === 'function', required: true },
+    // Security (required for token binding) - using imported module
+    'Security': { check: () => Security && typeof Security.checkSecureContext === 'function', required: true },
 
     // Optional modules (not required but useful) - use ModuleRegistry for dynamically loaded modules
     'RAG': { check: () => ModuleRegistry.isLoaded('RAG'), required: false },
@@ -88,11 +119,9 @@ const CRITICAL_DEPENDENCIES = {
     'LocalEmbeddings': { check: () => ModuleRegistry.isLoaded('LocalEmbeddings'), required: false },
 
     // Security checklist (optional - only shows on first run)
-    // Uses imported SecurityChecklist symbol, not window global
     'SecurityChecklist': { check: () => SecurityChecklist && typeof SecurityChecklist.init === 'function', required: false },
 
     // Settings module (required for settings/tools modals)
-    // Uses imported Settings symbol, not window global
     'Settings': { check: () => Settings && typeof Settings.showSettingsModal === 'function', required: true }
 };
 
@@ -298,9 +327,16 @@ if (typeof window !== 'undefined') {
 function updateAuthorityUI(authority) {
     const indicator = document.getElementById('authority-indicator');
     const banner = document.getElementById('read-only-banner');
+    const chatInput = document.getElementById('chat-input');
 
     if (!indicator) {
         console.log('[App] Authority indicator element not found');
+        return;
+    }
+
+    // Defensive check for null/undefined authority
+    if (!authority || typeof authority.level === 'undefined') {
+        console.warn('[App] updateAuthorityUI received invalid authority:', authority);
         return;
     }
 
@@ -315,6 +351,16 @@ function updateAuthorityUI(authority) {
         // Remove read-only mode from body
         document.body.classList.remove('read-only-mode');
         if (banner) banner.classList.remove('active');
+
+        // Restore chat input placeholder
+        if (chatInput) {
+            const originalPlaceholder = chatInput.dataset.originalPlaceholder;
+            if (originalPlaceholder) {
+                chatInput.placeholder = originalPlaceholder;
+            } else {
+                chatInput.placeholder = 'Ask about your music...';
+            }
+        }
     } else {
         indicator.classList.remove('primary');
         indicator.classList.add('secondary');
@@ -324,6 +370,15 @@ function updateAuthorityUI(authority) {
         // Add read-only mode to body
         document.body.classList.add('read-only-mode');
         if (banner) banner.classList.add('active');
+
+        // Update chat input placeholder for read-only mode
+        if (chatInput) {
+            // Save original placeholder if not already saved
+            if (!chatInput.dataset.originalPlaceholder) {
+                chatInput.dataset.originalPlaceholder = chatInput.placeholder;
+            }
+            chatInput.placeholder = 'Read-only mode - close other tabs to enable chat';
+        }
     }
 
     console.log(`[App] Authority UI updated: ${authority.level}`);
@@ -335,6 +390,7 @@ function updateAuthorityUI(authority) {
 
 /**
  * Initialize all controllers with their dependencies
+ * Now uses imported ES modules instead of window.X references
  */
 async function initializeControllers() {
     console.log('[App] Initializing controllers...');
@@ -343,7 +399,7 @@ async function initializeControllers() {
     FileUploadController.init({
         Storage,
         AppState,
-        OperationLock: window.OperationLock,
+        OperationLock,  // Now using imported module
         Patterns,
         Personality,
         ViewController,
@@ -375,18 +431,18 @@ async function initializeControllers() {
         Storage,
         AppState,
         Spotify,
-        Chat: window.Chat,
-        OperationLock: window.OperationLock,
+        Chat,           // Now using imported module
+        OperationLock,  // Now using imported module
         ViewController,
         showToast
     });
 
     // Initialize MessageOperations
     MessageOperations.init({
-        DataQuery: window.DataQuery,
-        TokenCounter: window.TokenCounter,
-        Functions: window.Functions,
-        RAG: ModuleRegistry.getModuleSync('RAG') // Use registry instead of window global
+        DataQuery,      // Now using imported module
+        TokenCounter,   // Now using imported module
+        Functions,      // Now using imported module
+        RAG: ModuleRegistry.getModuleSync('RAG') // Still use registry for lazy-loaded modules
     });
 
     console.log('[App] Controllers initialized');
