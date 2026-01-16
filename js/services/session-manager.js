@@ -9,6 +9,8 @@
 
 'use strict';
 
+import { EventBus } from './event-bus.js';
+
 // ==========================================
 // Constants
 // ==========================================
@@ -25,7 +27,6 @@ const SESSION_EMERGENCY_BACKUP_MAX_AGE_MS = 3600000;  // 1 hour max age for emer
 
 let currentSessionId = null;
 let currentSessionCreatedAt = null;
-let sessionUpdateListeners = [];
 let autoSaveTimeoutId = null;
 
 // ==========================================
@@ -138,7 +139,7 @@ async function createNewSession(initialMessages = []) {
     }
 
     console.log('[SessionManager] Created new session:', currentSessionId);
-    notifySessionUpdate();
+    notifySessionUpdate('session:created', { sessionId: currentSessionId, title: 'New Chat' });
     return currentSessionId;
 }
 
@@ -187,6 +188,7 @@ async function loadSession(sessionId) {
         localStorage.setItem(SESSION_CURRENT_SESSION_KEY, currentSessionId);
 
         console.log('[SessionManager] Loaded session:', sessionId, 'with', (session.messages || []).length, 'messages');
+        notifySessionUpdate('session:loaded', { sessionId, messageCount: (session.messages || []).length });
         return session;
 
     } catch (e) {
@@ -223,7 +225,7 @@ async function saveCurrentSession() {
 
         await window.Storage.saveSession(session);
         console.log('[SessionManager] Session saved:', currentSessionId);
-        notifySessionUpdate();
+        notifySessionUpdate('session:updated', { sessionId: currentSessionId, field: 'messages' });
     } catch (e) {
         console.error('[SessionManager] Failed to save session:', e);
     }
@@ -358,11 +360,14 @@ async function switchSession(sessionId) {
 
     const session = await loadSession(sessionId);
     if (session) {
-        notifySessionUpdate();
+        notifySessionUpdate('session:switched', { fromSessionId: previousSessionId, toSessionId: sessionId });
         return true;
     }
     return false;
 }
+
+// Track previous session for switch events
+let previousSessionId = null;
 
 /**
  * Get all sessions for sidebar display
@@ -398,7 +403,7 @@ async function deleteSessionById(sessionId) {
             await createNewSession();
         }
 
-        notifySessionUpdate();
+        notifySessionUpdate('session:deleted', { sessionId });
         return true;
     } catch (e) {
         console.error('[SessionManager] Failed to delete session:', e);
@@ -422,7 +427,7 @@ async function renameSession(sessionId, newTitle) {
         if (session) {
             session.title = newTitle;
             await window.Storage.saveSession(session);
-            notifySessionUpdate();
+            notifySessionUpdate('session:updated', { sessionId, field: 'title' });
             return true;
         }
         return false;
@@ -536,26 +541,13 @@ function generateSessionTitle(messages) {
 }
 
 /**
- * Register a listener for session updates
- * @param {Function} callback - Callback function
+ * Notify session update via EventBus
+ * @param {string} [eventType='session:updated'] - Event type for EventBus
+ * @param {Object} [eventPayload={}] - Additional event payload
  */
-function onSessionUpdate(callback) {
-    if (typeof callback === 'function') {
-        sessionUpdateListeners.push(callback);
-    }
-}
-
-/**
- * Notify all session update listeners
- */
-function notifySessionUpdate() {
-    sessionUpdateListeners.forEach(cb => {
-        try {
-            cb({ sessionId: currentSessionId });
-        } catch (e) {
-            console.error('[SessionManager] Error in session update listener:', e);
-        }
-    });
+function notifySessionUpdate(eventType = 'session:updated', eventPayload = {}) {
+    // Emit via centralized EventBus - no legacy listeners
+    EventBus.emit(eventType, { sessionId: currentSessionId, ...eventPayload });
 }
 
 /**
@@ -617,10 +609,7 @@ const SessionManager = {
     emergencyBackupSync,
     recoverEmergencyBackup,
 
-    // Utilities
-    listSessions,
-    onSessionUpdate,
-    setUserContext,
+    // Utilities\n    listSessions,\n    setUserContext,\n    // NOTE: onSessionUpdate removed - use EventBus.on('session:*') instead
 
     // Exposed for testing
     generateUUID,

@@ -12,6 +12,7 @@
 import { StorageTransaction } from './storage/transaction.js';
 import { StorageMigration } from './storage/migration.js';
 import { ModuleRegistry } from './module-registry.js';
+import { EventBus } from './services/event-bus.js';
 
 // ==========================================
 // Privacy Controls
@@ -19,9 +20,6 @@ import { ModuleRegistry } from './module-registry.js';
 
 let sessionOnlyMode = false;
 let dataPersistenceConsent = true;
-
-// Event listener registry
-const updateListeners = [];
 
 // Operation queue for critical operations
 const storageQueue = [];
@@ -474,25 +472,12 @@ const Storage = {
   },
 
   // ==========================================
-  // Update Listeners
+  // Event Emission (via EventBus)
   // ==========================================
 
-  onUpdate(callback) {
-    if (typeof callback === 'function') {
-      updateListeners.push(callback);
-    }
-  },
-
-  offUpdate(callback) {
-    const index = updateListeners.indexOf(callback);
-    if (index > -1) updateListeners.splice(index, 1);
-  },
-
   _notifyUpdate(type, count) {
-    const event = { type, count, timestamp: Date.now() };
-    updateListeners.forEach(cb => {
-      try { cb(event); } catch (e) { console.error('[Storage] Listener error:', e); }
-    });
+    // Emit via centralized EventBus - no legacy listeners
+    EventBus.emit('storage:updated', { store: type, count });
   },
 
   // ==========================================
