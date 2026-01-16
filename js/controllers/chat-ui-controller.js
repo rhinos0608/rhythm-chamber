@@ -17,6 +17,78 @@ const CHAT_UI_SEND_ID = 'chat-send';
 const CHAT_UI_SUGGESTIONS_ID = 'chat-suggestions';
 
 // ==========================================
+// SSE Sequence Validation (HNW Wave)
+// ==========================================
+
+/** SSE sequence buffer for reordering out-of-order chunks */
+let sequenceBuffer = new Map();
+let nextExpectedSeq = 0;
+let gapDetected = false;
+
+/**
+ * Process a chunk with sequence validation
+ * Buffers out-of-order chunks and processes in-order
+ * 
+ * @param {number} seq - Sequence number of the chunk
+ * @param {string} data - Chunk data
+ * @param {function} handler - Function to call with in-order data
+ * @returns {boolean} True if processed immediately, false if buffered
+ */
+function processSequencedChunk(seq, data, handler) {
+    // Add to buffer
+    sequenceBuffer.set(seq, data);
+
+    // Process any buffered chunks that are now in-order
+    let processed = false;
+    while (sequenceBuffer.has(nextExpectedSeq)) {
+        handler(sequenceBuffer.get(nextExpectedSeq));
+        sequenceBuffer.delete(nextExpectedSeq);
+        nextExpectedSeq++;
+        processed = true;
+    }
+
+    // Detect gaps (for debugging)
+    if (!processed && sequenceBuffer.size > 5) {
+        if (!gapDetected) {
+            gapDetected = true;
+            console.warn(`[ChatUI] SSE sequence gap detected: expecting ${nextExpectedSeq}, got ${seq}, buffered ${sequenceBuffer.size}`);
+        }
+    }
+
+    return processed;
+}
+
+/**
+ * Reset the sequence buffer (call at stream start)
+ */
+function resetSequenceBuffer() {
+    sequenceBuffer.clear();
+    nextExpectedSeq = 0;
+    gapDetected = false;
+}
+
+/**
+ * Get buffered chunks that haven't been processed
+ * @returns {{ pending: number, gaps: number[] }}
+ */
+function getSequenceBufferStatus() {
+    const bufferedSeqs = Array.from(sequenceBuffer.keys()).sort((a, b) => a - b);
+    const gaps = [];
+
+    for (let i = nextExpectedSeq; i < Math.max(...bufferedSeqs, nextExpectedSeq); i++) {
+        if (!sequenceBuffer.has(i)) {
+            gaps.push(i);
+        }
+    }
+
+    return {
+        pending: sequenceBuffer.size,
+        nextExpected: nextExpectedSeq,
+        gaps
+    };
+}
+
+// ==========================================
 // Message Rendering
 // ==========================================
 
@@ -628,6 +700,11 @@ export const ChatUIController = {
     updateLoadingMessage,
     removeMessageElement,
     finalizeStreamedMessage,
+
+    // SSE sequence validation
+    processSequencedChunk,
+    resetSequenceBuffer,
+    getSequenceBufferStatus,
 
     // Input handling
     getInputValue,

@@ -89,6 +89,13 @@ const HEARTBEAT_INTERVAL_MS = 5000; // 5 seconds
 const STALE_WORKER_TIMEOUT_MS = 15000; // 15 seconds
 const workerLastHeartbeat = new Map(); // Track last heartbeat response from each worker
 
+// Backpressure state (HNW Wave)
+let pendingResultCount = 0;
+const BACKPRESSURE_THRESHOLD = 50; // Pause at 50 pending results
+const BACKPRESSURE_RESUME_THRESHOLD = 25; // Resume at 25 pending results
+let paused = false;
+const backpressureListeners = [];
+
 // ==========================================
 // Core Functions
 // ==========================================
@@ -183,7 +190,7 @@ function handleWorkerMessage(event) {
     if (type === 'partial') {
         const partialResult = result;
         const progressPercent = progress;
-        
+
         // Initialize partial results storage if needed
         if (!request.partialResults) {
             request.partialResults = {};
@@ -565,11 +572,77 @@ function aggregateResults(results) {
 function getStatus() {
     return {
         initialized,
+        ready: initialized && workers.length > 0,
         workerCount: workers.length,
         busyWorkers: workers.filter(w => w.busy).length,
         pendingRequests: pendingRequests.size,
-        totalProcessed: workers.reduce((sum, w) => sum + w.processedCount, 0)
+        totalProcessed: workers.reduce((sum, w) => sum + w.processedCount, 0),
+        // Backpressure status
+        pendingResultCount,
+        paused,
+        backpressureThreshold: BACKPRESSURE_THRESHOLD
     };
+}
+
+/**
+ * Check and apply backpressure if needed
+ * Notifies listeners when backpressure state changes
+ * @private
+ */
+function checkBackpressure() {
+    if (pendingResultCount >= BACKPRESSURE_THRESHOLD && !paused) {
+        paused = true;
+        console.warn(`[PatternWorkerPool] Backpressure: pausing (${pendingResultCount} pending results)`);
+        notifyBackpressureListeners('backpressure', { pending: pendingResultCount });
+    }
+}
+
+/**
+ * Mark a result as consumed, potentially resuming production
+ */
+function onResultConsumed() {
+    pendingResultCount = Math.max(0, pendingResultCount - 1);
+
+    if (paused && pendingResultCount < BACKPRESSURE_RESUME_THRESHOLD) {
+        paused = false;
+        console.log(`[PatternWorkerPool] Backpressure: resuming (${pendingResultCount} pending results)`);
+        notifyBackpressureListeners('resume', { pending: pendingResultCount });
+    }
+}
+
+/**
+ * Subscribe to backpressure events
+ * @param {function} listener - Callback receiving (event: 'backpressure' | 'resume', data: object)
+ * @returns {function} Unsubscribe function
+ */
+function onBackpressure(listener) {
+    backpressureListeners.push(listener);
+    return () => {
+        const idx = backpressureListeners.indexOf(listener);
+        if (idx >= 0) backpressureListeners.splice(idx, 1);
+    };
+}
+
+/**
+ * Notify all backpressure listeners
+ * @private
+ */
+function notifyBackpressureListeners(event, data) {
+    for (const listener of backpressureListeners) {
+        try {
+            listener(event, data);
+        } catch (e) {
+            console.error('[PatternWorkerPool] Backpressure listener error:', e);
+        }
+    }
+}
+
+/**
+ * Check if pool is paused due to backpressure
+ * @returns {boolean}
+ */
+function isPaused() {
+    return paused;
 }
 
 /**
@@ -674,6 +747,11 @@ const PatternWorkerPool = {
     // Status
     getStatus,
     getSpeedupFactor,
+
+    // Backpressure (HNW Wave)
+    onBackpressure,
+    onResultConsumed,
+    isPaused,
 
     // Memory configuration (HNW Network)
     getMemoryConfig,
