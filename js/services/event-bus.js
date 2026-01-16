@@ -111,6 +111,16 @@ const EVENT_SCHEMAS = {
     'error:critical': {
         description: 'Critical error requiring user attention',
         payload: { message: 'string', code: 'string?', recoveryAction: 'string?' }
+    },
+
+    // Circuit breaker events
+    'CIRCUIT_BREAKER:DROPPED': {
+        description: 'Event was dropped by circuit breaker',
+        payload: { count: 'number', eventType: 'string', reason: 'string', totalDropped: 'number' }
+    },
+    'eventbus:storm': {
+        description: 'Event storm detected',
+        payload: { eventsPerSecond: 'number', threshold: 'number' }
     }
 };
 
@@ -288,6 +298,13 @@ function emit(eventType, payload = {}, options = {}) {
 
             if (strategy === 'reject_all') {
                 droppedCount++;
+                // Emit drop event for monitoring
+                emit('CIRCUIT_BREAKER:DROPPED', {
+                    count: 1,
+                    eventType,
+                    reason: 'queue_full_reject_all',
+                    totalDropped: droppedCount
+                }, { bypassCircuitBreaker: true, skipValidation: true });
                 if (debugMode) {
                     console.warn(`[EventBus] Event rejected (queue full): ${eventType}`);
                 }
@@ -304,6 +321,13 @@ function emit(eventType, payload = {}, options = {}) {
                 // Only drop if new event has equal or lower priority
                 if (priority >= pendingEvents[lowestPriorityIndex].priority) {
                     droppedCount++;
+                    // Emit drop event for monitoring
+                    emit('CIRCUIT_BREAKER:DROPPED', {
+                        count: 1,
+                        eventType,
+                        reason: 'priority_too_low',
+                        totalDropped: droppedCount
+                    }, { bypassCircuitBreaker: true, skipValidation: true });
                     if (debugMode) {
                         console.warn(`[EventBus] Event rejected (equal or lower priority than queue): ${eventType}`);
                     }
@@ -313,12 +337,26 @@ function emit(eventType, payload = {}, options = {}) {
                 // Drop lowest priority event
                 const dropped = pendingEvents.splice(lowestPriorityIndex, 1)[0];
                 droppedCount++;
+                // Emit drop event for monitoring
+                emit('CIRCUIT_BREAKER:DROPPED', {
+                    count: 1,
+                    eventType: dropped.eventType,
+                    reason: 'displaced_by_higher_priority',
+                    totalDropped: droppedCount
+                }, { bypassCircuitBreaker: true, skipValidation: true });
                 if (debugMode) {
                     console.warn(`[EventBus] Dropped low-priority event: ${dropped.eventType}`);
                 }
             } else if (strategy === 'drop_oldest') {
                 const dropped = pendingEvents.shift();
                 droppedCount++;
+                // Emit drop event for monitoring
+                emit('CIRCUIT_BREAKER:DROPPED', {
+                    count: 1,
+                    eventType: dropped?.eventType || 'unknown',
+                    reason: 'oldest_dropped',
+                    totalDropped: droppedCount
+                }, { bypassCircuitBreaker: true, skipValidation: true });
                 if (debugMode) {
                     console.warn(`[EventBus] Dropped oldest event: ${dropped?.eventType}`);
                 }

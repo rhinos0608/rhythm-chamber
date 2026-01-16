@@ -61,7 +61,7 @@ class TimeoutBudgetInstance {
                 this._abortController.abort(this._externalSignal.reason || 'Parent aborted');
                 clearTimeout(this._timeoutId);
             };
-            
+
             if (this._externalSignal.aborted) {
                 this._abortController.abort(this._externalSignal.reason);
             } else {
@@ -176,7 +176,7 @@ class TimeoutBudgetInstance {
     dispose() {
         clearTimeout(this._timeoutId);
         this._abortHandlers = [];
-        
+
         // Remove external signal event listener to prevent memory leak
         if (this._externalSignal && this._onExternalSignalAbort) {
             this._externalSignal.removeEventListener('abort', this._onExternalSignalAbort);
@@ -289,6 +289,61 @@ const DEFAULT_BUDGETS = {
 const DEFAULT_LIMITS = {
     max_function_calls: 5       // Max 5 function calls per turn
 };
+
+/**
+ * Operation complexity categories for adaptive timeouts
+ * Maps operation types to complexity multipliers
+ */
+const OPERATION_COMPLEXITY = {
+    // Simple operations (1x)
+    vector_search: 1.0,
+    network_latency: 1.0,
+
+    // Medium operations (1.5x)
+    function_call: 1.5,
+    file_parse: 1.5,
+    pattern_detection: 1.5,
+
+    // Complex operations (2x)
+    llm_call: 2.0,
+    local_llm_call: 2.5,
+    embedding_generation: 2.0
+};
+
+/**
+ * Calculate adaptive timeout based on operation type and payload size
+ * 
+ * Formula: baseTimeout * (1 + log10(max(1, payloadSize / 1MB))) * complexityMultiplier
+ * 
+ * @param {Object} options
+ * @param {string} options.operation - Operation type
+ * @param {number} [options.payloadSize=0] - Payload size in bytes
+ * @param {number} [options.minTimeout=5000] - Minimum timeout (default 5s)
+ * @param {number} [options.maxTimeout=300000] - Maximum timeout (default 5 min)
+ * @returns {number} Timeout in milliseconds
+ */
+function adaptiveTimeout({ operation, payloadSize = 0, minTimeout = 5000, maxTimeout = 300000 }) {
+    // Get base timeout for operation or use default
+    const baseTimeout = DEFAULT_BUDGETS[operation] || 30000;
+
+    // Get complexity multiplier (default 1.0)
+    const complexity = OPERATION_COMPLEXITY[operation] || 1.0;
+
+    // Scale based on payload size (1MB = ~2x timeout)
+    // Using log10 for diminishing returns on very large payloads
+    const MB = 1_000_000;
+    const sizeFactor = 1 + Math.log10(Math.max(1, payloadSize / MB));
+
+    // Calculate adaptive timeout
+    const adaptedMs = Math.round(baseTimeout * sizeFactor * complexity);
+
+    // Clamp to min/max bounds
+    const result = Math.max(minTimeout, Math.min(adaptedMs, maxTimeout));
+
+    console.log(`[TimeoutBudget] Adaptive timeout for ${operation}: base=${baseTimeout}ms, size=${payloadSize}b, complexity=${complexity}x → ${result}ms`);
+
+    return result;
+}
 
 // ==========================================
 // Active Budgets Tracking
@@ -466,9 +521,13 @@ const TimeoutBudget = {
     TimeoutBudgetInstance,
     BudgetExhaustedError,
 
+    // Adaptive timeout
+    adaptiveTimeout,
+
     // Constants
     DEFAULT_BUDGETS,
-    DEFAULT_LIMITS
+    DEFAULT_LIMITS,
+    OPERATION_COMPLEXITY
 };
 
 // ES Module export

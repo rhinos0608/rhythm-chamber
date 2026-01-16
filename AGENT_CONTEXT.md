@@ -113,6 +113,8 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 | **Playlist Generator** | ✅ Done | `js/services/playlist-generator.js` (AI-powered creation) |
 | **Error Boundaries** | ✅ Done | `js/services/error-boundary.js` (React-style error isolation) |
 | **LRU Vector Cache** | ✅ Done | `js/storage/lru-cache.js` (5000-vector cap with eviction) |
+| **Wave Telemetry** | ✅ Done | `js/services/wave-telemetry.js` (Timing anomaly detection - HNW Wave) |
+| **Data Capabilities** | ✅ Done | `js/providers/capabilities.js` (Capability-based access control) |
 | WASM embeddings | ⏳ v1.1 | Not implemented |
 
 ---
@@ -180,7 +182,8 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 │   │   ├── provider-interface.js
 │   │   ├── openrouter.js
 │   │   ├── lmstudio.js
-│   │   └── ollama-adapter.js
+│   │   ├── ollama-adapter.js
+│   │   └── capabilities.js  # Capability-based access control (NEW - HNW Hierarchy)
 │   │
 │   ├── storage/            # Storage Submodules
 │   │   ├── indexeddb.js    # Core DB operations
@@ -221,6 +224,7 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 │   │   ├── temporal-analysis.js          # 5-year trend visualization (Phase 2)
 │   │   ├── playlist-generator.js         # AI playlist creation (Phase 2)
 │   │   ├── error-boundary.js             # React-style error boundaries (NEW - UI fault tolerance)
+│   │   ├── wave-telemetry.js             # Timing anomaly detection (NEW - HNW Wave)
 │   │   └── tool-strategies/
 │   │       ├── base-strategy.js          # BaseToolStrategy (ENHANCED - confidence scoring)
 │   │       ├── native-strategy.js        # NativeToolStrategy (Level 1)

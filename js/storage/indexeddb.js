@@ -10,6 +10,7 @@
  */
 
 import { TabCoordinator } from '../services/tab-coordination.js';
+import { LamportClock } from '../services/lamport-clock.js';
 
 // ==========================================
 // Database Configuration
@@ -233,11 +234,19 @@ async function put(storeName, data, options = {}) {
         }
     }
 
+    // Add Lamport timestamp for dual-write protection
+    // Skip for read-only stores or if explicitly bypassed
+    const stampedData = options.skipWriteEpoch ? data : {
+        ...data,
+        _writeEpoch: LamportClock.tick(),
+        _writerId: LamportClock.getId()
+    };
+
     const database = await initDatabase();
     return new Promise((resolve, reject) => {
         const transaction = database.transaction(storeName, 'readwrite');
         const store = transaction.objectStore(storeName);
-        const request = store.put(data);
+        const request = store.put(stampedData);
 
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
@@ -422,18 +431,72 @@ async function atomicUpdate(storeName, key, modifier) {
             if (cursor) {
                 const currentValue = cursor.value;
                 const newValue = modifier(currentValue);
-                cursor.update(newValue);
-                resolve(newValue);
+                // Add write epoch to atomic updates
+                const stampedValue = {
+                    ...newValue,
+                    _writeEpoch: LamportClock.tick(),
+                    _writerId: LamportClock.getId()
+                };
+                cursor.update(stampedValue);
+                resolve(stampedValue);
             } else {
                 // Key doesn't exist, create new
                 const newValue = modifier(undefined);
-                const putRequest = store.put(newValue);
-                putRequest.onsuccess = () => resolve(newValue);
+                const stampedValue = {
+                    ...newValue,
+                    _writeEpoch: LamportClock.tick(),
+                    _writerId: LamportClock.getId()
+                };
+                const putRequest = store.put(stampedValue);
+                putRequest.onsuccess = () => resolve(stampedValue);
                 putRequest.onerror = () => reject(putRequest.error);
             }
         };
         request.onerror = () => reject(request.error);
     });
+}
+
+/**
+ * Detect write conflicts between two records using Lamport timestamps
+ * @param {Object} existing - Existing record with _writeEpoch
+ * @param {Object} incoming - Incoming record with _writeEpoch
+ * @returns {{ hasConflict: boolean, winner: 'existing' | 'incoming', reason: string }}
+ */
+function detectWriteConflict(existing, incoming) {
+    // No existing record - no conflict
+    if (!existing) {
+        return { hasConflict: false, winner: 'incoming', reason: 'new_record' };
+    }
+
+    // Neither has epoch - legacy data, treat as no conflict
+    if (!existing._writeEpoch && !incoming._writeEpoch) {
+        return { hasConflict: false, winner: 'incoming', reason: 'legacy_data' };
+    }
+
+    // Only one has epoch - prefer the one with epoch
+    if (!existing._writeEpoch) {
+        return { hasConflict: false, winner: 'incoming', reason: 'existing_legacy' };
+    }
+    if (!incoming._writeEpoch) {
+        return { hasConflict: true, winner: 'existing', reason: 'incoming_legacy' };
+    }
+
+    // Both have epochs - compare using Lamport clock rules
+    const comparison = LamportClock.compare(
+        { lamportTimestamp: existing._writeEpoch, senderId: existing._writerId || '' },
+        { lamportTimestamp: incoming._writeEpoch, senderId: incoming._writerId || '' }
+    );
+
+    if (comparison === 0) {
+        return { hasConflict: false, winner: 'incoming', reason: 'same_epoch' };
+    }
+
+    // Last-write-wins: higher epoch wins
+    if (comparison < 0) {
+        return { hasConflict: true, winner: 'incoming', reason: 'incoming_newer' };
+    } else {
+        return { hasConflict: true, winner: 'existing', reason: 'existing_newer' };
+    }
 }
 
 // ==========================================
@@ -466,7 +529,10 @@ export const IndexedDBCore = {
     count,
     transaction,
     getAllByIndex,
-    atomicUpdate
+    atomicUpdate,
+
+    // Conflict detection
+    detectWriteConflict
 };
 
 // Keep window global for backwards compatibility during migration
