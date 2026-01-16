@@ -236,6 +236,7 @@ You mark time through sound.
 - **Basic Cards**: Shareable personality cards
 - **100% Client-Side**: Zero server costs, maximum privacy
 - **Premium Themes**: Dark, Cyberpunk, Minimal styles (FREE for all)
+- **Pattern Worker Pool**: Parallel pattern detection with heartbeat monitoring for worker health
 - **Purpose**: Loss leader to build community and validate product
 
 #### Supporter Tier ($39 one-time) - Seed Capital

@@ -140,6 +140,7 @@ describe('Chat TurnQueue Integration', () => {
 
     beforeEach(async () => {
         vi.resetModules();
+        vi.clearAllMocks();
         
         // Setup mock window
         mockWindow = createMockWindow();

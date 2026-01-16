@@ -15,6 +15,7 @@
 // ==========================================
 
 import { Security } from './security/index.js';
+import { DEPRECATED_WINDOW_GLOBALS, setupDeprecatedWindowGlobals } from './window-globals-debug.js';
 
 // Validate secure context immediately before ANY other imports
 const securityCheck = Security.checkSecureContext();
@@ -182,6 +183,8 @@ if (typeof window !== 'undefined') {
     window.DemoData = DemoData;
     window.TemplateProfileStore = TemplateProfileStore;
     window.ProfileSynthesizer = ProfileSynthesizer;
+
+    setupDeprecatedWindowGlobals(window, DEPRECATED_WINDOW_GLOBALS);
 }
 
 console.log('[Main] All modules imported and registered on window');
@@ -374,4 +377,3 @@ if (document.readyState === 'loading') {
 } else {
     bootstrap();
 }
-

@@ -87,6 +87,7 @@ describe('withTimeout', () => {
     });
 
     afterEach(() => {
+        vi.clearAllTimers();
         vi.useRealTimers();
     });
 
@@ -104,24 +105,23 @@ describe('withTimeout', () => {
         const slowOp = () => new Promise(resolve => setTimeout(() => resolve('slow'), 5000));
 
         const resultPromise = withTimeout(slowOp, 100);
+        const rejection = expect(resultPromise).rejects.toThrow(TimeoutError);
         await vi.advanceTimersByTimeAsync(100);
-
-        await expect(resultPromise).rejects.toThrow(TimeoutError);
+        await rejection;
     });
 
     it('should include timeout duration in error', async () => {
         const slowOp = () => new Promise(resolve => setTimeout(() => resolve('slow'), 5000));
 
         const resultPromise = withTimeout(slowOp, 250);
+        const rejection = expect(resultPromise).rejects.toBeInstanceOf(TimeoutError);
         await vi.advanceTimersByTimeAsync(250);
+        await rejection;
 
-        try {
-            await resultPromise;
-            expect(true).toBe(false); // Should not reach here
-        } catch (error) {
+        await resultPromise.catch((error) => {
             expect(error).toBeInstanceOf(TimeoutError);
             expect(error.timeoutMs).toBe(250);
-        }
+        });
     });
 
     it('should execute fallback on timeout', async () => {
@@ -139,14 +139,14 @@ describe('withTimeout', () => {
         const slowOp = () => new Promise(resolve => setTimeout(() => resolve('slow'), 5000));
 
         const resultPromise = withTimeout(slowOp, 100, { operation: 'testOperation' });
+        const rejection = expect(resultPromise).rejects.toThrow(TimeoutError);
         await vi.advanceTimersByTimeAsync(100);
 
-        try {
-            await resultPromise;
-        } catch (error) {
+        await rejection;
+        await resultPromise.catch((error) => {
             expect(error.message).toContain('testOperation');
             expect(error.operation).toBe('testOperation');
-        }
+        });
     });
 
     it('should accept both promises and functions', async () => {
@@ -169,6 +169,7 @@ describe('withProgressiveTimeout', () => {
     });
 
     afterEach(() => {
+        vi.clearAllTimers();
         vi.useRealTimers();
     });
 
@@ -220,9 +221,10 @@ describe('withProgressiveTimeout', () => {
         const resultPromise = withProgressiveTimeout(errorOp, {
             timeouts: [100, 500, 1000]
         });
+        const rejection = expect(resultPromise).rejects.toThrow('operation failed');
         await vi.advanceTimersByTimeAsync(0);
 
-        await expect(resultPromise).rejects.toThrow('operation failed');
+        await rejection;
     });
 });
 

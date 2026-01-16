@@ -257,6 +257,7 @@ What opened you up during that time?"
 2. **No genre data** — Can't detect "workout" or "sad" music without API
 3. **Artist normalization** — "RHCP" ≠ "Red Hot Chili Peppers"
 4. **Personality overlap** — Users may score high on multiple types → show primary + secondary
+5. **Worker pool stability** — Pattern detection may fail if workers become stale (mitigated by heartbeat monitoring)
 
 ---
 

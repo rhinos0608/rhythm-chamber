@@ -64,6 +64,7 @@ function createMockIndexedDBCore() {
 
 let StorageTransaction;
 let Storage;
+let StorageMigration;
 
 beforeEach(async () => {
     vi.resetModules();
@@ -72,7 +73,6 @@ beforeEach(async () => {
     globalThis.localStorage = createMockLocalStorage();
     globalThis.IndexedDBCore = createMockIndexedDBCore();
     window.IndexedDBCore = globalThis.IndexedDBCore;
-    window.StorageMigration = { migrateFromLocalStorage: vi.fn(), rollbackMigration: vi.fn(), getMigrationState: vi.fn() };
     window.ConfigAPI = {
         getConfig: vi.fn(),
         setConfig: vi.fn(),
@@ -82,6 +82,11 @@ beforeEach(async () => {
         removeToken: vi.fn()
     };
     window.ProfileStorage = { init: vi.fn(), _storage: {}, saveProfile: vi.fn(), getAllProfiles: vi.fn(), getProfile: vi.fn(), deleteProfile: vi.fn(), getActiveProfileId: vi.fn(), setActiveProfile: vi.fn(), getProfileCount: vi.fn(), clearAllProfiles: vi.fn() };
+
+    StorageMigration = (await import('../../js/storage/migration.js')).StorageMigration;
+    vi.spyOn(StorageMigration, 'migrateFromLocalStorage').mockResolvedValue();
+    vi.spyOn(StorageMigration, 'rollbackMigration').mockResolvedValue();
+    vi.spyOn(StorageMigration, 'getMigrationState').mockResolvedValue(null);
 
     StorageTransaction = (await import('../../js/storage/transaction.js')).StorageTransaction;
     Storage = (await import('../../js/storage.js')).Storage;

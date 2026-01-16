@@ -935,7 +935,7 @@ function setStreamsData(streams) {
 // HNW Fix: Correct sync/async strategy for tab close
 // ==========================================
 
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     // Async save when tab goes hidden (mobile switch, minimize, tab switch)
     // visibilitychange gives us time for async operations
     document.addEventListener('visibilitychange', () => {

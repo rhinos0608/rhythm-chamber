@@ -225,7 +225,7 @@ async function isProviderAvailable(provider) {
         default:
             // OpenRouter is always "available" if we have an API key
             const apiKey = window.Settings?.get?.()?.openrouter?.apiKey ||
-                window.CONFIG?.apiKey;
+                window.Config?.apiKey;
             return !!apiKey;
     }
 }
@@ -301,7 +301,7 @@ const HEALTH_CHECK_TIMEOUT = 5000;
  */
 async function checkOpenRouterHealth() {
     const start = Date.now();
-    const apiKey = window.Settings?.get?.()?.openrouter?.apiKey || window.CONFIG?.apiKey;
+    const apiKey = window.Settings?.get?.()?.openrouter?.apiKey || window.Config?.apiKey;
 
     if (!apiKey || apiKey === 'your-api-key-here') {
         return {
@@ -572,4 +572,3 @@ if (typeof window !== 'undefined') {
 }
 
 console.log('[ProviderInterface] LLM provider abstraction layer loaded with health checks');
-
