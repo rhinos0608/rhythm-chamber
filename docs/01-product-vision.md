@@ -68,6 +68,7 @@ Plus: Your AI notices your patterns and writes personalized narratives about you
 | Full history + real-time | Full history only |
 | Low technical barrier (OAuth) | Medium (file upload OR OAuth) |
 | Click to explore | Ask questions naturally |
+| **Server-dependent** | **Zero-backend with heartbeat monitoring** |
 
 **We're not competing for stats nerds.** We're competing for everyone who screenshots Wrapped and wants deeper self-understanding.
 

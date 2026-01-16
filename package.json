@@ -9,10 +9,12 @@
   "scripts": {
     "dev": "npx http-server . -p 8080 -c-1",
     "test": "npx playwright test",
+    "pretest": "npm run lint:globals",
     "test:unit": "vitest run tests/unit/",
     "test:unit:watch": "vitest tests/unit/",
     "test:ui": "npx playwright test --ui",
     "test:headed": "npx playwright test --headed",
+    "lint:globals": "node scripts/lint-window-globals.mjs",
     "test:report": "npx playwright show-report"
   },
   "repository": {

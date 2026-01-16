@@ -141,10 +141,14 @@ function isLocalMode() {
  * @returns {Promise<{supported: boolean, reason?: string}>}
  */
 async function checkLocalSupport() {
-    if (!window.LocalEmbeddings?.isSupported) {
+    const LocalEmbeddings =
+        ModuleRegistry.getModuleSync('LocalEmbeddings') ||
+        (ModuleRegistry.getModule ? await ModuleRegistry.getModule('LocalEmbeddings') : null);
+
+    if (!LocalEmbeddings?.isSupported) {
         return { supported: false, reason: 'LocalEmbeddings module not loaded' };
     }
-    return await window.LocalEmbeddings.isSupported();
+    return await LocalEmbeddings.isSupported();
 }
 
 /**
@@ -1494,4 +1498,3 @@ export const RAG = {
 
 // ES Module export - use ModuleRegistry for access instead of window globals
 console.log('[RAG] RAG module loaded with local fallback + incremental embedding support');
-

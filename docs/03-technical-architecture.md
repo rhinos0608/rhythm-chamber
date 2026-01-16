@@ -104,6 +104,12 @@ ollama serve
 
 ## Modular Architecture (Refactored - HNW Compliant)
 
+### Legacy Window Globals (Debug-Only)
+- Window globals remain for backward compatibility while UI/controllers finish migrating to pure ES modules and `ModuleRegistry`.
+- They are considered deprecated; new code should import modules directly instead of reaching for `window.X`.
+- In development, any access to these globals logs a warning via `js/window-globals-debug.js` to catch accidental usage early.
+- `npm run lint:globals` fails CI if new window globals are introduced; update the allowlist only when removing legacy globals.
+
 ### The Refactoring: From God Objects to Modular Architecture
 
 **Before:** 3,426 lines in 3 God objects (app.js: 1,426, chat.js: 1,486, storage.js: 514)

@@ -10,6 +10,8 @@
  */
 
 import { StorageTransaction } from './storage/transaction.js';
+import { StorageMigration } from './storage/migration.js';
+import { ModuleRegistry } from './module-registry.js';
 
 // ==========================================
 // Privacy Controls
@@ -111,7 +113,7 @@ const Storage = {
     });
 
     // Run migration
-    await window.StorageMigration.migrateFromLocalStorage();
+    await StorageMigration.migrateFromLocalStorage();
 
     return window.IndexedDBCore.getConnection();
   },
@@ -344,9 +346,9 @@ const Storage = {
   // Migration (delegate to StorageMigration)
   // ==========================================
 
-  migrateFromLocalStorage: () => window.StorageMigration.migrateFromLocalStorage(),
-  rollbackMigration: () => window.StorageMigration.rollbackMigration(),
-  getMigrationState: () => window.StorageMigration.getMigrationState(),
+  migrateFromLocalStorage: () => StorageMigration.migrateFromLocalStorage(),
+  rollbackMigration: () => StorageMigration.rollbackMigration(),
+  getMigrationState: () => StorageMigration.getMigrationState(),
 
   // ==========================================
   // Clear All Data
@@ -399,9 +401,13 @@ const Storage = {
       results.localStorage.cleared = true;
 
       // Clear Qdrant embeddings
-      if (window.RAG?.hasCredentials?.()) {
+      const RAG = ModuleRegistry?.getModule
+        ? await ModuleRegistry.getModule('RAG')
+        : null;
+
+      if (RAG?.hasCredentials?.()) {
         try {
-          await window.RAG.clearEmbeddings();
+          await RAG.clearEmbeddings();
           results.qdrant.cleared = true;
         } catch (e) {
           results.qdrant.error = e.message;

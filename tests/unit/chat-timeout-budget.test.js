@@ -164,6 +164,7 @@ describe('Chat TimeoutBudget Integration', () => {
 
     beforeEach(async () => {
         vi.resetModules();
+        vi.clearAllMocks();
         
         // Setup mock window
         mockWindow = createMockWindow();
@@ -185,7 +186,7 @@ describe('Chat TimeoutBudget Integration', () => {
         );
 
         // Send a message
-        await Chat.sendMessage('Hello');
+        await Chat.sendMessage('Hello', null, { bypassQueue: true });
 
         // Verify timeout budget was allocated for chat turn
         expect(TimeoutBudget.allocate).toHaveBeenCalledWith('chat_turn', 60000);
@@ -203,7 +204,7 @@ describe('Chat TimeoutBudget Integration', () => {
         );
 
         // Send a message
-        await Chat.sendMessage('Hello');
+        await Chat.sendMessage('Hello', null, { bypassQueue: true });
 
         // Verify timeout budget was released
         expect(TimeoutBudget.release).toHaveBeenCalled();
@@ -221,7 +222,7 @@ describe('Chat TimeoutBudget Integration', () => {
         );
 
         // Send a message
-        await Chat.sendMessage('Test message');
+        await Chat.sendMessage('Test message', null, { bypassQueue: true });
 
         // Verify budget was allocated with correct operation name
         expect(TimeoutBudget.allocate).toHaveBeenCalledWith('chat_turn', 60000);
@@ -242,7 +243,9 @@ describe('Chat TimeoutBudget Integration', () => {
         );
 
         // Send a message and expect error
-        await expect(Chat.sendMessage('Test message')).rejects.toThrow('LLM error');
+        const result = await Chat.sendMessage('Test message', null, { bypassQueue: true });
+        expect(result.status).toBe('error');
+        expect(result.error).toBe('LLM error');
 
         // Verify timeout budget was still allocated and released
         expect(TimeoutBudget.allocate).toHaveBeenCalledWith('chat_turn', 60000);
@@ -271,7 +274,7 @@ describe('Chat TimeoutBudget Integration', () => {
         );
 
         // Send a message
-        await Chat.sendMessage('Test message');
+        await Chat.sendMessage('Test message', null, { bypassQueue: true });
 
         // Verify budget was allocated with correct timeout
         expect(TimeoutBudget.allocate).toHaveBeenCalledWith('chat_turn', 60000);

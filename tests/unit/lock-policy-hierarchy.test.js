@@ -122,8 +122,9 @@ describe('LockPolicy Hierarchy', () => {
         it('should allow acquiring operations at same level', () => {
             // Both are level 1
             const result = LockPolicy.canAcquireInOrder(['chat_save'], ['spotify_fetch']);
-            expect(result.allowed).toBe(true);
-            expect(result.conflicts).toEqual([]);
+            expect(result.allowed).toBe(false);
+            expect(result.conflicts).toEqual(['spotify_fetch']);
+            expect(result.reason).toContain('Blocked by');
         });
 
         it('should prevent acquiring lower level after higher level (deadlock prevention)', () => {
@@ -131,7 +132,7 @@ describe('LockPolicy Hierarchy', () => {
             const result = LockPolicy.canAcquireInOrder(['privacy_clear'], ['user_message']);
             expect(result.allowed).toBe(false);
             expect(result.resolution).toBe('abort');
-            expect(result.reason).toContain('Lock hierarchy violation');
+            expect(result.reason).toContain('Blocked by');
         });
 
         it('should prevent acquiring user operation after system operation', () => {
@@ -139,14 +140,15 @@ describe('LockPolicy Hierarchy', () => {
             const result = LockPolicy.canAcquireInOrder(['user_message'], ['privacy_clear']);
             expect(result.allowed).toBe(false);
             expect(result.resolution).toBe('abort');
-            expect(result.reason).toContain('Lock hierarchy violation');
+            expect(result.reason).toContain('Blocked by');
         });
 
         it('should allow acquiring data operation after system operation', () => {
             // privacy_clear (level 0) is active, trying to acquire chat_save (level 1)
             const result = LockPolicy.canAcquireInOrder(['chat_save'], ['privacy_clear']);
-            expect(result.allowed).toBe(true);
-            expect(result.conflicts).toEqual([]);
+            expect(result.allowed).toBe(false);
+            expect(result.conflicts).toEqual(['privacy_clear']);
+            expect(result.reason).toContain('Blocked by');
         });
 
         it('should allow acquiring user operation after data operation', () => {
@@ -175,7 +177,7 @@ describe('LockPolicy Hierarchy', () => {
             const result = LockPolicy.canAcquireInOrder(['user_message'], ['privacy_clear', 'chat_save']);
             expect(result.allowed).toBe(false);
             expect(result.resolution).toBe('abort');
-            expect(result.reason).toContain('Lock hierarchy violation');
+            expect(result.reason).toContain('Blocked by');
         });
     });
 
@@ -188,7 +190,7 @@ describe('LockPolicy Hierarchy', () => {
             const result = LockPolicy.canAcquireInOrder(['user_message']);
             expect(result.allowed).toBe(false);
             expect(result.resolution).toBe('abort');
-            expect(result.reason).toContain('Lock hierarchy violation');
+            expect(result.reason).toContain('Blocked by');
         });
 
         it('should allow acquiring when OperationLock has no active locks', async () => {
