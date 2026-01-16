@@ -209,6 +209,10 @@ function handleWorkerMessage(event) {
             });
         }
 
+        // Track backpressure: increment counter and check if we should pause
+        pendingResultCount++;
+        checkBackpressure();
+
         console.log(`[PatternWorkerPool] Partial result: ${pattern} (${Math.round(progressPercent * 100)}%)`);
         return;
     }
@@ -224,6 +228,10 @@ function handleWorkerMessage(event) {
     if (type === 'result') {
         request.results.push(result);
         markComplete();
+
+        // Track backpressure: increment counter and check if we should pause
+        pendingResultCount++;
+        checkBackpressure();
 
         // Check if all workers have completed
         if (request.completedWorkers >= request.totalWorkers) {
@@ -594,6 +602,10 @@ function checkBackpressure() {
         paused = true;
         console.warn(`[PatternWorkerPool] Backpressure: pausing (${pendingResultCount} pending results)`);
         notifyBackpressureListeners('backpressure', { pending: pendingResultCount });
+    } else if (paused && pendingResultCount < BACKPRESSURE_RESUME_THRESHOLD) {
+        paused = false;
+        console.log(`[PatternWorkerPool] Backpressure: resuming (${pendingResultCount} pending results)`);
+        notifyBackpressureListeners('resume', { pending: pendingResultCount });
     }
 }
 
@@ -603,11 +615,8 @@ function checkBackpressure() {
 function onResultConsumed() {
     pendingResultCount = Math.max(0, pendingResultCount - 1);
 
-    if (paused && pendingResultCount < BACKPRESSURE_RESUME_THRESHOLD) {
-        paused = false;
-        console.log(`[PatternWorkerPool] Backpressure: resuming (${pendingResultCount} pending results)`);
-        notifyBackpressureListeners('resume', { pending: pendingResultCount });
-    }
+    // Check if we should resume (now handled by checkBackpressure)
+    checkBackpressure();
 }
 
 /**

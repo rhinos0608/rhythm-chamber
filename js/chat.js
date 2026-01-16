@@ -29,6 +29,9 @@ import { TurnQueue } from './services/turn-queue.js';
 // Timeout budget import
 import { TimeoutBudget } from './services/timeout-budget-manager.js';
 
+// Wave telemetry import for LLM call timing
+import { WaveTelemetry } from './services/wave-telemetry.js';
+
 // HNW Fix: Timeout constants to prevent cascade failures
 const CHAT_API_TIMEOUT_MS = 60000;           // 60 second timeout for cloud API calls
 const LOCAL_LLM_TIMEOUT_MS = 90000;          // 90 second timeout for local LLM providers
@@ -732,7 +735,16 @@ async function processMessage(message, optionsOrKey = null) {
             if (!window.LLMProviderRoutingService?.callLLM) {
                 throw new Error('LLMProviderRoutingService not loaded. Ensure provider modules are included before chat initialization.');
             }
+
+            // Track LLM call duration for WaveTelemetry
+            const llmCallStart = Date.now();
             let response = await window.LLMProviderRoutingService.callLLM(providerConfig, key, apiMessages, apiTools, isLocalProvider ? onProgress : null);
+            const llmCallDuration = Date.now() - llmCallStart;
+
+            // Record to WaveTelemetry for timing analysis
+            const telemetryMetric = isLocalProvider ? 'local_llm_call' : 'cloud_llm_call';
+            WaveTelemetry.record(telemetryMetric, llmCallDuration);
+            console.log(`[Chat] LLM call completed in ${llmCallDuration}ms`);
 
             // HNW Fix: Validate response structure before accessing choices
             if (!response || !response.choices || response.choices.length === 0) {

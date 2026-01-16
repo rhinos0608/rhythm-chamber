@@ -589,7 +589,7 @@ export class ErrorRecoveryCoordinator {
 
         // Determine if lock is required
         const requiresLock = request.domain === RecoveryDomain.STORAGE ||
-                            request.domain === RecoveryDomain.SECURITY;
+            request.domain === RecoveryDomain.SECURITY;
         const lockName = requiresLock ? `recovery_${request.domain}` : null;
 
         return {
@@ -1017,6 +1017,131 @@ export class ErrorRecoveryCoordinator {
             totalRecoveryTimeMs: 0,
             successRate: 0
         };
+    }
+
+    // ==========================================
+    // Global System Health (P2.2)
+    // ==========================================
+
+    /**
+     * Check global system health across all circuit breakers
+     * HNW Network: Monitors all provider circuits for cascade failure detection
+     * 
+     * @public
+     * @returns {Promise<{ healthy: boolean, degradedMode: boolean, openCircuits: number, totalCircuits: number, providers: Object }>}
+     */
+    async checkSystemHealth() {
+        try {
+            // Dynamic import to avoid circular dependency
+            const { ProviderCircuitBreaker } = await import('./provider-circuit-breaker.js');
+
+            const allStatus = ProviderCircuitBreaker.getAllStatus();
+            const providerNames = Object.keys(allStatus);
+            const totalCircuits = providerNames.length;
+
+            let openCircuits = 0;
+            let halfOpenCircuits = 0;
+
+            for (const provider of providerNames) {
+                const status = allStatus[provider];
+                if (status.state === 'open') {
+                    openCircuits++;
+                } else if (status.state === 'half_open') {
+                    halfOpenCircuits++;
+                }
+            }
+
+            // Enter degraded mode if ≥50% of providers are open
+            const degradedThreshold = totalCircuits * 0.5;
+            const degradedMode = openCircuits >= degradedThreshold;
+
+            if (degradedMode) {
+                console.warn(`[ErrorRecoveryCoordinator] DEGRADED MODE: ${openCircuits}/${totalCircuits} circuits open`);
+                this._eventBus.emit('SYSTEM:DEGRADED_MODE', {
+                    openCircuits,
+                    totalCircuits,
+                    reason: 'circuit_breaker_threshold',
+                    timestamp: Date.now()
+                });
+            }
+
+            return {
+                healthy: openCircuits === 0,
+                degradedMode,
+                openCircuits,
+                halfOpenCircuits,
+                totalCircuits,
+                providers: allStatus
+            };
+        } catch (e) {
+            console.warn('[ErrorRecoveryCoordinator] Failed to check system health:', e);
+            return {
+                healthy: true, // Assume healthy if check fails
+                degradedMode: false,
+                openCircuits: 0,
+                totalCircuits: 0,
+                providers: {}
+            };
+        }
+    }
+
+    /**
+     * Get performance percentiles from telemetry history
+     * HNW Wave: Analyzes timing patterns for anomaly detection
+     * 
+     * @public
+     * @param {string} [category] - Optional category filter
+     * @returns {{ p50: number, p95: number, p99: number, count: number }}
+     */
+    getPerformancePercentiles(category = null) {
+        const durations = this._telemetry.history
+            .filter(r => !category || r.metadata?.domain === category)
+            .map(r => r.durationMs)
+            .filter(d => d != null && d >= 0)
+            .sort((a, b) => a - b);
+
+        if (durations.length === 0) {
+            return { p50: 0, p95: 0, p99: 0, count: 0 };
+        }
+
+        const percentile = (arr, p) => {
+            if (arr.length === 0) return 0;
+            const idx = Math.ceil(arr.length * p) - 1;
+            return arr[Math.max(0, Math.min(idx, arr.length - 1))];
+        };
+
+        return {
+            p50: percentile(durations, 0.50),
+            p95: percentile(durations, 0.95),
+            p99: percentile(durations, 0.99),
+            count: durations.length
+        };
+    }
+
+    /**
+     * Get adaptive recovery timeout based on historical data
+     * HNW Wave: Uses p95 from history with 1.5x multiplier
+     * 
+     * @public
+     * @param {string} domain - Recovery domain
+     * @returns {number} Timeout in milliseconds (minimum 30000)
+     */
+    getAdaptiveRecoveryTimeout(domain) {
+        const domainHistory = this._telemetry.history
+            .filter(r => r.metadata?.domain === domain && r.success)
+            .map(r => r.durationMs)
+            .sort((a, b) => a - b);
+
+        if (domainHistory.length < 5) {
+            return 30000; // Default minimum
+        }
+
+        // Calculate p95
+        const p95Index = Math.ceil(domainHistory.length * 0.95) - 1;
+        const p95 = domainHistory[Math.max(0, p95Index)];
+
+        // Apply 1.5x multiplier with 30s minimum
+        return Math.max(p95 * 1.5, 30000);
     }
 }
 
