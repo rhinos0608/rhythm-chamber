@@ -140,11 +140,26 @@ function createCategoryRows(breakdown) {
  * @returns {string} Formatted string
  */
 function formatBytes(bytes) {
-    if (!bytes || bytes === 0) return '0 B';
+    // Validate input: check for finite number
+    if (typeof bytes !== 'number' || !Number.isFinite(bytes)) {
+        return '0 B';
+    }
+
+    if (bytes === 0) return '0 B';
+
+    // Preserve sign for negative values
+    const sign = Math.sign(bytes);
+    const absBytes = Math.abs(bytes);
+
     const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB'];
+
+    // Calculate unit index and clamp to array bounds
+    const i = Math.min(Math.floor(Math.log(absBytes) / Math.log(k)), sizes.length - 1);
+
+    // Format the value and reapply sign
+    const value = parseFloat((absBytes / Math.pow(k, i)).toFixed(2));
+    return (sign * value) + ' ' + sizes[i];
 }
 
 // ==========================================
@@ -196,12 +211,22 @@ async function render(container) {
 
     } catch (error) {
         console.error('[StorageBreakdownUI] Failed to render:', error);
-        containerEl.innerHTML = `
-            <div class="storage-breakdown-panel error">
-                <p>Failed to load storage breakdown: ${error.message}</p>
-                <button class="btn btn-small" onclick="StorageBreakdownUI.refresh()">Retry</button>
-            </div>
-        `;
+        // Use DOM APIs to prevent XSS - don't use innerHTML with error.message
+        const errorPanel = document.createElement('div');
+        errorPanel.className = 'storage-breakdown-panel error';
+
+        const errorMessage = document.createElement('p');
+        errorMessage.textContent = 'Failed to load storage breakdown: ' + (error.message || 'Unknown error');
+        errorPanel.appendChild(errorMessage);
+
+        const retryButton = document.createElement('button');
+        retryButton.className = 'btn btn-small';
+        retryButton.textContent = 'Retry';
+        retryButton.onclick = () => StorageBreakdownUI.refresh();
+        errorPanel.appendChild(retryButton);
+
+        containerEl.innerHTML = '';
+        containerEl.appendChild(errorPanel);
     }
 }
 
@@ -217,20 +242,29 @@ async function refresh() {
 
 /**
  * Run cleanup for a specific category
- * @param {string} category - Category to cleanup
+ * @param {string} category - Category to cleanup ('embeddings', 'sessions', 'streams', 'chunks', 'all')
  */
 async function cleanup(category) {
     try {
         const manager = _storageDegradationManager || await getStorageDegradationManager();
 
+        // Handle specific categories with appropriate cleanup strategies
         if (category === 'embeddings') {
             // Import and clear LRU cache
             const { VectorLRUCache } = await import('./storage/lru-cache.js');
             await VectorLRUCache.clear();
             showToast('Embeddings cleared successfully');
+        } else if (category === 'all') {
+            // Full cleanup with HIGH priority
+            const result = await manager.triggerCleanup(3);
+            showToast(`Cleaned ${result.itemsDeleted} items, freed ${formatBytes(result.bytesFreed)}`);
+        } else if (category === 'sessions' || category === 'streams' || category === 'chunks') {
+            // Category-specific cleanup with MEDIUM priority
+            const result = await manager.triggerCleanup(2);
+            showToast(`Cleaned ${result.itemsDeleted} items, freed ${formatBytes(result.bytesFreed)}`);
         } else {
-            // Use manager's cleanup with appropriate priority
-            const result = await manager.triggerCleanup(2); // MEDIUM priority
+            // Unknown category, perform general cleanup
+            const result = await manager.triggerCleanup(2);
             showToast(`Cleaned ${result.itemsDeleted} items, freed ${formatBytes(result.bytesFreed)}`);
         }
 
@@ -245,6 +279,14 @@ async function cleanup(category) {
  * Show the cleanup modal with options
  */
 async function showCleanupModal() {
+    // Check for existing modal to prevent duplicates
+    const existingModal = document.getElementById('storage-cleanup-modal');
+    if (existingModal) {
+        // Focus existing modal instead of creating a duplicate
+        existingModal.focus();
+        return;
+    }
+
     const manager = _storageDegradationManager || await getStorageDegradationManager();
     const breakdown = await manager.getStorageBreakdown();
 
@@ -318,12 +360,15 @@ async function runSelectedCleanup() {
         let totalFreed = 0;
         let totalDeleted = 0;
 
+        // Float32 vector size: 1536 dimensions * 4 bytes per float32 = 6144 bytes per vector
+        const EMBEDDING_BYTES_PER_VECTOR = 1536 * 4;
+
         for (const category of categories) {
             if (category === 'embeddings') {
                 const { VectorLRUCache } = await import('./storage/lru-cache.js');
                 const beforeSize = VectorLRUCache.size?.() || 0;
                 await VectorLRUCache.clear();
-                totalFreed += beforeSize * 1536;
+                totalFreed += beforeSize * EMBEDDING_BYTES_PER_VECTOR;
                 totalDeleted += beforeSize;
             }
         }
