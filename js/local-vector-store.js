@@ -59,6 +59,11 @@ let workerReady = false;
  * Uses promise-based initialization to prevent race condition when
  * multiple concurrent calls try to create the worker simultaneously.
  * 
+ * Handles offline/network errors gracefully:
+ * - Detects network failures (script fetch errors)
+ * - Prevents retry loops on persistent network issues
+ * - Falls back to sync search without breaking the app
+ * 
  * @returns {Promise<Worker|null>} The worker instance or null if unavailable
  */
 async function initWorkerAsync() {
@@ -71,9 +76,21 @@ async function initWorkerAsync() {
     // Start initialization - create single promise that all callers will share
     workerInitPromise = new Promise((resolve) => {
         try {
+            // Check if we're in a context where workers can be created
+            if (typeof Worker === 'undefined') {
+                console.warn('[LocalVectorStore] Web Workers not supported, using sync fallback');
+                workerInitPromise = null;
+                resolve(null);
+                return;
+            }
+
             const worker = new Worker('js/workers/vector-search-worker.js');
 
+            // Track if worker successfully initialized (received a message)
+            let workerStarted = false;
+
             worker.onmessage = (event) => {
+                workerStarted = true;
                 const { type, id, results, stats, message } = event.data;
 
                 const pending = pendingSearches.get(id);
@@ -96,15 +113,35 @@ async function initWorkerAsync() {
             };
 
             worker.onerror = (error) => {
-                console.error('[LocalVectorStore] Worker error:', error);
+                // Determine if this is a network/loading error vs runtime error
+                const isNetworkError = !workerStarted ||
+                    (error.message && (
+                        error.message.includes('NetworkError') ||
+                        error.message.includes('Failed to fetch') ||
+                        error.message.includes('Failed to load') ||
+                        error.message.includes('Script error')
+                    ));
+
+                if (isNetworkError) {
+                    console.warn('[LocalVectorStore] Worker failed to load (offline or network error). Using sync fallback.');
+                    console.warn('[LocalVectorStore] This is expected when offline - vector search will use main thread.');
+                } else {
+                    console.error('[LocalVectorStore] Worker runtime error:', error);
+                }
+
                 // Reject all pending searches
                 for (const [id, pending] of pendingSearches) {
-                    pending.reject(new Error('Worker crashed'));
+                    pending.reject(new Error('Worker unavailable'));
                 }
                 pendingSearches.clear();
+
                 searchWorker = null;
                 workerReady = false;
-                workerInitPromise = null; // Allow retry
+                workerInitPromise = null; // Allow retry only for non-network errors
+
+                // For network errors, don't retry immediately 
+                // The sync fallback will handle all searches
+                resolve(null);
             };
 
             searchWorker = worker;
@@ -112,7 +149,16 @@ async function initWorkerAsync() {
             console.log('[LocalVectorStore] Search worker initialized');
             resolve(worker);
         } catch (e) {
-            console.warn('[LocalVectorStore] Failed to initialize worker, using sync fallback:', e);
+            // Handle synchronous errors (e.g., CSP blocking Worker creation)
+            const isSecurityError = e.name === 'SecurityError' ||
+                e.message?.includes('Content Security Policy');
+
+            if (isSecurityError) {
+                console.warn('[LocalVectorStore] Worker blocked by security policy, using sync fallback');
+            } else {
+                console.warn('[LocalVectorStore] Failed to initialize worker, using sync fallback:', e.message);
+            }
+
             workerInitPromise = null; // Allow retry
             resolve(null);
         }

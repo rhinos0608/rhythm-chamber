@@ -654,6 +654,19 @@ function showSettingsModal() {
                         <span class="settings-hint">Invalidates all encrypted credentials and forces re-authentication</span>
                     </div>
                 </div>
+                
+                <!-- Storage Management Section -->
+                <div class="settings-section">
+                    <h3>💾 Storage Management</h3>
+                    <p class="settings-description">
+                        Monitor and manage local storage usage. Cleanup old data to free space.
+                    </p>
+                    
+                    <!-- Storage Breakdown Container -->
+                    <div id="storage-breakdown-container">
+                        <div class="storage-loading">Loading storage breakdown...</div>
+                    </div>
+                </div>
             </div>
             
             <div class="settings-footer">
@@ -710,6 +723,9 @@ function showSettingsModal() {
             hideSettingsModal();
         }
     });
+
+    // Initialize storage breakdown UI
+    initStorageBreakdown();
 }
 
 /**

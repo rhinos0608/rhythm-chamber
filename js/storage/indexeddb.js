@@ -10,7 +10,10 @@
  */
 
 import { TabCoordinator } from '../services/tab-coordination.js';
-import { LamportClock } from '../services/lamport-clock.js';
+import { VectorClock } from '../services/vector-clock.js';
+
+// Module-level VectorClock for write tracking
+const writeVectorClock = new VectorClock();
 
 // ==========================================
 // Database Configuration
@@ -234,12 +237,13 @@ async function put(storeName, data, options = {}) {
         }
     }
 
-    // Add Lamport timestamp for dual-write protection
+    // Add VectorClock timestamp for dual-write protection and conflict detection
     // Skip for read-only stores or if explicitly bypassed
+    const clockState = writeVectorClock.tick();
     const stampedData = options.skipWriteEpoch ? data : {
         ...data,
-        _writeEpoch: LamportClock.tick(),
-        _writerId: LamportClock.getId()
+        _writeEpoch: clockState,
+        _writerId: writeVectorClock.processId
     };
 
     const database = await initDatabase();
@@ -431,21 +435,23 @@ async function atomicUpdate(storeName, key, modifier) {
             if (cursor) {
                 const currentValue = cursor.value;
                 const newValue = modifier(currentValue);
-                // Add write epoch to atomic updates
+                // Add write epoch to atomic updates with VectorClock
+                const clockState = writeVectorClock.tick();
                 const stampedValue = {
                     ...newValue,
-                    _writeEpoch: LamportClock.tick(),
-                    _writerId: LamportClock.getId()
+                    _writeEpoch: clockState,
+                    _writerId: writeVectorClock.processId
                 };
                 cursor.update(stampedValue);
                 resolve(stampedValue);
             } else {
                 // Key doesn't exist, create new
                 const newValue = modifier(undefined);
+                const clockState = writeVectorClock.tick();
                 const stampedValue = {
                     ...newValue,
-                    _writeEpoch: LamportClock.tick(),
-                    _writerId: LamportClock.getId()
+                    _writeEpoch: clockState,
+                    _writerId: writeVectorClock.processId
                 };
                 const putRequest = store.put(stampedValue);
                 putRequest.onsuccess = () => resolve(stampedValue);
@@ -457,45 +463,64 @@ async function atomicUpdate(storeName, key, modifier) {
 }
 
 /**
- * Detect write conflicts between two records using Lamport timestamps
+ * Detect write conflicts between two records using VectorClock timestamps
+ * VectorClock provides true concurrent conflict detection vs Lamport's total ordering
  * @param {Object} existing - Existing record with _writeEpoch
  * @param {Object} incoming - Incoming record with _writeEpoch
- * @returns {{ hasConflict: boolean, winner: 'existing' | 'incoming', reason: string }}
+ * @returns {{ hasConflict: boolean, winner: 'existing' | 'incoming', reason: string, isConcurrent: boolean }}
  */
 function detectWriteConflict(existing, incoming) {
     // No existing record - no conflict
     if (!existing) {
-        return { hasConflict: false, winner: 'incoming', reason: 'new_record' };
+        return { hasConflict: false, winner: 'incoming', reason: 'new_record', isConcurrent: false };
     }
 
     // Neither has epoch - legacy data, treat as no conflict
     if (!existing._writeEpoch && !incoming._writeEpoch) {
-        return { hasConflict: false, winner: 'incoming', reason: 'legacy_data' };
+        return { hasConflict: false, winner: 'incoming', reason: 'legacy_data', isConcurrent: false };
     }
 
     // Only one has epoch - prefer the one with epoch
     if (!existing._writeEpoch) {
-        return { hasConflict: false, winner: 'incoming', reason: 'existing_legacy' };
+        return { hasConflict: false, winner: 'incoming', reason: 'existing_legacy', isConcurrent: false };
     }
     if (!incoming._writeEpoch) {
-        return { hasConflict: true, winner: 'existing', reason: 'incoming_legacy' };
+        return { hasConflict: true, winner: 'existing', reason: 'incoming_legacy', isConcurrent: false };
     }
 
-    // Both have epochs - compare using Lamport clock rules
-    const comparison = LamportClock.compare(
-        { lamportTimestamp: existing._writeEpoch, senderId: existing._writerId || '' },
-        { lamportTimestamp: incoming._writeEpoch, senderId: incoming._writerId || '' }
-    );
+    // Both have epochs - use VectorClock comparison
+    // Create temporary VectorClock to compare states
+    const existingClock = VectorClock.fromState(existing._writeEpoch, existing._writerId);
+    const comparison = existingClock.compare(incoming._writeEpoch);
 
-    if (comparison === 0) {
-        return { hasConflict: false, winner: 'incoming', reason: 'same_epoch' };
-    }
+    switch (comparison) {
+        case 'equal':
+            return { hasConflict: false, winner: 'incoming', reason: 'same_epoch', isConcurrent: false };
 
-    // Last-write-wins: higher epoch wins
-    if (comparison < 0) {
-        return { hasConflict: true, winner: 'incoming', reason: 'incoming_newer' };
-    } else {
-        return { hasConflict: true, winner: 'existing', reason: 'existing_newer' };
+        case 'before':
+            // Existing happened before incoming - incoming is newer
+            return { hasConflict: false, winner: 'incoming', reason: 'incoming_newer', isConcurrent: false };
+
+        case 'after':
+            // Existing happened after incoming - existing is newer
+            return { hasConflict: true, winner: 'existing', reason: 'existing_newer', isConcurrent: false };
+
+        case 'concurrent':
+            // True concurrent update detected - needs conflict resolution
+            // Use writerId as tiebreaker (consistent ordering)
+            const winnerByTiebreaker = (existing._writerId || '') < (incoming._writerId || '')
+                ? 'existing'
+                : 'incoming';
+            return {
+                hasConflict: true,
+                winner: winnerByTiebreaker,
+                reason: 'concurrent_update',
+                isConcurrent: true
+            };
+
+        default:
+            // Fallback to incoming for unknown comparison result
+            return { hasConflict: false, winner: 'incoming', reason: 'unknown_comparison', isConcurrent: false };
     }
 }
 
