@@ -358,9 +358,5 @@ export const PatternComparison = {
     compareArtists
 };
 
-// Expose on window for debugging
-if (typeof window !== 'undefined') {
-    window.PatternComparison = PatternComparison;
-}
 
 console.log('[PatternComparison] Profile comparison service loaded');

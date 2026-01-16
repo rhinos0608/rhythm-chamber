@@ -20,6 +20,8 @@
  */
 
 import { EventBus } from './event-bus.js';
+import { DataProvider } from '../providers/data-provider-interface.js';
+import { Storage } from '../storage.js';
 
 // ==========================================
 // Constants
@@ -149,8 +151,6 @@ async function exportProfile(passphrase, options = {}) {
     }
 
     // Get data from DataProvider or Storage
-    const DataProvider = window.DataProvider;
-    const Storage = window.Storage;
 
     const personality = DataProvider
         ? await DataProvider.getPersonality()
@@ -315,9 +315,5 @@ export const ProfileSharing = {
     VERSION: PROFILE_VERSION
 };
 
-// Expose on window for debugging
-if (typeof window !== 'undefined') {
-    window.ProfileSharing = ProfileSharing;
-}
 
 console.log('[ProfileSharing] Profile sharing service loaded with E2E encryption');

@@ -273,9 +273,5 @@ export const PatternStream = {
     PATTERN_ORDER
 };
 
-// Expose on window for debugging
-if (typeof window !== 'undefined') {
-    window.PatternStream = PatternStream;
-}
 
 console.log('[PatternStream] Pattern streaming service loaded');

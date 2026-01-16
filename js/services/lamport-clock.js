@@ -199,9 +199,5 @@ export const LamportClock = {
     getStatus
 };
 
-// Window export for debugging
-if (typeof window !== 'undefined') {
-    window.LamportClock = LamportClock;
-}
 
 console.log('[LamportClock] Logical clock loaded');

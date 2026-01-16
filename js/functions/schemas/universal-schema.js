@@ -297,9 +297,5 @@ export const UniversalSchema = {
     createSchema
 };
 
-// Expose on window for debugging
-if (typeof window !== 'undefined') {
-    window.UniversalSchema = UniversalSchema;
-}
 
 console.log('[UniversalSchema] Provider-agnostic schema system loaded');
