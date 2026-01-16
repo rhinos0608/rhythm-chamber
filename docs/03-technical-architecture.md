@@ -296,6 +296,7 @@ rhythm-chamber/
 │   ├── payments.js         # Stripe Checkout + premium status
 │   ├── rag.js              # Embeddings + Qdrant vector search + encrypted credentials
 │   ├── prompts.js          # System prompt templates
+│   ├── window-globals-debug.js # Dev-only wrapper that warns on legacy window globals
 │   ├── config.js           # API keys (gitignored)
 │   ├── config.example.js   # Config template (+ Stripe)
 │   ├── utils.js            # Timeout/retry utilities
@@ -860,6 +861,8 @@ python -m http.server 8080
 # Or use any static file server
 npx serve .
 ```
+
+Run `npm run lint:globals` before committing to catch new `window.X` usage. The script scans for new window/global variables, compares them against the allowlist in `js/window-globals-debug.js`, and fails if you introduce new globals. CI runs the same check via `npm test` (`pretest` hook), so only update the allowlist when removing legacy globals—not to add new ones.
 
 ---
 
