@@ -7,6 +7,7 @@
  */
 
 import { ModuleRegistry } from './module-registry.js';
+import { StorageBreakdownUI } from './storage-breakdown-ui.js';
 
 // Available LLM providers
 const LLM_PROVIDERS = [
@@ -808,6 +809,38 @@ async function verifyIdentity() {
     } catch (error) {
         console.error('[Settings] Identity verification failed:', error);
         showToast('Could not start verification: ' + error.message);
+    }
+}
+
+/**
+ * Initialize the storage breakdown UI
+ * Gets StorageDegradationManager and renders the breakdown
+ */
+async function initStorageBreakdown() {
+    const container = document.getElementById('storage-breakdown-container');
+    if (!container) return;
+
+    // Show loading state for better UX
+    container.innerHTML = '<div class="storage-loading">Loading storage breakdown...</div>';
+
+    try {
+        // Asynchronously request the module to ensure it's loaded
+        const manager = await ModuleRegistry.getModule('StorageDegradationManager');
+
+        if (!manager) {
+            container.innerHTML = '<div class="storage-error">Storage degradation manager not available</div>';
+            return;
+        }
+
+        // Initialize StorageBreakdownUI with the manager
+        await StorageBreakdownUI.init(manager);
+
+        // Render the breakdown
+        await StorageBreakdownUI.render(container);
+
+    } catch (error) {
+        console.error('[Settings] Failed to initialize storage breakdown:', error);
+        container.innerHTML = `<div class="storage-error">Failed to load storage breakdown: ${error.message}</div>`;
     }
 }
 

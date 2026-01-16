@@ -1,6 +1,6 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System** + **ToolStrategy Pattern** + **ES Module Migration (Hybrid - Consumer Complete/Provider Compat)** + **Unit Testing (Vitest)** + **Chat Module Refactoring** + **HNW Structural Improvements (9 modules)** + **HNW Phase 2 Advanced Improvements (5 modules)** + **Phase 1 Architecture (EventBus, DataProvider)** + **Phase 2 Advanced Features (Sharing, Temporal, Playlist)** + **Error Boundaries & LRU Vector Cache** + **Phase 3 Critical Infrastructure (ErrorRecoveryCoordinator, Storage Degradation, Clock Skew Handling, Provider Fallback Chain, Performance Profiling)**
+> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System** + **ToolStrategy Pattern** + **ES Module Migration (Hybrid - Consumer Complete/Provider Compat)** + **Unit Testing (Vitest)** + **Chat Module Refactoring** + **HNW Structural Improvements (9 modules)** + **HNW Phase 2 Advanced Improvements (5 modules)** + **Phase 1 Architecture (EventBus, DataProvider)** + **Phase 2 Advanced Features (Sharing, Temporal, Playlist)** + **Error Boundaries & LRU Vector Cache** + **Phase 3 Critical Infrastructure (ErrorRecoveryCoordinator, Storage Degradation, Clock Skew Handling, Provider Fallback Chain, Performance Profiling)** + **Phase 3 Enhanced (Cross-Tab Recovery Delegation, Storage Breakdown UI)**
 
 ---
 
@@ -136,7 +136,8 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 │   ├── data-query.js       # Query streams by time/artist/track
 │   ├── cards.js            # Canvas card generator
 │   ├── storage.js          # Storage Facade (Delegates to js/storage/ modules)
-│   ├── settings.js         # In-app settings modal (API key, model, etc.)
+│   ├── settings.js         # In-app settings modal (API key, model, storage management)
+│   ├── storage-breakdown-ui.js # Storage management UI with cleanup (NEW)
 │   ├── spotify.js          # Spotify OAuth PKCE + API calls + session invalidation
 │   ├── security.js         # Security Facade (Delegates to js/security/ modules)
 │   ├── payments.js         # Stripe Checkout + premium status
@@ -208,7 +209,7 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 │   ├── services/           # Services (Extracted from God objects)
 │   │   ├── message-operations.js # Message operations (regenerate, delete, edit, query context)
 │   │   ├── session-manager.js    # Session lifecycle (create, load, save, delete)
-│   │   ├── tab-coordination.js   # Cross-tab coordination (ENHANCED - heartbeat failover)
+│   │   ├── tab-coordination.js   # Cross-tab coordination (ENHANCED - clock skew handling)
 │   │   ├── token-counting-service.js # Token counting & context window management
 │   │   ├── tool-call-handling-service.js # Tool call handling (ENHANCED — strategy voting)
 │   │   ├── llm-provider-routing-service.js # LLM provider configuration & routing
@@ -225,6 +226,10 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 │   │   ├── playlist-generator.js         # AI playlist creation (Phase 2)
 │   │   ├── error-boundary.js             # React-style error boundaries (NEW - UI fault tolerance)
 │   │   ├── wave-telemetry.js             # Timing anomaly detection (NEW - HNW Wave)
+│   │   ├── error-recovery-coordinator.js # Centralized error recovery authority (Phase 3)
+│   │   ├── storage-degradation-manager.js # Tier-based storage degradation (Phase 3)
+│   │   ├── provider-fallback-chain.js   # Automatic provider fallback (Phase 3)
+│   │   ├── performance-profiler.js       # Chrome DevTools integration (Phase 3)
 │   │   └── tool-strategies/
 │   │       ├── base-strategy.js          # BaseToolStrategy (ENHANCED - confidence scoring)
 │   │       ├── native-strategy.js        # NativeToolStrategy (Level 1)
@@ -1255,7 +1260,7 @@ npx serve .
 
 ## Session Log
 
-### Session 22 — 2026-01-16 (Phase 3 Critical Infrastructure)
+### Session 22 — 2026-01-16 (Phase 3 Critical Infrastructure - Enhanced)
 
 **What was done:**
 
@@ -1265,6 +1270,7 @@ This session addressed critical architectural vulnerabilities identified through
 - **Hidden State**: Global module variables creating testing/debugging nightmares
 - **Timing Assumptions**: No clock skew handling, hardcoded election windows
 - **Cascade Risks**: Storage failure cascades, provider fallback exhaustion
+- **User Visibility**: No storage management UI for users to monitor/cleanup data
 
 **1. ErrorRecoveryCoordinator Service** (`js/services/error-recovery-coordinator.js`)
    - **Centralized error recovery authority** resolving conflicts between multiple handlers
@@ -1274,6 +1280,9 @@ This session addressed critical architectural vulnerabilities identified through
    - **Comprehensive telemetry** tracking recovery success rates
    - **Lock integration** preventing race conditions in recovery execution
    - **Progressive recovery** with rollback support for failed attempts
+   - **Cross-tab recovery delegation** via BroadcastChannel for leader-based recovery (ENHANCED)
+   - **VectorClock integration** for causal ordering across tabs (ENHANCED)
+   - **Bug fixes**: Null safety checks, duplicate variable removal (ENHANCED)
 
 **2. Storage Degradation Manager** (`js/services/storage-degradation-manager.js`)
    - **Tier-based degradation modes**: Normal (80%), Warning (80-94%), Critical (95-99%), Exceeded (100%)
@@ -1284,7 +1293,25 @@ This session addressed critical architectural vulnerabilities identified through
    - **Emergency cleanup** when quota exceeded with data preservation guarantees
    - **Real-time quota monitoring** with 30-second check intervals
 
-**3. Clock Skew Handling** (Enhanced `js/services/tab-coordination.js`)
+**3. Storage Breakdown UI** (`js/storage-breakdown-ui.js`) (NEW)
+   - **Real-time storage monitoring** with breakdown by category (streams, chunks, personality, chat, embeddings, etc.)
+   - **Visual bar charts** showing usage percentages with color-coded tiers
+   - **Individual cleanup actions** for each storage category with one-click cleanup
+   - **Bulk cleanup modal** with selectable options for multiple categories
+   - **Auto-refresh on storage events** via EventBus subscriptions for real-time updates
+   - **Self-contained CSS** with responsive design and dark mode support
+   - **Error handling** and toast notifications for user feedback
+   - **FormatBytes utility** for human-readable size display (B, KB, MB, GB)
+   - **Per-category cleanup strategies** (embeddings → VectorLRUCache.clear(), sessions/streams/chunks → StorageDegradationManager.triggerCleanup())
+
+**4. Settings Integration** (`js/settings.js`) (ENHANCED)
+   - **Storage Management section** in settings modal with visual breakdown
+   - **Async module loading** via ModuleRegistry.getModule() for robust dependency handling
+   - **Loading states** for better UX during initialization
+   - **Graceful error handling** with user-friendly error messages
+   - **Integration with StorageDegradationManager** for real-time quota monitoring
+
+**5. Clock Skew Handling** (Enhanced `js/services/tab-coordination.js`)
    - **Dual timestamp system**: Wall-clock + Lamport logical timestamps in heartbeats
    - **Clock skew detection** with 2-second tolerance threshold
    - **NTP-style clock synchronization** using Lamport timestamps as reference
@@ -1293,7 +1320,7 @@ This session addressed critical architectural vulnerabilities identified through
    - **Clock skew telemetry** tracking detected skew across tabs
    - **Enhanced election timing** with adaptive window and device calibration
 
-**4. Provider Fallback Chain** (`js/services/provider-fallback-chain.js`)
+**6. Provider Fallback Chain** (`js/services/provider-fallback-chain.js`)
    - **Automatic provider fallback**: OpenRouter → LM Studio → Ollama → Static fallback
    - **Provider health tracking** with success/failure rates and latency metrics
    - **Automatic provider blacklisting** (5-minute default) for repeated failures
@@ -1302,7 +1329,7 @@ This session addressed critical architectural vulnerabilities identified through
    - **Priority-based provider selection** with configurable ordering
    - **Comprehensive telemetry** for cascade pattern detection
 
-**5. Performance Profiler** (`js/services/performance-profiler.js`)
+**7. Performance Profiler** (`js/services/performance-profiler.js`)
    - **Unified performance API** for Chrome DevTools integration
    - **Category-based measurement tracking** across 10 performance categories
    - **Async operation measurement** with automatic start/stop markers
@@ -1317,16 +1344,19 @@ This session addressed critical architectural vulnerabilities identified through
 - **Single Authority**: ErrorRecoveryCoordinator as final decision-maker for all error recovery
 - **Clear Chain of Command**: Coordinator → Handlers → Services → Providers
 - **Dependency Injection**: All services receive explicit dependencies
+- **User Visibility**: Storage breakdown UI provides transparency into storage usage
 
 **HNW Network:**
 - **Decoupled Recovery**: Error recovery no longer creates circular dependencies
 - **Provider Isolation**: Fallback chain prevents cascade failures across providers
 - **Event-Driven Degradation**: Storage degradation events propagate via EventBus
+- **Cross-Tab Delegation**: BroadcastChannel enables leader-based recovery coordination
 
 **HNW Wave:**
 - **Clock Skew Tolerance**: Deterministic timing despite wall-clock differences
 - **Progressive Degradation**: Graceful performance degradation under resource pressure
 - **Timing Configurability**: Environment-specific timing profiles for different deployment scenarios
+- **Real-Time Updates**: Storage breakdown UI auto-refreshes on storage events
 
 **Critical Security & Reliability Fixes:**
 
@@ -1346,21 +1376,33 @@ This session addressed critical architectural vulnerabilities identified through
    - Before: OpenRouter failure = user-facing errors even when Ollama available
    - After: Automatic fallback chain with provider blacklisting and health tracking
 
+5. **Added User Storage Visibility** (NEW):
+   - Before: No UI for monitoring storage usage or cleanup
+   - After: Real-time storage breakdown with per-category cleanup actions
+
+6. **Enhanced Cross-Tab Recovery** (NEW):
+   - Before: Each tab handled recovery independently
+   - After: Leader tab coordinates recovery via BroadcastChannel with VectorClock ordering
+
 **New Files:**
 - `js/services/error-recovery-coordinator.js` (800+ lines, comprehensive JSDoc)
 - `js/services/storage-degradation-manager.js` (900+ lines, tier-based degradation)
 - `js/services/provider-fallback-chain.js` (700+ lines, automatic fallback)
 - `js/services/performance-profiler.js` (600+ lines, Chrome DevTools integration)
+- `js/storage-breakdown-ui.js` (627 lines, storage management UI) (NEW)
 
 **Modified Files:**
 - `js/services/tab-coordination.js` (Enhanced with clock skew handling)
-- `AGENT_CONTEXT.md` (Updated with Phase 3 status)
+- `js/services/error-recovery-coordinator.js` (Added broadcastRecoveryRequest(), delegation listener, bug fixes) (ENHANCED)
+- `js/settings.js` (Added Storage Management section with async module loading) (ENHANCED)
+- `AGENT_CONTEXT.md` (Updated with Phase 3 status + Storage Breakdown UI)
 
 **Performance & Testing:**
 - **Chrome DevTools Integration**: All new services include performance.mark() markers
 - **Comprehensive JSDoc**: 100% coverage of public APIs with @typedef annotations
 - **Type Safety**: Full JSDoc type definitions for complex objects (RecoveryResult, StorageQuotaMetrics, ProviderHealthRecord)
 - **IDE Support**: Enhanced autocomplete and type inference throughout new services
+- **Precommit Validation**: Expert analysis completed, all medium-severity issues addressed (async module loading fix applied)
 
 **Architectural Metrics:**
 - **Authority Conflicts**: Resolved (1 coordinator vs 6 competing handlers)
@@ -1368,13 +1410,16 @@ This session addressed critical architectural vulnerabilities identified through
 - **Clock Skew Vulnerability**: Fixed (dual timestamp system vs wall-clock only)
 - **Provider Cascade Risk**: Mitigated (automatic fallback vs manual switching)
 - **Performance Visibility**: Added (comprehensive profiling vs ad-hoc timing)
+- **User Storage Visibility**: Added (real-time breakdown UI vs no visibility)
 
 **Impact:**
 - **Resilience**: 80% reduction in authority conflicts and race conditions
 - **Reliability**: Graceful degradation prevents app crashes on storage quota exceeded
 - **User Experience**: Automatic provider fallback eliminates provider lock-in issues
+- **User Experience**: Storage breakdown UI enables proactive storage management
 - **Developer Experience**: Performance profiling and comprehensive JSDoc improve debugging
 - **Operational Excellence**: Configurable timing and telemetry enable production optimization
+- **Cross-Tab Coordination**: Leader-based recovery prevents duplicate recovery attempts
 
 **Future Considerations:**
 - Unit tests needed for new services (estimated 50-75 tests)
@@ -1382,6 +1427,7 @@ This session addressed critical architectural vulnerabilities identified through
 - Load testing for storage degradation under memory pressure
 - Production telemetry dashboards for performance monitoring
 - Documentation updates for operational runbooks
+- User education on storage management best practices
 
 ---
 

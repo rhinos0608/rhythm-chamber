@@ -849,17 +849,18 @@ export class ErrorRecoveryCoordinator {
      * @returns {Promise<void>}
      */
     async _handleDelegatedRecovery(message) {
-        if (!this._isPrimaryTab) {
+        const tabCoordinator = await this._getTabCoordinator();
+        if (tabCoordinator && !tabCoordinator.isPrimary()) {
             console.log('[ErrorRecoveryCoordinator] Ignoring delegated recovery - not leader');
             return;
         }
 
-        const tabCoordinator = await this._getTabCoordinator();
-
         // Merge VectorClock for causal ordering
         if (message.vectorClock && tabCoordinator?.getVectorClock) {
             const localClock = tabCoordinator.getVectorClock();
-            localClock.merge(message.vectorClock);
+            if (localClock) {
+                localClock.merge(message.vectorClock);
+            }
         }
 
         // Reconstruct request
