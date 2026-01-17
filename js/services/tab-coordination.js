@@ -9,6 +9,7 @@
 
 import { VectorClock } from './vector-clock.js';
 import { WaveTelemetry } from './wave-telemetry.js';
+import { EventBus } from './event-bus.js';
 
 // ==========================================
 // Constants
@@ -92,11 +93,11 @@ const TimingConfig = {
         adaptiveMultiplier: 60
     },
 
-    // Heartbeat timing
+    // Heartbeat timing - HNW Wave: Reduced for faster failover (~7s vs ~10s)
     heartbeat: {
-        intervalMs: 5000,
-        maxMissed: 2,
-        skewToleranceMs: 2000  // Allow 2 seconds clock skew
+        intervalMs: 3000,     // Reduced from 5000 for faster detection
+        maxMissed: 2,         // 2 missed = 6s + promotion delay = ~7s total
+        skewToleranceMs: 2000 // Allow 2 seconds clock skew
     },
 
     // Failover timing
@@ -799,6 +800,16 @@ function onAuthorityChange(callback) {
  */
 function notifyAuthorityChange() {
     const level = getAuthorityLevel();
+
+    // Emit EventBus event for UI components
+    EventBus.emit('tab:authority_changed', {
+        isPrimary: level.canWrite,
+        level: level.level,
+        mode: level.mode,
+        message: level.message
+    });
+
+    // Call internal listeners
     for (const listener of authorityChangeListeners) {
         try {
             listener(level);

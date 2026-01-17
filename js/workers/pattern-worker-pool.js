@@ -10,6 +10,16 @@
  * HEARTBEAT: Bidirectional liveness checks with worker health monitoring
  * and automatic restart of stale workers.
  *
+ * MEMORY OPTIMIZATION:
+ * - Uses SharedArrayBuffer when COOP/COEP headers are present
+ * - Falls back to data partitioning when SharedArrayBuffer unavailable
+ * - Adapts worker count based on navigator.deviceMemory
+ *
+ * COOP/COEP REQUIREMENTS for SharedArrayBuffer:
+ * Server must send these headers:
+ *   Cross-Origin-Opener-Policy: same-origin
+ *   Cross-Origin-Embedder-Policy: require-corp
+ *
  * @module workers/pattern-worker-pool
  */
 
@@ -116,10 +126,22 @@ async function init(options = {}) {
     // Determine optimal worker count based on hardware
     const hardwareConcurrency = navigator?.hardwareConcurrency || 4;
     const computedMax = Math.max(1, hardwareConcurrency - 1);
+
+    // HNW Network: Adapt worker count based on device memory
+    // Low memory devices (<= 2GB) get fewer workers to prevent OOM
+    const deviceMemory = navigator?.deviceMemory || 4; // Default to 4GB if not available
+    let memoryAdjustedMax = computedMax;
+    if (deviceMemory <= 2) {
+        memoryAdjustedMax = Math.min(computedMax, 2); // Low memory: max 2 workers
+        console.log(`[PatternWorkerPool] Low memory device (${deviceMemory}GB), limiting to ${memoryAdjustedMax} workers`);
+    } else if (deviceMemory <= 4) {
+        memoryAdjustedMax = Math.min(computedMax, 3); // Medium memory: max 3 workers
+    }
+
     const requestedCount = (typeof options.workerCount === 'number' && options.workerCount > 0)
         ? options.workerCount
         : null;
-    const workerCount = requestedCount ?? Math.min(DEFAULT_WORKER_COUNT, computedMax);
+    const workerCount = requestedCount ?? Math.min(DEFAULT_WORKER_COUNT, memoryAdjustedMax);
 
     console.log(`[PatternWorkerPool] Initializing with ${workerCount} workers (${hardwareConcurrency} cores)`);
 

@@ -11,6 +11,7 @@
 
 import { TabCoordinator } from '../services/tab-coordination.js';
 import { VectorClock } from '../services/vector-clock.js';
+import { EventBus } from '../services/event-bus.js';
 
 // Module-level VectorClock for write tracking
 const writeVectorClock = new VectorClock();
@@ -36,6 +37,21 @@ const INDEXEDDB_STORES = {
 
 // Database connection
 let indexedDBConnection = null;
+
+// Connection retry state
+let connectionAttempts = 0;
+let isConnectionFailed = false;
+
+// ==========================================
+// Connection Retry Configuration
+// ==========================================
+
+const CONNECTION_CONFIG = {
+    maxRetries: 3,
+    baseDelayMs: 500,
+    maxDelayMs: 5000,
+    backoffMultiplier: 2
+};
 
 // ==========================================
 // Write Authority Configuration (HNW)
@@ -117,11 +133,18 @@ async function initDatabase(options = {}) {
 
         request.onblocked = () => {
             console.warn('[IndexedDB] Database upgrade blocked by other tabs');
+            // Emit event for UI notification
+            EventBus.emit('storage:connection_blocked', {
+                reason: 'upgrade_blocked',
+                message: 'Database upgrade blocked by other tabs. Please close other tabs.'
+            });
             options.onBlocked?.();
         };
 
         request.onsuccess = () => {
             indexedDBConnection = request.result;
+            connectionAttempts = 0; // Reset on success
+            isConnectionFailed = false;
 
             indexedDBConnection.onversionchange = () => {
                 console.log('[IndexedDB] Database version change detected');
@@ -133,6 +156,14 @@ async function initDatabase(options = {}) {
                 }
             };
 
+            indexedDBConnection.onerror = (event) => {
+                console.error('[IndexedDB] Database error:', event.target.error);
+                EventBus.emit('storage:error', {
+                    type: 'database_error',
+                    error: event.target.error?.message || 'Unknown database error'
+                });
+            };
+
             resolve(indexedDBConnection);
         };
 
@@ -141,6 +172,111 @@ async function initDatabase(options = {}) {
             createStores(database);
         };
     });
+}
+
+/**
+ * Initialize database with retry logic and exponential backoff
+ * HNW Hierarchy: Provides resilient connection with graceful degradation
+ * 
+ * @param {object} options - Options for handling version changes
+ * @param {number} [options.maxAttempts=3] - Maximum retry attempts
+ * @param {function} options.onVersionChange - Callback when another tab upgrades DB
+ * @param {function} options.onBlocked - Callback when upgrade is blocked
+ * @param {function} options.onRetry - Callback on retry attempt
+ * @returns {Promise<IDBDatabase>} Database connection
+ * @throws {Error} When all retry attempts exhausted
+ */
+async function initDatabaseWithRetry(options = {}) {
+    const maxAttempts = options.maxAttempts ?? CONNECTION_CONFIG.maxRetries;
+
+    // Return existing connection if available
+    if (indexedDBConnection) {
+        return indexedDBConnection;
+    }
+
+    // If previously failed permanently, throw immediately
+    if (isConnectionFailed) {
+        throw new Error('IndexedDB connection permanently failed. Refresh the page to retry.');
+    }
+
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        connectionAttempts = attempt;
+
+        try {
+            console.log(`[IndexedDB] Connection attempt ${attempt}/${maxAttempts}`);
+
+            const connection = await initDatabase(options);
+
+            // Success - reset state
+            connectionAttempts = 0;
+            EventBus.emit('storage:connection_established', {
+                attempts: attempt
+            });
+
+            return connection;
+        } catch (error) {
+            lastError = error;
+            console.warn(`[IndexedDB] Connection attempt ${attempt} failed:`, error.message);
+
+            // Notify about retry
+            if (options.onRetry) {
+                options.onRetry(attempt, maxAttempts, error);
+            }
+
+            if (attempt < maxAttempts) {
+                // Calculate exponential backoff delay
+                const delay = Math.min(
+                    CONNECTION_CONFIG.baseDelayMs * Math.pow(CONNECTION_CONFIG.backoffMultiplier, attempt - 1),
+                    CONNECTION_CONFIG.maxDelayMs
+                );
+
+                EventBus.emit('storage:connection_retry', {
+                    attempt,
+                    maxAttempts,
+                    nextRetryMs: delay,
+                    error: error.message
+                });
+
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+
+    // All attempts exhausted
+    isConnectionFailed = true;
+
+    // Emit connection failure event for StorageDegradationManager
+    EventBus.emit('storage:connection_failed', {
+        attempts: connectionAttempts,
+        error: lastError?.message || 'Unknown error',
+        recoverable: false
+    });
+
+    console.error(`[IndexedDB] All ${maxAttempts} connection attempts failed`);
+    throw new Error(`Failed to connect to IndexedDB after ${maxAttempts} attempts: ${lastError?.message}`);
+}
+
+/**
+ * Reset connection failure state (for recovery attempts)
+ */
+function resetConnectionState() {
+    isConnectionFailed = false;
+    connectionAttempts = 0;
+    indexedDBConnection = null;
+}
+
+/**
+ * Get connection status
+ * @returns {{ isConnected: boolean, isFailed: boolean, attempts: number }}
+ */
+function getConnectionStatus() {
+    return {
+        isConnected: indexedDBConnection !== null,
+        isFailed: isConnectionFailed,
+        attempts: connectionAttempts
+    };
 }
 
 /**
@@ -537,8 +673,11 @@ export const DB_VERSION = INDEXEDDB_VERSION;
 export const IndexedDBCore = {
     // Connection management
     initDatabase,
+    initDatabaseWithRetry,
     closeDatabase,
     getConnection,
+    resetConnectionState,
+    getConnectionStatus,
 
     // Store configuration
     STORES: INDEXEDDB_STORES,

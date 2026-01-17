@@ -287,7 +287,7 @@ async function migrateFromLocalStorage(onProgress = null) {
         }
     }
 
-    // Step 3: Migrate token keys
+    // Step 3: Migrate token keys (checkpoint after each - critical data)
     const tokenStartIndex = Math.max(0, startIndex - allConfigKeys.length);
     for (let i = tokenStartIndex; i < allTokenKeys.length; i++) {
         const key = allTokenKeys[i];
@@ -297,6 +297,16 @@ async function migrateFromLocalStorage(onProgress = null) {
             try {
                 await window.ConfigAPI.setToken(key, value);
                 keysProcessed++;
+
+                // HNW Hierarchy: Checkpoint after each token for critical data safety
+                // Tokens are few (3 keys) but critical for app configuration
+                await saveCheckpoint({
+                    lastProcessedIndex: allConfigKeys.length + i,
+                    keysProcessed,
+                    totalKeys,
+                    phase: 'token',
+                    lastKey: key
+                });
             } catch (err) {
                 console.warn(`[Migration] Failed to migrate token '${key}':`, err);
             }
