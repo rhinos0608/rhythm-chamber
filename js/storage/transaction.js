@@ -18,13 +18,14 @@
  * Represents a pending operation in the transaction
  */
 class TransactionOperation {
-    constructor(backend, type, store, key, value, previousValue = null) {
-        this.backend = backend;       // 'indexeddb' | 'localstorage'
+    constructor(backend, type, store, key, value, previousValue = null, previousOptions = null) {
+        this.backend = backend;       // 'indexeddb' | 'localstorage' | 'securetoken'
         this.type = type;             // 'put' | 'delete'
         this.store = store;           // Store name (for IndexedDB) or null
         this.key = key;               // Key identifier
         this.value = value;           // Value to store
         this.previousValue = previousValue;  // For rollback
+        this.previousOptions = previousOptions;  // For rollback (token options)
         this.committed = false;
         this.timestamp = Date.now();
     }
@@ -145,7 +146,7 @@ class TransactionContext {
     /**
      * Add a secure token store operation to the transaction
      * HNW Network: Unified transaction scope for SecureTokenStore
-     * 
+     *
      * @param {string} tokenKey - Token identifier
      * @param {string} value - Token value
      * @param {Object} [options] - Storage options (expiresIn, metadata)
@@ -156,25 +157,35 @@ class TransactionContext {
         }
 
         let previousValue = null;
+        let previousOptions = {};
 
-        // Get previous value from SecureTokenStore for rollback
-        if (window.SecureTokenStore?.retrieve) {
+        // Get previous value AND options from SecureTokenStore for complete rollback
+        // HNW Network: Use retrieveWithOptions to preserve token options during rollback
+        if (window.SecureTokenStore?.retrieveWithOptions) {
             try {
-                previousValue = await window.SecureTokenStore.retrieve(tokenKey);
+                const previousToken = await window.SecureTokenStore.retrieveWithOptions(tokenKey);
+                if (previousToken) {
+                    previousValue = previousToken.value;
+                    previousOptions = {
+                        expiresIn: previousToken.expiresIn,
+                        metadata: previousToken.metadata
+                    };
+                }
             } catch {
                 previousValue = null;
+                previousOptions = {};
             }
         }
 
         this.operations.push(new TransactionOperation(
-            'securetoken', 'put', null, tokenKey, { value, options }, previousValue
+            'securetoken', 'put', null, tokenKey, { value, options }, previousValue, previousOptions
         ));
     }
 
     /**
      * Add a secure token delete operation to the transaction
      * HNW Network: Unified transaction scope for SecureTokenStore
-     * 
+     *
      * @param {string} tokenKey - Token identifier
      */
     async deleteToken(tokenKey) {
@@ -183,18 +194,28 @@ class TransactionContext {
         }
 
         let previousValue = null;
+        let previousOptions = {};
 
-        // Get previous value from SecureTokenStore for rollback
-        if (window.SecureTokenStore?.retrieve) {
+        // Get previous value AND options from SecureTokenStore for complete rollback
+        // HNW Network: Use retrieveWithOptions to preserve token options during rollback
+        if (window.SecureTokenStore?.retrieveWithOptions) {
             try {
-                previousValue = await window.SecureTokenStore.retrieve(tokenKey);
+                const previousToken = await window.SecureTokenStore.retrieveWithOptions(tokenKey);
+                if (previousToken) {
+                    previousValue = previousToken.value;
+                    previousOptions = {
+                        expiresIn: previousToken.expiresIn,
+                        metadata: previousToken.metadata
+                    };
+                }
             } catch {
                 previousValue = null;
+                previousOptions = {};
             }
         }
 
         this.operations.push(new TransactionOperation(
-            'securetoken', 'delete', null, tokenKey, null, previousValue
+            'securetoken', 'delete', null, tokenKey, null, previousValue, previousOptions
         ));
     }
 }
@@ -333,12 +354,13 @@ async function rollback(ctx) {
             } else if (op.backend === 'indexeddb') {
                 await revertIndexedDBOperation(op);
             } else if (op.backend === 'securetoken') {
-                // HNW Network: SecureTokenStore rollback
+                // HNW Network: SecureTokenStore rollback with full options preservation
                 if (window.SecureTokenStore) {
                     if (op.previousValue === null) {
                         await window.SecureTokenStore.invalidate(op.key);
                     } else {
-                        await window.SecureTokenStore.store(op.key, op.previousValue);
+                        // Restore previous value with original options
+                        await window.SecureTokenStore.store(op.key, op.previousValue, op.previousOptions);
                     }
                 }
             }

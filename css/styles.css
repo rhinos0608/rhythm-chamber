@@ -1741,6 +1741,26 @@ a {
   transition: width 0.3s ease;
 }
 
+.progress-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-md);
+  margin-top: var(--space-sm);
+}
+
+.progress-text {
+  flex: 1;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.btn-sm {
+  padding: var(--space-xs) var(--space-md);
+  font-size: 0.85rem;
+  border-radius: var(--radius-sm);
+}
+
 /* Upgrade Modal */
 .upgrade-content {
   max-width: 650px;
@@ -2657,6 +2677,135 @@ a {
   padding: var(--space-lg) var(--space-xl);
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-primary);
+}
+
+/* Storage Mode Mismatch Modal (Priority 1) */
+.storage-mismatch-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+
+.storage-mismatch-modal.closing {
+  animation: fadeOut 0.2s ease forwards;
+}
+
+.storage-mismatch-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
+}
+
+.storage-mismatch-content {
+  position: relative;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease;
+}
+
+.storage-mismatch-header {
+  padding: var(--space-lg) var(--space-xl);
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.storage-mismatch-header h2 {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+  color: #fbbf24;
+}
+
+.storage-mismatch-body {
+  padding: var(--space-xl);
+  overflow-y: auto;
+}
+
+.mismatch-warning {
+  display: flex;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-lg);
+}
+
+.mismatch-warning .warning-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.mismatch-warning .warning-text p {
+  margin: 0 0 var(--space-sm) 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.mismatch-warning .warning-text p:last-child {
+  margin-bottom: 0;
+}
+
+.mismatch-warning .warning-text strong {
+  color: var(--accent-primary);
+}
+
+.mismatch-impact {
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-md);
+}
+
+.mismatch-impact h4 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0 0 var(--space-sm) 0;
+  color: var(--text-primary);
+}
+
+.mismatch-impact ul {
+  margin: 0;
+  padding-left: var(--space-lg);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.mismatch-impact li {
+  padding: var(--space-xs) 0;
+}
+
+.storage-mismatch-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-lg) var(--space-xl);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+}
+
+.storage-mismatch-footer .btn {
+  width: 100%;
+  text-align: center;
 }
 
 /* AI Animation Elements */

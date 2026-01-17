@@ -139,6 +139,47 @@ function isLocalMode() {
 }
 
 /**
+ * Detects if storage mode has changed since embeddings were generated
+ * Priority 1: Storage Mode Migration Detection
+ * 
+ * When the user switches between local and Qdrant mode after generating
+ * embeddings, their existing embeddings become invalid. This function
+ * detects that mismatch so the UI can prompt for regeneration.
+ * 
+ * @returns {Promise<{mismatch: boolean, currentMode: string, savedMode: string|null}>}
+ */
+async function detectStorageModeMismatch() {
+    const config = await getConfig();
+
+    // No embeddings generated yet - no mismatch possible
+    if (!config?.embeddingsGenerated) {
+        return { mismatch: false, currentMode: getStorageMode(), savedMode: null };
+    }
+
+    const currentMode = getStorageMode();
+    const savedMode = config.storageMode || null;
+
+    // Legacy config without storageMode - assume it matches current
+    // (graceful fallback for existing users upgrading)
+    if (!savedMode) {
+        console.log('[RAG] Legacy config without storageMode, assuming match');
+        return { mismatch: false, currentMode, savedMode };
+    }
+
+    const mismatch = currentMode !== savedMode;
+
+    if (mismatch) {
+        console.warn(`[RAG] Storage mode mismatch: saved=${savedMode}, current=${currentMode}`);
+    }
+
+    return {
+        mismatch,
+        currentMode,
+        savedMode
+    };
+}
+
+/**
  * Check if local embeddings are available in this browser
  * @returns {Promise<{supported: boolean, reason?: string}>}
  */
@@ -631,11 +672,17 @@ async function updateManifestAfterEmbedding(embeddedChunks) {
 /**
  * Get embedding for text using OpenRouter API
  * Includes rate limiting and anomaly detection
- * 
+ *
  * @param {string|string[]} input - Text or array of texts to embed
+ * @param {AbortSignal} abortSignal - Optional abort signal for cancellation
  * @returns {Promise<number[]|number[][]>} Embedding vector(s)
  */
-async function getEmbedding(input) {
+async function getEmbedding(input, abortSignal = null) {
+    // Check for cancellation
+    if (abortSignal?.aborted) {
+        throw new Error('Embedding generation cancelled');
+    }
+
     // Security: Check for suspicious activity
     if (window.Security?.checkSuspiciousActivity) {
         const suspicious = await window.Security.checkSuspiciousActivity('embedding');
@@ -670,7 +717,8 @@ async function getEmbedding(input) {
             body: JSON.stringify({
                 model: EMBEDDING_MODEL,
                 input: Array.isArray(input) ? input : [input]
-            })
+            }),
+            signal: abortSignal
         }, API_TIMEOUT_MS);
 
         if (!response.ok) {
@@ -689,6 +737,10 @@ async function getEmbedding(input) {
         return Array.isArray(input) ? embeddings : embeddings[0];
 
     } catch (err) {
+        // Check for cancellation
+        if (abortSignal?.aborted || err.message === 'Request cancelled') {
+            throw new Error('Embedding generation cancelled');
+        }
         // Record network/auth failures
         if (err.message.includes('401') || err.message.includes('403')) {
             await window.Security?.recordFailedAttempt?.('embedding', err.message);
@@ -745,8 +797,15 @@ function isQdrantPermissionError(status, message = '') {
 /**
  * Create collection in Qdrant if it doesn't exist
  * Uses namespace-isolated collection name
+ *
+ * @param {AbortSignal} abortSignal - Optional abort signal for cancellation
  */
-async function ensureCollection() {
+async function ensureCollection(abortSignal = null) {
+    // Check for cancellation
+    if (abortSignal?.aborted) {
+        throw new Error('Operation cancelled');
+    }
+
     const config = await getConfig();
     if (!config?.qdrantUrl || !config?.qdrantApiKey) {
         throw new Error('Qdrant credentials not configured');
@@ -758,7 +817,8 @@ async function ensureCollection() {
 
     // Check if collection exists
     const checkResponse = await fetch(`${config.qdrantUrl}/collections/${collectionName}`, {
-        headers: { 'api-key': config.qdrantApiKey }
+        headers: { 'api-key': config.qdrantApiKey },
+        signal: abortSignal
     });
 
     if (!checkResponse.ok && isQdrantPermissionError(checkResponse.status)) {
@@ -784,7 +844,8 @@ async function ensureCollection() {
                 size: EMBEDDING_DIMENSIONS,
                 distance: 'Cosine'
             }
-        })
+        }),
+        signal: abortSignal
     });
 
     if (!createResponse.ok) {
@@ -800,9 +861,16 @@ async function ensureCollection() {
 /**
  * Upsert points to Qdrant
  * Uses namespace-isolated collection
+ *
  * @param {Array} points - Array of { id, vector, payload } objects
+ * @param {AbortSignal} abortSignal - Optional abort signal for cancellation
  */
-async function upsertPoints(points) {
+async function upsertPoints(points, abortSignal = null) {
+    // Check for cancellation
+    if (abortSignal?.aborted) {
+        throw new Error('Operation cancelled');
+    }
+
     const config = await getConfig();
     if (!config?.qdrantUrl || !config?.qdrantApiKey) {
         throw new Error('Qdrant credentials not configured');
@@ -816,7 +884,8 @@ async function upsertPoints(points) {
             'api-key': config.qdrantApiKey,
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ points })
+        body: JSON.stringify({ points }),
+        signal: abortSignal
     });
 
     if (!response.ok) {
@@ -832,11 +901,18 @@ async function upsertPoints(points) {
 /**
  * Search for similar vectors in Qdrant or local store
  * Automatically routes to local mode if no Qdrant credentials
+ *
  * @param {string} query - Search query text
  * @param {number} limit - Number of results to return
+ * @param {AbortSignal} abortSignal - Optional abort signal for cancellation
  * @returns {Promise<Array>} Search results with payloads
  */
-async function search(query, limit = 5) {
+async function search(query, limit = 5, abortSignal = null) {
+    // Check for cancellation
+    if (abortSignal?.aborted) {
+        throw new Error('Search cancelled');
+    }
+
     // Route to local mode if applicable
     if (isLocalMode()) {
         return searchLocal(query, limit);
@@ -847,8 +923,8 @@ async function search(query, limit = 5) {
         throw new Error('Qdrant credentials not configured');
     }
 
-    // Get embedding for query
-    const queryVector = await getEmbedding(query);
+    // Get embedding for query (pass abort signal through)
+    const queryVector = await getEmbedding(query, abortSignal);
 
     const collectionName = await getCollectionName();
 
@@ -863,7 +939,8 @@ async function search(query, limit = 5) {
             vector: queryVector,
             limit: limit,
             with_payload: true
-        })
+        }),
+        signal: abortSignal
     });
 
     if (!response.ok) {
@@ -881,11 +958,17 @@ async function search(query, limit = 5) {
  * Automatically routes to local mode if no Qdrant credentials
  * @param {Function} onProgress - Progress callback (current, total, message)
  * @param {object} options - Options including resume, mergeStrategy
+ * @param {AbortSignal} abortSignal - Optional signal to cancel operation
  */
-async function generateEmbeddings(onProgress = () => { }, options = {}) {
+async function generateEmbeddings(onProgress = () => { }, options = {}, abortSignal = null) {
+    // Check for cancellation at start
+    if (abortSignal?.aborted) {
+        throw new Error('Embedding generation cancelled');
+    }
+
     // Route to local mode if applicable
     if (isLocalMode()) {
-        return generateLocalEmbeddings(onProgress, options);
+        return generateLocalEmbeddings(onProgress, options, abortSignal);
     }
 
     const config = await getConfig();
@@ -996,6 +1079,11 @@ async function generateEmbeddings(onProgress = () => { }, options = {}) {
         let processed = checkpoint?.processed || 0;
 
         for (let i = startBatch * BATCH_SIZE; i < chunks.length; i += BATCH_SIZE) {
+            // Check for cancellation at start of each batch
+            if (abortSignal?.aborted) {
+                throw new Error('Embedding generation cancelled');
+            }
+
             const batchIndex = Math.floor(i / BATCH_SIZE);
             const batch = chunks.slice(i, i + BATCH_SIZE);
             const texts = batch.map(c => c.text);
@@ -1058,7 +1146,8 @@ async function generateEmbeddings(onProgress = () => { }, options = {}) {
             embeddingsGenerated: true,
             chunksCount: totalChunks,
             generatedAt: new Date().toISOString(),
-            dataHash: dataHash
+            dataHash: dataHash,
+            storageMode: 'qdrant'
         });
 
         // Update embedding manifest for incremental support (Phase 3)
@@ -1470,9 +1559,14 @@ async function clearEmbeddings() {
  * Generate embeddings using local browser model
  * @param {Function} onProgress - Progress callback (current, total, message)
  * @param {object} options - Options
+ * @param {AbortSignal} abortSignal - Optional signal to cancel operation
  * @returns {Promise<{success: boolean, chunksProcessed: number, mode: string}>}
  */
-async function generateLocalEmbeddings(onProgress = () => { }, options = {}) {
+async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abortSignal = null) {
+    // Check for cancellation at start
+    if (abortSignal?.aborted) {
+        throw new Error('Embedding generation cancelled');
+    }
     // Check if local embeddings are supported
     const support = await checkLocalSupport();
     if (!support.supported) {
@@ -1525,6 +1619,11 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}) {
 
         // Generate embeddings for each chunk
         for (let i = 0; i < chunks.length; i++) {
+            // Check for cancellation at start of each iteration
+            if (abortSignal?.aborted) {
+                throw new Error('Embedding generation cancelled');
+            }
+
             const chunk = chunks[i];
 
             try {
@@ -1684,6 +1783,7 @@ export const RAG = {
     isLocalMode,
     getStorageMode,
     checkLocalSupport,
+    detectStorageModeMismatch,
     generateLocalEmbeddings,
     searchLocal,
     clearLocalEmbeddings,
