@@ -1094,26 +1094,55 @@ async function generateEmbeddings(onProgress = () => { }, options = {}) {
  */
 async function createChunks(streams, onProgress = () => { }) {
     const chunks = [];
-    const BATCH_SIZE = 5000; // Process 5k streams at a time
+    const INITIAL_BATCH_SIZE = 1000; // Reduced from 5000 for better responsiveness
+    const TARGET_PROCESSING_TIME_MS = 16; // Target 60fps (16ms budget)
+    const MIN_BATCH_SIZE = 100; // Minimum batch size to avoid too much overhead
+    const MAX_BATCH_SIZE = 5000; // Maximum batch size for efficiency
 
-    // Phase 1: Group streams by month (with yielding)
-    const byMonth = {};
-    for (let i = 0; i < streams.length; i += BATCH_SIZE) {
-        const batch = streams.slice(i, Math.min(i + BATCH_SIZE, streams.length));
+    let currentBatchSize = INITIAL_BATCH_SIZE;
+    let adaptiveBatchSize = INITIAL_BATCH_SIZE;
 
-        batch.forEach(stream => {
-            const date = new Date(stream.ts || stream.endTime);
-            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-            if (!byMonth[monthKey]) byMonth[monthKey] = [];
-            byMonth[monthKey].push(stream);
-        });
+    // Helper function for time-budget-aware processing
+    const processWithBudget = async (items, processor, phaseName, progressMultiplier, baseProgress = 0) => {
+        let processed = 0;
+        const total = items.length;
 
-        // Yield to event loop every batch to keep UI responsive
-        if (i + BATCH_SIZE < streams.length) {
-            onProgress(Math.round((i / streams.length) * 30), 100, 'Grouping by month...');
-            await new Promise(resolve => setTimeout(resolve, 0));
+        while (processed < total) {
+            const batchStartTime = performance.now();
+            const batchEnd = Math.min(processed + adaptiveBatchSize, total);
+            const batch = items.slice(processed, batchEnd);
+
+            // Process the batch
+            batch.forEach(item => processor(item));
+
+            const batchProcessingTime = performance.now() - batchStartTime;
+            processed = batchEnd;
+
+            // Adjust batch size based on actual processing time
+            if (batchProcessingTime > TARGET_PROCESSING_TIME_MS) {
+                // Processing took too long, reduce batch size
+                adaptiveBatchSize = Math.max(MIN_BATCH_SIZE, Math.floor(adaptiveBatchSize * 0.7));
+            } else if (batchProcessingTime < TARGET_PROCESSING_TIME_MS * 0.5) {
+                // Processing was quick, could increase batch size
+                adaptiveBatchSize = Math.min(MAX_BATCH_SIZE, Math.floor(adaptiveBatchSize * 1.3));
+            }
+
+            // Yield to event loop to maintain UI responsiveness
+            if (processed < total) {
+                onProgress(baseProgress + Math.round((processed / total) * progressMultiplier), 100, phaseName);
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
         }
-    }
+    };
+
+    // Phase 1: Group streams by month (with time-budget-aware yielding)
+    const byMonth = {};
+    await processWithBudget(streams, (stream) => {
+        const date = new Date(stream.ts || stream.endTime);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        if (!byMonth[monthKey]) byMonth[monthKey] = [];
+        byMonth[monthKey].push(stream);
+    }, 'Grouping by month...', 30);
 
     // Phase 2: Create monthly summary chunks
     const monthEntries = Object.entries(byMonth);
@@ -1160,23 +1189,13 @@ async function createChunks(streams, onProgress = () => { }) {
         }
     }
 
-    // Phase 3: Group streams by artist (with yielding)
+    // Phase 3: Group streams by artist (with time-budget-aware yielding)
     const byArtist = {};
-    for (let i = 0; i < streams.length; i += BATCH_SIZE) {
-        const batch = streams.slice(i, Math.min(i + BATCH_SIZE, streams.length));
-
-        batch.forEach(stream => {
-            const artist = stream.master_metadata_album_artist_name || stream.artistName || 'Unknown';
-            if (!byArtist[artist]) byArtist[artist] = [];
-            byArtist[artist].push(stream);
-        });
-
-        // Yield to event loop
-        if (i + BATCH_SIZE < streams.length) {
-            onProgress(50 + Math.round((i / streams.length) * 20), 100, 'Grouping by artist...');
-            await new Promise(resolve => setTimeout(resolve, 0));
-        }
-    }
+    await processWithBudget(streams, (stream) => {
+        const artist = stream.master_metadata_album_artist_name || stream.artistName || 'Unknown';
+        if (!byArtist[artist]) byArtist[artist] = [];
+        byArtist[artist].push(stream);
+    }, 'Grouping by artist...', 20, 50);
 
     // Phase 4: Top 50 artists get individual chunks
     const topArtistEntries = Object.entries(byArtist)

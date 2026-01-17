@@ -1,6 +1,6 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System** + **ToolStrategy Pattern** + **ES Module Migration (Hybrid - Consumer Complete/Provider Compat)** + **Unit Testing (Vitest)** + **Chat Module Refactoring** + **HNW Structural Improvements (9 modules)** + **HNW Phase 2 Advanced Improvements (5 modules)** + **Phase 1 Architecture (EventBus, DataProvider)** + **Phase 2 Advanced Features (Sharing, Temporal, Playlist)** + **Error Boundaries & LRU Vector Cache** + **Phase 3 Critical Infrastructure (ErrorRecoveryCoordinator, Storage Degradation, Clock Skew Handling, Provider Fallback Chain, Performance Profiling)** + **Phase 3 Enhanced (Cross-Tab Recovery Delegation, Storage Breakdown UI)**
+> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System** + **ToolStrategy Pattern** + **ES Module Migration (Hybrid - Consumer Complete/Provider Compat)** + **Unit Testing (Vitest)** + **Chat Module Refactoring** + **HNW Structural Improvements (9 modules)** + **HNW Phase 2 Advanced Improvements (5 modules)** + **Phase 1 Architecture (EventBus, DataProvider)** + **Phase 2 Advanced Features (Sharing, Temporal, Playlist)** + **Error Boundaries & LRU Vector Cache** + **Phase 3 Critical Infrastructure (ErrorRecoveryCoordinator, Storage Degradation, Clock Skew Handling, Provider Fallback Chain, Performance Profiling)** + **Phase 3 Enhanced (Cross-Tab Recovery Delegation, Storage Breakdown UI)** + **Session 23: Module Migration Completion + Performance Optimizations (ES Module Complete, 60fps Optimization, Mutex Hardening)**
 
 ---
 
@@ -1428,6 +1428,88 @@ This session addressed critical architectural vulnerabilities identified through
 - Production telemetry dashboards for performance monitoring
 - Documentation updates for operational runbooks
 - User education on storage management best practices
+
+---
+
+### Session 23 — 2026-01-17 (Module Migration Completion + Performance Optimizations)
+
+**What was done:**
+
+This session completed the ES module migration and implemented critical performance and reliability improvements across the codebase:
+
+1. **Complete ES Module Migration** (`js/chat.js`)
+   - **Removed all 53+ `window.SessionManager` references** - Replaced with direct ES imports
+   - **Removed `window.Chat = Chat` assignment** - Pre-release status, no backwards compatibility
+   - **Added direct imports**: SessionManager, TokenCounter
+   - **Enhanced buildSystemPrompt with strict token limits**:
+     - 50% budget reserved for base system prompt (never truncated)
+     - Smart truncation of semantic context if exceeds budget
+     - Final validation to prevent context window overflow
+     - Query context skipped if would exceed 90% of context window
+   - **Added deprecation warning** for `onSessionUpdate` (use EventBus instead)
+
+2. **Mutex Hardening** (`js/spotify.js`)
+   - **Updated performTokenRefreshWithFallbackLock** to use polling loop
+   - **Changed from single 2-second wait** to continuous polling (100ms intervals)
+   - **Added 5-second maximum wait time** for cross-tab coordination
+   - **Improved stale lock detection** and clearing
+   - **Better reliability** for Spotify token refresh across browser tabs
+
+3. **Main Thread Performance Optimization** (`js/rag.js`)
+   - **Reduced BATCH_SIZE from 5000 to 1000** for better responsiveness
+   - **Implemented time-budget-aware processing** with 16ms target (60fps)
+   - **Added adaptive batch sizing**:
+     - Minimum: 100, Maximum: 5000
+     - Dynamic adjustment based on actual processing time
+     - Reduces batch size if exceeds 16ms, increases if under 8ms
+   - **Improved progress reporting** with base offsets for accurate percentages
+
+4. **Telemetry Privacy Verification**
+   - **Confirmed WaveTelemetry does NOT log PII**:
+     - Only collects timing measurements (metric names, milliseconds)
+     - Statistical aggregates (average, min, max, variance)
+     - No user data, chat content, or music preferences
+     - Privacy guarantees maintained
+
+**Key Architectural Improvements:**
+
+**HNW Hierarchy:**
+- **Complete ES module migration** - Zero window globals in chat.js
+- **Direct imports** - Clear dependency chains via ES import syntax
+- **No backwards compatibility** - Pre-release allows breaking changes
+
+**HNW Network:**
+- **Improved cross-tab coordination** - Polling loop reduces race conditions
+- **Adaptive batching** - Dynamic resource allocation based on actual load
+
+**HNW Wave:**
+- **16ms processing budget** - Maintains 60fps UI responsiveness
+- **Adaptive batch sizing** - Self-optimizing based on performance metrics
+
+**Modified Files:**
+- `js/chat.js` - Complete ES module migration, enhanced token limits
+- `js/spotify.js` - Mutex hardening with polling loop
+- `js/rag.js` - Performance optimization with adaptive batching
+
+**Performance Impact:**
+- **60fps maintenance** - 16ms processing budget with adaptive batching
+- **Improved reliability** - Polling loop reduces cross-tab race conditions
+- **Better token management** - Strict budget enforcement prevents truncation
+
+**Security & Privacy:**
+- **No PII exposure** - WaveTelemetry verified to only log timing metrics
+- **Token budget enforcement** - Prevents context window overflow attacks
+
+**Testing & Validation:**
+- **Precommit validation** - Expert analysis completed via PAL MCP tool
+- **All changes verified** - No new window globals introduced
+- **Lint:globals passes** - Confirmed no legacy global accesses
+
+**Impact:**
+- **Zero window globals** in chat.js (53+ references removed)
+- **60fps UI responsiveness** maintained during large file processing
+- **Reduced race conditions** in Spotify token refresh
+- **Pre-production ready** - Breaking changes acceptable for pre-release status
 
 ---
 

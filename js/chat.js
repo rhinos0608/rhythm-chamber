@@ -32,6 +32,12 @@ import { TimeoutBudget } from './services/timeout-budget-manager.js';
 // Wave telemetry import for LLM call timing
 import { WaveTelemetry } from './services/wave-telemetry.js';
 
+// Session Manager import
+import { SessionManager } from './services/session-manager.js';
+
+// Token Counter import
+import { TokenCounter } from './token-counter.js';
+
 // HNW Fix: Timeout constants to prevent cascade failures
 const CHAT_API_TIMEOUT_MS = 60000;           // 60 second timeout for cloud API calls
 const LOCAL_LLM_TIMEOUT_MS = 90000;          // 90 second timeout for local LLM providers
@@ -64,10 +70,8 @@ async function initChat(personality, patterns, summary, streams = null) {
     streamsData = streams;
 
     // Initialize SessionManager (handles emergency backup recovery)
-    if (window.SessionManager) {
-        window.SessionManager.setUserContext(personality);
-        await window.SessionManager.init();
-    }
+    SessionManager.setUserContext(personality);
+    await SessionManager.init();
 
     // Register for storage updates to refresh data
     if (window.Storage?.onUpdate) {
@@ -105,7 +109,7 @@ async function initChat(personality, patterns, summary, streams = null) {
         window.ToolCallHandlingService.init({
             CircuitBreaker: window.CircuitBreaker,
             Functions: window.Functions,
-            SessionManager: window.SessionManager,
+            SessionManager: SessionManager,
             FunctionCallingFallback: window.FunctionCallingFallback,
             buildSystemPrompt: buildSystemPrompt,
             callLLM: callLLMWrapper,
@@ -157,9 +161,7 @@ async function handleStorageUpdate(event) {
  * Delegates to SessionManager
  */
 function saveConversation() {
-    if (window.SessionManager?.saveConversation) {
-        window.SessionManager.saveConversation();
-    }
+    SessionManager.saveConversation();
 }
 
 /**
@@ -167,9 +169,7 @@ function saveConversation() {
  * Delegates to SessionManager
  */
 async function flushPendingSaveAsync() {
-    if (window.SessionManager?.flushPendingSaveAsync) {
-        return window.SessionManager.flushPendingSaveAsync();
-    }
+    return SessionManager.flushPendingSaveAsync();
 }
 
 /**
@@ -177,9 +177,7 @@ async function flushPendingSaveAsync() {
  * Delegates to SessionManager
  */
 function emergencyBackupSync() {
-    if (window.SessionManager?.emergencyBackupSync) {
-        window.SessionManager.emergencyBackupSync();
-    }
+    SessionManager.emergencyBackupSync();
 }
 
 /**
@@ -187,10 +185,7 @@ function emergencyBackupSync() {
  * Delegates to SessionManager (called automatically in SessionManager.init())
  */
 async function recoverEmergencyBackup() {
-    if (window.SessionManager?.recoverEmergencyBackup) {
-        return window.SessionManager.recoverEmergencyBackup();
-    }
-    return false;
+    return SessionManager.recoverEmergencyBackup();
 }
 
 /**
@@ -198,9 +193,7 @@ async function recoverEmergencyBackup() {
  * Delegates to SessionManager
  */
 async function saveCurrentSession() {
-    if (window.SessionManager?.saveCurrentSession) {
-        return window.SessionManager.saveCurrentSession();
-    }
+    return SessionManager.saveCurrentSession();
 }
 
 /**
@@ -208,9 +201,7 @@ async function saveCurrentSession() {
  * Delegates to SessionManager
  */
 async function createNewSession(initialMessages = []) {
-    if (window.SessionManager?.createNewSession) {
-        return window.SessionManager.createNewSession(initialMessages);
-    }
+    return SessionManager.createNewSession(initialMessages);
 }
 
 /**
@@ -218,10 +209,7 @@ async function createNewSession(initialMessages = []) {
  * Delegates to SessionManager
  */
 async function loadSession(sessionId) {
-    if (window.SessionManager?.loadSession) {
-        return window.SessionManager.loadSession(sessionId);
-    }
-    return null;
+    return SessionManager.loadSession(sessionId);
 }
 
 /**
@@ -229,10 +217,7 @@ async function loadSession(sessionId) {
  * Delegates to SessionManager
  */
 async function switchSession(sessionId) {
-    if (window.SessionManager?.switchSession) {
-        return window.SessionManager.switchSession(sessionId);
-    }
-    return false;
+    return SessionManager.switchSession(sessionId);
 }
 
 /**
@@ -240,10 +225,7 @@ async function switchSession(sessionId) {
  * Delegates to SessionManager
  */
 async function listSessions() {
-    if (window.SessionManager?.listSessions) {
-        return window.SessionManager.listSessions();
-    }
-    return [];
+    return SessionManager.listSessions();
 }
 
 /**
@@ -251,10 +233,7 @@ async function listSessions() {
  * Delegates to SessionManager
  */
 async function deleteSessionById(sessionId) {
-    if (window.SessionManager?.deleteSessionById) {
-        return window.SessionManager.deleteSessionById(sessionId);
-    }
-    return false;
+    return SessionManager.deleteSessionById(sessionId);
 }
 
 /**
@@ -262,10 +241,7 @@ async function deleteSessionById(sessionId) {
  * Delegates to SessionManager
  */
 async function renameSession(sessionId, newTitle) {
-    if (window.SessionManager?.renameSession) {
-        return window.SessionManager.renameSession(sessionId, newTitle);
-    }
-    return false;
+    return SessionManager.renameSession(sessionId, newTitle);
 }
 
 /**
@@ -273,10 +249,7 @@ async function renameSession(sessionId, newTitle) {
  * Delegates to SessionManager
  */
 function getCurrentSessionId() {
-    if (window.SessionManager?.getCurrentSessionId) {
-        return window.SessionManager.getCurrentSessionId();
-    }
-    return null;
+    return SessionManager.getCurrentSessionId();
 }
 
 /**
@@ -284,9 +257,9 @@ function getCurrentSessionId() {
  * Delegates to SessionManager
  */
 function onSessionUpdate(callback) {
-    if (window.SessionManager?.onSessionUpdate) {
-        window.SessionManager.onSessionUpdate(callback);
-    }
+    // NOTE: SessionManager no longer supports onSessionUpdate - use EventBus instead
+    // This is kept for backwards compatibility but does nothing
+    console.warn('[Chat] onSessionUpdate is deprecated. Use EventBus.on("session:*", callback) instead.');
 }
 
 /**
@@ -294,13 +267,12 @@ function onSessionUpdate(callback) {
  * Delegates to SessionManager
  */
 function clearConversation() {
-    if (window.SessionManager?.clearConversation) {
-        window.SessionManager.clearConversation();
-    }
+    SessionManager.clearConversation();
 }
 
 /**
  * Build system prompt with user data
+ * Enforces strict token limits to prevent truncation of base system instructions
  */
 function buildSystemPrompt(queryContext = null, semanticContext = null) {
     const template = window.Prompts?.system;
@@ -339,14 +311,64 @@ function buildSystemPrompt(queryContext = null, semanticContext = null) {
         .replace('{{current_date}}', currentDate)
         .replace('{{evidence}}', evidenceText);
 
+    // Calculate base system prompt tokens
+    const basePromptTokens = TokenCounter.countTokens(prompt);
+    const contextWindow = TokenCounter.getContextWindow();
+
+    // Reserve 50% of context window for base system prompt (ensures it's never truncated)
+    const basePromptBudget = Math.floor(contextWindow * 0.5);
+    const remainingBudget = contextWindow - basePromptBudget;
+
+    // Log base prompt usage for debugging
+    if (basePromptTokens > basePromptBudget) {
+        console.warn(`[Chat] Base system prompt (${basePromptTokens} tokens) exceeds budget (${basePromptBudget} tokens). This may cause truncation.`);
+    }
+
     // Append semantic context from RAG if available (higher priority)
+    // Enforce strict token limits on semantic context
     if (semanticContext) {
-        prompt += `\n\n${semanticContext}`;
+        const semanticTokens = TokenCounter.countTokens(semanticContext);
+        const currentTotalTokens = basePromptTokens + semanticTokens;
+
+        if (currentTotalTokens > contextWindow) {
+            // Semantic context would exceed budget, need to truncate
+            const availableTokens = Math.max(0, contextWindow - basePromptTokens);
+            const truncationRatio = availableTokens / semanticTokens;
+
+            if (truncationRatio < 0.5) {
+                // Semantic context would be more than 50% truncated, skip it entirely
+                console.warn(`[Chat] Semantic context too large (${semanticTokens} tokens), would require ${Math.round((1 - truncationRatio) * 100)}% truncation. Skipping semantic context.`);
+            } else {
+                // Partially truncate semantic context
+                const charsToKeep = Math.floor(semanticContext.length * truncationRatio);
+                const truncatedContext = semanticContext.substring(0, charsToKeep);
+                prompt += `\n\n${truncatedContext}...`;
+                console.log(`[Chat] Semantic context truncated from ${semanticTokens} to ${TokenCounter.countTokens(truncatedContext)} tokens to fit within budget.`);
+            }
+        } else {
+            // Full semantic context fits
+            prompt += `\n\n${semanticContext}`;
+        }
     }
 
     // Append query context if available (fallback)
+    // Only append if we still have budget after semantic context
     if (queryContext) {
-        prompt += `\n\nRELEVANT DATA FOR THIS QUERY:\n${queryContext}`;
+        const currentTokens = TokenCounter.countTokens(prompt);
+        const queryTokens = TokenCounter.countTokens(queryContext);
+
+        if (currentTokens + queryTokens > contextWindow * 0.9) {
+            // Query context would push us over 90% of context window, skip it
+            console.warn(`[Chat] Query context (${queryTokens} tokens) would exceed 90% context window. Skipping query context.`);
+        } else {
+            prompt += `\n\nRELEVANT DATA FOR THIS QUERY:\n${queryContext}`;
+        }
+    }
+
+    // Final token count check
+    const finalTokens = TokenCounter.countTokens(prompt);
+    if (finalTokens > contextWindow) {
+        console.error(`[Chat] Final system prompt (${finalTokens} tokens) exceeds context window (${contextWindow}). This should not happen.`);
     }
 
     return prompt;
@@ -546,12 +568,10 @@ async function processMessage(message, optionsOrKey = null) {
         }
 
         // Add user message to history via SessionManager
-        if (window.SessionManager?.addMessageToHistory) {
-            window.SessionManager.addMessageToHistory({
-                role: 'user',
-                content: message
-            });
-        }
+        SessionManager.addMessageToHistory({
+            role: 'user',
+            content: message
+        });
 
         // Try to get semantic context from RAG if configured
         let semanticContext = null;
@@ -568,7 +588,7 @@ async function processMessage(message, optionsOrKey = null) {
         }
 
         // Get current history from SessionManager
-        const conversationHistory = window.SessionManager?.getHistory?.() || [];
+        const conversationHistory = SessionManager.getHistory();
 
         // Build messages array with system prompt (includes semantic context if available)
         const messages = [
@@ -608,12 +628,10 @@ async function processMessage(message, optionsOrKey = null) {
             // Return a helpful message if no API key configured
             const queryContext = generateQueryContext(message);
             const fallbackResponse = window.FallbackResponseService.generateFallbackResponse(message, queryContext);
-            if (window.SessionManager?.addMessageToHistory) {
-                window.SessionManager.addMessageToHistory({
-                    role: 'assistant',
-                    content: fallbackResponse
-                });
-            }
+            SessionManager.addMessageToHistory({
+                role: 'assistant',
+                content: fallbackResponse
+            });
             return {
                 content: fallbackResponse,
                 status: 'success', // Treat fallback as success for now to show message
@@ -773,12 +791,10 @@ async function processMessage(message, optionsOrKey = null) {
             const assistantContent = responseMessage?.content || 'I couldn\'t generate a response.';
 
             // Add final response to history
-            if (window.SessionManager?.addMessageToHistory) {
-                window.SessionManager.addMessageToHistory({
-                    role: 'assistant',
-                    content: assistantContent
-                });
-            }
+            SessionManager.addMessageToHistory({
+                role: 'assistant',
+                content: assistantContent
+            });
 
             // Save conversation to session storage
             saveConversation();
@@ -796,13 +812,11 @@ async function processMessage(message, optionsOrKey = null) {
             const fallbackResponse = window.FallbackResponseService.generateFallbackResponse(message, queryContext);
 
             // Add fallback to history but mark as error context if needed
-            if (window.SessionManager?.addMessageToHistory) {
-                window.SessionManager.addMessageToHistory({
-                    role: 'assistant',
-                    content: fallbackResponse,
-                    error: true
-                });
-            }
+            SessionManager.addMessageToHistory({
+                role: 'assistant',
+                content: fallbackResponse,
+                error: true
+            });
             saveConversation();
 
             return {
@@ -824,7 +838,7 @@ async function processMessage(message, optionsOrKey = null) {
  */
 async function regenerateLastResponse(options = null) {
     // Get history from SessionManager
-    const conversationHistory = window.SessionManager?.getHistory?.() || [];
+    const conversationHistory = SessionManager.getHistory();
 
     if (typeof window.MessageOperations !== 'undefined') {
         return window.MessageOperations.regenerateLastResponse(
@@ -854,9 +868,7 @@ async function regenerateLastResponse(options = null) {
     const message = lastUserMsg.content;
 
     // Truncate history to just before the user message
-    if (window.SessionManager?.truncateHistory) {
-        window.SessionManager.truncateHistory(lastMsgIndex);
-    }
+    SessionManager.truncateHistory(lastMsgIndex);
 
     // Re-send
     return sendMessage(message, options);
@@ -867,7 +879,7 @@ async function regenerateLastResponse(options = null) {
  * DELEGATES to MessageOperations
  */
 function deleteMessage(index) {
-    const conversationHistory = window.SessionManager?.getHistory?.() || [];
+    const conversationHistory = SessionManager.getHistory();
 
     if (typeof window.MessageOperations !== 'undefined') {
         const result = window.MessageOperations.deleteMessage(index, conversationHistory);
@@ -878,9 +890,7 @@ function deleteMessage(index) {
     // Fallback if MessageOperations not available
     if (index < 0 || index >= conversationHistory.length) return false;
 
-    if (window.SessionManager?.removeMessageFromHistory) {
-        window.SessionManager.removeMessageFromHistory(index);
-    }
+    SessionManager.removeMessageFromHistory(index);
     saveConversation();
     return true;
 }
@@ -890,7 +900,7 @@ function deleteMessage(index) {
  * DELEGATES to MessageOperations
  */
 async function editMessage(index, newText, options = null) {
-    const conversationHistory = window.SessionManager?.getHistory?.() || [];
+    const conversationHistory = SessionManager.getHistory();
 
     if (typeof window.MessageOperations !== 'undefined') {
         return window.MessageOperations.editMessage(
@@ -909,9 +919,7 @@ async function editMessage(index, newText, options = null) {
     if (msg.role !== 'user') return { error: 'Can only edit user messages' };
 
     // Truncate history to remove this message and everything after it
-    if (window.SessionManager?.truncateHistory) {
-        window.SessionManager.truncateHistory(index);
-    }
+    SessionManager.truncateHistory(index);
 
     // Send new message (this will add it to history and generate response)
     return sendMessage(newText, options);
@@ -922,9 +930,7 @@ async function editMessage(index, newText, options = null) {
  * Delegates to SessionManager
  */
 function clearHistory() {
-    if (window.SessionManager?.clearConversation) {
-        window.SessionManager.clearConversation();
-    }
+    SessionManager.clearConversation();
 }
 
 /**
@@ -932,7 +938,7 @@ function clearHistory() {
  * Delegates to SessionManager
  */
 function getHistory() {
-    return window.SessionManager?.getHistory?.() || [];
+    return SessionManager.getHistory();
 }
 
 /**
@@ -988,10 +994,5 @@ export const Chat = {
     emergencyBackupSync,
     recoverEmergencyBackup
 };
-
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.Chat = Chat;
-}
 
 console.log('[Chat] Module loaded');

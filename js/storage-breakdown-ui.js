@@ -1,14 +1,17 @@
 /**
  * Storage Breakdown UI Component
- * 
+ *
  * Displays storage usage breakdown by category with visual indicators
  * and cleanup actions. Integrates with StorageDegradationManager.
- * 
+ *
  * HNW Network: Provides visibility into storage distribution
  * for informed cleanup decisions.
- * 
+ *
  * @module StorageBreakdownUI
  */
+
+// EventBus import for toast notifications
+import { EventBus } from './services/event-bus.js';
 
 // ==========================================
 // Storage Breakdown Panel
@@ -68,13 +71,13 @@ function createStorageBreakdownHTML(breakdown, metrics) {
             
             <!-- Actions -->
             <div class="storage-actions">
-                <button class="btn btn-small btn-secondary" onclick="StorageBreakdownUI.refresh()">
+                <button class="btn btn-small btn-secondary" data-action="storage-refresh">
                     ↻ Refresh
                 </button>
-                <button class="btn btn-small btn-warning" onclick="StorageBreakdownUI.cleanup('embeddings')">
+                <button class="btn btn-small btn-warning" data-action="storage-clear-embeddings">
                     Clear Embeddings
                 </button>
-                <button class="btn btn-small btn-danger" onclick="StorageBreakdownUI.showCleanupModal()">
+                <button class="btn btn-small btn-danger" data-action="storage-show-cleanup-modal">
                     Cleanup...
                 </button>
             </div>
@@ -174,7 +177,44 @@ let _storageDegradationManager = null;
  */
 async function init(manager) {
     _storageDegradationManager = manager;
-    console.log('[StorageBreakdownUI] Initialized');
+
+    // Set up event delegation for data-action attributes
+    document.addEventListener('click', handleDataAction);
+
+    console.log('[StorageBreakdownUI] Initialized with event delegation');
+}
+
+/**
+ * Handle data-action events via event delegation
+ * @param {Event} event - Click event
+ */
+function handleDataAction(event) {
+    const target = event.target;
+    const action = target.dataset?.action;
+
+    if (!action || !action.startsWith('storage-')) return;
+
+    event.preventDefault();
+
+    switch (action) {
+        case 'storage-refresh':
+            refresh();
+            break;
+        case 'storage-clear-embeddings':
+            cleanup('embeddings');
+            break;
+        case 'storage-show-cleanup-modal':
+            showCleanupModal();
+            break;
+        case 'storage-hide-cleanup-modal':
+            hideCleanupModal();
+            break;
+        case 'storage-run-cleanup':
+            runSelectedCleanup();
+            break;
+        default:
+            console.warn('[StorageBreakdownUI] Unknown action:', action);
+    }
 }
 
 /**
@@ -294,7 +334,7 @@ async function showCleanupModal() {
     modal.className = 'storage-cleanup-modal';
     modal.id = 'storage-cleanup-modal';
     modal.innerHTML = `
-        <div class="modal-overlay" onclick="StorageBreakdownUI.hideCleanupModal()"></div>
+        <div class="modal-overlay" data-action="storage-hide-cleanup-modal"></div>
         <div class="modal-content">
             <h3>🧹 Storage Cleanup</h3>
             <p>Select categories to cleanup:</p>
@@ -323,8 +363,8 @@ async function showCleanupModal() {
             </div>
             
             <div class="modal-actions">
-                <button class="btn btn-secondary" onclick="StorageBreakdownUI.hideCleanupModal()">Cancel</button>
-                <button class="btn btn-danger" onclick="StorageBreakdownUI.runSelectedCleanup()">🧹 Cleanup Selected</button>
+                <button class="btn btn-secondary" data-action="storage-hide-cleanup-modal">Cancel</button>
+                <button class="btn btn-danger" data-action="storage-run-cleanup">🧹 Cleanup Selected</button>
             </div>
         </div>
     `;
@@ -404,14 +444,8 @@ async function getStorageDegradationManager() {
  * @param {string} message - Message to show
  */
 function showToast(message) {
-    // Use EventBus if available
-    if (window.EventBus?.emit) {
-        window.EventBus.emit('UI:TOAST', { message, type: 'info', duration: 3000 });
-        return;
-    }
-
-    // Fallback to console
-    console.log('[StorageBreakdownUI]', message);
+    // Use EventBus for toast notifications
+    EventBus.emit('UI:TOAST', { message, type: 'info', duration: 3000 });
 }
 
 // ==========================================
@@ -662,10 +696,5 @@ export const StorageBreakdownUI = {
     hideCleanupModal,
     runSelectedCleanup
 };
-
-// Make available globally for onclick handlers
-if (typeof window !== 'undefined') {
-    window.StorageBreakdownUI = StorageBreakdownUI;
-}
 
 console.log('[StorageBreakdownUI] Component loaded');

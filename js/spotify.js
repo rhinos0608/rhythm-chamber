@@ -271,34 +271,48 @@ const Spotify = (() => {
 
     /**
      * localStorage-based mutex for browsers without Web Locks API
-     * Uses a simple lock with timeout to prevent deadlocks
+     * Uses a polling loop with timeout to prevent deadlocks and improve reliability
      */
     async function performTokenRefreshWithFallbackLock() {
         const LOCK_KEY = 'spotify_refresh_lock';
         const LOCK_TIMEOUT_MS = 10000; // 10 second timeout
+        const POLL_INTERVAL_MS = 100; // Check every 100ms
+        const MAX_WAIT_TIME_MS = 5000; // Maximum wait time for another tab
+
+        const startTime = Date.now();
+
+        // Polling loop to wait for lock release
+        while (Date.now() - startTime < MAX_WAIT_TIME_MS) {
+            const existingLock = localStorage.getItem(LOCK_KEY);
+
+            if (!existingLock) {
+                // No lock exists, try to acquire
+                break;
+            }
+
+            const lockTime = parseInt(existingLock, 10);
+            const now = Date.now();
+
+            // Check if lock is stale (older than timeout)
+            if (now - lockTime >= LOCK_TIMEOUT_MS) {
+                console.warn('[Spotify] Stale lock detected, clearing...');
+                localStorage.removeItem(LOCK_KEY);
+                break;
+            }
+
+            // Lock is active, wait and poll again
+            console.log('[Spotify] Waiting for another tab to complete refresh...');
+            await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+        }
+
+        // Check if another tab succeeded while we were waiting
+        if (hasValidToken()) {
+            console.log('[Spotify] Token refreshed by another tab');
+            return true;
+        }
 
         // Try to acquire lock
         const now = Date.now();
-        const existingLock = localStorage.getItem(LOCK_KEY);
-
-        if (existingLock) {
-            const lockTime = parseInt(existingLock, 10);
-            if (now - lockTime < LOCK_TIMEOUT_MS) {
-                // Another tab is refreshing - wait and check if token is valid
-                console.log('[Spotify] Waiting for another tab to complete refresh...');
-                await new Promise(resolve => setTimeout(resolve, 2000));
-
-                // Check if the other tab succeeded
-                if (hasValidToken()) {
-                    console.log('[Spotify] Token refreshed by another tab');
-                    return true;
-                }
-                // Other tab may have failed, allow this tab to try
-            }
-            // Lock is stale, clear it
-        }
-
-        // Acquire lock
         localStorage.setItem(LOCK_KEY, String(now));
 
         try {
