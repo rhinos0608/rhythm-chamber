@@ -523,6 +523,21 @@ async function init(options = {}) {
     // Initialize all controllers with dependencies
     await initializeControllers();
 
+    // Priority 1: Check for storage mode mismatch (local vs Qdrant)
+    // This must happen early to warn users before they try to use chat
+    try {
+        const RAG = ModuleRegistry.getModuleSync('RAG');
+        if (RAG && typeof RAG.detectStorageModeMismatch === 'function') {
+            const mismatchResult = await RAG.detectStorageModeMismatch();
+            if (mismatchResult.mismatch) {
+                console.warn('[App] Storage mode mismatch detected:', mismatchResult);
+                Settings.showStorageMismatchModal(mismatchResult.currentMode, mismatchResult.savedMode);
+            }
+        }
+    } catch (err) {
+        console.warn('[App] Storage mode check failed:', err.message);
+    }
+
     // Check for OAuth callbacks or special modes
     const urlParams = new URLSearchParams(window.location.search);
 

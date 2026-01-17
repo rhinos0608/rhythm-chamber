@@ -27,6 +27,61 @@ const DB_VERSION = 1;
 const STORE_NAME = 'vectors';
 const SETTINGS_KEY = 'vector_store_settings';
 
+// Priority 3: SharedArrayBuffer availability detection
+// Requires COOP/COEP headers for cross-origin isolation
+const SHARED_MEMORY_AVAILABLE = (() => {
+    try {
+        if (typeof SharedArrayBuffer === 'undefined') return false;
+        const test = new SharedArrayBuffer(8);
+        return test.byteLength === 8;
+    } catch (e) {
+        return false;
+    }
+})();
+
+/**
+ * Check if SharedArrayBuffer is available (exported for stats/debugging)
+ * @returns {boolean} True if SharedArrayBuffer can be used
+ */
+function isSharedArrayBufferAvailable() {
+    return SHARED_MEMORY_AVAILABLE;
+}
+
+/**
+ * Build shared vector data for zero-copy worker transfer
+ * Priority 3: Prepares vectors in SharedArrayBuffer format
+ * @returns {{sharedVectors: SharedArrayBuffer, payloads: Array, dimensions: number}|null}
+ */
+function buildSharedVectorData() {
+    if (!SHARED_MEMORY_AVAILABLE || !vectors || vectors.size === 0) return null;
+
+    const vectorArray = Array.from(vectors.values());
+    if (vectorArray.length === 0) return null;
+
+    const dimensions = vectorArray[0].vector?.length || 0;
+    if (dimensions === 0) return null;
+
+    const totalFloats = vectorArray.length * dimensions;
+
+    try {
+        const sharedBuffer = new SharedArrayBuffer(totalFloats * 4); // Float32 = 4 bytes
+        const sharedView = new Float32Array(sharedBuffer);
+
+        // Copy vectors into shared buffer (one-time cost)
+        for (let i = 0; i < vectorArray.length; i++) {
+            sharedView.set(vectorArray[i].vector, i * dimensions);
+        }
+
+        // Payloads still use structured clone (small relative to vectors)
+        const payloads = vectorArray.map(v => ({ id: v.id, payload: v.payload }));
+
+        return { sharedVectors: sharedBuffer, payloads, dimensions };
+    } catch (e) {
+        console.warn('[LocalVectorStore] SharedArrayBuffer build failed:', e.message);
+        return null;
+    }
+}
+
 // ==========================================
 // In-Memory Vector Storage (LRU Cache)
 // ==========================================
@@ -536,7 +591,25 @@ const LocalVectorStore = {
                 }
             });
 
-            // Send search command to worker
+            // Priority 3: Use SharedArrayBuffer when available for zero-copy transfer
+            if (SHARED_MEMORY_AVAILABLE) {
+                const sharedData = buildSharedVectorData();
+                if (sharedData) {
+                    worker.postMessage({
+                        type: 'search_shared',
+                        id: requestId,
+                        queryVector,
+                        sharedVectors: sharedData.sharedVectors,
+                        payloads: sharedData.payloads,
+                        dimensions: sharedData.dimensions,
+                        limit,
+                        threshold
+                    });
+                    return;
+                }
+            }
+
+            // Fallback to standard structured clone transfer
             worker.postMessage({
                 type: 'search',
                 id: requestId,
@@ -596,7 +669,11 @@ const LocalVectorStore = {
                 maxVectors: currentMaxVectors,
                 dimensions: { min: 0, max: 0, avg: 0 },
                 storage: { bytes: 0, megabytes: 0 },
-                lru: { evictionCount: 0, hitRate: 0, autoScaleEnabled: false }
+                lru: { evictionCount: 0, hitRate: 0, autoScaleEnabled: false },
+                sharedMemory: {
+                    available: SHARED_MEMORY_AVAILABLE,
+                    enabled: false
+                }
             };
         }
 
@@ -640,6 +717,10 @@ const LocalVectorStore = {
                 hitCount: lruStats.hitCount,
                 missCount: lruStats.missCount,
                 autoScaleEnabled: autoScaleEnabled
+            },
+            sharedMemory: {
+                available: SHARED_MEMORY_AVAILABLE,
+                enabled: SHARED_MEMORY_AVAILABLE && count > 0
             }
         };
     },

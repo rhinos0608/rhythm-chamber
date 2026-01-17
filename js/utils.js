@@ -5,15 +5,23 @@
  */
 
 /**
- * Fetch with timeout support
+ * Fetch with timeout support and external abort signal
  * @param {string} url - URL to fetch
- * @param {RequestInit} options - Fetch options
+ * @param {RequestInit} options - Fetch options (can include external signal)
  * @param {number} timeoutMs - Timeout in milliseconds (default 30s)
  * @returns {Promise<Response>}
  */
 async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    // Support external abort signal (for user-initiated cancellation)
+    if (options.signal) {
+        options.signal.addEventListener('abort', () => {
+            clearTimeout(timeoutId);
+            controller.abort();
+        });
+    }
 
     try {
         const response = await fetch(url, {
@@ -25,6 +33,10 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
     } catch (err) {
         clearTimeout(timeoutId);
         if (err.name === 'AbortError') {
+            // Distinguish between timeout and user cancellation
+            if (options.signal?.aborted) {
+                throw new Error('Request cancelled');
+            }
             throw new Error(`Request timed out after ${timeoutMs}ms`);
         }
         throw err;

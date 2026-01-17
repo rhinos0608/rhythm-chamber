@@ -30,10 +30,15 @@ function assertWriteAllowed(operation) {
   if (!SafeMode.canEncrypt()) {
     const status = SafeMode.getSafeModeStatus();
     if (status.isSafeMode) {
+      // Defensively handle failedModules to prevent errors if undefined or not an array
+      const failedModules = Array.isArray(status.failedModules)
+        ? status.failedModules.map(m => m?.name || 'unknown').join(', ')
+        : 'unknown';
+
       throw new Error(
         `[Storage] Write blocked: Safe Mode active. ` +
         `Operation '${operation}' requires security capabilities. ` +
-        `Failed modules: ${status.failedModules.map(m => m.name).join(', ')}`
+        `Failed modules: ${failedModules}`
       );
     }
   }

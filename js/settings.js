@@ -33,6 +33,9 @@ const AVAILABLE_MODELS = [
     { id: 'openai/gpt-4-turbo', name: 'GPT-4 Turbo ($)', free: false }
 ];
 
+// Priority 2: Module-level AbortController for embedding cancellation
+let currentEmbeddingAbortController = null;
+
 /**
  * Get current settings - reads directly from window.Config (source of truth)
  * Falls back to localStorage overrides, then IndexedDB (after migration).
@@ -644,7 +647,12 @@ function showSettingsModal() {
                     
                     <div id="embedding-progress" class="embedding-progress" style="display: none;">
                         <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-                        <span class="progress-text" id="progress-text">Processing...</span>
+                        <div class="progress-actions">
+                            <span class="progress-text" id="progress-text">Processing...</span>
+                            <button class="btn btn-secondary btn-sm" id="cancel-embeddings-btn" onclick="Settings.cancelEmbeddings()">
+                                ✕ Cancel
+                            </button>
+                        </div>
                     </div>
                     
                     <!-- Session Reset with Cryptographic Proof -->
@@ -983,6 +991,7 @@ function showToast(message, duration = 2000) {
 
 /**
  * Generate embeddings with progress UI
+ * Priority 2: AbortController support for cancellation
  * @param {boolean} resume - Whether to resume from checkpoint
  */
 async function generateEmbeddings(resume = false) {
@@ -1015,10 +1024,21 @@ async function generateEmbeddings(resume = false) {
     const progressText = document.getElementById('progress-text');
     const generateBtn = document.getElementById('generate-embeddings-btn');
     const resumeBtn = document.getElementById('resume-embeddings-btn');
+    const cancelBtn = document.getElementById('cancel-embeddings-btn');
 
     if (progressContainer) progressContainer.style.display = 'block';
     if (generateBtn) generateBtn.disabled = true;
     if (resumeBtn) resumeBtn.disabled = true;
+
+    // Priority 2: Create AbortController for cancellation
+    const abortController = new AbortController();
+    currentEmbeddingAbortController = abortController;
+
+    // Show cancel button
+    if (cancelBtn) {
+        cancelBtn.style.display = 'inline-block';
+        cancelBtn.disabled = false;
+    }
 
     try {
         // Test connection first
@@ -1031,15 +1051,17 @@ async function generateEmbeddings(resume = false) {
             if (progressContainer) progressContainer.style.display = 'none';
             if (generateBtn) generateBtn.disabled = false;
             if (resumeBtn) resumeBtn.disabled = false;
+            if (cancelBtn) cancelBtn.style.display = 'none';
+            currentEmbeddingAbortController = null;
             return;
         }
 
-        // Generate embeddings with progress callback
+        // Generate embeddings with progress callback and abort signal
         await RAG.generateEmbeddings((current, total, message) => {
             const percent = Math.round((current / total) * 100);
             if (progressFill) progressFill.style.width = `${percent}%`;
             if (progressText) progressText.textContent = message;
-        }, { resume });
+        }, { resume }, abortController.signal);
 
         showToast('🎉 Embeddings generated successfully!');
 
@@ -1052,12 +1074,17 @@ async function generateEmbeddings(resume = false) {
     } catch (err) {
         console.error('Embedding generation error:', err);
 
-        // Check if we have a checkpoint for resume
-        const checkpoint = RAG.getCheckpoint?.();
-        if (checkpoint && checkpoint.processed > 0) {
-            showToast(`Error at ${checkpoint.processed}/${checkpoint.totalChunks}: ${err.message}. Click Resume to continue.`);
+        // Handle cancellation specifically
+        if (err.message === 'Embedding generation cancelled') {
+            showToast('Embedding generation cancelled');
         } else {
-            showToast('Error: ' + err.message);
+            // Check if we have a checkpoint for resume
+            const checkpoint = RAG.getCheckpoint?.();
+            if (checkpoint && checkpoint.processed > 0) {
+                showToast(`Error at ${checkpoint.processed}/${checkpoint.totalChunks}: ${err.message}. Click Resume to continue.`);
+            } else {
+                showToast('Error: ' + err.message);
+            }
         }
 
         if (progressContainer) progressContainer.style.display = 'none';
@@ -1070,6 +1097,10 @@ async function generateEmbeddings(resume = false) {
                 resumeBtn.disabled = false;
             }
         }
+    } finally {
+        // Clean up abort controller and hide cancel button
+        currentEmbeddingAbortController = null;
+        if (cancelBtn) cancelBtn.style.display = 'none';
     }
 }
 
@@ -1078,6 +1109,19 @@ async function generateEmbeddings(resume = false) {
  */
 function resumeEmbeddings() {
     generateEmbeddings(true);
+}
+
+/**
+ * Cancel ongoing embedding generation
+ * Priority 2: Uses AbortController to cleanly abort the operation
+ */
+function cancelEmbeddings() {
+    if (currentEmbeddingAbortController) {
+        currentEmbeddingAbortController.abort();
+        console.log('[Settings] Embedding generation cancelled by user');
+    } else {
+        console.warn('[Settings] No embedding generation in progress to cancel');
+    }
 }
 
 /**
@@ -1233,6 +1277,106 @@ async function confirmSessionReset() {
             confirmBtn.disabled = false;
             confirmBtn.textContent = 'Reset Session';
         }
+    }
+}
+
+// ==========================================
+// Storage Mode Mismatch Modal
+// Priority 1: Storage Mode Migration Detection
+// ==========================================
+
+/**
+ * Show modal when storage mode has changed requiring embedding regeneration
+ * @param {string} currentMode - Current storage mode ('local' or 'qdrant')
+ * @param {string} savedMode - Previously saved storage mode
+ */
+function showStorageMismatchModal(currentMode, savedMode) {
+    // Remove existing modal if present
+    const existing = document.getElementById('storage-mismatch-modal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'storage-mismatch-modal';
+    modal.className = 'storage-mismatch-modal';
+    modal.innerHTML = `
+        <div class="storage-mismatch-overlay"></div>
+        <div class="storage-mismatch-content">
+            <div class="storage-mismatch-header">
+                <h2>⚠️ Semantic Search Mode Changed</h2>
+            </div>
+            
+            <div class="storage-mismatch-body">
+                <div class="mismatch-warning">
+                    <span class="warning-icon">🔄</span>
+                    <div class="warning-text">
+                        <p>Your semantic search mode has changed from <strong>${savedMode}</strong> 
+                           to <strong>${currentMode}</strong>.</p>
+                        <p>Your existing embeddings are incompatible with the new mode. 
+                           Please regenerate embeddings to continue using semantic search in chat.</p>
+                    </div>
+                </div>
+                
+                <div class="mismatch-impact">
+                    <h4>What this means:</h4>
+                    <ul>
+                        <li>Chat will work without semantic search context</li>
+                        <li>Embeddings need to be regenerated for the new mode</li>
+                        <li>This typically takes 1-5 minutes depending on data size</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="storage-mismatch-footer">
+                <button class="btn btn-primary" id="regenerate-embeddings-btn">
+                    🔄 Regenerate Embeddings
+                </button>
+                <button class="btn btn-secondary" id="dismiss-mismatch-btn">
+                    Dismiss (Continue without semantic search)
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Wire up buttons
+    document.getElementById('regenerate-embeddings-btn').onclick = () => {
+        hideStorageMismatchModal();
+        showSettingsModal();
+        // Auto-navigate to embedding section after modal opens
+        setTimeout(() => {
+            const embeddingSection = document.querySelector('.settings-section-embeddings');
+            if (embeddingSection) {
+                embeddingSection.scrollIntoView({ behavior: 'smooth' });
+            }
+        }, 300);
+    };
+
+    document.getElementById('dismiss-mismatch-btn').onclick = () => {
+        hideStorageMismatchModal();
+        showToast('Semantic search disabled. Regenerate embeddings in Settings when ready.');
+    };
+
+    // Add escape key listener
+    const escHandler = (e) => {
+        if (e.key === 'Escape') {
+            hideStorageMismatchModal();
+            document.removeEventListener('keydown', escHandler);
+        }
+    };
+    document.addEventListener('keydown', escHandler);
+
+    console.log('[Settings] Storage mismatch modal shown');
+}
+
+/**
+ * Hide the storage mismatch modal
+ */
+function hideStorageMismatchModal() {
+    const modal = document.getElementById('storage-mismatch-modal');
+    if (modal) {
+        modal.classList.add('closing');
+        setTimeout(() => modal.remove(), 200);
     }
 }
 
@@ -1698,6 +1842,7 @@ export const Settings = {
     showToast,
     generateEmbeddings,
     resumeEmbeddings,
+    cancelEmbeddings,
     showSessionResetModal,
     hideSessionResetModal,
     confirmSessionReset,
@@ -1717,6 +1862,9 @@ export const Settings = {
     saveToolsAndClose,
     getEnabledTools,
     isToolEnabled,
+    // Storage mode mismatch modal (Priority 1)
+    showStorageMismatchModal,
+    hideStorageMismatchModal,
     // Constants
     AVAILABLE_MODELS,
     LLM_PROVIDERS,

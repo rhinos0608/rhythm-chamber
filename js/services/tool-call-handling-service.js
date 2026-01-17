@@ -446,7 +446,7 @@ async function handleToolCallsWithFallback(
             }
         });
 
-        // Add timeout promise that rejects
+        // Add timeout promise that rejects - used consistently for both Promise.any and polyfill
         const timeoutPromise = new Promise((_, reject) =>
             setTimeout(() => reject(new Error('All strategies timed out')), context.timeoutMs)
         );
@@ -457,16 +457,17 @@ async function handleToolCallsWithFallback(
             let successfulResult;
 
             if (typeof Promise.any === 'function') {
-                successfulResult = await Promise.any([...racePromises, timeoutPromise.then(() => {
-                    throw new Error('Timeout');
-                })]);
+                // Modern browsers: Promise.any with timeout as a competing promise
+                successfulResult = await Promise.any([...racePromises, timeoutPromise]);
             } else {
                 // Fallback for older browsers: custom first-success implementation
+                // Mirrors Promise.any semantics exactly - timeout only wins when all racePromises reject
                 successfulResult = await new Promise((resolve, reject) => {
                     let pendingCount = racePromises.length;
                     const errors = [];
                     let resolved = false;
 
+                    // Wire up race promises
                     racePromises.forEach((promise, i) => {
                         promise.then(
                             (result) => {
@@ -479,18 +480,21 @@ async function handleToolCallsWithFallback(
                                 errors[i] = error;
                                 pendingCount--;
                                 if (pendingCount === 0 && !resolved) {
+                                    // All strategies rejected - check if timeout wins
                                     reject(new AggregateError(errors, 'All strategies failed'));
                                 }
                             }
                         );
                     });
 
-                    // Timeout handling
-                    setTimeout(() => {
+                    // Wire up timeout promise to compete with strategies
+                    // If timeout resolves (rejects) first, it wins; otherwise strategies win
+                    timeoutPromise.catch((timeoutError) => {
                         if (!resolved) {
-                            reject(new Error('All strategies timed out'));
+                            resolved = true;
+                            reject(timeoutError);
                         }
-                    }, context.timeoutMs);
+                    });
                 });
             }
 

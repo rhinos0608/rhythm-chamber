@@ -320,6 +320,65 @@ async function retrieve(tokenKey) {
 }
 
 /**
+ * Retrieve a token with full options (including expiry and metadata)
+ * Used by transaction rollback to preserve original token options
+ * @param {string} tokenKey - Token identifier
+ * @returns {Promise<{value: string, expiresIn?: number, metadata?: object}|null>}
+ */
+async function retrieveWithOptions(tokenKey) {
+    const bindingResult = await verifyBinding();
+
+    if (!bindingResult.valid) {
+        console.error('[SecureTokenStore] Cannot retrieveWithOptions: binding invalid -', bindingResult.reason);
+        audit('token_retrieve_blocked', { tokenKey, reason: bindingResult.reason });
+        return null;
+    }
+
+    const storageKey = TOKEN_STORE_PREFIX + tokenKey;
+
+    try {
+        let tokenData = null;
+
+        if (window.IndexedDBCore) {
+            const record = await window.IndexedDBCore.get(
+                window.IndexedDBCore.STORES.TOKENS,
+                storageKey
+            );
+            tokenData = record;
+        } else {
+            const stored = localStorage.getItem(storageKey);
+            if (stored) {
+                tokenData = JSON.parse(stored);
+            }
+        }
+
+        if (!tokenData) {
+            return null;
+        }
+
+        // Check expiry
+        if (tokenData.expiresAt && Date.now() > tokenData.expiresAt) {
+            audit('token_expired', { tokenKey });
+            await invalidate(tokenKey);
+            return null;
+        }
+
+        audit('token_retrieved_with_options', { tokenKey });
+
+        // Return full token data with options for transaction rollback
+        return {
+            value: tokenData.value,
+            expiresIn: tokenData.expiresAt ? tokenData.expiresAt - Date.now() : undefined,
+            metadata: tokenData.metadata || {}
+        };
+    } catch (error) {
+        console.error('[SecureTokenStore] retrieveWithOptions failed:', error);
+        audit('token_retrieve_failed', { tokenKey, error: error.message });
+        return null;
+    }
+}
+
+/**
  * Invalidate a specific token
  * @param {string} tokenKey - Token identifier
  * @returns {Promise<boolean>}
@@ -494,6 +553,7 @@ export const SecureTokenStore = {
     // Token operations (all require binding)
     store,
     retrieve,
+    retrieveWithOptions,
     invalidate,
     invalidateAllTokens,
 

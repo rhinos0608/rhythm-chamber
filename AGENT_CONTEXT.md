@@ -658,9 +658,9 @@ EventBus.getCircuitBreakerStatus();
 // → { pendingEventCount, maxQueueSize, stormActive, droppedCount }
 ```
 
-### 19. HNW Phase 4: Reliability & Performance (NEW)
+### 19. HNW Phase 3: Reliability & Performance (NEW)
 
-**Phase 4 Improvements:**
+**Phase 3 Improvements:**
 
 | Domain | Improvement | File | Purpose |
 |--------|-------------|------|---------|
@@ -694,7 +694,7 @@ await calibrateClockSkew(); // Called before election in init()
 if (document.hidden) await delay(5000); // Wait before promoting
 ```
 
-**Testing:** 315 unit tests passing (10 pre-existing failures in unrelated module)
+**Testing:** 325 tests: 325 passing, 0 failing (verified 2026-01-17)
 ### SSE / Streaming Order Guarantees
 
 > [!NOTE]
@@ -986,15 +986,23 @@ flowchart LR
 
 ### Architecture Overview
 
-Users can enable RAG-powered semantic search using their own Qdrant Cloud cluster:
+Users can enable RAG-powered semantic search using their own Qdrant Cloud cluster OR local vector search:
 
 ```mermaid
 flowchart LR
-    A[User Query] --> B[Generate Embedding]
-    B --> C[Search Qdrant]
-    C --> D[Get Top 3 Chunks]
-    D --> E[Inject into System Prompt]
-    E --> F[LLM Response]
+    A[User Query] --> B{Search Mode}
+    B -->|Qdrant Cloud| C[Generate Embedding]
+    B -->|Local Mode| D[Local Embeddings]
+    C --> E[Search Qdrant]
+    D --> F[Search Local Vector Store]
+    E --> G[Get Top 3 Chunks]
+    F --> G
+    G --> H[Inject into System Prompt]
+    H --> I[LLM Response]
+
+    style B fill:#f9f,stroke:#333,stroke-width:2px
+    style D fill:#bbf,stroke:#333,stroke-width:2px
+    style F fill:#bbf,stroke:#333,stroke-width:2px
 ```
 
 ### Why This Matters vs Stats.fm
@@ -1006,22 +1014,130 @@ flowchart LR
 - **Stats.fm:** Shows you a chart of "March 2020 Top Artists"
 - **Rhythm Chamber:** You ask "What was I listening to during my breakup in March 2020?" → Gets semantic answer with context
 
+### Vector Search Architecture
+
+#### Dual-Mode Search System
+
+**Qdrant Cloud Mode:**
+- User provides Qdrant credentials in settings
+- Embeddings generated via OpenRouter API (qwen/qwen3-embedding-8b)
+- Chunks upserted to user's Qdrant cluster
+- Namespace-isolated collections (user-namespace format)
+- Full-text semantic search with cosine similarity
+
+**Local Vector Search Mode:**
+- 100% client-side, no external dependencies
+- Local embeddings via Transformers.js (Xenova/all-MiniLM-L6-v2)
+- IndexedDB persistence with LRU cache (5000-vector cap)
+- Web Worker offloading for 60fps performance
+- SharedArrayBuffer optimization (zero-copy transfer when available)
+
+#### Performance Optimizations
+
+**LRU Vector Cache:**
+- Automatic eviction when exceeding 5000 vectors
+- Least-recently-used eviction policy
+- IndexedDB persistence for surviving vectors
+- Cache hit rate tracking in stats
+
+**Web Worker Search:**
+- Cosine similarity offloaded to background thread
+- Maintains 60fps during large vector set searches
+- Command pattern for extensibility
+- Graceful fallback to sync search if worker unavailable
+
+**SharedArrayBuffer (Priority 3):**
+- Zero-copy vector transfer to worker
+- Reduces structured clone overhead
+- Enabled when COOP/COEP headers available
+- Automatic fallback to standard transfer
+- Status available in `getStats()` output
+
+#### Abort Signal Support (NEW)
+
+All embedding and search operations support user-initiated cancellation:
+
+```javascript
+// Generate embeddings with cancellation
+const abortController = new AbortController();
+const signal = abortController.signal;
+
+// Can cancel during:
+// - Individual embedding API calls (OpenRouter)
+// - Qdrant collection operations
+// - Batch upsert operations
+// - Search queries
+
+abortController.abort(); // "Embedding generation cancelled"
+```
+
+**Implementation:**
+- `getEmbedding(input, abortSignal)` - OpenRouter API cancellation
+- `ensureCollection(abortSignal)` - Qdrant collection management
+- `upsertPoints(points, abortSignal)` - Batch upsert cancellation
+- `search(query, limit, abortSignal)` - Search query cancellation
+- `fetchWithTimeout` utility supports external abort signals
+
+**UI Integration:**
+- Cancel button in embedding progress UI (Settings > Embeddings)
+- Real-time progress updates during generation
+- Graceful error handling with checkpoint resume
+- Automatic cleanup on cancellation
+
 ### Components
 
 | Module | Purpose |
 |--------|---------|
-| `payments.js` | Entitlement stub (always returns true for MVP) |
-| `rag.js` | Embeddings API, Qdrant client, chunking logic |
+| `rag.js` | Embeddings API, Qdrant client, chunking logic, abort support |
+| `local-embeddings.js` | Local embedding generation (Transformers.js) |
+| `local-vector-store.js` | Client-side vector search with LRU cache |
+| `vector-search-worker.js` | Web Worker for cosine similarity offloading |
+| `utils.js` | fetchWithTimeout with abort signal support |
 
 ### Embedding Generation
+
+#### Qdrant Mode
 
 ```javascript
 // js/rag.js - generateEmbeddings()
 // 1. Load all streams from IndexedDB
 // 2. Create chunks (monthly summaries + artist profiles)
 // 3. Generate embeddings via OpenRouter (qwen/qwen3-embedding-8b)
-// 4. Upsert to user's Qdrant cluster
+// 4. Upsert to user's Qdrant cluster (with abort support)
 // 5. Store config + status in localStorage
+```
+
+#### Local Mode
+
+```javascript
+// js/local-embeddings.js - initialize()
+// 1. Load Transformers.js from CDN
+// 2. Initialize Xenova/all-MiniLM-L6-v2 model
+// 3. Generate 384-dimensional embeddings locally
+// 4. Store in LocalVectorStore with LRU caching
+```
+
+### Local Vector Store API
+
+```javascript
+import { LocalVectorStore } from './local-vector-store.js';
+
+// Initialize (auto-loads from IndexedDB)
+await LocalVectorStore.init();
+
+// Upsert vectors
+await LocalVectorStore.upsert('chunk-1', vector, { month: '2020-03', artist: 'Taylor Swift' });
+
+// Search (async with worker)
+const results = await LocalVectorStore.searchAsync(queryVector, 5, 0.5);
+
+// Get stats (including SharedArrayBuffer status)
+const stats = LocalVectorStore.getStats();
+// {
+//   count: 1250,
+//   sharedMemory: { available: true, enabled: true },
+//   lru: { evictionCount: 5, hitRate: 0.85 }
+// }
 ```
 
 ---
@@ -1427,6 +1543,8 @@ This session addressed critical architectural vulnerabilities identified through
 - `js/services/provider-fallback-chain.js` (700+ lines, automatic fallback)
 - `js/services/performance-profiler.js` (600+ lines, Chrome DevTools integration)
 - `js/storage-breakdown-ui.js` (627 lines, storage management UI) (NEW)
+
+**Testing:** 325 tests: 325 passing, 0 failing (verified 2026-01-17)
 
 **Modified Files:**
 - `js/services/tab-coordination.js` (Enhanced with clock skew handling)
@@ -1862,7 +1980,7 @@ Completed the final phase of ES module migration by removing all remaining `wind
 - `vitest.config.js`: Configured Vitest to use happy-dom environment
 
 **Test Results**:
-- **Total Passing**: 311 tests (including new error boundary tests)
+- **Total Passing**: 325 tests: 325 passing, 0 failing (verified 2026-01-17)
 - **New Test Coverage**: 32 error boundary tests + 24 LRU cache tests = 56 new tests
 - **Quality**: Comprehensive coverage of edge cases, error conditions, and recovery scenarios
 
