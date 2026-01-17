@@ -694,7 +694,6 @@ await calibrateClockSkew(); // Called before election in init()
 if (document.hidden) await delay(5000); // Wait before promoting
 ```
 
-**Testing:** 325 tests: 325 passing, 0 failing (verified 2026-01-17)
 ### SSE / Streaming Order Guarantees
 
 > [!NOTE]
@@ -1543,8 +1542,6 @@ This session addressed critical architectural vulnerabilities identified through
 - `js/services/provider-fallback-chain.js` (700+ lines, automatic fallback)
 - `js/services/performance-profiler.js` (600+ lines, Chrome DevTools integration)
 - `js/storage-breakdown-ui.js` (627 lines, storage management UI) (NEW)
-
-**Testing:** 325 tests: 325 passing, 0 failing (verified 2026-01-17)
 
 **Modified Files:**
 - `js/services/tab-coordination.js` (Enhanced with clock skew handling)

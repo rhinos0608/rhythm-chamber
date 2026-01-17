@@ -58,9 +58,43 @@ function buildSharedVectorData() {
     const vectorArray = Array.from(vectors.values());
     if (vectorArray.length === 0) return null;
 
-    const dimensions = vectorArray[0].vector?.length || 0;
-    if (dimensions === 0) return null;
+    // Defensive validation: verify all vectors have consistent dimensionality
+    let expectedDimensions = null;
 
+    for (let i = 0; i < vectorArray.length; i++) {
+        const item = vectorArray[i];
+
+        // Check if vector exists and is an array
+        if (!item.vector || !Array.isArray(item.vector)) {
+            console.warn(`[LocalVectorStore] Invalid vector at index ${i}: missing or not an array`);
+            return null;
+        }
+
+        // Check vector dimensions
+        const currentDimensions = item.vector.length;
+        if (currentDimensions === 0) {
+            console.warn(`[LocalVectorStore] Empty vector at index ${i}`);
+            return null;
+        }
+
+        // Validate consistent dimensions across all vectors
+        if (expectedDimensions === null) {
+            expectedDimensions = currentDimensions;
+        } else if (currentDimensions !== expectedDimensions) {
+            console.error(`[LocalVectorStore] Dimension mismatch at index ${i}: expected ${expectedDimensions}, got ${currentDimensions}`);
+            return null;
+        }
+
+        // Validate all elements are numbers
+        for (let j = 0; j < currentDimensions; j++) {
+            if (typeof item.vector[j] !== 'number' || isNaN(item.vector[j])) {
+                console.warn(`[LocalVectorStore] Non-numeric value at vector ${i}, index ${j}`);
+                return null;
+            }
+        }
+    }
+
+    const dimensions = expectedDimensions;
     const totalFloats = vectorArray.length * dimensions;
 
     try {

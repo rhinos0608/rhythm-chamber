@@ -172,8 +172,21 @@ class TransactionContext {
                     };
                 }
             } catch {
-                previousValue = null;
-                previousOptions = {};
+                // Fall through to direct storage access
+            }
+        }
+
+        // FALLBACK: Direct storage access when retrieveWithOptions is unavailable
+        if (previousValue === null && window.SecureTokenStore?.retrieve) {
+            try {
+                const tokenValue = await window.SecureTokenStore.retrieve(tokenKey);
+                if (tokenValue) {
+                    previousValue = tokenValue;
+                    // Use empty options since retrieve doesn't return metadata/expiry
+                    previousOptions = {};
+                }
+            } catch (fallbackError) {
+                console.warn('[Transaction] Token fallback retrieval failed:', fallbackError);
             }
         }
 
@@ -209,8 +222,21 @@ class TransactionContext {
                     };
                 }
             } catch {
-                previousValue = null;
-                previousOptions = {};
+                // Fall through to direct storage access
+            }
+        }
+
+        // FALLBACK: Direct storage access when retrieveWithOptions is unavailable
+        if (previousValue === null && window.SecureTokenStore?.retrieve) {
+            try {
+                const tokenValue = await window.SecureTokenStore.retrieve(tokenKey);
+                if (tokenValue) {
+                    previousValue = tokenValue;
+                    // Use empty options since retrieve doesn't return metadata/expiry
+                    previousOptions = {};
+                }
+            } catch (fallbackError) {
+                console.warn('[Transaction] Token fallback retrieval failed:', fallbackError);
             }
         }
 

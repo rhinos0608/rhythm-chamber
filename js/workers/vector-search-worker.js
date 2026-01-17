@@ -114,13 +114,47 @@ function searchVectorsShared(queryVector, sharedVectors, payloads, dimensions, l
         return [];
     }
 
+    // Validate dimensions parameter
+    if (typeof dimensions !== 'number' || !Number.isInteger(dimensions) || dimensions <= 0) {
+        throw new Error(`Invalid dimensions: ${dimensions}. Must be a positive integer.`);
+    }
+
+    // Validate query vector dimension consistency
+    if (queryVector.length !== dimensions) {
+        throw new Error(`Query vector dimension mismatch. Expected ${dimensions}, got ${queryVector.length}`);
+    }
+
+    // Validate query vector content
+    for (let i = 0; i < queryVector.length; i++) {
+        if (!Number.isFinite(queryVector[i])) {
+            throw new Error(`Query vector contains invalid value at index ${i}: ${queryVector[i]}`);
+        }
+    }
+
+    // Validate SharedArrayBuffer type
+    if (!(sharedVectors instanceof SharedArrayBuffer)) {
+        throw new Error('sharedVectors must be a SharedArrayBuffer');
+    }
+
+    // Validate buffer size matches expected dimensions
+    const expectedLen = payloads.length * dimensions;
     const vectorArray = new Float32Array(sharedVectors);
+    if (vectorArray.length < expectedLen) {
+        throw new Error(`Shared buffer too small. Expected ${expectedLen} floats, got ${vectorArray.length}`);
+    }
+
     const vectorCount = payloads.length;
     const results = [];
 
     // Iterate through vectors in shared memory
     for (let i = 0; i < vectorCount; i++) {
         const offset = i * dimensions;
+
+        // Bounds check before subarray operation
+        if (offset + dimensions > vectorArray.length) {
+            throw new Error(`Buffer overflow prevented at vector index ${i}. Offset: ${offset + dimensions}, Buffer length: ${vectorArray.length}`);
+        }
+
         const vector = vectorArray.subarray(offset, offset + dimensions);
 
         const score = cosineSimilarity(queryVector, vector);
@@ -225,6 +259,44 @@ function handleSearch(id, { queryVector, vectors, limit = 5, threshold = 0.5 }) 
  */
 function handleSearchShared(id, { queryVector, sharedVectors, payloads, dimensions, limit = 5, threshold = 0.5 }) {
     try {
+        // Validate parameters before calling searchVectorsShared
+        if (!queryVector || !Array.isArray(queryVector)) {
+            throw new Error('queryVector must be a non-empty array');
+        }
+
+        if (!(sharedVectors instanceof SharedArrayBuffer)) {
+            throw new Error('sharedVectors must be a SharedArrayBuffer');
+        }
+
+        if (!payloads || !Array.isArray(payloads) || payloads.length === 0) {
+            throw new Error('payloads must be a non-empty array');
+        }
+
+        if (typeof dimensions !== 'number' || dimensions <= 0 || !Number.isInteger(dimensions)) {
+            throw new Error(`Invalid dimensions: ${dimensions}. Must be a positive integer.`);
+        }
+
+        // Validate query vector dimension consistency
+        if (queryVector.length !== dimensions) {
+            throw new Error(`Query vector dimension mismatch. Expected ${dimensions}, got ${queryVector.length}`);
+        }
+
+        // Validate limit and threshold ranges
+        if (typeof limit !== 'number' || limit <= 0) {
+            throw new Error(`Invalid limit: ${limit}. Must be a positive number.`);
+        }
+
+        if (typeof threshold !== 'number' || threshold < 0 || threshold > 1) {
+            throw new Error(`Invalid threshold: ${threshold}. Must be between 0 and 1.`);
+        }
+
+        // Validate payload structure
+        for (let i = 0; i < payloads.length; i++) {
+            if (!payloads[i] || typeof payloads[i].id === 'undefined') {
+                throw new Error(`Invalid payload at index ${i}. Missing required 'id' field.`);
+            }
+        }
+
         const startTime = performance.now();
 
         const results = searchVectorsShared(queryVector, sharedVectors, payloads, dimensions, limit, threshold);
@@ -246,7 +318,7 @@ function handleSearchShared(id, { queryVector, sharedVectors, payloads, dimensio
         self.postMessage({
             type: 'error',
             id,
-            message: error.message || 'Shared search failed'
+            message: `Shared search validation failed: ${error.message}`
         });
     }
 }
