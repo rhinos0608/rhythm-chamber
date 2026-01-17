@@ -159,6 +159,28 @@ const EVENT_SCHEMAS = {
     'eventbus:storm': {
         description: 'Event storm detected',
         payload: { eventsPerSecond: 'number', threshold: 'number' }
+    },
+
+    // Embedding events
+    'embedding:model_loaded': {
+        description: 'Embedding model fully loaded',
+        payload: { model: 'string', backend: 'string', quantization: 'string?', loadTimeMs: 'number' }
+    },
+    'embedding:mode_change': {
+        description: 'Embedding mode changed (battery-aware switching)',
+        payload: { from: 'string', to: 'string', batteryLevel: 'number?', charging: 'boolean?' }
+    },
+    'embedding:generation_start': {
+        description: 'Embedding generation started',
+        payload: { count: 'number', mode: 'string' }
+    },
+    'embedding:generation_complete': {
+        description: 'Embedding generation completed',
+        payload: { count: 'number', durationMs: 'number', avgTimePerEmbedding: 'number' }
+    },
+    'embedding:error': {
+        description: 'Embedding error occurred',
+        payload: { error: 'string', context: 'string?' }
     }
 };
 

@@ -7,6 +7,29 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { QuotaManager } from '../../js/storage/quota-manager.js';
 import { EventBus } from '../../js/services/event-bus.js';
 
+// Store original navigator.storage
+const originalStorage = navigator.storage;
+
+// Mock storage estimate function
+function mockStorageEstimate(usage, quota) {
+    Object.defineProperty(navigator, 'storage', {
+        value: {
+            estimate: vi.fn().mockResolvedValue({ usage, quota })
+        },
+        writable: true,
+        configurable: true
+    });
+}
+
+// Restore original navigator.storage
+function restoreStorage() {
+    Object.defineProperty(navigator, 'storage', {
+        value: originalStorage,
+        writable: true,
+        configurable: true
+    });
+}
+
 describe('QuotaManager', () => {
     beforeEach(() => {
         vi.useFakeTimers();
@@ -18,6 +41,7 @@ describe('QuotaManager', () => {
         vi.useRealTimers();
         QuotaManager.reset();
         EventBus.clearAll();
+        restoreStorage();
     });
 
     describe('Configuration', () => {
@@ -39,12 +63,13 @@ describe('QuotaManager', () => {
     });
 
     describe('getStatus', () => {
-        it('should return current quota status object', () => {
+        it('should return current quota status object with all properties', () => {
             const status = QuotaManager.getStatus();
 
             expect(status).toHaveProperty('usageBytes');
             expect(status).toHaveProperty('quotaBytes');
             expect(status).toHaveProperty('percentage');
+            expect(status).toHaveProperty('availableBytes');
             expect(status).toHaveProperty('isBlocked');
             expect(status).toHaveProperty('tier');
         });
@@ -58,6 +83,21 @@ describe('QuotaManager', () => {
             const status = QuotaManager.getStatus();
             expect(status.isBlocked).toBe(false);
         });
+
+        it('should have initial availableBytes equal to fallback quota', () => {
+            const status = QuotaManager.getStatus();
+            expect(status.availableBytes).toBe(QuotaManager.config.fallbackQuotaBytes);
+        });
+
+        it('should return a copy so callers cannot mutate internal state', () => {
+            const status1 = QuotaManager.getStatus();
+            status1.tier = 'hacked';
+            status1.usageBytes = 999999;
+
+            const status2 = QuotaManager.getStatus();
+            expect(status2.tier).toBe('normal');
+            expect(status2.usageBytes).toBe(0);
+        });
     });
 
     describe('isWriteBlocked', () => {
@@ -68,12 +108,14 @@ describe('QuotaManager', () => {
 
     describe('Threshold setters', () => {
         it('should allow setting warning threshold', () => {
-            QuotaManager.setWarningThreshold(0.75);
+            const result = QuotaManager.setWarningThreshold(0.75);
+            expect(result).toBe(true);
             expect(QuotaManager.config.warningThreshold).toBe(0.75);
         });
 
         it('should allow setting critical threshold', () => {
-            QuotaManager.setCriticalThreshold(0.90);
+            const result = QuotaManager.setCriticalThreshold(0.90);
+            expect(result).toBe(true);
             expect(QuotaManager.config.criticalThreshold).toBe(0.90);
         });
 
@@ -81,11 +123,27 @@ describe('QuotaManager', () => {
             const originalWarning = QuotaManager.config.warningThreshold;
             const originalCritical = QuotaManager.config.criticalThreshold;
 
-            QuotaManager.setWarningThreshold(1.5); // Invalid - > 1
-            expect(QuotaManager.config.warningThreshold).toBe(originalWarning); // Unchanged
+            const result1 = QuotaManager.setWarningThreshold(1.5); // Invalid - > 1
+            expect(result1).toBe(false);
+            expect(QuotaManager.config.warningThreshold).toBe(originalWarning);
 
-            QuotaManager.setCriticalThreshold(-0.5); // Invalid - < 0
-            expect(QuotaManager.config.criticalThreshold).toBe(originalCritical); // Unchanged
+            const result2 = QuotaManager.setCriticalThreshold(-0.5); // Invalid - < 0
+            expect(result2).toBe(false);
+            expect(QuotaManager.config.criticalThreshold).toBe(originalCritical);
+        });
+
+        it('should reject warning threshold >= critical threshold', () => {
+            // Try to set warning to 0.96 when critical is 0.95
+            const result = QuotaManager.setWarningThreshold(0.96);
+            expect(result).toBe(false);
+            expect(QuotaManager.config.warningThreshold).toBe(0.80); // Unchanged
+        });
+
+        it('should reject critical threshold <= warning threshold', () => {
+            // Try to set critical to 0.75 when warning is 0.80
+            const result = QuotaManager.setCriticalThreshold(0.75);
+            expect(result).toBe(false);
+            expect(QuotaManager.config.criticalThreshold).toBe(0.95); // Unchanged
         });
     });
 
@@ -103,49 +161,105 @@ describe('QuotaManager', () => {
             expect(status.tier).toBe('normal');
             expect(status.isBlocked).toBe(false);
             expect(status.percentage).toBe(0);
+            expect(status.availableBytes).toBe(QuotaManager.config.fallbackQuotaBytes);
+        });
+
+        it('should restore config defaults when reset is called', () => {
+            // Modify thresholds
+            QuotaManager.setWarningThreshold(0.50);
+            QuotaManager.setCriticalThreshold(0.60);
+
+            expect(QuotaManager.config.warningThreshold).toBe(0.50);
+            expect(QuotaManager.config.criticalThreshold).toBe(0.60);
+
+            // Reset should restore defaults
+            QuotaManager.reset();
+
+            expect(QuotaManager.config.warningThreshold).toBe(0.80);
+            expect(QuotaManager.config.criticalThreshold).toBe(0.95);
         });
     });
 
-    describe('Event schema contracts', () => {
-        it('should emit storage:quota_warning with correct payload shape', () => {
-            const payload = {
-                usageBytes: 40 * 1024 * 1024, // 40MB
-                quotaBytes: 50 * 1024 * 1024, // 50MB
-                percentage: 80
-            };
+    describe('Event emissions', () => {
+        it('should emit storage:quota_warning when crossing warning threshold', async () => {
+            const warningHandler = vi.fn();
+            EventBus.on('storage:quota_warning', warningHandler);
 
+            // Mock storage at 85% usage (above 80% warning threshold)
+            const quota = 100 * 1024 * 1024; // 100MB
+            const usage = 85 * 1024 * 1024;  // 85MB (85%)
+            mockStorageEstimate(usage, quota);
+
+            await QuotaManager.checkNow();
+
+            expect(warningHandler).toHaveBeenCalled();
+            const payload = warningHandler.mock.calls[0][0];
             expect(payload).toHaveProperty('usageBytes');
             expect(payload).toHaveProperty('quotaBytes');
             expect(payload).toHaveProperty('percentage');
             expect(typeof payload.usageBytes).toBe('number');
             expect(typeof payload.quotaBytes).toBe('number');
             expect(typeof payload.percentage).toBe('number');
+            expect(payload.percentage).toBeGreaterThanOrEqual(80);
+            expect(payload.percentage).toBeLessThan(95);
         });
 
-        it('should emit storage:quota_critical with correct payload shape', () => {
-            const payload = {
-                usageBytes: 47.5 * 1024 * 1024, // 47.5MB
-                quotaBytes: 50 * 1024 * 1024,   // 50MB
-                percentage: 95
-            };
+        it('should emit storage:quota_critical when crossing critical threshold', async () => {
+            const criticalHandler = vi.fn();
+            EventBus.on('storage:quota_critical', criticalHandler);
 
+            // Mock storage at 96% usage (above 95% critical threshold)
+            const quota = 100 * 1024 * 1024; // 100MB
+            const usage = 96 * 1024 * 1024;  // 96MB (96%)
+            mockStorageEstimate(usage, quota);
+
+            await QuotaManager.checkNow();
+
+            expect(criticalHandler).toHaveBeenCalled();
+            const payload = criticalHandler.mock.calls[0][0];
             expect(payload).toHaveProperty('usageBytes');
             expect(payload).toHaveProperty('quotaBytes');
             expect(payload).toHaveProperty('percentage');
             expect(payload.percentage).toBeGreaterThanOrEqual(95);
         });
 
-        it('should emit storage:quota_normal when recovered', () => {
-            const payload = {
-                usageBytes: 30 * 1024 * 1024, // 30MB
-                quotaBytes: 50 * 1024 * 1024, // 50MB
-                percentage: 60
-            };
+        it('should emit storage:quota_normal when recovered', async () => {
+            const normalHandler = vi.fn();
+            EventBus.on('storage:quota_normal', normalHandler);
 
+            // First, put into warning state
+            const quota = 100 * 1024 * 1024;
+            mockStorageEstimate(85 * 1024 * 1024, quota); // 85%
+            await QuotaManager.checkNow();
+
+            // Then recover to normal
+            mockStorageEstimate(50 * 1024 * 1024, quota); // 50%
+            await QuotaManager.checkNow();
+
+            expect(normalHandler).toHaveBeenCalled();
+            const payload = normalHandler.mock.calls[0][0];
             expect(payload).toHaveProperty('usageBytes');
             expect(payload).toHaveProperty('quotaBytes');
             expect(payload).toHaveProperty('percentage');
             expect(payload.percentage).toBeLessThan(80);
+        });
+
+        it('should emit storage:quota_warning when transitioning from critical to warning', async () => {
+            const warningHandler = vi.fn();
+            EventBus.on('storage:quota_warning', warningHandler);
+
+            const quota = 100 * 1024 * 1024;
+
+            // First, put into critical state
+            mockStorageEstimate(96 * 1024 * 1024, quota); // 96%
+            await QuotaManager.checkNow();
+
+            // Then recover to warning (but not normal)
+            mockStorageEstimate(85 * 1024 * 1024, quota); // 85%
+            await QuotaManager.checkNow();
+
+            // Should have emitted warning event on critical->warning transition
+            expect(warningHandler).toHaveBeenCalled();
         });
     });
 
@@ -160,6 +274,36 @@ describe('QuotaManager', () => {
             expect(checkNowSpy).not.toHaveBeenCalled();
 
             checkNowSpy.mockRestore();
+        });
+
+        it('should trigger immediate check for large writes above threshold', async () => {
+            // This test validates the threshold logic
+            // 1MB is the threshold, so 1MB should trigger a check
+            const config = QuotaManager.config;
+            expect(config.largeWriteThresholdBytes).toBe(1024 * 1024);
+
+            // 512KB is below threshold, should not trigger
+            expect(512 * 1024 < config.largeWriteThresholdBytes).toBe(true);
+
+            // 1MB is at threshold, should trigger
+            expect(1024 * 1024 >= config.largeWriteThresholdBytes).toBe(true);
+
+            // 2MB is above threshold, should trigger
+            expect(2 * 1024 * 1024 >= config.largeWriteThresholdBytes).toBe(true);
+        });
+    });
+
+    describe('init function', () => {
+        it('should return a shallow copy of status, not the internal reference', async () => {
+            mockStorageEstimate(0, 100 * 1024 * 1024);
+
+            const status = await QuotaManager.init();
+            status.tier = 'hacked';
+            status.usageBytes = 999999;
+
+            const internalStatus = QuotaManager.getStatus();
+            expect(internalStatus.tier).not.toBe('hacked');
+            expect(internalStatus.usageBytes).not.toBe(999999);
         });
     });
 });

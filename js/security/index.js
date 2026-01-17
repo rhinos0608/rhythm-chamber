@@ -113,7 +113,7 @@ function deobfuscate(obfuscated, key = null) {
     }
 }
 
-function redactForLogging(obj, sensitiveKeys = ['apiKey', 'qdrantApiKey', 'token', 'secret']) {
+function redactForLogging(obj, sensitiveKeys = ['apiKey', 'token', 'secret']) {
     if (!obj || typeof obj !== 'object') return obj;
 
     const redacted = { ...obj };

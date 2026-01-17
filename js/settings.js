@@ -578,8 +578,8 @@ function showSettingsModal() {
                     </div>
                     
                     <p class="settings-description">
-                        RAG-powered semantic search using your own Qdrant cluster.
-                        Connect your cluster to ask natural questions about your listening history.
+                        RAG-powered semantic search using 100% local browser embeddings.
+                        Ask natural questions about your listening history without data leaving your device.
                     </p>
                     
                     <!-- Security Warning -->
@@ -609,23 +609,6 @@ function showSettingsModal() {
                         </div>
                     </div>
                     
-                    <div class="settings-field">
-                        <label for="setting-qdrant-url">Qdrant Cluster URL</label>
-                        <input type="text" id="setting-qdrant-url" 
-                               value="${ModuleRegistry.getModuleSync('RAG')?.getConfig()?.qdrantUrl || ''}" 
-                               placeholder="https://xyz-abc.cloud.qdrant.io:6333"
-                               autocomplete="off">
-                        <span class="settings-hint">Get a free cluster at <a href="https://cloud.qdrant.io" target="_blank">cloud.qdrant.io</a></span>
-                    </div>
-                    
-                    <div class="settings-field">
-                        <label for="setting-qdrant-key">Qdrant API Key</label>
-                        <input type="password" id="setting-qdrant-key" 
-                               value="${ModuleRegistry.getModuleSync('RAG')?.getConfig()?.qdrantApiKey || ''}" 
-                               placeholder="Enter your Qdrant API key"
-                               autocomplete="off">
-                        <button class="btn-show-password" onclick="Settings.togglePasswordVisibility('setting-qdrant-key', this)">Show</button>
-                    </div>
                     
                     <div class="settings-field">
                         <button class="btn btn-primary" id="generate-embeddings-btn" onclick="Settings.generateEmbeddings()">
@@ -641,7 +624,7 @@ function showSettingsModal() {
                         ` : ModuleRegistry.getModuleSync('RAG')?.getCheckpoint?.() ? `
                             <span class="settings-hint warning">⚠️ Interrupted - click Resume to continue</span>
                         ` : `
-                            <span class="settings-hint">Required after adding your Qdrant credentials</span>
+                            <span class="settings-hint">Generate embeddings to enable semantic search</span>
                         `}
                     </div>
                     
@@ -922,23 +905,6 @@ function saveFromModal() {
     }
 
     saveSettings(settings);
-
-    // Save Qdrant settings
-    const RAG = ModuleRegistry.getModuleSync('RAG');
-    if (RAG) {
-        const qdrantUrl = document.getElementById('setting-qdrant-url')?.value?.trim();
-        const qdrantKey = document.getElementById('setting-qdrant-key')?.value?.trim();
-
-        if (qdrantUrl || qdrantKey) {
-            const ragConfig = RAG.getConfig() || {};
-            RAG.saveConfig({
-                ...ragConfig,
-                qdrantUrl: qdrantUrl || ragConfig.qdrantUrl,
-                qdrantApiKey: qdrantKey || ragConfig.qdrantApiKey
-            });
-        }
-    }
-
     hideSettingsModal();
 
     // Show confirmation
@@ -1001,23 +967,6 @@ async function generateEmbeddings(resume = false) {
         return;
     }
 
-    // First save any unsaved Qdrant settings
-    const qdrantUrl = document.getElementById('setting-qdrant-url')?.value?.trim();
-    const qdrantKey = document.getElementById('setting-qdrant-key')?.value?.trim();
-
-    if (!qdrantUrl || !qdrantKey) {
-        showToast('Please enter your Qdrant URL and API key first');
-        return;
-    }
-
-    // Save credentials
-    const ragConfig = RAG.getConfig() || {};
-    RAG.saveConfig({
-        ...ragConfig,
-        qdrantUrl,
-        qdrantApiKey: qdrantKey
-    });
-
     // Show progress UI
     const progressContainer = document.getElementById('embedding-progress');
     const progressFill = document.getElementById('progress-fill');
@@ -1041,21 +990,6 @@ async function generateEmbeddings(resume = false) {
     }
 
     try {
-        // Test connection first
-        progressText.textContent = 'Testing Qdrant connection...';
-
-        try {
-            await RAG.testConnection();
-        } catch (connErr) {
-            showToast('Qdrant connection failed: ' + connErr.message);
-            if (progressContainer) progressContainer.style.display = 'none';
-            if (generateBtn) generateBtn.disabled = false;
-            if (resumeBtn) resumeBtn.disabled = false;
-            if (cancelBtn) cancelBtn.style.display = 'none';
-            currentEmbeddingAbortController = null;
-            return;
-        }
-
         // Generate embeddings with progress callback and abort signal
         await RAG.generateEmbeddings((current, total, message) => {
             const percent = Math.round((current / total) * 100);
@@ -1166,7 +1100,7 @@ async function showSessionResetModal() {
                         <ul>
                             <li>Invalidate all encrypted credentials</li>
                             <li>Clear RAG checkpoint data</li>
-                            <li>Require re-entering your Qdrant API key</li>
+                            <li>Require re-authentication with Spotify</li>
                             <li>Force generation of new session keys</li>
                         </ul>
                     </div>
@@ -1277,106 +1211,6 @@ async function confirmSessionReset() {
             confirmBtn.disabled = false;
             confirmBtn.textContent = 'Reset Session';
         }
-    }
-}
-
-// ==========================================
-// Storage Mode Mismatch Modal
-// Priority 1: Storage Mode Migration Detection
-// ==========================================
-
-/**
- * Show modal when storage mode has changed requiring embedding regeneration
- * @param {string} currentMode - Current storage mode ('local' or 'qdrant')
- * @param {string} savedMode - Previously saved storage mode
- */
-function showStorageMismatchModal(currentMode, savedMode) {
-    // Remove existing modal if present
-    const existing = document.getElementById('storage-mismatch-modal');
-    if (existing) existing.remove();
-
-    const modal = document.createElement('div');
-    modal.id = 'storage-mismatch-modal';
-    modal.className = 'storage-mismatch-modal';
-    modal.innerHTML = `
-        <div class="storage-mismatch-overlay"></div>
-        <div class="storage-mismatch-content">
-            <div class="storage-mismatch-header">
-                <h2>⚠️ Semantic Search Mode Changed</h2>
-            </div>
-            
-            <div class="storage-mismatch-body">
-                <div class="mismatch-warning">
-                    <span class="warning-icon">🔄</span>
-                    <div class="warning-text">
-                        <p>Your semantic search mode has changed from <strong>${savedMode}</strong> 
-                           to <strong>${currentMode}</strong>.</p>
-                        <p>Your existing embeddings are incompatible with the new mode. 
-                           Please regenerate embeddings to continue using semantic search in chat.</p>
-                    </div>
-                </div>
-                
-                <div class="mismatch-impact">
-                    <h4>What this means:</h4>
-                    <ul>
-                        <li>Chat will work without semantic search context</li>
-                        <li>Embeddings need to be regenerated for the new mode</li>
-                        <li>This typically takes 1-5 minutes depending on data size</li>
-                    </ul>
-                </div>
-            </div>
-            
-            <div class="storage-mismatch-footer">
-                <button class="btn btn-primary" id="regenerate-embeddings-btn">
-                    🔄 Regenerate Embeddings
-                </button>
-                <button class="btn btn-secondary" id="dismiss-mismatch-btn">
-                    Dismiss (Continue without semantic search)
-                </button>
-            </div>
-        </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    // Wire up buttons
-    document.getElementById('regenerate-embeddings-btn').onclick = () => {
-        hideStorageMismatchModal();
-        showSettingsModal();
-        // Auto-navigate to embedding section after modal opens
-        setTimeout(() => {
-            const embeddingSection = document.querySelector('.premium-section');
-            if (embeddingSection) {
-                embeddingSection.scrollIntoView({ behavior: 'smooth' });
-            }
-        }, 300);
-    };
-
-    document.getElementById('dismiss-mismatch-btn').onclick = () => {
-        hideStorageMismatchModal();
-        showToast('Semantic search disabled. Regenerate embeddings in Settings when ready.');
-    };
-
-    // Add escape key listener
-    const escHandler = (e) => {
-        if (e.key === 'Escape') {
-            hideStorageMismatchModal();
-            document.removeEventListener('keydown', escHandler);
-        }
-    };
-    document.addEventListener('keydown', escHandler);
-
-    console.log('[Settings] Storage mismatch modal shown');
-}
-
-/**
- * Hide the storage mismatch modal
- */
-function hideStorageMismatchModal() {
-    const modal = document.getElementById('storage-mismatch-modal');
-    if (modal) {
-        modal.classList.add('closing');
-        setTimeout(() => modal.remove(), 200);
     }
 }
 
@@ -1862,9 +1696,6 @@ export const Settings = {
     saveToolsAndClose,
     getEnabledTools,
     isToolEnabled,
-    // Storage mode mismatch modal (Priority 1)
-    showStorageMismatchModal,
-    hideStorageMismatchModal,
     // Constants
     AVAILABLE_MODELS,
     LLM_PROVIDERS,

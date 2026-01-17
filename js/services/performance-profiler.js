@@ -25,7 +25,9 @@ export const PerformanceCategory = Object.freeze({
     PARSING: 'parsing',
     PATTERN_DETECTION: 'pattern_detection',
     ERROR_RECOVERY: 'error_recovery',
-    TAB_COORDINATION: 'tab_coordination'
+    TAB_COORDINATION: 'tab_coordination',
+    EMBEDDING_GENERATION: 'embedding_generation',
+    EMBEDDING_INITIALIZATION: 'embedding_initialization'
 });
 
 /**
@@ -116,8 +118,8 @@ export class PerformanceProfiler {
      */
     _isPerformanceAPIAvailable() {
         return typeof performance !== 'undefined' &&
-               typeof performance.mark === 'function' &&
-               typeof performance.measure === 'function';
+            typeof performance.mark === 'function' &&
+            typeof performance.measure === 'function';
     }
 
     /**

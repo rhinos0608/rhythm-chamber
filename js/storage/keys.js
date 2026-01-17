@@ -12,7 +12,6 @@ const STORAGE_KEYS = {
     // RAG Module Keys
     // ==========================================
     RAG_CONFIG: 'rhythm_chamber_rag',
-    RAG_CREDENTIAL: 'qdrant_credentials',
     RAG_CHECKPOINT: 'rhythm_chamber_rag_checkpoint',
     RAG_CHECKPOINT_CIPHER: 'rhythm_chamber_rag_checkpoint_cipher',
     RAG_EMBEDDING_MANIFEST: 'rhythm_chamber_embedding_manifest',

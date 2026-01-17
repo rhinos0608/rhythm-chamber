@@ -1,28 +1,21 @@
 /**
  * RAG (Retrieval-Augmented Generation) Module for Rhythm Chamber
- * 
- * Handles semantic search using embeddings and Qdrant vector storage.
- * Premium feature - requires user's own Qdrant Cloud cluster.
- * 
+ *
+ * Handles semantic search using local browser embeddings (WASM).
+ * 100% client-side with zero external dependencies.
+ *
  * SECURITY FEATURES:
- * - Credentials obfuscated in localStorage (not plaintext)
  * - Checkpoints encrypted with session-derived keys
- * - Collection namespace isolation per user
- * - Rate limiting on embedding generation
- * - Anomaly detection for failed API attempts
+ * - All processing happens locally in browser
+ * - No data transmission or external API calls
+ * - Incremental embedding support for efficient updates
  */
 
 const RAG_STORAGE_KEY = 'rhythm_chamber_rag';
-const RAG_CREDENTIAL_KEY = 'qdrant_credentials'; // Key for encrypted storage
 const RAG_CHECKPOINT_KEY = 'rhythm_chamber_rag_checkpoint';
 const RAG_CHECKPOINT_CIPHER_KEY = 'rhythm_chamber_rag_checkpoint_cipher';
-const COLLECTION_NAME_BASE = 'rhythm_chamber';
-const EMBEDDING_MODEL = 'qwen/qwen3-embedding-8b';
-const EMBEDDING_DIMENSIONS = 4096; // qwen3-embedding-8b output dimension
-const API_TIMEOUT_MS = 60000; // 60 second timeout
-const EMBEDDING_RATE_LIMIT = 5; // Max 5 embedding batches per minute
 
-// Local embedding constants (different model, smaller dimensions)
+// Local embedding constants
 const LOCAL_EMBEDDING_DIMENSIONS = 384; // all-MiniLM-L6-v2 output dimension
 
 // Import ModuleRegistry for accessing dynamically loaded modules
@@ -114,69 +107,23 @@ async function createChunksWithWorker(streams, onProgress = () => { }) {
 
 // ==========================================
 // Storage Mode Detection
-// HNW Hierarchy: Clear authority for local vs cloud decision
+// HNW Hierarchy: Local-only mode (WASM-only architecture)
 // ==========================================
 
 /**
- * Get current storage mode ('local' or 'qdrant')
- * Defaults to 'local' if no Qdrant credentials are configured
- * @returns {string} 'local' or 'qdrant'
+ * Get current storage mode (always 'local' in WASM-only architecture)
+ * @returns {string} Always returns 'local'
  */
 function getStorageMode() {
-    const config = getConfigSync();
-    // Default to local if no Qdrant credentials
-    if (!config?.hasCredentials) return 'local';
-    // Explicit mode setting takes precedence
-    return config?.storageMode || 'qdrant';
+    return 'local';
 }
 
 /**
- * Check if using local vector storage mode
- * @returns {boolean} True if in local mode
+ * Check if using local vector storage mode (always true)
+ * @returns {boolean} Always returns true
  */
 function isLocalMode() {
-    return getStorageMode() === 'local';
-}
-
-/**
- * Detects if storage mode has changed since embeddings were generated
- * Priority 1: Storage Mode Migration Detection
- * 
- * When the user switches between local and Qdrant mode after generating
- * embeddings, their existing embeddings become invalid. This function
- * detects that mismatch so the UI can prompt for regeneration.
- * 
- * @returns {Promise<{mismatch: boolean, currentMode: string, savedMode: string|null}>}
- */
-async function detectStorageModeMismatch() {
-    const config = await getConfig();
-
-    // No embeddings generated yet - no mismatch possible
-    if (!config?.embeddingsGenerated) {
-        return { mismatch: false, currentMode: getStorageMode(), savedMode: null };
-    }
-
-    const currentMode = getStorageMode();
-    const savedMode = config.storageMode || null;
-
-    // Legacy config without storageMode - assume it matches current
-    // (graceful fallback for existing users upgrading)
-    if (!savedMode) {
-        console.log('[RAG] Legacy config without storageMode, assuming match');
-        return { mismatch: false, currentMode, savedMode };
-    }
-
-    const mismatch = currentMode !== savedMode;
-
-    if (mismatch) {
-        console.warn(`[RAG] Storage mode mismatch: saved=${savedMode}, current=${currentMode}`);
-    }
-
-    return {
-        mismatch,
-        currentMode,
-        savedMode
-    };
+    return true;
 }
 
 /**
@@ -194,26 +141,12 @@ async function checkLocalSupport() {
     return await LocalEmbeddings.isSupported();
 }
 
-/**
- * Get collection name for Qdrant
- * 
- * SIMPLIFIED (Phase 2): User owns their own Qdrant instance,
- * so namespace isolation is unnecessary. The collection name is now
- * just the base name without per-user hashing.
- * 
- * This removes the dependency on Security.getUserNamespace() which
- * was designed for shared cluster scenarios.
- */
-function getCollectionName() {
-    return COLLECTION_NAME_BASE;
-}
 
 
 /**
  * Get RAG configuration
- * Credentials are encrypted with AES-GCM, not just obfuscated
  * Uses unified storage API with localStorage fallback
- * Returns null if decryption fails (session changed, re-auth needed)
+ * Returns null if config doesn't exist
  */
 async function getConfig() {
     try {
@@ -232,28 +165,6 @@ async function getConfig() {
             config = stored ? JSON.parse(stored) : {};
         }
 
-        // Get encrypted credentials using Security module
-        if (window.Security?.getEncryptedCredentials) {
-            const creds = await window.Security.getEncryptedCredentials(RAG_CREDENTIAL_KEY);
-            if (creds) {
-                config.qdrantUrl = creds.qdrantUrl;
-                config.qdrantApiKey = creds.qdrantApiKey;
-            }
-        }
-
-        // Fallback: Check for legacy unencrypted storage (migration path)
-        if (!config.qdrantApiKey) {
-            const ls = localStorage.getItem(RAG_STORAGE_KEY);
-            if (ls) {
-                const legacy = JSON.parse(ls);
-                if (legacy.qdrantApiKey) {
-                    console.warn('[RAG] Found legacy unencrypted credentials - will encrypt on next save');
-                    config.qdrantUrl = legacy.qdrantUrl;
-                    config.qdrantApiKey = legacy.qdrantApiKey;
-                }
-            }
-        }
-
         return Object.keys(config).length > 0 ? config : null;
     } catch (e) {
         console.error('[RAG] Failed to get config:', e);
@@ -264,22 +175,19 @@ async function getConfig() {
 
 /**
  * Save RAG configuration
- * Credentials are encrypted with AES-GCM for real security
  * Uses unified storage API with localStorage fallback
  */
 async function saveConfig(config) {
-    // Separate sensitive credentials from non-sensitive config
     const nonSensitive = {
         embeddingsGenerated: config.embeddingsGenerated,
         chunksCount: config.chunksCount,
         generatedAt: config.generatedAt,
         dataHash: config.dataHash,
-        updatedAt: new Date().toISOString(),
-        // Flag for sync checks - indicates credentials have been saved
-        hasCredentials: !!(config.qdrantUrl && config.qdrantApiKey)
+        storageMode: config.storageMode || 'local',
+        updatedAt: new Date().toISOString()
     };
 
-    // Store non-sensitive in unified storage (IndexedDB)
+    // Store in unified storage (IndexedDB)
     if (window.Storage?.setConfig) {
         try {
             await window.Storage.setConfig(RAG_STORAGE_KEY, nonSensitive);
@@ -289,17 +197,6 @@ async function saveConfig(config) {
     }
     // Also save to localStorage as sync fallback
     localStorage.setItem(RAG_STORAGE_KEY, JSON.stringify(nonSensitive));
-
-    // Encrypt and store credentials if Security module available
-    if (config.qdrantUrl || config.qdrantApiKey) {
-        if (window.Security?.storeEncryptedCredentials) {
-            await window.Security.storeEncryptedCredentials(RAG_CREDENTIAL_KEY, {
-                qdrantUrl: config.qdrantUrl,
-                qdrantApiKey: config.qdrantApiKey
-            });
-            console.log('[RAG] Credentials encrypted with AES-GCM');
-        }
-    }
 }
 
 
@@ -328,13 +225,12 @@ function isConfigured() {
 }
 
 /**
- * Check if Qdrant credentials are set (SYNC version)
- * Note: Checks localStorage flag, not actual encrypted credentials
+ * Check if credentials are configured (SYNC version)
+ * In WASM-only architecture, always returns false
+ * @returns {boolean} Always returns false
  */
 function hasCredentials() {
-    const config = getConfigSync();
-    // Check if we have the flag that indicates credentials were saved
-    return !!(config?.hasCredentials || (config?.qdrantUrl && config?.qdrantApiKey));
+    return false;
 }
 
 /**
@@ -669,238 +565,9 @@ async function updateManifestAfterEmbedding(embeddedChunks) {
 }
 
 
-/**
- * Get embedding for text using OpenRouter API
- * Includes rate limiting and anomaly detection
- *
- * @param {string|string[]} input - Text or array of texts to embed
- * @param {AbortSignal} abortSignal - Optional abort signal for cancellation
- * @returns {Promise<number[]|number[][]>} Embedding vector(s)
- */
-async function getEmbedding(input, abortSignal = null) {
-    // Check for cancellation
-    if (abortSignal?.aborted) {
-        throw new Error('Embedding generation cancelled');
-    }
-
-    // Security: Check for suspicious activity
-    if (window.Security?.checkSuspiciousActivity) {
-        const suspicious = await window.Security.checkSuspiciousActivity('embedding');
-        if (suspicious.blocked) {
-            throw new Error(suspicious.message);
-        }
-    }
-
-    // Security: Rate limiting
-    if (window.Security?.isRateLimited?.('embedding', EMBEDDING_RATE_LIMIT)) {
-        throw new Error('Rate limited: Please wait before generating more embeddings');
-    }
-
-    const apiKey = window.Settings?.getSettings?.()?.openrouter?.apiKey;
-
-    if (!apiKey || apiKey === 'your-api-key-here') {
-        throw new Error('OpenRouter API key not configured');
-    }
-
-    // Use timeout wrapper if available
-    const fetchFn = window.Utils?.fetchWithTimeout || fetch;
-
-    try {
-        const response = await fetchFn('https://openrouter.ai/api/v1/embeddings', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-                'HTTP-Referer': window.location.origin,
-                'X-Title': 'Rhythm Chamber'
-            },
-            body: JSON.stringify({
-                model: EMBEDDING_MODEL,
-                input: Array.isArray(input) ? input : [input]
-            }),
-            signal: abortSignal
-        }, API_TIMEOUT_MS);
-
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            const errorMsg = error.error?.message || `Embedding API error: ${response.status}`;
-
-            // Record failed attempt for anomaly detection
-            await window.Security?.recordFailedAttempt?.('embedding', errorMsg);
-
-            throw new Error(errorMsg);
-        }
-
-        const data = await response.json();
-        const embeddings = data.data.map(d => d.embedding);
-
-        return Array.isArray(input) ? embeddings : embeddings[0];
-
-    } catch (err) {
-        // Check for cancellation
-        if (abortSignal?.aborted || err.message === 'Request cancelled') {
-            throw new Error('Embedding generation cancelled');
-        }
-        // Record network/auth failures
-        if (err.message.includes('401') || err.message.includes('403')) {
-            await window.Security?.recordFailedAttempt?.('embedding', err.message);
-        }
-        throw err;
-    }
-}
 
 /**
- * Test connection to Qdrant cluster
- */
-async function testConnection() {
-    const config = await getConfig();
-    if (!config?.qdrantUrl || !config?.qdrantApiKey) {
-        throw new Error('Qdrant credentials not configured');
-    }
-
-    const response = await fetch(`${config.qdrantUrl}/collections`, {
-        headers: {
-            'api-key': config.qdrantApiKey
-        }
-    });
-
-    if (!response.ok) {
-        throw new Error(`Qdrant connection failed: ${response.status}`);
-    }
-
-    return await response.json();
-}
-
-/**
- * Build consistent Qdrant error messaging with write-permission hints
- */
-function buildQdrantErrorMessage(action, response, errorPayload = {}) {
-    const status = response?.status;
-    const rawMessage = errorPayload?.status?.error || errorPayload?.message || errorPayload?.error;
-    const statusText = status ? ` (${status})` : '';
-    const base = `${action} failed${statusText}${rawMessage ? `: ${rawMessage}` : ''}`;
-    const permissionHint = isQdrantPermissionError(status, rawMessage)
-        ? 'Your Qdrant API key may be read-only. Use a key with write permissions to continue.'
-        : '';
-    return permissionHint ? `${base}. ${permissionHint}` : base;
-}
-
-function isQdrantPermissionError(status, message = '') {
-    if (status === 401 || status === 403) return true;
-    const normalized = message.toLowerCase();
-    return normalized.includes('permission') ||
-        normalized.includes('forbidden') ||
-        normalized.includes('read only') ||
-        normalized.includes('read-only');
-}
-
-/**
- * Create collection in Qdrant if it doesn't exist
- * Uses namespace-isolated collection name
- *
- * @param {AbortSignal} abortSignal - Optional abort signal for cancellation
- */
-async function ensureCollection(abortSignal = null) {
-    // Check for cancellation
-    if (abortSignal?.aborted) {
-        throw new Error('Operation cancelled');
-    }
-
-    const config = await getConfig();
-    if (!config?.qdrantUrl || !config?.qdrantApiKey) {
-        throw new Error('Qdrant credentials not configured');
-    }
-
-    // Get namespace-isolated collection name
-    const collectionName = await getCollectionName();
-    console.log(`[RAG] Using collection: ${collectionName}`);
-
-    // Check if collection exists
-    const checkResponse = await fetch(`${config.qdrantUrl}/collections/${collectionName}`, {
-        headers: { 'api-key': config.qdrantApiKey },
-        signal: abortSignal
-    });
-
-    if (!checkResponse.ok && isQdrantPermissionError(checkResponse.status)) {
-        const error = await checkResponse.json().catch(() => ({}));
-        const message = buildQdrantErrorMessage('Check collection', checkResponse, error);
-        await window.Security?.recordFailedAttempt?.('qdrant', message);
-        throw new Error(message);
-    }
-
-    if (checkResponse.ok) {
-        return true; // Collection exists
-    }
-
-    // Create collection
-    const createResponse = await fetch(`${config.qdrantUrl}/collections/${collectionName}`, {
-        method: 'PUT',
-        headers: {
-            'api-key': config.qdrantApiKey,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            vectors: {
-                size: EMBEDDING_DIMENSIONS,
-                distance: 'Cosine'
-            }
-        }),
-        signal: abortSignal
-    });
-
-    if (!createResponse.ok) {
-        const error = await createResponse.json().catch(() => ({}));
-        const message = buildQdrantErrorMessage('Create collection', createResponse, error);
-        await window.Security?.recordFailedAttempt?.('qdrant', message);
-        throw new Error(message);
-    }
-
-    return true;
-}
-
-/**
- * Upsert points to Qdrant
- * Uses namespace-isolated collection
- *
- * @param {Array} points - Array of { id, vector, payload } objects
- * @param {AbortSignal} abortSignal - Optional abort signal for cancellation
- */
-async function upsertPoints(points, abortSignal = null) {
-    // Check for cancellation
-    if (abortSignal?.aborted) {
-        throw new Error('Operation cancelled');
-    }
-
-    const config = await getConfig();
-    if (!config?.qdrantUrl || !config?.qdrantApiKey) {
-        throw new Error('Qdrant credentials not configured');
-    }
-
-    const collectionName = await getCollectionName();
-
-    const response = await fetch(`${config.qdrantUrl}/collections/${collectionName}/points`, {
-        method: 'PUT',
-        headers: {
-            'api-key': config.qdrantApiKey,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ points }),
-        signal: abortSignal
-    });
-
-    if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        const message = buildQdrantErrorMessage('Upsert points', response, error);
-        await window.Security?.recordFailedAttempt?.('qdrant', message);
-        throw new Error(message);
-    }
-
-    return await response.json();
-}
-
-/**
- * Search for similar vectors in Qdrant or local store
- * Automatically routes to local mode if no Qdrant credentials
+ * Search for similar vectors (routes to local store)
  *
  * @param {string} query - Search query text
  * @param {number} limit - Number of results to return
@@ -913,262 +580,19 @@ async function search(query, limit = 5, abortSignal = null) {
         throw new Error('Search cancelled');
     }
 
-    // Route to local mode if applicable
-    if (isLocalMode()) {
-        return searchLocal(query, limit);
-    }
-
-    const config = await getConfig();
-    if (!config?.qdrantUrl || !config?.qdrantApiKey) {
-        throw new Error('Qdrant credentials not configured');
-    }
-
-    // Get embedding for query (pass abort signal through)
-    const queryVector = await getEmbedding(query, abortSignal);
-
-    const collectionName = await getCollectionName();
-
-    // Search in Qdrant
-    const response = await fetch(`${config.qdrantUrl}/collections/${collectionName}/points/search`, {
-        method: 'POST',
-        headers: {
-            'api-key': config.qdrantApiKey,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            vector: queryVector,
-            limit: limit,
-            with_payload: true
-        }),
-        signal: abortSignal
-    });
-
-    if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        await window.Security?.recordFailedAttempt?.('qdrant', `Search failed: ${response.status}`);
-        throw new Error(error.status?.error || `Search failed: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data.result || [];
+    // Always route to local mode in WASM-only architecture
+    return searchLocal(query, limit);
 }
 
 /**
- * Generate embeddings for all streaming data chunks
- * Automatically routes to local mode if no Qdrant credentials
+ * Generate embeddings for all streaming data chunks (local mode)
  * @param {Function} onProgress - Progress callback (current, total, message)
  * @param {object} options - Options including resume, mergeStrategy
  * @param {AbortSignal} abortSignal - Optional signal to cancel operation
  */
 async function generateEmbeddings(onProgress = () => { }, options = {}, abortSignal = null) {
-    // Check for cancellation at start
-    if (abortSignal?.aborted) {
-        throw new Error('Embedding generation cancelled');
-    }
-
-    // Route to local mode if applicable
-    if (isLocalMode()) {
-        return generateLocalEmbeddings(onProgress, options, abortSignal);
-    }
-
-    const config = await getConfig();
-    if (!config?.qdrantUrl || !config?.qdrantApiKey) {
-        throw new Error('Please configure your Qdrant credentials first');
-    }
-
-    // HNW Hierarchy: Acquire operation lock before starting embedding generation
-    let embeddingLockId = null;
-    if (window.OperationLock) {
-        try {
-            embeddingLockId = await window.OperationLock.acquire('embedding_generation');
-        } catch (lockError) {
-            throw new Error(`Cannot generate embeddings: ${lockError.message}`);
-        }
-    }
-
-    // SECURITY: Start background token refresh for long operation
-    if (window.Spotify?.startBackgroundRefresh) {
-        window.Spotify.startBackgroundRefresh();
-    }
-
-    const { resume = false, mergeStrategy = null } = options;
-    const checkpoint = resume ? await getCheckpoint() : null;
-
-    try {
-        // Get streaming data
-        const streams = await Storage.getStreams();
-        if (!streams || streams.length === 0) {
-            throw new Error('No streaming data found. Please upload your Spotify data first.');
-        }
-
-        // Calculate data hash for staleness detection
-        const dataHash = await window.Storage?.getDataHash?.() || 'unknown';
-
-        onProgress(0, 100, 'Preparing data...');
-
-        // Create chunks from streaming data (uses worker to avoid UI jank)
-        const chunks = await createChunksWithWorker(streams, onProgress);
-        const totalChunks = chunks.length;
-
-        // Calculate time estimate (roughly 0.3s per chunk with batching)
-        const estimatedSeconds = Math.ceil(totalChunks * 0.03); // ~30ms per chunk in batch
-        const estimateText = window.Utils?.formatDuration?.(estimatedSeconds) || `~${estimatedSeconds}s`;
-
-        // Determine starting point
-        // HNW Fix: Enhanced checkpoint validation with auto-restart (power users can override via Settings)
-        let startBatch = 0;
-        if (checkpoint && checkpoint.totalChunks === totalChunks) {
-            // Critical: Validate that checkpoint was created for the same data
-            if (checkpoint.dataHash && checkpoint.dataHash !== dataHash) {
-                console.warn('[RAG] Checkpoint data hash mismatch - data has changed since checkpoint');
-
-                // Check power user setting for checkpoint strategy
-                let strategy = mergeStrategy;
-                if (!strategy) {
-                    // Read from unified storage (default: 'auto' = restart)
-                    const ragSettings = await window.Storage?.getConfig?.('rhythm_chamber_rag_settings');
-                    strategy = ragSettings?.checkpointStrategy || 'auto';
-
-                    // 'prompt' means surface the choice to UI (power user mode)
-                    if (strategy === 'prompt') {
-                        return {
-                            action: 'prompt_merge',
-                            options: [
-                                {
-                                    strategy: 'merge',
-                                    label: 'Keep previous progress + add new data',
-                                    description: `Resume from batch ${checkpoint.lastBatch + 1}, then process new chunks`
-                                },
-                                {
-                                    strategy: 'restart',
-                                    label: 'Start fresh',
-                                    description: 'Discard previous progress and reprocess all data'
-                                }
-                            ],
-                            checkpoint
-                        };
-                    }
-                }
-
-                // Handle based on strategy (default auto = restart)
-                if (strategy === 'merge') {
-                    startBatch = checkpoint.lastBatch + 1;
-                    console.log(`[RAG] Strategy: merge → resuming from batch ${startBatch}`);
-                    onProgress(checkpoint.processed, totalChunks,
-                        `Merging: resuming from batch ${startBatch}... (${estimateText} remaining)`);
-                } else {
-                    // Default: auto-restart on mismatch
-                    console.log('[RAG] Strategy: auto → restarting fresh due to data change');
-                    clearCheckpoint();
-                    onProgress(0, totalChunks, `Data changed. Starting fresh... (Est: ${estimateText})`);
-                }
-            } else {
-                startBatch = checkpoint.lastBatch + 1;
-                onProgress(checkpoint.processed, totalChunks,
-                    `Resuming from batch ${startBatch}... (${estimateText} remaining)`);
-            }
-        } else {
-            onProgress(0, totalChunks, `Processing ${totalChunks} chunks... (Est: ${estimateText})`);
-        }
-
-        // Ensure collection exists
-        await ensureCollection();
-
-        // Process in batches to avoid rate limits
-        const BATCH_SIZE = 10;
-        let processed = checkpoint?.processed || 0;
-
-        for (let i = startBatch * BATCH_SIZE; i < chunks.length; i += BATCH_SIZE) {
-            // Check for cancellation at start of each batch
-            if (abortSignal?.aborted) {
-                throw new Error('Embedding generation cancelled');
-            }
-
-            const batchIndex = Math.floor(i / BATCH_SIZE);
-            const batch = chunks.slice(i, i + BATCH_SIZE);
-            const texts = batch.map(c => c.text);
-
-            try {
-                // Get embeddings for batch
-                const embeddings = await getEmbedding(texts);
-
-                // Prepare points for Qdrant
-                const points = batch.map((chunk, idx) => ({
-                    id: i + idx + 1, // Qdrant requires positive integers
-                    vector: embeddings[idx],
-                    payload: {
-                        text: chunk.text,
-                        type: chunk.type,
-                        metadata: chunk.metadata
-                    }
-                }));
-
-                // Upsert to Qdrant
-                await upsertPoints(points);
-
-                processed += batch.length;
-
-                // Save checkpoint after each batch
-                await saveCheckpoint({
-                    lastBatch: batchIndex,
-                    processed,
-                    totalChunks,
-                    dataHash
-                });
-
-                onProgress(processed, totalChunks, `Processed ${processed}/${totalChunks} chunks...`);
-
-            } catch (err) {
-                console.error('Batch processing error:', err);
-                // Save checkpoint so user can resume
-                await saveCheckpoint({
-                    lastBatch: batchIndex - 1,
-                    processed,
-                    totalChunks,
-                    dataHash,
-                    error: err.message
-                });
-                throw new Error(`Failed at batch ${batchIndex}: ${err.message}. You can resume from Settings.`);
-            }
-
-            // Small delay to avoid rate limits
-            if (i + BATCH_SIZE < chunks.length) {
-                await new Promise(r => setTimeout(r, 200));
-            }
-        }
-
-        // Clear checkpoint and mark complete
-        await clearCheckpoint();
-
-        // Mark embeddings as generated with data hash
-        await saveConfig({
-            ...config,
-            embeddingsGenerated: true,
-            chunksCount: totalChunks,
-            generatedAt: new Date().toISOString(),
-            dataHash: dataHash,
-            storageMode: 'qdrant'
-        });
-
-        // Update embedding manifest for incremental support (Phase 3)
-        await updateManifestAfterEmbedding(chunks);
-
-        onProgress(totalChunks, totalChunks, '✓ Embeddings generated successfully!');
-
-        return { success: true, chunksProcessed: totalChunks };
-
-
-    } finally {
-        // SECURITY: Always stop background refresh when done
-        if (window.Spotify?.stopBackgroundRefresh) {
-            window.Spotify.stopBackgroundRefresh();
-        }
-
-        // HNW Hierarchy: Always release operation lock
-        if (embeddingLockId && window.OperationLock) {
-            window.OperationLock.release('embedding_generation', embeddingLockId);
-        }
-    }
+    // Always route to local mode in WASM-only architecture
+    return generateLocalEmbeddings(onProgress, options, abortSignal);
 }
 
 /**
@@ -1514,40 +938,11 @@ async function createPatternChunks(streams) {
 }
 
 /**
- * Clear all embeddings from Qdrant or local store
- * Uses namespace-isolated collection for Qdrant
+ * Clear all embeddings (local mode)
  */
 async function clearEmbeddings() {
-    // Handle local mode
-    if (isLocalMode()) {
-        return clearLocalEmbeddings();
-    }
-
-    const config = await getConfig();
-    if (!config?.qdrantUrl || !config?.qdrantApiKey) {
-        throw new Error('Qdrant credentials not configured');
-    }
-
-    const collectionName = await getCollectionName();
-
-    // Delete collection
-    const response = await fetch(`${config.qdrantUrl}/collections/${collectionName}`, {
-        method: 'DELETE',
-        headers: { 'api-key': config.qdrantApiKey }
-    });
-
-    if (!response.ok && response.status !== 404) {
-        throw new Error(`Failed to clear embeddings: ${response.status}`);
-    }
-
-    // Update config
-    const newConfig = { ...config };
-    delete newConfig.embeddingsGenerated;
-    delete newConfig.chunksCount;
-    delete newConfig.generatedAt;
-    await saveConfig(newConfig);
-
-    return { success: true };
+    // Always route to local mode in WASM-only architecture
+    return clearLocalEmbeddings();
 }
 
 // ==========================================
@@ -1757,42 +1152,35 @@ async function getSemanticContext(query, limit = 3) {
 // ES Module export
 export const RAG = {
     getConfig,
-    getConfigSync,  // Sync version for UI checks
+    getConfigSync,
     saveConfig,
     isConfigured,
     hasCredentials,
     isStale,
     getCheckpoint,
     clearCheckpoint,
-    getEmbedding,
-    testConnection,
-    ensureCollection,
     search,
     generateEmbeddings,
     clearEmbeddings,
     getSemanticContext,
-    getCollectionName,
 
-    // Incremental embedding support (Phase 3)
+    // Incremental embedding support
     getEmbeddingManifest,
     getNewChunks,
     filterStreamsForIncremental,
     clearEmbeddingManifest,
 
-    // Local mode support (HNW Fallback)
+    // Local mode support (WASM-only architecture)
     isLocalMode,
     getStorageMode,
     checkLocalSupport,
-    detectStorageModeMismatch,
     generateLocalEmbeddings,
     searchLocal,
     clearLocalEmbeddings,
 
     // Constants
-    COLLECTION_NAME: COLLECTION_NAME_BASE,
-    EMBEDDING_MODEL,
     LOCAL_EMBEDDING_DIMENSIONS
 };
 
 // ES Module export - use ModuleRegistry for access instead of window globals
-console.log('[RAG] RAG module loaded with local fallback + incremental embedding support');
+console.log('[RAG] RAG module loaded (WASM-only architecture with local embeddings)');

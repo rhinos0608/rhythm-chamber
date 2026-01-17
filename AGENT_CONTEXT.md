@@ -1,6 +1,6 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System** + **ToolStrategy Pattern** + **ES Module Migration (Hybrid - Consumer Complete/Provider Compat)** + **Unit Testing (Vitest)** + **Chat Module Refactoring** + **HNW Structural Improvements (9 modules)** + **HNW Phase 2 Advanced Improvements (5 modules)** + **Phase 1 Architecture (EventBus, DataProvider)** + **Phase 2 Advanced Features (Sharing, Temporal, Playlist)** + **Error Boundaries & LRU Vector Cache** + **Phase 3 Critical Infrastructure (ErrorRecoveryCoordinator, Storage Degradation, Clock Skew Handling, Provider Fallback Chain, Performance Profiling)** + **Phase 3 Enhanced (Cross-Tab Recovery Delegation, Storage Breakdown UI)** + **Session 23: Module Migration Completion + Performance Optimizations (ES Module Complete, 60fps Optimization, Mutex Hardening)**
+> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System** + **ToolStrategy Pattern** + **ES Module Migration (Hybrid - Consumer Complete/Provider Compat)** + **Unit Testing (Vitest)** + **Chat Module Refactoring** + **HNW Structural Improvements (9 modules)** + **HNW Phase 2 Advanced Improvements (5 modules)** + **Phase 1 Architecture (EventBus, DataProvider)** + **Phase 2 Advanced Features (Sharing, Temporal, Playlist)** + **Error Boundaries & LRU Vector Cache** + **Phase 3 Critical Infrastructure** + **Phase 3 Enhanced** + **Session 23: Module Migration Completion + Performance Optimizations** + **HNW Phase 5: System Resilience (IndexedDB Retry, QuotaManager, Faster Failover, EventBus Domains)** + **WASM-Only Semantic Search (100% Client-Side, Qdrant Removed, INT8 Quantization, Battery-Aware Mode)**
 
 ---
 
@@ -85,9 +85,10 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 | **Template Profiles** | ✅ Done | `js/template-profiles.js` (8 curated profiles) |
 | **Profile Synthesizer** | ✅ Done | `js/profile-synthesizer.js` (AI synthesis) |
 | **Payments** | ✅ Done | `js/payments.js` (Stubbed for Free MVP) |
-| **RAG/Semantic** | ✅ Done | `js/rag.js` (embeddings + Qdrant) |
+| **RAG/Semantic** | ✅ Done | `js/rag.js` (WASM-only local embeddings + IndexedDB vector store) |
 | Card generator | ✅ Done | `js/cards.js` (Canvas + Web Share API) |
-| **Storage** | ✅ Done | `js/storage/` (IndexedDB + ConfigAPI + Migration + Profiles) |
+| **Storage** | ✅ Done | `js/storage/` (IndexedDB + ConfigAPI + Migration + Profiles + QuotaManager) |
+| **QuotaManager** | ✅ Done | `js/storage/quota-manager.js` (Storage quota monitoring with 80%/95% thresholds) |
 | **LLM Providers** | ✅ Done | `js/providers/` (OpenRouter, LMStudio, Ollama) |
 | **Controllers** | ✅ Done | `js/controllers/` (ChatUI, Sidebar, View, FileUpload, Spotify, Demo, Reset) |
 | **Services** | ✅ Done | `js/services/` (MessageOperations, SessionManager, TabCoordinator) |
@@ -115,7 +116,9 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 | **LRU Vector Cache** | ✅ Done | `js/storage/lru-cache.js` (5000-vector cap with eviction) |
 | **Wave Telemetry** | ✅ Done | `js/services/wave-telemetry.js` (Timing anomaly detection - HNW Wave) |
 | **Data Capabilities** | ✅ Done | `js/providers/capabilities.js` (Capability-based access control) |
-| WASM embeddings | ⏳ v1.1 | Not implemented |
+| **WASM Embeddings** | ✅ Done | `js/local-embeddings.js` (Transformers.js INT8 quantization) |
+| **Battery-Aware Mode** | ✅ Done | `js/services/battery-aware-mode-selector.js` |
+| **Embeddings UI** | ✅ Done | `js/embeddings/` (onboarding, progress, task manager) |
 
 ---
 
@@ -141,7 +144,7 @@ Mostly client-side: Static HTML/CSS/JS + IndexedDB + Web Workers + OpenRouter AP
 │   ├── spotify.js          # Spotify OAuth PKCE + API calls + session invalidation
 │   ├── security.js         # Security Facade (Delegates to js/security/ modules)
 │   ├── payments.js         # Stripe Checkout + premium status
-│   ├── rag.js              # Embeddings + Qdrant vector search + encrypted credentials
+│   ├── rag.js              # Semantic search orchestration (WASM-only local embeddings)
 │   ├── prompts.js          # System prompt templates
 │   ├── config.js           # API keys (gitignored)
 │   ├── config.example.js   # Config template (+ Stripe)
@@ -345,11 +348,13 @@ Curated listening profiles for comparison and inspiration, managed by `js/templa
 
 **Status:** Core infrastructure complete. Template data TBD from consenting friends/family.
 
-### 7. Semantic Search (Free)
-Integrated via `js/rag.js`. Users provide own Qdrant Cloud credentials.
-- In-memory vector generation (Transformer.js) or Cohore API.
-- Semantic search over listening history.
-- Context injection into LLM prompts.
+### 7. Semantic Search (100% Local)
+Integrated via `js/rag.js` with 100% client-side processing.
+- **WASM-only**: Transformers.js with INT8 quantization (~6MB model)
+- **Battery-aware**: Dynamic backend selection (WebGPU → WASM)
+- **Privacy-first**: No external API calls after model download
+- **Background processing**: Web Worker orchestration with pause/resume
+- **Performance monitoring**: EventBus integration for timing metrics
 
 ### 8. Data-Driven Prompt Engineering
 The AI persona is grounded in "Key Data Profiles" (`js/prompts.js`):
@@ -698,6 +703,57 @@ if (document.hidden) await delay(5000); // Wait before promoting
 
 > [!NOTE]
 > **Assumption:** OpenRouter and LLM providers deliver SSE chunks in-order within a single HTTP/2 stream. No sequence number validation is implemented.
+
+### 20. HNW Phase 5: System Resilience (NEW)
+
+**Problem:** Storage failures could leave users stranded with no recovery path. Cross-tab coordination lacked UI feedback. Worker pools didn't adapt to device constraints.
+
+**Solution: 8 Resilience Improvements**
+
+| Priority | Module | File | Purpose |
+|----------|--------|------|---------|
+| **High** | IndexedDB Retry | `js/storage/indexeddb.js` | `initDatabaseWithRetry()` with exponential backoff (3 retries, 500ms-5s) |
+| **High** | QuotaManager | `js/storage/quota-manager.js` | Storage quota monitoring (80%/95% thresholds, 60s polling) |
+| **High** | Connection Events | `js/services/event-bus.js` | `storage:connection_*` events for UI notification |
+| **High** | Authority Events | `js/services/tab-coordination.js` | `tab:authority_changed` EventBus emission |
+| **Medium** | Faster Failover | `js/services/tab-coordination.js` | Reduced heartbeat 5s→3s (~7s failover vs ~10s) |
+| **Medium** | Memory Optimization | `js/workers/pattern-worker-pool.js` | `deviceMemory`-based worker count (2 for ≤2GB, 3 for ≤4GB) |
+| **Low** | EventBus Domains | `js/services/event-bus.js` | Optional `domain` parameter for scoped event delivery |
+| **Low** | Token Checkpointing | `js/storage/migration.js` | Checkpoint after each token migration |
+
+**Key APIs:**
+```javascript
+// IndexedDB with retry
+const db = await IndexedDBCore.initDatabaseWithRetry({
+    maxAttempts: 3,
+    onRetry: (attempt, max, error) => console.log(`Retry ${attempt}/${max}`)
+});
+IndexedDBCore.getConnectionStatus(); // → { isConnected, isFailed, attempts }
+
+// QuotaManager
+QuotaManager.init();
+const status = QuotaManager.getStatus(); // → { usage, quota, percent }
+QuotaManager.isWriteBlocked(); // → true if ≥95%
+
+// EventBus domains
+EventBus.on('storage:error', handler, { domain: 'storage' });
+EventBus.emit('storage:error', payload, { domain: 'storage' });
+
+// Tab authority changes
+EventBus.on('tab:authority_changed', ({ isPrimary, level }) => {
+    updateReadOnlyBanner(!isPrimary);
+});
+```
+
+**Testing:** 26 tests in `tests/unit/indexeddb-retry.test.js` + `tests/unit/quota-manager.test.js`
+
+**Verification Checklist:**
+- [x] `initDatabaseWithRetry()` with exponential backoff (500ms base, 2x multiplier, 5s max)
+- [x] QuotaManager polling every 60s with `navigator.storage.estimate()`
+- [x] EventBus domain filtering in dispatch loop
+- [x] TabCoordinator heartbeat reduced to 3s
+- [x] Worker pool adapts to `navigator.deviceMemory`
+- [x] Migration checkpoints after each token
 
 **Ordering Behavior:**
 - SSE (Server-Sent Events) uses HTTP/2 which guarantees in-order delivery

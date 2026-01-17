@@ -67,7 +67,7 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 ## Key Differentiators
 
 1. **Chat-First Interface** — Natural language queries, not dashboard clicks
-2. **Semantic Search** — Ask "What was I like in 2019?" and get accurate answers
+2. **Semantic Search** — Ask "What was I like in 2019?" and get contextual answers (100% local, WASM-based)
 3. **Zero-Backend Architecture** — Runs entirely in your browser
 4. **BYOI Model** — You choose the intelligence (local or cloud), we orchestrate it
 5. **Privacy-First** — Your data never leaves your device
@@ -119,7 +119,6 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 
 ### 3. Power User Setup
 - Add OpenRouter API key (or use local models for BYOI)
-- Configure Qdrant for semantic search
 - Use local models for ultimate privacy
 
 ---

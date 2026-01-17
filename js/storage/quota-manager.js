@@ -17,7 +17,7 @@ import { EventBus } from '../services/event-bus.js';
 // Quota Thresholds Configuration
 // ==========================================
 
-const QUOTA_CONFIG = {
+const DEFAULT_QUOTA_CONFIG = Object.freeze({
     // Warning threshold (80% of quota)
     warningThreshold: 0.80,
 
@@ -32,7 +32,10 @@ const QUOTA_CONFIG = {
 
     // Default quota if navigator.storage.estimate() fails (50MB)
     fallbackQuotaBytes: 50 * 1024 * 1024
-};
+});
+
+// Mutable config that can be modified
+let QUOTA_CONFIG = { ...DEFAULT_QUOTA_CONFIG };
 
 // ==========================================
 // Internal State
@@ -41,8 +44,9 @@ const QUOTA_CONFIG = {
 let pollIntervalId = null;
 let currentStatus = {
     usageBytes: 0,
-    quotaBytes: QUOTA_CONFIG.fallbackQuotaBytes,
+    quotaBytes: DEFAULT_QUOTA_CONFIG.fallbackQuotaBytes,
     percentage: 0,
+    availableBytes: DEFAULT_QUOTA_CONFIG.fallbackQuotaBytes, // Initial available = full quota
     isBlocked: false,
     tier: 'normal' // 'normal' | 'warning' | 'critical'
 };
@@ -62,7 +66,7 @@ let isInitialized = false;
 async function init(options = {}) {
     if (isInitialized) {
         console.log('[QuotaManager] Already initialized');
-        return currentStatus;
+        return { ...currentStatus }; // Return shallow copy
     }
 
     // Apply options
@@ -79,7 +83,7 @@ async function init(options = {}) {
     startPolling();
 
     console.log('[QuotaManager] Initialized with polling every', QUOTA_CONFIG.pollIntervalMs, 'ms');
-    return currentStatus;
+    return { ...currentStatus }; // Return shallow copy
 }
 
 /**
@@ -115,7 +119,8 @@ async function checkNow() {
         } else if (currentStatus.percentage >= QUOTA_CONFIG.warningThreshold * 100) {
             currentStatus.tier = 'warning';
 
-            if (previousTier === 'normal') {
+            // Emit warning on any transition INTO warning tier (from normal or critical)
+            if (previousTier !== 'warning') {
                 EventBus.emit('storage:quota_warning', {
                     usageBytes: currentStatus.usageBytes,
                     quotaBytes: currentStatus.quotaBytes,
@@ -216,21 +221,37 @@ async function notifyLargeWrite(bytesWritten) {
 /**
  * Set warning threshold
  * @param {number} threshold - Threshold as decimal (0-1)
+ * @returns {boolean} True if threshold was set
  */
 function setWarningThreshold(threshold) {
     if (threshold > 0 && threshold < 1) {
+        // Ensure warning < critical
+        if (threshold >= QUOTA_CONFIG.criticalThreshold) {
+            console.error('[QuotaManager] Warning threshold must be less than critical threshold');
+            return false;
+        }
         QUOTA_CONFIG.warningThreshold = threshold;
+        return true;
     }
+    return false;
 }
 
 /**
  * Set critical threshold
  * @param {number} threshold - Threshold as decimal (0-1)
+ * @returns {boolean} True if threshold was set
  */
 function setCriticalThreshold(threshold) {
     if (threshold > 0 && threshold < 1) {
+        // Ensure critical > warning
+        if (threshold <= QUOTA_CONFIG.warningThreshold) {
+            console.error('[QuotaManager] Critical threshold must be greater than warning threshold');
+            return false;
+        }
         QUOTA_CONFIG.criticalThreshold = threshold;
+        return true;
     }
+    return false;
 }
 
 /**
@@ -239,10 +260,15 @@ function setCriticalThreshold(threshold) {
 function reset() {
     stopPolling();
     isInitialized = false;
+
+    // Restore config to defaults
+    QUOTA_CONFIG = { ...DEFAULT_QUOTA_CONFIG };
+
     currentStatus = {
         usageBytes: 0,
-        quotaBytes: QUOTA_CONFIG.fallbackQuotaBytes,
+        quotaBytes: DEFAULT_QUOTA_CONFIG.fallbackQuotaBytes,
         percentage: 0,
+        availableBytes: DEFAULT_QUOTA_CONFIG.fallbackQuotaBytes,
         isBlocked: false,
         tier: 'normal'
     };
