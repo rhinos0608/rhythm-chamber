@@ -239,6 +239,53 @@ export class StorageDegradationManager {
         this._eventBus.subscribe('STORAGE:QUOTA_CHANGE', async (event, data) => {
             await this._checkQuotaAndDegrade();
         });
+
+        // Monitor connection failures from IndexedDB
+        this._eventBus.on('storage:connection_failed', async (payload) => {
+            await this._onConnectionFailed(payload);
+        });
+
+        // Monitor connection blocked (upgrade blocked by other tabs)
+        this._eventBus.on('storage:connection_blocked', async (payload) => {
+            this._eventBus.emit('UI:TOAST', {
+                type: 'warning',
+                message: payload.message || 'Database upgrade blocked by other tabs. Please close other tabs.',
+                duration: 10000
+            });
+        });
+    }
+
+    /**
+     * Handle IndexedDB connection failure
+     * @private
+     * @param {Object} data - Event data
+     */
+    async _onConnectionFailed(data) {
+        console.error('[StorageDegradationManager] IndexedDB connection failed:', data.error);
+
+        // Enter emergency mode immediately
+        this._isEmergencyMode = true;
+
+        // Show emergency modal for session-only mode
+        this._eventBus.emit('UI:MODAL', {
+            type: 'emergency',
+            title: 'Storage Unavailable',
+            message: `Unable to connect to storage after ${data.attempts} attempts. Your data will only be saved for this session.`,
+            options: [
+                {
+                    label: 'Continue in Session-Only Mode',
+                    action: 'session_only_mode',
+                    primary: true
+                },
+                {
+                    label: 'Retry Connection',
+                    action: 'retry_connection'
+                }
+            ]
+        });
+
+        // Emit storage mode change
+        this._eventBus.emit('STORAGE:SESSION_ONLY_MODE', { enabled: true, reason: 'connection_failed' });
     }
 
     /**

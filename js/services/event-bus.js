@@ -30,6 +30,38 @@ const EVENT_SCHEMAS = {
         description: 'Storage cleared',
         payload: { store: 'string' }
     },
+    'storage:connection_blocked': {
+        description: 'Database upgrade blocked by other tabs',
+        payload: { reason: 'string', message: 'string' }
+    },
+    'storage:connection_retry': {
+        description: 'Database connection retry attempt',
+        payload: { attempt: 'number', maxAttempts: 'number', nextRetryMs: 'number', error: 'string' }
+    },
+    'storage:connection_failed': {
+        description: 'Database connection permanently failed',
+        payload: { attempts: 'number', error: 'string', recoverable: 'boolean' }
+    },
+    'storage:connection_established': {
+        description: 'Database connection successfully established',
+        payload: { attempts: 'number' }
+    },
+    'storage:error': {
+        description: 'Storage error occurred',
+        payload: { type: 'string', error: 'string' }
+    },
+    'storage:quota_warning': {
+        description: 'Storage quota warning (80% threshold)',
+        payload: { usageBytes: 'number', quotaBytes: 'number', percentage: 'number' }
+    },
+    'storage:quota_critical': {
+        description: 'Storage quota critical (95% threshold, writes blocked)',
+        payload: { usageBytes: 'number', quotaBytes: 'number', percentage: 'number' }
+    },
+    'storage:quota_normal': {
+        description: 'Storage quota returned to normal',
+        payload: { usageBytes: 'number', quotaBytes: 'number', percentage: 'number' }
+    },
 
     // Session events
     'session:created': {
@@ -48,9 +80,15 @@ const EVENT_SCHEMAS = {
         description: 'Session data updated',
         payload: { sessionId: 'string', field: 'string?' }
     },
-    'session:deleted': {
-        description: 'Session deleted',
-        payload: { sessionId: 'string' }
+    'session:ended': {
+        description: 'Chat session ended',
+        payload: { reason: 'string' }
+    },
+
+    // Tab coordination events
+    'tab:authority_changed': {
+        description: 'Tab write authority changed (primary/secondary)',
+        payload: { isPrimary: 'boolean', level: 'string', mode: 'string', message: 'string' }
     },
 
     // Tab coordination events
@@ -193,10 +231,12 @@ let droppedCount = 0;
  * @param {Function} handler - Handler function receiving (payload, eventMeta)
  * @param {Object} [options] - Subscription options
  * @param {number} [options.priority=PRIORITY.NORMAL] - Handler priority (lower = earlier)
+ * @param {string} [options.domain='global'] - Domain filter (receives only events from this domain, 'global' receives all)
  * @returns {Function} Unsubscribe function
  */
 function on(eventType, handler, options = {}) {
     const priority = options.priority ?? PRIORITY.NORMAL;
+    const domain = options.domain ?? 'global'; // Default domain receives all events
     const id = `handler_${++handlerId}`;
 
     if (!subscribers.has(eventType)) {
@@ -204,13 +244,13 @@ function on(eventType, handler, options = {}) {
     }
 
     const handlers = subscribers.get(eventType);
-    handlers.push({ handler, priority, id });
+    handlers.push({ handler, priority, id, domain });
 
     // Sort by priority (stable sort to maintain insertion order for same priority)
     handlers.sort((a, b) => a.priority - b.priority);
 
     if (debugMode) {
-        console.log(`[EventBus] Subscribed to "${eventType}" with priority ${priority} (id: ${id})`);
+        console.log(`[EventBus] Subscribed to "${eventType}" with priority ${priority}, domain ${domain} (id: ${id})`);
     }
 
     // Return unsubscribe function
@@ -260,11 +300,13 @@ function off(eventType, handlerId) {
  * @param {Object} [options] - Emit options
  * @param {boolean} [options.skipValidation=false] - Skip payload validation
  * @param {boolean} [options.bypassCircuitBreaker=false] - Skip circuit breaker checks
+ * @param {string} [options.domain='global'] - Event domain for filtering (subscribers with matching domain or 'global' receive it)
  * @returns {boolean} True if any handlers were called
  */
 function emit(eventType, payload = {}, options = {}) {
     const timestamp = Date.now();
     const priority = EVENT_PRIORITIES[eventType] ?? PRIORITY.NORMAL;
+    const eventDomain = options.domain ?? 'global';
 
     // Circuit breaker: Storm detection
     if (!options.bypassCircuitBreaker) {
@@ -414,11 +456,25 @@ function emit(eventType, payload = {}, options = {}) {
         type: eventType,
         timestamp,
         priority,
-        stormActive
+        stormActive,
+        domain: eventDomain // Include domain in metadata
     };
 
-    // Call handlers in priority order
-    for (const { handler, id } of allHandlers) {
+    // Call handlers in priority order, filtering by domain
+    for (const { handler, id, domain: handlerDomain } of allHandlers) {
+        // Domain filtering: handler receives event if:
+        // 1. Handler domain is 'global' (receives all events - catch-all handlers)
+        // 2. Event domain matches handler domain (scoped delivery)
+        const domainMatches = handlerDomain === 'global' ||
+            handlerDomain === eventDomain;
+
+        if (!domainMatches) {
+            if (debugMode) {
+                console.log(`[EventBus] Skipping handler ${id} (domain mismatch: ${handlerDomain} vs ${eventDomain})`);
+            }
+            continue;
+        }
+
         try {
             handler(payload, eventMeta);
         } catch (error) {
