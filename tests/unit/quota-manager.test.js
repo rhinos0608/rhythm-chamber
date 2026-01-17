@@ -277,19 +277,42 @@ describe('QuotaManager', () => {
         });
 
         it('should trigger immediate check for large writes above threshold', async () => {
-            // This test validates the threshold logic
-            // 1MB is the threshold, so 1MB should trigger a check
-            const config = QuotaManager.config;
-            expect(config.largeWriteThresholdBytes).toBe(1024 * 1024);
+            // Mock storage estimate to avoid actual API calls and track calls
+            mockStorageEstimate(0, 100 * 1024 * 1024);
 
-            // 512KB is below threshold, should not trigger
-            expect(512 * 1024 < config.largeWriteThresholdBytes).toBe(true);
+            // Test 1: Small write below threshold (512KB) - should NOT trigger check
+            let storageCheckCount = 0;
+            const originalEstimate1 = navigator.storage.estimate;
+            navigator.storage.estimate = vi.fn().mockImplementation(async () => {
+                storageCheckCount++;
+                return { usage: 0, quota: 100 * 1024 * 1024 };
+            });
 
-            // 1MB is at threshold, should trigger
-            expect(1024 * 1024 >= config.largeWriteThresholdBytes).toBe(true);
+            await QuotaManager.notifyLargeWrite(512 * 1024); // 512KB
+            expect(storageCheckCount).toBe(0); // No check should have been made
 
-            // 2MB is above threshold, should trigger
-            expect(2 * 1024 * 1024 >= config.largeWriteThresholdBytes).toBe(true);
+            // Test 2: Write exactly at threshold (1MB) - should trigger check
+            storageCheckCount = 0;
+            navigator.storage.estimate = vi.fn().mockImplementation(async () => {
+                storageCheckCount++;
+                return { usage: 0, quota: 100 * 1024 * 1024 };
+            });
+
+            await QuotaManager.notifyLargeWrite(1024 * 1024); // 1MB
+            expect(storageCheckCount).toBe(1); // Exactly one check should have been made
+
+            // Test 3: Large write above threshold (2MB) - should trigger check
+            storageCheckCount = 0;
+            navigator.storage.estimate = vi.fn().mockImplementation(async () => {
+                storageCheckCount++;
+                return { usage: 0, quota: 100 * 1024 * 1024 };
+            });
+
+            await QuotaManager.notifyLargeWrite(2 * 1024 * 1024); // 2MB
+            expect(storageCheckCount).toBe(1); // Exactly one check should have been made
+
+            // Restore original
+            navigator.storage.estimate = originalEstimate1;
         });
     });
 

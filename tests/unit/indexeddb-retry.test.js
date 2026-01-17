@@ -83,18 +83,77 @@ describe('IndexedDB Connection Retry', () => {
             expect(typeof status.attempts).toBe('number');
         });
 
-        it('should reset connection state', () => {
-            // Get initial state
+        it('should reset connection state from non-default values', async () => {
+            // Get initial state to verify it starts at defaults
             let status = IndexedDBCore.getConnectionStatus();
-            expect(status.isConnected).toBe(false);
-
-            // Reset should work
-            IndexedDBCore.resetConnectionState();
-            status = IndexedDBCore.getConnectionStatus();
-
             expect(status.isConnected).toBe(false);
             expect(status.isFailed).toBe(false);
             expect(status.attempts).toBe(0);
+
+            // Mock indexedDB.open to simulate connection failure
+            const mockOpen = vi.fn();
+            const originalIndexedDB = window.indexedDB;
+
+            Object.defineProperty(window, 'indexedDB', {
+                value: {
+                    open: mockOpen.mockImplementation(() => {
+                        const request = {
+                            onsuccess: null,
+                            onerror: null,
+                            result: null,
+                            onblocked: null
+                        };
+
+                        // Simulate immediate failure
+                        setTimeout(() => {
+                            if (request.onerror) {
+                                request.onerror({ target: { error: new Error('Connection failed') } });
+                            }
+                        }, 10);
+
+                        return request;
+                    })
+                },
+                writable: true,
+                configurable: true
+            });
+
+            try {
+                // Attempt to initialize database - this will fail and mutate state
+                const initPromise = IndexedDBCore.initDatabaseWithRetry();
+
+                // Wait for connection failure to mutate state
+                vi.advanceTimersByTime(50);
+
+                try {
+                    await initPromise;
+                } catch (error) {
+                    // Expected to fail
+                }
+
+                // State should now be mutated - verify non-default values
+                const mutatedStatus = IndexedDBCore.getConnectionStatus();
+                // After failed attempts, we expect either attempts > 0 or isFailed === true
+                expect(
+                    mutatedStatus.attempts > 0 || mutatedStatus.isFailed === true
+                ).toBe(true);
+
+                // Now reset the state
+                IndexedDBCore.resetConnectionState();
+
+                // Verify state is back to defaults
+                const resetStatus = IndexedDBCore.getConnectionStatus();
+                expect(resetStatus.isConnected).toBe(false);
+                expect(resetStatus.isFailed).toBe(false);
+                expect(resetStatus.attempts).toBe(0);
+            } finally {
+                // Restore original indexedDB
+                Object.defineProperty(window, 'indexedDB', {
+                    value: originalIndexedDB,
+                    writable: true,
+                    configurable: true
+                });
+            }
         });
     });
 

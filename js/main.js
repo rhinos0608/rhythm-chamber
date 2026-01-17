@@ -100,6 +100,9 @@ import { Functions } from './functions/index.js';
 import { TabCoordinator } from './services/tab-coordination.js';
 import { SessionManager } from './services/session-manager.js';
 import { MessageOperations } from './services/message-operations.js';
+import { WorkerCoordinator } from './services/worker-coordinator.js';
+import { EventBus } from './services/event-bus.js';
+import { EventLogStore } from './storage/event-log-store.js';
 
 // Controllers
 import { ChatUIController } from './controllers/chat-ui-controller.js';
@@ -419,6 +422,11 @@ async function bootstrap() {
     try {
         // Install global error handlers for fallback error handling
         installGlobalErrorHandler();
+
+        // Initialize WorkerCoordinator for centralized worker lifecycle management
+        // This sets up beforeunload handlers for automatic cleanup
+        WorkerCoordinator.init();
+        console.log('[Main] WorkerCoordinator initialized');
 
         // Register heavy modules with ModuleRegistry for lazy loading
         // These are NOT preloaded at startup - loaded on user intent instead

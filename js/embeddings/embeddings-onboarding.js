@@ -94,6 +94,8 @@ const MODAL_HTML = `
 let modal = null;
 let isChecking = false;
 let compatibilityResults = {};
+let currentShowPromise = null;
+let isSettled = false;
 
 // ==========================================
 // Compatibility Checks
@@ -104,49 +106,57 @@ let compatibilityResults = {};
  * @returns {Promise<Object>} Compatibility results
  */
 async function runCompatibilityChecks() {
+    // Prevent reentry
+    if (isChecking) {
+        console.log('[EmbeddingsOnboarding] Compatibility checks already in progress');
+        return compatibilityResults;
+    }
+
     isChecking = true;
     compatibilityResults = {};
 
-    // WASM Check
-    updateCheckStatus('check-wasm', 'checking');
-    const wasmSupported = await checkWASM();
-    compatibilityResults.wasm = wasmSupported;
-    updateCheckStatus('check-wasm', wasmSupported ? 'pass' : 'fail', wasmSupported ? 'Available' : 'Not supported');
+    try {
+        // WASM Check
+        updateCheckStatus('check-wasm', 'checking');
+        const wasmSupported = await checkWASM();
+        compatibilityResults.wasm = wasmSupported;
+        updateCheckStatus('check-wasm', wasmSupported ? 'pass' : 'fail', wasmSupported ? 'Available' : 'Not supported');
 
-    // WebGPU Check (optional enhancement)
-    updateCheckStatus('check-webgpu', 'checking');
-    const webgpuResult = await BatteryAwareModeSelector.checkWebGPUSupport();
-    compatibilityResults.webgpu = webgpuResult.supported;
-    updateCheckStatus('check-webgpu', webgpuResult.supported ? 'pass' : 'optional',
-        webgpuResult.supported ? '100x faster' : 'Using WASM');
+        // WebGPU Check (optional enhancement)
+        updateCheckStatus('check-webgpu', 'checking');
+        const webgpuResult = await BatteryAwareModeSelector.checkWebGPUSupport();
+        compatibilityResults.webgpu = webgpuResult.supported;
+        updateCheckStatus('check-webgpu', webgpuResult.supported ? 'pass' : 'optional',
+            webgpuResult.supported ? '100x faster' : 'Using WASM');
 
-    // IndexedDB Check
-    updateCheckStatus('check-indexeddb', 'checking');
-    const indexedDBSupported = await checkIndexedDB();
-    compatibilityResults.indexeddb = indexedDBSupported;
-    updateCheckStatus('check-indexeddb', indexedDBSupported ? 'pass' : 'fail',
-        indexedDBSupported ? 'Available' : 'Required');
+        // IndexedDB Check
+        updateCheckStatus('check-indexeddb', 'checking');
+        const indexedDBSupported = await checkIndexedDB();
+        compatibilityResults.indexeddb = indexedDBSupported;
+        updateCheckStatus('check-indexeddb', indexedDBSupported ? 'pass' : 'fail',
+            indexedDBSupported ? 'Available' : 'Required');
 
-    // Storage Check
-    updateCheckStatus('check-storage', 'checking');
-    const storageResult = await checkStorage();
-    compatibilityResults.storage = storageResult;
-    updateCheckStatus('check-storage', storageResult.ok ? 'pass' : 'fail',
-        storageResult.ok ? 'Sufficient' : 'Low space');
+        // Storage Check
+        updateCheckStatus('check-storage', 'checking');
+        const storageResult = await checkStorage();
+        compatibilityResults.storage = storageResult;
+        updateCheckStatus('check-storage', storageResult.ok ? 'pass' : 'fail',
+            storageResult.ok ? 'Sufficient' : 'Low space');
 
-    // Update storage preview
-    updateStoragePreview(storageResult);
+        // Update storage preview
+        updateStoragePreview(storageResult);
 
-    isChecking = false;
+        // Enable button if minimum requirements met
+        const canEnable = compatibilityResults.wasm && compatibilityResults.indexeddb && compatibilityResults.storage?.ok;
+        const enableBtn = document.getElementById('onboarding-enable');
+        if (enableBtn) {
+            enableBtn.disabled = !canEnable;
+        }
 
-    // Enable button if minimum requirements met
-    const canEnable = compatibilityResults.wasm && compatibilityResults.indexeddb && compatibilityResults.storage?.ok;
-    const enableBtn = document.getElementById('onboarding-enable');
-    if (enableBtn) {
-        enableBtn.disabled = !canEnable;
+        return compatibilityResults;
+    } finally {
+        isChecking = false;
     }
-
-    return compatibilityResults;
 }
 
 /**
@@ -177,8 +187,12 @@ async function checkIndexedDB() {
             request.onerror = () => resolve(false);
             request.onsuccess = () => {
                 request.result.close();
-                indexedDB.deleteDatabase('__test__');
-                resolve(true);
+
+                // Wait for delete operation completion
+                const deleteRequest = indexedDB.deleteDatabase('__test__');
+                deleteRequest.onsuccess = () => resolve(true);
+                deleteRequest.onerror = () => resolve(false);
+                deleteRequest.onblocked = () => resolve(false);
             };
         } catch (e) {
             resolve(false);
@@ -285,7 +299,16 @@ function updateStoragePreview(storageResult) {
  * @returns {Promise<boolean>} True if user enabled, false if cancelled
  */
 function show() {
-    return new Promise((resolve) => {
+    // Guard against concurrent modal displays
+    if (currentShowPromise) {
+        console.log('[EmbeddingsOnboarding] Modal already displayed, returning existing promise');
+        return currentShowPromise;
+    }
+
+    currentShowPromise = new Promise((resolve) => {
+        // Reset settled flag
+        isSettled = false;
+
         // Create modal
         const container = document.createElement('div');
         container.innerHTML = MODAL_HTML;
@@ -295,39 +318,54 @@ function show() {
         // Run compatibility checks
         runCompatibilityChecks();
 
+        // Single cleanup function to prevent multiple resolves
+        const cleanup = (result) => {
+            if (isSettled) {
+                console.warn('[EmbeddingsOnboarding] Promise already settled, ignoring duplicate resolve');
+                return;
+            }
+            isSettled = true;
+
+            // Remove all event listeners
+            if (cancelBtn) cancelBtn.removeEventListener('click', onCancel);
+            if (enableBtn) enableBtn.removeEventListener('click', onEnable);
+            if (modal) modal.removeEventListener('click', onOverlayClick);
+            document.removeEventListener('keydown', handleEscape);
+
+            // Remove modal and reset state
+            hide();
+            currentShowPromise = null;
+
+            resolve(result);
+        };
+
         // Bind event handlers
         const cancelBtn = document.getElementById('onboarding-cancel');
         const enableBtn = document.getElementById('onboarding-enable');
 
-        cancelBtn?.addEventListener('click', () => {
-            hide();
-            resolve(false);
-        });
-
-        enableBtn?.addEventListener('click', () => {
-            hide();
+        const onCancel = () => cleanup(false);
+        const onEnable = () => {
             EventBus.emit('embedding:onboarding_complete', { enabled: true });
-            resolve(true);
-        });
-
-        // Close on overlay click
-        modal.addEventListener('click', (e) => {
+            cleanup(true);
+        };
+        const onOverlayClick = (e) => {
             if (e.target === modal) {
-                hide();
-                resolve(false);
-            }
-        });
-
-        // Close on Escape
-        const handleEscape = (e) => {
-            if (e.key === 'Escape') {
-                hide();
-                document.removeEventListener('keydown', handleEscape);
-                resolve(false);
+                cleanup(false);
             }
         };
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                cleanup(false);
+            }
+        };
+
+        cancelBtn?.addEventListener('click', onCancel);
+        enableBtn?.addEventListener('click', onEnable);
+        modal.addEventListener('click', onOverlayClick);
         document.addEventListener('keydown', handleEscape);
     });
+
+    return currentShowPromise;
 }
 
 /**

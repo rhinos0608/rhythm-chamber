@@ -72,6 +72,7 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 4. **BYOI Model** — You choose the intelligence (local or cloud), we orchestrate it
 5. **Privacy-First** — Your data never leaves your device
 6. **Power User Focus** — If you can set up an API key, you can use Rhythm Chamber
+7. **Provider Health Monitoring** — Real-time AI provider status with automatic fallback and smart error guidance
 
 ### What Stats.fm Can't Match
 
@@ -81,6 +82,7 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 - **"Try before you upload"** — Demo mode ships with a full sample persona, isolated from real data
 - **"Template & Synth profiles"** — Generate synthetic profiles for comparison via the profile synthesizer
 - **"Identity over statistics"** — "You're an Emotional Archaeologist" vs "Top Artists: A, B, C"
+- **"Self-healing AI providers"** — Automatic fallback when providers fail, with real-time health monitoring and smart troubleshooting guidance
 
 ### Why This Works
 

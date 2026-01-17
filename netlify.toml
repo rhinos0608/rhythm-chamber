@@ -1,0 +1,8 @@
+# Netlify deployment configuration for Rhythm Chamber
+# Enables SharedArrayBuffer support with COOP/COEP headers
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Embedder-Policy = "require-corp"
+    Cross-Origin-Opener-Policy = "same-origin"

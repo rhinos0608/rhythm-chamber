@@ -293,6 +293,7 @@ async function getBatchEmbeddings(texts, onProgress = () => { }) {
     });
 
     const embeddings = [];
+    let validCount = 0;  // Track successfully generated embeddings
 
     try {
         for (let i = 0; i < texts.length; i++) {
@@ -305,6 +306,7 @@ async function getBatchEmbeddings(texts, onProgress = () => { }) {
 
             const output = await pipeline(text, { pooling: 'mean', normalize: true });
             embeddings.push(Array.from(output.data));
+            validCount++;  // Increment only for successful embeddings
 
             onProgress(i + 1, texts.length);
         }
@@ -312,11 +314,11 @@ async function getBatchEmbeddings(texts, onProgress = () => { }) {
         // Stop performance timer
         stopGenTimer();
         const durationMs = performance.now() - startTime;
-        const avgTimePerEmbedding = texts.length > 0 ? durationMs / texts.length : 0;
+        const avgTimePerEmbedding = validCount > 0 ? durationMs / validCount : 0;
 
-        // Emit generation complete event
+        // Emit generation complete event with actual successful count
         EventBus.emit('embedding:generation_complete', {
-            count: texts.length,
+            count: validCount,
             durationMs: Math.round(durationMs),
             avgTimePerEmbedding: Math.round(avgTimePerEmbedding)
         });

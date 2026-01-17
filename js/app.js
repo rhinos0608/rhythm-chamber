@@ -58,6 +58,8 @@ import { ChatUIController } from './controllers/chat-ui-controller.js';
 import { TabCoordinator } from './services/tab-coordination.js';
 import { SessionManager } from './services/session-manager.js';
 import { MessageOperations } from './services/message-operations.js';
+import { EventBus } from './services/event-bus.js';
+import { EventLogStore } from './storage/event-log-store.js';
 
 // Utility modules
 import { OperationLock } from './operation-lock.js';
@@ -506,6 +508,24 @@ async function init(options = {}) {
 
     // Initialize unified storage
     await Storage.init();
+
+    // Initialize Event Log Store for event replay system
+    try {
+        await EventLogStore.initEventLogStores();
+        console.log('[App] Event Log Store initialized');
+    } catch (error) {
+        console.error('[App] Failed to initialize Event Log Store:', error);
+        // Continue without event replay - non-critical feature
+    }
+
+    // Enable event logging for replay coordination
+    try {
+        EventBus.enableEventLog(true);
+        console.log('[App] Event logging enabled');
+    } catch (error) {
+        console.error('[App] Failed to enable event logging:', error);
+        // Continue without event logging - non-critical feature
+    }
 
     // Validate storage consistency on startup
     const validation = await Storage.validateConsistency();

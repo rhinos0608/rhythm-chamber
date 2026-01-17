@@ -803,54 +803,60 @@ const pendingPatternRequests = new Map();
 
 /**
  * Initialize pattern worker global handlers (called once)
+ * NOTE: Can be called before worker is created to prevent race conditions
  */
 function initPatternWorkerHandlers() {
-    if (patternWorkerInitialized || !patternWorker) return;
-    patternWorkerInitialized = true;
+    if (patternWorkerInitialized) return;
 
-    patternWorker.onmessage = (e) => {
-        const { type, requestId, patterns, current, total, message, error } = e.data;
+    // If worker exists, set up handlers immediately
+    // If worker doesn't exist yet, handlers will be set up when it's created
+    if (patternWorker) {
+        patternWorkerInitialized = true;
 
-        const pending = pendingPatternRequests.get(requestId);
-        if (!pending) {
-            console.warn('[Patterns] Received message for unknown requestId:', requestId);
-            return;
-        }
+        patternWorker.onmessage = (e) => {
+            const { type, requestId, patterns, current, total, message, error } = e.data;
 
-        switch (type) {
-            case 'progress':
-                pending.onProgress(current, total, message);
-                break;
+            const pending = pendingPatternRequests.get(requestId);
+            if (!pending) {
+                console.warn('[Patterns] Received message for unknown requestId:', requestId);
+                return;
+            }
 
-            case 'complete':
+            switch (type) {
+                case 'progress':
+                    pending.onProgress(current, total, message);
+                    break;
+
+                case 'complete':
+                    clearTimeout(pending.timeoutId);
+                    pendingPatternRequests.delete(requestId);
+                    pending.resolve(patterns);
+                    if (pendingPatternRequests.size === 0) {
+                        cleanupPatternWorker();
+                    }
+                    break;
+
+                case 'error':
+                    clearTimeout(pending.timeoutId);
+                    pendingPatternRequests.delete(requestId);
+                    pending.reject(new Error(error));
+                    if (pendingPatternRequests.size === 0) {
+                        cleanupPatternWorker();
+                    }
+                    break;
+            }
+        };
+
+        patternWorker.onerror = (err) => {
+            // On global error, reject all pending requests
+            for (const [requestId, pending] of pendingPatternRequests) {
                 clearTimeout(pending.timeoutId);
-                pendingPatternRequests.delete(requestId);
-                pending.resolve(patterns);
-                if (pendingPatternRequests.size === 0) {
-                    cleanupPatternWorker();
-                }
-                break;
-
-            case 'error':
-                clearTimeout(pending.timeoutId);
-                pendingPatternRequests.delete(requestId);
-                pending.reject(new Error(error));
-                if (pendingPatternRequests.size === 0) {
-                    cleanupPatternWorker();
-                }
-                break;
-        }
-    };
-
-    patternWorker.onerror = (err) => {
-        // On global error, reject all pending requests
-        for (const [requestId, pending] of pendingPatternRequests) {
-            clearTimeout(pending.timeoutId);
-            pending.reject(new Error(err.message || 'Worker error'));
-        }
-        pendingPatternRequests.clear();
-        cleanupPatternWorker();
-    };
+                pending.reject(new Error(err.message || 'Worker error'));
+            }
+            pendingPatternRequests.clear();
+            cleanupPatternWorker();
+        };
+    }
 }
 
 /**
@@ -882,15 +888,18 @@ async function detectAllPatternsAsync(streams, chunks, onProgress = () => { }) {
     if (!patternWorker) {
         try {
             patternWorker = new Worker('js/workers/pattern-worker.js');
-            patternWorkerInitialized = false;
+
+            // CRITICAL: Initialize handlers immediately after worker creation
+            // This prevents race condition where worker sends messages before handlers are ready
+            initPatternWorkerHandlers();
         } catch (e) {
             console.warn('[Patterns] Failed to create worker, falling back to sync:', e.message);
             return detectAllPatterns(streams, chunks);
         }
+    } else if (!patternWorkerInitialized) {
+        // Worker exists but handlers not initialized (edge case)
+        initPatternWorkerHandlers();
     }
-
-    // Initialize global handlers once
-    initPatternWorkerHandlers();
 
     // Generate unique request ID for this call
     const requestId = ++patternRequestId;
@@ -925,6 +934,7 @@ function cleanupPatternWorker() {
     if (patternWorker) {
         patternWorker.terminate();
         patternWorker = null;
+        patternWorkerInitialized = false;
     }
 }
 
