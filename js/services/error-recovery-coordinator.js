@@ -79,7 +79,17 @@ export const RecoveryState = Object.freeze({
  * @property {string[]} dependencies - Recovery step dependencies
  * @property {number} timestamp - Request timestamp
  * @property {string} tabId - Tab that initiated recovery
+ * @property {number} expiresAt - Recovery TTL expiration time (HNW Hierarchy)
+ * @property {number} delegationAttempts - Number of delegation attempts (HNW Hierarchy)
+ * @property {number} maxDelegations - Maximum allowed delegations (HNW Hierarchy)
  */
+
+/**
+ * Recovery TTL configuration
+ * @readonly
+ */
+const RECOVERY_TTL_MS = 60000; // 60 seconds
+const MAX_DELEGATION_ATTEMPTS = 3;
 
 /**
  * Recovery plan structure
@@ -466,7 +476,11 @@ export class ErrorRecoveryCoordinator {
             context: errorData.context || {},
             dependencies: errorData.dependencies || [],
             timestamp: Date.now(),
-            tabId
+            tabId,
+            // HNW Hierarchy: TTL and re-delegation tracking
+            expiresAt: Date.now() + RECOVERY_TTL_MS,
+            delegationAttempts: 0,
+            maxDelegations: MAX_DELEGATION_ATTEMPTS
         };
     }
 
@@ -479,6 +493,23 @@ export class ErrorRecoveryCoordinator {
     async coordinateRecovery(request) {
         const startTime = performance.now();
         performance.mark('recovery-coordination-start');
+
+        // HNW Hierarchy: Check if recovery request has expired
+        if (request.expiresAt && Date.now() > request.expiresAt) {
+            console.warn(`[ErrorRecoveryCoordinator] Recovery ${request.id} expired (TTL: ${RECOVERY_TTL_MS}ms)`);
+            this._eventBus.emit('RECOVERY:EXPIRED', {
+                recoveryId: request.id,
+                domain: request.domain,
+                age: Date.now() - request.timestamp
+            });
+            return {
+                success: false,
+                action: 'expired',
+                durationMs: 0,
+                error: null,
+                metadata: { reason: 'ttl_expired', requestId: request.id }
+            };
+        }
 
         // Check if this tab should handle recovery
         if (!this._shouldHandleRecovery(request)) {
@@ -802,6 +833,19 @@ export class ErrorRecoveryCoordinator {
             return { delegated: false, reason: 'is_leader' };
         }
 
+        // HNW Hierarchy: Check delegation attempts limit
+        if (request.delegationAttempts >= request.maxDelegations) {
+            console.warn(`[ErrorRecoveryCoordinator] Max delegations (${request.maxDelegations}) reached for recovery ${request.id}`);
+            this._eventBus.emit('RECOVERY:DELEGATION_EXHAUSTED', {
+                recoveryId: request.id,
+                attempts: request.delegationAttempts
+            });
+            return { delegated: false, reason: 'max_delegations_reached' };
+        }
+
+        // Increment delegation attempts
+        request.delegationAttempts = (request.delegationAttempts || 0) + 1;
+
         try {
             // Get VectorClock for causal ordering
             const vectorClock = tabCoordinator.getVectorClockState?.() || {};
@@ -817,7 +861,11 @@ export class ErrorRecoveryCoordinator {
                     priority: request.priority,
                     error: request.error?.message || 'Unknown error',
                     context: request.context,
-                    timestamp: request.timestamp
+                    timestamp: request.timestamp,
+                    // HNW Hierarchy: Pass TTL and delegation tracking
+                    expiresAt: request.expiresAt,
+                    delegationAttempts: request.delegationAttempts,
+                    maxDelegations: request.maxDelegations
                 },
                 vectorClock,
                 sourceTabId: tabCoordinator.getTabId(),
@@ -827,11 +875,12 @@ export class ErrorRecoveryCoordinator {
             channel.postMessage(delegationMessage);
             channel.close();
 
-            console.log(`[ErrorRecoveryCoordinator] Delegated recovery ${request.id} to leader tab`);
+            console.log(`[ErrorRecoveryCoordinator] Delegated recovery ${request.id} to leader tab (attempt ${request.delegationAttempts}/${request.maxDelegations})`);
 
             this._eventBus.emit('RECOVERY:DELEGATED', {
                 recoveryId: request.id,
-                sourceTabId: tabCoordinator.getTabId()
+                sourceTabId: tabCoordinator.getTabId(),
+                delegationAttempt: request.delegationAttempts
             });
 
             return { delegated: true, reason: 'delegated_to_leader' };

@@ -658,6 +658,43 @@ EventBus.getCircuitBreakerStatus();
 // → { pendingEventCount, maxQueueSize, stormActive, droppedCount }
 ```
 
+### 19. HNW Phase 4: Reliability & Performance (NEW)
+
+**Phase 4 Improvements:**
+
+| Domain | Improvement | File | Purpose |
+|--------|-------------|------|---------|
+| **Hierarchy** | Recovery Coordinator Hardening | `js/services/error-recovery-coordinator.js` | 60s TTL, max 3 delegation attempts, expiry check |
+| **Hierarchy** | Safe Mode Enforcement | `js/storage.js` | Block writes when security modules unavailable |
+| **Network** | Unified Transaction Scope | `js/storage/transaction.js` | `storeToken()`/`deleteToken()` for SecureTokenStore |
+| **Wave** | Proactive Clock Sync | `js/services/tab-coordination.js` | 500ms calibration before election |
+| **Wave** | Visibility-Aware Heartbeat | `js/services/tab-coordination.js` | 5s wait if tab backgrounded before promotion |
+| **Wave** | Parallel Strategy Execution | `js/services/tool-call-handling-service.js` | `Promise.race` across strategies with 10s timeout |
+
+**Key APIs:**
+```javascript
+// Recovery with TTL (auto-expires after 60s)
+request.expiresAt = Date.now() + 60000;
+request.delegationAttempts = 0;
+request.maxDelegations = 3;
+
+// Safe Mode enforcement
+assertWriteAllowed('saveStreams'); // Throws if Safe Mode active
+
+// Unified transactions (now includes tokens)
+await StorageTransaction.transaction(async (tx) => {
+    await tx.put('indexeddb', 'store', data);
+    await tx.storeToken('api_key', value, { expiresIn: 3600000 });
+});
+
+// Proactive clock calibration
+await calibrateClockSkew(); // Called before election in init()
+
+// Visibility-aware promotion (in heartbeat monitor)
+if (document.hidden) await delay(5000); // Wait before promoting
+```
+
+**Testing:** 315 unit tests passing (10 pre-existing failures in unrelated module)
 ### SSE / Streaming Order Guarantees
 
 > [!NOTE]

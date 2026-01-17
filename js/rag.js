@@ -27,6 +27,8 @@ const LOCAL_EMBEDDING_DIMENSIONS = 384; // all-MiniLM-L6-v2 output dimension
 
 // Import ModuleRegistry for accessing dynamically loaded modules
 import { ModuleRegistry } from './module-registry.js';
+import { Patterns } from './patterns.js';
+import { Storage } from './storage.js';
 
 // EmbeddingWorker instance (lazy-loaded)
 let embeddingWorker = null;
@@ -1236,12 +1238,189 @@ async function createChunks(streams, onProgress = () => { }) {
 
         // Yield every 10 artists
         if (i % 10 === 0 && i > 0) {
-            onProgress(70 + Math.round((i / topArtistEntries.length) * 30), 100, 'Creating artist profiles...');
+            onProgress(70 + Math.round((i / topArtistEntries.length) * 25), 100, 'Creating artist profiles...');
             await new Promise(resolve => setTimeout(resolve, 0));
         }
     }
 
+    // Phase 5: Create pattern chunks for semantic search (RAG-Pattern Integration)
+    onProgress(95, 100, 'Creating pattern embeddings...');
+    try {
+        const patternChunks = await createPatternChunks(streams);
+        chunks.push(...patternChunks);
+        console.log(`[RAG] Added ${patternChunks.length} pattern chunks for semantic search`);
+    } catch (patternError) {
+        console.warn('[RAG] Pattern chunk creation failed, continuing without:', patternError.message);
+    }
+
     onProgress(100, 100, 'Chunks created');
+    return chunks;
+}
+
+/**
+ * Create searchable chunks from detected patterns
+ * Phase 5: RAG-Pattern Integration - enables semantic search over listening patterns
+ * 
+ * Note: Pattern detection is wrapped in setTimeout to yield to event loop,
+ * preventing UI blocking for large streaming histories.
+ * 
+ * @param {Array} streams - Streaming history data
+ * @returns {Promise<Array>} Pattern chunks for embedding
+ */
+async function createPatternChunks(streams) {
+    const chunks = [];
+
+    // Yield to event loop before heavy pattern detection
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    // Run pattern detection (wrapped to prevent blocking)
+    const patterns = await new Promise((resolve) => {
+        // Use setTimeout to run pattern detection in a separate task
+        setTimeout(() => {
+            try {
+                resolve(Patterns.detectAllPatterns(streams, []));
+            } catch (e) {
+                console.warn('[RAG] Pattern detection failed:', e.message);
+                resolve({}); // Return empty patterns on failure
+            }
+        }, 0);
+    });
+
+    // Comfort/Discovery Pattern
+    if (patterns.comfortDiscovery?.description) {
+        chunks.push({
+            type: 'pattern_result',
+            text: `Listening Pattern: Comfort vs Discovery. ${patterns.comfortDiscovery.description}. ` +
+                `Comfort ratio: ${(patterns.comfortDiscovery.comfortRatio * 100).toFixed(1)}%. ` +
+                `Discovery ratio: ${(patterns.comfortDiscovery.discoveryRatio * 100).toFixed(1)}%.`,
+            metadata: {
+                patternType: 'comfort_discovery',
+                comfortRatio: patterns.comfortDiscovery.comfortRatio,
+                discoveryRatio: patterns.comfortDiscovery.discoveryRatio
+            }
+        });
+    }
+
+    // Ghosted Artists Pattern
+    if (patterns.ghostedArtists?.ghosted?.length > 0) {
+        const topGhosted = patterns.ghostedArtists.ghosted.slice(0, 10)
+            .map(a => `${a.artist} (${a.plays} plays, gone since ${a.lastPlayed?.getFullYear() || 'unknown'})`)
+            .join(', ');
+        chunks.push({
+            type: 'pattern_result',
+            text: `Listening Pattern: Ghosted Artists. ${patterns.ghostedArtists.description}. ` +
+                `Artists you used to play frequently but stopped: ${topGhosted}.`,
+            metadata: {
+                patternType: 'ghosted_artists',
+                count: patterns.ghostedArtists.ghosted.length,
+                artists: patterns.ghostedArtists.ghosted.slice(0, 10).map(a => a.artist)
+            }
+        });
+    }
+
+    // Era Detection Pattern
+    if (patterns.eras?.hasEras && patterns.eras?.periods?.length > 0) {
+        const erasText = patterns.eras.periods.slice(0, 5)
+            .map(e => `${e.genre || 'Mixed'} era (${e.startMonth} to ${e.endMonth})`)
+            .join(', ');
+        chunks.push({
+            type: 'pattern_result',
+            text: `Listening Pattern: Musical Eras. ${patterns.eras.description}. ` +
+                `Distinct listening eras detected: ${erasText}.`,
+            metadata: {
+                patternType: 'eras',
+                eraCount: patterns.eras.periods.length,
+                periods: patterns.eras.periods.slice(0, 5)
+            }
+        });
+    }
+
+    // Time Patterns (Mood Engineer)
+    if (patterns.timePatterns?.isMoodEngineer) {
+        chunks.push({
+            type: 'pattern_result',
+            text: `Listening Pattern: Time-Based Habits. ${patterns.timePatterns.description}. ` +
+                `You are a Mood Engineer who strategically chooses music based on time of day.`,
+            metadata: {
+                patternType: 'time_patterns',
+                isMoodEngineer: true,
+                hourBreakdown: patterns.timePatterns.hourBreakdown || {}
+            }
+        });
+    }
+
+    // Social Patterns
+    if (patterns.socialPatterns?.isSocialChameleon) {
+        chunks.push({
+            type: 'pattern_result',
+            text: `Listening Pattern: Social Listening. ${patterns.socialPatterns.description}. ` +
+                `Your listening habits adapt based on social context.`,
+            metadata: {
+                patternType: 'social_patterns',
+                isSocialChameleon: true
+            }
+        });
+    }
+
+    // Discovery Explosions
+    if (patterns.discoveryExplosions?.explosions?.length > 0) {
+        const explosionsText = patterns.discoveryExplosions.explosions.slice(0, 5)
+            .map(e => `${e.month} (${e.newArtistCount} new artists)`)
+            .join(', ');
+        chunks.push({
+            type: 'pattern_result',
+            text: `Listening Pattern: Discovery Explosions. ${patterns.discoveryExplosions.description}. ` +
+                `Months with unusual spikes in new artist discovery: ${explosionsText}.`,
+            metadata: {
+                patternType: 'discovery_explosions',
+                count: patterns.discoveryExplosions.explosions.length,
+                months: patterns.discoveryExplosions.explosions.slice(0, 5).map(e => e.month)
+            }
+        });
+    }
+
+    // True Favorites
+    if (patterns.trueFavorites?.favorites?.length > 0) {
+        const favText = patterns.trueFavorites.favorites.slice(0, 10)
+            .map(f => `${f.artist} (${f.plays} plays over ${f.months} months)`)
+            .join(', ');
+        chunks.push({
+            type: 'pattern_result',
+            text: `Listening Pattern: True Favorites. ${patterns.trueFavorites.description}. ` +
+                `Artists you consistently return to month after month: ${favText}.`,
+            metadata: {
+                patternType: 'true_favorites',
+                count: patterns.trueFavorites.favorites.length,
+                artists: patterns.trueFavorites.favorites.slice(0, 10).map(f => f.artist)
+            }
+        });
+    }
+
+    // Mood Searching Pattern
+    if (patterns.moodSearching?.description) {
+        chunks.push({
+            type: 'pattern_result',
+            text: `Listening Pattern: Mood Searching. ${patterns.moodSearching.description}. ` +
+                `You sometimes search for music to match or alter your mood.`,
+            metadata: {
+                patternType: 'mood_searching',
+                isActive: patterns.moodSearching.isActive || false
+            }
+        });
+    }
+
+    // Overall summary as a searchable chunk
+    if (patterns.summary) {
+        chunks.push({
+            type: 'pattern_summary',
+            text: `Overall Listening Patterns Summary: ${patterns.summary}`,
+            metadata: {
+                patternType: 'summary',
+                evidenceCount: patterns.evidence?.length || 0
+            }
+        });
+    }
+
     return chunks;
 }
 

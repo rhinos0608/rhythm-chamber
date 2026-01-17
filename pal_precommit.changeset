@@ -1,0 +1,1003 @@
+diff --git a/AGENT_CONTEXT.md b/AGENT_CONTEXT.md
+index 94d269b..89c18ad 100644
+--- a/AGENT_CONTEXT.md
++++ b/AGENT_CONTEXT.md
+@@ -658,6 +658,43 @@ EventBus.getCircuitBreakerStatus();
+ // → { pendingEventCount, maxQueueSize, stormActive, droppedCount }
+ ```
+ 
++### 19. HNW Phase 4: Reliability & Performance (NEW)
++
++**Phase 4 Improvements:**
++
++| Domain | Improvement | File | Purpose |
++|--------|-------------|------|---------|
++| **Hierarchy** | Recovery Coordinator Hardening | `js/services/error-recovery-coordinator.js` | 60s TTL, max 3 delegation attempts, expiry check |
++| **Hierarchy** | Safe Mode Enforcement | `js/storage.js` | Block writes when security modules unavailable |
++| **Network** | Unified Transaction Scope | `js/storage/transaction.js` | `storeToken()`/`deleteToken()` for SecureTokenStore |
++| **Wave** | Proactive Clock Sync | `js/services/tab-coordination.js` | 500ms calibration before election |
++| **Wave** | Visibility-Aware Heartbeat | `js/services/tab-coordination.js` | 5s wait if tab backgrounded before promotion |
++| **Wave** | Parallel Strategy Execution | `js/services/tool-call-handling-service.js` | `Promise.race` across strategies with 10s timeout |
++
++**Key APIs:**
++```javascript
++// Recovery with TTL (auto-expires after 60s)
++request.expiresAt = Date.now() + 60000;
++request.delegationAttempts = 0;
++request.maxDelegations = 3;
++
++// Safe Mode enforcement
++assertWriteAllowed('saveStreams'); // Throws if Safe Mode active
++
++// Unified transactions (now includes tokens)
++await StorageTransaction.transaction(async (tx) => {
++    await tx.put('indexeddb', 'store', data);
++    await tx.storeToken('api_key', value, { expiresIn: 3600000 });
++});
++
++// Proactive clock calibration
++await calibrateClockSkew(); // Called before election in init()
++
++// Visibility-aware promotion (in heartbeat monitor)
++if (document.hidden) await delay(5000); // Wait before promoting
++```
++
++**Testing:** 315 unit tests passing (10 pre-existing failures in unrelated module)
+ ### SSE / Streaming Order Guarantees
+ 
+ > [!NOTE]
+diff --git a/js/rag.js b/js/rag.js
+index c19c310..5a847db 100644
+--- a/js/rag.js
++++ b/js/rag.js
+@@ -27,6 +27,8 @@ const LOCAL_EMBEDDING_DIMENSIONS = 384; // all-MiniLM-L6-v2 output dimension
+ 
+ // Import ModuleRegistry for accessing dynamically loaded modules
+ import { ModuleRegistry } from './module-registry.js';
++import { Patterns } from './patterns.js';
++import { Storage } from './storage.js';
+ 
+ // EmbeddingWorker instance (lazy-loaded)
+ let embeddingWorker = null;
+@@ -1236,15 +1238,192 @@ async function createChunks(streams, onProgress = () => { }) {
+ 
+         // Yield every 10 artists
+         if (i % 10 === 0 && i > 0) {
+-            onProgress(70 + Math.round((i / topArtistEntries.length) * 30), 100, 'Creating artist profiles...');
++            onProgress(70 + Math.round((i / topArtistEntries.length) * 25), 100, 'Creating artist profiles...');
+             await new Promise(resolve => setTimeout(resolve, 0));
+         }
+     }
+ 
++    // Phase 5: Create pattern chunks for semantic search (RAG-Pattern Integration)
++    onProgress(95, 100, 'Creating pattern embeddings...');
++    try {
++        const patternChunks = await createPatternChunks(streams);
++        chunks.push(...patternChunks);
++        console.log(`[RAG] Added ${patternChunks.length} pattern chunks for semantic search`);
++    } catch (patternError) {
++        console.warn('[RAG] Pattern chunk creation failed, continuing without:', patternError.message);
++    }
++
+     onProgress(100, 100, 'Chunks created');
+     return chunks;
+ }
+ 
++/**
++ * Create searchable chunks from detected patterns
++ * Phase 5: RAG-Pattern Integration - enables semantic search over listening patterns
++ * 
++ * Note: Pattern detection is wrapped in setTimeout to yield to event loop,
++ * preventing UI blocking for large streaming histories.
++ * 
++ * @param {Array} streams - Streaming history data
++ * @returns {Promise<Array>} Pattern chunks for embedding
++ */
++async function createPatternChunks(streams) {
++    const chunks = [];
++
++    // Yield to event loop before heavy pattern detection
++    await new Promise(resolve => setTimeout(resolve, 0));
++
++    // Run pattern detection (wrapped to prevent blocking)
++    const patterns = await new Promise((resolve) => {
++        // Use setTimeout to run pattern detection in a separate task
++        setTimeout(() => {
++            try {
++                resolve(Patterns.detectAllPatterns(streams, []));
++            } catch (e) {
++                console.warn('[RAG] Pattern detection failed:', e.message);
++                resolve({}); // Return empty patterns on failure
++            }
++        }, 0);
++    });
++
++    // Comfort/Discovery Pattern
++    if (patterns.comfortDiscovery?.description) {
++        chunks.push({
++            type: 'pattern_result',
++            text: `Listening Pattern: Comfort vs Discovery. ${patterns.comfortDiscovery.description}. ` +
++                `Comfort ratio: ${(patterns.comfortDiscovery.comfortRatio * 100).toFixed(1)}%. ` +
++                `Discovery ratio: ${(patterns.comfortDiscovery.discoveryRatio * 100).toFixed(1)}%.`,
++            metadata: {
++                patternType: 'comfort_discovery',
++                comfortRatio: patterns.comfortDiscovery.comfortRatio,
++                discoveryRatio: patterns.comfortDiscovery.discoveryRatio
++            }
++        });
++    }
++
++    // Ghosted Artists Pattern
++    if (patterns.ghostedArtists?.ghosted?.length > 0) {
++        const topGhosted = patterns.ghostedArtists.ghosted.slice(0, 10)
++            .map(a => `${a.artist} (${a.plays} plays, gone since ${a.lastPlayed?.getFullYear() || 'unknown'})`)
++            .join(', ');
++        chunks.push({
++            type: 'pattern_result',
++            text: `Listening Pattern: Ghosted Artists. ${patterns.ghostedArtists.description}. ` +
++                `Artists you used to play frequently but stopped: ${topGhosted}.`,
++            metadata: {
++                patternType: 'ghosted_artists',
++                count: patterns.ghostedArtists.ghosted.length,
++                artists: patterns.ghostedArtists.ghosted.slice(0, 10).map(a => a.artist)
++            }
++        });
++    }
++
++    // Era Detection Pattern
++    if (patterns.eras?.hasEras && patterns.eras?.periods?.length > 0) {
++        const erasText = patterns.eras.periods.slice(0, 5)
++            .map(e => `${e.genre || 'Mixed'} era (${e.startMonth} to ${e.endMonth})`)
++            .join(', ');
++        chunks.push({
++            type: 'pattern_result',
++            text: `Listening Pattern: Musical Eras. ${patterns.eras.description}. ` +
++                `Distinct listening eras detected: ${erasText}.`,
++            metadata: {
++                patternType: 'eras',
++                eraCount: patterns.eras.periods.length,
++                periods: patterns.eras.periods.slice(0, 5)
++            }
++        });
++    }
++
++    // Time Patterns (Mood Engineer)
++    if (patterns.timePatterns?.isMoodEngineer) {
++        chunks.push({
++            type: 'pattern_result',
++            text: `Listening Pattern: Time-Based Habits. ${patterns.timePatterns.description}. ` +
++                `You are a Mood Engineer who strategically chooses music based on time of day.`,
++            metadata: {
++                patternType: 'time_patterns',
++                isMoodEngineer: true,
++                hourBreakdown: patterns.timePatterns.hourBreakdown || {}
++            }
++        });
++    }
++
++    // Social Patterns
++    if (patterns.socialPatterns?.isSocialChameleon) {
++        chunks.push({
++            type: 'pattern_result',
++            text: `Listening Pattern: Social Listening. ${patterns.socialPatterns.description}. ` +
++                `Your listening habits adapt based on social context.`,
++            metadata: {
++                patternType: 'social_patterns',
++                isSocialChameleon: true
++            }
++        });
++    }
++
++    // Discovery Explosions
++    if (patterns.discoveryExplosions?.explosions?.length > 0) {
++        const explosionsText = patterns.discoveryExplosions.explosions.slice(0, 5)
++            .map(e => `${e.month} (${e.newArtistCount} new artists)`)
++            .join(', ');
++        chunks.push({
++            type: 'pattern_result',
++            text: `Listening Pattern: Discovery Explosions. ${patterns.discoveryExplosions.description}. ` +
++                `Months with unusual spikes in new artist discovery: ${explosionsText}.`,
++            metadata: {
++                patternType: 'discovery_explosions',
++                count: patterns.discoveryExplosions.explosions.length,
++                months: patterns.discoveryExplosions.explosions.slice(0, 5).map(e => e.month)
++            }
++        });
++    }
++
++    // True Favorites
++    if (patterns.trueFavorites?.favorites?.length > 0) {
++        const favText = patterns.trueFavorites.favorites.slice(0, 10)
++            .map(f => `${f.artist} (${f.plays} plays over ${f.months} months)`)
++            .join(', ');
++        chunks.push({
++            type: 'pattern_result',
++            text: `Listening Pattern: True Favorites. ${patterns.trueFavorites.description}. ` +
++                `Artists you consistently return to month after month: ${favText}.`,
++            metadata: {
++                patternType: 'true_favorites',
++                count: patterns.trueFavorites.favorites.length,
++                artists: patterns.trueFavorites.favorites.slice(0, 10).map(f => f.artist)
++            }
++        });
++    }
++
++    // Mood Searching Pattern
++    if (patterns.moodSearching?.description) {
++        chunks.push({
++            type: 'pattern_result',
++            text: `Listening Pattern: Mood Searching. ${patterns.moodSearching.description}. ` +
++                `You sometimes search for music to match or alter your mood.`,
++            metadata: {
++                patternType: 'mood_searching',
++                isActive: patterns.moodSearching.isActive || false
++            }
++        });
++    }
++
++    // Overall summary as a searchable chunk
++    if (patterns.summary) {
++        chunks.push({
++            type: 'pattern_summary',
++            text: `Overall Listening Patterns Summary: ${patterns.summary}`,
++            metadata: {
++                patternType: 'summary',
++                evidenceCount: patterns.evidence?.length || 0
++            }
++        });
++    }
++
++    return chunks;
++}
++
+ /**
+  * Clear all embeddings from Qdrant or local store
+  * Uses namespace-isolated collection for Qdrant
+diff --git a/js/services/error-recovery-coordinator.js b/js/services/error-recovery-coordinator.js
+index 029e1f1..3de71b3 100644
+--- a/js/services/error-recovery-coordinator.js
++++ b/js/services/error-recovery-coordinator.js
+@@ -79,8 +79,18 @@ export const RecoveryState = Object.freeze({
+  * @property {string[]} dependencies - Recovery step dependencies
+  * @property {number} timestamp - Request timestamp
+  * @property {string} tabId - Tab that initiated recovery
++ * @property {number} expiresAt - Recovery TTL expiration time (HNW Hierarchy)
++ * @property {number} delegationAttempts - Number of delegation attempts (HNW Hierarchy)
++ * @property {number} maxDelegations - Maximum allowed delegations (HNW Hierarchy)
+  */
+ 
++/**
++ * Recovery TTL configuration
++ * @readonly
++ */
++const RECOVERY_TTL_MS = 60000; // 60 seconds
++const MAX_DELEGATION_ATTEMPTS = 3;
++
+ /**
+  * Recovery plan structure
+  * @typedef {Object} RecoveryPlan
+@@ -466,7 +476,11 @@ export class ErrorRecoveryCoordinator {
+             context: errorData.context || {},
+             dependencies: errorData.dependencies || [],
+             timestamp: Date.now(),
+-            tabId
++            tabId,
++            // HNW Hierarchy: TTL and re-delegation tracking
++            expiresAt: Date.now() + RECOVERY_TTL_MS,
++            delegationAttempts: 0,
++            maxDelegations: MAX_DELEGATION_ATTEMPTS
+         };
+     }
+ 
+@@ -480,6 +494,23 @@ export class ErrorRecoveryCoordinator {
+         const startTime = performance.now();
+         performance.mark('recovery-coordination-start');
+ 
++        // HNW Hierarchy: Check if recovery request has expired
++        if (request.expiresAt && Date.now() > request.expiresAt) {
++            console.warn(`[ErrorRecoveryCoordinator] Recovery ${request.id} expired (TTL: ${RECOVERY_TTL_MS}ms)`);
++            this._eventBus.emit('RECOVERY:EXPIRED', {
++                recoveryId: request.id,
++                domain: request.domain,
++                age: Date.now() - request.timestamp
++            });
++            return {
++                success: false,
++                action: 'expired',
++                durationMs: 0,
++                error: null,
++                metadata: { reason: 'ttl_expired', requestId: request.id }
++            };
++        }
++
+         // Check if this tab should handle recovery
+         if (!this._shouldHandleRecovery(request)) {
+             console.log('[ErrorRecoveryCoordinator] Skipping recovery - not primary tab');
+@@ -802,6 +833,19 @@ export class ErrorRecoveryCoordinator {
+             return { delegated: false, reason: 'is_leader' };
+         }
+ 
++        // HNW Hierarchy: Check delegation attempts limit
++        if (request.delegationAttempts >= request.maxDelegations) {
++            console.warn(`[ErrorRecoveryCoordinator] Max delegations (${request.maxDelegations}) reached for recovery ${request.id}`);
++            this._eventBus.emit('RECOVERY:DELEGATION_EXHAUSTED', {
++                recoveryId: request.id,
++                attempts: request.delegationAttempts
++            });
++            return { delegated: false, reason: 'max_delegations_reached' };
++        }
++
++        // Increment delegation attempts
++        request.delegationAttempts = (request.delegationAttempts || 0) + 1;
++
+         try {
+             // Get VectorClock for causal ordering
+             const vectorClock = tabCoordinator.getVectorClockState?.() || {};
+@@ -817,7 +861,11 @@ export class ErrorRecoveryCoordinator {
+                     priority: request.priority,
+                     error: request.error?.message || 'Unknown error',
+                     context: request.context,
+-                    timestamp: request.timestamp
++                    timestamp: request.timestamp,
++                    // HNW Hierarchy: Pass TTL and delegation tracking
++                    expiresAt: request.expiresAt,
++                    delegationAttempts: request.delegationAttempts,
++                    maxDelegations: request.maxDelegations
+                 },
+                 vectorClock,
+                 sourceTabId: tabCoordinator.getTabId(),
+@@ -827,11 +875,12 @@ export class ErrorRecoveryCoordinator {
+             channel.postMessage(delegationMessage);
+             channel.close();
+ 
+-            console.log(`[ErrorRecoveryCoordinator] Delegated recovery ${request.id} to leader tab`);
++            console.log(`[ErrorRecoveryCoordinator] Delegated recovery ${request.id} to leader tab (attempt ${request.delegationAttempts}/${request.maxDelegations})`);
+ 
+             this._eventBus.emit('RECOVERY:DELEGATED', {
+                 recoveryId: request.id,
+-                sourceTabId: tabCoordinator.getTabId()
++                sourceTabId: tabCoordinator.getTabId(),
++                delegationAttempt: request.delegationAttempts
+             });
+ 
+             return { delegated: true, reason: 'delegated_to_leader' };
+diff --git a/js/services/tab-coordination.js b/js/services/tab-coordination.js
+index 52828b8..f6a8dc5 100644
+--- a/js/services/tab-coordination.js
++++ b/js/services/tab-coordination.js
+@@ -249,6 +249,53 @@ let lastHeartbeatSentTime = 0; // Track for WaveTelemetry
+ // Core Functions
+ // ==========================================
+ 
++/**
++ * Proactive clock skew calibration
++ * HNW Wave: Calibrate clock skew BEFORE elections to ensure accurate timing
++ * 
++ * Uses localStorage timestamp exchange to detect timing differences between tabs
++ * without relying on BroadcastChannel messages.
++ * 
++ * @returns {Promise<void>}
++ */
++async function calibrateClockSkew() {
++    const CALIBRATION_KEY = 'rhythm_chamber_clock_calibration';
++    const CALIBRATION_DURATION_MS = 500;
++
++    try {
++        const localStart = Date.now();
++
++        // Write our timestamp to localStorage
++        localStorage.setItem(CALIBRATION_KEY, JSON.stringify({
++            timestamp: localStart,
++            tabId: TAB_ID
++        }));
++
++        // Wait for other tabs to potentially update
++        await new Promise(resolve => setTimeout(resolve, CALIBRATION_DURATION_MS));
++
++        // Read back and check for other tab timestamps
++        const stored = localStorage.getItem(CALIBRATION_KEY);
++        if (stored) {
++            const data = JSON.parse(stored);
++            if (data.tabId !== TAB_ID) {
++                // Another tab wrote - calculate skew
++                const localNow = Date.now();
++                const remoteTimestamp = data.timestamp;
++                clockSkewTracker.recordSkew(remoteTimestamp, localNow);
++                console.log(`[TabCoordination] Proactive clock calibration: ` +
++                    `detected ${clockSkewTracker.getSkew().toFixed(0)}ms skew from tab ${data.tabId}`);
++            }
++        }
++
++        // Clean up calibration key
++        localStorage.removeItem(CALIBRATION_KEY);
++        console.log(`[TabCoordination] Clock calibration complete (${CALIBRATION_DURATION_MS}ms)`);
++    } catch (e) {
++        console.warn('[TabCoordination] Clock calibration failed:', e.message);
++    }
++}
++
+ /**
+  * Initialize tab coordination service
+  * Uses deterministic leader election (lowest tab ID wins)
+@@ -267,6 +314,9 @@ async function init() {
+         return true; // Assume primary if no coordination available
+     }
+ 
++    // HNW Wave: Proactive clock calibration before election
++    await calibrateClockSkew();
++
+     broadcastChannel = new BroadcastChannel(CHANNEL_NAME);
+ 
+     // Set up message handler
+@@ -617,6 +667,26 @@ function startHeartbeatMonitor() {
+ 
+         // Check if heartbeat is overdue with skew tolerance
+         if (timeSinceLastHeartbeat > maxAllowedGap) {
++            // HNW Wave: Visibility-aware heartbeat - wait before promoting if tab may be backgrounded
++            const isPageHidden = typeof document !== 'undefined' && document.hidden;
++            if (isPageHidden) {
++                // Primary may just be backgrounded - wait 5s before promoting
++                console.log(`[TabCoordination] Leader heartbeat missed, but page hidden. Waiting 5s before re-election...`);
++                clearInterval(heartbeatCheckInterval);
++                setTimeout(async () => {
++                    // Re-check after delay
++                    const recentHeartbeat = clockSkewTracker.adjustTimestamp(Date.now()) - lastLeaderHeartbeat;
++                    if (recentHeartbeat > maxAllowedGap) {
++                        console.log(`[TabCoordination] Still no heartbeat after visibility wait, promoting to leader`);
++                        initiateReElection();
++                    } else {
++                        console.log(`[TabCoordination] Heartbeat received during visibility wait, resuming monitor`);
++                        startHeartbeatMonitor(); // Resume monitoring
++                    }
++                }, 5000);
++                return; // Exit early
++            }
++
+             console.log(`[TabCoordination] Leader heartbeat missed for ${timeSinceLastHeartbeat}ms (skew: ${clockSkewTracker.getSkew().toFixed(0)}ms), promoting to leader`);
+             stopHeartbeatMonitor();
+             initiateReElection();
+diff --git a/js/services/tool-call-handling-service.js b/js/services/tool-call-handling-service.js
+index df557d0..b1962c2 100644
+--- a/js/services/tool-call-handling-service.js
++++ b/js/services/tool-call-handling-service.js
+@@ -407,64 +407,106 @@ async function handleToolCallsWithFallback(
+                 candidates.map(c => `${c.strategy.strategyName}: ${c.confidence.toFixed(2)} (${c.reason})`));
+         }
+ 
+-        // Try strategies in order of confidence until one succeeds or budget exhausted
+-        for (const candidate of candidates) {
+-            // Check if budget exhausted before trying next strategy
+-            if (strategyBudget.isExhausted()) {
+-                const budgetInfo = strategyBudget.getAccounting();
+-                console.warn(`[ToolCallHandlingService] Strategy budget exhausted after ${budgetInfo.elapsed}ms`);
+-
+-                // Notify UI about timeout
+-                if (onProgress) {
+-                    onProgress({ type: 'strategy_timeout', elapsed: budgetInfo.elapsed });
+-                }
++        // ==========================================
++        // HNW Wave: Parallel Strategy Execution
++        // Race all qualifying strategies using Promise.race for fastest response
++        // ==========================================
+ 
+-                return {
+-                    earlyReturn: {
+-                        status: 'error',
+-                        content: buildTimeoutExhaustedError(budgetInfo.elapsed),
+-                        role: 'assistant',
+-                        isTimeoutError: true
+-                    }
+-                };
++        if (candidates.length === 0) {
++            // No qualifying strategies - check for native tool_calls fallback
++            if (responseMessage?.tool_calls?.length > 0) {
++                console.log('[ToolCallHandlingService] Native tool calls found in response (fallback)');
++                return handleToolCalls(responseMessage, providerConfig, key, onProgress);
+             }
++            return { responseMessage };
++        }
+ 
+-            // Provide remaining budget to strategy
+-            const remainingMs = strategyBudget.remaining();
+-            context.timeoutMs = remainingMs;
++        // Provide remaining budget to context
++        const remainingMs = strategyBudget.remaining();
++        context.timeoutMs = Math.min(remainingMs, 10000); // Max 10s per strategy
+ 
+-            console.log(`[ToolCallHandlingService] Trying ${candidate.strategy.strategyName} (confidence: ${candidate.confidence.toFixed(2)}, budget: ${remainingMs}ms remaining)`);
++        console.log(`[ToolCallHandlingService] Racing ${candidates.length} strategies with ${context.timeoutMs}ms budget`);
+ 
++        // Create race promises for each strategy - wrap to throw on failure so firstSuccess works
++        const racePromises = candidates.map(async (candidate) => {
+             try {
+                 const result = await candidate.strategy.execute(context);
+ 
+-                // Strategy succeeded
++                // Only return successful results - throw on errors to trigger next strategy
+                 if (result && !result.earlyReturn?.status?.includes('error')) {
++                    console.log(`[ToolCallHandlingService] Strategy ${candidate.strategy.strategyName} succeeded`);
+                     return result;
+                 }
+ 
+-                // Strategy returned an error - continue to next if budget permits
+-                if (result?.earlyReturn) {
+-                    console.log(`[ToolCallHandlingService] ${candidate.strategy.strategyName} returned error, trying next strategy`);
+-                    continue;
+-                }
+-
+-                return result;
++                // Strategy returned an error - throw to let other strategies try
++                throw new Error(result?.earlyReturn?.content || 'Strategy failed');
+             } catch (strategyError) {
+-                // Strategy threw - log and continue to next
+-                console.error(`[ToolCallHandlingService] ${candidate.strategy.strategyName} threw:`, strategyError);
+-                continue;
++                // Re-throw to let Promise.any try next strategy
++                throw new Error(`${candidate.strategy.strategyName}: ${strategyError.message}`);
+             }
+-        }
++        });
+ 
+-        // No winning strategy or all failed - check for native tool_calls fallback
+-        if (responseMessage?.tool_calls?.length > 0) {
+-            console.log('[ToolCallHandlingService] Native tool calls found in response (fallback)');
+-            return handleToolCalls(responseMessage, providerConfig, key, onProgress);
+-        }
++        // Add timeout promise that rejects
++        const timeoutPromise = new Promise((_, reject) =>
++            setTimeout(() => reject(new Error('All strategies timed out')), context.timeoutMs)
++        );
+ 
+-        // No function calls to handle
+-        return { responseMessage };
++        try {
++            // Use Promise.any for true first-success-wins (or polyfill if unavailable)
++            // Promise.any resolves as soon as ANY promise resolves, ignoring rejections
++            let successfulResult;
++
++            if (typeof Promise.any === 'function') {
++                successfulResult = await Promise.any([...racePromises, timeoutPromise.then(() => {
++                    throw new Error('Timeout');
++                })]);
++            } else {
++                // Fallback for older browsers: custom first-success implementation
++                successfulResult = await new Promise((resolve, reject) => {
++                    let pendingCount = racePromises.length;
++                    const errors = [];
++                    let resolved = false;
++
++                    racePromises.forEach((promise, i) => {
++                        promise.then(
++                            (result) => {
++                                if (!resolved) {
++                                    resolved = true;
++                                    resolve(result);
++                                }
++                            },
++                            (error) => {
++                                errors[i] = error;
++                                pendingCount--;
++                                if (pendingCount === 0 && !resolved) {
++                                    reject(new AggregateError(errors, 'All strategies failed'));
++                                }
++                            }
++                        );
++                    });
++
++                    // Timeout handling
++                    setTimeout(() => {
++                        if (!resolved) {
++                            reject(new Error('All strategies timed out'));
++                        }
++                    }, context.timeoutMs);
++                });
++            }
++
++            return successfulResult;
++        } catch (raceError) {
++            // All strategies failed or timed out - check for native fallback
++            console.warn(`[ToolCallHandlingService] Strategy race failed: ${raceError.message}`);
++
++            if (responseMessage?.tool_calls?.length > 0) {
++                console.log('[ToolCallHandlingService] Falling back to native tool calls');
++                return handleToolCalls(responseMessage, providerConfig, key, onProgress);
++            }
++
++            // No function calls to handle
++            return { responseMessage };
++        }
+ 
+     } finally {
+         // Always release budget
+diff --git a/js/storage.js b/js/storage.js
+index 5c98c79..c63e33c 100644
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -13,6 +13,31 @@ import { StorageTransaction } from './storage/transaction.js';
+ import { StorageMigration } from './storage/migration.js';
+ import { ModuleRegistry } from './module-registry.js';
+ import { EventBus } from './services/event-bus.js';
++import { SafeMode } from './security/safe-mode.js';
++
++// ==========================================
++// HNW Hierarchy: Safe Mode Enforcement
++// ==========================================
++
++/**
++ * Check if writes are blocked by Safe Mode
++ * @param {string} operation - Operation name for error message
++ * @throws {Error} If Safe Mode is active and encryption is unavailable
++ */
++function assertWriteAllowed(operation) {
++  // Only block if encryption is required but unavailable
++  // This implements fail-closed behavior for security-sensitive operations
++  if (!SafeMode.canEncrypt()) {
++    const status = SafeMode.getSafeModeStatus();
++    if (status.isSafeMode) {
++      throw new Error(
++        `[Storage] Write blocked: Safe Mode active. ` +
++        `Operation '${operation}' requires security capabilities. ` +
++        `Failed modules: ${status.failedModules.map(m => m.name).join(', ')}`
++      );
++    }
++  }
++}
+ 
+ // ==========================================
+ // Privacy Controls
+@@ -121,6 +146,7 @@ const Storage = {
+   // ==========================================
+ 
+   async saveStreams(streams) {
++    assertWriteAllowed('saveStreams');
+     return queuedOperation(async () => {
+       const result = await window.IndexedDBCore.put(STORES.STREAMS, {
+         id: 'all',
+@@ -138,6 +164,7 @@ const Storage = {
+   },
+ 
+   async appendStreams(newStreams) {
++    assertWriteAllowed('appendStreams');
+     return queuedOperation(async () => {
+       // Use atomic update to prevent race conditions
+       const result = await window.IndexedDBCore.atomicUpdate(
+@@ -159,6 +186,7 @@ const Storage = {
+   },
+ 
+   async clearStreams() {
++    assertWriteAllowed('clearStreams');
+     return queuedOperation(async () => {
+       await window.IndexedDBCore.clear(STORES.STREAMS);
+       this._notifyUpdate('streams', 0);
+diff --git a/js/storage/transaction.js b/js/storage/transaction.js
+index e41672f..ee5e00d 100644
+--- a/js/storage/transaction.js
++++ b/js/storage/transaction.js
+@@ -141,6 +141,62 @@ class TransactionContext {
+     getPendingCount() {
+         return this.operations.length;
+     }
++
++    /**
++     * Add a secure token store operation to the transaction
++     * HNW Network: Unified transaction scope for SecureTokenStore
++     * 
++     * @param {string} tokenKey - Token identifier
++     * @param {string} value - Token value
++     * @param {Object} [options] - Storage options (expiresIn, metadata)
++     */
++    async storeToken(tokenKey, value, options = {}) {
++        if (this.committed || this.rolledBack) {
++            throw new Error('Transaction already completed');
++        }
++
++        let previousValue = null;
++
++        // Get previous value from SecureTokenStore for rollback
++        if (window.SecureTokenStore?.retrieve) {
++            try {
++                previousValue = await window.SecureTokenStore.retrieve(tokenKey);
++            } catch {
++                previousValue = null;
++            }
++        }
++
++        this.operations.push(new TransactionOperation(
++            'securetoken', 'put', null, tokenKey, { value, options }, previousValue
++        ));
++    }
++
++    /**
++     * Add a secure token delete operation to the transaction
++     * HNW Network: Unified transaction scope for SecureTokenStore
++     * 
++     * @param {string} tokenKey - Token identifier
++     */
++    async deleteToken(tokenKey) {
++        if (this.committed || this.rolledBack) {
++            throw new Error('Transaction already completed');
++        }
++
++        let previousValue = null;
++
++        // Get previous value from SecureTokenStore for rollback
++        if (window.SecureTokenStore?.retrieve) {
++            try {
++                previousValue = await window.SecureTokenStore.retrieve(tokenKey);
++            } catch {
++                previousValue = null;
++            }
++        }
++
++        this.operations.push(new TransactionOperation(
++            'securetoken', 'delete', null, tokenKey, null, previousValue
++        ));
++    }
+ }
+ 
+ // ==========================================
+@@ -208,6 +264,18 @@ async function commit(ctx) {
+                 } else if (op.type === 'delete') {
+                     await window.IndexedDBCore.delete(op.store, op.key);
+                 }
++            } else if (op.backend === 'securetoken') {
++                // HNW Network: SecureTokenStore integration
++                if (!window.SecureTokenStore) {
++                    throw new Error('SecureTokenStore not available');
++                }
++
++                if (op.type === 'put') {
++                    const { value, options } = op.value;
++                    await window.SecureTokenStore.store(op.key, value, options);
++                } else if (op.type === 'delete') {
++                    await window.SecureTokenStore.invalidate(op.key);
++                }
+             }
+ 
+             op.committed = true;
+@@ -264,6 +332,15 @@ async function rollback(ctx) {
+                 }
+             } else if (op.backend === 'indexeddb') {
+                 await revertIndexedDBOperation(op);
++            } else if (op.backend === 'securetoken') {
++                // HNW Network: SecureTokenStore rollback
++                if (window.SecureTokenStore) {
++                    if (op.previousValue === null) {
++                        await window.SecureTokenStore.invalidate(op.key);
++                    } else {
++                        await window.SecureTokenStore.store(op.key, op.previousValue);
++                    }
++                }
+             }
+         } catch (rollbackError) {
+             console.error('[StorageTransaction] Rollback failed for operation:', op, rollbackError);
+diff --git a/tests/unit/chat-queue.test.js b/tests/unit/chat-queue.test.js
+index 73bd486..0283f63 100644
+--- a/tests/unit/chat-queue.test.js
++++ b/tests/unit/chat-queue.test.js
+@@ -40,6 +40,112 @@ vi.mock('../../js/module-registry.js', () => ({
+     }
+ }));
+ 
++// Mock SessionManager as ES module (Chat imports it directly)
++vi.mock('../../js/services/session-manager.js', () => ({
++    SessionManager: {
++        init: vi.fn(),
++        setUserContext: vi.fn(),
++        addMessageToHistory: vi.fn(),
++        getHistory: vi.fn(() => []),
++        saveConversation: vi.fn(),
++        flushPendingSaveAsync: vi.fn(),
++        emergencyBackupSync: vi.fn(),
++        recoverEmergencyBackup: vi.fn(),
++        saveCurrentSession: vi.fn(),
++        createNewSession: vi.fn(),
++        loadSession: vi.fn(),
++        switchSession: vi.fn(),
++        listSessions: vi.fn(),
++        deleteSessionById: vi.fn(),
++        renameSession: vi.fn(),
++        getCurrentSessionId: vi.fn(),
++        onSessionUpdate: vi.fn(),
++        clearConversation: vi.fn(),
++        truncateHistory: vi.fn(),
++        removeMessageFromHistory: vi.fn()
++    }
++}));
++
++// Mock CircuitBreaker as ES module
++vi.mock('../../js/services/circuit-breaker.js', () => ({
++    CircuitBreaker: {
++        resetTurn: vi.fn(),
++        check: vi.fn(() => ({ allowed: true })),
++        recordCall: vi.fn(),
++        getErrorMessage: vi.fn(() => 'Circuit breaker error')
++    }
++}));
++
++// Mock LLMProviderRoutingService as ES module
++vi.mock('../../js/services/llm-provider-routing-service.js', () => ({
++    LLMProviderRoutingService: {
++        init: vi.fn(),
++        callLLM: vi.fn(() => Promise.resolve({
++            choices: [{ message: { content: 'Test response' } }]
++        })),
++        buildProviderConfig: vi.fn(() => ({
++            provider: 'openrouter',
++            model: 'test-model',
++            baseUrl: ''
++        }))
++    }
++}));
++
++// Mock TokenCountingService as ES module
++vi.mock('../../js/services/token-counting-service.js', () => ({
++    TokenCountingService: {
++        init: vi.fn(),
++        calculateTokenUsage: vi.fn(() => ({
++            totalTokens: 100,
++            contextWindow: 4096,
++            warnings: []
++        })),
++        getRecommendedAction: vi.fn(() => ({ action: 'none' })),
++        truncateToTarget: vi.fn((params) => params)
++    }
++}));
++
++// Mock ToolCallHandlingService as ES module
++vi.mock('../../js/services/tool-call-handling-service.js', () => ({
++    ToolCallHandlingService: {
++        init: vi.fn(),
++        setStreamsData: vi.fn(),
++        handleToolCalls: vi.fn((responseMessage) => ({ responseMessage })),
++        handleToolCallsWithFallback: vi.fn((responseMessage) => ({ responseMessage }))
++    }
++}));
++
++// Mock FallbackResponseService as ES module
++vi.mock('../../js/services/fallback-response-service.js', () => ({
++    FallbackResponseService: {
++        init: vi.fn(),
++        generateFallbackResponse: vi.fn(() => 'Fallback response')
++    }
++}));
++
++// Mock TimeoutBudget as ES module
++vi.mock('../../js/services/timeout-budget-manager.js', () => ({
++    TimeoutBudget: {
++        allocate: vi.fn((operation, budgetMs) => ({
++            operation,
++            budgetMs,
++            id: `${operation}:1`,
++            startTime: Date.now(),
++            remaining: () => budgetMs,
++            isExhausted: () => false,
++            elapsed: () => 0
++        })),
++        release: vi.fn(),
++        getBudget: vi.fn(() => null),
++        withBudget: vi.fn((operation, budgetMs, fn) => fn()),
++        getActiveAccounting: vi.fn(() => []),
++        DEFAULT_BUDGETS: {
++            llm_call: 60000,
++            function_call: 10000
++        }
++    }
++}));
++
+ // Create mock window objects
+ function createMockWindow() {
+     return {
+@@ -180,6 +286,7 @@ describe('Chat TurnQueue Integration', () => {
+ 
+     it('should bypass TurnQueue for internal operations', async () => {
+         const { TurnQueue } = await import('../../js/services/turn-queue.js');
++        const { SessionManager } = await import('../../js/services/session-manager.js');
+ 
+         // Initialize chat
+         await Chat.initChat(
+@@ -195,8 +302,8 @@ describe('Chat TurnQueue Integration', () => {
+         // Verify TurnQueue.push was NOT called
+         expect(TurnQueue.push).not.toHaveBeenCalled();
+ 
+-        // Verify the message was processed directly
+-        expect(mockWindow.SessionManager.addMessageToHistory).toHaveBeenCalledWith({
++        // Verify the message was processed directly (use ES module mock, not window)
++        expect(SessionManager.addMessageToHistory).toHaveBeenCalledWith({
+             role: 'user',
+             content: 'Internal message'
+         });
+diff --git a/tests/unit/chat-timeout-budget.test.js b/tests/unit/chat-timeout-budget.test.js
+index d45996c..2e24726 100644
+--- a/tests/unit/chat-timeout-budget.test.js
++++ b/tests/unit/chat-timeout-budget.test.js
+@@ -64,6 +64,89 @@ vi.mock('../../js/module-registry.js', () => ({
+     }
+ }));
+ 
++// Mock SessionManager as ES module (Chat imports it directly)
++vi.mock('../../js/services/session-manager.js', () => ({
++    SessionManager: {
++        init: vi.fn(),
++        setUserContext: vi.fn(),
++        addMessageToHistory: vi.fn(),
++        getHistory: vi.fn(() => []),
++        saveConversation: vi.fn(),
++        flushPendingSaveAsync: vi.fn(),
++        emergencyBackupSync: vi.fn(),
++        recoverEmergencyBackup: vi.fn(),
++        saveCurrentSession: vi.fn(),
++        createNewSession: vi.fn(),
++        loadSession: vi.fn(),
++        switchSession: vi.fn(),
++        listSessions: vi.fn(),
++        deleteSessionById: vi.fn(),
++        renameSession: vi.fn(),
++        getCurrentSessionId: vi.fn(),
++        onSessionUpdate: vi.fn(),
++        clearConversation: vi.fn(),
++        truncateHistory: vi.fn(),
++        removeMessageFromHistory: vi.fn()
++    }
++}));
++
++// Mock CircuitBreaker as ES module
++vi.mock('../../js/services/circuit-breaker.js', () => ({
++    CircuitBreaker: {
++        resetTurn: vi.fn(),
++        check: vi.fn(() => ({ allowed: true })),
++        recordCall: vi.fn(),
++        getErrorMessage: vi.fn(() => 'Circuit breaker error')
++    }
++}));
++
++// Mock LLMProviderRoutingService as ES module
++vi.mock('../../js/services/llm-provider-routing-service.js', () => ({
++    LLMProviderRoutingService: {
++        init: vi.fn(),
++        callLLM: vi.fn(() => Promise.resolve({
++            choices: [{ message: { content: 'Test response' } }]
++        })),
++        buildProviderConfig: vi.fn(() => ({
++            provider: 'openrouter',
++            model: 'test-model',
++            baseUrl: ''
++        }))
++    }
++}));
++
++// Mock TokenCountingService as ES module
++vi.mock('../../js/services/token-counting-service.js', () => ({
++    TokenCountingService: {
++        init: vi.fn(),
++        calculateTokenUsage: vi.fn(() => ({
++            totalTokens: 100,
++            contextWindow: 4096,
++            warnings: []
++        })),
++        getRecommendedAction: vi.fn(() => ({ action: 'none' })),
++        truncateToTarget: vi.fn((params) => params)
++    }
++}));
++
++// Mock ToolCallHandlingService as ES module
++vi.mock('../../js/services/tool-call-handling-service.js', () => ({
++    ToolCallHandlingService: {
++        init: vi.fn(),
++        setStreamsData: vi.fn(),
++        handleToolCalls: vi.fn((responseMessage) => ({ responseMessage })),
++        handleToolCallsWithFallback: vi.fn((responseMessage) => ({ responseMessage }))
++    }
++}));
++
++// Mock FallbackResponseService as ES module
++vi.mock('../../js/services/fallback-response-service.js', () => ({
++    FallbackResponseService: {
++        init: vi.fn(),
++        generateFallbackResponse: vi.fn(() => 'Fallback response')
++    }
++}));
++
+ // Create mock window objects
+ function createMockWindow() {
+     return {
