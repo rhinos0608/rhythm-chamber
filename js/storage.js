@@ -13,6 +13,31 @@ import { StorageTransaction } from './storage/transaction.js';
 import { StorageMigration } from './storage/migration.js';
 import { ModuleRegistry } from './module-registry.js';
 import { EventBus } from './services/event-bus.js';
+import { SafeMode } from './security/safe-mode.js';
+
+// ==========================================
+// HNW Hierarchy: Safe Mode Enforcement
+// ==========================================
+
+/**
+ * Check if writes are blocked by Safe Mode
+ * @param {string} operation - Operation name for error message
+ * @throws {Error} If Safe Mode is active and encryption is unavailable
+ */
+function assertWriteAllowed(operation) {
+  // Only block if encryption is required but unavailable
+  // This implements fail-closed behavior for security-sensitive operations
+  if (!SafeMode.canEncrypt()) {
+    const status = SafeMode.getSafeModeStatus();
+    if (status.isSafeMode) {
+      throw new Error(
+        `[Storage] Write blocked: Safe Mode active. ` +
+        `Operation '${operation}' requires security capabilities. ` +
+        `Failed modules: ${status.failedModules.map(m => m.name).join(', ')}`
+      );
+    }
+  }
+}
 
 // ==========================================
 // Privacy Controls
@@ -121,6 +146,7 @@ const Storage = {
   // ==========================================
 
   async saveStreams(streams) {
+    assertWriteAllowed('saveStreams');
     return queuedOperation(async () => {
       const result = await window.IndexedDBCore.put(STORES.STREAMS, {
         id: 'all',
@@ -138,6 +164,7 @@ const Storage = {
   },
 
   async appendStreams(newStreams) {
+    assertWriteAllowed('appendStreams');
     return queuedOperation(async () => {
       // Use atomic update to prevent race conditions
       const result = await window.IndexedDBCore.atomicUpdate(
@@ -159,6 +186,7 @@ const Storage = {
   },
 
   async clearStreams() {
+    assertWriteAllowed('clearStreams');
     return queuedOperation(async () => {
       await window.IndexedDBCore.clear(STORES.STREAMS);
       this._notifyUpdate('streams', 0);

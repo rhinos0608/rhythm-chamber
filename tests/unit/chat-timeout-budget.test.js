@@ -64,6 +64,89 @@ vi.mock('../../js/module-registry.js', () => ({
     }
 }));
 
+// Mock SessionManager as ES module (Chat imports it directly)
+vi.mock('../../js/services/session-manager.js', () => ({
+    SessionManager: {
+        init: vi.fn(),
+        setUserContext: vi.fn(),
+        addMessageToHistory: vi.fn(),
+        getHistory: vi.fn(() => []),
+        saveConversation: vi.fn(),
+        flushPendingSaveAsync: vi.fn(),
+        emergencyBackupSync: vi.fn(),
+        recoverEmergencyBackup: vi.fn(),
+        saveCurrentSession: vi.fn(),
+        createNewSession: vi.fn(),
+        loadSession: vi.fn(),
+        switchSession: vi.fn(),
+        listSessions: vi.fn(),
+        deleteSessionById: vi.fn(),
+        renameSession: vi.fn(),
+        getCurrentSessionId: vi.fn(),
+        onSessionUpdate: vi.fn(),
+        clearConversation: vi.fn(),
+        truncateHistory: vi.fn(),
+        removeMessageFromHistory: vi.fn()
+    }
+}));
+
+// Mock CircuitBreaker as ES module
+vi.mock('../../js/services/circuit-breaker.js', () => ({
+    CircuitBreaker: {
+        resetTurn: vi.fn(),
+        check: vi.fn(() => ({ allowed: true })),
+        recordCall: vi.fn(),
+        getErrorMessage: vi.fn(() => 'Circuit breaker error')
+    }
+}));
+
+// Mock LLMProviderRoutingService as ES module
+vi.mock('../../js/services/llm-provider-routing-service.js', () => ({
+    LLMProviderRoutingService: {
+        init: vi.fn(),
+        callLLM: vi.fn(() => Promise.resolve({
+            choices: [{ message: { content: 'Test response' } }]
+        })),
+        buildProviderConfig: vi.fn(() => ({
+            provider: 'openrouter',
+            model: 'test-model',
+            baseUrl: ''
+        }))
+    }
+}));
+
+// Mock TokenCountingService as ES module
+vi.mock('../../js/services/token-counting-service.js', () => ({
+    TokenCountingService: {
+        init: vi.fn(),
+        calculateTokenUsage: vi.fn(() => ({
+            totalTokens: 100,
+            contextWindow: 4096,
+            warnings: []
+        })),
+        getRecommendedAction: vi.fn(() => ({ action: 'none' })),
+        truncateToTarget: vi.fn((params) => params)
+    }
+}));
+
+// Mock ToolCallHandlingService as ES module
+vi.mock('../../js/services/tool-call-handling-service.js', () => ({
+    ToolCallHandlingService: {
+        init: vi.fn(),
+        setStreamsData: vi.fn(),
+        handleToolCalls: vi.fn((responseMessage) => ({ responseMessage })),
+        handleToolCallsWithFallback: vi.fn((responseMessage) => ({ responseMessage }))
+    }
+}));
+
+// Mock FallbackResponseService as ES module
+vi.mock('../../js/services/fallback-response-service.js', () => ({
+    FallbackResponseService: {
+        init: vi.fn(),
+        generateFallbackResponse: vi.fn(() => 'Fallback response')
+    }
+}));
+
 // Create mock window objects
 function createMockWindow() {
     return {

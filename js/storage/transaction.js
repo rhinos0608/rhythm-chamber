@@ -141,6 +141,62 @@ class TransactionContext {
     getPendingCount() {
         return this.operations.length;
     }
+
+    /**
+     * Add a secure token store operation to the transaction
+     * HNW Network: Unified transaction scope for SecureTokenStore
+     * 
+     * @param {string} tokenKey - Token identifier
+     * @param {string} value - Token value
+     * @param {Object} [options] - Storage options (expiresIn, metadata)
+     */
+    async storeToken(tokenKey, value, options = {}) {
+        if (this.committed || this.rolledBack) {
+            throw new Error('Transaction already completed');
+        }
+
+        let previousValue = null;
+
+        // Get previous value from SecureTokenStore for rollback
+        if (window.SecureTokenStore?.retrieve) {
+            try {
+                previousValue = await window.SecureTokenStore.retrieve(tokenKey);
+            } catch {
+                previousValue = null;
+            }
+        }
+
+        this.operations.push(new TransactionOperation(
+            'securetoken', 'put', null, tokenKey, { value, options }, previousValue
+        ));
+    }
+
+    /**
+     * Add a secure token delete operation to the transaction
+     * HNW Network: Unified transaction scope for SecureTokenStore
+     * 
+     * @param {string} tokenKey - Token identifier
+     */
+    async deleteToken(tokenKey) {
+        if (this.committed || this.rolledBack) {
+            throw new Error('Transaction already completed');
+        }
+
+        let previousValue = null;
+
+        // Get previous value from SecureTokenStore for rollback
+        if (window.SecureTokenStore?.retrieve) {
+            try {
+                previousValue = await window.SecureTokenStore.retrieve(tokenKey);
+            } catch {
+                previousValue = null;
+            }
+        }
+
+        this.operations.push(new TransactionOperation(
+            'securetoken', 'delete', null, tokenKey, null, previousValue
+        ));
+    }
 }
 
 // ==========================================
@@ -208,6 +264,18 @@ async function commit(ctx) {
                 } else if (op.type === 'delete') {
                     await window.IndexedDBCore.delete(op.store, op.key);
                 }
+            } else if (op.backend === 'securetoken') {
+                // HNW Network: SecureTokenStore integration
+                if (!window.SecureTokenStore) {
+                    throw new Error('SecureTokenStore not available');
+                }
+
+                if (op.type === 'put') {
+                    const { value, options } = op.value;
+                    await window.SecureTokenStore.store(op.key, value, options);
+                } else if (op.type === 'delete') {
+                    await window.SecureTokenStore.invalidate(op.key);
+                }
             }
 
             op.committed = true;
@@ -264,6 +332,15 @@ async function rollback(ctx) {
                 }
             } else if (op.backend === 'indexeddb') {
                 await revertIndexedDBOperation(op);
+            } else if (op.backend === 'securetoken') {
+                // HNW Network: SecureTokenStore rollback
+                if (window.SecureTokenStore) {
+                    if (op.previousValue === null) {
+                        await window.SecureTokenStore.invalidate(op.key);
+                    } else {
+                        await window.SecureTokenStore.store(op.key, op.previousValue);
+                    }
+                }
             }
         } catch (rollbackError) {
             console.error('[StorageTransaction] Rollback failed for operation:', op, rollbackError);

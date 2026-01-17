@@ -250,6 +250,53 @@ let lastHeartbeatSentTime = 0; // Track for WaveTelemetry
 // ==========================================
 
 /**
+ * Proactive clock skew calibration
+ * HNW Wave: Calibrate clock skew BEFORE elections to ensure accurate timing
+ * 
+ * Uses localStorage timestamp exchange to detect timing differences between tabs
+ * without relying on BroadcastChannel messages.
+ * 
+ * @returns {Promise<void>}
+ */
+async function calibrateClockSkew() {
+    const CALIBRATION_KEY = 'rhythm_chamber_clock_calibration';
+    const CALIBRATION_DURATION_MS = 500;
+
+    try {
+        const localStart = Date.now();
+
+        // Write our timestamp to localStorage
+        localStorage.setItem(CALIBRATION_KEY, JSON.stringify({
+            timestamp: localStart,
+            tabId: TAB_ID
+        }));
+
+        // Wait for other tabs to potentially update
+        await new Promise(resolve => setTimeout(resolve, CALIBRATION_DURATION_MS));
+
+        // Read back and check for other tab timestamps
+        const stored = localStorage.getItem(CALIBRATION_KEY);
+        if (stored) {
+            const data = JSON.parse(stored);
+            if (data.tabId !== TAB_ID) {
+                // Another tab wrote - calculate skew
+                const localNow = Date.now();
+                const remoteTimestamp = data.timestamp;
+                clockSkewTracker.recordSkew(remoteTimestamp, localNow);
+                console.log(`[TabCoordination] Proactive clock calibration: ` +
+                    `detected ${clockSkewTracker.getSkew().toFixed(0)}ms skew from tab ${data.tabId}`);
+            }
+        }
+
+        // Clean up calibration key
+        localStorage.removeItem(CALIBRATION_KEY);
+        console.log(`[TabCoordination] Clock calibration complete (${CALIBRATION_DURATION_MS}ms)`);
+    } catch (e) {
+        console.warn('[TabCoordination] Clock calibration failed:', e.message);
+    }
+}
+
+/**
  * Initialize tab coordination service
  * Uses deterministic leader election (lowest tab ID wins)
  * 
@@ -266,6 +313,9 @@ async function init() {
         console.warn('[TabCoordination] BroadcastChannel not supported, skipping cross-tab coordination');
         return true; // Assume primary if no coordination available
     }
+
+    // HNW Wave: Proactive clock calibration before election
+    await calibrateClockSkew();
 
     broadcastChannel = new BroadcastChannel(CHANNEL_NAME);
 
@@ -617,6 +667,26 @@ function startHeartbeatMonitor() {
 
         // Check if heartbeat is overdue with skew tolerance
         if (timeSinceLastHeartbeat > maxAllowedGap) {
+            // HNW Wave: Visibility-aware heartbeat - wait before promoting if tab may be backgrounded
+            const isPageHidden = typeof document !== 'undefined' && document.hidden;
+            if (isPageHidden) {
+                // Primary may just be backgrounded - wait 5s before promoting
+                console.log(`[TabCoordination] Leader heartbeat missed, but page hidden. Waiting 5s before re-election...`);
+                clearInterval(heartbeatCheckInterval);
+                setTimeout(async () => {
+                    // Re-check after delay
+                    const recentHeartbeat = clockSkewTracker.adjustTimestamp(Date.now()) - lastLeaderHeartbeat;
+                    if (recentHeartbeat > maxAllowedGap) {
+                        console.log(`[TabCoordination] Still no heartbeat after visibility wait, promoting to leader`);
+                        initiateReElection();
+                    } else {
+                        console.log(`[TabCoordination] Heartbeat received during visibility wait, resuming monitor`);
+                        startHeartbeatMonitor(); // Resume monitoring
+                    }
+                }, 5000);
+                return; // Exit early
+            }
+
             console.log(`[TabCoordination] Leader heartbeat missed for ${timeSinceLastHeartbeat}ms (skew: ${clockSkewTracker.getSkew().toFixed(0)}ms), promoting to leader`);
             stopHeartbeatMonitor();
             initiateReElection();

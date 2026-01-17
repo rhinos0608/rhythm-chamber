@@ -407,64 +407,106 @@ async function handleToolCallsWithFallback(
                 candidates.map(c => `${c.strategy.strategyName}: ${c.confidence.toFixed(2)} (${c.reason})`));
         }
 
-        // Try strategies in order of confidence until one succeeds or budget exhausted
-        for (const candidate of candidates) {
-            // Check if budget exhausted before trying next strategy
-            if (strategyBudget.isExhausted()) {
-                const budgetInfo = strategyBudget.getAccounting();
-                console.warn(`[ToolCallHandlingService] Strategy budget exhausted after ${budgetInfo.elapsed}ms`);
+        // ==========================================
+        // HNW Wave: Parallel Strategy Execution
+        // Race all qualifying strategies using Promise.race for fastest response
+        // ==========================================
 
-                // Notify UI about timeout
-                if (onProgress) {
-                    onProgress({ type: 'strategy_timeout', elapsed: budgetInfo.elapsed });
-                }
-
-                return {
-                    earlyReturn: {
-                        status: 'error',
-                        content: buildTimeoutExhaustedError(budgetInfo.elapsed),
-                        role: 'assistant',
-                        isTimeoutError: true
-                    }
-                };
+        if (candidates.length === 0) {
+            // No qualifying strategies - check for native tool_calls fallback
+            if (responseMessage?.tool_calls?.length > 0) {
+                console.log('[ToolCallHandlingService] Native tool calls found in response (fallback)');
+                return handleToolCalls(responseMessage, providerConfig, key, onProgress);
             }
+            return { responseMessage };
+        }
 
-            // Provide remaining budget to strategy
-            const remainingMs = strategyBudget.remaining();
-            context.timeoutMs = remainingMs;
+        // Provide remaining budget to context
+        const remainingMs = strategyBudget.remaining();
+        context.timeoutMs = Math.min(remainingMs, 10000); // Max 10s per strategy
 
-            console.log(`[ToolCallHandlingService] Trying ${candidate.strategy.strategyName} (confidence: ${candidate.confidence.toFixed(2)}, budget: ${remainingMs}ms remaining)`);
+        console.log(`[ToolCallHandlingService] Racing ${candidates.length} strategies with ${context.timeoutMs}ms budget`);
 
+        // Create race promises for each strategy - wrap to throw on failure so firstSuccess works
+        const racePromises = candidates.map(async (candidate) => {
             try {
                 const result = await candidate.strategy.execute(context);
 
-                // Strategy succeeded
+                // Only return successful results - throw on errors to trigger next strategy
                 if (result && !result.earlyReturn?.status?.includes('error')) {
+                    console.log(`[ToolCallHandlingService] Strategy ${candidate.strategy.strategyName} succeeded`);
                     return result;
                 }
 
-                // Strategy returned an error - continue to next if budget permits
-                if (result?.earlyReturn) {
-                    console.log(`[ToolCallHandlingService] ${candidate.strategy.strategyName} returned error, trying next strategy`);
-                    continue;
-                }
-
-                return result;
+                // Strategy returned an error - throw to let other strategies try
+                throw new Error(result?.earlyReturn?.content || 'Strategy failed');
             } catch (strategyError) {
-                // Strategy threw - log and continue to next
-                console.error(`[ToolCallHandlingService] ${candidate.strategy.strategyName} threw:`, strategyError);
-                continue;
+                // Re-throw to let Promise.any try next strategy
+                throw new Error(`${candidate.strategy.strategyName}: ${strategyError.message}`);
             }
-        }
+        });
 
-        // No winning strategy or all failed - check for native tool_calls fallback
-        if (responseMessage?.tool_calls?.length > 0) {
-            console.log('[ToolCallHandlingService] Native tool calls found in response (fallback)');
-            return handleToolCalls(responseMessage, providerConfig, key, onProgress);
-        }
+        // Add timeout promise that rejects
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('All strategies timed out')), context.timeoutMs)
+        );
 
-        // No function calls to handle
-        return { responseMessage };
+        try {
+            // Use Promise.any for true first-success-wins (or polyfill if unavailable)
+            // Promise.any resolves as soon as ANY promise resolves, ignoring rejections
+            let successfulResult;
+
+            if (typeof Promise.any === 'function') {
+                successfulResult = await Promise.any([...racePromises, timeoutPromise.then(() => {
+                    throw new Error('Timeout');
+                })]);
+            } else {
+                // Fallback for older browsers: custom first-success implementation
+                successfulResult = await new Promise((resolve, reject) => {
+                    let pendingCount = racePromises.length;
+                    const errors = [];
+                    let resolved = false;
+
+                    racePromises.forEach((promise, i) => {
+                        promise.then(
+                            (result) => {
+                                if (!resolved) {
+                                    resolved = true;
+                                    resolve(result);
+                                }
+                            },
+                            (error) => {
+                                errors[i] = error;
+                                pendingCount--;
+                                if (pendingCount === 0 && !resolved) {
+                                    reject(new AggregateError(errors, 'All strategies failed'));
+                                }
+                            }
+                        );
+                    });
+
+                    // Timeout handling
+                    setTimeout(() => {
+                        if (!resolved) {
+                            reject(new Error('All strategies timed out'));
+                        }
+                    }, context.timeoutMs);
+                });
+            }
+
+            return successfulResult;
+        } catch (raceError) {
+            // All strategies failed or timed out - check for native fallback
+            console.warn(`[ToolCallHandlingService] Strategy race failed: ${raceError.message}`);
+
+            if (responseMessage?.tool_calls?.length > 0) {
+                console.log('[ToolCallHandlingService] Falling back to native tool calls');
+                return handleToolCalls(responseMessage, providerConfig, key, onProgress);
+            }
+
+            // No function calls to handle
+            return { responseMessage };
+        }
 
     } finally {
         // Always release budget
