@@ -1345,7 +1345,7 @@ function showStorageMismatchModal(currentMode, savedMode) {
         showSettingsModal();
         // Auto-navigate to embedding section after modal opens
         setTimeout(() => {
-            const embeddingSection = document.querySelector('.settings-section-embeddings');
+            const embeddingSection = document.querySelector('.premium-section');
             if (embeddingSection) {
                 embeddingSection.scrollIntoView({ behavior: 'smooth' });
             }

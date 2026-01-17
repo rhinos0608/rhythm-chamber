@@ -16,11 +16,21 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     // Support external abort signal (for user-initiated cancellation)
+    let externalAbortHandler;
     if (options.signal) {
-        options.signal.addEventListener('abort', () => {
+        // Check for pre-aborted signal to avoid unnecessary operations
+        if (options.signal.aborted) {
             clearTimeout(timeoutId);
             controller.abort();
-        });
+            throw new Error('Request cancelled');
+        }
+
+        // Store handler reference for cleanup
+        externalAbortHandler = () => {
+            clearTimeout(timeoutId);
+            controller.abort();
+        };
+        options.signal.addEventListener('abort', externalAbortHandler);
     }
 
     try {
@@ -40,6 +50,11 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
             throw new Error(`Request timed out after ${timeoutMs}ms`);
         }
         throw err;
+    } finally {
+        // Clean up external signal listener in all code paths
+        if (externalAbortHandler && options.signal) {
+            options.signal.removeEventListener('abort', externalAbortHandler);
+        }
     }
 }
 
