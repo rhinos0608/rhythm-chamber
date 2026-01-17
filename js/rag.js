@@ -42,10 +42,41 @@ function getEmbeddingWorker() {
     try {
         embeddingWorker = new Worker('js/embedding-worker.js');
         console.log('[RAG] EmbeddingWorker initialized');
+
+        // Set up error handler for cleanup
+        embeddingWorker.onerror = (error) => {
+            console.warn('[RAG] EmbeddingWorker error:', error.message);
+            cleanupEmbeddingWorker();
+        };
+
         return embeddingWorker;
     } catch (err) {
         console.warn('[RAG] Failed to create EmbeddingWorker:', err.message);
         return null;
+    }
+}
+
+/**
+ * Clean up the EmbeddingWorker instance
+ * Should be called when worker is no longer needed or on page unload
+ * @returns {boolean} True if worker was cleaned up
+ */
+function cleanupEmbeddingWorker() {
+    if (!embeddingWorker) {
+        return false;
+    }
+
+    try {
+        embeddingWorker.onmessage = null;
+        embeddingWorker.onerror = null;
+        embeddingWorker.terminate();
+        embeddingWorker = null;
+        console.log('[RAG] EmbeddingWorker cleaned up');
+        return true;
+    } catch (err) {
+        console.warn('[RAG] Error during EmbeddingWorker cleanup:', err.message);
+        embeddingWorker = null;
+        return false;
     }
 }
 
@@ -1177,6 +1208,9 @@ export const RAG = {
     generateLocalEmbeddings,
     searchLocal,
     clearLocalEmbeddings,
+
+    // Worker lifecycle management
+    cleanupEmbeddingWorker,
 
     // Constants
     LOCAL_EMBEDDING_DIMENSIONS

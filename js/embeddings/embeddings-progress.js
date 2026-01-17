@@ -56,8 +56,8 @@ const PROGRESS_HTML = `
     </div>
     
     <div class="overall-progress">
-        <div class="progress-bar-container">
-            <div class="progress-bar" id="overall-progress-bar" style="width: 0%"></div>
+        <div class="embeddings-progress-bar-container">
+            <div class="embeddings-progress-fill" id="overall-progress-bar" style="width: 0%"></div>
         </div>
         <div class="progress-stats">
             <span id="progress-percent">0%</span>

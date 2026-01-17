@@ -14,6 +14,7 @@ import { StorageMigration } from './storage/migration.js';
 import { ModuleRegistry } from './module-registry.js';
 import { EventBus } from './services/event-bus.js';
 import { SafeMode } from './security/safe-mode.js';
+import { WriteAheadLog, WalPriority } from './storage/write-ahead-log.js';
 
 // ==========================================
 // HNW Hierarchy: Safe Mode Enforcement
@@ -142,6 +143,9 @@ const Storage = {
 
     // Run migration
     await StorageMigration.migrateFromLocalStorage();
+
+    // HNW Wave: Initialize Write-Ahead Log for Safe Mode
+    await WriteAheadLog.init();
 
     return window.IndexedDBCore.getConnection();
   },

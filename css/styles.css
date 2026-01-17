@@ -1522,6 +1522,30 @@ a {
   background: #ef4444;
 }
 
+.status-dot.degraded {
+  background: #f59e0b;
+}
+
+.status-dot.healthy {
+  background: #10b981;
+}
+
+.status-dot.blacklisted {
+  background: #8b5cf6;
+  animation: pulse-blacklist 2s ease-in-out infinite;
+}
+
+@keyframes pulse-blacklist {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.7);
+  }
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 0 0 6px rgba(139, 92, 246, 0);
+  }
+}
+
 .btn-small {
   padding: var(--space-xs) var(--space-sm) !important;
   font-size: 0.75rem !important;
@@ -1592,6 +1616,163 @@ a {
 .toast-notification.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+/* Provider Health Monitoring Styles */
+.provider-health-section {
+  margin-top: var(--space-lg);
+  padding: var(--space-md);
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.provider-health-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-md);
+}
+
+.provider-health-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.provider-health-overview {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.provider-health-badge {
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+}
+
+.provider-health-badge.healthy {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #10b981;
+}
+
+.provider-health-badge.degraded {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #f59e0b;
+}
+
+.provider-health-badge.unhealthy {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.provider-health-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.provider-health-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm);
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  transition: all var(--transition-fast);
+}
+
+.provider-health-item:hover {
+  border-color: var(--border-accent);
+}
+
+.provider-health-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex: 1;
+}
+
+.provider-health-name {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.provider-health-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.provider-health-metrics {
+  display: flex;
+  gap: var(--space-md);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.provider-health-metric {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.provider-health-actions {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.provider-health-action {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.provider-health-action:hover {
+  background: var(--bg-glass);
+  border-color: var(--border-accent);
+  color: var(--text-primary);
+}
+
+.provider-health-action.primary {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+}
+
+.provider-health-action.primary:hover {
+  background: var(--accent-secondary);
+  border-color: var(--accent-secondary);
+}
+
+.provider-health-recommendation {
+  margin-top: var(--space-sm);
+  padding: var(--space-sm);
+  background: rgba(139, 92, 246, 0.1);
+  border-left: 3px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.provider-health-recommendation strong {
+  color: var(--text-primary);
 }
 
 /* Privacy Dashboard Styles */
@@ -4108,7 +4289,7 @@ body.read-only-mode .chat-input {
   margin-bottom: var(--space-md);
 }
 
-.progress-bar-container {
+.embeddings-progress-bar-container {
   height: 8px;
   background: var(--bg-glass);
   border-radius: var(--radius-full);
@@ -4116,7 +4297,7 @@ body.read-only-mode .chat-input {
   margin-bottom: var(--space-sm);
 }
 
-.progress-bar {
+.embeddings-progress-fill {
   height: 100%;
   background: var(--accent-gradient);
   border-radius: var(--radius-full);

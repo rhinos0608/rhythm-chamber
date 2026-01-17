@@ -12,6 +12,10 @@
  * @module services/event-bus
  */
 
+import { VectorClock } from './vector-clock.js';
+import { EventLogStore } from '../storage/event-log-store.js';
+import { TabCoordinator } from './tab-coordination.js';
+
 // ==========================================
 // Event Contracts (Schemas)
 // ==========================================
@@ -242,6 +246,13 @@ let stormActive = false;
 let stormCooldownUntil = 0;
 let droppedCount = 0;
 
+// Event versioning and replay state
+const eventVectorClock = new VectorClock();
+let eventSequenceNumber = 0;
+let eventLogEnabled = false;
+let eventReplayInProgress = false;
+let lastEventWatermark = -1; // Last sequence number we processed
+
 // ==========================================
 // Core Functions
 // ==========================================
@@ -329,6 +340,20 @@ function emit(eventType, payload = {}, options = {}) {
     const timestamp = Date.now();
     const priority = EVENT_PRIORITIES[eventType] ?? PRIORITY.NORMAL;
     const eventDomain = options.domain ?? 'global';
+
+    // Event versioning: increment sequence and tick VectorClock
+    const currentVectorClock = eventVectorClock.tick();
+    eventSequenceNumber++;
+    const sequenceNumber = eventSequenceNumber;
+
+    // Store event in log if enabled
+    if (eventLogEnabled && !eventReplayInProgress && !options.skipEventLog) {
+        persistEvent(eventType, payload, currentVectorClock, sequenceNumber, options)
+            .catch(err => console.warn('[EventBus] Failed to persist event:', err));
+    }
+
+    // Update watermark
+    lastEventWatermark = sequenceNumber;
 
     // Circuit breaker: Storm detection
     if (!options.bypassCircuitBreaker) {
@@ -479,7 +504,10 @@ function emit(eventType, payload = {}, options = {}) {
         timestamp,
         priority,
         stormActive,
-        domain: eventDomain // Include domain in metadata
+        domain: eventDomain, // Include domain in metadata
+        vectorClock: currentVectorClock,
+        sequenceNumber,
+        isReplay: eventReplayInProgress
     };
 
     // Call handlers in priority order, filtering by domain
@@ -697,6 +725,146 @@ function configureCircuitBreaker(config) {
 }
 
 // ==========================================
+// Event Persistence & Replay
+// ==========================================
+
+/**
+ * Persist event to log
+ * @param {string} eventType - Event type
+ * @param {object} payload - Event payload
+ * @param {object} vectorClock - Vector clock state
+ * @param {number} sequenceNumber - Sequence number
+ * @param {object} options - Emit options
+ */
+async function persistEvent(eventType, payload, vectorClock, sequenceNumber, options = {}) {
+    try {
+        const sourceTab = TabCoordinator.getTabId();
+        await EventLogStore.appendEvent(eventType, payload, vectorClock, sourceTab);
+
+        // Create periodic checkpoint
+        if (sequenceNumber > 0 && sequenceNumber % EventLogStore.COMPACTION_CONFIG.checkpointInterval === 0) {
+            await EventLogStore.createCheckpoint(sequenceNumber, { timestamp: Date.now() });
+        }
+    } catch (error) {
+        console.error('[EventBus] Failed to persist event:', error);
+        EventBus.emit('eventbus:persistence_error', { error: error.message, eventType });
+    }
+}
+
+/**
+ * Enable event logging
+ * @param {boolean} enabled - Whether to enable event logging
+ */
+function enableEventLog(enabled = true) {
+    eventLogEnabled = enabled;
+    console.log(`[EventBus] Event logging ${enabled ? 'enabled' : 'disabled'}`);
+}
+
+/**
+ * Check if event logging is enabled
+ * @returns {boolean}
+ */
+function isEventLogEnabled() {
+    return eventLogEnabled;
+}
+
+/**
+ * Get current event watermark
+ * @returns {number} Current sequence number
+ */
+function getEventWatermark() {
+    return lastEventWatermark;
+}
+
+/**
+ * Set event watermark
+ * @param {number} watermark - Watermark to set
+ */
+function setEventWatermark(watermark) {
+    lastEventWatermark = watermark;
+    console.log(`[EventBus] Event watermark set to ${watermark}`);
+}
+
+/**
+ * Replay events from log
+ * @param {object} options - Replay options
+ * @param {number} [options.fromSequenceNumber=-1] - Start from this sequence
+ * @param {number} [options.count=1000] - Maximum events to replay
+ * @param {boolean} [options.forward=true] - Replay forward or reverse
+ * @returns {Promise<{replayed: number, errors: number}>}
+ */
+async function replayEvents(options = {}) {
+    const {
+        fromSequenceNumber = -1,
+        count = 1000,
+        forward = true
+    } = options;
+
+    eventReplayInProgress = true;
+
+    try {
+        console.log(`[EventBus] Starting event replay from sequence ${fromSequenceNumber}`);
+        const events = await EventLogStore.getEvents(fromSequenceNumber, count);
+
+        if (forward) {
+            events.sort((a, b) => a.sequenceNumber - b.sequenceNumber);
+        } else {
+            events.sort((a, b) => b.sequenceNumber - a.sequenceNumber);
+        }
+
+        let replayed = 0;
+        let errors = 0;
+
+        for (const event of events) {
+            try {
+                // Merge vector clock
+                if (event.vectorClock) {
+                    eventVectorClock.merge(event.vectorClock);
+                }
+
+                // Emit with replay flag
+                emit(event.type, event.payload, {
+                    skipEventLog: true, // Don't log replayed events
+                    domain: 'global'
+                });
+
+                // Update watermark
+                if (event.sequenceNumber > lastEventWatermark) {
+                    lastEventWatermark = event.sequenceNumber;
+                }
+
+                replayed++;
+            } catch (error) {
+                console.error(`[EventBus] Error replaying event ${event.id}:`, error);
+                errors++;
+            }
+        }
+
+        console.log(`[EventBus] Event replay complete: ${replayed} events, ${errors} errors`);
+        return { replayed, errors };
+    } finally {
+        eventReplayInProgress = false;
+    }
+}
+
+/**
+ * Get event log statistics
+ * @returns {Promise<object>}
+ */
+async function getEventLogStats() {
+    return EventLogStore.getEventLogStats();
+}
+
+/**
+ * Clear event log
+ * @returns {Promise<void>}
+ */
+async function clearEventLog() {
+    await EventLogStore.clearEventLog();
+    console.log('[EventBus] Event log cleared');
+}
+
+// ==========================================
 // Public API
 // ==========================================
 
@@ -721,6 +889,15 @@ export const EventBus = {
     // Circuit breaker
     getCircuitBreakerStatus,
     configureCircuitBreaker,
+
+    // Event versioning and replay
+    enableEventLog,
+    isEventLogEnabled,
+    getEventWatermark,
+    setEventWatermark,
+    replayEvents,
+    getEventLogStats,
+    clearEventLog,
 
     // Testing
     clearAll,

@@ -94,47 +94,294 @@ async function releaseLock() {
 }
 
 // ==========================================
-// Checkpointing
+// Checkpointing (Hybrid Storage: localStorage + IndexedDB)
 // ==========================================
 
-/**
- * Save checkpoint for recovery
- */
-async function saveCheckpoint() {
-    checkpointData = {
-        processedCount,
-        totalCount,
-        timestamp: Date.now(),
-        taskId: currentTask?.id
-    };
+// Checkpoint storage keys
+const CHECKPOINT_METADATA_KEY = 'embedding_checkpoint_meta';
+const CHECKPOINT_TEXTS_KEY = 'embedding_checkpoint_texts';
+const CHECKPOINT_IDB_STORE = 'config'; // Use existing config store in IndexedDB
 
+/**
+ * Calculate approximate JSON string size in bytes
+ * @param {any} data - Data to estimate size of
+ * @returns {number} Approximate size in bytes
+ */
+function estimateJsonSize(data) {
     try {
-        localStorage.setItem('embedding_checkpoint', JSON.stringify(checkpointData));
+        return new Blob([JSON.stringify(data)]).size;
     } catch (e) {
-        console.warn('[EmbeddingsTaskManager] Could not save checkpoint:', e);
+        // Fallback: rough estimate (2 bytes per char for UTF-16)
+        return JSON.stringify(data).length * 2;
     }
 }
 
 /**
- * Load checkpoint for recovery
+ * Get IndexedDB connection for checkpoint storage
+ * @returns {Promise<IDBDatabase|null>}
  */
-function loadCheckpoint() {
+async function getCheckpointDB() {
     try {
-        const data = localStorage.getItem('embedding_checkpoint');
-        return data ? JSON.parse(data) : null;
+        // Try to import IndexedDBCore if available
+        const { IndexedDBCore } = await import('../storage/indexeddb.js');
+        return await IndexedDBCore.initDatabase();
     } catch (e) {
+        console.warn('[EmbeddingsTaskManager] IndexedDB not available for checkpoint:', e.message);
         return null;
     }
 }
 
 /**
- * Clear checkpoint
+ * Save bulk texts to IndexedDB
+ * @param {string[]} texts - Texts array to save
+ * @returns {Promise<boolean>} True if saved successfully
  */
-function clearCheckpoint() {
+async function saveTextsToIndexedDB(texts) {
     try {
-        localStorage.removeItem('embedding_checkpoint');
+        const db = await getCheckpointDB();
+        if (!db) return false;
+
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction(CHECKPOINT_IDB_STORE, 'readwrite');
+            const store = transaction.objectStore(CHECKPOINT_IDB_STORE);
+
+            const request = store.put({
+                key: CHECKPOINT_TEXTS_KEY,
+                value: texts,
+                timestamp: Date.now()
+            });
+
+            request.onsuccess = () => resolve(true);
+            request.onerror = () => {
+                console.error('[EmbeddingsTaskManager] Failed to save texts to IndexedDB:', request.error);
+                reject(request.error);
+            };
+        });
     } catch (e) {
-        // Ignore
+        console.error('[EmbeddingsTaskManager] IndexedDB save error:', e);
+        return false;
+    }
+}
+
+/**
+ * Load bulk texts from IndexedDB
+ * @returns {Promise<string[]|null>}
+ */
+async function loadTextsFromIndexedDB() {
+    try {
+        const db = await getCheckpointDB();
+        if (!db) return null;
+
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction(CHECKPOINT_IDB_STORE, 'readonly');
+            const store = transaction.objectStore(CHECKPOINT_IDB_STORE);
+            const request = store.get(CHECKPOINT_TEXTS_KEY);
+
+            request.onsuccess = () => {
+                const result = request.result;
+                resolve(result?.value || null);
+            };
+            request.onerror = () => {
+                console.error('[EmbeddingsTaskManager] Failed to load texts from IndexedDB:', request.error);
+                reject(request.error);
+            };
+        });
+    } catch (e) {
+        console.error('[EmbeddingsTaskManager] IndexedDB load error:', e);
+        return null;
+    }
+}
+
+/**
+ * Clear bulk texts from IndexedDB
+ * @returns {Promise<void>}
+ */
+async function clearTextsFromIndexedDB() {
+    try {
+        const db = await getCheckpointDB();
+        if (!db) return;
+
+        return new Promise((resolve) => {
+            const transaction = db.transaction(CHECKPOINT_IDB_STORE, 'readwrite');
+            const store = transaction.objectStore(CHECKPOINT_IDB_STORE);
+            const request = store.delete(CHECKPOINT_TEXTS_KEY);
+
+            request.onsuccess = () => resolve();
+            request.onerror = () => {
+                console.warn('[EmbeddingsTaskManager] Failed to clear texts from IndexedDB');
+                resolve();
+            };
+        });
+    } catch (e) {
+        // Ignore cleanup errors
+    }
+}
+
+/**
+ * Save checkpoint for recovery
+ * Uses hybrid storage: lightweight metadata in localStorage, bulk texts in IndexedDB
+ * This prevents localStorage quota exceeded errors for large streaming histories
+ */
+async function saveCheckpoint() {
+    const texts = currentTask?.texts || [];
+    const textsSize = estimateJsonSize(texts);
+
+    // Threshold: 1MB is safe for localStorage (well under 5MB limit with margin for other data)
+    const LOCALSTORAGE_SIZE_THRESHOLD = 1 * 1024 * 1024; // 1MB
+
+    // Metadata (always lightweight, goes to localStorage)
+    const metadata = {
+        processedCount,
+        totalCount,
+        timestamp: Date.now(),
+        taskId: currentTask?.id,
+        processedIndices: currentTask?.processedIndices || [],
+        nextIndex: currentTask?.nextIndex || 0,
+        textsStoredInIDB: false, // Flag to indicate where texts are stored
+        textsCount: texts.length
+    };
+
+    checkpointData = { ...metadata, texts };
+
+    try {
+        if (textsSize > LOCALSTORAGE_SIZE_THRESHOLD) {
+            // Large texts: store in IndexedDB
+            console.log(`[EmbeddingsTaskManager] Texts array too large for localStorage (${(textsSize / 1024 / 1024).toFixed(2)}MB), using IndexedDB`);
+
+            const saved = await saveTextsToIndexedDB(texts);
+            if (saved) {
+                metadata.textsStoredInIDB = true;
+                localStorage.setItem(CHECKPOINT_METADATA_KEY, JSON.stringify(metadata));
+                console.log('[EmbeddingsTaskManager] Checkpoint saved (metadata: localStorage, texts: IndexedDB)');
+            } else {
+                // IndexedDB failed - try localStorage as last resort (may fail for very large data)
+                console.warn('[EmbeddingsTaskManager] IndexedDB unavailable, attempting localStorage fallback');
+                metadata.texts = texts;
+                localStorage.setItem(CHECKPOINT_METADATA_KEY, JSON.stringify(metadata));
+            }
+        } else {
+            // Small enough for localStorage - include texts directly
+            metadata.texts = texts;
+            localStorage.setItem(CHECKPOINT_METADATA_KEY, JSON.stringify(metadata));
+            console.log('[EmbeddingsTaskManager] Checkpoint saved to localStorage');
+        }
+    } catch (e) {
+        if (e.name === 'QuotaExceededError' || e.message?.includes('quota')) {
+            console.error('[EmbeddingsTaskManager] localStorage quota exceeded, attempting IndexedDB fallback');
+
+            // Try IndexedDB as fallback
+            try {
+                const saved = await saveTextsToIndexedDB(texts);
+                if (saved) {
+                    metadata.textsStoredInIDB = true;
+                    delete metadata.texts; // Remove texts from metadata
+                    localStorage.setItem(CHECKPOINT_METADATA_KEY, JSON.stringify(metadata));
+                    console.log('[EmbeddingsTaskManager] Checkpoint saved via IndexedDB fallback');
+                } else {
+                    console.error('[EmbeddingsTaskManager] Both localStorage and IndexedDB failed - checkpoint not saved');
+                    EventBus.emit('embedding:checkpoint_failed', {
+                        reason: 'storage_quota_exceeded',
+                        textsSize,
+                        processedCount
+                    });
+                }
+            } catch (fallbackError) {
+                console.error('[EmbeddingsTaskManager] IndexedDB fallback also failed:', fallbackError);
+                EventBus.emit('embedding:checkpoint_failed', {
+                    reason: 'all_storage_failed',
+                    textsSize,
+                    processedCount
+                });
+            }
+        } else {
+            console.warn('[EmbeddingsTaskManager] Could not save checkpoint:', e);
+        }
+    }
+}
+
+/**
+ * Load checkpoint for recovery
+ * Handles hybrid storage: metadata from localStorage, texts from IndexedDB if needed
+ * @returns {Promise<Object|null>}
+ */
+async function loadCheckpoint() {
+    try {
+        // First, try new hybrid format
+        let metadataStr = localStorage.getItem(CHECKPOINT_METADATA_KEY);
+
+        // Fallback to legacy key for backwards compatibility
+        if (!metadataStr) {
+            metadataStr = localStorage.getItem('embedding_checkpoint');
+            if (metadataStr) {
+                console.log('[EmbeddingsTaskManager] Loading checkpoint from legacy key');
+            }
+        }
+
+        if (!metadataStr) {
+            return null;
+        }
+
+        const metadata = JSON.parse(metadataStr);
+
+        // Validate basic structure
+        if (metadata.processedCount === undefined || metadata.totalCount === undefined) {
+            console.warn('[EmbeddingsTaskManager] Invalid checkpoint metadata');
+            return null;
+        }
+
+        // Load texts from appropriate storage
+        let texts = metadata.texts;
+
+        if (metadata.textsStoredInIDB) {
+            console.log('[EmbeddingsTaskManager] Loading texts from IndexedDB...');
+            texts = await loadTextsFromIndexedDB();
+
+            if (!texts) {
+                console.warn('[EmbeddingsTaskManager] Could not load texts from IndexedDB');
+                return null;
+            }
+        }
+
+        // Validate texts
+        if (!Array.isArray(texts) || texts.length === 0) {
+            // Check if textsCount matches expectation
+            if (metadata.textsCount && metadata.textsCount > 0) {
+                console.warn('[EmbeddingsTaskManager] Checkpoint texts missing or empty');
+                return null;
+            }
+        }
+
+        // Validate texts count matches
+        if (texts && metadata.textsCount && texts.length !== metadata.textsCount) {
+            console.warn(`[EmbeddingsTaskManager] Texts count mismatch: expected ${metadata.textsCount}, got ${texts.length}`);
+            return null;
+        }
+
+        return {
+            ...metadata,
+            texts
+        };
+    } catch (e) {
+        console.warn('[EmbeddingsTaskManager] Could not load checkpoint:', e);
+        return null;
+    }
+}
+
+/**
+ * Clear checkpoint from all storage locations
+ */
+async function clearCheckpoint() {
+    try {
+        // Clear from localStorage (both new and legacy keys)
+        localStorage.removeItem(CHECKPOINT_METADATA_KEY);
+        localStorage.removeItem('embedding_checkpoint'); // Legacy key
+
+        // Clear from IndexedDB
+        await clearTextsFromIndexedDB();
+
+        console.log('[EmbeddingsTaskManager] Checkpoint cleared');
+    } catch (e) {
+        console.warn('[EmbeddingsTaskManager] Error clearing checkpoint:', e);
     }
     checkpointData = null;
 }
@@ -159,6 +406,17 @@ async function startTask(options) {
 
     const { texts, onProgress, onComplete, onError } = options;
 
+    // Input validation - validate texts before acquiring lock
+    if (!Array.isArray(texts)) {
+        throw new Error('Invalid input: texts must be an array');
+    }
+    if (texts.length === 0) {
+        throw new Error('Invalid input: texts array cannot be empty');
+    }
+    if (!texts.every(text => typeof text === 'string' && text.length > 0)) {
+        throw new Error('Invalid input: all texts must be non-empty strings');
+    }
+
     // Acquire lock
     const lockAcquired = await acquireLock();
     if (!lockAcquired) {
@@ -172,7 +430,9 @@ async function startTask(options) {
         startTime: Date.now(),
         onProgress,
         onComplete,
-        onError
+        onError,
+        processedIndices: [],
+        nextIndex: 0
     };
 
     totalCount = texts.length;
@@ -251,6 +511,9 @@ async function startTask(options) {
 
             // Checkpoint periodically
             if ((i + CONFIG.BATCH_SIZE) % CONFIG.CHECKPOINT_INTERVAL === 0) {
+                // Update task state for checkpoint recovery
+                currentTask.processedIndices = Array.from({ length: i + CONFIG.BATCH_SIZE }, (_, idx) => idx);
+                currentTask.nextIndex = i + CONFIG.BATCH_SIZE;
                 await saveCheckpoint();
             }
 
@@ -349,10 +612,191 @@ function getStatus() {
 
 /**
  * Check if a task can be recovered from checkpoint
+ * @returns {Promise<boolean>}
  */
-function canRecover() {
-    const checkpoint = loadCheckpoint();
-    return checkpoint !== null && checkpoint.processedCount < checkpoint.totalCount;
+async function canRecover() {
+    const checkpoint = await loadCheckpoint();
+    if (!checkpoint) {
+        return false;
+    }
+    // Check if checkpoint is valid and incomplete
+    return (
+        checkpoint.processedCount < checkpoint.totalCount &&
+        Array.isArray(checkpoint.texts) &&
+        checkpoint.texts.length > 0 &&
+        checkpoint.texts.length === checkpoint.totalCount
+    );
+}
+
+/**
+ * Recover task from checkpoint
+ * @param {Function} [options.onProgress] - Progress callback
+ * @param {Function} [options.onComplete] - Completion callback
+ * @param {Function} [options.onError] - Error callback
+ * @returns {Promise<Object>} Task handle
+ */
+async function recoverTask(options = {}) {
+    const checkpoint = await loadCheckpoint();
+
+    // Validate checkpoint inline since canRecover() is async
+    const isValid = checkpoint &&
+        checkpoint.processedCount < checkpoint.totalCount &&
+        Array.isArray(checkpoint.texts) &&
+        checkpoint.texts.length > 0 &&
+        checkpoint.texts.length === checkpoint.totalCount;
+
+    if (!isValid) {
+        throw new Error('No valid checkpoint found for recovery');
+    }
+
+    const { onProgress, onComplete, onError } = options;
+
+    // Acquire lock
+    const lockAcquired = await acquireLock();
+    if (!lockAcquired) {
+        throw new Error('Could not acquire embedding lock - another operation in progress');
+    }
+
+    // Initialize task from checkpoint
+    const startIndex = checkpoint.nextIndex || checkpoint.processedCount;
+    const remainingTexts = checkpoint.texts.slice(startIndex);
+
+    currentTask = {
+        id: checkpoint.taskId || `embed_${Date.now()}`,
+        texts: checkpoint.texts,
+        startTime: Date.now(),
+        onProgress,
+        onComplete,
+        onError,
+        processedIndices: checkpoint.processedIndices || [],
+        nextIndex: startIndex
+    };
+
+    totalCount = checkpoint.totalCount;
+    processedCount = checkpoint.processedCount;
+    errorCount = 0;
+    pauseRequested = false;
+    cancelRequested = false;
+    taskState = TaskState.RUNNING;
+
+    // Start performance tracking
+    const stopTimer = PerformanceProfiler.startOperation('embedding_task_recovery', {
+        category: PerformanceCategory.EMBEDDING_GENERATION,
+        metadata: { totalCount, recoveredFrom: startIndex }
+    });
+
+    // Emit recovery started event
+    EventBus.emit('embedding:task_started', {
+        taskId: currentTask.id,
+        totalCount,
+        recovered: true,
+        startIndex
+    });
+
+    try {
+        // Initialize embeddings model
+        await LocalEmbeddings.initialize((pct) => {
+            onProgress?.({ phase: 'initializing', percent: pct * 0.2 });
+        });
+
+        // Process remaining texts in batches
+        const results = [];
+        for (let i = startIndex; i < checkpoint.texts.length; i += CONFIG.BATCH_SIZE) {
+            // Check for cancel
+            if (cancelRequested) {
+                taskState = TaskState.CANCELLED;
+                break;
+            }
+
+            // Check for pause
+            while (pauseRequested && !cancelRequested) {
+                taskState = TaskState.PAUSED;
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            if (taskState === TaskState.PAUSED && !cancelRequested) {
+                taskState = TaskState.RUNNING;
+            }
+
+            // Process batch
+            const batch = checkpoint.texts.slice(i, Math.min(i + CONFIG.BATCH_SIZE, checkpoint.texts.length));
+
+            try {
+                const batchResults = await LocalEmbeddings.getBatchEmbeddings(batch, (done, total) => {
+                    const currentProcessed = i + done;
+                    processedCount = currentProcessed;
+                    onProgress?.({
+                        phase: 'embedding',
+                        processed: currentProcessed,
+                        total: totalCount,
+                        percent: 20 + (currentProcessed / totalCount) * 80,
+                        recovered: true
+                    });
+                });
+
+                results.push(...batchResults);
+            } catch (batchError) {
+                errorCount += batch.length;
+                console.error('[EmbeddingsTaskManager] Batch error during recovery:', batchError);
+                results.push(...Array(batch.length).fill(null));
+            }
+
+            // Checkpoint periodically
+            if ((i + CONFIG.BATCH_SIZE) % CONFIG.CHECKPOINT_INTERVAL === 0) {
+                currentTask.processedIndices = Array.from({ length: i + CONFIG.BATCH_SIZE }, (_, idx) => idx);
+                currentTask.nextIndex = i + CONFIG.BATCH_SIZE;
+                await saveCheckpoint();
+            }
+
+            // Yield to main thread
+            await new Promise(resolve => setTimeout(resolve, CONFIG.MIN_INTERVAL_MS));
+        }
+
+        // Complete task
+        taskState = cancelRequested ? TaskState.CANCELLED : TaskState.COMPLETING;
+        stopTimer();
+
+        // Cleanup
+        clearCheckpoint();
+        await releaseLock();
+
+        const finalResult = {
+            taskId: currentTask.id,
+            processed: processedCount,
+            total: totalCount,
+            errors: errorCount,
+            cancelled: cancelRequested,
+            recovered: true,
+            duration: Date.now() - currentTask.startTime,
+            embeddings: cancelRequested ? null : results
+        };
+
+        EventBus.emit('embedding:task_complete', finalResult);
+        onComplete?.(finalResult);
+
+        taskState = TaskState.IDLE;
+        currentTask = null;
+
+        return finalResult;
+
+    } catch (error) {
+        taskState = TaskState.ERROR;
+        stopTimer();
+        await releaseLock();
+
+        const errorResult = {
+            taskId: currentTask?.id,
+            error: error.message,
+            processed: processedCount,
+            total: totalCount,
+            recovered: true
+        };
+
+        EventBus.emit('embedding:task_error', errorResult);
+        onError?.(error);
+
+        currentTask = null;
+        throw error;
+    }
 }
 
 // ==========================================
@@ -364,6 +808,11 @@ export const EmbeddingsTaskManager = {
      * Start embedding generation task
      */
     startTask,
+
+    /**
+     * Recover task from checkpoint
+     */
+    recoverTask,
 
     /**
      * Pause current task

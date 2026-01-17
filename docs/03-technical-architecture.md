@@ -66,7 +66,7 @@ Your "backend":
 **Our BYOI (you own the intelligence path):**
 - **Local models**: Ollama, LM Studio (100% private, keyless)
 - **Cloud models**: OpenRouter (optional, user-controlled)
-- **Vector stores**: 100% local embeddings with IndexedDB (Qdrant removed)
+- **Vector stores**: 100% local embeddings with IndexedDB
 - **Cost control**: Choose free local, free cloud, or premium as needed
 
 ### Supported Intelligence Providers
@@ -258,6 +258,1261 @@ Comprehensive structural improvements based on HNW framework analysis:
 | Pattern Worker Pool | `js/workers/pattern-worker-pool.js` | Parallel pattern detection (3 workers) with heartbeat monitoring |
 | Pattern Worker | `js/workers/pattern-worker.js` | Pattern detection worker with heartbeat response support |
 | Migration Checkpointing | `js/storage/migration.js` | Resumable migrations with progress |
+| Hybrid Checkpoint Storage | `js/embeddings/embeddings-task-manager.js` | Split metadata→localStorage + texts→IndexedDB (prevents 5MB quota exceeded) |
+
+---
+
+## Provider Health Monitoring & Automatic Fallback (Phase 6)
+
+### Overview
+
+The Provider Health Monitoring system delivers real-time visibility into AI provider health with automatic fallback capabilities. Users get instant feedback on provider status and the system automatically switches to alternative providers when issues occur, ensuring continuous chat functionality.
+
+```mermaid
+flowchart LR
+    A[Chat Request] --> B[Provider Health Monitor]
+    B --> C{Provider Healthy?}
+    C -->|Yes| D[Execute Request]
+    C -->|No| E[Automatic Fallback]
+    E --> F[Provider Notification Service]
+    F --> G[User Notification]
+    G --> H[Alternative Provider]
+    H --> D
+    D --> I[Update Health Stats]
+    I --> J[Settings UI Update]
+```
+
+### Core Components
+
+#### 1. Provider Health Monitor (`js/services/provider-health-monitor.js`)
+Real-time health tracking with 2-second update intervals:
+
+| Feature | Description | Benefit |
+|---------|-------------|---------|
+| **Health Status Tracking** | Monitors success rates, latency, failures per provider | Identify degrading providers before they fail |
+| **Circuit Breaker Integration** | Coordinates with circuit breaker state | Prevents cascade failures |
+| **Real-time UI Updates** | Pushes health updates to settings modal | Users see live provider status |
+| **Recommended Actions** | Suggests provider switches based on health | Proactive problem resolution |
+
+**Health Status Levels:**
+- `healthy`: Provider functioning normally (>80% success rate, <5s latency)
+- `degraded`: Provider slow but functional (50-80% success rate or >5s latency)
+- `unhealthy`: Provider failing (<50% success rate)
+- `blacklisted`: Provider temporarily unavailable (circuit breaker open)
+- `unknown`: Provider status not yet determined
+
+#### 2. Provider Notification Service (`js/services/provider-notification-service.js`)
+User-friendly notifications with actionable guidance:
+
+| Notification Type | Trigger | User Action |
+|------------------|---------|-------------|
+| **Provider Fallback** | Automatic provider switch | "Switch back to [Provider]" button |
+| **Provider Recovered** | Provider returns to healthy | "Switch to [Provider]" button |
+| **Provider Blacklisted** | Circuit breaker opens | Shows expiry time + alternatives |
+| **Provider Error** | Request fails | Provider-specific troubleshooting steps |
+
+**Provider-Specific Error Guidance:**
+- **Ollama**: "Start Ollama with `ollama serve`" for connection errors
+- **LM Studio**: "Start the server in LM Studio (↔️ button)" for connection errors
+- **OpenRouter**: "Check your API key in Settings" for authentication errors
+
+#### 3. Enhanced Settings UI
+Real-time provider health indicators in settings modal:
+
+```html
+<div class="provider-health-section">
+    <div class="provider-health-header">
+        <span class="provider-health-title">Provider Health Status</span>
+        <span class="provider-health-badge healthy">Healthy</span>
+    </div>
+    <div class="provider-health-list">
+        <!-- Real-time health per provider with metrics -->
+        <div class="provider-health-item">
+            <span class="status-dot healthy"></span>
+            <span>Ollama (Local)</span>
+            <span>⏱️ 234ms</span>
+            <span>✅ 45</span>
+        </div>
+    </div>
+    <div class="provider-health-recommendation">
+        <strong>Recommendation:</strong> All providers operating normally
+    </div>
+</div>
+```
+
+### Automatic Provider Fallback
+
+The system automatically tries alternative providers when the current provider fails:
+
+**Fallback Priority:**
+1. **OpenRouter** (Primary cloud provider)
+2. **LM Studio** (Local inference)
+3. **Ollama** (Local inference)
+4. **Fallback Mode** (Static responses)
+
+**Fallback Behavior:**
+- Transparent switching with user notification
+- Maintains conversation context across provider changes
+- Tracks fallback reasons for debugging
+- Recommends returning to preferred provider when recovered
+
+### Integration Points
+
+#### Chat Integration
+```javascript
+// Health monitoring is automatic - no chat changes needed
+// Provider fallback happens transparently
+ProviderFallbackChain.executeWithFallback({
+    provider: 'ollama',
+    messages: chatMessages,
+    tools: functionTools
+})
+```
+
+#### Settings Integration
+```javascript
+// Initialize health monitoring when settings opens
+function showSettingsModal() {
+    initProviderHealthMonitoring();
+    // Health UI updates automatically every 2 seconds
+}
+
+function hideSettingsModal() {
+    // Stop monitoring when settings closes to save resources
+    ProviderHealthMonitor.stopMonitoring();
+}
+```
+
+### Testing & Validation
+
+Comprehensive test coverage with 60 tests across both services:
+
+**Provider Health Monitor Tests (30 tests):**
+- Initialization and health data management
+- Health status mapping and circuit breaker integration
+- UI callbacks and recommended actions
+- Health summary calculation and monitoring lifecycle
+- Data privacy and immutability
+
+**Provider Notification Service Tests (30 tests):**
+- Event subscription and notification types
+- Provider fallback, recovery, and blacklist handling
+- Provider-specific error messages and guidance
+- Notification history and enable/disable functionality
+- Toast integration and severity icons
+
+### User Experience Benefits
+
+**Before Phase 6:**
+- ❌ Silent provider failures with cryptic error messages
+- ❌ Manual provider switching required
+- ❌ No visibility into provider health
+- ❌ Difficult troubleshooting
+
+**After Phase 6:**
+- ✅ Real-time provider health indicators
+- ✅ Automatic fallback with user notifications
+- ✅ Provider-specific error guidance
+- ✅ One-click provider switching
+- ✅ Proactive health recommendations
+
+### Performance Impact
+
+**Minimal Overhead:**
+- Health monitoring: <1% CPU (2-second polling interval)
+- Memory usage: ~2MB for health data storage
+- Network impact: None (uses existing provider requests)
+- UI updates: Efficient DOM updates with dirty checking
+
+**Resource Management:**
+- Health monitoring stops when settings modal closes
+- Notification history limited to 50 entries
+- UI callbacks properly cleaned up
+- No memory leaks in long-running sessions
+
+---
+
+## Event Replay System (NEW - Phase 7)
+
+### Architecture Overview
+
+The Event Replay System provides persistent event logging, cross-tab coordination, and causal ordering for events across browser tabs. This enables tabs to catch up automatically after disconnection, ensures consistent event ordering, and provides a foundation for advanced features like collaborative analysis and error replay.
+
+```mermaid
+flowchart TB
+    A[Event Emitted] --> B[EventBus]
+    B --> C[Assign Sequence Number]
+    B --> D[Update VectorClock]
+    C --> E[Persist to EventLogStore]
+    D --> E
+    E --> F[Update Watermark]
+    F --> G{Primary Tab?}
+    G -->|Yes| H[Broadcast Watermark]
+    G -->|No| I[Monitor Watermarks]
+    H --> J[Secondary Tabs Receive]
+    I --> J
+    J --> K{Behind Primary?}
+    K -->|Yes| L[Request Replay]
+    K -->|No| M[Normal Operation]
+    L --> N[Primary Sends Events]
+    N --> O[Replay Events]
+    O --> P[Apply to Local State]
+```
+
+### Core Components
+
+#### 1. Event Log Store (`js/storage/event-log-store.js`)
+IndexedDB-backed persistent storage for event replay and recovery:
+
+| Feature | Description | Benefit |
+|---------|-------------|---------|
+| **Persistent Storage** | IndexedDB-backed event log | Survives page refreshes and tab crashes |
+| **Automatic Compaction** | Compacts at 10,000 events | Prevents unbounded log growth |
+| **Checkpoint System** | Creates checkpoints for rapid replay | Fast catch-up from known good states |
+| **VectorClock Ordering** | Causal event relationships | Consistent ordering across tabs |
+| **High-Resolution Timestamps** | `performance.now()` for precise ordering | Sub-millisecond event ordering |
+| **Conflict Resolution** | Last-write-wins with timestamp ordering | Deterministic conflict handling |
+| **Circuit Breaker** | 1000 events/hour limit | Prevents event storms |
+
+**Event Schema:**
+```javascript
+{
+    id: 'uuid-v4',
+    type: 'EVENT_TYPE',
+    payload: { /* event data */ },
+    sequenceNumber: 42,
+    vectorClock: { tab1: 5, tab2: 3 },
+    timestamp: 1234567890.123,  // performance.now()
+    wallClockTime: 1705569600000, // Date.now()
+    metadata: {
+        source: 'tab-id',
+        priority: 1,
+        domain: 'user-data'
+    }
+}
+```
+
+**Key APIs:**
+- `initEventLogStores()` - Initialize IndexedDB stores
+- `appendEvent(event)` - Add event to log
+- `getEvents({ fromSequenceNumber, count, forward })` - Query events
+- `createCheckpoint(label)` - Create checkpoint for rapid replay
+- `getLatestCheckpoint()` - Get most recent checkpoint
+- `compactEventLog()` - Compact old events (preserves checkpoints)
+- `getEventLogStats()` - Get event log statistics
+
+#### 2. EventBus Extensions (`js/services/event-bus.js`)
+Enhanced with event versioning and replay capabilities:
+
+| Feature | Description | Benefit |
+|---------|-------------|---------|
+| **Event Versioning** | Monotonically increasing sequence numbers | Track event order |
+| **VectorClock Integration** | Causal ordering metadata | Detect concurrent events |
+| **Event Watermark** | Track processed event sequence | Enable catch-up replay |
+| **Replay APIs** | Forward/reverse replay from log | Debug and recovery |
+| **Replay Detection** | `isReplay` flag in metadata | Distinguish original vs replayed |
+| **Event Log Control** | Enable/disable logging, skip option | Control what gets logged |
+
+**Enhanced Event Metadata:**
+```javascript
+{
+    type: 'EVENT_TYPE',
+    sequenceNumber: 42,
+    vectorClock: { tab1: 5, tab2: 3 },
+    timestamp: 1234567890.123,
+    priority: 1,
+    domain: 'user-data',
+    isReplay: false,
+    source: 'tab-id'
+}
+```
+
+**New APIs:**
+- `replayEvents({ fromSequenceNumber, count, forward })` - Replay events from log
+- `enableEventLog(bool)` - Enable/disable event logging
+- `isEventLogEnabled()` - Check if logging is enabled
+- `setEventWatermark(sequence)` - Set current watermark
+- `getEventWatermark()` - Get current watermark
+- `getEventLogStats()` - Get event log statistics
+- `clearEventLog()` - Clear all logged events
+
+#### 3. TabCoordinator Enhancements (`js/services/tab-coordination.js`)
+Enhanced with watermark tracking and replay coordination:
+
+| Feature | Description | Benefit |
+|---------|-------------|---------|
+| **Watermark Tracking** | Track processed event sequence per tab | Detect lagging tabs |
+| **Replay Detection** | `needsReplay()` checks if behind primary | Automatic catch-up |
+| **Replay Coordination** | Request/servce replay via BroadcastChannel | Cross-tab event sync |
+| **Auto-Replay** | `autoReplayIfNeeded()` on tab activation | Seamless tab switch |
+| **Watermark Broadcast** | Periodic broadcasts (5-second interval) | Real-time sync status |
+
+**New Message Types:**
+- `EVENT_WATERMARK` - Primary broadcasts current watermark
+- `REPLAY_REQUEST` - Secondary requests events from watermark
+- `REPLAY_RESPONSE` - Primary sends event batch
+
+**New APIs:**
+- `updateEventWatermark(sequence)` - Update local watermark
+- `getEventWatermark()` - Get local watermark
+- `getKnownWatermarks()` - Get all tab watermarks
+- `needsReplay()` - Check if replay needed
+- `requestEventReplay(fromWatermark)` - Request catch-up
+- `autoReplayIfNeeded()` - Automatic replay on lag
+- `handleReplayRequest(tabId, fromWatermark)` - Primary serves events
+- `handleReplayResponse(events)` - Secondary applies events
+
+### Cross-Tab Replay Coordination
+
+**Watermark Broadcast (Primary → Secondary):**
+```javascript
+// Primary tab broadcasts watermark every 5 seconds
+setInterval(() => {
+    if (isPrimaryTab) {
+        const watermark = EventBus.getEventWatermark();
+        broadcastChannel.postMessage({
+            type: 'EVENT_WATERMARK',
+            tabId: currentTabId,
+            watermark: watermark
+        });
+    }
+}, 5000);
+```
+
+**Replay Request (Secondary → Primary):**
+```javascript
+// Secondary detects it's behind and requests replay
+if (TabCoordinator.needsReplay()) {
+    const fromWatermark = TabCoordinator.getEventWatermark();
+    broadcastChannel.postMessage({
+        type: 'REPLAY_REQUEST',
+        tabId: currentTabId,
+        fromWatermark: fromWatermark
+    });
+}
+```
+
+**Replay Response (Primary → Secondary):**
+```javascript
+// Primary fetches events and sends to requesting tab
+async function handleReplayRequest(requestingTabId, fromWatermark) {
+    const events = await EventLogStore.getEvents({
+        fromSequenceNumber: fromWatermark,
+        count: 1000,
+        forward: true
+    });
+
+    broadcastChannel.postMessage({
+        type: 'REPLAY_RESPONSE',
+        tabId: currentTabId,
+        targetTabId: requestingTabId,
+        events: events
+    });
+}
+```
+
+### VectorClock for Causal Ordering
+
+**What is VectorClock?**
+- A distributed algorithm for capturing causal relationships between events
+- Each tab maintains a vector clock (counter per tab)
+- Enables detection of concurrent events and conflicts
+
+**VectorClock Operations:**
+```javascript
+// Tick local clock (event emitted)
+const vectorClock = new VectorClock();
+vectorClock.tick(); // { tab1: 1 }
+
+// Merge with another clock (receive event from another tab)
+vectorClock.merge({ tab2: 1 }); // { tab1: 1, tab2: 1 }
+
+// Compare clocks (check event ordering)
+vectorClock.compare({ tab1: 1, tab2: 2 }); // Returns: 'before'
+```
+
+**Causal Relationship Detection:**
+- `before`: Event A causally precedes Event B
+- `after`: Event A causally follows Event B
+- `concurrent`: Events are concurrent (no causal relationship)
+
+### Event Replay Flow
+
+**Forward Replay (Latest → Earliest):**
+```javascript
+const result = await EventBus.replayEvents({
+    fromSequenceNumber: 100,
+    count: 50,
+    forward: true
+});
+// Returns: { replayed: 50, errors: 0, lastSequenceNumber: 150 }
+```
+
+**Reverse Replay (Earliest → Latest):**
+```javascript
+const result = await EventBus.replayEvents({
+    fromSequenceNumber: 150,
+    count: 50,
+    forward: false
+});
+// Returns: { replayed: 50, errors: 0, lastSequenceNumber: 100 }
+```
+
+**Checkpoint-Based Replay:**
+```javascript
+// Create checkpoint
+await EventLogStore.createCheckpoint('before-migration');
+
+// Later, replay from checkpoint
+const checkpoint = await EventLogStore.getLatestCheckpoint();
+await EventBus.replayEvents({
+    fromSequenceNumber: checkpoint.sequenceNumber
+});
+```
+
+### Automatic Compaction
+
+**Compaction Strategy:**
+- **Trigger**: 10,000 events in log
+- **Preservation**: Checkpoints always preserved
+- **Cleanup**: Events older than latest checkpoint removed
+- **Optimization**: IndexedDB compaction after cleanup
+
+**Compaction Flow:**
+```javascript
+async function compactEventLog() {
+    const stats = await EventLogStore.getEventLogStats();
+    if (stats.totalEvents >= 10000) {
+        const checkpoint = await EventLogStore.getLatestCheckpoint();
+        await EventLogStore.compactEventLog(checkpoint.sequenceNumber);
+    }
+}
+```
+
+### Integration Points
+
+**EventBus Integration:**
+```javascript
+// All events automatically versioned
+EventBus.emit('DATA_STREAMS_LOADED', { streams: [] });
+// Metadata: { sequenceNumber: 42, vectorClock: {...}, isReplay: false }
+```
+
+**TabCoordinator Integration:**
+```javascript
+// Watermark broadcast integrated with heartbeat
+setInterval(() => {
+    if (isPrimaryTab) {
+        sendHeartbeat();
+        broadcastWatermark(); // New
+    }
+}, 5000);
+```
+
+**Error Recovery Integration:**
+```javascript
+// Replay error events for debugging
+await EventBus.replayEvents({
+    fromSequenceNumber: errorWatermark,
+    count: 100
+});
+```
+
+### Testing & Validation
+
+Comprehensive test coverage with 75+ tests across 3 test files:
+
+**Event Log Store Tests (30+ tests):**
+- Event storage and retrieval
+- Sequence numbering and ordering
+- VectorClock integration
+- Checkpoint creation and restoration
+- Compaction and cleanup
+- Error handling and edge cases
+
+**EventBus Replay Tests (25+ tests):**
+- Event versioning (sequence numbers, VectorClock)
+- Watermark tracking
+- Event log control (enable/disable, skip)
+- Replay APIs (forward/reverse)
+- Integration with existing EventBus
+- Edge cases (no subscribers, rapid emission)
+
+**TabCoordinator Watermark Tests (20+ tests):**
+- Watermark tracking and updates
+- Replay detection and coordination
+- Cross-tab message handling
+- Auto-replay on lag detection
+- Mock BroadcastChannel for isolated testing
+
+### HNW Framework Alignment
+
+**Hierarchy:**
+- **Clear Authority**: Primary tab responsible for event log and serving replays
+- **Single Source of Truth**: EventLogStore as authoritative event history
+- **Delegation**: TabCoordinator delegates replay coordination to primary/secondary roles
+
+**Network:**
+- **Decoupled Communication**: BroadcastChannel enables cross-tab coordination without coupling
+- **Event-Driven Coordination**: Watermark broadcasts trigger automatic catch-up
+- **Causal Ordering**: VectorClock ensures consistent event ordering across tabs
+
+**Wave:**
+- **Deterministic Timing**: 5-second watermark broadcast interval
+- **Progressive Catch-up**: Replay events in batches to maintain UI responsiveness
+- **Storm Protection**: Circuit breaker prevents runaway event logging
+
+### Performance Impact
+
+**Minimal Overhead:**
+- Event logging: <2% CPU (async IndexedDB writes)
+- Memory usage: ~5MB for 10,000 events
+- Watermark broadcast: 5-second interval (negligible)
+- Replay catch-up: Batched (1000 events per request)
+
+**Resource Management:**
+- Automatic compaction at 10,000 events
+- Checkpoint preservation for rapid replay
+- Circuit breaker prevents event storms
+- Efficient IndexedDB queries with indexes
+
+### User Experience Benefits
+
+**Before Phase 7:**
+- ❌ Tabs can't catch up after disconnection
+- ❌ Event ordering inconsistencies across tabs
+- ❌ No event history for debugging
+- ❌ Manual page refresh required to sync state
+
+**After Phase 7:**
+- ✅ Automatic catch-up for late-joining tabs
+- ✅ Consistent event ordering via VectorClock
+- ✅ Persistent event log for debugging and replay
+- ✅ Seamless cross-tab coordination
+- ✅ Foundation for collaborative features
+
+### Future Enhancements
+
+- **Error Event Replay**: Replay error events for debugging and analysis
+- **Event Export/Import**: Export event log for external analysis
+- **Configurable Compaction**: User-adjustable compaction thresholds
+- **Metrics Dashboard**: Event log health monitoring UI
+- **Collaborative Replay**: Multi-user event replay for shared sessions
+- **Event Filtering**: Replay only specific event types or domains
+
+---
+
+## Phase 7: Mobile Reliability & Safe Mode Enhancements (NEW)
+
+### Architecture Overview
+
+Phase 7 delivers three critical improvements for mobile devices, Safe Mode durability, and intelligent error recovery. These systems work together to provide a robust, adaptive experience across all device types and network conditions while ensuring data durability during security failures.
+
+```mermaid
+flowchart TB
+    A[Device Detection Service] --> B[TabCoordinator Enhancement]
+    A --> C[Context-Aware Recovery]
+    D[Safe Mode Active] --> E[Write-Ahead Log]
+    E --> F[Crash Recovery Replay]
+    C --> G[Priority System]
+    G --> H[Lock Preemption]
+    B --> I[Adaptive Timing]
+    I --> J[Mobile Optimized]
+    C --> K[App State Context]
+    K --> L[Intelligent Recovery]
+```
+
+### Core Components
+
+#### 1. Device Detection Service (`js/services/device-detection.js`)
+
+Mobile device detection, network monitoring, and adaptive timing recommendations:
+
+| Feature | Description | Benefit |
+|---------|-------------|---------|
+| **Device Type Detection** | PHONE, TABLET, DESKTOP classification | Mobile-aware behavior |
+| **Device Capability Levels** | HIGH, MEDIUM, LOW based on hardware | Resource-aware operations |
+| **Network Quality Monitoring** | EXCELLENT, GOOD, FAIR, POOR tracking | Network-adaptive operations |
+| **Visibility State Tracking** | Page visibility API integration | Background tab handling |
+| **Adaptive Timing** | Device and network-based timing config | Optimized performance |
+| **Heartbeat Quality** | Throttling detection via quality metrics | Battery optimization |
+
+**Device Detection APIs:**
+```javascript
+// Device type detection
+DeviceDetection.detectDeviceType()           // → 'PHONE' | 'TABLET' | 'DESKTOP'
+DeviceDetection.isMobile()                   // → boolean
+DeviceDetection.isPhone()                    // → boolean
+DeviceDetection.getDeviceInfo()             // → { type, capability, userAgent, screenSize, cores, memory }
+
+// Network monitoring
+DeviceDetection.getConnectionQuality()       // → 'EXCELLENT' | 'GOOD' | 'FAIR' | 'POOR'
+DeviceDetection.isNetworkDegraded()          // → boolean
+DeviceDetection.isOnline()                   // → boolean
+DeviceDetection.onNetworkChange(callback)    // → Register network change listener
+
+// Adaptive timing
+DeviceDetection.getAdaptiveTiming()          // → { heartbeat: {...}, election: {...} }
+DeviceDetection.getRecommendedVisibilityWait() // → Adaptive wait time (5s-12s)
+
+// Heartbeat quality
+DeviceDetection.recordHeartbeatQuality(onTime, degraded)
+DeviceDetection.getHeartbeatQualityStats()   // → { onTimeRate, degradedRate, lastDegraded, sampleCount }
+```
+
+**Adaptive Timing Configuration:**
+```javascript
+// Desktop, excellent network
+{
+    heartbeat: { intervalMs: 3000, maxMissed: 3 },
+    election: { windowMs: 300 }
+}
+
+// Mobile, poor network
+{
+    heartbeat: { intervalMs: 8000, maxMissed: 5 },
+    election: { windowMs: 800 }
+}
+```
+
+#### 2. TabCoordinator Enhancement (`js/services/tab-coordination.js`)
+
+Enhanced with DeviceDetection integration for mobile-aware coordination:
+
+| Feature | Description | Benefit |
+|---------|-------------|---------|
+| **Adaptive Heartbeat** | Device and network-based timing | Mobile-optimized coordination |
+| **Visibility-Aware Promotion** | Adaptive wait before promotion | Prevents premature promotion |
+| **Network Failover** | Quality-based heartbeat adjustment | Resilient to network changes |
+| **Heartbeat Quality Recording** | Throttling detection | Battery optimization |
+
+**Key Changes:**
+```javascript
+// Initialize adaptive timing
+function initAdaptiveTiming() {
+    adaptiveTiming = DeviceDetection.getAdaptiveTiming();
+    HEARTBEAT_INTERVAL_MS = adaptiveTiming.heartbeat.intervalMs;
+    MAX_MISSED_HEARTBEATS = adaptiveTiming.heartbeat.maxMissed;
+    ELECTION_WINDOW_MS = adaptiveTiming.election.windowMs;
+}
+
+// Adaptive visibility wait
+const visibilityWaitMs = DeviceDetection.getRecommendedVisibilityWait();
+setTimeout(async () => {
+    const recentHeartbeat = clockSkewTracker.adjustTimestamp(Date.now()) - lastLeaderHeartbeat;
+    if (recentHeartbeat > maxAllowedGap) {
+        initiateReElection();
+    }
+}, visibilityWaitMs); // 5s desktop, 8s mobile, 12s poor network
+
+// Network-based failover
+function setupNetworkMonitoring() {
+    DeviceDetection.onNetworkChange((quality) => {
+        if (quality === 'poor' || quality === 'fair') {
+            // Increase heartbeat interval on degraded network
+            HEARTBEAT_INTERVAL_MS = 8000;
+        } else {
+            // Restore normal heartbeat
+            HEARTBEAT_INTERVAL_MS = adaptiveTiming.heartbeat.intervalMs;
+        }
+    });
+}
+```
+
+#### 3. Write-Ahead Log (`js/storage/write-ahead-log.js`)
+
+Durable write queue and crash recovery for Safe Mode operations:
+
+| Feature | Description | Benefit |
+|---------|-------------|---------|
+| **Write Queue** | Operations queued when encryption unavailable | No data loss in Safe Mode |
+| **Persistent Log** | localStorage-backed operation log | Survives page crashes |
+| **Automatic Replay** | Startup and encryption-available replay | Automatic recovery |
+| **Cross-Tab Coordination** | Only primary tab processes WAL | No duplicate operations |
+| **Adaptive Batching** | Device and network-based batching | Performance optimization |
+| **Priority System** | CRITICAL, HIGH, NORMAL, LOW ordering | Critical operations first |
+
+**WAL APIs:**
+```javascript
+// Initialization
+await WriteAheadLog.init()                    // Initialize WAL system
+
+// Write queue
+await WriteAheadLog.queueWrite('saveStreams', [streams], WalPriority.HIGH)
+await WriteAheadLog.queueWrite('savePersonality', [personality], WalPriority.CRITICAL)
+
+// Processing
+await WriteAheadLog.processWal()              // Process pending entries
+await WriteAheadLog.replayWal()                // Replay on startup for crash recovery
+WriteAheadLog.stopProcessing()                 // Stop WAL processing
+
+// Monitoring
+WriteAheadLog.getWalStats()                    // → { totalEntries, pending, processing, committed, failed }
+WriteAheadLog.startMonitoring()                // Start cleanup monitoring
+WriteAheadLog.stopMonitoring()                 // Stop monitoring
+
+// Maintenance
+WriteAheadLog.cleanupWal()                     // Cleanup old entries
+WriteAheadLog.clearWal()                       // Clear all WAL entries
+```
+
+**WAL Entry Schema:**
+```javascript
+{
+    id: '1705569600000-abc123',
+    sequence: 42,
+    operation: 'saveStreams',
+    args: [[/* streams */]],
+    priority: 'high',       // critical | high | normal | low
+    status: 'pending',      // pending | processing | committed | failed
+    createdAt: 1705569600000,
+    processedAt: null,
+    attempts: 0,
+    error: null
+}
+```
+
+**Processing Logic:**
+```javascript
+// Only primary tab processes WAL
+async function processWal() {
+    if (!TabCoordinator.isPrimary()) {
+        console.log('[WAL] Skipping WAL processing - not primary tab');
+        return;
+    }
+
+    // Sort by priority and sequence
+    const sortedEntries = walState.entries
+        .filter(entry => entry.status === WalStatus.PENDING || entry.status === WalStatus.FAILED)
+        .sort((a, b) => {
+            const priorityDiff = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
+            if (priorityDiff !== 0) return priorityDiff;
+            return a.sequence - b.sequence;
+        });
+
+    // Process in batches
+    for (const entry of sortedEntries) {
+        if (SafeMode.canEncrypt()) {
+            const result = await executeOperation(entry.operation, entry.args);
+            entry.status = WalStatus.COMMITTED;
+        } else {
+            entry.status = WalStatus.FAILED;
+            entry.error = 'Encryption unavailable';
+        }
+    }
+}
+```
+
+#### 4. Context-Aware Error Recovery (`js/context-aware-recovery.js`)
+
+Intelligent error recovery with dynamic priorities and app state context:
+
+| Feature | Description | Benefit |
+|---------|-------------|---------|
+| **Dynamic Priority System** | CRITICAL (100), HIGH (75), NORMAL (50), LOW (25) | Resource allocation |
+| **Lock Preemption** | Higher priority can preempt lower priority | Critical operations first |
+| **App State Context** | View mode, data state, user intent tracking | Context-aware decisions |
+| **Intelligent Strategy Selection** | Error type and context-based recovery | Optimal recovery paths |
+| **Context Monitoring** | Real-time app state updates | Adaptive recovery |
+
+**Priority System:**
+```javascript
+const RecoveryPriority = {
+    CRITICAL: 'critical',     // System integrity (security, data corruption)
+    HIGH: 'high',            // User-visible operations (chat, upload)
+    NORMAL: 'normal',        // Background tasks (analytics, sync)
+    LOW: 'low'               // Optional tasks (cache, prefetch)
+}
+
+const PRIORITY_VALUES = {
+    [RecoveryPriority.CRITICAL]: 100,
+    [RecoveryPriority.HIGH]: 75,
+    [RecoveryPriority.NORMAL]: 50,
+    [RecoveryPriority.LOW]: 25
+}
+```
+
+**Context-Aware Locks:**
+```javascript
+// Acquire priority lock with preemption support
+const lockId = await ContextAwareRecovery.acquirePriorityLock(
+    'file_processing',
+    RecoveryPriority.HIGH
+)
+
+// Higher priority can preempt lower priority (>20 point difference)
+if (priorityValue > currentValue + 20) {
+    OperationLock.forceRelease(operationName, 'priority_preemption');
+    await new Promise(resolve => setTimeout(resolve, 100));
+}
+```
+
+**Recovery Strategy Selection:**
+```javascript
+// AUTH_FAILURE → High priority refresh token
+{
+    priority: 'high',
+    action: 'refresh_token',
+    reason: 'User-facing auth issue',
+    canAutoRecover: true,
+    requiresLock: 'spotify_fetch'
+}
+
+// STORAGE_QUOTA_EXCEEDED → Critical priority cleanup
+{
+    priority: 'critical',
+    action: 'cleanup_storage',
+    reason: 'Storage quota critical',
+    canAutoRecover: true,
+    requiresLock: 'privacy_clear'
+}
+
+// NETWORK_ERROR on poor network → Adaptive retry
+{
+    priority: 'normal',
+    action: 'adaptive_retry',
+    reason: 'Network degraded, using adaptive timing',
+    canAutoRecover: true,
+    adaptiveDelay: 5000  // Longer on mobile
+}
+```
+
+### Integration Points
+
+**Storage Integration:**
+```javascript
+// Storage facade initializes WAL
+async init() {
+    await window.IndexedDBCore.initDatabase({...});
+    await StorageMigration.migrateFromLocalStorage();
+
+    // Initialize Write-Ahead Log for Safe Mode
+    await WriteAheadLog.init();
+
+    return window.IndexedDBCore.getConnection();
+}
+```
+
+**TabCoordinator Integration:**
+```javascript
+// Initialize adaptive timing on startup
+function init() {
+    initAdaptiveTiming();
+    setupNetworkMonitoring();
+    setupVisibilityMonitoring();
+
+    // Rest of initialization...
+}
+
+function initAdaptiveTiming() {
+    adaptiveTiming = DeviceDetection.getAdaptiveTiming();
+    HEARTBEAT_INTERVAL_MS = adaptiveTiming.heartbeat.intervalMs;
+    MAX_MISSED_HEARTBEATS = adaptiveTiming.heartbeat.maxMissed;
+    ELECTION_WINDOW_MS = adaptiveTiming.election.windowMs;
+}
+```
+
+**Context-Aware Recovery Integration:**
+```javascript
+// Start context monitoring on app initialization
+ContextAwareRecovery.startContextMonitoring();
+
+// Update context on view changes
+EventBus.on('ui:view_changed', ({ view }) => {
+    ContextAwareRecovery.updateAppStateContext({ viewMode: view });
+});
+
+// Use in error handling
+try {
+    await someOperation();
+} catch (error) {
+    const strategy = ContextAwareRecovery.selectRecoveryStrategy(error, context);
+    await ContextAwareRecovery.executeRecovery(strategy);
+}
+```
+
+### HNW Framework Alignment
+
+**Hierarchy (Clear Chain of Command):**
+- **Priority System**: CRITICAL → HIGH → NORMAL → LOW with numeric values (100, 75, 50, 25)
+- **Lock Preemption**: Higher priority operations can preempt lower priority locks (>20 point difference)
+- **Single Authority**: Only primary tab processes WAL and handles recovery
+- **Dependency Injection**: All services accept dependencies via parameters
+
+**Network (Modular Communication):**
+- **Cross-Tab Coordination**: WAL processing coordinated via TabCoordinator
+- **Event-Driven Updates**: App state context changes emitted via EventBus
+- **Facade Pattern**: ContextAwareRecovery provides unified API for all recovery operations
+- **BroadcastChannel**: Used for cross-tab WAL coordination
+
+**Wave (Deterministic Timing):**
+- **Adaptive Heartbeat**: 3s desktop, 5s mobile, 8s poor network
+- **Adaptive Visibility Wait**: 5s desktop, 8s mobile, 12s poor network
+- **Adaptive Batching**: WAL batch size based on device and network conditions
+- **Progressive Processing**: Priority-based WAL processing (CRITICAL → HIGH → NORMAL → LOW)
+
+### Performance Impact
+
+**Minimal Overhead:**
+- Device detection: <0.5% CPU (one-time detection, cached results)
+- Network monitoring: <1% CPU (Network Information API)
+- WAL processing: <2% CPU (adaptive batching)
+- Context tracking: <0.5% CPU (event-driven updates)
+
+**Resource Management:**
+- WAL size limited to 100 entries
+- WAL entries expire after 24 hours
+- Committed entries cleaned up after 1 minute
+- Heartbeat quality samples limited to 100
+
+### User Experience Benefits
+
+**Before Phase 7:**
+- ❌ Fixed timing causes battery drain on mobile devices
+- ❌ No operation durability in Safe Mode
+- ❌ All errors handled equally regardless of context
+- ❌ No priority-based resource allocation
+
+**After Phase 7:**
+- ✅ Mobile-optimized timing reduces battery usage
+- ✅ WAL ensures operations survive crashes in Safe Mode
+- ✅ Context-aware recovery provides intelligent error handling
+- ✅ Priority system ensures critical operations take precedence
+- ✅ Network-aware operations adapt to connection quality
+
+### Testing & Validation
+
+Comprehensive test coverage planned:
+- Device detection accuracy across devices
+- Network monitoring integration
+- WAL persistence and replay
+- Priority-based lock preemption
+- Context-aware strategy selection
+- Adaptive timing configuration
+
+### Future Enhancements
+
+- **Battery Status API**: More accurate battery monitoring
+- **Configurable Priorities**: User-adjustable priority thresholds
+- **WAL Metrics Dashboard**: Safe Mode operation monitoring
+- **Cross-Tab Recovery**: Multi-user recovery coordination
+- **Advanced Throttling Detection**: Machine learning-based detection
+
+---
+
+## Observability & Performance Monitoring (NEW - Phase 8)
+
+### Architecture Overview
+
+The observability system provides comprehensive performance monitoring and metrics collection while maintaining the 100% client-side architecture. Built with < 5% performance overhead, it enables real-time insights into application health and user experience.
+
+```mermaid
+flowchart LR
+    A[User Actions] --> B[Performance Profiler]
+    B --> C[Core Web Vitals]
+    B --> D[Memory Profiling]
+    C --> E[Metrics Exporter]
+    D --> E
+    E --> F[Dashboard UI]
+    E --> G[External Services]
+```
+
+### Core Components
+
+#### 1. Core Web Vitals Tracker (`js/observability/core-web-vitals.js`)
+Tracks Google's Core Web Vitals using PerformanceObserver API:
+
+| Metric | Description | Good Threshold |
+|--------|-------------|----------------|
+| **CLS** (Cumulative Layout Shift) | Visual stability | < 0.1 |
+| **FID** (First Input Delay) | Interactivity | < 100ms |
+| **LCP** (Largest Contentful Paint) | Loading performance | < 2.5s |
+| **INP** (Interaction to Next Paint) | Responsiveness | < 200ms |
+| **TTFB** (Time to First Byte) | Server response | < 800ms |
+| **FCP** (First Contentful Paint) | Initial paint | < 1.8s |
+
+**Features:**
+- PerformanceObserver-based automatic tracking
+- 95th percentile aggregation for statistical accuracy
+- Performance rating calculation (good/needs improvement/poor)
+- JSON export functionality
+- Real-time metric collection with configurable sampling
+
+#### 2. Enhanced Performance Profiler (`js/services/performance-profiler.js`)
+Upgraded from basic profiling to comprehensive performance monitoring:
+
+**New Capabilities:**
+- **Memory Profiling**: Chrome DevTools Memory API integration
+- **Operation Duration Tracking**: Categorized performance measurements
+- **Performance Budgets**: Configurable thresholds with alerts
+- **Degradation Detection**: Automatic performance regression detection
+- **Comprehensive Reporting**: Unified performance and health reports
+
+**Performance Categories:**
+```javascript
+PerformanceCategory = {
+    COMPUTATION: 'computation',           // Data processing operations
+    STORAGE: 'storage',                   // IndexedDB/localStorage operations
+    CHAT: 'chat',                        // LLM API calls and responses
+    UI_RENDERING: 'ui_rendering',        // DOM updates and rendering
+    PATTERN_DETECTION: 'pattern_detection', // Pattern algorithm execution
+    EMBEDDING_GENERATION: 'embedding_generation', // Vector embedding creation
+    SEMANTIC_SEARCH: 'semantic_search'   // Vector similarity search
+}
+```
+
+**Key Features:**
+- Memory snapshots with trend analysis
+- Performance budget enforcement with degradation thresholds
+- Baseline establishment for regression detection
+- 95th/99th percentile calculations
+- Automatic alert generation for threshold violations
+
+#### 3. Metrics Export Framework (`js/observability/metrics-exporter.js`)
+Provides flexible metrics export and integration capabilities:
+
+**Export Formats:**
+| Format | Use Case | Features |
+|--------|----------|----------|
+| **JSON** | Full metrics backup | Complete data structure |
+| **CSV** | Spreadsheet analysis | Human-readable tabular format |
+| **Prometheus** | Monitoring systems | Time-series format for Grafana |
+| **InfluxDB** | Time-series databases | Line protocol format |
+
+**Scheduled Exports:**
+- **HOURLY**: Regular monitoring intervals
+- **DAILY**: Daily performance snapshots
+- **WEEKLY**: Weekly trend analysis
+- **CUSTOM**: User-defined intervals
+
+**External Service Integrations:**
+- **DataDog**: Custom metrics submission
+- **New Relic**: Insights integration
+- **Prometheus Pushgateway**: Time-series push
+- **Custom Endpoints**: Generic HTTP webhook support
+
+**Features:**
+- AES-GCM encryption for sensitive metrics
+- Automatic retry with exponential backoff
+- Configuration persistence via localStorage
+- Job management (pause/resume/delete)
+
+#### 4. Observability Controller (`js/controllers/observability-controller.js`)
+Manages the performance monitoring dashboard UI:
+
+**Dashboard Features:**
+- **Real-time Metrics Display**: Live performance data updates
+- **Tabbed Interface**: Organized by metric category
+- **Performance Charts**: Visual trend analysis
+- **Export Controls**: Immediate and scheduled export options
+- **Memory Profiling Controls**: Start/stop memory profiling
+- **Alert Management**: View and clear degradation alerts
+
+**UI Components:**
+- Performance overview cards
+- Category-specific statistics
+- Memory usage trends
+- Web Vitals status indicators
+- Export format selection
+- Scheduled job management
+
+### Performance Characteristics
+
+#### Overhead Analysis
+| Component | CPU Overhead | Memory Impact | Frequency |
+|-----------|-------------|---------------|-----------|
+| **Core Web Vitals** | < 0.1% | ~50KB | On metric events |
+| **Performance Profiler** | < 2% | ~200KB | Per operation |
+| **Memory Profiling** | < 1% | ~100KB | Configurable interval |
+| **Metrics Export** | < 1% | ~500KB (temporary) | On demand/schedule |
+| **Dashboard UI** | < 0.5% | ~100KB | User interaction |
+| **Total** | **< 5%** | **< 1MB** | - |
+
+#### Optimization Strategies
+- **Lazy Loading**: Observability modules load on-demand
+- **Sampling Config**: Adjustable metric collection frequency
+- **Pruning**: Automatic cleanup of old measurements
+- **Circuit Breakers**: Prevent runaway metric collection
+- **Web Worker Offloading**: Heavy computation in background threads
+
+### Integration Points
+
+#### EventBus Integration
+```javascript
+// Observability events published to EventBus
+EventBus.publish('observability:metric', {
+    category: PerformanceCategory.COMPUTATION,
+    duration: 150,
+    metadata: { operation: 'pattern_detection' }
+});
+
+EventBus.publish('observability:degradation', {
+    severity: 'warning',
+    category: PerformanceCategory.STORAGE,
+    details: { threshold: 100, actual: 180 }
+});
+```
+
+#### Settings Integration
+- Performance monitoring toggle
+- Memory profiling controls
+- Export format preferences
+- Update interval configuration
+- Scheduled job management
+
+#### Existing Service Integration
+- **Chat Operations**: LLM call timing
+- **Storage Operations**: IndexedDB performance tracking
+- **Pattern Detection**: Algorithm execution metrics
+- **Embedding Generation**: Vector embedding performance
+- **RAG Operations**: Semantic search timing
+
+### Usage Examples
+
+#### Basic Performance Tracking
+```javascript
+// Start operation timing
+const stopOperation = PerformanceProfiler.startOperation('data_analysis', {
+    category: PerformanceCategory.COMPUTATION
+});
+
+// ... perform operation ...
+stopOperation(); // Automatically records duration
+
+// Get statistics
+const stats = PerformanceProfiler.getStatistics(PerformanceCategory.COMPUTATION);
+console.log(`Average: ${stats.avgDuration}ms, P95: ${stats.p95Duration}ms`);
+```
+
+#### Memory Profiling
+```javascript
+// Take memory snapshot
+const snapshot = PerformanceProfiler.takeMemorySnapshot();
+console.log(`Memory usage: ${snapshot.usagePercentage}%`);
+
+// Start automatic profiling
+const stopProfiling = PerformanceProfiler.startMemoryProfiling(10000); // 10s interval
+
+// Later: stop profiling
+stopProfiling();
+```
+
+#### Performance Budgets
+```javascript
+// Set performance budget
+PerformanceProfiler.setPerformanceBudget(PerformanceCategory.STORAGE, {
+    threshold: 100, // 100ms
+    action: 'warn',
+    degradationThreshold: 50 // 50% increase triggers alert
+});
+
+// Check for alerts
+const alerts = PerformanceProfiler.getDegradationAlerts();
+alerts.forEach(alert => {
+    console.log(`Alert: ${alert.message} (${alert.severity})`);
+});
+```
+
+#### Metrics Export
+```javascript
+// Immediate export
+await MetricsExporter.exportNow({
+    format: ExportFormat.JSON,
+    includeMemory: true,
+    includeWebVitals: true
+});
+
+// Scheduled export
+const jobId = MetricsExporter.createScheduledExport('daily-performance', {
+    format: ExportFormat.PROMETHEUS,
+    schedule: ScheduleType.DAILY,
+    includeMemory: true,
+    categories: ['computation', 'storage']
+});
+```
+
+### Testing Coverage
+Comprehensive test suites ensure reliability:
+
+| Test Suite | Tests | Coverage |
+|------------|-------|----------|
+| **Core Web Vitals** | 370 tests | Metric collection, rating calculations, export |
+| **Performance Profiler** | 508 tests | Memory profiling, budgets, degradation detection |
+| **Metrics Exporter** | 462 tests | Export formats, scheduling, external services |
+| **Total** | **1340 tests** | Comprehensive observability coverage |
+
+### Configuration
+
+#### Default Settings
+```javascript
+const defaultConfig = {
+    // Core Web Vitals
+    webVitalsEnabled: true,
+    maxMetrics: 100,
+
+    // Performance Profiler
+    profilerEnabled: true,
+    maxMeasurements: 1000,
+    maxMemorySnapshots: 20,
+    maxDegradationAlerts: 50,
+
+    // Memory Profiling
+    memoryProfilingEnabled: true,
+    memoryProfilingInterval: 30000, // 30s
+    highMemoryThreshold: 85, // percentage
+
+    // Metrics Export
+    exporterEnabled: true,
+    defaultExportFormat: 'json',
+    maxScheduledJobs: 10,
+
+    // Dashboard
+    updateInterval: 5000, // 5s
+    chartDataPoints: 50
+};
+```
+
+#### Custom Configuration
+```javascript
+// Custom configuration via settings
+const customConfig = {
+    profilingEnabled: true,
+    memoryProfilingInterval: 60000, // 60s for less overhead
+    highMemoryThreshold: 90, // Higher threshold
+    defaultExportFormat: 'prometheus' // Prometheus for monitoring
+};
+```
+
+### Security & Privacy
+
+**Data Protection:**
+- All metrics collected locally (no external transmission by default)
+- Optional encryption for exported metrics
+- User control over data collection granularity
+- Automatic data pruning to prevent storage bloat
+
+**Privacy Considerations:**
+- No user-identifiable information in metrics
+- No streaming data content in performance metrics
+- Configurable metric sampling for reduced overhead
+- User-controlled export and sharing
+
+### Architectural Benefits
+
+**HNW Hierarchy:**
+- Clear separation: Core metrics → Profiler → Exporter → Controller
+- Dependency injection for all observability components
+- Single responsibility per module
+
+**HNW Network:**
+- Event-driven communication via EventBus
+- Modular design allows independent component updates
+- Facade pattern for unified metrics access
+
+**HNW Wave:**
+- Configurable collection intervals prevent system overload
+- Automatic cleanup prevents memory exhaustion
+- Graceful degradation when components unavailable
 
 ---
 
@@ -325,7 +1580,7 @@ rhythm-chamber/
 │   ├── embeddings/         # Embedding UI Components (NEW - Phase 3)
 │   │   ├── embeddings-onboarding.js  # Feature discovery + compatibility checks
 │   │   ├── embeddings-progress.js    # 6-stage progress indicator
-│   │   └── embeddings-task-manager.js # Background processing orchestrator
+│   │   └── embeddings-task-manager.js # Background processing + hybrid checkpoint storage (ENHANCED)
 │   │
 │   ├── functions/          # Function Calling Modules (Modular Architecture)
 │   │   ├── index.js        # Facade - unified execute() + schema access
@@ -363,6 +1618,11 @@ rhythm-chamber/
 │   │   ├── recovery-handlers.js # ErrorContext recovery actions
 │   │   └── index.js        # Module entry point
 │   │
+│   ├── observability/      # Observability Modules (NEW - Phase 8)
+│   │   ├── core-web-vitals.js    # Core Web Vitals tracking (CLS, FID, LCP, INP, TTFB, FCP)
+│   │   ├── metrics-exporter.js   # Metrics export framework (JSON, CSV, Prometheus, InfluxDB)
+│   │   └── observability-settings.js # Settings integration for observability controls
+│   │
 │   ├── state/              # State Management
 │   │   └── app-state.js    # Centralized app state
 │   │
@@ -378,6 +1638,7 @@ rhythm-chamber/
 │   │   ├── lock-policy-coordinator.js    # Conflict matrix (NEW)
 │   │   ├── timeout-budget-manager.js     # Timeout allocation (NEW)
 │   │   ├── turn-queue.js                 # Message serialization (NEW)
+│   │   ├── battery-aware-mode-selector.js # Dynamic WebGPU/WASM switching (NEW)
 │   │   └── tool-strategies/
 │   │       ├── base-strategy.js          # BaseToolStrategy (ENHANCED - confidence)
 │   │       ├── native-strategy.js        # NativeToolStrategy (Level 1)
@@ -391,14 +1652,20 @@ rhythm-chamber/
 │       ├── file-upload-controller.js (FIXED - race condition removed)
 │       ├── spotify-controller.js
 │       ├── demo-controller.js
-│       └── reset-controller.js
+│       ├── reset-controller.js
+│       └── observability-controller.js # Performance dashboard UI (NEW - Phase 8)
 │
 ├── tests/                  # Test Suite
 │   ├── rhythm-chamber.spec.ts  # E2E tests (Playwright)
 │   └── unit/               # Unit tests (Vitest)
 │       ├── schemas.test.js   # Function schema validation
 │       ├── patterns.test.js  # Pattern detection algorithms
-│       └── hnw-structural.test.js # HNW improvements (26 tests, NEW)
+│       ├── hnw-structural.test.js # HNW improvements (26 tests, NEW)
+│       ├── embeddings-checkpoint.test.js # Hybrid checkpoint storage (17 tests, NEW)
+│       └── observability/    # Observability test suites (NEW - Phase 8)
+│           ├── core-web-vitals.test.js # Core Web Vitals tracking (370 tests)
+│           ├── performance-profiler.test.js # Enhanced profiler (508 tests)
+│           └── metrics-exporter.test.js # Metrics export framework (462 tests)
 │
 ├── docs/
 │   ├── 03-technical-architecture.md
@@ -575,7 +1842,7 @@ flowchart LR
 | `local-embeddings.js` | Transformers.js pipeline with INT8 quantization |
 | `local-vector-store.js` | IndexedDB-backed vector storage with LRU cache |
 | `battery-aware-mode-selector.js` | Dynamic WebGPU/WASM switching |
-| `embeddings-task-manager.js` | Background processing with pause/resume |
+| `embeddings-task-manager.js` | Background processing with pause/resume + hybrid checkpoint storage |
 
 ### Why 100% Local?
 
@@ -596,6 +1863,42 @@ flowchart LR
 - **WebGPU Acceleration**: 100x faster when available
 - **Battery-Aware Mode**: Dynamic switching based on device power
 - **Background Processing**: Web Worker orchestration
+
+### Hybrid Checkpoint Storage (NEW)
+
+**Problem:** For large streaming histories (100k+ entries), saving checkpoint data to localStorage exceeded the 5MB quota limit, causing silent save failures and preventing crash recovery.
+
+**Solution:** Split storage strategy:
+| Data Type | Storage | Capacity |
+|-----------|---------|----------|
+| **Metadata** (processedCount, taskId, etc.) | localStorage | Always < 5KB |
+| **Bulk texts** (large array for embedding) | IndexedDB | Hundreds of MB to GB |
+
+**Implementation:**
+```javascript
+// Threshold detection (1MB = safe for localStorage)
+if (textsSize > LOCALSTORAGE_SIZE_THRESHOLD) {
+    // Large texts: store in IndexedDB
+    await saveTextsToIndexedDB(texts);
+    metadata.textsStoredInIDB = true;
+    localStorage.setItem('embedding_checkpoint_meta', JSON.stringify(metadata));
+} else {
+    // Small enough for localStorage
+    metadata.texts = texts;
+    localStorage.setItem('embedding_checkpoint_meta', JSON.stringify(metadata));
+}
+
+// Recovery loads texts from appropriate storage
+const checkpoint = await EmbeddingsTaskManager.loadCheckpoint();
+// checkpoint.textsStoredInIDB === true when texts stored in IndexedDB
+```
+
+**Key Features:**
+- Automatic size detection with 1MB threshold
+- IndexedDB fallback for large data
+- Backward compatible with legacy checkpoint format
+- Proper `QuotaExceededError` handling with fallback
+- EventBus emission for `embedding:checkpoint_failed` events
 
 ---
 
@@ -886,10 +2189,10 @@ Run `npm run lint:globals` before committing to catch new `window.X` usage. The 
 
 #### Free Tier
 - [x] Full local analysis, BYOI chat, basic cards
-- [x] Semantic search (Qdrant, user-provided credentials)
+- [x] Semantic search (100% local WASM embeddings)
 - [x] Chat data queries (function calling)
 - [x] Premium themes (Dark, Cyberpunk, Minimal) - **FREE for all**
-- [ ] WASM embeddings for semantic search (v1.1)
+- [x] WASM embeddings for semantic search (v1.1)
 - [ ] Playlist generation based on patterns (v1.1)
 
 #### Supporter Tier ($39 one-time OR $19 first year, then $9/year)

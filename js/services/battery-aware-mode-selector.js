@@ -55,6 +55,7 @@ const BATTERY_THRESHOLDS = {
 let currentMode = null;
 let batteryManager = null;
 let initialized = false;
+let cachedCapabilities = null;
 
 // ==========================================
 // Capability Detection
@@ -68,13 +69,14 @@ async function checkWebGPUSupport() {
         return { supported: false, reason: 'WebGPU not available' };
     }
 
+    let device = null;
     try {
         const adapter = await navigator.gpu.requestAdapter();
         if (!adapter) {
             return { supported: false, reason: 'No GPU adapter available' };
         }
 
-        const device = await adapter.requestDevice();
+        device = await adapter.requestDevice();
         const isSupported = !!device;
 
         return {
@@ -84,11 +86,16 @@ async function checkWebGPUSupport() {
         };
     } catch (e) {
         return { supported: false, reason: e.message };
+    } finally {
+        // Clean up GPU device to prevent resource leak
+        if (device && typeof device.destroy === 'function') {
+            device.destroy();
+        }
     }
 }
 
 /**
- * Check if WASM SIMD is available
+ * Check if basic WebAssembly support is available
  */
 function checkWASMSupport() {
     try {
@@ -164,10 +171,15 @@ async function handleBatteryChange() {
  * @returns {Promise<Object>} Mode configuration
  */
 async function getOptimalEmbeddingMode() {
-    const capabilities = {
-        webgpu: await checkWebGPUSupport(),
-        wasm: checkWASMSupport()
-    };
+    // Use cached capabilities if available, otherwise detect and cache
+    if (!cachedCapabilities) {
+        cachedCapabilities = {
+            webgpu: await checkWebGPUSupport(),
+            wasm: checkWASMSupport()
+        };
+    }
+
+    const capabilities = cachedCapabilities;
 
     // Get battery info
     let batteryInfo = null;

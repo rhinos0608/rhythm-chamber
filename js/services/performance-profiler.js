@@ -1,12 +1,13 @@
 /**
- * PerformanceProfiler - Chrome DevTools Performance Markers
+ * PerformanceProfiler - Enhanced Chrome DevTools Performance Markers
  *
  * Provides unified performance profiling API for tracking application performance.
  * Integrates with Chrome DevTools Performance panel for detailed timing analysis.
+ * Enhanced with memory profiling, operation budgets, and performance degradation detection.
  *
  * @module PerformanceProfiler
  * @author Rhythm Chamber Architecture Team
- * @version 1.0.0
+ * @version 2.0.0
  */
 
 /**
@@ -27,8 +28,40 @@ export const PerformanceCategory = Object.freeze({
     ERROR_RECOVERY: 'error_recovery',
     TAB_COORDINATION: 'tab_coordination',
     EMBEDDING_GENERATION: 'embedding_generation',
-    EMBEDDING_INITIALIZATION: 'embedding_initialization'
+    EMBEDDING_INITIALIZATION: 'embedding_initialization',
+    OBSERVABILITY: 'observability'
 });
+
+/**
+ * Performance budget configuration
+ * @typedef {Object} PerformanceBudget
+ * @property {number} threshold - Maximum duration in milliseconds
+ * @property {string} action - Action to take when budget exceeded ('warn', 'error', 'adaptive')
+ * @property {number} degradationThreshold - Percentage threshold for degradation detection
+ */
+
+/**
+ * Memory snapshot record
+ * @typedef {Object} MemorySnapshot
+ * @property {string} id - Unique snapshot ID
+ * @property {number} timestamp - Snapshot timestamp
+ * @property {number} usedJSHeapSize - Used JavaScript heap size in bytes
+ * @property {number} totalJSHeapSize - Total JavaScript heap size in bytes
+ * @property {number} jsHeapSizeLimit - JavaScript heap size limit in bytes
+ * @property {number} usagePercentage - Memory usage percentage
+ * @property {Object} metadata - Additional metadata
+ */
+
+/**
+ * Performance degradation alert
+ * @typedef {Object} DegradationAlert
+ * @property {string} id - Alert ID
+ * @property {string} severity - Severity level ('warning', 'critical')
+ * @property {string} message - Alert message
+ * @property {string} category - Affected category
+ * @property {number} timestamp - Alert timestamp
+ * @property {Object} details - Detailed information
+ */
 
 /**
  * Performance measurement record
@@ -86,6 +119,48 @@ export class PerformanceProfiler {
      * @type {number}
      */
     _maxMeasurements = 1000;
+
+    /**
+     * @private
+     * @type {Map<PerformanceCategory, PerformanceBudget>}
+     */
+    _performanceBudgets = new Map();
+
+    /**
+     * @private
+     * @type {Array<MemorySnapshot>}
+     */
+    _memorySnapshots = [];
+
+    /**
+     * @private
+     * @type {number}
+     */
+    _maxMemorySnapshots = 100;
+
+    /**
+     * @private
+     * @type {Array<DegradationAlert>}
+     */
+    _degradationAlerts = [];
+
+    /**
+     * @private
+     * @type {number}
+     */
+    _maxDegradationAlerts = 50;
+
+    /**
+     * @private
+     * @type {Map<PerformanceCategory, Array<number>>}
+     */
+    _baselinePerformance = new Map();
+
+    /**
+     * @private
+     * @type {boolean}
+     */
+    _memoryProfilingEnabled = true;
 
     /**
      * Initialize the PerformanceProfiler
@@ -558,6 +633,362 @@ export class PerformanceProfiler {
      */
     isEnabled() {
         return this._enabled;
+    }
+
+    /**
+     * Take a memory snapshot
+     * @public
+     * @param {Object} metadata - Additional metadata
+     * @returns {MemorySnapshot|null} Memory snapshot or null if unavailable
+     */
+    takeMemorySnapshot(metadata = {}) {
+        if (!this._enabled || !this._memoryProfilingEnabled) {
+            return null;
+        }
+
+        if (!performance.memory) {
+            console.warn('[PerformanceProfiler] Memory API not available');
+            return null;
+        }
+
+        try {
+            const memory = performance.memory;
+            const snapshot = {
+                id: `memory_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                timestamp: Date.now(),
+                usedJSHeapSize: memory.usedJSHeapSize,
+                totalJSHeapSize: memory.totalJSHeapSize,
+                jsHeapSizeLimit: memory.jsHeapSizeLimit,
+                usagePercentage: (memory.usedJSHeapSize / memory.jsHeapSizeLimit) * 100,
+                metadata
+            };
+
+            // Store snapshot with pruning
+            this._memorySnapshots.push(snapshot);
+            if (this._memorySnapshots.length > this._maxMemorySnapshots) {
+                this._memorySnapshots.shift();
+            }
+
+            // Check for memory degradation
+            this._checkMemoryDegradation(snapshot);
+
+            return snapshot;
+        } catch (error) {
+            console.warn('[PerformanceProfiler] Failed to take memory snapshot:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Get memory statistics
+     * @public
+     * @returns {Object} Memory statistics
+     */
+    getMemoryStatistics() {
+        if (this._memorySnapshots.length === 0) {
+            return {
+                snapshotCount: 0,
+                currentUsage: null,
+                averageUsage: null,
+                peakUsage: null,
+                usageTrend: 'unknown'
+            };
+        }
+
+        const usages = this._memorySnapshots.map(s => s.usagePercentage);
+        const current = this._memorySnapshots[this._memorySnapshots.length - 1];
+        const average = usages.reduce((sum, u) => sum + u, 0) / usages.length;
+        const peak = Math.max(...usages);
+
+        // Determine trend
+        const recent = usages.slice(-10);
+        const older = usages.slice(0, 10);
+        const avgRecent = recent.reduce((sum, u) => sum + u, 0) / recent.length;
+        const avgOlder = older.reduce((sum, u) => sum + u, 0) / older.length;
+
+        let trend = 'stable';
+        if (avgRecent > avgOlder * 1.2) {
+            trend = 'increasing';
+        } else if (avgRecent < avgOlder * 0.8) {
+            trend = 'decreasing';
+        }
+
+        return {
+            snapshotCount: this._memorySnapshots.length,
+            currentUsage: current.usagePercentage,
+            averageUsage: average,
+            peakUsage: peak,
+            usageTrend: trend,
+            currentBytes: {
+                used: current.usedJSHeapSize,
+                total: current.totalJSHeapSize,
+                limit: current.jsHeapSizeLimit
+            }
+        };
+    }
+
+    /**
+     * Set performance budget for a category
+     * @public
+     * @param {PerformanceCategory} category - Category to set budget for
+     * @param {PerformanceBudget} budget - Budget configuration
+     */
+    setPerformanceBudget(category, budget) {
+        this._performanceBudgets.set(category, {
+            threshold: budget.threshold || 1000,
+            action: budget.action || 'warn',
+            degradationThreshold: budget.degradationThreshold || 50
+        });
+    }
+
+    /**
+     * Check performance budget for a measurement
+     * @private
+     * @param {PerformanceMeasurement} measurement - Measurement to check
+     */
+    _checkPerformanceBudget(measurement) {
+        const budget = this._performanceBudgets.get(measurement.category);
+        if (!budget) return;
+
+        if (measurement.duration > budget.threshold) {
+            const alert = {
+                id: `budget_alert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                severity: budget.action === 'error' ? 'critical' : 'warning',
+                message: `Performance budget exceeded for ${measurement.category}: ${measurement.duration.toFixed(2)}ms > ${budget.threshold}ms`,
+                category: measurement.category,
+                timestamp: Date.now(),
+                details: {
+                    measurement: measurement.name,
+                    duration: measurement.duration,
+                    threshold: budget.threshold,
+                    budgetAction: budget.action
+                }
+            };
+
+            this._addDegradationAlert(alert);
+        }
+    }
+
+    /**
+     * Check for performance degradation
+     * @private
+     * @param {PerformanceMeasurement} measurement - Measurement to check
+     */
+    _checkPerformanceDegradation(measurement) {
+        const baseline = this._baselinePerformance.get(measurement.category);
+        if (!baseline || baseline.length < 5) return;
+
+        const avgBaseline = baseline.reduce((sum, val) => sum + val, 0) / baseline.length;
+        const degradation = ((measurement.duration - avgBaseline) / avgBaseline) * 100;
+
+        const budget = this._performanceBudgets.get(measurement.category);
+        const threshold = budget?.degradationThreshold || 50;
+
+        if (degradation > threshold) {
+            const alert = {
+                id: `degradation_alert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                severity: degradation > threshold * 2 ? 'critical' : 'warning',
+                message: `Performance degradation detected in ${measurement.category}: ${degradation.toFixed(1)}% slower than baseline`,
+                category: measurement.category,
+                timestamp: Date.now(),
+                details: {
+                    measurement: measurement.name,
+                    currentDuration: measurement.duration,
+                    baselineDuration: avgBaseline,
+                    degradation: degradation
+                }
+            };
+
+            this._addDegradationAlert(alert);
+        }
+    }
+
+    /**
+     * Check for memory degradation
+     * @private
+     * @param {MemorySnapshot} snapshot - Memory snapshot
+     */
+    _checkMemoryDegradation(snapshot) {
+        if (this._memorySnapshots.length < 5) return;
+
+        const recentSnapshots = this._memorySnapshots.slice(-10);
+        const avgUsage = recentSnapshots.reduce((sum, s) => sum + s.usagePercentage, 0) / recentSnapshots.length;
+        const threshold = 80; // 80% memory usage threshold
+
+        if (snapshot.usagePercentage > threshold && avgUsage > threshold * 0.8) {
+            const alert = {
+                id: `memory_alert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                severity: snapshot.usagePercentage > 90 ? 'critical' : 'warning',
+                message: `High memory usage detected: ${snapshot.usagePercentage.toFixed(1)}% of heap limit`,
+                category: 'memory',
+                timestamp: Date.now(),
+                details: {
+                    currentUsage: snapshot.usagePercentage,
+                    usedBytes: snapshot.usedJSHeapSize,
+                    totalBytes: snapshot.totalJSHeapSize,
+                    limitBytes: snapshot.jsHeapSizeLimit
+                }
+            };
+
+            this._addDegradationAlert(alert);
+        }
+    }
+
+    /**
+     * Add degradation alert with pruning
+     * @private
+     * @param {DegradationAlert} alert - Alert to add
+     */
+    _addDegradationAlert(alert) {
+        this._degradationAlerts.push(alert);
+
+        // Prune old alerts
+        if (this._degradationAlerts.length > this._maxDegradationAlerts) {
+            this._degradationAlerts.shift();
+        }
+
+        // Log critical alerts
+        if (alert.severity === 'critical') {
+            console.error(`[PerformanceProfiler] ${alert.message}`, alert.details);
+        } else {
+            console.warn(`[PerformanceProfiler] ${alert.message}`);
+        }
+    }
+
+    /**
+     * Get degradation alerts
+     * @public
+     * @param {string} severity - Filter by severity (optional)
+     * @returns {Array<DegradationAlert>} Degradation alerts
+     */
+    getDegradationAlerts(severity = null) {
+        if (severity) {
+            return this._degradationAlerts.filter(alert => alert.severity === severity);
+        }
+        return [...this._degradationAlerts];
+    }
+
+    /**
+     * Clear degradation alerts
+     * @public
+     */
+    clearDegradationAlerts() {
+        this._degradationAlerts = [];
+        console.log('[PerformanceProfiler] Cleared degradation alerts');
+    }
+
+    /**
+     * Establish performance baseline for a category
+     * @public
+     * @param {PerformanceCategory} category - Category to establish baseline for
+     * @param {number} sampleSize - Number of measurements to use for baseline
+     */
+    establishBaseline(category, sampleSize = 10) {
+        const measurements = this.getMeasurementsByCategory(category);
+        const recent = measurements.slice(-sampleSize);
+
+        if (recent.length >= sampleSize) {
+            const durations = recent.map(m => m.duration);
+            this._baselinePerformance.set(category, durations);
+            console.log(`[PerformanceProfiler] Established baseline for ${category} with ${durations.length} samples`);
+        }
+    }
+
+    /**
+     * Get comprehensive performance report
+     * @public
+     * @returns {Object} Comprehensive performance report
+     */
+    getComprehensiveReport() {
+        const baseReport = this.getPerformanceReport();
+
+        return {
+            ...baseReport,
+            memory: this.getMemoryStatistics(),
+            degradation: {
+                alerts: this.getDegradationAlerts(),
+                criticalCount: this.getDegradationAlerts('critical').length,
+                warningCount: this.getDegradationAlerts('warning').length
+            },
+            budgets: this._getBudgetStatus(),
+            memorySnapshots: this._memorySnapshots.slice(-20) // Last 20 snapshots
+        };
+    }
+
+    /**
+     * Get budget status for all categories
+     * @private
+     * @returns {Object} Budget status
+     */
+    _getBudgetStatus() {
+        const budgets = {};
+
+        for (const [category, budget] of this._performanceBudgets) {
+            const measurements = this.getMeasurementsByCategory(category);
+            const recent = measurements.slice(-10);
+
+            if (recent.length > 0) {
+                const avgDuration = recent.reduce((sum, m) => sum + m.duration, 0) / recent.length;
+                const maxDuration = Math.max(...recent.map(m => m.duration));
+                const budgetExceeded = recent.filter(m => m.duration > budget.threshold).length;
+
+                budgets[category] = {
+                    threshold: budget.threshold,
+                    action: budget.action,
+                    averageDuration: avgDuration,
+                    maxDuration,
+                    budgetExceededCount: budgetExceeded,
+                    budgetExceededPercentage: (budgetExceeded / recent.length) * 100
+                };
+            }
+        }
+
+        return budgets;
+    }
+
+    /**
+     * Set up automatic memory profiling interval
+     * @public
+     * @param {number} intervalMs - Interval in milliseconds
+     * @returns {Function} Stop function
+     */
+    startMemoryProfiling(intervalMs = 30000) {
+        if (!this._memoryProfilingEnabled) {
+            return () => {};
+        }
+
+        const intervalId = setInterval(() => {
+            this.takeMemorySnapshot({ automatic: true });
+        }, intervalMs);
+
+        return () => clearInterval(intervalId);
+    }
+
+    /**
+     * Enable memory profiling
+     * @public
+     */
+    enableMemoryProfiling() {
+        this._memoryProfilingEnabled = true;
+        console.log('[PerformanceProfiler] Memory profiling enabled');
+    }
+
+    /**
+     * Disable memory profiling
+     * @public
+     */
+    disableMemoryProfiling() {
+        this._memoryProfilingEnabled = false;
+        console.log('[PerformanceProfiler] Memory profiling disabled');
+    }
+
+    /**
+     * Clear memory snapshots
+     * @public
+     */
+    clearMemorySnapshots() {
+        this._memorySnapshots = [];
+        console.log('[PerformanceProfiler] Cleared memory snapshots');
     }
 }
 

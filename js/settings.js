@@ -8,6 +8,7 @@
 
 import { ModuleRegistry } from './module-registry.js';
 import { StorageBreakdownUI } from './storage-breakdown-ui.js';
+import ProviderHealthMonitor from './services/provider-health-monitor.js';
 
 // Available LLM providers
 const LLM_PROVIDERS = [
@@ -398,7 +399,21 @@ function showSettingsModal() {
                             ${LLM_PROVIDERS.find(p => p.id === settings.llm.provider)?.description || ''}
                         </span>
                     </div>
-                    
+
+                    <!-- Provider Health Monitoring -->
+                    <div class="provider-health-section">
+                        <div class="provider-health-header">
+                            <span class="provider-health-title">Provider Health Status</span>
+                            <div class="provider-health-overview">
+                                <span class="provider-health-badge" id="provider-health-overall-badge">Checking...</span>
+                            </div>
+                        </div>
+                        <div class="provider-health-list" id="provider-health-list">
+                            <div class="provider-health-item">Loading provider health...</div>
+                        </div>
+                        <div class="provider-health-recommendation" id="provider-health-recommendation" style="display: none;"></div>
+                    </div>
+
                     <!-- Ollama Status (shown when ollama selected) -->
                     <div id="ollama-status" class="settings-field provider-section" style="display: ${settings.llm.provider === 'ollama' ? 'block' : 'none'}">
                         <div class="status-indicator" id="ollama-connection-status">
@@ -718,6 +733,9 @@ function showSettingsModal() {
 
     // Initialize storage breakdown UI
     initStorageBreakdown();
+
+    // Initialize provider health monitoring
+    initProviderHealthMonitoring();
 }
 
 /**
@@ -729,6 +747,144 @@ function hideSettingsModal() {
         modal.classList.add('closing');
         setTimeout(() => modal.remove(), 200);
     }
+
+    // Stop health monitoring when modal closes
+    if (ProviderHealthMonitor) {
+        ProviderHealthMonitor.stopMonitoring();
+    }
+}
+
+/**
+ * Initialize provider health monitoring UI
+ */
+function initProviderHealthMonitoring() {
+    if (!ProviderHealthMonitor) return;
+
+    // Subscribe to health updates
+    ProviderHealthMonitor.onHealthUpdate(updateProviderHealthUI);
+
+    // Initial update
+    updateProviderHealthUI();
+}
+
+/**
+ * Update provider health UI
+ */
+function updateProviderHealthUI() {
+    const healthSnapshot = ProviderHealthMonitor.getHealthSnapshot();
+    const healthSummary = ProviderHealthMonitor.getHealthSummary();
+
+    // Update overall badge
+    const overallBadge = document.getElementById('provider-health-overall-badge');
+    if (overallBadge) {
+        overallBadge.textContent = formatHealthStatus(healthSummary.overallStatus);
+        overallBadge.className = 'provider-health-badge ' + healthSummary.overallStatus;
+    }
+
+    // Update provider list
+    const providerList = document.getElementById('provider-health-list');
+    if (providerList) {
+        providerList.innerHTML = '';
+
+        const providers = ['openrouter', 'ollama', 'lmstudio'];
+        const currentProvider = getSettings().llm.provider;
+
+        for (const provider of providers) {
+            const health = healthSnapshot[provider];
+            if (!health) continue;
+
+            const item = createProviderHealthItem(provider, health, currentProvider);
+            providerList.appendChild(item);
+        }
+    }
+
+    // Update recommendation for current provider
+    updateProviderRecommendation(currentProvider, healthSnapshot[currentProvider]);
+}
+
+/**
+ * Create provider health item element
+ */
+function createProviderHealthItem(provider, health, currentProvider) {
+    const item = document.createElement('div');
+    item.className = 'provider-health-item';
+
+    const providerName = LLM_PROVIDERS.find(p => p.id === provider)?.name || provider;
+
+    item.innerHTML = `
+        <div class="provider-health-info">
+            <span class="status-dot ${health.status}"></span>
+            <span class="provider-health-name">${providerName}</span>
+            <span class="provider-health-status">${formatHealthStatus(health.status)}</span>
+            ${provider === currentProvider ? '<span class="provider-health-badge">Current</span>' : ''}
+        </div>
+        <div class="provider-health-metrics">
+            ${health.avgLatencyMs > 0 ? `<span class="provider-health-metric">⏱️ ${Math.round(health.avgLatencyMs)}ms</span>` : ''}
+            <span class="provider-health-metric">✅ ${health.successCount}</span>
+            ${health.failureCount > 0 ? `<span class="provider-health-metric">❌ ${health.failureCount}</span>` : ''}
+        </div>
+        <div class="provider-health-actions">
+            ${createProviderActions(provider, health, currentProvider)}
+        </div>
+    `;
+
+    return item;
+}
+
+/**
+ * Create provider action buttons
+ */
+function createProviderActions(provider, health, currentProvider) {
+    if (provider === currentProvider) {
+        if (health.status === 'unhealthy' || health.status === 'blacklisted') {
+            return `<button class="provider-health-action primary" onclick="Settings.switchProviderFromHealth('${provider}')">Switch Provider</button>`;
+        }
+        return '';
+    }
+
+    return `<button class="provider-health-action" onclick="Settings.switchProviderFromHealth('${provider}')">Switch to ${LLM_PROVIDERS.find(p => p.id === provider)?.name.split(' ')[0]}</button>`;
+}
+
+/**
+ * Format health status for display
+ */
+function formatHealthStatus(status) {
+    switch (status) {
+        case 'healthy': return 'Healthy';
+        case 'degraded': return 'Slow';
+        case 'unhealthy': return 'Unhealthy';
+        case 'blacklisted': return 'Unavailable';
+        case 'unknown': return 'Unknown';
+        default: return 'Checking...';
+    }
+}
+
+/**
+ * Update provider recommendation
+ */
+function updateProviderRecommendation(provider, health) {
+    const recommendationEl = document.getElementById('provider-health-recommendation');
+    if (!recommendationEl || !health) return;
+
+    const action = ProviderHealthMonitor.getRecommendedAction(provider);
+
+    if (action.action !== 'none') {
+        recommendationEl.style.display = 'block';
+        recommendationEl.innerHTML = `<strong>Recommendation:</strong> ${action.message}`;
+    } else {
+        recommendationEl.style.display = 'none';
+    }
+}
+
+/**
+ * Switch provider from health UI
+ */
+function switchProviderFromHealth(provider) {
+    const settings = getSettings();
+    settings.llm.provider = provider;
+    saveSettings(settings);
+    showSettingsModal(); // Refresh modal
+    showToast(`Switched to ${LLM_PROVIDERS.find(p => p.id === provider)?.name}`);
 }
 
 /**
@@ -1688,6 +1844,10 @@ export const Settings = {
     checkOllamaConnection,
     testOllamaConnection,
     refreshOllamaModels,
+    // Provider health monitoring
+    initProviderHealthMonitoring,
+    updateProviderHealthUI,
+    switchProviderFromHealth,
     // Tools modal
     showToolsModal,
     hideToolsModal,

@@ -10,6 +10,7 @@
 import { VectorClock } from './vector-clock.js';
 import { WaveTelemetry } from './wave-telemetry.js';
 import { EventBus } from './event-bus.js';
+import { DeviceDetection } from './device-detection.js';
 
 // ==========================================
 // Constants
@@ -77,7 +78,10 @@ const MESSAGE_TYPES = {
     CANDIDATE: 'CANDIDATE',
     CLAIM_PRIMARY: 'CLAIM_PRIMARY',
     RELEASE_PRIMARY: 'RELEASE_PRIMARY',
-    HEARTBEAT: 'HEARTBEAT'
+    HEARTBEAT: 'HEARTBEAT',
+    EVENT_WATERMARK: 'EVENT_WATERMARK',     // Event replay watermark broadcast
+    REPLAY_REQUEST: 'REPLAY_REQUEST',       // Request event replay from primary
+    REPLAY_RESPONSE: 'REPLAY_RESPONSE'      // Replay data from primary
 };
 
 /**
@@ -239,6 +243,9 @@ let heartbeatInterval = null;
 let heartbeatCheckInterval = null;
 let lastLeaderHeartbeat = Date.now();
 let lastLeaderVectorClock = vectorClock.toJSON(); // Track Vector clock for heartbeat
+let adaptiveTiming = null;
+let visibilityMonitorCleanup = null;
+let networkMonitorCleanup = null;
 
 // Module-scoped election state to prevent race conditions
 let electionCandidates = new Set();
@@ -246,9 +253,43 @@ let receivedPrimaryClaim = false;
 let electionAborted = false;
 let lastHeartbeatSentTime = 0; // Track for WaveTelemetry
 
+// Event replay watermark tracking
+let lastEventWatermark = -1; // Last event sequence number processed
+let knownWatermarks = new Map(); // Track watermarks from other tabs: tabId -> watermark
+let watermarkBroadcastInterval = null;
+const WATERMARK_BROADCAST_MS = 5000; // Broadcast watermark every 5 seconds
+
 // ==========================================
 // Core Functions
 // ==========================================
+
+/**
+ * Initialize adaptive timing based on device and network conditions
+ * HNW Wave: Mobile-aware timing configuration
+ */
+function initAdaptiveTiming() {
+    adaptiveTiming = DeviceDetection.getAdaptiveTiming();
+
+    // Update heartbeat configuration
+    HEARTBEAT_INTERVAL_MS = adaptiveTiming.heartbeat.intervalMs;
+    MAX_MISSED_HEARTBEATS = adaptiveTiming.heartbeat.maxMissed;
+
+    // Update TimingConfig for consistency
+    TimingConfig.heartbeat.intervalMs = HEARTBEAT_INTERVAL_MS;
+    TimingConfig.heartbeat.maxMissed = MAX_MISSED_HEARTBEATS;
+    TimingConfig.heartbeat.visibilityWaitMs = adaptiveTiming.heartbeat.visibilityWaitMs;
+
+    // Recalculate election window for mobile
+    ELECTION_WINDOW_MS = adaptiveTiming.election.windowMs;
+
+    console.log('[TabCoordination] Adaptive timing initialized:', {
+        deviceType: DeviceDetection.getDeviceInfo().deviceType,
+        heartbeatInterval: HEARTBEAT_INTERVAL_MS,
+        maxMissed: MAX_MISSED_HEARTBEATS,
+        visibilityWait: adaptiveTiming.heartbeat.visibilityWaitMs,
+        networkQuality: DeviceDetection.getNetworkState().quality
+    });
+}
 
 /**
  * Proactive clock skew calibration
@@ -300,13 +341,17 @@ async function calibrateClockSkew() {
 /**
  * Initialize tab coordination service
  * Uses deterministic leader election (lowest tab ID wins)
- * 
+ *
  * HNW Fix: Replaced 100ms timeout with proper coordination protocol
  * - All tabs announce candidacy simultaneously
  * - Wait 300ms for all candidates to announce (3x original timeout for safety)
  * - Lowest lexicographic tab ID wins (deterministic resolution)
  * - Eliminates race condition where two tabs both claim primary
- * 
+ *
+ * HNW Wave: Adaptive timing for mobile devices
+ * - Adjusts heartbeat interval based on device type and network quality
+ * - Uses visibility-aware heartbeat monitoring for background tabs
+ *
  * @returns {Promise<boolean>} True if this tab won election
  */
 async function init() {
@@ -314,6 +359,9 @@ async function init() {
         console.warn('[TabCoordination] BroadcastChannel not supported, skipping cross-tab coordination');
         return true; // Assume primary if no coordination available
     }
+
+    // HNW Wave: Initialize adaptive timing before election
+    initAdaptiveTiming();
 
     // HNW Wave: Proactive clock calibration before election
     await calibrateClockSkew();
@@ -363,9 +411,16 @@ async function init() {
     // Set up cleanup on unload
     window.addEventListener('beforeunload', cleanup);
 
+    // HNW Wave: Set up visibility monitoring for adaptive heartbeat
+    visibilityMonitorCleanup = DeviceDetection.startVisibilityMonitoring();
+
+    // HNW Wave: Set up network monitoring for adaptive failover
+    networkMonitorCleanup = setupNetworkMonitoring();
+
     // Set up heartbeat system
     if (isPrimaryTab) {
         startHeartbeat();
+        startWatermarkBroadcast(); // Start watermark broadcast as primary
     } else {
         startHeartbeatMonitor();
     }
@@ -439,6 +494,30 @@ function createMessageHandler() {
                     }
                 }
                 break;
+
+            case MESSAGE_TYPES.EVENT_WATERMARK:
+                // Received watermark broadcast from another tab
+                if (tabId !== TAB_ID && event.data.watermark !== undefined) {
+                    knownWatermarks.set(tabId, event.data.watermark);
+                    if (debugMode) {
+                        console.log(`[TabCoordination] Received watermark ${event.data.watermark} from tab ${tabId}`);
+                    }
+                }
+                break;
+
+            case MESSAGE_TYPES.REPLAY_REQUEST:
+                // Secondary tab requesting event replay
+                if (isPrimaryTab && tabId !== TAB_ID) {
+                    handleReplayRequest(tabId, event.data.fromWatermark);
+                }
+                break;
+
+            case MESSAGE_TYPES.REPLAY_RESPONSE:
+                // Primary tab responding with replay data
+                if (!isPrimaryTab && tabId !== TAB_ID) {
+                    handleReplayResponse(event.data.events);
+                }
+                break;
         }
     };
 }
@@ -461,6 +540,9 @@ function claimPrimary() {
  */
 function handleSecondaryMode() {
     console.log('[TabCoordination] Entering secondary mode (read-only)');
+
+    // Stop watermark broadcast as we're now secondary
+    stopWatermarkBroadcast();
 
     // Show warning modal if available
     const modal = document.getElementById('multi-tab-modal');
@@ -551,6 +633,7 @@ async function initiateReElection() {
         isPrimaryTab = true;
         claimPrimary();
         startHeartbeat();
+        startWatermarkBroadcast(); // Start watermark broadcast as new primary
         stopHeartbeatMonitor();
         console.log('[TabCoordination] Became primary after re-election');
     }
@@ -578,6 +661,7 @@ function startHeartbeat() {
 /**
  * Send a heartbeat with both wall-clock and Vector clock timestamps
  * HNW Wave: Dual timestamp system prevents clock skew issues
+ * HNW Wave: Heartbeat quality monitoring for mobile
  */
 function sendHeartbeat() {
     const wallClockTime = Date.now();
@@ -587,6 +671,9 @@ function sendHeartbeat() {
     if (lastHeartbeatSentTime > 0) {
         const actualInterval = wallClockTime - lastHeartbeatSentTime;
         WaveTelemetry.record('heartbeat_interval', actualInterval);
+
+        // HNW Wave: Record heartbeat quality for mobile detection
+        DeviceDetection.recordHeartbeatQuality(actualInterval);
     }
     lastHeartbeatSentTime = wallClockTime;
 
@@ -596,7 +683,12 @@ function sendHeartbeat() {
         tabId: TAB_ID,
         timestamp: wallClockTime,
         vectorClock: currentVectorClock,
-        senderId: vectorClock.processId
+        senderId: vectorClock.processId,
+        // HNW Wave: Include device info for adaptive follower behavior
+        deviceInfo: {
+            isMobile: DeviceDetection.isMobile(),
+            networkQuality: DeviceDetection.getNetworkState().quality
+        }
     });
 
     // Also store in localStorage for cross-tab fallback
@@ -668,11 +760,12 @@ function startHeartbeatMonitor() {
 
         // Check if heartbeat is overdue with skew tolerance
         if (timeSinceLastHeartbeat > maxAllowedGap) {
-            // HNW Wave: Visibility-aware heartbeat - wait before promoting if tab may be backgrounded
+            // HNW Wave: Visibility-aware heartbeat - adaptive wait before promoting if tab may be backgrounded
             const isPageHidden = typeof document !== 'undefined' && document.hidden;
             if (isPageHidden) {
-                // Primary may just be backgrounded - wait 5s before promoting
-                console.log(`[TabCoordination] Leader heartbeat missed, but page hidden. Waiting 5s before re-election...`);
+                // Primary may just be backgrounded - use adaptive visibility wait
+                const visibilityWaitMs = DeviceDetection.getRecommendedVisibilityWait();
+                console.log(`[TabCoordination] Leader heartbeat missed, but page hidden. Waiting ${visibilityWaitMs}ms before re-election...`);
                 clearInterval(heartbeatCheckInterval);
                 setTimeout(async () => {
                     // Re-check after delay
@@ -684,7 +777,7 @@ function startHeartbeatMonitor() {
                         console.log(`[TabCoordination] Heartbeat received during visibility wait, resuming monitor`);
                         startHeartbeatMonitor(); // Resume monitoring
                     }
-                }, 5000);
+                }, visibilityWaitMs);
                 return; // Exit early
             }
 
@@ -707,6 +800,252 @@ function stopHeartbeatMonitor() {
     if (heartbeatCheckInterval) {
         clearInterval(heartbeatCheckInterval);
         heartbeatCheckInterval = null;
+    }
+}
+
+/**
+ * Setup network monitoring for adaptive failover behavior
+ * HNW Network: Adjust failover behavior based on network quality
+ *
+ * @returns {Function} Cleanup function
+ */
+function setupNetworkMonitoring() {
+    const networkCleanup = DeviceDetection.startNetworkMonitoring();
+
+    const handleNetworkChange = (newQuality, oldQuality) => {
+        if (!adaptiveTiming) return;
+
+        console.log(`[TabCoordination] Network quality changed: ${oldQuality} → ${newQuality}`);
+
+        // Re-initialize adaptive timing based on new network conditions
+        initAdaptiveTiming();
+
+        // Update heartbeat intervals if we're the leader
+        if (isPrimaryTab && heartbeatInterval) {
+            stopHeartbeat();
+            startHeartbeat();
+            console.log('[TabCoordination] Heartbeat restarted with adaptive timing:', {
+                interval: HEARTBEAT_INTERVAL_MS,
+                maxMissed: MAX_MISSED_HEARTBEATS
+            });
+        }
+
+        // Update monitor intervals if we're a follower
+        if (!isPrimaryTab && heartbeatCheckInterval) {
+            stopHeartbeatMonitor();
+            startHeartbeatMonitor();
+        }
+    };
+
+    const unsubscribe = DeviceDetection.onNetworkChange(handleNetworkChange);
+
+    return () => {
+        networkCleanup();
+        unsubscribe();
+    };
+}
+
+// ==========================================
+// Event Replay Coordination
+// ==========================================
+
+/**
+ * Start broadcasting event watermark
+ * Only primary tab broadcasts its watermark for secondary tabs to track
+ */
+function startWatermarkBroadcast() {
+    if (watermarkBroadcastInterval) {
+        clearInterval(watermarkBroadcastInterval);
+    }
+
+    watermarkBroadcastInterval = setInterval(() => {
+        broadcastWatermark();
+    }, WATERMARK_BROADCAST_MS);
+
+    console.log('[TabCoordination] Started watermark broadcast');
+}
+
+/**
+ * Stop broadcasting event watermark
+ */
+function stopWatermarkBroadcast() {
+    if (watermarkBroadcastInterval) {
+        clearInterval(watermarkBroadcastInterval);
+        watermarkBroadcastInterval = null;
+    }
+}
+
+/**
+ * Broadcast current event watermark to all tabs
+ */
+function broadcastWatermark() {
+    if (!broadcastChannel) return;
+
+    broadcastChannel.postMessage({
+        type: MESSAGE_TYPES.EVENT_WATERMARK,
+        tabId: TAB_ID,
+        watermark: lastEventWatermark,
+        vectorClock: vectorClock.tick(),
+        senderId: vectorClock.processId
+    });
+}
+
+/**
+ * Update local event watermark
+ * @param {number} watermark - New watermark value
+ */
+function updateEventWatermark(watermark) {
+    lastEventWatermark = watermark;
+    // Broadcast watermark update immediately if primary
+    if (isPrimaryTab) {
+        broadcastWatermark();
+    }
+}
+
+/**
+ * Get current event watermark
+ * @returns {number} Current watermark
+ */
+function getEventWatermark() {
+    return lastEventWatermark;
+}
+
+/**
+ * Get known watermarks from all tabs
+ * @returns {Map<string, number>} Map of tab IDs to watermarks
+ */
+function getKnownWatermarks() {
+    return new Map(knownWatermarks);
+}
+
+/**
+ * Handle replay request from secondary tab (primary only)
+ * @param {string} requestingTabId - Tab requesting replay
+ * @param {number} fromWatermark - Starting watermark for replay
+ */
+async function handleReplayRequest(requestingTabId, fromWatermark) {
+    if (!isPrimaryTab) return;
+
+    try {
+        console.log(`[TabCoordination] Handling replay request from tab ${requestingTabId} from watermark ${fromWatermark}`);
+
+        // Import EventBus here to avoid circular dependency
+        const { EventBus } = await import('./event-bus.js');
+
+        // Get events from log
+        const events = await EventBus.getEventLogStats();
+        const eventLog = await EventBus.replayEvents({
+            fromSequenceNumber: fromWatermark,
+            count: 1000,
+            forward: true
+        });
+
+        // Send replay response to requesting tab
+        broadcastChannel?.postMessage({
+            type: MESSAGE_TYPES.REPLAY_RESPONSE,
+            tabId: TAB_ID,
+            events: eventLog,
+            vectorClock: vectorClock.tick(),
+            senderId: vectorClock.processId
+        });
+    } catch (error) {
+        console.error('[TabCoordination] Error handling replay request:', error);
+    }
+}
+
+/**
+ * Handle replay response from primary tab (secondary only)
+ * @param {Array} events - Events to replay
+ */
+async function handleReplayResponse(events) {
+    if (isPrimaryTab) return;
+
+    try {
+        console.log(`[TabCoordination] Received replay response with ${events.length} events`);
+
+        // Import EventBus here to avoid circular dependency
+        const { EventBus } = await import('./event-bus.js');
+
+        // Replay events
+        for (const event of events) {
+            await EventBus.emit(event.type, event.payload, {
+                skipEventLog: true,
+                domain: 'global'
+            });
+        }
+
+        // Update watermark
+        if (events.length > 0) {
+            const lastEvent = events[events.length - 1];
+            updateEventWatermark(lastEvent.sequenceNumber);
+        }
+
+        console.log('[TabCoordination] Replay complete');
+    } catch (error) {
+        console.error('[TabCoordination] Error handling replay response:', error);
+    }
+}
+
+/**
+ * Request event replay from primary tab (secondary only)
+ * @param {number} fromWatermark - Starting watermark for replay
+ */
+async function requestEventReplay(fromWatermark) {
+    if (isPrimaryTab) {
+        console.warn('[TabCoordination] Primary tab should not request replay');
+        return;
+    }
+
+    if (!broadcastChannel) {
+        console.warn('[TabCoordination] No broadcast channel available for replay request');
+        return;
+    }
+
+    console.log(`[TabCoordination] Requesting event replay from watermark ${fromWatermark}`);
+
+    broadcastChannel.postMessage({
+        type: MESSAGE_TYPES.REPLAY_REQUEST,
+        tabId: TAB_ID,
+        fromWatermark,
+        vectorClock: vectorClock.tick(),
+        senderId: vectorClock.processId
+    });
+}
+
+/**
+ * Check if replay is needed based on watermarks
+ * @returns {boolean} True if replay is needed
+ */
+function needsReplay() {
+    if (isPrimaryTab) return false;
+
+    // Get highest watermark from known tabs
+    let highestWatermark = lastEventWatermark;
+    for (const [tabId, watermark] of knownWatermarks.entries()) {
+        if (watermark > highestWatermark) {
+            highestWatermark = watermark;
+        }
+    }
+
+    return highestWatermark > lastEventWatermark;
+}
+
+/**
+ * Perform automatic replay if needed
+ * @returns {Promise<boolean>} True if replay was performed
+ */
+async function autoReplayIfNeeded() {
+    if (!needsReplay()) return false;
+
+    try {
+        const highestWatermark = Math.max(...knownWatermarks.values(), lastEventWatermark);
+        console.log(`[TabCoordination] Auto-replaying events from ${lastEventWatermark} to ${highestWatermark}`);
+
+        await requestEventReplay(lastEventWatermark);
+        return true;
+    } catch (error) {
+        console.error('[TabCoordination] Auto-replay failed:', error);
+        return false;
     }
 }
 
@@ -827,6 +1166,9 @@ function cleanup() {
     stopHeartbeat();
     stopHeartbeatMonitor();
 
+    // Stop watermark broadcast
+    stopWatermarkBroadcast();
+
     if (isPrimaryTab && broadcastChannel) {
         broadcastChannel.postMessage({
             type: MESSAGE_TYPES.RELEASE_PRIMARY,
@@ -841,6 +1183,17 @@ function cleanup() {
 
     if (electionTimeout) {
         clearTimeout(electionTimeout);
+    }
+
+    // HNW Wave: Cleanup monitoring
+    if (visibilityMonitorCleanup) {
+        visibilityMonitorCleanup();
+        visibilityMonitorCleanup = null;
+    }
+
+    if (networkMonitorCleanup) {
+        networkMonitorCleanup();
+        networkMonitorCleanup = null;
     }
 
     // Reset election state
@@ -878,10 +1231,24 @@ const TabCoordinator = {
     getClockSkewHistory: () => [...clockSkewTracker.skewSamples],
     resetClockSkewTracking: () => clockSkewTracker.reset(),
 
+    // HNW Wave: Adaptive timing and device detection
+    getAdaptiveTiming: () => adaptiveTiming ? structuredClone(adaptiveTiming) : null,
+    getDeviceInfo: () => DeviceDetection.getDeviceInfo(),
+    getNetworkState: () => DeviceDetection.getNetworkState(),
+    getHeartbeatQualityStats: () => DeviceDetection.getHeartbeatQualityStats(),
+
     // VectorClock API (HNW Network - for conflict detection)
     getVectorClock: () => vectorClock.clone(),
     getVectorClockState: () => vectorClock.toJSON(),
     isConflict: (remoteClock) => vectorClock.isConcurrent(remoteClock),
+
+    // Event Replay Coordination (NEW)
+    updateEventWatermark,
+    getEventWatermark,
+    getKnownWatermarks,
+    requestEventReplay,
+    needsReplay,
+    autoReplayIfNeeded,
 
     // Heartbeat (exposed for testing)
     _startHeartbeat: startHeartbeat,

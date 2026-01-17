@@ -1,0 +1,440 @@
+/**
+ * Provider Health Monitor Service
+ *
+ * Real-time provider health monitoring with UI integration.
+ * Aggregates health data from ProviderFallbackChain and ProviderCircuitBreaker
+ * and provides live updates to the settings UI.
+ *
+ * @module services/provider-health-monitor
+ */
+
+import { EventBus } from './event-bus.js';
+
+/**
+ * Health status levels for UI display
+ * @readonly
+ * @enum {string}
+ */
+export const HealthStatus = Object.freeze({
+    HEALTHY: 'healthy',
+    DEGRADED: 'degraded',
+    UNHEALTHY: 'unhealthy',
+    BLACKLISTED: 'blacklisted',
+    UNKNOWN: 'unknown'
+});
+
+/**
+ * Provider health data structure
+ * @typedef {Object} ProviderHealthData
+ * @property {string} provider - Provider name
+ * @property {HealthStatus} status - Current health status
+ * @property {number} successCount - Number of successful requests
+ * @property {number} failureCount - Number of failed requests
+ * @property {number} avgLatencyMs - Average latency in milliseconds
+ * @property {number} lastSuccessTime - Last successful request timestamp
+ * @property {number} lastFailureTime - Last failed request timestamp
+ * @property {string|null} blacklistExpiry - Blacklist expiry timestamp
+ * @property {string} circuitState - Circuit breaker state (closed, open, half_open)
+ * @property {number} cooldownRemaining - Circuit breaker cooldown remaining (ms)
+ * @property {boolean} isLocal - Whether provider is local
+ */
+
+/**
+ * Provider Health Monitor Class
+ */
+export class ProviderHealthMonitor {
+    /**
+     * @private
+     * @type {Map<string, ProviderHealthData>}
+     */
+    _healthData = new Map();
+
+    /**
+     * @private
+     * @type {EventBus}
+     */
+    _eventBus = EventBus;
+
+    /**
+     * @private
+     * @type {number|null}
+     */
+    _updateIntervalId = null;
+
+    /**
+     * @private
+     * @type {number}
+     */
+    _updateIntervalMs = 2000; // Update every 2 seconds
+
+    /**
+     * @private
+     * @type {Array<Function>}
+     */
+    _uiCallbacks = [];
+
+    constructor() {
+        this._initializeHealthData();
+        this._subscribeToEvents();
+        this._startMonitoring();
+    }
+
+    /**
+     * Initialize health data for all providers
+     * @private
+     */
+    _initializeHealthData() {
+        const providers = ['openrouter', 'ollama', 'lmstudio', 'fallback'];
+
+        for (const provider of providers) {
+            this._healthData.set(provider, {
+                provider,
+                status: HealthStatus.UNKNOWN,
+                successCount: 0,
+                failureCount: 0,
+                avgLatencyMs: 0,
+                lastSuccessTime: 0,
+                lastFailureTime: 0,
+                blacklistExpiry: null,
+                circuitState: 'closed',
+                cooldownRemaining: 0,
+                isLocal: ['ollama', 'lmstudio', 'fallback'].includes(provider)
+            });
+        }
+    }
+
+    /**
+     * Subscribe to provider health events
+     * @private
+     */
+    _subscribeToEvents() {
+        this._eventBus.subscribe('PROVIDER:HEALTH_UPDATE', (event, data) => {
+            this._updateHealthFromEvent(data);
+        });
+
+        this._eventBus.subscribe('PROVIDER:BLACKLISTED', (event, data) => {
+            this._handleProviderBlacklisted(data);
+        });
+
+        this._eventBus.subscribe('PROVIDER:UNBLACKLISTED', (event, data) => {
+            this._handleProviderUnblacklisted(data);
+        });
+
+        this._eventBus.subscribe('CIRCUIT_BREAKER:TRIPPED', (event, data) => {
+            this._handleCircuitBreakerTripped(data);
+        });
+
+        this._eventBus.subscribe('CIRCUIT_BREAKER:RECOVERED', (event, data) => {
+            this._handleCircuitBreakerRecovered(data);
+        });
+    }
+
+    /**
+     * Start periodic health monitoring
+     * @private
+     */
+    _startMonitoring() {
+        if (this._updateIntervalId) {
+            clearInterval(this._updateIntervalId);
+        }
+
+        this._updateIntervalId = setInterval(() => {
+            this._refreshHealthData();
+            this._notifyUI();
+        }, this._updateIntervalMs);
+    }
+
+    /**
+     * Stop health monitoring
+     */
+    stopMonitoring() {
+        if (this._updateIntervalId) {
+            clearInterval(this._updateIntervalId);
+            this._updateIntervalId = null;
+        }
+    }
+
+    /**
+     * Refresh health data from fallback chain and circuit breaker
+     * @private
+     */
+    _refreshHealthData() {
+        if (!window.ProviderFallbackChain || !window.ProviderCircuitBreaker) {
+            return;
+        }
+
+        const providers = ['openrouter', 'ollama', 'lmstudio', 'fallback'];
+
+        for (const provider of providers) {
+            const healthRecord = window.ProviderFallbackChain.getProviderHealthStatus(provider);
+            const circuitStatus = window.ProviderCircuitBreaker.getStatus(provider);
+
+            if (healthRecord) {
+                const healthData = this._healthData.get(provider);
+                if (healthData) {
+                    healthData.successCount = healthRecord.successCount;
+                    healthData.failureCount = healthRecord.failureCount;
+                    healthData.avgLatencyMs = healthRecord.avgLatencyMs;
+                    healthData.lastSuccessTime = healthRecord.lastSuccessTime;
+                    healthData.lastFailureTime = healthRecord.lastFailureTime;
+                    healthData.blacklistExpiry = healthRecord.blacklistExpiry;
+                    healthData.status = this._mapHealthStatus(healthRecord.health);
+                }
+            }
+
+            if (circuitStatus) {
+                const healthData = this._healthData.get(provider);
+                if (healthData) {
+                    healthData.circuitState = circuitStatus.state;
+                    healthData.cooldownRemaining = circuitStatus.cooldownRemaining || 0;
+                }
+            }
+        }
+    }
+
+    /**
+     * Map provider health status to UI status
+     * @private
+     * @param {string} health - Provider health status
+     * @returns {HealthStatus} UI health status
+     */
+    _mapHealthStatus(health) {
+        switch (health) {
+            case 'healthy': return HealthStatus.HEALTHY;
+            case 'degraded': return HealthStatus.DEGRADED;
+            case 'unhealthy': return HealthStatus.UNHEALTHY;
+            case 'blacklisted': return HealthStatus.BLACKLISTED;
+            default: return HealthStatus.UNKNOWN;
+        }
+    }
+
+    /**
+     * Update health from event
+     * @private
+     * @param {Object} data - Event data
+     */
+    _updateHealthFromEvent(data) {
+        const { provider, health } = data;
+        const healthData = this._healthData.get(provider);
+        if (healthData) {
+            healthData.status = this._mapHealthStatus(health);
+            this._notifyUI();
+        }
+    }
+
+    /**
+     * Handle provider blacklisted event
+     * @private
+     * @param {Object} data - Event data
+     */
+    _handleProviderBlacklisted(data) {
+        const { provider, expiry } = data;
+        const healthData = this._healthData.get(provider);
+        if (healthData) {
+            healthData.status = HealthStatus.BLACKLISTED;
+            healthData.blacklistExpiry = expiry;
+            this._notifyUI();
+        }
+    }
+
+    /**
+     * Handle provider unblacklisted event
+     * @private
+     * @param {Object} data - Event data
+     */
+    _handleProviderUnblacklisted(data) {
+        const { provider } = data;
+        const healthData = this._healthData.get(provider);
+        if (healthData) {
+            healthData.status = HealthStatus.UNKNOWN;
+            healthData.blacklistExpiry = null;
+            this._notifyUI();
+        }
+    }
+
+    /**
+     * Handle circuit breaker tripped event
+     * @private
+     * @param {Object} data - Event data
+     */
+    _handleCircuitBreakerTripped(data) {
+        const { provider } = data;
+        const healthData = this._healthData.get(provider);
+        if (healthData) {
+            healthData.circuitState = 'open';
+            healthData.status = HealthStatus.UNHEALTHY;
+            this._notifyUI();
+        }
+    }
+
+    /**
+     * Handle circuit breaker recovered event
+     * @private
+     * @param {Object} data - Event data
+     */
+    _handleCircuitBreakerRecovered(data) {
+        const { provider } = data;
+        const healthData = this._healthData.get(provider);
+        if (healthData) {
+            healthData.circuitState = 'closed';
+            healthData.status = HealthStatus.HEALTHY;
+            this._notifyUI();
+        }
+    }
+
+    /**
+     * Notify UI callbacks of health updates
+     * @private
+     */
+    _notifyUI() {
+        for (const callback of this._uiCallbacks) {
+            try {
+                callback(this.getHealthSnapshot());
+            } catch (error) {
+                console.error('[ProviderHealthMonitor] UI callback error:', error);
+            }
+        }
+    }
+
+    /**
+     * Register a UI callback for health updates
+     * @param {Function} callback - Callback function
+     */
+    onHealthUpdate(callback) {
+        if (typeof callback === 'function') {
+            this._uiCallbacks.push(callback);
+        }
+    }
+
+    /**
+     * Unregister a UI callback
+     * @param {Function} callback - Callback function
+     */
+    offHealthUpdate(callback) {
+        const index = this._uiCallbacks.indexOf(callback);
+        if (index > -1) {
+            this._uiCallbacks.splice(index, 1);
+        }
+    }
+
+    /**
+     * Get current health snapshot for all providers
+     * @returns {Object} Health snapshot
+     */
+    getHealthSnapshot() {
+        const snapshot = {};
+        for (const [provider, data] of this._healthData) {
+            snapshot[provider] = { ...data };
+        }
+        return snapshot;
+    }
+
+    /**
+     * Get health data for a specific provider
+     * @param {string} provider - Provider name
+     * @returns {ProviderHealthData|null} Health data
+     */
+    getProviderHealth(provider) {
+        return this._healthData.get(provider) || null;
+    }
+
+    /**
+     * Get health summary for UI
+     * @returns {Object} Health summary
+     */
+    getHealthSummary() {
+        let healthy = 0;
+        let degraded = 0;
+        let unhealthy = 0;
+        let blacklisted = 0;
+        let unknown = 0;
+
+        for (const data of this._healthData.values()) {
+            switch (data.status) {
+                case HealthStatus.HEALTHY: healthy++; break;
+                case HealthStatus.DEGRADED: degraded++; break;
+                case HealthStatus.UNHEALTHY: unhealthy++; break;
+                case HealthStatus.BLACKLISTED: blacklisted++; break;
+                case HealthStatus.UNKNOWN: unknown++; break;
+            }
+        }
+
+        const total = this._healthData.size;
+        let overallStatus = HealthStatus.UNKNOWN;
+
+        if (blacklisted > 0 || unhealthy > 0) {
+            overallStatus = HealthStatus.UNHEALTHY;
+        } else if (degraded > 0) {
+            overallStatus = HealthStatus.DEGRADED;
+        } else if (healthy === total) {
+            overallStatus = HealthStatus.HEALTHY;
+        }
+
+        return {
+            total,
+            healthy,
+            degraded,
+            unhealthy,
+            blacklisted,
+            unknown,
+            overallStatus
+        };
+    }
+
+    /**
+     * Get recommended action for a provider
+     * @param {string} provider - Provider name
+     * @returns {Object} Recommended action
+     */
+    getRecommendedAction(provider) {
+        const health = this._healthData.get(provider);
+        if (!health) {
+            return {
+                action: 'none',
+                message: 'Unknown provider'
+            };
+        }
+
+        switch (health.status) {
+            case HealthStatus.BLACKLISTED:
+                return {
+                    action: 'wait',
+                    message: health.blacklistExpiry
+                        ? `Blacklisted until ${new Date(health.blacklistExpiry).toLocaleTimeString()}`
+                        : 'Provider temporarily unavailable',
+                    canSwitch: true
+                };
+
+            case HealthStatus.UNHEALTHY:
+                return {
+                    action: 'switch',
+                    message: 'Provider is experiencing issues. Consider switching to an alternative.',
+                    canSwitch: true
+                };
+
+            case HealthStatus.DEGRADED:
+                return {
+                    action: 'optional_switch',
+                    message: 'Provider is slow but functional. You can switch if needed.',
+                    canSwitch: true
+                };
+
+            case HealthStatus.UNKNOWN:
+                return {
+                    action: 'test',
+                    message: 'Provider status unknown. Try sending a message to test.',
+                    canSwitch: false
+                };
+
+            default:
+                return {
+                    action: 'none',
+                    message: 'Provider is working normally',
+                    canSwitch: false
+                };
+        }
+    }
+}
+
+// Export singleton instance
+export default new ProviderHealthMonitor();

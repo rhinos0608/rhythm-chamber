@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "npx http-server . -p 8080 -c-1",
+    "dev:coop-coep": "node scripts/dev-server-with-coop-coep.mjs 8080",
     "test": "npx playwright test",
     "pretest": "npm run lint:globals",
     "test:unit": "vitest run tests/unit/",
