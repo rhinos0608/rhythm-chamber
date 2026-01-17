@@ -66,7 +66,7 @@ Your "backend":
 **Our BYOI (you own the intelligence path):**
 - **Local models**: Ollama, LM Studio (100% private, keyless)
 - **Cloud models**: OpenRouter (optional, user-controlled)
-- **Vector stores**: User-provided Qdrant or fully local embeddings
+- **Vector stores**: 100% local embeddings with IndexedDB (Qdrant removed)
 - **Cost control**: Choose free local, free cloud, or premium as needed
 
 ### Supported Intelligence Providers
@@ -300,7 +300,7 @@ rhythm-chamber/
 │   ├── security.js         # Security Facade (Delegates to js/security/ modules)
 │   ├── security-checklist.js # First-run security waiver & education
 │   ├── payments.js         # Stripe Checkout + premium status
-│   ├── rag.js              # Embeddings + Qdrant vector search + encrypted credentials
+│   ├── rag.js              # Semantic search orchestration (WASM-only local embeddings)
 │   ├── prompts.js          # System prompt templates
 │   ├── window-globals-debug.js # Dev-only wrapper that warns on legacy window globals
 │   ├── config.js           # API keys (gitignored)
@@ -321,6 +321,11 @@ rhythm-chamber/
 │   │   ├── pattern-worker-pool.js # Worker pool with heartbeat monitoring (NEW)
 │   │   ├── pattern-worker.js      # Pattern detection worker (ENHANCED - heartbeat support)
 │   │   └── vector-search-worker.js # Cosine similarity offloading (60fps maintenance)
+│   │
+│   ├── embeddings/         # Embedding UI Components (NEW - Phase 3)
+│   │   ├── embeddings-onboarding.js  # Feature discovery + compatibility checks
+│   │   ├── embeddings-progress.js    # 6-stage progress indicator
+│   │   └── embeddings-task-manager.js # Background processing orchestrator
 │   │
 │   ├── functions/          # Function Calling Modules (Modular Architecture)
 │   │   ├── index.js        # Facade - unified execute() + schema access
@@ -547,47 +552,50 @@ flowchart LR
 
 ---
 
-## Semantic Search: The Competitive Moat
+## Semantic Search: 100% Local Architecture
 
 ### Architecture Overview
 
-Users can enable RAG-powered semantic search using their own Qdrant Cloud cluster:
+Semantic search runs entirely in the browser with WASM-based embeddings:
 
 ```mermaid
 flowchart LR
     A[User Query] --> B[Generate Embedding]
-    B --> C[Search Qdrant]
-    C --> D[Get Top 3 Chunks]
-    D --> E[Inject into System Prompt]
-    E --> F[LLM Response]
+    B --> C[Transformers.js WASM]
+    C --> D[Search IndexedDB]
+    D --> E[Top 3 Chunks]
+    E --> F[Inject into System Prompt]
+    F --> G[LLM Response]
 ```
 
-### Why This Matters vs Stats.fm
+### WASM Embedding Stack
 
-**Stats.fm:** "Click to explore charts"
-**Rhythm Chamber:** "Ask natural questions"
+| Component | Purpose |
+|-----------|---------|
+| `local-embeddings.js` | Transformers.js pipeline with INT8 quantization |
+| `local-vector-store.js` | IndexedDB-backed vector storage with LRU cache |
+| `battery-aware-mode-selector.js` | Dynamic WebGPU/WASM switching |
+| `embeddings-task-manager.js` | Background processing with pause/resume |
 
-**Example:**
-- **Stats.fm:** Shows you a chart of "March 2020 Top Artists"
-- **Rhythm Chamber:** You ask "What was I listening to during my breakup in March 2020?" → Gets semantic answer with context
+### Why 100% Local?
 
-### Components
+**Previous (Qdrant Cloud):**
+- Required user-provided credentials
+- Data left the device
+- External dependency
 
-| Module | Purpose |
-|--------|---------|
-| `payments.js` | Entitlement stub (always returns true for MVP) |
-| `rag.js` | Embeddings API, Qdrant client, chunking logic |
+**Current (WASM-only):**
+- ~6MB model download (INT8 quantized)
+- All processing in-browser
+- Zero external API calls
+- Works offline after initial load
 
-### Embedding Generation
+### Performance Optimizations
 
-```javascript
-// js/rag.js - generateEmbeddings()
-// 1. Load all streams from IndexedDB
-// 2. Create chunks (monthly summaries + artist profiles)
-// 3. Generate embeddings via OpenRouter (qwen/qwen3-embedding-8b)
-// 4. Upsert to user's Qdrant cluster
-// 5. Store config + status in localStorage
-```
+- **INT8 Quantization**: 4x memory reduction, 2-4x faster inference
+- **WebGPU Acceleration**: 100x faster when available
+- **Battery-Aware Mode**: Dynamic switching based on device power
+- **Background Processing**: Web Worker orchestration
 
 ---
 

@@ -1,74 +1,55 @@
 /**
  * IndexedDB Connection Retry Tests
  * 
- * Tests for initDatabaseWithRetry with exponential backoff
+ * Tests for initDatabaseWithRetry configuration and connection status API
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-
-// Mock IndexedDB
-const mockIDBRequest = {
-    result: { objectStoreNames: { contains: () => false } },
-    error: null,
-    onerror: null,
-    onsuccess: null,
-    onblocked: null,
-    onupgradeneeded: null
-};
-
-const mockIndexedDB = {
-    open: vi.fn(() => mockIDBRequest)
-};
-
-// Store original
-const originalIndexedDB = globalThis.indexedDB;
+import { IndexedDBCore } from '../../js/storage/indexeddb.js';
+import { EventBus } from '../../js/services/event-bus.js';
 
 describe('IndexedDB Connection Retry', () => {
     beforeEach(() => {
         vi.useFakeTimers();
-        globalThis.indexedDB = mockIndexedDB;
+
+        // Reset connection state before each test
+        IndexedDBCore.resetConnectionState();
+
+        // Clear EventBus listeners
+        EventBus.clearAll();
+
         vi.clearAllMocks();
     });
 
     afterEach(() => {
         vi.useRealTimers();
-        globalThis.indexedDB = originalIndexedDB;
+        IndexedDBCore.resetConnectionState();
+        EventBus.clearAll();
     });
 
     describe('CONNECTION_CONFIG', () => {
-        it('should have sensible default values', async () => {
-            // Import the module to check config is properly set
-            // Configuration is internal, so we test behavior instead
-            expect(mockIndexedDB).toBeDefined();
+        it('should have sensible default values', () => {
+            // Test the real getConnectionStatus function to verify API exists
+            const status = IndexedDBCore.getConnectionStatus();
+
+            expect(status).toBeDefined();
+            expect(typeof status.isConnected).toBe('boolean');
+            expect(typeof status.isFailed).toBe('boolean');
+            expect(typeof status.attempts).toBe('number');
+
+            // Initial state should be disconnected with no failures
+            expect(status.isConnected).toBe(false);
+            expect(status.isFailed).toBe(false);
+            expect(status.attempts).toBe(0);
         });
     });
 
-    describe('initDatabaseWithRetry behavior', () => {
-        it('should return existing connection if available', async () => {
-            // This is implicitly tested by the connection caching behavior
-            expect(true).toBe(true);
+    describe('initDatabaseWithRetry API', () => {
+        it('should be exported and callable', () => {
+            expect(typeof IndexedDBCore.initDatabaseWithRetry).toBe('function');
         });
 
-        it('should retry on failure with exponential backoff', async () => {
-            // The implementation uses CONFIG values:
-            // baseDelayMs: 500, backoffMultiplier: 2
-            // Attempt 1: 500ms, Attempt 2: 1000ms, Attempt 3: 2000ms
-            const delays = [500, 1000, 2000];
-
-            // Verify backoff calculation
-            const baseDelay = 500;
-            const multiplier = 2;
-
-            for (let attempt = 1; attempt <= 3; attempt++) {
-                const expectedDelay = Math.min(
-                    baseDelay * Math.pow(multiplier, attempt - 1),
-                    5000
-                );
-                expect(expectedDelay).toBe(delays[attempt - 1]);
-            }
-        });
-
-        it('should respect maxDelayMs cap', () => {
-            // After several retries, delay should not exceed maxDelayMs (5000)
+        it('should validate backoff calculation respects maxDelayMs cap', () => {
+            // Verify backoff calculation caps at 5000ms
             const baseDelay = 500;
             const multiplier = 2;
             const maxDelay = 5000;
@@ -79,31 +60,47 @@ describe('IndexedDB Connection Retry', () => {
                 maxDelay
             );
             expect(attempt5Delay).toBe(5000);
+
+            // Verify first few delays
+            expect(Math.min(baseDelay * Math.pow(multiplier, 0), maxDelay)).toBe(500);
+            expect(Math.min(baseDelay * Math.pow(multiplier, 1), maxDelay)).toBe(1000);
+            expect(Math.min(baseDelay * Math.pow(multiplier, 2), maxDelay)).toBe(2000);
         });
     });
 
     describe('Connection status tracking', () => {
-        it('should track connection attempts', () => {
-            // The getConnectionStatus function tracks:
-            // - isConnected: boolean
-            // - isFailed: boolean  
-            // - attempts: number
-            const expectedShape = {
-                isConnected: expect.any(Boolean),
-                isFailed: expect.any(Boolean),
-                attempts: expect.any(Number)
-            };
+        it('should track connection attempts with correct shape', () => {
+            // Call the real getConnectionStatus function
+            const status = IndexedDBCore.getConnectionStatus();
 
-            // This tests the contract of the status object
-            expect(expectedShape.isConnected).not.toBeUndefined();
-            expect(expectedShape.isFailed).not.toBeUndefined();
-            expect(expectedShape.attempts).not.toBeUndefined();
+            // Verify shape and types
+            expect(status).toHaveProperty('isConnected');
+            expect(status).toHaveProperty('isFailed');
+            expect(status).toHaveProperty('attempts');
+
+            expect(typeof status.isConnected).toBe('boolean');
+            expect(typeof status.isFailed).toBe('boolean');
+            expect(typeof status.attempts).toBe('number');
+        });
+
+        it('should reset connection state', () => {
+            // Get initial state
+            let status = IndexedDBCore.getConnectionStatus();
+            expect(status.isConnected).toBe(false);
+
+            // Reset should work
+            IndexedDBCore.resetConnectionState();
+            status = IndexedDBCore.getConnectionStatus();
+
+            expect(status.isConnected).toBe(false);
+            expect(status.isFailed).toBe(false);
+            expect(status.attempts).toBe(0);
         });
     });
 
-    describe('Event emissions', () => {
-        it('should emit storage:connection_retry on each retry attempt', () => {
-            // Event schema validation
+    describe('Event schema contracts', () => {
+        it('storage:connection_retry should have correct payload shape', () => {
+            // Validate expected payload structure
             const retryEventPayload = {
                 attempt: 1,
                 maxAttempts: 3,
@@ -115,10 +112,12 @@ describe('IndexedDB Connection Retry', () => {
             expect(retryEventPayload).toHaveProperty('maxAttempts');
             expect(retryEventPayload).toHaveProperty('nextRetryMs');
             expect(retryEventPayload).toHaveProperty('error');
+            expect(typeof retryEventPayload.attempt).toBe('number');
+            expect(typeof retryEventPayload.maxAttempts).toBe('number');
+            expect(typeof retryEventPayload.nextRetryMs).toBe('number');
         });
 
-        it('should emit storage:connection_failed when all retries exhausted', () => {
-            // Event schema validation
+        it('storage:connection_failed should have correct payload shape', () => {
             const failedEventPayload = {
                 attempts: 3,
                 error: 'Failed to connect',
@@ -129,20 +128,20 @@ describe('IndexedDB Connection Retry', () => {
             expect(failedEventPayload).toHaveProperty('error');
             expect(failedEventPayload).toHaveProperty('recoverable');
             expect(failedEventPayload.recoverable).toBe(false);
+            expect(typeof failedEventPayload.attempts).toBe('number');
         });
 
-        it('should emit storage:connection_established on success', () => {
-            // Event schema validation
+        it('storage:connection_established should have correct payload shape', () => {
             const establishedEventPayload = {
                 attempts: 1
             };
 
             expect(establishedEventPayload).toHaveProperty('attempts');
             expect(establishedEventPayload.attempts).toBeGreaterThanOrEqual(1);
+            expect(typeof establishedEventPayload.attempts).toBe('number');
         });
 
-        it('should emit storage:connection_blocked on blocked event', () => {
-            // Event schema validation
+        it('storage:connection_blocked should have correct payload shape', () => {
             const blockedEventPayload = {
                 reason: 'upgrade_blocked',
                 message: 'Database upgrade blocked by other tabs. Please close other tabs.'
@@ -150,6 +149,39 @@ describe('IndexedDB Connection Retry', () => {
 
             expect(blockedEventPayload).toHaveProperty('reason');
             expect(blockedEventPayload).toHaveProperty('message');
+            expect(typeof blockedEventPayload.reason).toBe('string');
+            expect(typeof blockedEventPayload.message).toBe('string');
+        });
+    });
+
+    describe('EventBus schema registration', () => {
+        it('should have storage:connection_retry event registered', () => {
+            // Try subscribing to the event - should not throw
+            const handler = vi.fn();
+            const unsub = EventBus.on('storage:connection_retry', handler);
+            expect(typeof unsub).toBe('function');
+            unsub();
+        });
+
+        it('should have storage:connection_failed event registered', () => {
+            const handler = vi.fn();
+            const unsub = EventBus.on('storage:connection_failed', handler);
+            expect(typeof unsub).toBe('function');
+            unsub();
+        });
+
+        it('should have storage:connection_established event registered', () => {
+            const handler = vi.fn();
+            const unsub = EventBus.on('storage:connection_established', handler);
+            expect(typeof unsub).toBe('function');
+            unsub();
+        });
+
+        it('should have storage:connection_blocked event registered', () => {
+            const handler = vi.fn();
+            const unsub = EventBus.on('storage:connection_blocked', handler);
+            expect(typeof unsub).toBe('function');
+            unsub();
         });
     });
 });

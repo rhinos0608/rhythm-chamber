@@ -80,17 +80,19 @@ Security enables control value by:
 
 ### 1. Credential Encryption (AES-GCM)
 
-RAG credentials (Qdrant API keys) are encrypted using the Web Crypto API with AES-GCM:
+**WASM-Only Architecture**: Semantic search now uses 100% client-side local embeddings (WASM-based). No external credentials or cloud services are required for RAG functionality.
+
+Previously, RAG credentials (Qdrant API keys) were encrypted using the Web Crypto API with AES-GCM. This infrastructure remains available for future extensions if needed:
 
 ```javascript
 // Credentials are NEVER stored in plaintext
-Security.storeEncryptedCredentials('qdrant_credentials', {
-    qdrantUrl: '...',
-    qdrantApiKey: '...'
+Security.storeEncryptedCredentials('service_credentials', {
+    apiKey: '...',
+    apiUrl: '...'
 });
 
 // Decryption requires active session
-const creds = await Security.getEncryptedCredentials('qdrant_credentials');
+const creds = await Security.getEncryptedCredentials('service_credentials');
 ```
 
 **Key derivation**: PBKDF2 with 600,000 iterations from session salt + Spotify refresh token + session version.
@@ -323,6 +325,7 @@ If you discover a security vulnerability in Rhythm Chamber:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.4 | 2026-01-18 | Updated to reflect WASM-only semantic search (removed Qdrant cloud dependency) |
 | 1.3 | 2026-01-15 | Updated to reflect three-layer value stack (Emotional, Privacy, Control) |
 | 1.2 | 2026-01-13 | Clarified obfuscation vs encryption, removed namespace isolation (user owns Qdrant) |
 | 1.1 | 2026-01-12 | XSS token protection, adaptive lockouts, unified errors |

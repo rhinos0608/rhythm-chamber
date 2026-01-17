@@ -263,8 +263,23 @@ export class StorageDegradationManager {
     async _onConnectionFailed(data) {
         console.error('[StorageDegradationManager] IndexedDB connection failed:', data.error);
 
-        // Enter emergency mode immediately
+        // Track old tier for event emission
+        const oldTier = this._currentTier;
+
+        // Enter emergency mode and update tier
         this._isEmergencyMode = true;
+        this._currentTier = DegradationTier.EMERGENCY;
+
+        // Emit tier change event (matching _transitionToTier behavior)
+        this._eventBus.emit('STORAGE:TIER_CHANGE', {
+            oldTier,
+            newTier: DegradationTier.EMERGENCY,
+            metrics: this._currentMetrics,
+            reason: 'connection_failed'
+        });
+
+        // Pause non-critical operations (matching _handleEmergencyMode behavior)
+        this._eventBus.emit('STORAGE:PAUSE_NON_CRITICAL');
 
         // Show emergency modal for session-only mode
         this._eventBus.emit('UI:MODAL', {

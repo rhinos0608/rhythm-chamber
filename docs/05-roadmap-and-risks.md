@@ -89,7 +89,7 @@
 | Proactive observations | v2 (creepy risk) |
 | Apple Music | Post-MVP |
 | Friend comparisons | Post-MVP |
-| WASM embeddings | v1.1 |
+| WASM embeddings | ✅ Complete |
 | **Cloud Sync** | **Phase 2 (Market Signal Triggered)** |
 | **Managed AI Setup** | **Phase 2 (Market Signal Triggered)** |
 | **CLI Tool** | **Open Source/Free (dropped from paid)** |
@@ -129,7 +129,7 @@ Features implemented beyond original roadmap:
 - **Incremental Caching** — Crash-safe parsing
 - **Markdown in Chat** — Formatted AI responses
 - **AI Function Calling** — LLM can query data via tools (get_top_artists, etc.)
-- **Semantic Search** — RAG with Qdrant (now free for all users)
+- **Semantic Search** — 100% local WASM-based embeddings (Qdrant removed)
 - **Demo Mode** — Isolated "Emo Teen" sample persona with demo-specific chat prompts and exit CTA
 - **Template Profiles + Profile Synthesizer** — Template search + synthetic profiles (streams/patterns/personality) saved locally for comparisons
 - **Pattern Worker Pool with Heartbeat** — Bidirectional liveness checks with automatic restart of stale workers

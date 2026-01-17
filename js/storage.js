@@ -388,8 +388,7 @@ const Storage = {
   async clearAllData() {
     const results = {
       indexedDB: { cleared: false, stores: [] },
-      localStorage: { cleared: false, keys: 0 },
-      qdrant: { cleared: false, error: null }
+      localStorage: { cleared: false, keys: 0 }
     };
 
     // Acquire lock if available
@@ -420,9 +419,7 @@ const Storage = {
         const key = localStorage.key(i);
         if (key && (
           key.startsWith('rhythm_chamber_') ||
-          key.startsWith('spotify_') ||
-          key === 'qdrant_url' ||
-          key === 'qdrant_api_key'
+          key.startsWith('spotify_')
         )) {
           keysToRemove.push(key);
         }
@@ -431,20 +428,17 @@ const Storage = {
       results.localStorage.keys = keysToRemove.length;
       results.localStorage.cleared = true;
 
-      // Clear Qdrant embeddings
+      // Clear local embeddings
       const RAG = ModuleRegistry?.getModule
         ? await ModuleRegistry.getModule('RAG')
         : null;
 
-      if (RAG?.hasCredentials?.()) {
+      if (RAG?.clearEmbeddings) {
         try {
           await RAG.clearEmbeddings();
-          results.qdrant.cleared = true;
         } catch (e) {
-          results.qdrant.error = e.message;
+          console.warn('[Storage] Failed to clear embeddings:', e);
         }
-      } else {
-        results.qdrant.cleared = true;
       }
 
       this._notifyUpdate('allDataCleared', 0);

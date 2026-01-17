@@ -146,25 +146,29 @@ const Config = {
 - Model downloaded (`ollama pull llama3.1:8b`)
 - Server running (`ollama serve`)
 
-### Qdrant Cloud Setup (For Semantic Search)
+### Local Embeddings Setup (Semantic Search)
 
-1. **Create free Qdrant cluster:**
-   - Go to [cloud.qdrant.io](https://cloud.qdrant.io)
-   - Sign up for free tier
-   - Create cluster
+Semantic search runs 100% locally with WASM-based embeddings:
 
-2. **Get credentials:**
-   - URL: `https://xxxxx.cloud.qdrant.io`
-   - API key: from dashboard
+1. **No external setup required:**
+   - Embeddings use Transformers.js (WASM)
+   - Model downloads automatically (~6MB INT8 quantized)
+   - Data stored in IndexedDB (browser-local)
 
-3. **Configure in app:**
-   - Open Settings → RAG Configuration
-   - Enter Qdrant URL and API key
-   - Click "Generate Embeddings"
+2. **Enable in app:**
+   - Open Settings → Semantic Search
+   - Click "Enable Local Embeddings"
+   - Wait for model download (~6MB one-time)
 
-4. **Use in chat:**
+3. **Use in chat:**
    - Ask questions like "What was I listening to in March?"
-   - System uses semantic search to find relevant chunks
+   - System uses local semantic search to find relevant chunks
+
+4. **Features:**
+   - ✅ 100% private - data never leaves browser
+   - ✅ Works offline after initial model download
+   - ✅ WebGPU acceleration when available (100x faster)
+   - ✅ Battery-aware mode selection
 
 ---
 
@@ -205,12 +209,12 @@ Rhythm Chamber only works in secure contexts (HTTPS or localhost). This prevents
 
 **What's not free:**
 - Premium LLM models (~$0.003/1K tokens)
-- Qdrant cloud (free tier available)
+- Local embeddings (WASM-based, free)
 
 ### Monitoring Usage
 
 1. **OpenRouter dashboard:** Track API calls
-2. **Qdrant dashboard:** Track vector storage
+2. **Browser DevTools:** Check IndexedDB storage
 3. **Browser console:** Check for errors
 
 ### Budget Control
@@ -237,13 +241,13 @@ const Config = {
 };
 ```
 
-### 2. Self-Hosted Qdrant
+### 2. Local Embeddings (Default)
 
-```javascript
-// In app settings
-Qdrant URL: http://localhost:6333
-API Key: (none for local)
-```
+Embeddings run entirely in-browser:
+- WASM-based Transformers.js
+- ~6MB model download
+- Stored in IndexedDB
+- No API keys required
 
 ### 3. Static Hosting
 
