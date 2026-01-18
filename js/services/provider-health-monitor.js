@@ -332,10 +332,11 @@ export class ProviderHealthMonitor {
     /**
      * Get health data for a specific provider
      * @param {string} provider - Provider name
-     * @returns {ProviderHealthData|null} Health data
+     * @returns {ProviderHealthData|null} Health data (shallow copy)
      */
     getProviderHealth(provider) {
-        return this._healthData.get(provider) || null;
+        const healthData = this._healthData.get(provider);
+        return healthData ? { ...healthData } : null;
     }
 
     /**

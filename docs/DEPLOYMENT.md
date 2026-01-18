@@ -141,6 +141,9 @@ server {
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
+        # Re-add COOP/COEP headers for cached assets (add_header overrides parents)
+        add_header Cross-Origin-Embedder-Policy "require-corp" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
     }
 }
 ```
@@ -251,8 +254,8 @@ console.log('SharedArrayBuffer enabled:', stats.sharedMemoryEnabled);
 - ✅ Chrome 92+ (Desktop)
 - ✅ Edge 92+ (Desktop)
 - ✅ Firefox 89+ (Desktop)
-- ❌ Safari (All versions)
-- ❌ Mobile browsers (Limited support)
+- ✅ Safari 15.2+ (requires COOP/COEP headers)
+- ⚠️ Mobile browsers (Limited support, varies by platform and COOP/COEP configuration)
 
 **Graceful Fallback**: Rhythm Chamber automatically detects SharedArrayBuffer availability and falls back to structured clone mode if unavailable.
 

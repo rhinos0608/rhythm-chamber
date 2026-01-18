@@ -60,7 +60,7 @@ describe('EventBus Replay', () => {
             expect(typeof meta.vectorClock).toBe('object');
         });
 
-        it('should mark replayed events in metadata', () => {
+        it('should include isReplay flag in event metadata', () => {
             const handler = vi.fn();
             EventBus.on('test_event', handler);
 
@@ -137,16 +137,16 @@ describe('EventBus Replay', () => {
             const handler1 = vi.fn();
             const handler2 = vi.fn();
 
-            EventBus.on('event1', handler1);
-            EventBus.on('event2', handler2);
+            const unsubscribe1 = EventBus.on('event1', handler1);
+            const unsubscribe2 = EventBus.on('event2', handler2);
 
             // Emit events (these would be logged in real implementation)
             EventBus.emit('event1', { value: 1 }, { skipEventLog: true });
             EventBus.emit('event2', { value: 2 }, { skipEventLog: true });
 
             // Clear handlers
-            EventBus.off('event1', Object.keys(EventBus)[0]);
-            EventBus.off('event2', Object.keys(EventBus)[1]);
+            unsubscribe1();
+            unsubscribe2();
 
             // Setup new handlers for replay
             const replayHandler1 = vi.fn();
@@ -281,7 +281,7 @@ describe('EventBus Replay', () => {
             expect(handler).toHaveBeenCalledTimes(100);
         });
 
-        it('should handle event during replay', () => {
+        it('should mark emitted event as replay when skipEventLog is true', () => {
             const handler = vi.fn();
             EventBus.on('test_event', handler);
 

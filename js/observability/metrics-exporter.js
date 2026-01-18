@@ -116,6 +116,12 @@ export class MetricsExporter {
     _encryptionConfig = null;
 
     /**
+     * @private
+     * @type {number|null}
+     */
+    _schedulerInterval = null;
+
+    /**
      * Initialize the Metrics Exporter
      * @public
      * @param {Object} options - Configuration options
@@ -125,14 +131,22 @@ export class MetricsExporter {
     constructor({ enabled = true, encryptionConfig = null } = {}) {
         this._enabled = enabled;
         this._encryptionConfig = encryptionConfig;
+    }
 
-        // Load saved configuration
-        this._loadConfiguration();
-
-        // Start job scheduler
-        if (this._enabled) {
-            this._startScheduler();
+    /**
+     * Async initialization factory method
+     * @public
+     * @static
+     * @param {Object} options - Configuration options
+     * @returns {Promise<MetricsExporter>} Initialized metrics exporter
+     */
+    static async create({ enabled = true, encryptionConfig = null } = {}) {
+        const instance = new MetricsExporter({ enabled, encryptionConfig });
+        await instance._loadConfiguration();
+        if (instance._enabled) {
+            instance._startScheduler();
         }
+        return instance;
     }
 
     /**
@@ -144,10 +158,24 @@ export class MetricsExporter {
             const stored = localStorage.getItem(this._storageKey);
             if (stored) {
                 const config = JSON.parse(stored);
-                this._scheduledJobs = new Map(
-                    Object.entries(config.scheduledJobs || {})
-                );
-                this._externalServices = config.externalServices || [];
+
+                // Revive Date instances for scheduled jobs
+                const jobEntries = Object.entries(config.scheduledJobs || {});
+                const revivedJobs = jobEntries.map(([id, job]) => {
+                    const revivedJob = { ...job };
+                    if (job.nextRun) {
+                        revivedJob.nextRun = new Date(job.nextRun);
+                    }
+                    if (job.lastRun) {
+                        revivedJob.lastRun = new Date(job.lastRun);
+                    }
+                    return [id, revivedJob];
+                });
+
+                this._scheduledJobs = new Map(revivedJobs);
+
+                // Decrypt external service credentials
+                this._externalServices = await this._decryptExternalServices(config.externalServices || []);
             }
         } catch (error) {
             console.warn('[MetricsExporter] Failed to load configuration:', error);
@@ -160,9 +188,12 @@ export class MetricsExporter {
      */
     async _saveConfiguration() {
         try {
+            // Encrypt external service credentials before saving
+            const encryptedServices = await this._encryptExternalServices(this._externalServices);
+
             const config = {
                 scheduledJobs: Object.fromEntries(this._scheduledJobs),
-                externalServices: this._externalServices
+                externalServices: encryptedServices
             };
             localStorage.setItem(this._storageKey, JSON.stringify(config));
         } catch (error) {
@@ -175,8 +206,13 @@ export class MetricsExporter {
      * @private
      */
     _startScheduler() {
+        // Only start if not already running
+        if (this._schedulerInterval) {
+            return;
+        }
+
         // Check every minute for jobs to run
-        setInterval(() => {
+        this._schedulerInterval = setInterval(() => {
             this._checkScheduledJobs();
         }, 60000);
     }
@@ -212,7 +248,7 @@ export class MetricsExporter {
 
             // Send to external services if configured
             if (this._externalServices.length > 0) {
-                await this._sendToExternalServices(exportedData, job.config);
+                await this._sendToExternalServices(exportedData, job.config, metrics);
             }
 
             // Download/export file
@@ -331,7 +367,20 @@ export class MetricsExporter {
         for (const metric of flatMetrics) {
             const values = headers.map(header => {
                 const value = metric[header];
-                return typeof value === 'string' ? `"${value}"` : value;
+
+                // Handle null/undefined
+                if (value == null) {
+                    return '';
+                }
+
+                // Convert to string
+                let strValue = String(value);
+
+                // Escape double-quotes by doubling them
+                strValue = strValue.replace(/"/g, '""');
+
+                // Wrap in double quotes
+                return `"${strValue}"`;
             });
             rows.push(values.join(','));
         }
@@ -393,9 +442,10 @@ export class MetricsExporter {
         if (metrics.performance?.categories) {
             for (const [category, data] of Object.entries(metrics.performance.categories)) {
                 if (data.statistics) {
-                    lines.push(`# HELP rhythm_chamber_${category}_duration_ms Duration for ${category}`);
-                    lines.push(`# TYPE rhythm_chamber_${category}_duration_ms gauge`);
-                    lines.push(`rhythm_chamber_${category}_duration_ms ${data.statistics.avgDuration}`);
+                    const metricName = this._sanitizePrometheusName(`rhythm_chamber_${category}_duration_ms`);
+                    lines.push(`# HELP ${metricName} Duration for ${category}`);
+                    lines.push(`# TYPE ${metricName} gauge`);
+                    lines.push(`${metricName} ${data.statistics.avgDuration}`);
                 }
             }
         }
@@ -404,18 +454,20 @@ export class MetricsExporter {
         if (metrics.webVitals?.vitals) {
             for (const [vitalType, vitalData] of Object.entries(metrics.webVitals.vitals)) {
                 if (vitalData.latest) {
-                    lines.push(`# HELP rhythm_chamber_web_vital_${vitalType} Web Vital ${vitalType}`);
-                    lines.push(`# TYPE rhythm_chamber_web_vital_${vitalType} gauge`);
-                    lines.push(`rhythm_chamber_web_vital_${vitalType}{rating="${vitalData.latest.rating}"} ${vitalData.latest.value}`);
+                    const metricName = this._sanitizePrometheusName(`rhythm_chamber_web_vital_${vitalType}`);
+                    lines.push(`# HELP ${metricName} Web Vital ${vitalType}`);
+                    lines.push(`# TYPE ${metricName} gauge`);
+                    lines.push(`${metricName}{rating="${vitalData.latest.rating}"} ${vitalData.latest.value}`);
                 }
             }
         }
 
         // Memory metrics
         if (metrics.memory?.currentUsage !== null) {
-            lines.push(`# HELP rhythm_chamber_memory_usage_percent Memory usage percentage`);
-            lines.push(`# TYPE rhythm_chamber_memory_usage_percent gauge`);
-            lines.push(`rhythm_chamber_memory_usage_percent ${metrics.memory.currentUsage}`);
+            const metricName = this._sanitizePrometheusName('rhythm_chamber_memory_usage_percent');
+            lines.push(`# HELP ${metricName} Memory usage percentage`);
+            lines.push(`# TYPE ${metricName} gauge`);
+            lines.push(`${metricName} ${metrics.memory.currentUsage}`);
         }
 
         return lines.join('\n');
@@ -485,13 +537,14 @@ export class MetricsExporter {
     /**
      * Send data to external services
      * @private
-     * @param {string} data - Data to send
+     * @param {string} data - Data to send (formatted string)
      * @param {ExportConfig} config - Export configuration
+     * @param {Object} rawMetrics - Raw metrics object for JSON parsing
      */
-    async _sendToExternalServices(data, config) {
+    async _sendToExternalServices(data, config, rawMetrics = null) {
         for (const serviceConfig of this._externalServices) {
             try {
-                await this._sendToService(data, serviceConfig, config);
+                await this._sendToService(data, serviceConfig, config, rawMetrics);
             } catch (error) {
                 console.error(`[MetricsExporter] Failed to send to ${serviceConfig.service}:`, error);
             }
@@ -504,9 +557,10 @@ export class MetricsExporter {
      * @param {string} data - Data to send
      * @param {ExternalServiceConfig} serviceConfig - Service configuration
      * @param {ExportConfig} exportConfig - Export configuration
+     * @param {Object} rawMetrics - Raw metrics object for JSON parsing
      */
-    async _sendToService(data, serviceConfig, exportConfig) {
-        const requestData = this._formatForService(data, serviceConfig.service, exportConfig);
+    async _sendToService(data, serviceConfig, exportConfig, rawMetrics = null) {
+        const requestData = this._formatForService(data, serviceConfig.service, exportConfig, rawMetrics);
 
         const response = await fetch(serviceConfig.endpoint, {
             method: 'POST',
@@ -528,21 +582,22 @@ export class MetricsExporter {
     /**
      * Format data for specific service
      * @private
-     * @param {string} data - Raw data
+     * @param {string} data - Formatted data (string)
      * @param {ExternalService} service - Service type
      * @param {ExportConfig} config - Export configuration
+     * @param {Object} rawMetrics - Raw metrics object for JSON parsing
      * @returns {Object} Formatted data
      */
-    _formatForService(data, service, config) {
+    _formatForService(data, service, config, rawMetrics = null) {
         switch (service) {
             case ExternalService.DATADOG:
                 return {
-                    series: this._formatAsDatadogSeries(data)
+                    series: this._formatAsDatadogSeries(rawMetrics || data)
                 };
 
             case ExternalService.NEWRELIC:
                 return {
-                    metrics: this._formatAsNewRelicMetrics(data)
+                    metrics: this._formatAsNewRelicMetrics(rawMetrics || data)
                 };
 
             case ExternalService.PROMETHEUS_PUSHGATEWAY:
@@ -556,11 +611,11 @@ export class MetricsExporter {
     /**
      * Format as Datadog series
      * @private
-     * @param {string} data - Raw data
+     * @param {Object|string} data - Raw metrics object or JSON string
      * @returns {Array} Datadog series format
      */
     _formatAsDatadogSeries(data) {
-        const metrics = JSON.parse(data);
+        const metrics = typeof data === 'string' ? JSON.parse(data) : data;
         const series = [];
 
         // Convert metrics to Datadog series format
@@ -580,11 +635,11 @@ export class MetricsExporter {
     /**
      * Format as New Relic metrics
      * @private
-     * @param {string} data - Raw data
+     * @param {Object|string} data - Raw metrics object or JSON string
      * @returns {Array} New Relic metrics format
      */
     _formatAsNewRelicMetrics(data) {
-        const metrics = JSON.parse(data);
+        const metrics = typeof data === 'string' ? JSON.parse(data) : data;
         const nrMetrics = [];
 
         for (const [key, value] of Object.entries(metrics)) {
@@ -635,9 +690,9 @@ export class MetricsExporter {
      * @public
      * @param {string} name - Job name
      * @param {ExportConfig} config - Export configuration
-     * @returns {string} Job ID
+     * @returns {Promise<string>} Job ID
      */
-    createScheduledExport(name, config) {
+    async createScheduledExport(name, config) {
         const job = {
             id: `export_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             name,
@@ -650,7 +705,7 @@ export class MetricsExporter {
         };
 
         this._scheduledJobs.set(job.id, job);
-        this._saveConfiguration();
+        await this._saveConfiguration();
 
         return job.id;
     }
@@ -660,11 +715,11 @@ export class MetricsExporter {
      * @public
      * @param {string} jobId - Job ID
      */
-    pauseJob(jobId) {
+    async pauseJob(jobId) {
         const job = this._scheduledJobs.get(jobId);
         if (job) {
             job.status = 'paused';
-            this._saveConfiguration();
+            await this._saveConfiguration();
         }
     }
 
@@ -673,12 +728,12 @@ export class MetricsExporter {
      * @public
      * @param {string} jobId - Job ID
      */
-    resumeJob(jobId) {
+    async resumeJob(jobId) {
         const job = this._scheduledJobs.get(jobId);
         if (job) {
             job.status = 'active';
             job.nextRun = this._calculateNextRun(job.config.schedule);
-            this._saveConfiguration();
+            await this._saveConfiguration();
         }
     }
 
@@ -687,9 +742,9 @@ export class MetricsExporter {
      * @public
      * @param {string} jobId - Job ID
      */
-    deleteJob(jobId) {
+    async deleteJob(jobId) {
         this._scheduledJobs.delete(jobId);
-        this._saveConfiguration();
+        await this._saveConfiguration();
     }
 
     /**
@@ -710,9 +765,9 @@ export class MetricsExporter {
      * @public
      * @param {ExternalServiceConfig} serviceConfig - Service configuration
      */
-    addExternalService(serviceConfig) {
+    async addExternalService(serviceConfig) {
         this._externalServices.push(serviceConfig);
-        this._saveConfiguration();
+        await this._saveConfiguration();
     }
 
     /**
@@ -720,11 +775,11 @@ export class MetricsExporter {
      * @public
      * @param {string} endpoint - Service endpoint
      */
-    removeExternalService(endpoint) {
+    async removeExternalService(endpoint) {
         this._externalServices = this._externalServices.filter(
             s => s.endpoint !== endpoint
         );
-        this._saveConfiguration();
+        await this._saveConfiguration();
     }
 
     /**
@@ -761,6 +816,13 @@ export class MetricsExporter {
      */
     disable() {
         this._enabled = false;
+
+        // Stop the scheduler
+        if (this._schedulerInterval) {
+            clearInterval(this._schedulerInterval);
+            this._schedulerInterval = null;
+        }
+
         console.log('[MetricsExporter] Disabled');
     }
 
@@ -772,8 +834,172 @@ export class MetricsExporter {
     isEnabled() {
         return this._enabled;
     }
+
+    /**
+     * Sanitize name for Prometheus metric compatibility
+     * @private
+     * @param {string} name - Name to sanitize
+     * @returns {string} Sanitized name
+     */
+    _sanitizePrometheusName(name) {
+        // Replace invalid characters with underscores
+        let sanitized = name.replace(/[^a-zA-Z0-9_:]/g, '_');
+
+        // Ensure first character matches [a-zA-Z_:]
+        if (!/^[a-zA-Z_:]/.test(sanitized)) {
+            sanitized = '_' + sanitized;
+        }
+
+        return sanitized;
+    }
+
+    /**
+     * Encrypt external service credentials
+     * @private
+     * @param {Array<ExternalServiceConfig>} services - Services to encrypt
+     * @returns {Promise<Array<ExternalServiceConfig>>} Services with encrypted credentials
+     */
+    async _encryptExternalServices(services) {
+        if (!this._encryptionConfig) {
+            return services;
+        }
+
+        try {
+            const encryptedServices = [];
+
+            for (const service of services) {
+                const encryptedService = { ...service };
+
+                if (service.credentials && Object.keys(service.credentials).length > 0) {
+                    // Generate encryption key
+                    const key = await this._deriveEncryptionKey();
+
+                    // Encrypt credentials
+                    const iv = crypto.getRandomValues(new Uint8Array(12));
+                    const encodedCredentials = new TextEncoder().encode(JSON.stringify(service.credentials));
+
+                    const encryptedData = await crypto.subtle.encrypt(
+                        { name: 'AES-GCM', iv },
+                        key,
+                        encodedCredentials
+                    );
+
+                    // Store encrypted data with IV
+                    encryptedService.credentials = {
+                        encrypted: Array.from(new Uint8Array(encryptedData)),
+                        iv: Array.from(iv),
+                        algorithm: 'AES-GCM'
+                    };
+                }
+
+                encryptedServices.push(encryptedService);
+            }
+
+            return encryptedServices;
+        } catch (error) {
+            console.error('[MetricsExporter] Failed to encrypt credentials:', error);
+            // Return unencrypted services as fallback
+            return services;
+        }
+    }
+
+    /**
+     * Decrypt external service credentials
+     * @private
+     * @param {Array<ExternalServiceConfig>} services - Services to decrypt
+     * @returns {Promise<Array<ExternalServiceConfig>>} Services with decrypted credentials
+     */
+    async _decryptExternalServices(services) {
+        if (!this._encryptionConfig) {
+            return services;
+        }
+
+        try {
+            const decryptedServices = [];
+
+            for (const service of services) {
+                const decryptedService = { ...service };
+
+                if (service.credentials?.encrypted) {
+                    // Generate decryption key
+                    const key = await this._deriveEncryptionKey();
+
+                    // Decrypt credentials
+                    const iv = new Uint8Array(service.credentials.iv);
+                    const encryptedData = new Uint8Array(service.credentials.encrypted);
+
+                    const decryptedData = await crypto.subtle.decrypt(
+                        { name: 'AES-GCM', iv },
+                        key,
+                        encryptedData
+                    );
+
+                    const decodedCredentials = new TextDecoder().decode(decryptedData);
+                    decryptedService.credentials = JSON.parse(decodedCredentials);
+                }
+
+                decryptedServices.push(decryptedService);
+            }
+
+            return decryptedServices;
+        } catch (error) {
+            console.error('[MetricsExporter] Failed to decrypt credentials:', error);
+            // Return services as-is (potentially with encrypted credentials)
+            return services;
+        }
+    }
+
+    /**
+     * Derive encryption key from configuration
+     * @private
+     * @returns {Promise<CryptoKey>} Derived encryption key
+     */
+    async _deriveEncryptionKey() {
+        if (!this._encryptionConfig) {
+            throw new Error('Encryption config not provided');
+        }
+
+        const { salt, iterations = 100000 } = this._encryptionConfig;
+
+        // Import password as key
+        const passwordKey = await crypto.subtle.importKey(
+            'raw',
+            new TextEncoder().encode(this._encryptionConfig.password),
+            'PBKDF2',
+            false,
+            ['deriveKey']
+        );
+
+        // Derive encryption key
+        return crypto.subtle.deriveKey(
+            {
+                name: 'PBKDF2',
+                salt: new TextEncoder().encode(salt),
+                iterations,
+                hash: 'SHA-256'
+            },
+            passwordKey,
+            { name: 'AES-GCM', length: 256 },
+            false,
+            ['encrypt', 'decrypt']
+        );
+    }
 }
 
-// Export singleton instance
-const MetricsExporterSingleton = new MetricsExporter();
-export default MetricsExporterSingleton;
+// Lazy singleton initialization
+let MetricsExporterSingleton = null;
+
+/**
+ * Get or create the MetricsExporter singleton instance
+ * @public
+ * @returns {Promise<MetricsExporter>} Singleton instance
+ */
+export async function getMetricsExporter() {
+    if (!MetricsExporterSingleton) {
+        MetricsExporterSingleton = await MetricsExporter.create();
+    }
+    return MetricsExporterSingleton;
+}
+
+// Export the getter function
+export default getMetricsExporter;

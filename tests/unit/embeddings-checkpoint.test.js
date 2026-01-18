@@ -113,12 +113,12 @@ describe('Checkpoint Storage Strategy', () => {
         });
 
         it('should detect large texts arrays', () => {
-            // Create a large texts array (simulating 100k+ streaming history chunks)
+            // Create a large texts array (simulating 1k streaming history chunks)
             const largeTexts = Array(1000).fill('This is a sample text chunk for embedding');
             const json = JSON.stringify(largeTexts);
             const size = new Blob([json]).size;
 
-            // Should be much larger than the 1MB threshold
+            // Should be ~40KB for 1000 texts
             expect(size).toBeGreaterThan(40000); // ~40KB for 1000 texts
         });
     });

@@ -774,6 +774,9 @@ function updateProviderHealthUI() {
     const healthSnapshot = ProviderHealthMonitor.getHealthSnapshot();
     const healthSummary = ProviderHealthMonitor.getHealthSummary();
 
+    // Move currentProvider declaration to the top to fix scope issue
+    const currentProvider = getSettings().llm.provider;
+
     // Update overall badge
     const overallBadge = document.getElementById('provider-health-overall-badge');
     if (overallBadge) {
@@ -787,7 +790,6 @@ function updateProviderHealthUI() {
         providerList.innerHTML = '';
 
         const providers = ['openrouter', 'ollama', 'lmstudio'];
-        const currentProvider = getSettings().llm.provider;
 
         for (const provider of providers) {
             const health = healthSnapshot[provider];
@@ -837,7 +839,14 @@ function createProviderHealthItem(provider, health, currentProvider) {
 function createProviderActions(provider, health, currentProvider) {
     if (provider === currentProvider) {
         if (health.status === 'unhealthy' || health.status === 'blacklisted') {
-            return `<button class="provider-health-action primary" onclick="Settings.switchProviderFromHealth('${provider}')">Switch Provider</button>`;
+            // Find a fallback provider that's not the current one and not unhealthy
+            const target = LLM_PROVIDERS.find(p => p.id !== currentProvider && health.status !== 'unhealthy')?.id ||
+                         LLM_PROVIDERS.find(p => p.id !== currentProvider)?.id;
+
+            if (target) {
+                return `<button class="provider-health-action primary" onclick="Settings.switchProviderFromHealth('${target}')">Switch Provider</button>`;
+            }
+            return ''; // No alternative providers available
         }
         return '';
     }
@@ -879,10 +888,10 @@ function updateProviderRecommendation(provider, health) {
 /**
  * Switch provider from health UI
  */
-function switchProviderFromHealth(provider) {
+async function switchProviderFromHealth(provider) {
     const settings = getSettings();
     settings.llm.provider = provider;
-    saveSettings(settings);
+    await saveSettings(settings);
     showSettingsModal(); // Refresh modal
     showToast(`Switched to ${LLM_PROVIDERS.find(p => p.id === provider)?.name}`);
 }

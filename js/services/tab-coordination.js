@@ -243,6 +243,7 @@ let heartbeatInterval = null;
 let heartbeatCheckInterval = null;
 let lastLeaderHeartbeat = Date.now();
 let lastLeaderVectorClock = vectorClock.toJSON(); // Track Vector clock for heartbeat
+let lastLeaderLamportTime = 0; // Track Lamport time for heartbeat (legacy, kept for compatibility)
 let adaptiveTiming = null;
 let visibilityMonitorCleanup = null;
 let networkMonitorCleanup = null;
@@ -258,6 +259,9 @@ let lastEventWatermark = -1; // Last event sequence number processed
 let knownWatermarks = new Map(); // Track watermarks from other tabs: tabId -> watermark
 let watermarkBroadcastInterval = null;
 const WATERMARK_BROADCAST_MS = 5000; // Broadcast watermark every 5 seconds
+
+// Debug mode flag for conditional logging
+let debugMode = false;
 
 // ==========================================
 // Core Functions
@@ -929,11 +933,7 @@ async function handleReplayRequest(requestingTabId, fromWatermark) {
     try {
         console.log(`[TabCoordination] Handling replay request from tab ${requestingTabId} from watermark ${fromWatermark}`);
 
-        // Import EventBus here to avoid circular dependency
-        const { EventBus } = await import('./event-bus.js');
-
-        // Get events from log
-        const events = await EventBus.getEventLogStats();
+        // Use the already-imported EventBus at the top of this file to get events and replay
         const eventLog = await EventBus.replayEvents({
             fromSequenceNumber: fromWatermark,
             count: 1000,
@@ -963,14 +963,11 @@ async function handleReplayResponse(events) {
     try {
         console.log(`[TabCoordination] Received replay response with ${events.length} events`);
 
-        // Import EventBus here to avoid circular dependency
-        const { EventBus } = await import('./event-bus.js');
-
-        // Replay events
+        // Replay events using the already-imported EventBus at the top of this file
         for (const event of events) {
             await EventBus.emit(event.type, event.payload, {
                 skipEventLog: true,
-                domain: 'global'
+                domain: event.domain || 'global'
             });
         }
 

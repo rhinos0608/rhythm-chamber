@@ -67,7 +67,7 @@ describe('Enhanced PerformanceProfiler', () => {
             const smallProfiler = new PerformanceProfiler({
                 enabled: true,
                 maxMeasurements: 10,
-                maxMemorySnapshots
+                maxSnapshots
             });
 
             // Take more snapshots than limit

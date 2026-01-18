@@ -316,9 +316,11 @@ async function getBatchEmbeddings(texts, onProgress = () => { }) {
         const durationMs = performance.now() - startTime;
         const avgTimePerEmbedding = validCount > 0 ? durationMs / validCount : 0;
 
-        // Emit generation complete event with actual successful count
+        // Emit generation complete event with both total and successful counts
         EventBus.emit('embedding:generation_complete', {
-            count: validCount,
+            totalCount: texts.length,
+            successCount: validCount,
+            skippedCount: texts.length - validCount,
             durationMs: Math.round(durationMs),
             avgTimePerEmbedding: Math.round(avgTimePerEmbedding)
         });

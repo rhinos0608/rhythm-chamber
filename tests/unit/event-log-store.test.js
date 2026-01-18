@@ -206,15 +206,17 @@ describe('EventLogStore', () => {
 
             // Manually trigger compaction with low threshold for testing
             const originalMaxEvents = EventLogStore.COMPACTION_CONFIG.maxEvents;
-            EventLogStore.COMPACTION_CONFIG.maxEvents = 5;
+            try {
+                EventLogStore.COMPACTION_CONFIG.maxEvents = 5;
 
-            const result = await EventLogStore.compactEventLog();
+                const result = await EventLogStore.compactEventLog();
 
-            expect(result.deleted).toBeGreaterThan(0);
-            expect(result.kept).toBeGreaterThan(0);
-
-            // Restore original threshold
-            EventLogStore.COMPACTION_CONFIG.maxEvents = originalMaxEvents;
+                expect(result.deleted).toBeGreaterThan(0);
+                expect(result.kept).toBeGreaterThan(0);
+            } finally {
+                // Restore original threshold
+                EventLogStore.COMPACTION_CONFIG.maxEvents = originalMaxEvents;
+            }
         });
 
         it('should not compact when below threshold', async () => {

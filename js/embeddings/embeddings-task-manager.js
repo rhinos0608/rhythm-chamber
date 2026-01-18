@@ -658,7 +658,8 @@ async function recoverTask(options = {}) {
     }
 
     // Initialize task from checkpoint
-    const startIndex = checkpoint.nextIndex || checkpoint.processedCount;
+    // Use nullish coalescing to avoid treating 0 as falsy
+    const startIndex = checkpoint.nextIndex ?? checkpoint.processedCount;
     const remainingTexts = checkpoint.texts.slice(startIndex);
 
     currentTask = {
@@ -683,6 +684,15 @@ async function recoverTask(options = {}) {
     const stopTimer = PerformanceProfiler.startOperation('embedding_task_recovery', {
         category: PerformanceCategory.EMBEDDING_GENERATION,
         metadata: { totalCount, recoveredFrom: startIndex }
+    });
+
+    // Subscribe to control events
+    const cancelUnsub = EventBus.on('embedding:cancel_requested', () => {
+        cancelRequested = true;
+    });
+
+    const pauseUnsub = EventBus.on('embedding:pause_toggle', ({ paused }) => {
+        pauseRequested = paused;
     });
 
     // Emit recovery started event
@@ -742,8 +752,10 @@ async function recoverTask(options = {}) {
 
             // Checkpoint periodically
             if ((i + CONFIG.BATCH_SIZE) % CONFIG.CHECKPOINT_INTERVAL === 0) {
-                currentTask.processedIndices = Array.from({ length: i + CONFIG.BATCH_SIZE }, (_, idx) => idx);
-                currentTask.nextIndex = i + CONFIG.BATCH_SIZE;
+                // Clamp endIndex to prevent overflow beyond texts array
+                const endIndex = Math.min(i + CONFIG.BATCH_SIZE, checkpoint.texts.length);
+                currentTask.processedIndices = Array.from({ length: endIndex }, (_, idx) => idx);
+                currentTask.nextIndex = endIndex;
                 await saveCheckpoint();
             }
 
@@ -755,8 +767,12 @@ async function recoverTask(options = {}) {
         taskState = cancelRequested ? TaskState.CANCELLED : TaskState.COMPLETING;
         stopTimer();
 
+        // Cleanup EventBus subscriptions
+        cancelUnsub();
+        pauseUnsub();
+
         // Cleanup
-        clearCheckpoint();
+        await clearCheckpoint();
         await releaseLock();
 
         const finalResult = {
@@ -781,6 +797,11 @@ async function recoverTask(options = {}) {
     } catch (error) {
         taskState = TaskState.ERROR;
         stopTimer();
+
+        // Cleanup EventBus subscriptions
+        cancelUnsub();
+        pauseUnsub();
+
         await releaseLock();
 
         const errorResult = {

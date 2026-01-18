@@ -181,7 +181,8 @@ describe('ProviderNotificationService', () => {
 
             const notification = mockEventBus.emit.mock.calls[0][1];
             expect(notification.message).toContain('5 minutes');
-            expect(notification.message).toContain(expiry.toLocaleTimeString());
+            // Use fixed locale for deterministic test
+            expect(notification.message).toContain(expiry.toLocaleTimeString('en-US'));
         });
 
         it('should suggest alternative providers', () => {

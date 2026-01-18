@@ -94,6 +94,7 @@ const MODAL_HTML = `
 let modal = null;
 let isChecking = false;
 let compatibilityResults = {};
+let compatibilityPromise = null;
 let currentShowPromise = null;
 let isSettled = false;
 
@@ -106,57 +107,64 @@ let isSettled = false;
  * @returns {Promise<Object>} Compatibility results
  */
 async function runCompatibilityChecks() {
-    // Prevent reentry
-    if (isChecking) {
-        console.log('[EmbeddingsOnboarding] Compatibility checks already in progress');
-        return compatibilityResults;
+    // Prevent reentry - return existing promise if checks are in progress
+    if (isChecking && compatibilityPromise) {
+        console.log('[EmbeddingsOnboarding] Compatibility checks already in progress, returning existing promise');
+        return compatibilityPromise;
     }
 
     isChecking = true;
     compatibilityResults = {};
 
-    try {
-        // WASM Check
-        updateCheckStatus('check-wasm', 'checking');
-        const wasmSupported = await checkWASM();
-        compatibilityResults.wasm = wasmSupported;
-        updateCheckStatus('check-wasm', wasmSupported ? 'pass' : 'fail', wasmSupported ? 'Available' : 'Not supported');
+    // Create a shared promise that all callers will await
+    compatibilityPromise = (async () => {
+        try {
+            // WASM Check
+            updateCheckStatus('check-wasm', 'checking');
+            const wasmSupported = await checkWASM();
+            compatibilityResults.wasm = wasmSupported;
+            updateCheckStatus('check-wasm', wasmSupported ? 'pass' : 'fail', wasmSupported ? 'Available' : 'Not supported');
 
-        // WebGPU Check (optional enhancement)
-        updateCheckStatus('check-webgpu', 'checking');
-        const webgpuResult = await BatteryAwareModeSelector.checkWebGPUSupport();
-        compatibilityResults.webgpu = webgpuResult.supported;
-        updateCheckStatus('check-webgpu', webgpuResult.supported ? 'pass' : 'optional',
-            webgpuResult.supported ? '100x faster' : 'Using WASM');
+            // WebGPU Check (optional enhancement)
+            updateCheckStatus('check-webgpu', 'checking');
+            const webgpuResult = await BatteryAwareModeSelector.checkWebGPUSupport();
+            compatibilityResults.webgpu = webgpuResult.supported;
+            updateCheckStatus('check-webgpu', webgpuResult.supported ? 'pass' : 'optional',
+                webgpuResult.supported ? '100x faster' : 'Using WASM');
 
-        // IndexedDB Check
-        updateCheckStatus('check-indexeddb', 'checking');
-        const indexedDBSupported = await checkIndexedDB();
-        compatibilityResults.indexeddb = indexedDBSupported;
-        updateCheckStatus('check-indexeddb', indexedDBSupported ? 'pass' : 'fail',
-            indexedDBSupported ? 'Available' : 'Required');
+            // IndexedDB Check
+            updateCheckStatus('check-indexeddb', 'checking');
+            const indexedDBSupported = await checkIndexedDB();
+            compatibilityResults.indexeddb = indexedDBSupported;
+            updateCheckStatus('check-indexeddb', indexedDBSupported ? 'pass' : 'fail',
+                indexedDBSupported ? 'Available' : 'Required');
 
-        // Storage Check
-        updateCheckStatus('check-storage', 'checking');
-        const storageResult = await checkStorage();
-        compatibilityResults.storage = storageResult;
-        updateCheckStatus('check-storage', storageResult.ok ? 'pass' : 'fail',
-            storageResult.ok ? 'Sufficient' : 'Low space');
+            // Storage Check
+            updateCheckStatus('check-storage', 'checking');
+            const storageResult = await checkStorage();
+            compatibilityResults.storage = storageResult;
+            updateCheckStatus('check-storage', storageResult.ok ? 'pass' : 'fail',
+                storageResult.ok ? 'Sufficient' : 'Low space');
 
-        // Update storage preview
-        updateStoragePreview(storageResult);
+            // Update storage preview
+            updateStoragePreview(storageResult);
 
-        // Enable button if minimum requirements met
-        const canEnable = compatibilityResults.wasm && compatibilityResults.indexeddb && compatibilityResults.storage?.ok;
-        const enableBtn = document.getElementById('onboarding-enable');
-        if (enableBtn) {
-            enableBtn.disabled = !canEnable;
+            // Enable button if minimum requirements met
+            const canEnable = compatibilityResults.wasm && compatibilityResults.indexeddb && compatibilityResults.storage?.ok;
+            const enableBtn = document.getElementById('onboarding-enable');
+            if (enableBtn) {
+                enableBtn.disabled = !canEnable;
+            }
+
+            return compatibilityResults;
+        } finally {
+            // Reset state after completion
+            isChecking = false;
+            compatibilityPromise = null;
         }
+    })();
 
-        return compatibilityResults;
-    } finally {
-        isChecking = false;
-    }
+    return compatibilityPromise;
 }
 
 /**

@@ -156,7 +156,7 @@ export class ProviderNotificationService {
 
         // Add "Switch Back" action if original provider recovers
         actions.push({
-            label: `Switch back to ${PROVIDER_NAMES[fromProvider]}`,
+            label: `Switch back to ${PROVIDER_NAMES[fromProvider] || fromProvider}`,
             action: 'switch_provider',
             provider: fromProvider,
             primary: false
@@ -191,7 +191,7 @@ export class ProviderNotificationService {
             },
             actions: [
                 {
-                    label: `Switch to ${PROVIDER_NAMES[provider]}`,
+                    label: `Switch to ${PROVIDER_NAMES[provider] || provider}`,
                     action: 'switch_provider',
                     provider,
                     primary: true
@@ -243,7 +243,7 @@ export class ProviderNotificationService {
         // Add alternative provider switches
         for (const altProvider of otherProviders) {
             actions.push({
-                label: `Switch to ${PROVIDER_NAMES[altProvider]}`,
+                label: `Switch to ${PROVIDER_NAMES[altProvider] || altProvider}`,
                 action: 'switch_provider',
                 provider: altProvider,
                 primary: altProvider === 'ollama' // Prefer local providers

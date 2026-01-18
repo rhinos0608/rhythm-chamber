@@ -271,9 +271,12 @@ function startNetworkMonitoring() {
     networkState.currentQuality = getConnectionQuality();
     networkState.lastUpdate = Date.now();
 
+    // Declare handleConnectionChange in outer scope for cleanup access
+    let handleConnectionChange = null;
+
     // Listen for connection changes
     if (navigator.connection) {
-        const handleConnectionChange = () => {
+        handleConnectionChange = () => {
             const oldQuality = networkState.currentQuality;
             const newQuality = getConnectionQuality();
 
@@ -314,7 +317,7 @@ function startNetworkMonitoring() {
     // Return cleanup function
     return () => {
         networkState.isMonitoring = false;
-        if (navigator.connection) {
+        if (navigator.connection && handleConnectionChange) {
             navigator.connection.removeEventListener('change', handleConnectionChange);
         }
         window.removeEventListener('online', handleOnlineChange);
@@ -409,27 +412,47 @@ function startVisibilityMonitoring() {
 
     visibilityState.isMonitoring = true;
 
+    // Synchronize initial state to match document.hidden
+    const now = Date.now();
+    visibilityState.hidden = document.hidden;
+
+    // Initialize timestamps consistently for accurate duration calculations
+    if (document.hidden) {
+        // Currently hidden: set lastHidden to now, lastVisible to a moment ago
+        visibilityState.lastHidden = now;
+        visibilityState.lastVisible = now - 0; // No visible time elapsed yet
+    } else {
+        // Currently visible: set lastVisible to now, lastHidden to a moment ago
+        visibilityState.lastVisible = now;
+        visibilityState.lastHidden = now - 0; // No hidden time elapsed yet
+    }
+
+    // Reset duration counters for clean state
+    visibilityState.hiddenDuration = 0;
+    visibilityState.visibleDuration = 0;
+    visibilityState.transitionCount = 0;
+
     const handleVisibilityChange = () => {
         const wasHidden = visibilityState.hidden;
         const isHidden = document.hidden;
-        const now = Date.now();
+        const transitionTime = Date.now();
 
         if (wasHidden !== isHidden) {
             visibilityState.hidden = isHidden;
             visibilityState.transitionCount++;
 
             if (isHidden) {
-                visibilityState.lastHidden = now;
-                visibilityState.visibleDuration += (now - visibilityState.lastVisible);
+                visibilityState.lastHidden = transitionTime;
+                visibilityState.visibleDuration += (transitionTime - visibilityState.lastVisible);
             } else {
-                visibilityState.lastVisible = now;
-                visibilityState.hiddenDuration += (now - visibilityState.lastHidden);
+                visibilityState.lastVisible = transitionTime;
+                visibilityState.hiddenDuration += (transitionTime - visibilityState.lastHidden);
             }
 
             // Notify listeners
             visibilityState.listeners.forEach(listener => {
                 try {
-                    listener(isHidden, now);
+                    listener(isHidden, transitionTime);
                 } catch (err) {
                     console.warn('[DeviceDetection] Visibility listener error:', err);
                 }

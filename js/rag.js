@@ -122,12 +122,29 @@ async function createChunksWithWorker(streams, onProgress = () => { }) {
         worker.onerror = async (error) => {
             clearTimeout(timeoutId);
             console.warn('[RAG] Worker error, falling back to async main thread:', error.message);
+
+            // Capture the existing error handler before cleanup
+            const prevOnError = embeddingWorker.onerror;
+
             // Fallback to async main thread version
             try {
                 const chunks = await createChunks(streams, onProgress);
+                // Call cleanup after successful fallback
+                cleanupEmbeddingWorker();
                 resolve(chunks);
             } catch (fallbackError) {
+                // Call cleanup after failed fallback
+                cleanupEmbeddingWorker();
                 reject(fallbackError);
+            }
+
+            // Invoke the previous error handler if it existed
+            if (prevOnError && typeof prevOnError === 'function') {
+                try {
+                    prevOnError(error);
+                } catch (handlerError) {
+                    console.warn('[RAG] Previous error handler failed:', handlerError.message);
+                }
             }
         };
 

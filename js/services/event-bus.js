@@ -341,20 +341,6 @@ function emit(eventType, payload = {}, options = {}) {
     const priority = EVENT_PRIORITIES[eventType] ?? PRIORITY.NORMAL;
     const eventDomain = options.domain ?? 'global';
 
-    // Event versioning: increment sequence and tick VectorClock
-    const currentVectorClock = eventVectorClock.tick();
-    eventSequenceNumber++;
-    const sequenceNumber = eventSequenceNumber;
-
-    // Store event in log if enabled
-    if (eventLogEnabled && !eventReplayInProgress && !options.skipEventLog) {
-        persistEvent(eventType, payload, currentVectorClock, sequenceNumber, options)
-            .catch(err => console.warn('[EventBus] Failed to persist event:', err));
-    }
-
-    // Update watermark
-    lastEventWatermark = sequenceNumber;
-
     // Circuit breaker: Storm detection
     if (!options.bypassCircuitBreaker) {
         // Update storm window
@@ -461,6 +447,20 @@ function emit(eventType, payload = {}, options = {}) {
             pendingEvents.shift();
         }
     }
+
+    // Event versioning: increment sequence and tick VectorClock ONLY after circuit breaker passes
+    const currentVectorClock = eventVectorClock.tick();
+    eventSequenceNumber++;
+    const sequenceNumber = eventSequenceNumber;
+
+    // Store event in log if enabled
+    if (eventLogEnabled && !eventReplayInProgress && !options.skipEventLog) {
+        persistEvent(eventType, payload, currentVectorClock, sequenceNumber, options)
+            .catch(err => console.warn('[EventBus] Failed to persist event:', err));
+    }
+
+    // Update watermark
+    lastEventWatermark = sequenceNumber;
 
     // Validate payload against schema if available
     if (!options.skipValidation && EVENT_SCHEMAS[eventType]) {
@@ -729,6 +729,13 @@ function configureCircuitBreaker(config) {
 // ==========================================
 
 /**
+ * Module-level reference to EventBus for internal use.
+ * Set after EventBus object is created to avoid circular dependency.
+ * @type {Object|null}
+ */
+let EventBusRef = null;
+
+/**
  * Persist event to log
  * @param {string} eventType - Event type
  * @param {object} payload - Event payload
@@ -739,7 +746,8 @@ function configureCircuitBreaker(config) {
 async function persistEvent(eventType, payload, vectorClock, sequenceNumber, options = {}) {
     try {
         const sourceTab = TabCoordinator.getTabId();
-        await EventLogStore.appendEvent(eventType, payload, vectorClock, sourceTab);
+        const eventDomain = options.domain ?? 'global';
+        await EventLogStore.appendEvent(eventType, payload, vectorClock, sourceTab, eventDomain);
 
         // Create periodic checkpoint
         if (sequenceNumber > 0 && sequenceNumber % EventLogStore.COMPACTION_CONFIG.checkpointInterval === 0) {
@@ -747,7 +755,16 @@ async function persistEvent(eventType, payload, vectorClock, sequenceNumber, opt
         }
     } catch (error) {
         console.error('[EventBus] Failed to persist event:', error);
-        EventBus.emit('eventbus:persistence_error', { error: error.message, eventType });
+        // Use module-level reference if available, otherwise log warning
+        if (EventBusRef && EventBusRef.emit) {
+            EventBusRef.emit('eventbus:persistence_error', {
+                error: error.message,
+                eventType,
+                skipEventLog: true
+            });
+        } else {
+            console.warn('[EventBus] Unable to emit persistence error - EventBusRef not initialized');
+        }
     }
 }
 
@@ -822,10 +839,10 @@ async function replayEvents(options = {}) {
                     eventVectorClock.merge(event.vectorClock);
                 }
 
-                // Emit with replay flag
+                // Emit with replay flag using original event domain
                 emit(event.type, event.payload, {
                     skipEventLog: true, // Don't log replayed events
-                    domain: 'global'
+                    domain: event.domain || 'global'
                 });
 
                 // Update watermark
@@ -906,5 +923,8 @@ export const EventBus = {
     PRIORITY,
     EVENT_SCHEMAS
 };
+
+// Set module-level reference for internal use (e.g., persistEvent error handling)
+EventBusRef = EventBus;
 
 console.log('[EventBus] Centralized event system loaded');
