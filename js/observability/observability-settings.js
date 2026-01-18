@@ -202,13 +202,18 @@ async function exportMetrics() {
 
 /**
  * Toggle performance monitoring
+ * HNW Hierarchy: Persists to IndexedDB for consistent settings source
+ * 
+ * @param {boolean} enabled - Whether monitoring is enabled
  */
-function toggleMonitoring(enabled) {
+async function toggleMonitoring(enabled) {
     if (window.PerformanceProfiler) {
         if (enabled) {
             window.PerformanceProfiler.enable();
+            console.log('[ObservabilitySettings] Performance monitoring enabled');
         } else {
             window.PerformanceProfiler.disable();
+            console.log('[ObservabilitySettings] Performance monitoring disabled (<5% CPU savings)');
         }
     }
 
@@ -220,8 +225,14 @@ function toggleMonitoring(enabled) {
         }
     }
 
-    // Save preference
-    localStorage.setItem('observability_enabled', enabled);
+    // Save preference to IndexedDB (consistent with HNW settings cascade)
+    if (window.Storage?.setConfig) {
+        try {
+            await window.Storage.setConfig('observability_enabled', enabled);
+        } catch (e) {
+            console.warn('[ObservabilitySettings] Failed to save preference:', e);
+        }
+    }
 }
 
 /**
@@ -253,6 +264,48 @@ function setUpdateInterval(intervalMs) {
     localStorage.setItem('observability_interval', intervalMs);
 }
 
+/**
+ * Load observability settings and apply them
+ * HNW Hierarchy: Called on app init to respect saved preferences
+ * 
+ * @returns {Promise<void>}
+ */
+async function loadObservabilitySettings() {
+    let enabled = true; // Default: enabled
+
+    // Try IndexedDB first
+    if (window.Storage?.getConfig) {
+        try {
+            const stored = await window.Storage.getConfig('observability_enabled');
+            if (stored !== undefined && stored !== null) {
+                enabled = stored;
+            }
+        } catch (e) {
+            console.warn('[ObservabilitySettings] Failed to load preference:', e);
+        }
+    }
+
+    // Apply the setting
+    if (!enabled) {
+        // Disable monitoring if user previously disabled
+        if (window.PerformanceProfiler) {
+            window.PerformanceProfiler.disable();
+        }
+        if (window.CoreWebVitalsTracker) {
+            window.CoreWebVitalsTracker.disable();
+        }
+        console.log('[ObservabilitySettings] Monitoring disabled per user preference');
+    }
+
+    // Update checkbox state in UI if it exists
+    const checkbox = document.getElementById('observability-enabled');
+    if (checkbox) {
+        checkbox.checked = enabled;
+    }
+
+    return enabled;
+}
+
 // Export observability settings API
 export const ObservabilitySettings = {
     initObservabilitySettings,
@@ -261,7 +314,8 @@ export const ObservabilitySettings = {
     exportMetrics,
     toggleMonitoring,
     toggleMemoryProfiling,
-    setUpdateInterval
+    setUpdateInterval,
+    loadObservabilitySettings
 };
 
 // Make available globally for onclick handlers

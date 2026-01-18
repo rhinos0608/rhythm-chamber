@@ -843,6 +843,19 @@ function setupEventListeners() {
             console.warn(`[App] Unknown action: ${action}`);
         }
     });
+
+    // ==========================================
+    // HNW Wave: Pattern Worker Failure Notification
+    // ==========================================
+    // Subscribe to worker failure events for user-friendly notification
+    if (typeof EventBus !== 'undefined' && typeof EventBus.on === 'function') {
+        EventBus.on('pattern:worker_failure', (data) => {
+            console.warn('[App] Pattern worker failure detected:', data);
+            const patterns = data.affectedPatterns?.join(', ') || 'pattern analysis';
+            showToast(`⚠️ ${patterns} unavailable - Try refreshing the page`, 6000);
+        });
+        console.log('[App] Subscribed to pattern:worker_failure events');
+    }
 }
 
 // ==========================================

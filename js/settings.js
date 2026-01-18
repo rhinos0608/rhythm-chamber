@@ -37,6 +37,58 @@ const AVAILABLE_MODELS = [
 // Priority 2: Module-level AbortController for embedding cancellation
 let currentEmbeddingAbortController = null;
 
+// Settings migration state
+let settingsMigrationComplete = false;
+const SETTINGS_MIGRATED_KEY = 'rhythm_chamber_settings_migrated_to_idb';
+
+/**
+ * Migrate settings from localStorage to IndexedDB (one-time migration)
+ * HNW Hierarchy: Simplifies to config.js → IndexedDB (removes localStorage as third authority)
+ * 
+ * @returns {Promise<boolean>} True if migration occurred, false if already migrated
+ */
+async function migrateLocalStorageSettings() {
+    // Check if already migrated
+    if (settingsMigrationComplete) return false;
+    if (localStorage.getItem(SETTINGS_MIGRATED_KEY) === 'true') {
+        settingsMigrationComplete = true;
+        return false;
+    }
+
+    const stored = localStorage.getItem('rhythm_chamber_settings');
+    if (!stored) {
+        // No settings to migrate
+        localStorage.setItem(SETTINGS_MIGRATED_KEY, 'true');
+        settingsMigrationComplete = true;
+        console.log('[Settings] No localStorage settings to migrate');
+        return false;
+    }
+
+    try {
+        const parsed = JSON.parse(stored);
+
+        // Migrate to IndexedDB
+        if (window.Storage?.setConfig) {
+            await window.Storage.setConfig('rhythm_chamber_settings', parsed);
+
+            // Mark migration complete and remove old localStorage data
+            localStorage.setItem(SETTINGS_MIGRATED_KEY, 'true');
+            localStorage.removeItem('rhythm_chamber_settings');
+            settingsMigrationComplete = true;
+
+            console.log('[Settings] Migrated settings from localStorage to IndexedDB');
+            return true;
+        } else {
+            // Storage not available yet, will retry on next call
+            console.warn('[Settings] Storage not available, migration deferred');
+            return false;
+        }
+    } catch (e) {
+        console.error('[Settings] Migration failed:', e);
+        return false;
+    }
+}
+
 /**
  * Get current settings - reads directly from window.Config (source of truth)
  * Falls back to localStorage overrides, then IndexedDB (after migration).
@@ -249,23 +301,24 @@ function applySettingsOverrides(settings, parsed) {
 }
 
 /**
- * Save user overrides to unified storage (IndexedDB) with localStorage sync fallback
- * HNW: Storage module is the single authority for persistence
+ * Save user overrides to unified storage (IndexedDB only)
+ * HNW Hierarchy: Storage module is the single authority for persistence
+ * Settings cascade: config.js (defaults) → IndexedDB (user overrides)
  * Note: This does NOT modify config.js - it stores overrides
  */
 async function saveSettings(settings) {
-    // Try unified storage first (IndexedDB)
+    // Save to IndexedDB only (localStorage fallback removed for HNW simplification)
     if (window.Storage?.setConfig) {
         try {
             await window.Storage.setConfig('rhythm_chamber_settings', settings);
-            console.log('[Settings] Saved to unified storage');
+            console.log('[Settings] Saved to IndexedDB');
         } catch (e) {
-            console.warn('[Settings] Failed to save to unified storage:', e);
+            console.warn('[Settings] Failed to save to IndexedDB:', e);
+            throw e; // Propagate error so caller knows save failed
         }
+    } else {
+        console.warn('[Settings] Storage not available, settings not persisted');
     }
-
-    // Also save to localStorage as sync fallback (for pre-migration reads)
-    localStorage.setItem('rhythm_chamber_settings', JSON.stringify(settings));
 
     // Update the runtime Config object so changes take effect immediately
     if (window.Config) {
@@ -288,23 +341,22 @@ async function saveSettings(settings) {
         }
     }
 
-    console.log('Settings saved and applied to runtime Config');
+    console.log('[Settings] Saved and applied to runtime Config');
 }
 
 /**
  * Clear all stored setting overrides
+ * HNW Hierarchy: Only clears from IndexedDB (single source of truth)
  */
 async function clearSettings() {
-    // Clear from unified storage
     if (window.Storage?.removeConfig) {
         try {
             await window.Storage.removeConfig('rhythm_chamber_settings');
+            console.log('[Settings] Cleared from IndexedDB');
         } catch (e) {
-            console.warn('[Settings] Failed to clear from unified storage:', e);
+            console.warn('[Settings] Failed to clear from IndexedDB:', e);
         }
     }
-    // Also clear localStorage
-    localStorage.removeItem('rhythm_chamber_settings');
 }
 
 /**
