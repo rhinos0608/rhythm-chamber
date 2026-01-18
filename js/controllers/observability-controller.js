@@ -169,6 +169,12 @@ export class ObservabilityController {
         // Add tab switching and action handlers
         this._setupTabs();
         this._setupActions();
+
+        // Attach click delegation handler now that container exists
+        // (handles case where _setupEventListeners ran before container was created)
+        if (this._container && this._onActionClick) {
+            this._container.addEventListener('click', this._onActionClick);
+        }
     }
 
     /**
@@ -851,12 +857,12 @@ export class ObservabilityController {
      * @returns {string} Escaped text
      */
     _escapeHtml(text) {
-        if (typeof text !== 'string') {
-            return String(text);
-        }
+        // Coerce all inputs to string first (handles null, undefined, objects with custom toString)
+        const coerced = typeof text === 'string' ? text : String(text);
 
+        // Always run through DOM-escape logic for security
         const div = document.createElement('div');
-        div.textContent = text;
+        div.textContent = coerced;
         return div.innerHTML;
     }
 
