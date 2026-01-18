@@ -52,6 +52,12 @@ let currentStatus = {
 };
 let isInitialized = false;
 
+// Event listeners (for threshold_exceeded, quota_cleaned, etc.)
+const eventListeners = new Map();
+
+// Cleanup threshold - triggers archival at 90%
+const CLEANUP_THRESHOLD_PERCENT = 90;
+
 // ==========================================
 // Core Functions
 // ==========================================
@@ -135,6 +141,18 @@ async function checkNow() {
                 quotaBytes: currentStatus.quotaBytes,
                 percentage: currentStatus.percentage
             });
+        }
+
+        // Emit threshold_exceeded when crossing cleanup threshold (90%)
+        if (currentStatus.percentage >= CLEANUP_THRESHOLD_PERCENT) {
+            const thresholdPayload = {
+                percent: currentStatus.percentage,
+                usageBytes: currentStatus.usageBytes,
+                quotaBytes: currentStatus.quotaBytes,
+                availableBytes: currentStatus.availableBytes
+            };
+            emitLocalEvent('threshold_exceeded', thresholdPayload);
+            EventBus.emit('storage:threshold_exceeded', thresholdPayload);
         }
 
         return currentStatus;
@@ -272,6 +290,68 @@ function reset() {
         isBlocked: false,
         tier: 'normal'
     };
+
+    // Clear event listeners
+    eventListeners.clear();
+}
+
+// ==========================================
+// Event Listener API
+// ==========================================
+
+/**
+ * Emit event to local listeners
+ * @private
+ * @param {string} event - Event name
+ * @param {object} data - Event data
+ */
+function emitLocalEvent(event, data) {
+    const listeners = eventListeners.get(event);
+    if (listeners) {
+        for (const listener of listeners) {
+            try {
+                listener(data);
+            } catch (error) {
+                console.error(`[QuotaManager] Error in ${event} listener:`, error);
+            }
+        }
+    }
+}
+
+/**
+ * Subscribe to QuotaManager events
+ * @param {string} event - Event name ('threshold_exceeded', 'quota_cleaned')
+ * @param {function} handler - Event handler
+ * @returns {function} Unsubscribe function
+ */
+function on(event, handler) {
+    if (typeof handler !== 'function') {
+        console.error('[QuotaManager] Handler must be a function');
+        return () => { };
+    }
+
+    if (!eventListeners.has(event)) {
+        eventListeners.set(event, new Set());
+    }
+    eventListeners.get(event).add(handler);
+
+    console.log(`[QuotaManager] Subscribed to ${event}`);
+
+    // Return unsubscribe function
+    return () => off(event, handler);
+}
+
+/**
+ * Unsubscribe from QuotaManager events
+ * @param {string} event - Event name
+ * @param {function} handler - Event handler to remove
+ */
+function off(event, handler) {
+    const listeners = eventListeners.get(event);
+    if (listeners) {
+        listeners.delete(handler);
+        console.log(`[QuotaManager] Unsubscribed from ${event}`);
+    }
 }
 
 // ==========================================
@@ -299,9 +379,18 @@ export const QuotaManager = {
     stopPolling,
     reset,
 
+    // Event listener API
+    on,
+    off,
+
     // Expose config for testing
     get config() {
         return { ...QUOTA_CONFIG };
+    },
+
+    // Expose cleanup threshold for testing
+    get cleanupThreshold() {
+        return CLEANUP_THRESHOLD_PERCENT;
     }
 };
 

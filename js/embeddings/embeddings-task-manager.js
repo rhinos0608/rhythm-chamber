@@ -42,7 +42,9 @@ const CONFIG = {
     CHECKPOINT_INTERVAL: 50,     // Save progress every N items
     LOCK_NAME: 'embedding_generation',
     WORKER_TIMEOUT_MS: 30000,    // 30s timeout per batch
-    MIN_INTERVAL_MS: 100         // Minimum interval between batches (for responsiveness)
+    MIN_INTERVAL_MS: 100,        // Minimum interval between batches (for responsiveness)
+    ETA_INITIAL_CHUNKS: 5,       // Emit first ETA after processing this many chunks
+    ETA_UPDATE_INTERVAL: 10      // Update ETA every N chunks after initial emit
 };
 
 // ==========================================
@@ -57,6 +59,10 @@ let errorCount = 0;
 let pauseRequested = false;
 let cancelRequested = false;
 let checkpointData = null;
+
+// ETA tracking state
+let etaEmitted = false;
+let lastEtaEmitCount = 0;
 
 // ==========================================
 // Operation Lock Integration
@@ -441,6 +447,8 @@ async function startTask(options) {
     pauseRequested = false;
     cancelRequested = false;
     taskState = TaskState.RUNNING;
+    etaEmitted = false;
+    lastEtaEmitCount = 0;
 
     // Start performance tracking
     const stopTimer = PerformanceProfiler.startOperation('embedding_task', {
@@ -500,6 +508,31 @@ async function startTask(options) {
                         total: totalCount,
                         percent: 20 + (currentProcessed / totalCount) * 80
                     });
+
+                    // ETA calculation and emission
+                    // Emit after ETA_INITIAL_CHUNKS (5), then every ETA_UPDATE_INTERVAL (10) chunks
+                    const shouldEmitInitial = !etaEmitted && currentProcessed >= CONFIG.ETA_INITIAL_CHUNKS;
+                    const shouldEmitUpdate = etaEmitted && (currentProcessed - lastEtaEmitCount) >= CONFIG.ETA_UPDATE_INTERVAL;
+
+                    if (shouldEmitInitial || shouldEmitUpdate) {
+                        const elapsed = Date.now() - currentTask.startTime;
+                        const timePerChunk = elapsed / currentProcessed;
+                        const remainingChunks = totalCount - currentProcessed;
+                        const remainingMs = remainingChunks * timePerChunk;
+                        const remainingSeconds = Math.ceil(remainingMs / 1000);
+
+                        EventBus.emit('embedding:time_estimate', {
+                            remainingSeconds,
+                            remainingMs,
+                            processedChunks: currentProcessed,
+                            totalChunks: totalCount,
+                            elapsedMs: elapsed,
+                            averageChunkMs: timePerChunk
+                        });
+
+                        etaEmitted = true;
+                        lastEtaEmitCount = currentProcessed;
+                    }
                 });
 
                 results.push(...batchResults);
@@ -678,6 +711,8 @@ async function recoverTask(options = {}) {
     pauseRequested = false;
     cancelRequested = false;
     taskState = TaskState.RUNNING;
+    etaEmitted = false;
+    lastEtaEmitCount = 0;
 
     // Start performance tracking
     const stopTimer = PerformanceProfiler.startOperation('embedding_task_recovery', {
@@ -740,6 +775,31 @@ async function recoverTask(options = {}) {
                         percent: 20 + (currentProcessed / totalCount) * 80,
                         recovered: true
                     });
+
+                    // ETA calculation and emission (same logic as startTask)
+                    const shouldEmitInitial = !etaEmitted && currentProcessed >= CONFIG.ETA_INITIAL_CHUNKS;
+                    const shouldEmitUpdate = etaEmitted && (currentProcessed - lastEtaEmitCount) >= CONFIG.ETA_UPDATE_INTERVAL;
+
+                    if (shouldEmitInitial || shouldEmitUpdate) {
+                        const elapsed = Date.now() - currentTask.startTime;
+                        const timePerChunk = elapsed / currentProcessed;
+                        const remainingChunks = totalCount - currentProcessed;
+                        const remainingMs = remainingChunks * timePerChunk;
+                        const remainingSeconds = Math.ceil(remainingMs / 1000);
+
+                        EventBus.emit('embedding:time_estimate', {
+                            remainingSeconds,
+                            remainingMs,
+                            processedChunks: currentProcessed,
+                            totalChunks: totalCount,
+                            elapsedMs: elapsed,
+                            averageChunkMs: timePerChunk,
+                            recovered: true
+                        });
+
+                        etaEmitted = true;
+                        lastEtaEmitCount = currentProcessed;
+                    }
                 });
 
                 results.push(...batchResults);

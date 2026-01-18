@@ -91,8 +91,11 @@ async function migrateLocalStorageSettings() {
 
 /**
  * Get current settings - reads directly from window.Config (source of truth)
- * Falls back to localStorage overrides, then IndexedDB (after migration).
- * SYNC version for backward compatibility - use getSettingsAsync for full unified storage support.
+ * Falls back to localStorage only if migration hasn't completed yet.
+ * SYNC version for backward compatibility - use getSettingsAsync() for full unified storage support.
+ * 
+ * HNW: After migration, this function only reads config.js defaults.
+ * Use getSettingsAsync() to get full settings with IndexedDB overrides.
  */
 function getSettings() {
     // Read directly from config.js as the source of truth
@@ -138,8 +141,13 @@ function getSettings() {
         }
     };
 
-    // Only apply localStorage overrides for fields that are empty/placeholder in config.js
-    // After migration, this will be empty and fall through to defaults
+    // Post-migration: Skip localStorage reads entirely
+    // User overrides are only available via getSettingsAsync()
+    if (settingsMigrationComplete) {
+        return settings;
+    }
+
+    // Pre-migration fallback: Apply localStorage overrides
     const stored = localStorage.getItem('rhythm_chamber_settings');
     if (stored) {
         try {
@@ -155,10 +163,14 @@ function getSettings() {
 
 /**
  * Get settings from unified storage (async version)
- * HNW: Single point of truth through unified storage API
+ * HNW: Single point of truth - config.js (defaults) → IndexedDB (user overrides)
+ * Note: localStorage fallback only used if migration hasn't completed yet
  * @returns {Promise<Object>} Settings object
  */
 async function getSettingsAsync() {
+    // Ensure migration has been attempted
+    await migrateLocalStorageSettings();
+
     // Read directly from config.js as the source of truth
     const configOpenrouter = window.Config?.openrouter || {};
     const configSpotify = window.Config?.spotify || {};
@@ -202,7 +214,20 @@ async function getSettingsAsync() {
         }
     };
 
-    // Try unified storage first (IndexedDB after migration)
+    // After migration, read only from IndexedDB (single source of user overrides)
+    if (settingsMigrationComplete && window.Storage?.getConfig) {
+        try {
+            const storedConfig = await window.Storage.getConfig('rhythm_chamber_settings');
+            if (storedConfig) {
+                applySettingsOverrides(settings, storedConfig);
+            }
+        } catch (e) {
+            console.warn('[Settings] Failed to read from IndexedDB:', e);
+        }
+        return settings;
+    }
+
+    // Pre-migration fallback: Try IndexedDB first, then localStorage
     if (window.Storage?.getConfig) {
         try {
             const storedConfig = await window.Storage.getConfig('rhythm_chamber_settings');
@@ -215,7 +240,7 @@ async function getSettingsAsync() {
         }
     }
 
-    // Fall back to localStorage (pre-migration or if IndexedDB fails)
+    // Fall back to localStorage only if migration hasn't completed
     const stored = localStorage.getItem('rhythm_chamber_settings');
     if (stored) {
         try {
