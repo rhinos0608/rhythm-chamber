@@ -26,27 +26,18 @@ import { PerformanceProfiler, PerformanceCategory } from '../services/performanc
  * @returns {Object|null} Encryption configuration or null if not available
  */
 function getOrCreateEncryptionConfig() {
-    try {
-        // Check if user provided an encryption config
-        const userProvidedSalt = localStorage.getItem('observability_encryption_salt');
-        const userProvidedPassword = localStorage.getItem('observability_encryption_password');
+    // SECURITY: Never read encryption keys from localStorage - vulnerable to XSS attacks
+    // Return null immediately to prevent insecure credential storage
+    console.warn('[ObservabilityInit] SECURITY WARNING: Metrics encryption not configured. ' +
+        'External service credentials will be stored in plain text in localStorage. ' +
+        'CRITICAL: Reading encryption secrets from localStorage is insecure and vulnerable to XSS attacks. ' +
+        'For production use, consider safer alternatives: ' +
+        '(1) Prompt for password at runtime, ' +
+        '(2) Use a session-derived key, ' +
+        '(3) Derive/store key server-side. ' +
+        'Do NOT attempt to provide encryption config via localStorage for security reasons.');
 
-        if (userProvidedSalt && userProvidedPassword) {
-            return {
-                password: userProvidedPassword,
-                salt: userProvidedSalt,
-                iterations: 100000
-            };
-        }
-
-        // No encryption config available - log warning
-        console.warn('[ObservabilityInit] Metrics encryption not configured. External service credentials will be stored in plain text in localStorage. For production use, set observability_encryption_salt and observability_encryption_password in localStorage before initialization.');
-
-        return null;
-    } catch (error) {
-        console.warn('[ObservabilityInit] Failed to read encryption config:', error);
-        return null;
-    }
+    return null;
 }
 import { MetricsExporter } from './metrics-exporter.js';
 import { ObservabilityController } from '../controllers/observability-controller.js';

@@ -119,11 +119,6 @@ export class ObservabilityController {
 
         // Listen for settings modal events
         document.addEventListener('settings:observability', this._onSettingsObservability);
-
-        // Set up action button delegation
-        if (this._container) {
-            this._container.addEventListener('click', this._onActionClick);
-        }
     }
 
     /**
@@ -170,8 +165,7 @@ export class ObservabilityController {
         this._setupTabs();
         this._setupActions();
 
-        // Attach click delegation handler now that container exists
-        // (handles case where _setupEventListeners ran before container was created)
+        // Attach click delegation handler to container (must be after container creation)
         if (this._container && this._onActionClick) {
             this._container.addEventListener('click', this._onActionClick);
         }
@@ -567,6 +561,12 @@ export class ObservabilityController {
      * @param {string} jobId - Job ID
      */
     _pauseJob(jobId) {
+        // Input validation
+        if (!jobId || typeof jobId !== 'string' || jobId.trim() === '') {
+            console.warn('[ObservabilityController] Invalid jobId:', jobId);
+            return;
+        }
+
         if (!window.MetricsExporter) return;
         console.log(`[ObservabilityController] Pause job ${jobId}`);
         // TODO: Implement job pause functionality
@@ -578,6 +578,12 @@ export class ObservabilityController {
      * @param {string} jobId - Job ID
      */
     _deleteJob(jobId) {
+        // Input validation
+        if (!jobId || typeof jobId !== 'string' || jobId.trim() === '') {
+            console.warn('[ObservabilityController] Invalid jobId:', jobId);
+            return;
+        }
+
         if (!window.MetricsExporter) return;
         console.log(`[ObservabilityController] Delete job ${jobId}`);
         // TODO: Implement job deletion functionality
@@ -589,6 +595,12 @@ export class ObservabilityController {
      * @param {string} endpoint - Service endpoint
      */
     _removeService(endpoint) {
+        // Input validation
+        if (!endpoint || typeof endpoint !== 'string' || endpoint.trim() === '') {
+            console.warn('[ObservabilityController] Invalid endpoint:', endpoint);
+            return;
+        }
+
         if (!window.MetricsExporter) return;
         console.log(`[ObservabilityController] Remove service ${endpoint}`);
         // TODO: Implement service removal functionality

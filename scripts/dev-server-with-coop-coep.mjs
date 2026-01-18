@@ -14,7 +14,7 @@
 import { createServer } from 'http';
 import { parse } from 'url';
 import { readFileSync } from 'fs';
-import { extname, join, normalize, resolve } from 'path';
+import { extname, join, normalize, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -80,12 +80,26 @@ const server = createServer((req, res) => {
   const parsedUrl = parse(req.url);
 
   // Security: Normalize and validate the path to prevent directory traversal
-  const decodedPathname = decodeURIComponent(parsedUrl.pathname);
+  // Wrap decodeURIComponent in try-catch to handle malformed percent-encoding
+  let decodedPathname;
+  try {
+    decodedPathname = decodeURIComponent(parsedUrl.pathname);
+  } catch (decodeError) {
+    // Malformed percent-encoding in URL - use raw pathname as fallback
+    console.warn(`[${new Date().toISOString()}] Warning: Malformed URL encoding in ${parsedUrl.pathname}:`, decodeError.message);
+    // Return 400 Bad Request for malformed URLs
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    res.end('400 Bad Request - Malformed URL encoding');
+    console.error(`[${new Date().toISOString()}] ${req.method} ${req.url} -> 400 Bad Request (malformed URL encoding)`);
+    return;
+  }
+
   const normalizedPath = normalize('/' + decodedPathname).replace(/^\/+/, '');
   const safePath = resolve(ROOT_DIR, normalizedPath);
 
   // Verify the resolved path is within ROOT_DIR (prevent path traversal)
-  if (!safePath.startsWith(ROOT_DIR)) {
+  // Check both that path starts with ROOT_DIR and that it's either exactly ROOT_DIR or has a separator after
+  if (safePath !== ROOT_DIR && !safePath.startsWith(ROOT_DIR + sep)) {
     res.writeHead(403, { 'Content-Type': 'text/plain' });
     res.end('403 Forbidden');
     console.error(`[${new Date().toISOString()}] ${req.method} ${req.url} -> 403 Forbidden (path traversal attempt)`);

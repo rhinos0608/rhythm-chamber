@@ -125,12 +125,19 @@ async function runCompatibilityChecks() {
             compatibilityResults.wasm = wasmSupported;
             updateCheckStatus('check-wasm', wasmSupported ? 'pass' : 'fail', wasmSupported ? 'Available' : 'Not supported');
 
-            // WebGPU Check (optional enhancement)
+            // WebGPU Check (optional enhancement) - wrapped in try-catch for safety
             updateCheckStatus('check-webgpu', 'checking');
-            const webgpuResult = await BatteryAwareModeSelector.checkWebGPUSupport();
-            compatibilityResults.webgpu = webgpuResult.supported;
-            updateCheckStatus('check-webgpu', webgpuResult.supported ? 'pass' : 'optional',
-                webgpuResult.supported ? '100x faster' : 'Using WASM');
+            try {
+                const webgpuResult = await BatteryAwareModeSelector.checkWebGPUSupport();
+                compatibilityResults.webgpu = webgpuResult.supported;
+                updateCheckStatus('check-webgpu', webgpuResult.supported ? 'pass' : 'optional',
+                    webgpuResult.supported ? '100x faster' : 'Using WASM');
+            } catch (webgpuError) {
+                // WebGPU check failed - log error and use safe default
+                console.error('[EmbeddingsOnboarding] WebGPU check failed:', webgpuError);
+                compatibilityResults.webgpu = false;
+                updateCheckStatus('check-webgpu', 'optional', 'Using WASM (check failed)');
+            }
 
             // IndexedDB Check
             updateCheckStatus('check-indexeddb', 'checking');

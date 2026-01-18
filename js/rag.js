@@ -119,12 +119,12 @@ async function createChunksWithWorker(streams, onProgress = () => { }) {
             }
         };
 
+        // Capture the original error handler before assigning new one
+        const originalOnError = worker.onerror;
+
         worker.onerror = async (error) => {
             clearTimeout(timeoutId);
             console.warn('[RAG] Worker error, falling back to async main thread:', error.message);
-
-            // Capture the existing error handler before cleanup
-            const prevOnError = embeddingWorker.onerror;
 
             // Fallback to async main thread version
             try {
@@ -138,12 +138,12 @@ async function createChunksWithWorker(streams, onProgress = () => { }) {
                 reject(fallbackError);
             }
 
-            // Invoke the previous error handler if it existed
-            if (prevOnError && typeof prevOnError === 'function') {
+            // Invoke the original error handler if it existed
+            if (originalOnError && typeof originalOnError === 'function') {
                 try {
-                    prevOnError(error);
+                    originalOnError.call(worker, error);
                 } catch (handlerError) {
-                    console.warn('[RAG] Previous error handler failed:', handlerError.message);
+                    console.warn('[RAG] Original error handler failed:', handlerError.message);
                 }
             }
         };

@@ -840,8 +840,12 @@ function createProviderActions(provider, health, currentProvider) {
     if (provider === currentProvider) {
         if (health.status === 'unhealthy' || health.status === 'blacklisted') {
             // Find a fallback provider that's not the current one and not unhealthy
-            const target = LLM_PROVIDERS.find(p => p.id !== currentProvider && health.status !== 'unhealthy')?.id ||
-                         LLM_PROVIDERS.find(p => p.id !== currentProvider)?.id;
+            const healthSnapshot = ProviderHealthMonitor.getHealthSnapshot();
+            const healthyFallbacks = LLM_PROVIDERS.filter(p =>
+                p.id !== currentProvider && healthSnapshot[p.id]?.status === 'healthy'
+            );
+
+            const target = healthyFallbacks[0]?.id || LLM_PROVIDERS.find(p => p.id !== currentProvider)?.id;
 
             if (target) {
                 return `<button class="provider-health-action primary" onclick="Settings.switchProviderFromHealth('${target}')">Switch Provider</button>`;
@@ -889,11 +893,30 @@ function updateProviderRecommendation(provider, health) {
  * Switch provider from health UI
  */
 async function switchProviderFromHealth(provider) {
+    // Input validation - verify provider exists
+    if (!provider || typeof provider !== 'string') {
+        console.error('[Settings] Invalid provider ID:', provider);
+        showToast('Invalid provider ID');
+        return;
+    }
+
+    const validProvider = LLM_PROVIDERS.find(p => p.id === provider);
+    if (!validProvider) {
+        console.error('[Settings] Unknown provider ID:', provider);
+        showToast(`Unknown provider: ${provider}`);
+        return;
+    }
+
     const settings = getSettings();
-    settings.llm.provider = provider;
-    await saveSettings(settings);
-    showSettingsModal(); // Refresh modal
-    showToast(`Switched to ${LLM_PROVIDERS.find(p => p.id === provider)?.name}`);
+    try {
+        settings.llm.provider = provider;
+        await saveSettings(settings);
+        showSettingsModal(); // Refresh modal
+        showToast(`Switched to ${validProvider.name}`);
+    } catch (error) {
+        console.error('[Settings] Failed to switch provider:', error);
+        showToast(`Failed to switch provider: ${error.message}`);
+    }
 }
 
 /**
