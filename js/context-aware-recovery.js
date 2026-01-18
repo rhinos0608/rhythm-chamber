@@ -174,7 +174,9 @@ async function acquirePriorityLock(operationName, priority = RecoveryPriority.NO
 
             if (lockStatus.isLocked) {
                 // Check if we should preempt based on priority
-                const currentPriority = lockStatus.priority || RecoveryPriority.NORMAL;
+                // Read priority from localStorage metadata (not lockStatus.priority which doesn't exist)
+                const priorityMetadata = getPriorityMetadata(operationName);
+                const currentPriority = priorityMetadata?.priority || RecoveryPriority.NORMAL;
                 const currentValue = PRIORITY_VALUES[currentPriority] || PRIORITY_VALUES[RecoveryPriority.NORMAL];
 
                 if (priorityValue > currentValue + 20) {
@@ -267,11 +269,11 @@ function selectRecoveryStrategy(error, context = {}) {
 
     // Check network conditions
     const networkDegraded = currentContext.networkQuality === 'poor' ||
-                           currentContext.networkQuality === 'fair';
+        currentContext.networkQuality === 'fair';
 
     // Check if device is mobile
     const isMobile = currentContext.deviceType === 'phone' ||
-                    currentContext.deviceType === 'tablet';
+        currentContext.deviceType === 'tablet';
 
     // Check if page is backgrounded
     const isBackground = currentContext.isBackground;
