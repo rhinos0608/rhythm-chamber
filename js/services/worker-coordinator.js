@@ -47,6 +47,7 @@ const WorkerType = {
  * @property {number|null} heartbeatTimer - Timer ID for heartbeat checks
  * @property {number} missedHeartbeats - Count of consecutive missed heartbeats
  * @property {Function|null} cleanup - Custom cleanup function
+ * @property {Promise<Worker>|null} initializingPromise - Promise for worker initialization (race prevention)
  */
 
 /**
@@ -75,6 +76,11 @@ let debugMode = false;
  */
 let coordinatorInitialized = false;
 
+/**
+ * Cleanup interval ID for idle workers
+ */
+let cleanupIntervalId = null;
+
 // ==========================================
 // Worker Registration
 // ==========================================
@@ -101,7 +107,8 @@ function registerWorker(type, options = {}) {
         heartbeatInterval: options.heartbeatInterval ?? DEFAULT_HEARTBEAT_INTERVAL,
         heartbeatTimer: null,
         missedHeartbeats: 0,
-        cleanup: options.cleanup || null
+        cleanup: options.cleanup || null,
+        initializingPromise: null // Race condition prevention
     };
 
     workerRegistry.set(type, entry);
@@ -154,6 +161,7 @@ async function createWorker(type, workerPath, initHandlers) {
         throw new Error(`Worker type ${type} not registered`);
     }
 
+    // If already initialized, reuse
     if (entry.instance && entry.initialized) {
         entry.lastUsed = Date.now();
         if (debugMode) {
@@ -162,36 +170,52 @@ async function createWorker(type, workerPath, initHandlers) {
         return entry.instance;
     }
 
-    try {
+    // If another caller is initializing, wait for them
+    if (entry.initializingPromise) {
         if (debugMode) {
-            console.log(`[WorkerCoordinator] Creating ${type} worker from ${workerPath}`);
+            console.log(`[WorkerCoordinator] Waiting for existing ${type} worker initialization`);
         }
-
-        const worker = new Worker(workerPath, { type: 'module' });
-
-        entry.instance = worker;
-        entry.createdAt = Date.now();
-        entry.lastUsed = Date.now();
-
-        if (debugMode) {
-            console.log(`[WorkerCoordinator] Initializing handlers for ${type} worker`);
-        }
-
-        await initHandlers(worker);
-        entry.initialized = true;
-
-        startHeartbeat(type);
-
-        if (debugMode) {
-            console.log(`[WorkerCoordinator] ${type} worker ready`);
-        }
-
-        return worker;
-    } catch (error) {
-        entry.instance = null;
-        entry.initialized = false;
-        throw new Error(`Failed to create ${type} worker: ${error.message}`);
+        return entry.initializingPromise;
     }
+
+    // Start initialization
+    entry.initializingPromise = (async () => {
+        try {
+            if (debugMode) {
+                console.log(`[WorkerCoordinator] Creating ${type} worker from ${workerPath}`);
+            }
+
+            const worker = new Worker(workerPath, { type: 'module' });
+
+            entry.instance = worker;
+            entry.createdAt = Date.now();
+            entry.lastUsed = Date.now();
+
+            if (debugMode) {
+                console.log(`[WorkerCoordinator] Initializing handlers for ${type} worker`);
+            }
+
+            await initHandlers(worker);
+            entry.initialized = true;
+
+            startHeartbeat(type);
+
+            if (debugMode) {
+                console.log(`[WorkerCoordinator] ${type} worker ready`);
+            }
+
+            return worker;
+        } catch (error) {
+            entry.instance = null;
+            entry.initialized = false;
+            throw new Error(`Failed to create ${type} worker: ${error.message}`);
+        } finally {
+            // Clear the promise so future callers can retry if needed
+            entry.initializingPromise = null;
+        }
+    })();
+
+    return entry.initializingPromise;
 }
 
 /**
@@ -482,7 +506,7 @@ function init() {
 
     window.addEventListener('beforeunload', terminateAll);
 
-    setInterval(cleanupIdleWorkers, 60000);
+    cleanupIntervalId = setInterval(cleanupIdleWorkers, 60000);
 
     coordinatorInitialized = true;
 
@@ -499,6 +523,12 @@ function destroy() {
     terminateAll();
     workerRegistry.clear();
     window.removeEventListener('beforeunload', terminateAll);
+
+    if (cleanupIntervalId) {
+        clearInterval(cleanupIntervalId);
+        cleanupIntervalId = null;
+    }
+
     coordinatorInitialized = false;
 
     if (debugMode) {

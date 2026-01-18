@@ -98,6 +98,12 @@ export class CoreWebVitalsTracker {
     _performanceObserver = null;
 
     /**
+     * @private
+     * @type {PerformanceObserver|null}
+     */
+    _inpObserver = null;
+
+    /**
      * Initialize the Core Web Vitals Tracker
      * @public
      * @param {Object} options - Configuration options
@@ -298,7 +304,7 @@ export class CoreWebVitalsTracker {
 
         // Replace previous LCP metric (only keep latest)
         this._latestMetrics.set(WebVitalType.LCP, metric);
-        this._metrics.set(WebVitalType.LLS, [metric]);
+        this._metrics.set(WebVitalType.LCP, [metric]);
     }
 
     /**
@@ -344,6 +350,7 @@ export class CoreWebVitalsTracker {
             });
 
             observer.observe({ type: 'event', buffered: true, durationThreshold: 0 });
+            this._inpObserver = observer;
         } catch (error) {
             console.warn('[CoreWebVitals] INP tracking not supported:', error);
         }
@@ -359,7 +366,7 @@ export class CoreWebVitalsTracker {
 
         const metric = this._createMetric(
             WebVitalType.INP,
-            entry.duration + entry.processingStart - entry.startTime,
+            entry.duration,
             {
                 eventType: entry.name,
                 interactionId: entry.interactionId,
@@ -627,6 +634,10 @@ export class CoreWebVitalsTracker {
         if (this._performanceObserver) {
             this._performanceObserver.disconnect();
             this._performanceObserver = null;
+        }
+        if (this._inpObserver) {
+            this._inpObserver.disconnect();
+            this._inpObserver = null;
         }
         console.log('[CoreWebVitals] Disabled');
     }

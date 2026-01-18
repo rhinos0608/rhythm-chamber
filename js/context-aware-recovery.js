@@ -99,6 +99,59 @@ function getAppStateContext() {
 // ==========================================
 
 /**
+ * External storage for priority lock metadata (cross-tab compatible)
+ * Uses localStorage to share priority metadata across browser tabs
+ * Avoids direct mutation of OperationLock's internal state
+ */
+const PRIORITY_METADATA_KEY = 'recovery_priority_metadata';
+
+/**
+ * Get priority metadata from localStorage (cross-tab compatible)
+ */
+function getPriorityMetadata(operationName) {
+    try {
+        const stored = localStorage.getItem(PRIORITY_METADATA_KEY);
+        if (stored) {
+            const metadata = JSON.parse(stored);
+            return metadata[operationName] || null;
+        }
+    } catch (error) {
+        console.warn('[ContextAwareRecovery] Failed to read priority metadata:', error);
+    }
+    return null;
+}
+
+/**
+ * Set priority metadata in localStorage (cross-tab compatible)
+ */
+function setPriorityMetadata(operationName, metadata) {
+    try {
+        const stored = localStorage.getItem(PRIORITY_METADATA_KEY);
+        const allMetadata = stored ? JSON.parse(stored) : {};
+        allMetadata[operationName] = metadata;
+        localStorage.setItem(PRIORITY_METADATA_KEY, JSON.stringify(allMetadata));
+    } catch (error) {
+        console.warn('[ContextAwareRecovery] Failed to write priority metadata:', error);
+    }
+}
+
+/**
+ * Delete priority metadata from localStorage (cross-tab compatible)
+ */
+function deletePriorityMetadata(operationName) {
+    try {
+        const stored = localStorage.getItem(PRIORITY_METADATA_KEY);
+        if (stored) {
+            const allMetadata = JSON.parse(stored);
+            delete allMetadata[operationName];
+            localStorage.setItem(PRIORITY_METADATA_KEY, JSON.stringify(allMetadata));
+        }
+    } catch (error) {
+        console.warn('[ContextAwareRecovery] Failed to delete priority metadata:', error);
+    }
+}
+
+/**
  * Priority-aware lock acquisition with preemption support
  * Higher priority operations can preempt lower priority locks
  *
@@ -110,42 +163,72 @@ function getAppStateContext() {
 async function acquirePriorityLock(operationName, priority = RecoveryPriority.NORMAL, timeoutMs = 30000) {
     const priorityValue = PRIORITY_VALUES[priority] || PRIORITY_VALUES[RecoveryPriority.NORMAL];
 
-    // Check if operation is currently locked
-    const lockStatus = OperationLock.getLockStatus(operationName);
+    // Robust retry loop around acquire to handle TOCTOU race conditions
+    const maxRetries = 5;
+    const backoffMs = 50;
 
-    if (lockStatus.isLocked) {
-        // Check if we should preempt based on priority
-        const currentPriority = lockStatus.priority || RecoveryPriority.NORMAL;
-        const currentValue = PRIORITY_VALUES[currentPriority] || PRIORITY_VALUES[RecoveryPriority.NORMAL];
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+            // First check if operation is currently locked
+            const lockStatus = OperationLock.getLockStatus(operationName);
 
-        if (priorityValue > currentValue + 20) {
-            // Preempt: Only if significantly higher priority (>20 points)
-            console.log(`[ContextAwareRecovery] Preempting ${operationName} (current: ${currentPriority}, new: ${priority})`);
+            if (lockStatus.isLocked) {
+                // Check if we should preempt based on priority
+                const currentPriority = lockStatus.priority || RecoveryPriority.NORMAL;
+                const currentValue = PRIORITY_VALUES[currentPriority] || PRIORITY_VALUES[RecoveryPriority.NORMAL];
 
-            // Force release the lower priority lock
-            OperationLock.forceRelease(operationName, 'priority_preemption');
+                if (priorityValue > currentValue + 20) {
+                    // Preempt: Only if significantly higher priority (>20 points)
+                    console.log(`[ContextAwareRecovery] Preempting ${operationName} (current: ${currentPriority}, new: ${priority})`);
 
-            // Wait a bit for cleanup
-            await new Promise(resolve => setTimeout(resolve, 100));
-        } else {
-            // Not high enough priority to preempt
-            console.log(`[ContextAwareRecovery] Cannot acquire ${operationName} - blocked by ${currentPriority} operation`);
-            throw new Error(`Operation ${operationName} is locked with priority ${currentPriority}`);
+                    // Force release the lower priority lock
+                    OperationLock.forceRelease(operationName, 'priority_preemption');
+
+                    // Wait a bit for cleanup and retry acquisition
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    continue; // Retry acquisition after preemption
+                } else {
+                    // Not high enough priority to preempt
+                    console.log(`[ContextAwareRecovery] Cannot acquire ${operationName} - blocked by ${currentPriority} operation`);
+                    throw new Error(`Operation ${operationName} is locked with priority ${currentPriority}`);
+                }
+            }
+
+            // Try to acquire the lock atomically
+            const lockId = await OperationLock.acquire(operationName);
+
+            // Successfully acquired - store priority metadata externally
+            // to avoid directly mutating OperationLock's internal state
+            const priorityMetadata = {
+                priority,
+                priorityValue,
+                context: getAppStateContext(),
+                lockId,
+                timestamp: Date.now()
+            };
+
+            // Store in localStorage for cross-tab access
+            setPriorityMetadata(operationName, priorityMetadata);
+
+            console.log(`[ContextAwareRecovery] Acquired priority lock for ${operationName} (priority: ${priority}, attempt: ${attempt + 1})`);
+            return lockId;
+
+        } catch (error) {
+            // If this is a LockAcquisitionError and we have retries left, continue
+            if (error.name === 'LockAcquisitionError' && attempt < maxRetries - 1) {
+                console.log(`[ContextAwareRecovery] Acquisition attempt ${attempt + 1} failed, retrying with backoff...`);
+                await new Promise(resolve => setTimeout(resolve, backoffMs * (attempt + 1)));
+                continue;
+            }
+
+            // Final attempt or different error - throw it
+            console.error(`[ContextAwareRecovery] Failed to acquire priority lock after ${attempt + 1} attempts:`, error);
+            throw error;
         }
     }
 
-    // Acquire the lock with priority tracking
-    const lockId = await OperationLock.acquire(operationName);
-
-    // Store priority with the lock
-    const lockInfo = OperationLock.getLockStatus(operationName);
-    if (lockInfo.lockInfo) {
-        lockInfo.lockInfo.priority = priority;
-        lockInfo.lockInfo.priorityValue = priorityValue;
-        lockInfo.lockInfo.context = getAppStateContext();
-    }
-
-    return lockId;
+    // Should never reach here, but for safety:
+    throw new Error(`Failed to acquire lock for ${operationName} after ${maxRetries} attempts`);
 }
 
 /**
@@ -154,6 +237,14 @@ async function acquirePriorityLock(operationName, priority = RecoveryPriority.NO
  * @param {string} lockId - Lock ID from acquisition
  */
 function releasePriorityLock(operationName, lockId) {
+    // Clean up external priority metadata from localStorage
+    const metadata = getPriorityMetadata(operationName);
+    if (metadata && metadata.lockId === lockId) {
+        deletePriorityMetadata(operationName);
+        console.log(`[ContextAwareRecovery] Released priority lock for ${operationName}`);
+    }
+
+    // Release the actual lock
     OperationLock.release(operationName, lockId);
 }
 
@@ -312,13 +403,13 @@ async function executeRecovery(strategy) {
         lastError: strategy.originalError
     });
 
-    try {
-        // Acquire lock if required
-        let lockId = null;
-        if (requiresLock) {
-            lockId = await acquirePriorityLock(requiresLock, priority);
-        }
+    // Acquire lock if required
+    let lockId = null;
+    if (requiresLock) {
+        lockId = await acquirePriorityLock(requiresLock, priority);
+    }
 
+    try {
         // Execute the recovery action
         let result;
         switch (action) {
@@ -357,58 +448,72 @@ async function executeRecovery(strategy) {
                 result = await RecoveryHandlers.execute(action, context);
         }
 
-        // Release lock if acquired
-        if (lockId) {
-            releasePriorityLock(requiresLock, lockId);
-        }
-
-        // Clear recovery in progress
-        updateAppStateContext({
-            operationInProgress: null
-        });
-
         return result;
 
     } catch (error) {
         console.error('[ContextAwareRecovery] Recovery failed:', error);
+        throw error;
 
-        // Clear recovery in progress
+    } finally {
+        // Always release lock if acquired (prevents lock leaks)
+        if (lockId) {
+            releasePriorityLock(requiresLock, lockId);
+        }
+
+        // Always clear recovery in progress state
         updateAppStateContext({
             operationInProgress: null
         });
-
-        throw error;
     }
 }
 
 /**
  * Execute retry with adaptive timing
- * @param {Object} strategy - Retry strategy
+ * @param {Object} strategy - Retry strategy with operation/fn callback
  * @returns {Promise<any>} Retry result
  */
 async function executeRetry(strategy) {
-    const { adaptiveDelay, retryCount = 3 } = strategy;
+    const { adaptiveDelay, retryCount = 3, operation, fn } = strategy;
     const baseDelay = adaptiveDelay || 1000;
+
+    // Get the retryable operation (support both naming conventions)
+    const retryableOperation = operation || fn;
+
+    if (typeof retryableOperation !== 'function') {
+        throw new Error('executeRetry requires a retryable operation function (operation or fn)');
+    }
 
     for (let i = 0; i < retryCount; i++) {
         try {
-            // Check network quality before retry
+            // Check network quality before retry to adjust delay
             const networkState = DeviceDetection.getNetworkState();
+            let adjustedDelay = baseDelay;
+
             if (networkState.quality === 'poor') {
                 // Use longer delays on poor networks
-                await new Promise(resolve => setTimeout(resolve, baseDelay * 3));
-            } else {
-                await new Promise(resolve => setTimeout(resolve, baseDelay));
+                adjustedDelay = baseDelay * 3;
+            } else if (networkState.quality === 'fair') {
+                // Moderate delay on fair networks
+                adjustedDelay = baseDelay * 1.5;
             }
 
-            // Execute the original operation (would be passed in strategy)
-            return { retried: true, attempt: i + 1 };
+            // Wait for adaptive delay
+            await new Promise(resolve => setTimeout(resolve, adjustedDelay));
+
+            // Execute the original operation (real errors can be thrown and retried)
+            const result = await retryableOperation();
+
+            return { result, retried: true, attempt: i + 1 };
 
         } catch (error) {
+            // Check if this was the final attempt
             if (i === retryCount - 1) {
-                throw error; // Final attempt failed
+                console.error(`[ContextAwareRecovery] All ${retryCount} retry attempts failed`);
+                throw error; // Final attempt failed - rethrow the error
             }
-            console.log(`[ContextAwareRecovery] Retry ${i + 1}/${retryCount} failed, trying again...`);
+
+            // Log retry attempt and continue
+            console.log(`[ContextAwareRecovery] Retry ${i + 1}/${retryCount} failed: ${error.message}, trying again...`);
         }
     }
 }
@@ -418,21 +523,59 @@ async function executeRetry(strategy) {
  * @returns {Promise<Object>} Cleanup result
  */
 async function cleanupStorageForRecovery() {
-    console.log('[ContextAwareRecovery] Executing storage cleanup...');
+    console.log('[ContextAwareRecovery] Executing storage cleanup for quota recovery...');
 
-    // Import storage dynamically
-    const { Storage } = await import('./storage.js');
+    try {
+        // Import storage dynamically
+        const { Storage } = await import('./storage.js');
 
-    // Clear old data
-    const result = {
-        cleared: true,
-        spaceFreed: 'unknown'
-    };
+        // Guard for missing methods on Storage
+        if (typeof Storage.clearAllData !== 'function') {
+            console.error('[ContextAwareRecovery] Storage.clearAllData method not available');
+            const result = {
+                cleared: false,
+                spaceFreed: 0,
+                error: 'Storage.clearAllData method not available'
+            };
+            EventBus.emit('recovery:storage_cleanup', result);
+            return result;
+        }
 
-    // Emit event for UI to show notification
-    EventBus.emit('recovery:storage_cleanup', result);
+        // Call the real cleanup API
+        console.log('[ContextAwareRecovery] Calling Storage.clearAllData()...');
+        const cleanupResult = await Storage.clearAllData();
 
-    return result;
+        // Compute actual values from the returned data
+        const result = {
+            cleared: cleanupResult.indexedDB?.cleared || cleanupResult.localStorage?.cleared || false,
+            spaceFreed: cleanupResult.localStorage?.keys || 0, // Number of items cleared
+            details: cleanupResult,
+            timestamp: Date.now()
+        };
+
+        console.log('[ContextAwareRecovery] Storage cleanup completed:', result);
+
+        // Emit event with real result for UI to show notification
+        EventBus.emit('recovery:storage_cleanup', result);
+
+        return result;
+
+    } catch (error) {
+        console.error('[ContextAwareRecovery] Storage cleanup failed:', error);
+
+        // Return failure result with error details
+        const result = {
+            cleared: false,
+            spaceFreed: 0,
+            error: error.message,
+            timestamp: Date.now()
+        };
+
+        // Still emit event for UI error handling
+        EventBus.emit('recovery:storage_cleanup', result);
+
+        return result;
+    }
 }
 
 /**
@@ -441,18 +584,37 @@ async function cleanupStorageForRecovery() {
  * @returns {Promise<Object>} Restart result
  */
 async function restartWorkerForRecovery(workerType) {
+    // Add null/falsy guard for workerType parameter
+    if (!workerType || typeof workerType !== 'string') {
+        console.error('[ContextAwareRecovery] Invalid workerType provided:', workerType);
+        return {
+            restarted: false,
+            workerType,
+            error: 'Invalid workerType parameter'
+        };
+    }
+
     console.log(`[ContextAwareRecovery] Restarting worker: ${workerType}`);
 
-    // Import worker coordinator
-    const { WorkerCoordinator } = await import('./services/worker-coordinator.js');
+    try {
+        // Import worker coordinator
+        const { WorkerCoordinator } = await import('./services/worker-coordinator.js');
 
-    // Reset and restart the worker
-    await WorkerCoordinator.resetHeartbeat(workerType.toUpperCase());
+        // Reset and restart the worker (only when workerType is valid)
+        await WorkerCoordinator.resetHeartbeat(workerType.toUpperCase());
 
-    return {
-        restarted: true,
-        workerType
-    };
+        return {
+            restarted: true,
+            workerType
+        };
+    } catch (error) {
+        console.error('[ContextAwareRecovery] Failed to restart worker:', error);
+        return {
+            restarted: false,
+            workerType,
+            error: error.message
+        };
+    }
 }
 
 // ==========================================

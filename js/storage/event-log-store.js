@@ -14,7 +14,7 @@
 
 import { VectorClock } from '../services/vector-clock.js';
 import { EventBus } from '../services/event-bus.js';
-import { initDatabaseWithRetry } from './indexeddb.js';
+import { IndexedDBCore } from './indexeddb.js';
 
 // ==========================================
 // Store Configuration
@@ -44,6 +44,7 @@ const COMPACTION_CONFIG = {
  * @property {number} timestamp - High-resolution timestamp
  * @property {number} sequenceNumber - Monotonically increasing sequence number
  * @property {string} sourceTab - Tab that created the event
+ * @property {string} domain - Event domain for filtering (default: 'global')
  */
 
 // ==========================================
@@ -55,30 +56,50 @@ const COMPACTION_CONFIG = {
  * @returns {Promise<IDBDatabase>}
  */
 async function initEventLogStores() {
-    const db = await initDatabaseWithRetry({
-        onVersionChange: () => {
-            console.warn('[EventLogStore] Database version changed, closing connection');
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open('rhythm-chamber', IndexedDBCore.DB_VERSION);
+
+        request.onerror = () => reject(request.error);
+        request.onblocked = () => {
+            console.warn('[EventLogStore] Database upgrade blocked by other tabs');
             EventBus.emit('storage:connection_blocked', {
-                reason: 'version_change',
-                message: 'Event log database version changed'
+                reason: 'upgrade_blocked',
+                message: 'Event log database upgrade blocked by other tabs'
             });
-        }
+        };
+
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+
+            // Create stores if they don't exist during upgrade
+            if (!db.objectStoreNames.contains(EVENT_LOG_STORE)) {
+                const eventStore = db.createObjectStore(EVENT_LOG_STORE, { keyPath: 'id' });
+                eventStore.createIndex('sequenceNumber', 'sequenceNumber', { unique: true });
+                eventStore.createIndex('type', 'type', { unique: false });
+                eventStore.createIndex('timestamp', 'timestamp', { unique: false });
+            }
+
+            if (!db.objectStoreNames.contains(CHECKPOINT_STORE)) {
+                const checkpointStore = db.createObjectStore(CHECKPOINT_STORE, { keyPath: 'id' });
+                checkpointStore.createIndex('sequenceNumber', 'sequenceNumber', { unique: true });
+            }
+        };
+
+        request.onsuccess = () => {
+            const db = request.result;
+
+            db.onversionchange = () => {
+                console.warn('[EventLogStore] Database version changed, closing connection');
+                EventBus.emit('storage:connection_blocked', {
+                    reason: 'version_change',
+                    message: 'Event log database version changed'
+                });
+                db.close();
+            };
+
+            resolve(db);
+        };
     });
-
-    // Create stores if they don't exist
-    if (!db.objectStoreNames.contains(EVENT_LOG_STORE)) {
-        const eventStore = db.createObjectStore(EVENT_LOG_STORE, { keyPath: 'id' });
-        eventStore.createIndex('sequenceNumber', 'sequenceNumber', { unique: true });
-        eventStore.createIndex('type', 'type', { unique: false });
-        eventStore.createIndex('timestamp', 'timestamp', { unique: false });
-    }
-
-    if (!db.objectStoreNames.contains(CHECKPOINT_STORE)) {
-        const checkpointStore = db.createObjectStore(CHECKPOINT_STORE, { keyPath: 'id' });
-        checkpointStore.createIndex('sequenceNumber', 'sequenceNumber', { unique: true });
-    }
-
-    return db;
 }
 
 /**
@@ -87,9 +108,10 @@ async function initEventLogStores() {
  * @param {object} payload - Event payload
  * @param {object} vectorClock - VectorClock state
  * @param {string} sourceTab - Source tab ID
+ * @param {string} domain - Event domain (default: 'global')
  * @returns {Promise<StoredEvent>}
  */
-async function appendEvent(eventType, payload, vectorClock, sourceTab) {
+async function appendEvent(eventType, payload, vectorClock, sourceTab, domain = 'global') {
     const db = await initEventLogStores();
     const tx = db.transaction([EVENT_LOG_STORE], 'readwrite');
     const store = tx.objectStore(EVENT_LOG_STORE);
@@ -102,9 +124,10 @@ async function appendEvent(eventType, payload, vectorClock, sourceTab) {
         type: eventType,
         payload: structuredClone ? structuredClone(payload) : JSON.parse(JSON.stringify(payload)),
         vectorClock: structuredClone ? structuredClone(vectorClock) : JSON.parse(JSON.stringify(vectorClock)),
-        timestamp: performance.now(),
+        timestamp: Date.now(),
         sequenceNumber,
-        sourceTab
+        sourceTab,
+        domain
     };
 
     return new Promise((resolve, reject) => {
@@ -155,7 +178,7 @@ async function getEvents(afterSequenceNumber = -1, limit = 1000) {
     const index = store.index('sequenceNumber');
 
     return new Promise((resolve, reject) => {
-        const range = IDBKeyRange.lowerBound(afterSequenceNumber + 1, true);
+        const range = IDBKeyRange.lowerBound(afterSequenceNumber + 1);
         const request = index.openCursor(range);
 
         const events = [];
@@ -244,7 +267,7 @@ async function getLatestCheckpoint() {
  * @returns {Promise<StoredEvent[]>}
  */
 async function getEventsSinceCheckpoint(fromSequenceNumber) {
-    return getEvents(fromSequenceNumber);
+    return getEvents(fromSequenceNumber, null);
 }
 
 /**
@@ -253,23 +276,36 @@ async function getEventsSinceCheckpoint(fromSequenceNumber) {
  * @returns {Promise<{deleted: number, kept: number}>}
  */
 async function compactEventLog() {
-    const db = await initEventLogStores();
-    const tx = db.transaction([EVENT_LOG_STORE], 'readwrite');
-    const store = tx.objectStore(EVENT_LOG_STORE);
-    const index = store.index('sequenceNumber');
-
-    // Get total event count
+    // Get total event count first (before creating transaction)
     const totalCount = await countEvents();
 
     if (totalCount < COMPACTION_CONFIG.maxEvents) {
         return { deleted: 0, kept: totalCount };
     }
 
-    // Calculate cutoff
+    // Get latest checkpoint first (before creating transaction)
     const latestCheckpoint = await getLatestCheckpoint();
-    const cutoffSequence = latestCheckpoint
-        ? latestCheckpoint.sequenceNumber + COMPACTION_CONFIG.minEventsAfterCheckpoint
-        : totalCount - COMPACTION_CONFIG.maxEvents;
+
+    // Calculate cutoff to retain events after the checkpoint
+    let cutoffSequence;
+    if (latestCheckpoint) {
+        // Keep events after the checkpoint minus minimum retention
+        cutoffSequence = latestCheckpoint.sequenceNumber - COMPACTION_CONFIG.minEventsAfterCheckpoint;
+    } else {
+        // No checkpoint, keep most recent maxEvents
+        cutoffSequence = totalCount - COMPACTION_CONFIG.maxEvents;
+    }
+
+    // Handle edge cases
+    if (cutoffSequence < 0) {
+        cutoffSequence = 0;
+    }
+
+    // Now create the transaction
+    const db = await initEventLogStores();
+    const tx = db.transaction([EVENT_LOG_STORE], 'readwrite');
+    const store = tx.objectStore(EVENT_LOG_STORE);
+    const index = store.index('sequenceNumber');
 
     return new Promise((resolve, reject) => {
         const range = IDBKeyRange.upperBound(cutoffSequence, true);
@@ -352,18 +388,36 @@ async function clearEventLog() {
     const db = await initEventLogStores();
     const tx = db.transaction([EVENT_LOG_STORE, CHECKPOINT_STORE], 'readwrite');
 
-    await new Promise((resolve, reject) => {
-        const eventStore = tx.objectStore(EVENT_LOG_STORE);
-        const eventRequest = eventStore.clear();
-        eventRequest.onsuccess = resolve;
-        eventRequest.onerror = () => reject(eventRequest.error);
-    });
+    // Get both stores synchronously
+    const eventStore = tx.objectStore(EVENT_LOG_STORE);
+    const checkpointStore = tx.objectStore(CHECKPOINT_STORE);
 
+    // Start both clear operations synchronously
+    const eventRequest = eventStore.clear();
+    const checkpointRequest = checkpointStore.clear();
+
+    // Wait for the transaction to complete
     await new Promise((resolve, reject) => {
-        const checkpointStore = tx.objectStore(CHECKPOINT_STORE);
-        const checkpointRequest = checkpointStore.clear();
-        checkpointRequest.onsuccess = resolve;
-        checkpointRequest.onerror = () => reject(checkpointRequest.error);
+        let completed = 0;
+        let hasError = false;
+
+        const checkComplete = () => {
+            if (hasError) return;
+            if (++completed === 2) resolve();
+        };
+
+        eventRequest.onerror = () => {
+            hasError = true;
+            reject(eventRequest.error);
+        };
+
+        checkpointRequest.onerror = () => {
+            hasError = true;
+            reject(checkpointRequest.error);
+        };
+
+        eventRequest.onsuccess = checkComplete;
+        checkpointRequest.onsuccess = checkComplete;
     });
 
     console.log('[EventLogStore] Event log cleared');

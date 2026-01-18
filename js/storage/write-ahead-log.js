@@ -84,7 +84,7 @@ const walState = {
  */
 function createWalEntry(operation, args, priority = WalPriority.NORMAL) {
     return {
-        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
         sequence: walState.sequence++,
         operation,
         args,
@@ -178,10 +178,28 @@ function clearWal() {
 
 /**
  * Queue a write operation for processing
+ *
+ * **CRASH-RECOVERY SEMANTICS:**
+ * The resolve/reject callbacks attached to WAL entries are **NOT persisted** across page reloads.
+ * If the browser crashes or reloads while operations are queued, callers' Promises will never settle.
+ *
+ * **Implications:**
+ * - The returned Promise from this function will only settle if the page remains alive
+ * - After a crash/reload, queued WAL entries are replayed but original callbacks are lost
+ * - Callers should NOT rely on Promise completion for critical operations
+ *
+ * **Recommended alternatives:**
+ * - Poll the persisted WAL state to check operation completion
+ * - Use external persisted acknowledgement (e.g., operation result stored separately)
+ * - Re-query operation state after page reload using operation IDs
+ * - Design for idempotency to safely retry operations
+ *
+ * See `createWalEntry`, `saveWal`, `walState.entries`, and `scheduleProcessing` for implementation details.
+ *
  * @param {string} operation - Operation name
  * @param {Array} args - Operation arguments
  * @param {string} priority - Priority level
- * @returns {Promise<any>} Promise that resolves when operation is processed
+ * @returns {Promise<any>} Promise that resolves when operation is processed (only if page remains alive)
  */
 async function queueWrite(operation, args, priority = WalPriority.NORMAL) {
     // Check if encryption is available

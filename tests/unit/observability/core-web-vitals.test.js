@@ -127,11 +127,11 @@ describe('CoreWebVitalsTracker', () => {
                 loadEventEnd: 1600
             };
 
+            // Mock performance.getEntriesByType to return our nav entry BEFORE tracking
+            performance.getEntriesByType = vi.fn(() => [navEntry]);
+
             // Simulate TTFB tracking
             tracker._trackTTFB();
-
-            // Mock performance.getEntriesByType to return our nav entry
-            performance.getEntriesByType = vi.fn(() => [navEntry]);
 
             const ttfbMetric = tracker.getLatestMetric(WebVitalType.TTFB);
             expect(ttfbMetric).toBeDefined();
@@ -298,12 +298,15 @@ describe('CoreWebVitalsTracker', () => {
 
         it('should disconnect PerformanceObserver when disabled', () => {
             const disconnectSpy = vi.fn();
+
+            // Create a new tracker with the disconnect spy already in place
             PerformanceObserver.mockImplementation(() => ({
                 observe: vi.fn(),
                 disconnect: disconnectSpy
             }));
 
-            tracker.disable();
+            const testTracker = new CoreWebVitalsTracker({ enabled: true, maxMetrics: 100 });
+            testTracker.disable();
 
             expect(disconnectSpy).toHaveBeenCalled();
         });

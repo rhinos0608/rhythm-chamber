@@ -42,6 +42,36 @@ export class ObservabilityController {
     _isDashboardVisible = false;
 
     /**
+     * @private
+     * @type {Function|null}
+     */
+    _onShowDashboard = null;
+
+    /**
+     * @private
+     * @type {Function|null}
+     */
+    _onHideDashboard = null;
+
+    /**
+     * @private
+     * @type {Function|null}
+     */
+    _onToggleDashboard = null;
+
+    /**
+     * @private
+     * @type {Function|null}
+     */
+    _onSettingsObservability = null;
+
+    /**
+     * @private
+     * @type {Function|null}
+     */
+    _onActionClick = null;
+
+    /**
      * Initialize the Observability Controller
      * @public
      * @param {HTMLElement} container - Container element for the dashboard
@@ -51,6 +81,13 @@ export class ObservabilityController {
     constructor(container = null, { updateInterval = 5000 } = {}) {
         this._container = container;
         this._updateInterval = updateInterval;
+
+        // Create bound event handlers for proper cleanup
+        this._onShowDashboard = () => this.showDashboard();
+        this._onHideDashboard = () => this.hideDashboard();
+        this._onToggleDashboard = () => this.toggleDashboard();
+        this._onSettingsObservability = () => this.showDashboard();
+        this._onActionClick = (event) => this._handleActionClick(event);
     }
 
     /**
@@ -75,13 +112,18 @@ export class ObservabilityController {
      * @private
      */
     _setupEventListeners() {
-        // Listen for observability-related events
-        document.addEventListener('observability:show', () => this.showDashboard());
-        document.addEventListener('observability:hide', () => this.hideDashboard());
-        document.addEventListener('observability:toggle', () => this.toggleDashboard());
+        // Listen for observability-related events using bound handlers
+        document.addEventListener('observability:show', this._onShowDashboard);
+        document.addEventListener('observability:hide', this._onHideDashboard);
+        document.addEventListener('observability:toggle', this._onToggleDashboard);
 
         // Listen for settings modal events
-        document.addEventListener('settings:observability', () => this.showDashboard());
+        document.addEventListener('settings:observability', this._onSettingsObservability);
+
+        // Set up action button delegation
+        if (this._container) {
+            this._container.addEventListener('click', this._onActionClick);
+        }
     }
 
     /**
@@ -124,8 +166,9 @@ export class ObservabilityController {
             </div>
         `;
 
-        // Add tab switching
+        // Add tab switching and action handlers
         this._setupTabs();
+        this._setupActions();
     }
 
     /**
@@ -183,11 +226,11 @@ export class ObservabilityController {
         return `
             <div class="tab-content" data-tab="web-vitals">
                 <div class="vitals-grid">
-                    ${this._createVitalCard('LCP', 'Largest Contentful Paint', 'good')}
-                    ${this._createVitalCard('FID', 'First Input Delay', 'good')}
-                    ${this._createVitalCard('CLS', 'Cumulative Layout Shift', 'good')}
-                    ${this._createVitalCard('INP', 'Interaction to Next Paint', 'good')}
-                    ${this._createVitalCard('TTFB', 'Time to First Byte', 'good')}
+                    ${this._createVitalCard('LCP', 'Largest Contentful Paint', 'good', 'ms')}
+                    ${this._createVitalCard('FID', 'First Input Delay', 'good', 'ms')}
+                    ${this._createVitalCard('CLS', 'Cumulative Layout Shift', 'good', '')}
+                    ${this._createVitalCard('INP', 'Interaction to Next Paint', 'good', 'ms')}
+                    ${this._createVitalCard('TTFB', 'Time to First Byte', 'good', 'ms')}
                 </div>
 
                 <div class="vitals-details">
@@ -204,9 +247,10 @@ export class ObservabilityController {
      * @param {string} type - Vital type
      * @param {string} label - Vital label
      * @param {string} rating - Initial rating
+     * @param {string} unit - Unit for the vital (default: 'ms')
      * @returns {string} HTML content
      */
-    _createVitalCard(type, label, rating) {
+    _createVitalCard(type, label, rating, unit = 'ms') {
         return `
             <div class="vital-card" data-vital="${type}">
                 <div class="vital-header">
@@ -214,7 +258,7 @@ export class ObservabilityController {
                     <div class="vital-rating ${rating}">${rating}</div>
                 </div>
                 <div class="vital-value" id="vital-${type}-value">--</div>
-                <div class="vital-unit">ms</div>
+                <div class="vital-unit">${unit}</div>
                 <div class="vital-threshold">
                     <span class="threshold-label">Target:</span>
                     <span class="threshold-value" id="vital-${type}-target">--</span>
@@ -392,6 +436,159 @@ export class ObservabilityController {
     }
 
     /**
+     * Set up action button handlers
+     * @private
+     */
+    _setupActions() {
+        // Action buttons are handled through event delegation in _handleActionClick
+        // This method is called during initialization to ensure the delegation is set up
+    }
+
+    /**
+     * Handle action button clicks via event delegation
+     * @private
+     * @param {Event} event - Click event
+     */
+    _handleActionClick(event) {
+        const actionButton = event.target.closest('[data-action]');
+        if (!actionButton) return;
+
+        const action = actionButton.dataset.action;
+
+        switch (action) {
+            case 'hide-observability':
+                event.preventDefault();
+                this._hideObservability();
+                break;
+
+            case 'export-now':
+                event.preventDefault();
+                this._exportNow();
+                break;
+
+            case 'clear-metrics':
+                event.preventDefault();
+                this._clearMetrics();
+                break;
+
+            case 'add-scheduled-export':
+                event.preventDefault();
+                this._addScheduledExport();
+                break;
+
+            case 'add-external-service':
+                event.preventDefault();
+                this._addExternalService();
+                break;
+
+            case 'pause-job':
+                event.preventDefault();
+                this._pauseJob(actionButton.dataset.jobId);
+                break;
+
+            case 'delete-job':
+                event.preventDefault();
+                this._deleteJob(actionButton.dataset.jobId);
+                break;
+
+            case 'remove-service':
+                event.preventDefault();
+                this._removeService(actionButton.dataset.endpoint);
+                break;
+        }
+    }
+
+    /**
+     * Hide the observability dashboard
+     * @private
+     */
+    _hideObservability() {
+        this.hideDashboard();
+    }
+
+    /**
+     * Export metrics now
+     * @private
+     */
+    async _exportNow() {
+        const formatSelect = this._container.querySelector('#export-format');
+        const includeMemory = this._container.querySelector('#export-memory')?.checked ?? true;
+        const includeVitals = this._container.querySelector('#export-vitals')?.checked ?? true;
+
+        const format = formatSelect?.value || 'json';
+
+        await this.exportNow(format, {
+            includeMemory,
+            includeWebVitals: includeVitals
+        });
+
+        // Show feedback
+        console.log('[ObservabilityController] Export initiated');
+    }
+
+    /**
+     * Clear all metrics
+     * @private
+     */
+    _clearMetrics() {
+        if (confirm('Are you sure you want to clear all metrics? This action cannot be undone.')) {
+            this.clearMetrics();
+            console.log('[ObservabilityController] Metrics cleared by user');
+        }
+    }
+
+    /**
+     * Add a scheduled export
+     * @private
+     */
+    _addScheduledExport() {
+        console.log('[ObservabilityController] Add scheduled export - feature not implemented');
+        // TODO: Implement scheduled export creation UI
+    }
+
+    /**
+     * Add an external service
+     * @private
+     */
+    _addExternalService() {
+        console.log('[ObservabilityController] Add external service - feature not implemented');
+        // TODO: Implement external service creation UI
+    }
+
+    /**
+     * Pause a scheduled job
+     * @private
+     * @param {string} jobId - Job ID
+     */
+    _pauseJob(jobId) {
+        if (!window.MetricsExporter) return;
+        console.log(`[ObservabilityController] Pause job ${jobId}`);
+        // TODO: Implement job pause functionality
+    }
+
+    /**
+     * Delete a scheduled job
+     * @private
+     * @param {string} jobId - Job ID
+     */
+    _deleteJob(jobId) {
+        if (!window.MetricsExporter) return;
+        console.log(`[ObservabilityController] Delete job ${jobId}`);
+        // TODO: Implement job deletion functionality
+    }
+
+    /**
+     * Remove an external service
+     * @private
+     * @param {string} endpoint - Service endpoint
+     */
+    _removeService(endpoint) {
+        if (!window.MetricsExporter) return;
+        console.log(`[ObservabilityController] Remove service ${endpoint}`);
+        // TODO: Implement service removal functionality
+    }
+
+    /**
      * Update tab-specific content
      * @private
      * @param {string} tabName - Tab name
@@ -542,16 +739,16 @@ export class ObservabilityController {
             scheduledList.innerHTML = '<div class="no-scheduled">No scheduled exports</div>';
         } else {
             scheduledList.innerHTML = scheduledJobs.map(job => `
-                <div class="scheduled-job" data-job-id="${job.id}">
-                    <div class="job-name">${job.name}</div>
+                <div class="scheduled-job" data-job-id="${this._escapeHtml(job.id)}">
+                    <div class="job-name">${this._escapeHtml(job.name)}</div>
                     <div class="job-info">
-                        <span>Format: ${job.config.format}</span>
-                        <span>Schedule: ${job.config.schedule}</span>
-                        <span>Status: ${job.status}</span>
+                        <span>Format: ${this._escapeHtml(job.config.format)}</span>
+                        <span>Schedule: ${this._escapeHtml(job.config.schedule)}</span>
+                        <span>Status: ${this._escapeHtml(job.status)}</span>
                     </div>
                     <div class="job-actions">
-                        <button class="btn btn-sm" data-action="pause-job" data-job-id="${job.id}">Pause</button>
-                        <button class="btn btn-sm" data-action="delete-job" data-job-id="${job.id}">Delete</button>
+                        <button class="btn btn-sm" data-action="pause-job" data-job-id="${this._escapeHtml(job.id)}">Pause</button>
+                        <button class="btn btn-sm" data-action="delete-job" data-job-id="${this._escapeHtml(job.id)}">Delete</button>
                     </div>
                 </div>
             `).join('');
@@ -565,11 +762,11 @@ export class ObservabilityController {
             servicesList.innerHTML = '<div class="no-services">No external services configured</div>';
         } else {
             servicesList.innerHTML = services.map(service => `
-                <div class="service-config" data-endpoint="${service.endpoint}">
-                    <div class="service-name">${service.service}</div>
-                    <div class="service-endpoint">${service.endpoint}</div>
+                <div class="service-config" data-endpoint="${this._escapeHtml(service.endpoint)}">
+                    <div class="service-name">${this._escapeHtml(service.service)}</div>
+                    <div class="service-endpoint">${this._escapeHtml(service.endpoint)}</div>
                     <div class="service-actions">
-                        <button class="btn btn-sm" data-action="remove-service" data-endpoint="${service.endpoint}">Remove</button>
+                        <button class="btn btn-sm" data-action="remove-service" data-endpoint="${this._escapeHtml(service.endpoint)}">Remove</button>
                     </div>
                 </div>
             `).join('');
@@ -591,10 +788,10 @@ export class ObservabilityController {
 
         const recentAlerts = alerts.slice(-10).reverse();
         alertsList.innerHTML = recentAlerts.map(alert => `
-            <div class="alert-item ${alert.severity}">
-                <div class="alert-message">${alert.message}</div>
+            <div class="alert-item ${this._escapeHtml(alert.severity)}">
+                <div class="alert-message">${this._escapeHtml(alert.message)}</div>
                 <div class="alert-details">
-                    <span class="alert-category">${alert.category}</span>
+                    <span class="alert-category">${this._escapeHtml(alert.category)}</span>
                     <span class="alert-time">${new Date(alert.timestamp).toLocaleTimeString()}</span>
                 </div>
             </div>
@@ -645,6 +842,22 @@ export class ObservabilityController {
             .split('_')
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
             .join(' ');
+    }
+
+    /**
+     * Escape HTML to prevent XSS attacks
+     * @private
+     * @param {string} text - Text to escape
+     * @returns {string} Escaped text
+     */
+    _escapeHtml(text) {
+        if (typeof text !== 'string') {
+            return String(text);
+        }
+
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     /**
@@ -773,11 +986,46 @@ export class ObservabilityController {
     destroy() {
         this._stopUpdates();
 
+        // Remove event listeners using bound handlers
+        this._removeEventListeners();
+
         if (this._container && this._container.parentNode) {
             this._container.parentNode.removeChild(this._container);
         }
 
+        // Null out handler properties to prevent memory leaks
+        this._onShowDashboard = null;
+        this._onHideDashboard = null;
+        this._onToggleDashboard = null;
+        this._onSettingsObservability = null;
+        this._onActionClick = null;
+
         console.log('[ObservabilityController] Destroyed');
+    }
+
+    /**
+     * Remove event listeners
+     * @private
+     */
+    _removeEventListeners() {
+        // Remove document event listeners using bound handlers
+        if (this._onShowDashboard) {
+            document.removeEventListener('observability:show', this._onShowDashboard);
+        }
+        if (this._onHideDashboard) {
+            document.removeEventListener('observability:hide', this._onHideDashboard);
+        }
+        if (this._onToggleDashboard) {
+            document.removeEventListener('observability:toggle', this._onToggleDashboard);
+        }
+        if (this._onSettingsObservability) {
+            document.removeEventListener('settings:observability', this._onSettingsObservability);
+        }
+
+        // Remove container event listeners
+        if (this._container && this._onActionClick) {
+            this._container.removeEventListener('click', this._onActionClick);
+        }
     }
 }
 

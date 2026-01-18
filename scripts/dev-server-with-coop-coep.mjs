@@ -14,12 +14,12 @@
 import { createServer } from 'http';
 import { parse } from 'url';
 import { readFileSync } from 'fs';
-import { extname, join } from 'path';
+import { extname, join, normalize, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const PORT = process.argv[2] ? parseInt(process.argv[2], 10) : 8080;
-const ROOT_DIR = join(__dirname, '..');
+const ROOT_DIR = resolve(__dirname, '..');
 
 /**
  * MIME types for common file extensions
@@ -78,7 +78,21 @@ function getHeaders(filePath) {
  */
 const server = createServer((req, res) => {
   const parsedUrl = parse(req.url);
-  let filePath = join(ROOT_DIR, parsedUrl.pathname);
+
+  // Security: Normalize and validate the path to prevent directory traversal
+  const decodedPathname = decodeURIComponent(parsedUrl.pathname);
+  const normalizedPath = normalize('/' + decodedPathname).replace(/^\/+/, '');
+  const safePath = resolve(ROOT_DIR, normalizedPath);
+
+  // Verify the resolved path is within ROOT_DIR (prevent path traversal)
+  if (!safePath.startsWith(ROOT_DIR)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain' });
+    res.end('403 Forbidden');
+    console.error(`[${new Date().toISOString()}] ${req.method} ${req.url} -> 403 Forbidden (path traversal attempt)`);
+    return;
+  }
+
+  let filePath = safePath;
 
   // Default to index.html for directory requests
   if (filePath.endsWith('/')) {

@@ -13,6 +13,41 @@
 import { EventBus } from '../services/event-bus.js';
 import { CoreWebVitalsTracker } from './core-web-vitals.js';
 import { PerformanceProfiler, PerformanceCategory } from '../services/performance-profiler.js';
+
+/**
+ * Generate or retrieve encryption key configuration for metrics exporter
+ * This provides basic protection for stored credentials using Web Crypto API
+ *
+ * NOTE: For production use, you should provide your own encryption config with:
+ * - password: A strong, unique passphrase
+ * - salt: A random salt string (store securely, don't commit to git)
+ * - iterations: PBKDF2 iteration count (minimum 100000)
+ *
+ * @returns {Object|null} Encryption configuration or null if not available
+ */
+function getOrCreateEncryptionConfig() {
+    try {
+        // Check if user provided an encryption config
+        const userProvidedSalt = localStorage.getItem('observability_encryption_salt');
+        const userProvidedPassword = localStorage.getItem('observability_encryption_password');
+
+        if (userProvidedSalt && userProvidedPassword) {
+            return {
+                password: userProvidedPassword,
+                salt: userProvidedSalt,
+                iterations: 100000
+            };
+        }
+
+        // No encryption config available - log warning
+        console.warn('[ObservabilityInit] Metrics encryption not configured. External service credentials will be stored in plain text in localStorage. For production use, set observability_encryption_salt and observability_encryption_password in localStorage before initialization.');
+
+        return null;
+    } catch (error) {
+        console.warn('[ObservabilityInit] Failed to read encryption config:', error);
+        return null;
+    }
+}
 import { MetricsExporter } from './metrics-exporter.js';
 import { ObservabilityController } from '../controllers/observability-controller.js';
 
@@ -21,6 +56,9 @@ let coreWebVitals = null;
 let metricsExporter = null;
 let observabilityController = null;
 let isInitialized = false;
+
+// EventBus unsubscribe functions
+let eventBusUnsubscribers = [];
 
 /**
  * Initialize observability system with all components
@@ -58,10 +96,13 @@ export async function initObservability(userOptions = {}) {
 
         // Initialize Metrics Exporter
         if (options.exportEnabled) {
-            metricsExporter = new MetricsExporter({
-                enabled: options.enabled
+            // Get encryption configuration for securing external service credentials
+            const encryptionConfig = getOrCreateEncryptionConfig();
+            metricsExporter = await MetricsExporter.create({
+                enabled: options.enabled,
+                encryptionConfig: encryptionConfig
             });
-            console.log('[ObservabilityInit] Metrics Exporter initialized');
+            console.log('[ObservabilityInit] Metrics Exporter initialized' + (encryptionConfig ? ' with encryption' : ' (encryption not configured)'));
         }
 
         // Initialize Observability Controller
@@ -111,10 +152,13 @@ function setupEventBusIntegration() {
     }
 
     // Subscribe to existing application events for tracking
-    EventBus.on('DATA_STREAMS_LOADED', handleDataStreamsLoaded);
-    EventBus.on('CHAT_MESSAGE_SENT', handleChatMessageSent);
-    EventBus.on('PATTERN_DETECTION_COMPLETE', handlePatternDetectionComplete);
-    EventBus.on('EMBEDDING_GENERATED', handleEmbeddingGenerated);
+    // Store unsubscribe functions for cleanup
+    eventBusUnsubscribers = [
+        EventBus.on('DATA_STREAMS_LOADED', handleDataStreamsLoaded),
+        EventBus.on('CHAT_MESSAGE_SENT', handleChatMessageSent),
+        EventBus.on('PATTERN_DETECTION_COMPLETE', handlePatternDetectionComplete),
+        EventBus.on('EMBEDDING_GENERATED', handleEmbeddingGenerated)
+    ];
 
     console.log('[ObservabilityInit] EventBus integration setup complete');
 }
@@ -155,10 +199,22 @@ function setupPerformanceBudgets() {
         degradationThreshold: 50
     });
 
+    // Embedding generation budget
+    PerformanceProfiler.setPerformanceBudget(PerformanceCategory.EMBEDDING_GENERATION, {
+        threshold: 500, // 500ms for embedding generation
+        action: 'warn',
+        degradationThreshold: 50
+    });
+
     console.log('[ObservabilityInit] Performance budgets configured');
 }
 
 // Event handlers for EventBus integration
+// Note: These handlers currently record minimal timing information (~0ms)
+// For accurate profiling, events should include timing data in payloads:
+// - payload.startTime / payload.endTime
+// - payload.duration
+// Or implement START/COMPLETE event patterns with operationId tracking
 
 function handleDataStreamsLoaded(payload) {
     if (!PerformanceProfiler) return;
@@ -166,12 +222,19 @@ function handleDataStreamsLoaded(payload) {
     const stopOperation = PerformanceProfiler.startOperation('data_streams_load', {
         category: PerformanceCategory.STORAGE,
         metadata: {
-            streamCount: payload.streams?.length || 0
+            streamCount: payload.streams?.length || 0,
+            timingNote: 'Actual timing should be provided in payload.duration'
         }
     });
 
-    // Record completion
-    setTimeout(() => stopOperation(), 0);
+    // If actual timing is available in payload, use it
+    if (payload.duration) {
+        // Stop with duration metadata for reference
+        stopOperation({ metadata: { actualDuration: payload.duration } });
+    } else {
+        // Record completion (will show minimal timing)
+        setTimeout(() => stopOperation(), 0);
+    }
 }
 
 function handleChatMessageSent(payload) {
@@ -181,12 +244,19 @@ function handleChatMessageSent(payload) {
         category: PerformanceCategory.CHAT,
         metadata: {
             messageLength: payload.message?.length || 0,
-            hasFunctionCalls: payload.functionCalls?.length > 0
+            hasFunctionCalls: payload.functionCalls?.length > 0,
+            timingNote: 'Actual timing should be provided in payload.duration'
         }
     });
 
-    // Record completion
-    setTimeout(() => stopOperation(), 0);
+    // If actual timing is available in payload, use it
+    if (payload.duration) {
+        // Stop with duration metadata for reference
+        stopOperation({ metadata: { actualDuration: payload.duration } });
+    } else {
+        // Record completion (will show minimal timing)
+        setTimeout(() => stopOperation(), 0);
+    }
 }
 
 function handlePatternDetectionComplete(payload) {
@@ -196,12 +266,19 @@ function handlePatternDetectionComplete(payload) {
         category: PerformanceCategory.PATTERN_DETECTION,
         metadata: {
             patternCount: Object.keys(payload.patterns || {}).length,
-            streamCount: payload.streamCount || 0
+            streamCount: payload.streamCount || 0,
+            timingNote: 'Actual timing should be provided in payload.duration'
         }
     });
 
-    // Record completion
-    setTimeout(() => stopOperation(), 0);
+    // If actual timing is available in payload, use it
+    if (payload.duration) {
+        // Stop with duration metadata for reference
+        stopOperation({ metadata: { actualDuration: payload.duration } });
+    } else {
+        // Record completion (will show minimal timing)
+        setTimeout(() => stopOperation(), 0);
+    }
 }
 
 function handleEmbeddingGenerated(payload) {
@@ -211,12 +288,19 @@ function handleEmbeddingGenerated(payload) {
         category: PerformanceCategory.EMBEDDING_GENERATION,
         metadata: {
             embeddingCount: payload.count || 1,
-            dimension: payload.dimension || 384
+            dimension: payload.dimension || 384,
+            timingNote: 'Actual timing should be provided in payload.duration'
         }
     });
 
-    // Record completion
-    setTimeout(() => stopOperation(), 0);
+    // If actual timing is available in payload, use it
+    if (payload.duration) {
+        // Stop with duration metadata for reference
+        stopOperation({ metadata: { actualDuration: payload.duration } });
+    } else {
+        // Record completion (will show minimal timing)
+        setTimeout(() => stopOperation(), 0);
+    }
 }
 
 /**
@@ -242,6 +326,15 @@ export function isObservabilityInitialized() {
  * Disable observability system
  */
 export function disableObservability() {
+    // Cleanup EventBus subscriptions
+    eventBusUnsubscribers.forEach(unsubscribe => {
+        if (typeof unsubscribe === 'function') {
+            unsubscribe();
+        }
+    });
+    eventBusUnsubscribers = [];
+
+    // Disable individual components
     if (coreWebVitals) {
         coreWebVitals.disable();
     }
@@ -251,7 +344,13 @@ export function disableObservability() {
     if (observabilityController) {
         observabilityController.hideDashboard();
     }
+
+    // Null out singleton references to allow reinitialization
+    coreWebVitals = null;
+    metricsExporter = null;
+    observabilityController = null;
     isInitialized = false;
+
     console.log('[ObservabilityInit] Observability system disabled');
 }
 

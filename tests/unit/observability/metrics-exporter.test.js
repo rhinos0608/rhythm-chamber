@@ -16,9 +16,9 @@ const mockFetch = () => {
 describe('MetricsExporter', () => {
     let exporter;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         mockFetch();
-        exporter = new MetricsExporter({ enabled: true });
+        exporter = await MetricsExporter.create({ enabled: true });
     });
 
     afterEach(() => {
@@ -34,13 +34,14 @@ describe('MetricsExporter', () => {
             expect(exporter.isEnabled()).toBe(true);
         });
 
-        it('should initialize with encryption config', () => {
+        it('should initialize with encryption config', async () => {
             const encryptionConfig = {
-                key: 'test-key',
-                algorithm: 'AES-GCM'
+                password: 'test-password',
+                salt: 'test-salt',
+                iterations: 100000
             };
 
-            const encryptedExporter = new MetricsExporter({
+            const encryptedExporter = await MetricsExporter.create({
                 enabled: true,
                 encryptionConfig
             });
@@ -403,20 +404,23 @@ describe('MetricsExporter', () => {
             setItemSpy.mockRestore();
         });
 
-        it('should load configuration from localStorage', () => {
+        it('should load configuration from localStorage', async () => {
             const config = {
                 scheduledJobs: {},
                 externalServices: []
             };
 
-            vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(JSON.stringify(config));
+            const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(JSON.stringify(config));
 
-            const newExporter = new MetricsExporter({ enabled: true });
+            const newExporter = await MetricsExporter.create({ enabled: true });
 
             expect(newExporter._scheduledJobs.size).toBe(0);
             expect(newExporter._externalServices.length).toBe(0);
 
             newExporter.disable();
+
+            // Restore the spy
+            getItemSpy.mockRestore();
         });
     });
 
