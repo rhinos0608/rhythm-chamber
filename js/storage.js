@@ -15,6 +15,8 @@ import { ModuleRegistry } from './module-registry.js';
 import { EventBus } from './services/event-bus.js';
 import { SafeMode } from './security/safe-mode.js';
 import { WriteAheadLog, WalPriority } from './storage/write-ahead-log.js';
+import { ArchiveService } from './storage/archive-service.js';
+import { QuotaManager } from './storage/quota-manager.js';
 
 // ==========================================
 // HNW Hierarchy: Safe Mode Enforcement
@@ -147,6 +149,20 @@ const Storage = {
     // HNW Wave: Initialize Write-Ahead Log for Safe Mode
     await WriteAheadLog.init();
 
+    // HNW Wave: Initialize QuotaManager and register cleanup handler
+    await QuotaManager.init();
+    QuotaManager.on('threshold_exceeded', async (usage) => {
+      if (usage.percent > 90) {
+        console.log(`[Storage] Quota threshold exceeded (${usage.percent.toFixed(1)}%), triggering auto-archive`);
+        try {
+          const result = await ArchiveService.archiveOldStreams();
+          console.log(`[Storage] Auto-archive complete: ${result.archived} streams archived, saved ${(result.savedBytes / 1024 / 1024).toFixed(2)}MB`);
+        } catch (error) {
+          console.error('[Storage] Auto-archive failed:', error);
+        }
+      }
+    });
+
     return window.IndexedDBCore.getConnection();
   },
 
@@ -200,6 +216,52 @@ const Storage = {
       await window.IndexedDBCore.clear(STORES.STREAMS);
       this._notifyUpdate('streams', 0);
     }, true);
+  },
+
+  // ==========================================
+  // Stream Archival (Quota Management)
+  // ==========================================
+
+  /**
+   * Archive streams older than cutoff date for quota management
+   * Streams are moved to archive store for optional restoration (not deleted)
+   * @param {Object} [options] - Archive options
+   * @param {Date|number} [options.cutoffDate] - Archive before this date (default: 1 year ago)
+   * @param {boolean} [options.dryRun=false] - Preview without archiving
+   * @returns {Promise<{archived: number, kept: number, savedBytes: number}>}
+   */
+  async archiveOldStreams(options = {}) {
+    assertWriteAllowed('archiveOldStreams');
+    return ArchiveService.archiveOldStreams(options);
+  },
+
+  /**
+   * Restore archived streams back to main storage
+   * @param {Object} [options] - Restore options
+   * @param {Date|number} [options.afterDate] - Only restore after this date
+   * @param {boolean} [options.clearArchive=true] - Clear archive after
+   * @returns {Promise<{restored: number, remaining: number}>}
+   */
+  async restoreFromArchive(options = {}) {
+    assertWriteAllowed('restoreFromArchive');
+    return ArchiveService.restoreFromArchive(options);
+  },
+
+  /**
+   * Get archive statistics
+   * @returns {Promise<{totalArchived: number, oldestDate: string, sizeBytes: number}>}
+   */
+  getArchiveStats() {
+    return ArchiveService.getArchiveStats();
+  },
+
+  /**
+   * Clear archive permanently
+   * @returns {Promise<{deleted: number}>}
+   */
+  async clearArchive() {
+    assertWriteAllowed('clearArchive');
+    return ArchiveService.clearArchive();
   },
 
   // ==========================================
