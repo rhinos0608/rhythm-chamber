@@ -759,9 +759,8 @@ async function persistEvent(eventType, payload, vectorClock, sequenceNumber, opt
         if (EventBusRef && EventBusRef.emit) {
             EventBusRef.emit('eventbus:persistence_error', {
                 error: error.message,
-                eventType,
-                skipEventLog: true
-            });
+                eventType
+            }, { skipEventLog: true });
         } else {
             console.warn('[EventBus] Unable to emit persistence error - EventBusRef not initialized');
         }

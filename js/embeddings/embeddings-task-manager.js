@@ -660,7 +660,6 @@ async function recoverTask(options = {}) {
     // Initialize task from checkpoint
     // Use nullish coalescing to avoid treating 0 as falsy
     const startIndex = checkpoint.nextIndex ?? checkpoint.processedCount;
-    const remainingTexts = checkpoint.texts.slice(startIndex);
 
     currentTask = {
         id: checkpoint.taskId || `embed_${Date.now()}`,

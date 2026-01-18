@@ -462,8 +462,8 @@ export class MetricsExporter {
             }
         }
 
-        // Memory metrics
-        if (metrics.memory?.currentUsage !== null) {
+        // Memory metrics - check for both null and undefined to avoid emitting invalid values
+        if (metrics.memory?.currentUsage != null && typeof metrics.memory.currentUsage === 'number') {
             const metricName = this._sanitizePrometheusName('rhythm_chamber_memory_usage_percent');
             lines.push(`# HELP ${metricName} Memory usage percentage`);
             lines.push(`# TYPE ${metricName} gauge`);
@@ -693,6 +693,19 @@ export class MetricsExporter {
      * @returns {Promise<string>} Job ID
      */
     async createScheduledExport(name, config) {
+        // Input validation
+        if (!name || typeof name !== 'string' || name.trim() === '') {
+            throw new Error('Invalid job name: must be a non-empty string');
+        }
+        if (!config || typeof config !== 'object') {
+            throw new Error('Invalid export config: must be an object');
+        }
+        if (!config.format || !Object.values(ExportFormat).includes(config.format)) {
+            throw new Error(`Invalid export format: ${config.format}`);
+        }
+        if (!config.schedule || !Object.values(ScheduleType).includes(config.schedule)) {
+            throw new Error(`Invalid schedule type: ${config.schedule}`);
+        }
         const job = {
             id: `export_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             name,
@@ -716,6 +729,11 @@ export class MetricsExporter {
      * @param {string} jobId - Job ID
      */
     async pauseJob(jobId) {
+        // Input validation
+        if (!jobId || typeof jobId !== 'string' || jobId.trim() === '') {
+            console.warn('[MetricsExporter] Invalid jobId:', jobId);
+            return;
+        }
         const job = this._scheduledJobs.get(jobId);
         if (job) {
             job.status = 'paused';
@@ -729,6 +747,11 @@ export class MetricsExporter {
      * @param {string} jobId - Job ID
      */
     async resumeJob(jobId) {
+        // Input validation
+        if (!jobId || typeof jobId !== 'string' || jobId.trim() === '') {
+            console.warn('[MetricsExporter] Invalid jobId:', jobId);
+            return;
+        }
         const job = this._scheduledJobs.get(jobId);
         if (job) {
             job.status = 'active';
@@ -743,6 +766,11 @@ export class MetricsExporter {
      * @param {string} jobId - Job ID
      */
     async deleteJob(jobId) {
+        // Input validation
+        if (!jobId || typeof jobId !== 'string' || jobId.trim() === '') {
+            console.warn('[MetricsExporter] Invalid jobId:', jobId);
+            return;
+        }
         this._scheduledJobs.delete(jobId);
         await this._saveConfiguration();
     }
@@ -754,6 +782,13 @@ export class MetricsExporter {
      * @returns {Promise<string>} Exported data
      */
     async exportNow(config) {
+        // Input validation
+        if (!config || typeof config !== 'object') {
+            throw new Error('Invalid export config: must be an object');
+        }
+        if (!config.format || !Object.values(ExportFormat).includes(config.format)) {
+            throw new Error(`Invalid export format: ${config.format}`);
+        }
         const metrics = await this._gatherMetrics(config);
         const exportedData = await this._exportMetrics(metrics, config.format);
         await this._downloadExport(exportedData, config.format, 'immediate');
@@ -766,6 +801,22 @@ export class MetricsExporter {
      * @param {ExternalServiceConfig} serviceConfig - Service configuration
      */
     async addExternalService(serviceConfig) {
+        // Input validation
+        if (!serviceConfig || typeof serviceConfig !== 'object') {
+            throw new Error('Invalid service config: must be an object');
+        }
+        if (!serviceConfig.service || !Object.values(ExternalService).includes(serviceConfig.service)) {
+            throw new Error(`Invalid service type: ${serviceConfig.service}`);
+        }
+        if (!serviceConfig.endpoint || typeof serviceConfig.endpoint !== 'string' || serviceConfig.endpoint.trim() === '') {
+            throw new Error('Invalid endpoint: must be a non-empty string');
+        }
+        // Validate URL format
+        try {
+            new URL(serviceConfig.endpoint);
+        } catch (urlError) {
+            throw new Error(`Invalid endpoint URL: ${serviceConfig.endpoint}`);
+        }
         this._externalServices.push(serviceConfig);
         await this._saveConfiguration();
     }
@@ -776,6 +827,11 @@ export class MetricsExporter {
      * @param {string} endpoint - Service endpoint
      */
     async removeExternalService(endpoint) {
+        // Input validation
+        if (!endpoint || typeof endpoint !== 'string' || endpoint.trim() === '') {
+            console.warn('[MetricsExporter] Invalid endpoint:', endpoint);
+            return;
+        }
         this._externalServices = this._externalServices.filter(
             s => s.endpoint !== endpoint
         );
@@ -897,9 +953,12 @@ export class MetricsExporter {
 
             return encryptedServices;
         } catch (error) {
-            console.error('[MetricsExporter] Failed to encrypt credentials:', error);
-            // Return unencrypted services as fallback
-            return services;
+            // CRITICAL: Do not silently fall back to unencrypted credentials
+            // This could expose sensitive API keys/secrets in localStorage
+            console.error('[MetricsExporter] CRITICAL: Failed to encrypt credentials. ' +
+                'Aborting to prevent plaintext credential storage:', error);
+            throw new Error(`Credential encryption failed: ${error.message}. ` +
+                'Cannot save external service configuration with unencrypted credentials.');
         }
     }
 
@@ -944,8 +1003,21 @@ export class MetricsExporter {
             return decryptedServices;
         } catch (error) {
             console.error('[MetricsExporter] Failed to decrypt credentials:', error);
-            // Return services as-is (potentially with encrypted credentials)
-            return services;
+            // Sanitize credentials to prevent using encrypted/invalid data
+            console.warn('[MetricsExporter] Decryption failed - sanitizing credentials from services. ' +
+                'Service configurations will need to be reconfigured. Error:', error.message);
+            const sanitizedServices = services.map(service => {
+                const sanitized = { ...service };
+                // Clear credential fields to prevent using invalid data
+                if (sanitized.credentials) {
+                    sanitized.credentials = null;
+                }
+                // Also clear any known sensitive fields that might exist
+                if (sanitized.apiKey) sanitized.apiKey = null;
+                if (sanitized.secret) sanitized.secret = null;
+                return sanitized;
+            });
+            return sanitizedServices;
         }
     }
 
@@ -986,19 +1058,39 @@ export class MetricsExporter {
     }
 }
 
-// Lazy singleton initialization
+// Lazy singleton initialization with promise caching to prevent race conditions
 let MetricsExporterSingleton = null;
+let MetricsExporterInitPromise = null;
 
 /**
  * Get or create the MetricsExporter singleton instance
+ * Uses promise caching to prevent race conditions where concurrent calls
+ * could create multiple instances before the first one resolves.
  * @public
  * @returns {Promise<MetricsExporter>} Singleton instance
  */
 export async function getMetricsExporter() {
-    if (!MetricsExporterSingleton) {
-        MetricsExporterSingleton = await MetricsExporter.create();
+    // Return existing instance if already created
+    if (MetricsExporterSingleton) {
+        return MetricsExporterSingleton;
     }
-    return MetricsExporterSingleton;
+
+    // If initialization is in progress, wait for it
+    if (MetricsExporterInitPromise) {
+        return MetricsExporterInitPromise;
+    }
+
+    // Start initialization and cache the promise
+    MetricsExporterInitPromise = MetricsExporter.create().then(instance => {
+        MetricsExporterSingleton = instance;
+        MetricsExporterInitPromise = null; // Clear promise cache after success
+        return instance;
+    }).catch(error => {
+        MetricsExporterInitPromise = null; // Clear promise cache on failure to allow retry
+        throw error;
+    });
+
+    return MetricsExporterInitPromise;
 }
 
 // Export the getter function

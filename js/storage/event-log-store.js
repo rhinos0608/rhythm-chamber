@@ -30,6 +30,8 @@ const COMPACTION_CONFIG = {
     minEventsAfterCheckpoint: 50   // Minimum events to keep after checkpoint
 };
 
+const MAX_CONNECTION_RETRIES = 5;  // Maximum retry attempts for blocked connections
+
 // ==========================================
 // Event Schema
 // ==========================================
@@ -41,7 +43,7 @@ const COMPACTION_CONFIG = {
  * @property {string} type - Event type
  * @property {object} payload - Event payload
  * @property {object} vectorClock - VectorClock for ordering
- * @property {number} timestamp - High-resolution timestamp
+ * @property {number} timestamp - Milliseconds since Unix epoch
  * @property {number} sequenceNumber - Monotonically increasing sequence number
  * @property {string} sourceTab - Tab that created the event
  * @property {string} domain - Event domain for filtering (default: 'global')
@@ -51,21 +53,74 @@ const COMPACTION_CONFIG = {
 // Core Functions
 // ==========================================
 
+// Module-level cached database connection
+let cachedDbPromise = null;
+let cachedDb = null;
+
+/**
+ * Close the cached event log store connection
+ * Call this when you need to force a new connection
+ */
+function closeEventLogStore() {
+    if (cachedDb) {
+        cachedDb.close();
+        cachedDb = null;
+    }
+    cachedDbPromise = null;
+    console.log('[EventLogStore] Connection closed and cache cleared');
+}
+
 /**
  * Initialize event log stores
+ * Caches and reuses the connection to avoid opening new connections on every call
+ * Implements retry with exponential backoff for blocked connections
+ * @param {number} [retryCount=0] - Internal retry counter
  * @returns {Promise<IDBDatabase>}
  */
-async function initEventLogStores() {
-    return new Promise((resolve, reject) => {
+async function initEventLogStores(retryCount = 0) {
+    // Return existing connection if valid
+    if (cachedDb) {
+        return cachedDb;
+    }
+
+    // Return existing promise if initialization is in progress
+    if (cachedDbPromise) {
+        return cachedDbPromise;
+    }
+
+    // Create new connection with promise caching
+    cachedDbPromise = new Promise((resolve, reject) => {
         const request = indexedDB.open('rhythm-chamber', IndexedDBCore.DB_VERSION);
 
-        request.onerror = () => reject(request.error);
+        request.onerror = () => {
+            cachedDbPromise = null;
+            reject(request.error);
+        };
         request.onblocked = () => {
             console.warn('[EventLogStore] Database upgrade blocked by other tabs');
             EventBus.emit('storage:connection_blocked', {
                 reason: 'upgrade_blocked',
-                message: 'Event log database upgrade blocked by other tabs'
+                message: 'Event log database upgrade blocked by other tabs',
+                retryCount: retryCount + 1
             });
+
+            // Check if we've exceeded max retries
+            if (retryCount >= MAX_CONNECTION_RETRIES) {
+                console.error(`[EventLogStore] Max retries (${MAX_CONNECTION_RETRIES}) exceeded. Giving up.`);
+                cachedDbPromise = null;  // Clear failed promise from cache
+                reject(new Error(`Database connection blocked after ${MAX_CONNECTION_RETRIES} retry attempts`));
+                return;
+            }
+
+            // Retry with exponential backoff
+            const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
+            console.log(`[EventLogStore] Retrying connection in ${delay}ms (attempt ${retryCount + 1}/${MAX_CONNECTION_RETRIES})`);
+
+            setTimeout(() => {
+                // Clear cache and retry
+                cachedDbPromise = null;
+                initEventLogStores(retryCount + 1).then(resolve).catch(reject);
+            }, delay);
         };
 
         request.onupgradeneeded = (event) => {
@@ -95,11 +150,19 @@ async function initEventLogStores() {
                     message: 'Event log database version changed'
                 });
                 db.close();
+                // Clear cache on version change
+                cachedDb = null;
+                cachedDbPromise = null;
             };
 
+            // Cache the connection
+            cachedDb = db;
+            cachedDbPromise = null; // Clear the pending promise
             resolve(db);
         };
     });
+
+    return cachedDbPromise;
 }
 
 /**
@@ -267,7 +330,7 @@ async function getLatestCheckpoint() {
  * @returns {Promise<StoredEvent[]>}
  */
 async function getEventsSinceCheckpoint(fromSequenceNumber) {
-    return getEvents(fromSequenceNumber, null);
+    return getEvents(fromSequenceNumber, Infinity);
 }
 
 /**
@@ -286,20 +349,46 @@ async function compactEventLog() {
     // Get latest checkpoint first (before creating transaction)
     const latestCheckpoint = await getLatestCheckpoint();
 
-    // Calculate cutoff to retain events after the checkpoint
+    // Calculate cutoff - delete events BELOW the cutoff sequence number
+    // Goal: Keep the most recent events, remove old ones
     let cutoffSequence;
     if (latestCheckpoint) {
-        // Keep events after the checkpoint minus minimum retention
-        cutoffSequence = latestCheckpoint.sequenceNumber - COMPACTION_CONFIG.minEventsAfterCheckpoint;
+        // With checkpoint: keep events AFTER the checkpoint (higher sequence numbers)
+        // Delete events with sequence < (checkpoint.sequenceNumber + minEventsAfterCheckpoint)
+        // This ensures we keep at least minEventsAfterCheckpoint events after the checkpoint
+        cutoffSequence = latestCheckpoint.sequenceNumber;
     } else {
-        // No checkpoint, keep most recent maxEvents
-        cutoffSequence = totalCount - COMPACTION_CONFIG.maxEvents;
+        // No checkpoint: get highest sequence number and derive cutoff
+        // Keep the most recent maxEvents worth of events
+        const events = await getEvents(-1, 1); // Get first event to check
+        if (events.length === 0) {
+            return { deleted: 0, kept: 0 };
+        }
+        // Get the last event (highest sequence)
+        const db = await initEventLogStores();
+        const tx = db.transaction([EVENT_LOG_STORE], 'readonly');
+        const store = tx.objectStore(EVENT_LOG_STORE);
+        const index = store.index('sequenceNumber');
+
+        const lastEvent = await new Promise((resolve, reject) => {
+            const request = index.openCursor(null, 'prev');
+            request.onsuccess = () => {
+                const cursor = request.result;
+                resolve(cursor ? cursor.value : null);
+            };
+            request.onerror = () => reject(request.error);
+        });
+
+        if (!lastEvent) {
+            return { deleted: 0, kept: totalCount };
+        }
+
+        // Calculate cutoff based on highest sequence number, keeping maxEvents
+        cutoffSequence = lastEvent.sequenceNumber - COMPACTION_CONFIG.maxEvents;
     }
 
-    // Handle edge cases
-    if (cutoffSequence < 0) {
-        cutoffSequence = 0;
-    }
+    // Clamp cutoff to >= 0 to avoid negative sequence numbers
+    cutoffSequence = Math.max(0, cutoffSequence);
 
     // Now create the transaction
     const db = await initEventLogStores();
@@ -429,6 +518,7 @@ async function clearEventLog() {
 
 export const EventLogStore = {
     initEventLogStores,
+    closeEventLogStore,
     appendEvent,
     getEvents,
     getEventById,

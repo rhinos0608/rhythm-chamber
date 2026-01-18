@@ -418,13 +418,13 @@ function startVisibilityMonitoring() {
 
     // Initialize timestamps consistently for accurate duration calculations
     if (document.hidden) {
-        // Currently hidden: set lastHidden to now, lastVisible to a moment ago
+        // Currently hidden: set both to now (zero elapsed time since state change)
         visibilityState.lastHidden = now;
-        visibilityState.lastVisible = now - 0; // No visible time elapsed yet
+        visibilityState.lastVisible = now; // No visible time elapsed yet
     } else {
-        // Currently visible: set lastVisible to now, lastHidden to a moment ago
+        // Currently visible: set both to now (zero elapsed time since state change)
         visibilityState.lastVisible = now;
-        visibilityState.lastHidden = now - 0; // No hidden time elapsed yet
+        visibilityState.lastHidden = now; // No hidden time elapsed yet
     }
 
     // Reset duration counters for clean state
