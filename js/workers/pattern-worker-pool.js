@@ -290,6 +290,7 @@ function handleWorkerMessage(event) {
 
 /**
  * Handle worker error
+ * HNW Wave: Emits pattern:worker_failure event for UI notification
  * 
  * @param {ErrorEvent} error - Worker error event
  */
@@ -297,9 +298,24 @@ function handleWorkerError(error) {
     console.error('[PatternWorkerPool] Worker error:', error);
 
     const workerInfo = workers.find(w => w.worker === error?.target);
+    const workerIndex = workerInfo ? workers.indexOf(workerInfo) : -1;
+
     if (workerInfo) {
         workerInfo.busy = false;
         workerInfo.processedCount += 1;
+    }
+
+    // Emit failure event for UI notification
+    // HNW Wave: Enables user-friendly error display
+    const errorMessage = error?.message || 'Unknown worker error';
+    if (typeof window !== 'undefined' && window.EventBus?.emit) {
+        window.EventBus.emit('pattern:worker_failure', {
+            workerIndex,
+            error: errorMessage,
+            timestamp: Date.now(),
+            affectedPatterns: PATTERN_GROUPS[workerIndex] || []
+        });
+        console.log('[PatternWorkerPool] Emitted pattern:worker_failure event');
     }
 
     for (const [reqId, request] of pendingRequests.entries()) {
@@ -307,7 +323,7 @@ function handleWorkerError(error) {
             continue;
         }
 
-        request.errors.push(error?.message || 'Worker error');
+        request.errors.push(errorMessage);
         request.completedWorkers++;
 
         if (request.completedWorkers >= request.totalWorkers) {

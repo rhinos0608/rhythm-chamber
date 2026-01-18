@@ -24,6 +24,10 @@ let _TokenCountingService = null;
 let _FallbackResponseService = null;
 let _CircuitBreaker = null;
 let _ModuleRegistry = null;
+let _Settings = null;
+let _Config = null;
+let _Functions = null;
+let _WaveTelemetry = null;
 
 // Timeout constants
 const CHAT_API_TIMEOUT_MS = 60000;
@@ -42,6 +46,10 @@ function init(dependencies) {
     _FallbackResponseService = dependencies.FallbackResponseService;
     _CircuitBreaker = dependencies.CircuitBreaker;
     _ModuleRegistry = dependencies.ModuleRegistry;
+    _Settings = dependencies.Settings;
+    _Config = dependencies.Config;
+    _Functions = dependencies.Functions;
+    _WaveTelemetry = dependencies.WaveTelemetry;
     console.log('[MessageLifecycleCoordinator] Initialized');
 }
 
@@ -117,14 +125,14 @@ async function processMessage(message, optionsOrKey = null) {
 
         const { apiKey, onProgress } = options;
 
-        const settings = window.Settings?.getSettings?.() || {};
+        const settings = _Settings?.getSettings?.() || {};
 
         const provider = settings.llm?.provider || 'openrouter';
         console.log('[MessageLifecycleCoordinator] Using LLM provider:', provider);
 
         const isLocalProvider = provider === 'ollama' || provider === 'lmstudio';
 
-        const config = window.Config?.openrouter || {};
+        const config = _Config?.openrouter || {};
 
         let key = apiKey || settings.openrouter?.apiKey || config.apiKey;
 
@@ -151,7 +159,7 @@ async function processMessage(message, optionsOrKey = null) {
             baseUrl: settings[provider]?.baseUrl || ''
         };
 
-        const tools = window.Functions?.getEnabledSchemas?.() || window.Functions?.schemas || [];
+        const tools = _Functions?.getEnabledSchemas?.() || _Functions?.schemas || [];
 
         const capabilityLevel = 1;
 
@@ -236,7 +244,7 @@ async function processMessage(message, optionsOrKey = null) {
             const llmCallDuration = Date.now() - llmCallStart;
 
             const telemetryMetric = isLocalProvider ? 'local_llm_call' : 'cloud_llm_call';
-            window.WaveTelemetry?.record(telemetryMetric, llmCallDuration);
+            _WaveTelemetry?.record(telemetryMetric, llmCallDuration);
             console.log(`[MessageLifecycleCoordinator] LLM call completed in ${llmCallDuration}ms`);
 
             if (!response || !response.choices || response.choices.length === 0) {

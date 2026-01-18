@@ -247,6 +247,7 @@ let lastLeaderLamportTime = 0; // Track Lamport time for heartbeat (legacy, kept
 let adaptiveTiming = null;
 let visibilityMonitorCleanup = null;
 let networkMonitorCleanup = null;
+let wakeFromSleepCleanup = null;
 
 // Module-scoped election state to prevent race conditions
 let electionCandidates = new Set();
@@ -262,6 +263,11 @@ const WATERMARK_BROADCAST_MS = 5000; // Broadcast watermark every 5 seconds
 
 // Debug mode flag for conditional logging
 let debugMode = false;
+
+// Wake-from-sleep detection state
+// HNW Wave: Detects OS sleep by tracking visibility change gaps
+let lastVisibilityCheckTime = Date.now();
+const SLEEP_DETECTION_THRESHOLD_MS = 30000; // 30 seconds gap indicates OS sleep
 
 // ==========================================
 // Core Functions
@@ -420,6 +426,9 @@ async function init() {
 
     // HNW Wave: Set up network monitoring for adaptive failover
     networkMonitorCleanup = setupNetworkMonitoring();
+
+    // HNW Wave: Set up wake-from-sleep detection for election recovery
+    wakeFromSleepCleanup = setupWakeFromSleepDetection();
 
     // Set up heartbeat system
     if (isPrimaryTab) {
@@ -846,6 +855,49 @@ function setupNetworkMonitoring() {
     return () => {
         networkCleanup();
         unsubscribe();
+    };
+}
+
+/**
+ * Setup wake-from-sleep detection
+ * HNW Wave: Detects OS sleep by tracking large time gaps between visibility changes.
+ * When a gap > 30s is detected on visibility becoming visible, triggers immediate re-election.
+ * 
+ * @returns {Function} Cleanup function
+ */
+function setupWakeFromSleepDetection() {
+    const handleVisibilityChange = () => {
+        const now = Date.now();
+        const gap = now - lastVisibilityCheckTime;
+
+        // Update the check time
+        lastVisibilityCheckTime = now;
+
+        if (!document.hidden && gap > SLEEP_DETECTION_THRESHOLD_MS) {
+            // Device woke up from sleep - large time gap detected
+            console.log(`[TabCoordination] Wake-from-sleep detected (${(gap / 1000).toFixed(1)}s gap)`);
+
+            // Trigger immediate leader election regardless of current role
+            // This ensures clean state after possible stale heartbeats during sleep
+            console.log('[TabCoordination] Triggering immediate re-election after sleep recovery');
+            initiateReElection();
+        }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Also update check time periodically when tab is active to prevent false positives
+    const intervalId = setInterval(() => {
+        if (!document.hidden) {
+            lastVisibilityCheckTime = Date.now();
+        }
+    }, 10000); // Update every 10 seconds when visible
+
+    console.log('[TabCoordination] Wake-from-sleep detection initialized');
+
+    return () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        clearInterval(intervalId);
     };
 }
 

@@ -93,21 +93,24 @@ async function initChat(personality, patterns, summary, streams = null) {
         window.ConversationOrchestrator.init({
             TokenCounter: window.TokenCounter,
             DataQuery: window.DataQuery,
-            RAG: ModuleRegistry.getModuleSync('RAG')
+            RAG: ModuleRegistry.getModuleSync('RAG'),
+            Prompts: window.Prompts
         });
         window.ConversationOrchestrator.setUserContext(userContext);
         window.ConversationOrchestrator.setStreamsData(streams);
     }
 
     // Initialize MessageOperations with dependencies (for backward compatibility)
+    // Note: MessageOperations now delegates to ConversationOrchestrator for state access
     if (window.MessageOperations?.init) {
         window.MessageOperations.init({
             DataQuery: window.DataQuery,
             RAG: ModuleRegistry.getModuleSync('RAG'),
-            TokenCounter: window.TokenCounter
+            TokenCounter: window.TokenCounter,
+            ConversationOrchestrator: window.ConversationOrchestrator
         });
-        window.MessageOperations.setUserContext(userContext);
-        window.MessageOperations.setStreamsData(streams);
+        // MessageOperations now gets state from ConversationOrchestrator
+        // No need to duplicate state here
     }
 
     // Initialize TokenCountingService with dependencies
@@ -165,7 +168,11 @@ async function initChat(personality, patterns, summary, streams = null) {
             TokenCountingService: window.TokenCountingService,
             FallbackResponseService: window.FallbackResponseService,
             CircuitBreaker: window.CircuitBreaker,
-            ModuleRegistry: ModuleRegistry
+            ModuleRegistry: ModuleRegistry,
+            Settings: window.Settings,
+            Config: window.Config,
+            Functions: window.Functions,
+            WaveTelemetry: window.WaveTelemetry
         });
     }
 
@@ -174,26 +181,26 @@ async function initChat(personality, patterns, summary, streams = null) {
 
 /**
  * Handle storage updates (new data uploaded)
+ * Uses ConversationOrchestrator as single source of truth to prevent race conditions
  */
 async function handleStorageUpdate(event) {
     if (event.type === 'streams' && event.count > 0) {
         console.log('[Chat] Data updated, refreshing streams...');
         const streamsData = await window.Storage.getStreams();
 
-        // Update ConversationOrchestrator with new data
+        // Update ConversationOrchestrator as single source of truth
         if (window.ConversationOrchestrator?.setStreamsData) {
             window.ConversationOrchestrator.setStreamsData(streamsData);
         }
 
-        // Update MessageOperations with new data (backward compatibility)
-        if (window.MessageOperations?.setStreamsData) {
-            window.MessageOperations.setStreamsData(streamsData);
-        }
-
-        // Update ToolCallHandlingService with new data
+        // ToolCallHandlingService still needs direct update for backward compatibility
+        // TODO: Refactor ToolCallHandlingService to use ConversationOrchestrator in future
         if (window.ToolCallHandlingService?.setStreamsData) {
             window.ToolCallHandlingService.setStreamsData(streamsData);
         }
+
+        // MessageOperations now delegates to ConversationOrchestrator, no update needed
+        console.log('[Chat] Storage update completed - ConversationOrchestrator is source of truth');
     }
 }
 
@@ -334,17 +341,46 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     window.addEventListener('pagehide', emergencyBackupSync);
 }
 
+// Helper function to ensure coordinator availability
+function requireCoordinator(coordinatorName, coordinator) {
+    if (!coordinator) {
+        throw new Error(`${coordinatorName} is not initialized. Ensure chat.initChat() has been called successfully.`);
+    }
+    return coordinator;
+}
+
 // ES Module export
 export const Chat = {
     initChat,
-    sendMessage: (...args) => window.MessageLifecycleCoordinator?.sendMessage(...args),
-    regenerateLastResponse: (...args) => window.MessageLifecycleCoordinator?.regenerateLastResponse(...args),
-    deleteMessage: (...args) => window.MessageLifecycleCoordinator?.deleteMessage(...args),
-    editMessage: (...args) => window.MessageLifecycleCoordinator?.editMessage(...args),
-    clearHistory: (...args) => window.MessageLifecycleCoordinator?.clearHistory(...args),
+    sendMessage: (...args) => {
+        const coordinator = requireCoordinator('MessageLifecycleCoordinator', window.MessageLifecycleCoordinator);
+        return coordinator.sendMessage(...args);
+    },
+    regenerateLastResponse: (...args) => {
+        const coordinator = requireCoordinator('MessageLifecycleCoordinator', window.MessageLifecycleCoordinator);
+        return coordinator.regenerateLastResponse(...args);
+    },
+    deleteMessage: (...args) => {
+        const coordinator = requireCoordinator('MessageLifecycleCoordinator', window.MessageLifecycleCoordinator);
+        return coordinator.deleteMessage(...args);
+    },
+    editMessage: (...args) => {
+        const coordinator = requireCoordinator('MessageLifecycleCoordinator', window.MessageLifecycleCoordinator);
+        return coordinator.editMessage(...args);
+    },
+    clearHistory: (...args) => {
+        const coordinator = requireCoordinator('MessageLifecycleCoordinator', window.MessageLifecycleCoordinator);
+        return coordinator.clearHistory(...args);
+    },
     clearConversation,
-    getHistory: (...args) => window.MessageLifecycleCoordinator?.getHistory(...args),
-    setStreamsData: (...args) => window.ConversationOrchestrator?.setStreamsData(...args),
+    getHistory: (...args) => {
+        const coordinator = requireCoordinator('MessageLifecycleCoordinator', window.MessageLifecycleCoordinator);
+        return coordinator.getHistory(...args);
+    },
+    setStreamsData: (...args) => {
+        const coordinator = requireCoordinator('ConversationOrchestrator', window.ConversationOrchestrator);
+        return coordinator.setStreamsData(...args);
+    },
     // Session management
     createNewSession,
     loadSession,

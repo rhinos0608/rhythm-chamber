@@ -18,6 +18,7 @@ import { TokenCounter } from '../token-counter.js';
 let _TokenCounter = null;
 let _DataQuery = null;
 let _RAG = null;
+let _Prompts = null;
 
 // State
 let userContext = null;
@@ -30,6 +31,7 @@ function init(dependencies) {
     _TokenCounter = dependencies.TokenCounter;
     _DataQuery = dependencies.DataQuery;
     _RAG = dependencies.RAG;
+    _Prompts = dependencies.Prompts;
     console.log('[ConversationOrchestrator] Initialized');
 }
 
@@ -38,7 +40,7 @@ function init(dependencies) {
  * Enforces strict token limits to prevent truncation of base system instructions
  */
 function buildSystemPrompt(queryContext = null, semanticContext = null) {
-    const template = window.Prompts?.system;
+    const template = _Prompts?.system;
     if (!template || !userContext) return '';
 
     const { personality, patterns, summary } = userContext;
@@ -137,7 +139,7 @@ function generateQueryContext(message) {
                 ? `${getMonthName(dateParams.month)} ${dateParams.year}`
                 : `${dateParams.year}`;
 
-            contextParts.push(`DATA FOR ${period.toUpperCase():`);
+            contextParts.push(`DATA FOR ${period.toUpperCase()}:`);
             contextParts.push(`- Total plays: ${periodData.totalPlays}`);
             contextParts.push(`- Listening time: ${periodData.totalHours} hours`);
             contextParts.push(`- Unique artists: ${periodData.uniqueArtists}`);

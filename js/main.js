@@ -81,6 +81,8 @@ import { Settings } from './settings.js';
 
 // Chat
 import { Chat } from './chat.js';
+import { ConversationOrchestrator } from './services/conversation-orchestrator.js';
+import { MessageLifecycleCoordinator } from './services/message-lifecycle-coordinator.js';
 
 // Cards
 import { Cards } from './cards.js';
@@ -411,6 +413,8 @@ async function loadHeavyModulesOnIntent() {
 // Export for use by other modules (app.js, chat.js, etc.)
 if (typeof window !== 'undefined') {
     window.loadHeavyModulesOnIntent = loadHeavyModulesOnIntent;
+    window.ConversationOrchestrator = ConversationOrchestrator;
+    window.MessageLifecycleCoordinator = MessageLifecycleCoordinator;
 }
 
 /**
