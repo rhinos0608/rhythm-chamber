@@ -340,10 +340,9 @@
         Single ES Module Entry Point
         All dependencies are imported by main.js in the correct order.
         This replaces 60+ individual script tags with a single module load.
+        Config is loaded dynamically by main.js with retry logic.
     -->
-    <!-- Config must load before ES modules since it sets window.Config -->
-    <script src="js/config.js"></script>
-    <script type="module" src="js/main.js?v=3"></script>
+    <script type="module" src="js/main.js?v=4"></script>
 </body>
 
 </html>

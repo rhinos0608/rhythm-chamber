@@ -395,14 +395,19 @@ async function isAvailable(endpoint = LMSTUDIO_DEFAULT_ENDPOINT) {
  * @returns {Promise<Array>} List of models
  */
 async function listModels(endpoint = LMSTUDIO_DEFAULT_ENDPOINT) {
-    const response = await fetch(`${endpoint}/models`);
+    try {
+        const response = await fetch(`${endpoint}/models`);
 
-    if (!response.ok) {
-        throw new Error(`Failed to list models: ${response.status}`);
+        if (!response.ok) {
+            throw new Error(`Failed to list models: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.data || [];
+    } catch (error) {
+        console.error('[LMStudio] Failed to list models:', error.message);
+        throw error;
     }
-
-    const data = await response.json();
-    return data.data || [];
 }
 
 // ==========================================

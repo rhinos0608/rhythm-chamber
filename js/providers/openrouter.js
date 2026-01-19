@@ -150,7 +150,8 @@ async function validateApiKey(apiKey) {
 
         clearTimeout(timeoutId);
         return response.ok;
-    } catch {
+    } catch (error) {
+        console.warn('[OpenRouter] API key validation failed:', error.message);
         return false;
     }
 }
@@ -165,18 +166,23 @@ async function listModels(apiKey) {
         throw new Error('API key required');
     }
 
-    const response = await fetch('https://openrouter.ai/api/v1/models', {
-        headers: {
-            'Authorization': `Bearer ${apiKey}`
+    try {
+        const response = await fetch('https://openrouter.ai/api/v1/models', {
+            headers: {
+                'Authorization': `Bearer ${apiKey}`
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to list models: ${response.status}`);
         }
-    });
 
-    if (!response.ok) {
-        throw new Error(`Failed to list models: ${response.status}`);
+        const data = await response.json();
+        return data.data || [];
+    } catch (error) {
+        console.error('[OpenRouter] Failed to list models:', error.message);
+        throw error;
     }
-
-    const data = await response.json();
-    return data.data || [];
 }
 
 // ==========================================

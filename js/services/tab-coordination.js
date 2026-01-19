@@ -11,6 +11,7 @@ import { VectorClock } from './vector-clock.js';
 import { WaveTelemetry } from './wave-telemetry.js';
 import { EventBus } from './event-bus.js';
 import { DeviceDetection } from './device-detection.js';
+import { SharedWorkerCoordinator } from '../workers/shared-worker-coordinator.js';
 
 // ==========================================
 // Constants
@@ -236,6 +237,8 @@ const clockSkewTracker = {
 // ==========================================
 
 let broadcastChannel = null;
+let sharedWorkerFallback = false; // Track if using SharedWorker fallback
+let coordinationTransport = null; // Unified interface for BroadcastChannel or SharedWorker
 let isPrimaryTab = true;
 let electionTimeout = null;
 let messageHandler = null;
@@ -365,11 +368,35 @@ async function calibrateClockSkew() {
  * @returns {Promise<boolean>} True if this tab won election
  */
 async function init() {
-    if (!('BroadcastChannel' in window)) {
-        console.warn('[TabCoordination] BroadcastChannel not supported, skipping cross-tab coordination');
-        return true; // Assume primary if no coordination available
+    // Try BroadcastChannel first (preferred)
+    if ('BroadcastChannel' in window) {
+        console.log('[TabCoordination] Using BroadcastChannel for coordination');
+        sharedWorkerFallback = false;
+        return await initWithBroadcastChannel();
     }
 
+    // Try SharedWorker fallback
+    if (SharedWorkerCoordinator.isSupported()) {
+        console.log('[TabCoordination] BroadcastChannel unavailable, trying SharedWorker fallback');
+        const connected = await SharedWorkerCoordinator.init(TAB_ID);
+
+        if (connected) {
+            console.log('[TabCoordination] Using SharedWorker for coordination');
+            sharedWorkerFallback = true;
+            return await initWithSharedWorker();
+        }
+    }
+
+    // No coordination available - assume primary (single-tab mode)
+    console.warn('[TabCoordination] No cross-tab coordination available, operating in isolated mode');
+    return true;
+}
+
+/**
+ * Initialize with BroadcastChannel (original implementation)
+ * @returns {Promise<boolean>} True if this tab won election
+ */
+async function initWithBroadcastChannel() {
     // HNW Wave: Initialize adaptive timing before election
     initAdaptiveTiming();
 
@@ -378,6 +405,13 @@ async function init() {
 
     broadcastChannel = new BroadcastChannel(CHANNEL_NAME);
 
+    // Create unified transport interface
+    coordinationTransport = {
+        postMessage: (msg) => broadcastChannel.postMessage(msg),
+        addEventListener: (type, handler) => broadcastChannel.addEventListener(type, handler),
+        removeEventListener: (type, handler) => broadcastChannel.removeEventListener(type, handler),
+        close: () => broadcastChannel.close()
+    };
     // Set up message handler
     messageHandler = createMessageHandler();
     broadcastChannel.addEventListener('message', messageHandler);
@@ -442,6 +476,94 @@ async function init() {
 }
 
 /**
+ * Initialize with SharedWorker fallback
+ * Used when BroadcastChannel is not available
+ * @returns {Promise<boolean>} True if this tab won election
+ */
+async function initWithSharedWorker() {
+    // HNW Wave: Initialize adaptive timing before election
+    initAdaptiveTiming();
+
+    // Note: Skip clock calibration with SharedWorker (relies on worker coordination)
+
+    // Create unified transport interface using SharedWorkerCoordinator
+    coordinationTransport = {
+        postMessage: (msg) => SharedWorkerCoordinator.postMessage(msg),
+        addEventListener: (type, handler) => SharedWorkerCoordinator.addEventListener(type, handler),
+        removeEventListener: (type, handler) => SharedWorkerCoordinator.removeEventListener(type, handler),
+        close: () => SharedWorkerCoordinator.close()
+    };
+
+    // Set up message handler using unified interface
+    messageHandler = createMessageHandler();
+    coordinationTransport.addEventListener('message', messageHandler);
+
+    // Reset module-scoped election state
+    electionCandidates.clear();
+    receivedPrimaryClaim = false;
+    electionAborted = false;
+
+    console.log('[TabCoordination] Announcing candidacy via SharedWorker:', TAB_ID);
+
+    // Announce candidacy
+    coordinationTransport.postMessage({
+        type: MESSAGE_TYPES.CANDIDATE,
+        tabId: TAB_ID,
+        vectorClock: vectorClock.tick(),
+        senderId: vectorClock.processId
+    });
+
+    // Wait for election window
+    await new Promise(resolve => setTimeout(resolve, ELECTION_WINDOW_MS));
+
+    // Determine winner (same logic as BroadcastChannel)
+    electionCandidates.add(TAB_ID);
+
+    if (!electionAborted && !receivedPrimaryClaim) {
+        const sortedCandidates = Array.from(electionCandidates).sort();
+        isPrimaryTab = sortedCandidates[0] === TAB_ID;
+
+        if (isPrimaryTab) {
+            console.log('[TabCoordination] Won SharedWorker election, claiming primary');
+            coordinationTransport.postMessage({
+                type: MESSAGE_TYPES.CLAIM_PRIMARY,
+                tabId: TAB_ID,
+                vectorClock: vectorClock.tick(),
+                senderId: vectorClock.processId
+            });
+        } else {
+            console.log('[TabCoordination] Lost election via SharedWorker to:', sortedCandidates[0]);
+            handleSecondaryMode();
+        }
+    } else {
+        isPrimaryTab = false;
+        handleSecondaryMode();
+    }
+
+    // Set up beforeunload handler
+    window.addEventListener('beforeunload', handleTabClose);
+
+    // HNW Wave: Set up visibility monitoring
+    visibilityMonitorCleanup = setupVisibilityMonitoring();
+
+    // HNW Wave: Set up network monitoring
+    networkMonitorCleanup = setupNetworkMonitoring();
+
+    // HNW Wave: Set up wake-from-sleep detection
+    wakeFromSleepCleanup = setupWakeFromSleepDetection();
+
+    // Set up heartbeat system
+    if (isPrimaryTab) {
+        startHeartbeat();
+        startWatermarkBroadcast();
+    } else {
+        startHeartbeatMonitor();
+    }
+
+    return isPrimaryTab;
+}
+
+/**
  * Create message handler for BroadcastChannel
  */
 function createMessageHandler() {
@@ -459,7 +581,7 @@ function createMessageHandler() {
                 // Another tab announced candidacy - collect it for election
                 // If we're already primary, assert dominance so new tab knows leader exists
                 if (isPrimaryTab && tabId !== TAB_ID) {
-                    broadcastChannel?.postMessage({
+                    coordinationTransport?.postMessage({
                         type: MESSAGE_TYPES.CLAIM_PRIMARY,
                         tabId: TAB_ID,
                         vectorClock: vectorClock.tick(),
@@ -540,7 +662,7 @@ function createMessageHandler() {
  */
 function claimPrimary() {
     isPrimaryTab = true;
-    broadcastChannel?.postMessage({
+    coordinationTransport?.postMessage({
         type: MESSAGE_TYPES.CLAIM_PRIMARY,
         tabId: TAB_ID
     });
@@ -629,7 +751,7 @@ async function initiateReElection() {
     electionAborted = false;
 
     // Announce candidacy
-    broadcastChannel?.postMessage({
+    coordinationTransport?.postMessage({
         type: MESSAGE_TYPES.CANDIDATE,
         tabId: TAB_ID
     });
@@ -690,8 +812,8 @@ function sendHeartbeat() {
     }
     lastHeartbeatSentTime = wallClockTime;
 
-    // Send via BroadcastChannel with Vector clock
-    broadcastChannel?.postMessage({
+    // Send via coordination transport (BroadcastChannel or SharedWorker)
+    coordinationTransport?.postMessage({
         type: MESSAGE_TYPES.HEARTBEAT,
         tabId: TAB_ID,
         timestamp: wallClockTime,
@@ -993,7 +1115,7 @@ async function handleReplayRequest(requestingTabId, fromWatermark) {
         });
 
         // Send replay response to requesting tab
-        broadcastChannel?.postMessage({
+        coordinationTransport?.postMessage({
             type: MESSAGE_TYPES.REPLAY_RESPONSE,
             tabId: TAB_ID,
             events: eventLog,
@@ -1218,16 +1340,31 @@ function cleanup() {
     // Stop watermark broadcast
     stopWatermarkBroadcast();
 
-    if (isPrimaryTab && broadcastChannel) {
-        broadcastChannel.postMessage({
+    // Notify other tabs of release
+    if (isPrimaryTab && coordinationTransport) {
+        coordinationTransport.postMessage({
             type: MESSAGE_TYPES.RELEASE_PRIMARY,
             tabId: TAB_ID
         });
     }
 
+    // Close coordination transport (BroadcastChannel or SharedWorker)
+    if (coordinationTransport) {
+        coordinationTransport.removeEventListener('message', messageHandler);
+        coordinationTransport.close();
+        coordinationTransport = null;
+    }
+
+    // Close BroadcastChannel if it exists
     if (broadcastChannel) {
-        broadcastChannel.removeEventListener('message', messageHandler);
         broadcastChannel.close();
+        broadcastChannel = null;
+    }
+
+    // Close SharedWorker if it was used
+    if (sharedWorkerFallback) {
+        SharedWorkerCoordinator.close();
+        sharedWorkerFallback = false;
     }
 
     if (electionTimeout) {
@@ -1298,6 +1435,10 @@ const TabCoordinator = {
     requestEventReplay,
     needsReplay,
     autoReplayIfNeeded,
+
+    // Transport info (diagnostics)
+    getTransportType: () => sharedWorkerFallback ? 'SharedWorker' : 'BroadcastChannel',
+    isUsingFallback: () => sharedWorkerFallback,
 
     // Heartbeat (exposed for testing)
     _startHeartbeat: startHeartbeat,

@@ -245,10 +245,15 @@
   </div>
 
   <!-- Scripts -->
-  <script src="js/config.js?v=1"></script>
-  <!-- Settings module for landing page (ES module) -->
+  <!-- Settings module for landing page (ES module) - Config loaded dynamically -->
   <script type="module">
     import { Settings } from './js/settings.js';
+    import { ConfigLoader } from './js/services/config-loader.js';
+
+    // Load config first, then expose Settings
+    await ConfigLoader.load();
+    ConfigLoader.installWindowProxy();
+
     // Expose to window for inline onclick handler in footer
     window.Settings = Settings;
   </script>

@@ -1,0 +1,26 @@
+{
+    "openrouter": {
+        "apiKey": "",
+        "apiUrl": "https://openrouter.ai/api/v1/chat/completions",
+        "model": "xiaomi/mimo-v2-flash:free",
+        "maxTokens": 4500,
+        "temperature": 0.7
+    },
+    "spotify": {
+        "clientId": "",
+        "scopes": [
+            "user-read-recently-played",
+            "user-top-read"
+        ]
+    },
+    "stripe": {
+        "publishableKey": "",
+        "prices": {
+            "lifetime": "",
+            "monthly": ""
+        }
+    },
+    "app": {
+        "name": "Rhythm Chamber"
+    }
+}

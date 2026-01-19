@@ -254,6 +254,41 @@ let eventReplayInProgress = false;
 let lastEventWatermark = -1; // Last sequence number we processed
 
 // ==========================================
+// Health Monitoring State
+// ==========================================
+
+/**
+ * Health monitoring configuration
+ */
+const HEALTH_CONFIG = {
+    heartbeatIntervalMs: 5000,      // Internal health check interval
+    handlerTimeoutMs: 10000,        // Consider handler stuck after this
+    maxHandlerFailures: 5,          // Failures before handler is paused
+    healthCheckWindowMs: 60000,     // Rolling window for health metrics
+    degradedThreshold: 0.8,         // Failure rate threshold for degraded status
+    criticalThreshold: 0.95         // Failure rate threshold for critical status
+};
+
+/**
+ * Handler execution metrics
+ * @type {Map<string, {totalCalls: number, failures: number, totalTimeMs: number, lastCallTime: number, isStuck: boolean, isPaused: boolean}>}
+ */
+const handlerMetrics = new Map();
+
+/** @type {number} */
+let healthCheckInterval = null;
+
+/** @type {number} */
+let totalEventsProcessed = 0;
+
+/** @type {number} */
+let totalEventsFailed = 0;
+
+/** @type {Array<{timestamp: number, success: boolean, durationMs: number}>} */
+const recentEventResults = [];
+const MAX_RECENT_RESULTS = 1000;
+
+// ==========================================
 // Core Functions
 // ==========================================
 
@@ -525,9 +560,26 @@ function emit(eventType, payload = {}, options = {}) {
             continue;
         }
 
+        // Skip paused handlers (health monitoring)
+        const handlerHealthMetrics = handlerMetrics.get(id);
+        if (handlerHealthMetrics?.isPaused) {
+            if (debugMode) {
+                console.log(`[EventBus] Skipping paused handler ${id}`);
+            }
+            continue;
+        }
+
+        // Track handler execution for health monitoring
+        const handlerStartTime = performance.now();
+        markHandlerStarted(id);
+
         try {
             handler(payload, eventMeta);
+            const durationMs = performance.now() - handlerStartTime;
+            recordHandlerMetrics(id, durationMs, true);
         } catch (error) {
+            const durationMs = performance.now() - handlerStartTime;
+            recordHandlerMetrics(id, durationMs, false);
             console.error(`[EventBus] Handler ${id} threw error for "${eventType}":`, error);
             // Don't stop other handlers from executing
         }
@@ -696,7 +748,259 @@ function clearAll() {
     eventsThisWindow = 0;
     stormActive = false;
     droppedCount = 0;
+    // Reset health monitoring state
+    handlerMetrics.clear();
+    totalEventsProcessed = 0;
+    totalEventsFailed = 0;
+    recentEventResults.length = 0;
     console.log('[EventBus] All subscribers and circuit breaker state cleared');
+}
+
+// ==========================================
+// Health Monitoring Functions
+// ==========================================
+
+/**
+ * Start health monitoring heartbeat
+ */
+function startHealthMonitoring() {
+    if (healthCheckInterval) {
+        return; // Already running
+    }
+
+    healthCheckInterval = setInterval(() => {
+        performHealthCheck();
+    }, HEALTH_CONFIG.heartbeatIntervalMs);
+
+    console.log('[EventBus] Health monitoring started');
+}
+
+/**
+ * Stop health monitoring
+ */
+function stopHealthMonitoring() {
+    if (healthCheckInterval) {
+        clearInterval(healthCheckInterval);
+        healthCheckInterval = null;
+        console.log('[EventBus] Health monitoring stopped');
+    }
+}
+
+/**
+ * Perform internal health check
+ * Detects stuck handlers and emits health events
+ */
+function performHealthCheck() {
+    const now = Date.now();
+    let stuckCount = 0;
+    let pausedCount = 0;
+
+    // Check for stuck handlers
+    for (const [handlerId, metrics] of handlerMetrics) {
+        // Check if handler is stuck (long running without completion)
+        if (metrics.lastCallTime && !metrics.isStuck) {
+            const elapsed = now - metrics.lastCallTime;
+            if (elapsed > HEALTH_CONFIG.handlerTimeoutMs) {
+                metrics.isStuck = true;
+                stuckCount++;
+                console.warn(`[EventBus] Handler ${handlerId} appears stuck (${elapsed}ms elapsed)`);
+            }
+        }
+
+        if (metrics.isStuck) stuckCount++;
+        if (metrics.isPaused) pausedCount++;
+    }
+
+    // Calculate health status
+    const status = calculateHealthStatus();
+
+    // Emit health degraded event if needed
+    if (status.status !== 'healthy') {
+        emit('eventbus:health_degraded', {
+            status: status.status,
+            failureRate: status.failureRate,
+            stuckHandlers: stuckCount,
+            pausedHandlers: pausedCount,
+            avgLatencyMs: status.avgLatencyMs
+        }, { bypassCircuitBreaker: true, skipValidation: true, skipEventLog: true });
+    }
+
+    // Prune old metrics from rolling window
+    pruneOldMetrics();
+}
+
+/**
+ * Record handler execution metrics
+ * @param {string} handlerId - Handler identifier
+ * @param {number} durationMs - Execution time in milliseconds
+ * @param {boolean} success - Whether the handler succeeded
+ */
+function recordHandlerMetrics(handlerId, durationMs, success) {
+    if (!handlerMetrics.has(handlerId)) {
+        handlerMetrics.set(handlerId, {
+            totalCalls: 0,
+            failures: 0,
+            totalTimeMs: 0,
+            lastCallTime: 0,
+            isStuck: false,
+            isPaused: false
+        });
+    }
+
+    const metrics = handlerMetrics.get(handlerId);
+    metrics.totalCalls++;
+    metrics.totalTimeMs += durationMs;
+    metrics.lastCallTime = 0; // Clear - call completed
+    metrics.isStuck = false; // Recovered if it was stuck
+
+    if (!success) {
+        metrics.failures++;
+        totalEventsFailed++;
+
+        // Pause handler if too many failures
+        if (metrics.failures >= HEALTH_CONFIG.maxHandlerFailures && !metrics.isPaused) {
+            metrics.isPaused = true;
+            console.warn(`[EventBus] Handler ${handlerId} paused due to ${metrics.failures} failures`);
+        }
+    }
+
+    totalEventsProcessed++;
+
+    // Add to recent results for rolling calculation
+    recentEventResults.push({
+        timestamp: Date.now(),
+        success,
+        durationMs
+    });
+
+    // Trim results
+    while (recentEventResults.length > MAX_RECENT_RESULTS) {
+        recentEventResults.shift();
+    }
+}
+
+/**
+ * Mark handler as starting execution
+ * @param {string} handlerId - Handler identifier
+ */
+function markHandlerStarted(handlerId) {
+    if (!handlerMetrics.has(handlerId)) {
+        handlerMetrics.set(handlerId, {
+            totalCalls: 0,
+            failures: 0,
+            totalTimeMs: 0,
+            lastCallTime: Date.now(),
+            isStuck: false,
+            isPaused: false
+        });
+    } else {
+        handlerMetrics.get(handlerId).lastCallTime = Date.now();
+    }
+}
+
+/**
+ * Prune old metrics from rolling window
+ */
+function pruneOldMetrics() {
+    const cutoff = Date.now() - HEALTH_CONFIG.healthCheckWindowMs;
+
+    while (recentEventResults.length > 0 && recentEventResults[0].timestamp < cutoff) {
+        recentEventResults.shift();
+    }
+}
+
+/**
+ * Calculate current health status
+ * @returns {{status: 'healthy'|'degraded'|'critical', failureRate: number, avgLatencyMs: number, handlerCount: number, stuckCount: number, pausedCount: number}}
+ */
+function calculateHealthStatus() {
+    // Calculate failure rate from recent events
+    const total = recentEventResults.length;
+    const failures = recentEventResults.filter(r => !r.success).length;
+    const failureRate = total > 0 ? failures / total : 0;
+
+    // Calculate average latency
+    const avgLatencyMs = total > 0
+        ? recentEventResults.reduce((sum, r) => sum + r.durationMs, 0) / total
+        : 0;
+
+    // Count handler states
+    let stuckCount = 0;
+    let pausedCount = 0;
+    for (const metrics of handlerMetrics.values()) {
+        if (metrics.isStuck) stuckCount++;
+        if (metrics.isPaused) pausedCount++;
+    }
+
+    // Determine status
+    let status = 'healthy';
+    if (failureRate >= HEALTH_CONFIG.criticalThreshold || stuckCount >= 3) {
+        status = 'critical';
+    } else if (failureRate >= HEALTH_CONFIG.degradedThreshold || stuckCount >= 1 || pausedCount >= 2) {
+        status = 'degraded';
+    }
+
+    return {
+        status,
+        failureRate,
+        avgLatencyMs,
+        handlerCount: subscribers.size,
+        stuckCount,
+        pausedCount
+    };
+}
+
+/**
+ * Get comprehensive health status
+ * @returns {Object} Health status including all metrics
+ */
+function getHealthStatus() {
+    const status = calculateHealthStatus();
+    return {
+        ...status,
+        healthy: status.status === 'healthy',
+        totalEventsProcessed,
+        totalEventsFailed,
+        recentEventCount: recentEventResults.length,
+        circuitBreaker: getCircuitBreakerStatus(),
+        config: { ...HEALTH_CONFIG }
+    };
+}
+
+/**
+ * Reset a stuck or paused handler
+ * @param {string} handlerId - Handler identifier
+ * @returns {boolean} True if handler was reset
+ */
+function resetHandler(handlerId) {
+    const metrics = handlerMetrics.get(handlerId);
+    if (!metrics) return false;
+
+    metrics.isStuck = false;
+    metrics.isPaused = false;
+    metrics.failures = 0;
+    console.log(`[EventBus] Handler ${handlerId} reset`);
+    return true;
+}
+
+/**
+ * Reset all health monitoring state
+ */
+function resetHealth() {
+    handlerMetrics.clear();
+    totalEventsProcessed = 0;
+    totalEventsFailed = 0;
+    recentEventResults.length = 0;
+    console.log('[EventBus] Health monitoring state reset');
+}
+
+/**
+ * Configure health monitoring
+ * @param {Object} config - Configuration updates
+ */
+function configureHealth(config) {
+    Object.assign(HEALTH_CONFIG, config);
+    console.log('[EventBus] Health configuration updated:', HEALTH_CONFIG);
 }
 
 /**
@@ -905,6 +1209,14 @@ export const EventBus = {
     // Circuit breaker
     getCircuitBreakerStatus,
     configureCircuitBreaker,
+
+    // Health monitoring
+    getHealthStatus,
+    startHealthMonitoring,
+    stopHealthMonitoring,
+    resetHandler,
+    resetHealth,
+    configureHealth,
 
     // Event versioning and replay
     enableEventLog,
