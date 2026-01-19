@@ -500,6 +500,7 @@ async function initWithSharedWorker() {
 
     // Reset module-scoped election state
     electionCandidates.clear();
+    electionCandidates.add(TAB_ID);
     receivedPrimaryClaim = false;
     electionAborted = false;
 
@@ -517,7 +518,6 @@ async function initWithSharedWorker() {
     await new Promise(resolve => setTimeout(resolve, ELECTION_WINDOW_MS));
 
     // Determine winner (same logic as BroadcastChannel)
-    electionCandidates.add(TAB_ID);
 
     if (!electionAborted && !receivedPrimaryClaim) {
         const sortedCandidates = Array.from(electionCandidates).sort();
@@ -541,10 +541,10 @@ async function initWithSharedWorker() {
     }
 
     // Set up beforeunload handler
-    window.addEventListener('beforeunload', handleTabClose);
+    window.addEventListener('beforeunload', cleanup);
 
     // HNW Wave: Set up visibility monitoring
-    visibilityMonitorCleanup = setupVisibilityMonitoring();
+    visibilityMonitorCleanup = DeviceDetection.startVisibilityMonitoring();
 
     // HNW Wave: Set up network monitoring
     networkMonitorCleanup = setupNetworkMonitoring();

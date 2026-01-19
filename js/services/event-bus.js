@@ -802,7 +802,6 @@ function performHealthCheck() {
             const elapsed = now - metrics.lastCallTime;
             if (elapsed > HEALTH_CONFIG.handlerTimeoutMs) {
                 metrics.isStuck = true;
-                stuckCount++;
                 console.warn(`[EventBus] Handler ${handlerId} appears stuck (${elapsed}ms elapsed)`);
             }
         }

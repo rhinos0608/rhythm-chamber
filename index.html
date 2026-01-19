@@ -251,11 +251,15 @@
     import { ConfigLoader } from './js/services/config-loader.js';
 
     // Load config first, then expose Settings
-    await ConfigLoader.load();
-    ConfigLoader.installWindowProxy();
-
-    // Expose to window for inline onclick handler in footer
-    window.Settings = Settings;
+    try {
+      await ConfigLoader.load();
+    } catch (error) {
+      console.error('ConfigLoader.load failed:', error);
+    } finally {
+      ConfigLoader.installWindowProxy();
+      // Expose to window for inline onclick handler in footer
+      window.Settings = Settings;
+    }
   </script>
 </body>
 

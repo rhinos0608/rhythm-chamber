@@ -247,7 +247,7 @@ function handleDisconnect(portId, tabId) {
     tabMetadata.delete(portId);
 
     // If the leader disconnected, trigger re-election
-    if (currentLeader === disconnectedTabId) {
+    if (disconnectedTabId && currentLeader === disconnectedTabId) {
         currentLeader = null;
 
         broadcastToAll({
@@ -255,7 +255,7 @@ function handleDisconnect(portId, tabId) {
             previousLeader: disconnectedTabId,
             tabCount: connectedPorts.size
         });
-    } else {
+    } else if (disconnectedTabId) {
         // Notify remaining tabs
         broadcastToAll({
             type: 'TAB_DISCONNECTED',
@@ -296,11 +296,18 @@ function cleanupStaleConnections() {
     const staleThreshold = 30000; // 30 seconds without heartbeat
     const now = Date.now();
 
+    // Collect stale entries first to avoid mutating during iteration
+    const staleEntries = [];
     for (const [portId, metadata] of tabMetadata) {
         if (now - metadata.lastHeartbeat > staleThreshold) {
-            console.log(`[SharedWorker] Cleaning up stale tab: ${metadata.tabId}`);
-            handleDisconnect(portId, metadata.tabId);
+            staleEntries.push([portId, metadata.tabId]);
         }
+    }
+
+    // Process stale entries after iteration
+    for (const [portId, tabId] of staleEntries) {
+        console.log(`[SharedWorker] Cleaning up stale tab: ${tabId}`);
+        handleDisconnect(portId, tabId);
     }
 }
 

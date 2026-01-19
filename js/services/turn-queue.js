@@ -46,8 +46,7 @@ const listeners = [];
  */
 const METRICS_CONFIG = {
     historySize: 100,           // Keep last N completed turns for analysis
-    warningThresholdMs: 500,    // Emit warning if avgWaitTime exceeds this
-    maxHistoryAgeSecs: 3600     // Prune history older than this
+    warningThresholdMs: 500     // Emit warning if avgWaitTime exceeds this
 };
 
 /**

@@ -205,9 +205,12 @@ describe('ConfigLoader', () => {
             expect(ConfigLoader.get('nonexistent.path', 'default')).toBe('default');
         });
 
-        it('should throw when accessing before load without default', () => {
+        it('should throw when accessing before load without default', async () => {
             vi.resetModules();
-            // This would need a fresh ConfigLoader instance to test
+            const freshModule = await import('../../js/services/config-loader.js');
+            const FreshConfigLoader = freshModule.ConfigLoader;
+
+            expect(() => FreshConfigLoader.get('nonexistent.path')).toThrow();
         });
     });
 

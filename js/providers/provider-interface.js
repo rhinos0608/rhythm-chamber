@@ -64,6 +64,20 @@ function buildProviderConfig(provider, settings, baseConfig) {
                 privacyLevel: 'maximum'
             };
 
+        case 'gemini':
+            return {
+                provider: 'gemini',
+                endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai',
+                model: settings.gemini?.model || 'gemini-2.5-flash',
+                temperature: settings.gemini?.temperature ?? settings.openrouter?.temperature ?? 0.7,
+                topP: settings.gemini?.topP ?? 0.9,
+                maxTokens: settings.gemini?.maxTokens || 8192,
+                timeout: PROVIDER_TIMEOUTS.cloud,
+                // Privacy flag for UI
+                isLocal: false,
+                privacyLevel: 'cloud'
+            };
+
         case 'openrouter':
         default:
             return {
@@ -135,6 +149,9 @@ async function callProvider(config, apiKey, messages, tools, onProgress = null) 
                     case 'lmstudio':
                         return await providerModule.call(config, messages, tools, onProgress);
 
+                    case 'gemini':
+                        return await providerModule.call(apiKey, config, messages, tools, onProgress);
+
                     case 'openrouter':
                     default:
                         return await providerModule.call(apiKey, config, messages, tools, onProgress);
@@ -188,6 +205,8 @@ function getProviderModule(provider) {
             return ModuleRegistry.getModuleSync('OllamaProvider') || null;
         case 'lmstudio':
             return window.LMStudioProvider || null;
+        case 'gemini':
+            return window.GeminiProvider || null;
         case 'openrouter':
         default:
             return window.OpenRouterProvider || null;
@@ -221,6 +240,11 @@ async function isProviderAvailable(provider) {
                 return false;
             }
 
+        case 'gemini':
+            // Gemini is available if we have an API key
+            const geminiApiKey = window.Settings?.get?.()?.gemini?.apiKey;
+            return !!geminiApiKey && geminiApiKey !== 'your-api-key-here';
+
         case 'openrouter':
         default:
             // OpenRouter is always "available" if we have an API key
@@ -235,7 +259,7 @@ async function isProviderAvailable(provider) {
  * @returns {Promise<Array<{name: string, available: boolean}>>}
  */
 async function getAvailableProviders() {
-    const providers = ['openrouter', 'ollama', 'lmstudio'];
+    const providers = ['openrouter', 'ollama', 'lmstudio', 'gemini'];
     const results = await Promise.all(
         providers.map(async (name) => ({
             name,
@@ -517,23 +541,106 @@ async function checkLMStudioHealth() {
 }
 
 /**
+ * Check Gemini health and API key validity
+ * @returns {Promise<ProviderHealthStatus>}
+ */
+async function checkGeminiHealth() {
+    const start = Date.now();
+    const apiKey = window.Settings?.get?.()?.gemini?.apiKey;
+
+    if (!apiKey || apiKey === 'your-api-key-here') {
+        return {
+            available: false,
+            status: 'no_key',
+            reason: 'No API key configured',
+            models: [],
+            latencyMs: 0
+        };
+    }
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT);
+
+        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/models?key=' + apiKey, {
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        const latencyMs = Date.now() - start;
+
+        if (response.status === 401 || response.status === 403) {
+            return {
+                available: false,
+                status: 'invalid_key',
+                reason: 'API key is invalid or expired',
+                models: [],
+                latencyMs
+            };
+        }
+
+        if (!response.ok) {
+            return {
+                available: false,
+                status: 'error',
+                reason: `API error: ${response.status}`,
+                models: [],
+                latencyMs
+            };
+        }
+
+        const data = await response.json();
+        const models = data.data?.map(m => m.id) || [];
+
+        return {
+            available: true,
+            status: 'ready',
+            models: models.slice(0, 20),
+            totalModels: models.length,
+            hasKey: true,
+            latencyMs
+        };
+    } catch (error) {
+        const latencyMs = Date.now() - start;
+        if (error.name === 'AbortError') {
+            return {
+                available: false,
+                status: 'timeout',
+                reason: 'Connection timeout - check your internet',
+                models: [],
+                latencyMs
+            };
+        }
+        return {
+            available: false,
+            status: 'error',
+            reason: error.message,
+            models: [],
+            latencyMs
+        };
+    }
+}
+
+/**
  * Comprehensive health check for all providers
  * Returns detailed status including model availability
- * 
+ *
  * @returns {Promise<{
  *   openrouter: ProviderHealthStatus,
  *   ollama: ProviderHealthStatus,
- *   lmstudio: ProviderHealthStatus
+ *   lmstudio: ProviderHealthStatus,
+ *   gemini: ProviderHealthStatus
  * }>}
  */
 async function checkHealth() {
-    const [openrouter, ollama, lmstudio] = await Promise.all([
+    const [openrouter, ollama, lmstudio, gemini] = await Promise.all([
         checkOpenRouterHealth(),
         checkOllamaHealth(),
-        checkLMStudioHealth()
+        checkLMStudioHealth(),
+        checkGeminiHealth()
     ]);
 
-    return { openrouter, ollama, lmstudio };
+    return { openrouter, ollama, lmstudio, gemini };
 }
 
 // ==========================================
@@ -558,6 +665,7 @@ export const ProviderInterface = {
     checkOpenRouterHealth,
     checkOllamaHealth,
     checkLMStudioHealth,
+    checkGeminiHealth,
 
     // Error handling
     normalizeProviderError,
