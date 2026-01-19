@@ -202,54 +202,7 @@ When we reach $10,000 in Supporter revenue, we will commission an external secur
 
 ## Target Audience
 
-**Old framing:** Stats nerds who export data (~5M)
-
 **New framing:** Everyone who screenshots Wrapped (~100M+) + quantified-self enthusiasts + PKM users + relationship-focused users
 
 The data export friction is real, but the payoff is self-discovery and deeper connections, not just stats.
 
----
-
-## Pricing Strategy Analysis
-
-### Strategy 1: The "Knowledge Graph" Tier (Recommended)
-**Value Prop:** Turn music history into a personal wiki. Instead of a CLI tool, build a powerful Export Engine that integrates with Personal Knowledge Management (PKM) tools like Obsidian, Notion, or Roam Research.
-
-**The Feature:** "Export to Obsidian Vault." The app generates a folder of Markdown files (one for every Artist, Month, Era) properly interlinked.
-
-**Example:** A user clicks "Export" and gets a local folder where [[The National]] links to [[Sad Dad Era]] and [[March 2019]].
-
-**Why it works:** The "Emotional Archaeologist" likely journals or tracks data. Giving them a "physical" digital copy of their history that connects to their other notes is huge value.
-
-**Value Prop:** Data Spotify doesn't give you. Use the local client to fetch public metadata that Spotify hides or doesn't track, creating a "Super-Metadata" version of their library.
-
-**The Feature:** "Enrichment Mode."
-
-**The app connects to public APIs (MusicBrainz, AcoustID) from the client side to fetch BPM, Key, Producer Credits, and Lyrics for top tracks.
-
-**Unlock:** "Show me my listening habits by Producer instead of Artist" (e.g., "You love Jack Antonoff productions, regardless of the singer").
-
-**Why it works:** It appeals to the "Discovery Junkie" and music nerds who feel limited by standard "Top Artist" charts.
-
-- Integrated with AI bundle
-
-### Strategy 2: The "Social Resonance" Tier
-**Value Prop:** Compare your data with others. Your docs mention a "Friend Compare via JSON". Currently, this is a feature. Make the Deep Comparison Report the paid product.
-
-**The Feature:** "Relationship Resonance Engine."
-
-**Free:** See your own stats.
-
-**Paid:** Upload a second person's zip file (or JSON export) to generate a "Relationship Compatibility Report."
-
-**Output:** "You and Sarah have 84% overlap in 'Melancholy' but divergent 'Energy' curves in 2021. Your common anthem is 'Bloodbuzz Ohio'."
-
-**Why it works:** It forces a viral loop. One user buys it to analyze their partner/friend. It sells the outcome (relationship insight), not the tool.
-
-**Price:** $2 monthly (Lower friction to encourage viral adoption).
-
-### Recommendation
-Combine Strategy 1 (PKM Export) and Strategy 2 (Comparison) into the "Supporter" tier.
-
-CLI Tool (Make it open source/free to attract devs). Premium Themes (Keep them free to make the product look good for everyone).
-Add: "Obsidian/Notion Export" + "Relationship Compatibility Reports."
