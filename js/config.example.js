@@ -1,24 +1,50 @@
 /**
  * Configuration File for Rhythm Chamber
- * 
+ *
  * SETUP INSTRUCTIONS:
  * 1. Copy this file to `config.js` in the same directory
- * 2. Get your OpenRouter API key from https://openrouter.ai/keys
+ * 2. Get an API key from one of the providers below (Gemini is free!)
  * 3. Replace 'your-api-key-here' with your actual API key
  * 4. (Optional) For Quick Snapshot: Get Spotify Client ID from https://developer.spotify.com/dashboard
  * 5. Save the file
- * 
+ *
  * NOTE: config.js is gitignored and will not be committed to version control
+ *
+ * API KEY SOURCES:
+ * - Gemini (FREE): https://aistudio.google.com/apikey
+ * - OpenRouter: https://openrouter.ai/keys
  */
 
 const Config = {
-    // OpenRouter API Configuration
+    // ==========================================
+    // AI PROVIDER CONFIGURATION
+    // ==========================================
+    // Choose ONE provider to configure. You can also configure multiple and switch in Settings.
+
+    // Gemini (Google AI Studio) - FREE tier available!
+    // Get your API key from: https://aistudio.google.com/apikey
+    gemini: {
+        apiKey: 'your-gemini-api-key-here',  // Starts with AIzaSy...
+
+        // Model selection (all support function calling)
+        // Free tier: 'gemini-2.5-flash' (default), 'gemini-2.0-flash', 'gemini-1.5-flash'
+        // Pro models: 'gemini-2.5-pro', 'gemini-1.5-pro'
+        model: 'gemini-2.5-flash',
+
+        // Chat parameters
+        maxTokens: 8192,
+        temperature: 0.7,
+        topP: 0.9
+    },
+
+    // OpenRouter API Configuration (access to multiple AI models)
+    // Get your API key from: https://openrouter.ai/keys
     openrouter: {
-        apiKey: 'your-api-key-here',
+        apiKey: 'your-openrouter-api-key-here',  // Starts with sk-or-v1-...
         apiUrl: 'https://openrouter.ai/api/v1/chat/completions',
 
         // Model selection
-        // Free tier: 'xiaomi/mimo-v2-flash:free' (default), 'mistralai/mistral-7b-instruct:free'
+        // Free tier: 'xiaomi/mimo-v2-flash:free', 'mistralai/mistral-7b-instruct:free'
         // Paid options: 'anthropic/claude-3.5-sonnet', 'openai/gpt-4-turbo'
         model: 'xiaomi/mimo-v2-flash:free',
 
@@ -27,7 +53,9 @@ const Config = {
         temperature: 0.7
     },
 
-    // Spotify OAuth Configuration (for Quick Snapshot feature)
+    // ==========================================
+    // SPOTIFY CONFIGURATION (Quick Snapshot)
+    // ==========================================
     // Get your Client ID from: https://developer.spotify.com/dashboard
     spotify: {
         clientId: 'your-spotify-client-id',
@@ -39,9 +67,10 @@ const Config = {
         ]
     },
 
-    // Stripe Configuration (for Premium features)
+    // ==========================================
+    // STRIPE CONFIGURATION (Premium features)
+    // ==========================================
     // Get your keys from: https://dashboard.stripe.com/apikeys
-    // Create products/prices at: https://dashboard.stripe.com/products
     stripe: {
         publishableKey: 'pk_test_your-publishable-key',
         prices: {
@@ -50,7 +79,9 @@ const Config = {
         }
     },
 
-    // App metadata for OpenRouter
+    // ==========================================
+    // APP METADATA
+    // ==========================================
     app: {
         name: 'Rhythm Chamber',
         url: window.location.origin

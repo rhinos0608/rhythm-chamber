@@ -117,10 +117,6 @@ async function connect() {
             workerPort.start();
 
             // Wait for connection acknowledgment
-            const timeout = setTimeout(() => {
-                reject(new Error('Connection timeout'));
-            }, 5000);
-
             const connectionHandler = (event) => {
                 if (event.data?.type === 'CONNECTED') {
                     clearTimeout(timeout);
@@ -145,6 +141,11 @@ async function connect() {
                 }
             };
 
+            const timeout = setTimeout(() => {
+                workerPort.removeEventListener('message', connectionHandler);
+                reject(new Error('Connection timeout'));
+            }, 5000);
+
             workerPort.addEventListener('message', connectionHandler);
 
         } catch (error) {
@@ -166,9 +167,9 @@ function postMessage(message) {
 
     try {
         workerPort.postMessage({
+            ...message,
             type: 'BROADCAST',
-            tabId,
-            ...message
+            tabId
         });
         return true;
     } catch (error) {
@@ -230,7 +231,7 @@ function close() {
 
 /**
  * Get connection status
- * @returns {{connected: boolean, portId: string|null, tabCount: number}}
+ * @returns {{connected: boolean, portId: string|null, tabId: string|null, reconnectAttempts: number}}
  */
 function getStatus() {
     return {

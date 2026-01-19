@@ -170,7 +170,7 @@ async function load(options = {}) {
 
         // No cache - use critical defaults
         console.warn('[ConfigLoader] No cache available, using critical defaults');
-        loadedConfig = { ...CRITICAL_DEFAULTS };
+        loadedConfig = deepMerge({}, CRITICAL_DEFAULTS);
         loadFailed = true;
         loadError = lastError?.message || 'Unknown error';
 
@@ -440,6 +440,8 @@ function installWindowProxy() {
         console.log('[ConfigLoader] Legacy window.Config detected, merging...');
         if (loadedConfig) {
             loadedConfig = deepMerge(loadedConfig, window.Config);
+        } else {
+            loadedConfig = deepMerge({}, window.Config);
         }
         return;
     }

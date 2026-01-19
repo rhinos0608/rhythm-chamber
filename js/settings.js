@@ -14,6 +14,7 @@ import ProviderHealthMonitor from './services/provider-health-monitor.js';
 const LLM_PROVIDERS = [
     { id: 'ollama', name: 'Ollama (Local)', description: 'Run AI models on your own hardware - zero data transmission' },
     { id: 'lmstudio', name: 'LM Studio (Local)', description: 'User-friendly local AI with OpenAI-compatible API' },
+    { id: 'gemini', name: 'Gemini (Google AI Studio)', description: 'Google AI models - Gemini 2.0 Flash is FREE!' },
     { id: 'openrouter', name: 'OpenRouter (Cloud)', description: 'Optional cloud provider for premium models' }
 ];
 
@@ -32,6 +33,17 @@ const AVAILABLE_MODELS = [
     { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini ($)', free: false },
     { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet ($)', free: false },
     { id: 'openai/gpt-4-turbo', name: 'GPT-4 Turbo ($)', free: false }
+];
+
+// Gemini models (Google AI Studio)
+const GEMINI_MODELS = [
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Free)', free: true },
+    { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite (Free)', free: true },
+    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Free)', free: true },
+    { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite (Free)', free: true },
+    { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Free)', free: true },
+    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro ($)', free: false },
+    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro ($)', free: false }
 ];
 
 // Priority 2: Module-level AbortController for embedding cancellation
@@ -101,10 +113,11 @@ function getSettings() {
     // Read directly from config.js as the source of truth
     const configOpenrouter = window.Config?.openrouter || {};
     const configSpotify = window.Config?.spotify || {};
+    const configGemini = window.Config?.gemini || {};
 
     // Build settings object from config.js
     const settings = {
-        // LLM Provider settings  
+        // LLM Provider settings
         llm: {
             provider: 'ollama', // Default to local AI for privacy
             ollamaEndpoint: DEFAULT_ENDPOINTS.ollama,
@@ -135,6 +148,14 @@ function getSettings() {
             temperature: 0.7,
             topP: 0.9,
             maxTokens: 2000
+        },
+        // Gemini settings (Google AI Studio)
+        gemini: {
+            apiKey: configGemini.apiKey || '',
+            model: configGemini.model || 'gemini-2.5-flash',
+            maxTokens: configGemini.maxTokens || 8192,
+            temperature: configGemini.temperature ?? 0.7,
+            topP: configGemini.topP ?? 0.9
         },
         spotify: {
             clientId: configSpotify.clientId || ''
@@ -174,10 +195,11 @@ async function getSettingsAsync() {
     // Read directly from config.js as the source of truth
     const configOpenrouter = window.Config?.openrouter || {};
     const configSpotify = window.Config?.spotify || {};
+    const configGemini = window.Config?.gemini || {};
 
     // Build settings object from config.js
     const settings = {
-        // LLM Provider settings  
+        // LLM Provider settings
         llm: {
             provider: 'ollama', // Default to local AI for privacy
             ollamaEndpoint: DEFAULT_ENDPOINTS.ollama,
@@ -208,6 +230,14 @@ async function getSettingsAsync() {
             temperature: 0.7,
             topP: 0.9,
             maxTokens: 2000
+        },
+        // Gemini settings (Google AI Studio)
+        gemini: {
+            apiKey: configGemini.apiKey || '',
+            model: configGemini.model || 'gemini-2.5-flash',
+            maxTokens: configGemini.maxTokens || 8192,
+            temperature: configGemini.temperature ?? 0.7,
+            topP: configGemini.topP ?? 0.9
         },
         spotify: {
             clientId: configSpotify.clientId || ''
@@ -318,6 +348,11 @@ function applySettingsOverrides(settings, parsed) {
         Object.assign(settings.lmstudio, parsed.lmstudio);
     }
 
+    // Gemini settings
+    if (parsed.gemini) {
+        Object.assign(settings.gemini, parsed.gemini);
+    }
+
     // Only use stored Spotify client ID if config.js has placeholder or empty
     if (parsed.spotify?.clientId &&
         (!settings.spotify.clientId || settings.spotify.clientId === 'your-spotify-client-id')) {
@@ -356,6 +391,16 @@ async function saveSettings(settings) {
                 temperature: settings.openrouter.temperature,
                 contextWindow: settings.openrouter.contextWindow,
                 apiUrl: window.Config.openrouter?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions'
+            };
+        }
+        if (settings.gemini) {
+            window.Config.gemini = {
+                ...window.Config.gemini,
+                apiKey: settings.gemini.apiKey,
+                model: settings.gemini.model,
+                maxTokens: settings.gemini.maxTokens,
+                temperature: settings.gemini.temperature,
+                topP: settings.gemini.topP
             };
         }
         if (settings.spotify?.clientId) {
@@ -574,7 +619,51 @@ function showSettingsModal() {
                             <span class="settings-hint">Select a preset or enter any <a href="https://openrouter.ai/models" target="_blank">OpenRouter model ID</a></span>
                         </div>
                     </div>
-                    
+
+                    <!-- Gemini Section (shown when gemini selected) -->
+                    <div id="gemini-section" class="provider-section" style="display: ${settings.llm.provider === 'gemini' ? 'block' : 'none'}">
+                        <p class="settings-description">
+                            Configure your Google AI Studio API key. Gemini 2.0 Flash is FREE!
+                            Get a key at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a>
+                        </p>
+
+                        <div class="security-warning warning-small" style="border-color: #4285f4; background: #e8f0fe;">
+                            <span class="warning-icon">🆓</span>
+                            <div class="warning-content">
+                                <strong>Free Tier Available</strong>
+                                <p>Gemini 2.0 Flash is completely free with generous limits. No credit card required!</p>
+                            </div>
+                        </div>
+
+                        <div class="security-warning warning-small">
+                            <span class="warning-icon">☁️</span>
+                            <div class="warning-content">
+                                <strong>Data Privacy Notice</strong>
+                                <p>Using Gemini sends your conversation data to Google's servers. Use Local AI for zero data transmission.</p>
+                            </div>
+                        </div>
+
+                        <div class="settings-field">
+                            <label for="setting-gemini-api-key">API Key</label>
+                            <input type="password" id="setting-gemini-api-key"
+                                   value="${settings.gemini?.apiKey || ''}"
+                                   placeholder="AIzaSy..."
+                                   autocomplete="off">
+                            <button class="btn-show-password" onclick="Settings.togglePasswordVisibility('setting-gemini-api-key', this)">Show</button>
+                            <span class="settings-hint">Your Google AI Studio API key</span>
+                        </div>
+
+                        <div class="settings-field">
+                            <label for="setting-gemini-model">Model</label>
+                            <select id="setting-gemini-model">
+                                ${GEMINI_MODELS.map(m => `
+                                    <option value="${m.id}" ${settings.gemini?.model === m.id ? 'selected' : ''}>${m.name}</option>
+                                `).join('')}
+                            </select>
+                            <span class="settings-hint">Choose a Gemini model (free tier options available)</span>
+                        </div>
+                    </div>
+
                     <!-- Common Parameters (all providers) -->
                     <div class="settings-row">
                         <div class="settings-field">
@@ -1123,6 +1212,11 @@ function saveFromModal() {
     const frequencyPenalty = parseFloat(document.getElementById('setting-freq-penalty')?.value) || 0;
     const presencePenalty = parseFloat(document.getElementById('setting-pres-penalty')?.value) || 0;
 
+    // Gemini settings
+    const geminiApiKeyInput = document.getElementById('setting-gemini-api-key');
+    const geminiModel = document.getElementById('setting-gemini-model')?.value || 'gemini-2.5-flash';
+    const geminiApiKey = geminiApiKeyInput?.value?.trim();
+
     const spotifyInput = document.getElementById('setting-spotify-client-id');
 
     // Only save API key if user actually entered one (field not readonly)
@@ -1155,6 +1249,13 @@ function saveFromModal() {
             temperature: Math.min(Math.max(temperature, 0), 2),
             topP: Math.min(Math.max(topP, 0), 1),
             maxTokens: Math.min(Math.max(maxTokens, 100), 8000)
+        },
+        gemini: {
+            model: geminiModel,
+            apiKey: geminiApiKey || '',
+            maxTokens: Math.min(Math.max(maxTokens, 100), 8192),
+            temperature: Math.min(Math.max(temperature, 0), 2),
+            topP: Math.min(Math.max(topP, 0), 1)
         },
         spotify: {}
     };

@@ -68,6 +68,7 @@ import { TokenCounter } from './token-counter.js';
 import { ProviderInterface } from './providers/provider-interface.js';
 import { OpenRouterProvider } from './providers/openrouter.js';
 import { LMStudioProvider } from './providers/lmstudio.js';
+import { GeminiProvider } from './providers/gemini.js';
 
 // Heavy modules are registered with ModuleRegistry for lazy loading:
 // - Ollama (./ollama.js, ./providers/ollama-adapter.js)

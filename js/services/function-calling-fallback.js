@@ -52,6 +52,13 @@ const TOOL_CAPABLE_MODELS = {
         // DeepSeek
         'deepseek', 'deepseek-chat', 'deepseek-coder'
     ],
+    gemini: [
+        // Google Gemini models (Google AI Studio)
+        'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro',
+        'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-exp',
+        'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.5-pro-exp',
+        'gemini-pro', 'gemini-flash'
+    ],
     ollama: [
         // From ollama.js TOOL_CAPABLE_MODELS, expanded
         'llama3.2', 'llama3.1', 'llama3.3',
