@@ -16,6 +16,7 @@
 
 import { Security } from './security/index.js';
 import { DEPRECATED_WINDOW_GLOBALS, setupDeprecatedWindowGlobals } from './window-globals-debug.js';
+import { ConfigLoader } from './services/config-loader.js';
 
 // Validate secure context immediately before ANY other imports
 const securityCheck = Security.checkSecureContext();
@@ -424,6 +425,20 @@ async function bootstrap() {
     console.log('[Main] Bootstrapping application...');
 
     try {
+        // Load configuration with retry logic (replaces fragile <script src="config.js">)
+        console.log('[Main] Loading configuration...');
+        await ConfigLoader.load();
+
+        // Install window.Config proxy for backward compatibility
+        ConfigLoader.installWindowProxy();
+
+        const configStatus = ConfigLoader.getLoadStatus();
+        if (configStatus.failed) {
+            console.warn('[Main] Config load failed, using defaults:', configStatus.error);
+        } else {
+            console.log('[Main] Configuration loaded successfully');
+        }
+
         // Install global error handlers for fallback error handling
         installGlobalErrorHandler();
 

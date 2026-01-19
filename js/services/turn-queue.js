@@ -38,6 +38,40 @@ let currentTurn = null;
 const listeners = [];
 
 // ==========================================
+// Metrics State
+// ==========================================
+
+/**
+ * Configuration for metrics and observability
+ */
+const METRICS_CONFIG = {
+    historySize: 100,           // Keep last N completed turns for analysis
+    warningThresholdMs: 500,    // Emit warning if avgWaitTime exceeds this
+    maxHistoryAgeSecs: 3600     // Prune history older than this
+};
+
+/**
+ * Completed turn history for metrics calculation
+ * @type {Array<{id: string, waitTimeMs: number, processingTimeMs: number, completedAt: number}>}
+ */
+const turnHistory = [];
+
+/**
+ * Queue depth samples over time
+ * @type {Array<{timestamp: number, depth: number}>}
+ */
+const depthSamples = [];
+const MAX_DEPTH_SAMPLES = 100;
+
+/**
+ * Metrics counters
+ */
+let totalTurnsProcessed = 0;
+let totalTurnsFailed = 0;
+let maxWaitTimeMs = 0;
+let warningEmitted = false;
+
+// ==========================================
 // Core Functions
 // ==========================================
 
@@ -74,6 +108,9 @@ async function processNext() {
     currentTurn.status = 'processing';
     currentTurn.startedAt = Date.now();
 
+    // Record queue depth sample
+    recordDepthSample();
+
     console.log(`[TurnQueue] Processing turn ${currentTurn.id}`);
     notifyListeners('processing', currentTurn);
 
@@ -94,6 +131,9 @@ async function processNext() {
         currentTurn.status = 'completed';
         currentTurn.completedAt = Date.now();
 
+        // Record metrics
+        recordTurnMetrics(currentTurn, true);
+
         console.log(`[TurnQueue] Completed turn ${currentTurn.id} in ${currentTurn.completedAt - currentTurn.startedAt}ms`);
         notifyListeners('completed', currentTurn);
 
@@ -101,6 +141,9 @@ async function processNext() {
     } catch (error) {
         currentTurn.status = 'failed';
         currentTurn.completedAt = Date.now();
+
+        // Record metrics for failed turn
+        recordTurnMetrics(currentTurn, false);
 
         console.error(`[TurnQueue] Failed turn ${currentTurn.id}:`, error);
         notifyListeners('failed', currentTurn, error);
@@ -259,6 +302,168 @@ function getStatusMessage() {
 }
 
 // ==========================================
+// Metrics Functions
+// ==========================================
+
+/**
+ * Record metrics for a completed turn
+ * @param {QueuedTurn} turn - The completed turn
+ * @param {boolean} success - Whether it succeeded
+ */
+function recordTurnMetrics(turn, success) {
+    const waitTimeMs = turn.startedAt - turn.queuedAt;
+    const processingTimeMs = turn.completedAt - turn.startedAt;
+
+    // Update counters
+    if (success) {
+        totalTurnsProcessed++;
+    } else {
+        totalTurnsFailed++;
+    }
+
+    // Track max wait time
+    if (waitTimeMs > maxWaitTimeMs) {
+        maxWaitTimeMs = waitTimeMs;
+    }
+
+    // Add to history
+    turnHistory.push({
+        id: turn.id,
+        waitTimeMs,
+        processingTimeMs,
+        completedAt: turn.completedAt,
+        success
+    });
+
+    // Trim old history
+    while (turnHistory.length > METRICS_CONFIG.historySize) {
+        turnHistory.shift();
+    }
+
+    // Check for warning threshold
+    const metrics = calculateMetrics();
+    if (metrics.avgWaitTimeMs > METRICS_CONFIG.warningThresholdMs && !warningEmitted) {
+        warningEmitted = true;
+        console.warn(`[TurnQueue] Average wait time (${metrics.avgWaitTimeMs.toFixed(0)}ms) exceeds threshold (${METRICS_CONFIG.warningThresholdMs}ms)`);
+
+        // Emit event if EventBus is available
+        try {
+            // Dynamic import to avoid circular dependency
+            import('./event-bus.js').then(({ EventBus }) => {
+                EventBus.emit('turnqueue:performance_warning', {
+                    avgWaitTimeMs: metrics.avgWaitTimeMs,
+                    maxWaitTimeMs: metrics.maxWaitTimeMs,
+                    queueDepth: queue.length,
+                    threshold: METRICS_CONFIG.warningThresholdMs
+                });
+            }).catch(() => { });
+        } catch (e) {
+            // Ignore
+        }
+    }
+}
+
+/**
+ * Record queue depth sample
+ */
+function recordDepthSample() {
+    depthSamples.push({
+        timestamp: Date.now(),
+        depth: queue.length + 1 // +1 for current processing turn
+    });
+
+    // Trim old samples
+    while (depthSamples.length > MAX_DEPTH_SAMPLES) {
+        depthSamples.shift();
+    }
+}
+
+/**
+ * Calculate metrics from history
+ * @returns {{avgWaitTimeMs: number, avgProcessingTimeMs: number, maxWaitTimeMs: number, totalProcessed: number, totalFailed: number, successRate: number}}
+ */
+function calculateMetrics() {
+    if (turnHistory.length === 0) {
+        return {
+            avgWaitTimeMs: 0,
+            avgProcessingTimeMs: 0,
+            maxWaitTimeMs: 0,
+            totalProcessed: totalTurnsProcessed,
+            totalFailed: totalTurnsFailed,
+            successRate: 1
+        };
+    }
+
+    const totalWait = turnHistory.reduce((sum, t) => sum + t.waitTimeMs, 0);
+    const totalProcessing = turnHistory.reduce((sum, t) => sum + t.processingTimeMs, 0);
+    const successCount = turnHistory.filter(t => t.success).length;
+
+    return {
+        avgWaitTimeMs: totalWait / turnHistory.length,
+        avgProcessingTimeMs: totalProcessing / turnHistory.length,
+        maxWaitTimeMs,
+        totalProcessed: totalTurnsProcessed,
+        totalFailed: totalTurnsFailed,
+        successRate: successCount / turnHistory.length
+    };
+}
+
+/**
+ * Get comprehensive queue metrics
+ * @returns {Object} Metrics with wait times, processing times, queue depth, and history
+ */
+function getMetrics() {
+    const metrics = calculateMetrics();
+
+    // Calculate queue depth stats
+    const avgDepth = depthSamples.length > 0
+        ? depthSamples.reduce((sum, s) => sum + s.depth, 0) / depthSamples.length
+        : 0;
+    const maxDepth = depthSamples.length > 0
+        ? Math.max(...depthSamples.map(s => s.depth))
+        : 0;
+
+    return {
+        // Wait times
+        avgWaitTimeMs: Math.round(metrics.avgWaitTimeMs),
+        maxWaitTimeMs: Math.round(metrics.maxWaitTimeMs),
+
+        // Processing times
+        avgProcessingTimeMs: Math.round(metrics.avgProcessingTimeMs),
+
+        // Queue depth
+        currentDepth: queue.length + (isProcessing ? 1 : 0),
+        avgDepth: Math.round(avgDepth * 10) / 10,
+        maxDepth,
+
+        // Counters
+        totalProcessed: metrics.totalProcessed,
+        totalFailed: metrics.totalFailed,
+        successRate: Math.round(metrics.successRate * 100),
+
+        // History info
+        historySize: turnHistory.length,
+
+        // Warning state
+        warningThresholdMs: METRICS_CONFIG.warningThresholdMs,
+        isAboveThreshold: metrics.avgWaitTimeMs > METRICS_CONFIG.warningThresholdMs
+    };
+}
+
+/**
+ * Reset all metrics
+ */
+function resetMetrics() {
+    turnHistory.length = 0;
+    depthSamples.length = 0;
+    totalTurnsProcessed = 0;
+    totalTurnsFailed = 0;
+    maxWaitTimeMs = 0;
+    warningEmitted = false;
+    console.log('[TurnQueue] Metrics reset');
+}
+
+// ==========================================
 // Public API
 // ==========================================
 
@@ -275,13 +480,18 @@ const TurnQueue = {
     getStatusMessage,
     getEstimatedWaitTime,
 
+    // Metrics (observability)
+    getMetrics,
+    resetMetrics,
+
     // Management
     clearPending,
     subscribe,
 
     // For testing
     _queue: queue,
-    _QueuedTurn: QueuedTurn
+    _QueuedTurn: QueuedTurn,
+    _turnHistory: turnHistory
 };
 
 // ES Module export
