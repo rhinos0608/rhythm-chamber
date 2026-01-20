@@ -307,6 +307,8 @@ async function getCheckpoint() {
             const cipher = await Storage.getConfig(RAG_CHECKPOINT_CIPHER_KEY);
             if (cipher && Security.decryptData) {
                 try {
+                    // Note: Uses Security.getSessionKey (legacy Encryption.getSessionKey)
+                    // For new code, use Security.getSessionKeyKM for KeyManager's non-extractable key
                     const sessionKey = await Security.getSessionKey();
                     const decrypted = await Security.decryptData(cipher, sessionKey);
                     if (decrypted) {
@@ -360,6 +362,8 @@ async function saveCheckpoint(data) {
     // Try to encrypt checkpoint
     if (Security.encryptData && Security.getSessionKey) {
         try {
+            // Note: Uses Security.getSessionKey (legacy Encryption.getSessionKey)
+            // For new code, use Security.getSessionKeyKM for KeyManager's non-extractable key
             const sessionKey = await Security.getSessionKey();
             const encrypted = await Security.encryptData(
                 JSON.stringify(checkpoint),

@@ -357,6 +357,12 @@ const Security = {
      * - Use getSessionKeyKM for new code requiring KeyManager's non-extractable session key
      * - Existing callers (rag.js) continue using getSessionKey for backward compatibility
      * - Future: Deprecate Encryption.getSessionKey after all callers migrated to KeyManager
+     *
+     * Known callers of getSessionKey methods:
+     * - js/rag.js: Uses Security.getSessionKey (legacy) for RAG checkpoint encryption/decryption
+     *
+     * Migration status: All existing callers use legacy implementation.
+     * New code should use getSessionKeyKM for non-extractable keys.
      */
     // Key Management (NEW - Phase 9)
     KeyManager,
