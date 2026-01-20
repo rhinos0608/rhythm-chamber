@@ -28,14 +28,14 @@ Requirements for security hardening before v1.0 launch.
 
 ### Storage Encryption
 
-- [ ] **STORE-01**: OpenRouter API keys are encrypted with AES-GCM-256 before IndexedDB storage
-- [ ] **STORE-02**: Gemini API keys are encrypted with AES-GCM-256 before IndexedDB storage
-- [ ] **STORE-03**: All LLM provider API keys are encrypted with AES-GCM-256 before IndexedDB storage
-- [ ] **STORE-04**: Chat history (conversation messages) are encrypted with AES-GCM-256
-- [ ] **STORE-05**: Each encryption operation uses a unique randomly generated IV
-- [ ] **STORE-06**: IV is stored alongside ciphertext in IndexedDB
-- [ ] **STORE-07**: Encrypted data can be decrypted after key rotation (key migration)
-- [ ] **STORE-08**: Deleted encrypted data is overwritten before removal (secure deletion)
+- [x] **STORE-01**: OpenRouter API keys are encrypted with AES-GCM-256 before IndexedDB storage
+- [x] **STORE-02**: Gemini API keys are encrypted with AES-GCM-256 before IndexedDB storage
+- [x] **STORE-03**: All LLM provider API keys are encrypted with AES-GCM-256 before IndexedDB storage
+- [x] **STORE-04**: Chat history (conversation messages) are encrypted with AES-GCM-256
+- [x] **STORE-05**: Each encryption operation uses a unique randomly generated IV
+- [x] **STORE-06**: IV is stored alongside ciphertext in IndexedDB
+- [x] **STORE-07**: Encrypted data can be decrypted after key rotation (key migration)
+- [x] **STORE-08**: Deleted encrypted data is overwritten before removal (secure deletion)
 
 ### Security Infrastructure
 
@@ -90,30 +90,30 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| KEY-01 | Phase 1 | Pending |
-| KEY-02 | Phase 1 | Pending |
-| KEY-03 | Phase 1 | Pending |
-| KEY-04 | Phase 1 | Pending |
-| KEY-05 | Phase 1 | Pending |
-| XTAB-01 | Phase 3 | Pending |
-| XTAB-02 | Phase 3 | Pending |
-| XTAB-03 | Phase 3 | Pending |
-| XTAB-04 | Phase 3 | Pending |
-| XTAB-05 | Phase 3 | Pending |
-| XTAB-06 | Phase 3 | Pending |
-| STORE-01 | Phase 2 | Pending |
-| STORE-02 | Phase 2 | Pending |
-| STORE-03 | Phase 2 | Pending |
-| STORE-04 | Phase 2 | Pending |
-| STORE-05 | Phase 2 | Pending |
-| STORE-06 | Phase 2 | Pending |
-| STORE-07 | Phase 2 | Pending |
-| STORE-08 | Phase 2 | Pending |
-| INFRA-01 | Phase 1 | Pending |
-| INFRA-02 | Phase 1 | Pending |
-| INFRA-03 | Phase 3 | Pending |
-| INFRA-04 | Phase 2 | Pending |
-| INFRA-05 | Phase 1 | Pending |
+| KEY-01 | Phase 9 | Complete |
+| KEY-02 | Phase 9 | Complete |
+| KEY-03 | Phase 9 | Complete |
+| KEY-04 | Phase 9 | Complete |
+| KEY-05 | Phase 9 | Complete |
+| XTAB-01 | Phase 14 | Pending |
+| XTAB-02 | Phase 14 | Pending |
+| XTAB-03 | Phase 14 | Pending |
+| XTAB-04 | Phase 14 | Pending |
+| XTAB-05 | Phase 14 | Pending |
+| XTAB-06 | Phase 14 | Pending |
+| STORE-01 | Phase 13 | Complete |
+| STORE-02 | Phase 13 | Complete |
+| STORE-03 | Phase 13 | Complete |
+| STORE-04 | Phase 13 | Complete |
+| STORE-05 | Phase 13 | Complete |
+| STORE-06 | Phase 13 | Complete |
+| STORE-07 | Phase 13 | Complete |
+| STORE-08 | Phase 13 | Complete |
+| INFRA-01 | Phase 9 | Complete |
+| INFRA-02 | Phase 9 | Complete |
+| INFRA-03 | Phase 14 | Pending |
+| INFRA-04 | Phase 13 | Complete |
+| INFRA-05 | Phase 9 | Complete |
 
 **Coverage:**
 - v0.9 requirements: 23 total
