@@ -346,7 +346,10 @@ const Security = {
     initializeKeySession: KeyManager.initializeSession,
     clearKeySession: KeyManager.clearSession,
     isSecureContextKeyManager: KeyManager.isSecureContext,
-    isKeySessionActive: KeyManager.isSessionActive
+    isKeySessionActive: KeyManager.isSessionActive,
+    getDataEncryptionKey: KeyManager.getDataEncryptionKey,
+    getSigningKey: KeyManager.getSigningKey,
+    getSessionKeyKM: KeyManager.getSessionKey
 };
 
 // Export for ES6 modules
