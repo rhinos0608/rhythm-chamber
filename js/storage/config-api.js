@@ -212,6 +212,125 @@ async function getAllConfig() {
     }
 }
 
+/**
+ * Migrate existing plaintext sensitive data to encrypted storage
+ *
+ * ONE-TIME MIGRATION: This function converts existing plaintext API keys,
+ * chat history, and other sensitive data to encrypted storage. It iterates
+ * through all existing config and encrypts data that matches sensitive patterns.
+ *
+ * MIGRATION BEHAVIOR:
+ * - Only processes plaintext data (value.encrypted !== true)
+ * - Uses shouldEncrypt() to identify sensitive data
+ * - Re-stores data using setConfig() which triggers encryption
+ * - Safe to run multiple times (idempotent) - skips already-encrypted data
+ * - Continues processing on individual record failures
+ * - Logs all migration activity for manual verification
+ *
+ * USE CASES:
+ * - Initial setup: Encrypt existing plaintext API keys after enabling encryption
+ * - Post-upgrade: Migrate data after adding new sensitive patterns
+ * - Manual migration: User-initiated encryption of existing data
+ *
+ * RECOMMENDATIONS:
+ * - Backup database before running migration
+ * - Verify migration success by checking console logs
+ * - Run during app initialization or via admin interface
+ * - Test migration on development environment first
+ *
+ * @returns {Promise<Object>} Migration result with success/failure counts
+ * @returns {number} return.successful - Number of records successfully migrated
+ * @returns {number} return.failed - Number of records that failed to migrate
+ * @returns {number} return.skipped - Number of records skipped (already encrypted or not sensitive)
+ * @returns {Array<string>} return.failedKeys - Keys that failed migration
+ *
+ * @example
+ * // Run migration during app initialization
+ * const result = await ConfigAPI.migrateToEncryptedStorage();
+ * console.log(`Migrated ${result.successful} records, ${result.failed} failed, ${result.skipped} skipped`);
+ * if (result.failed > 0) {
+ *   console.warn('Failed keys:', result.failedKeys);
+ * }
+ *
+ * @example
+ * // Manual migration via developer console
+ * await ConfigAPI.migrateToEncryptedStorage();
+ * // Check console output for migration progress
+ * // Verify: await ConfigAPI.getAllConfig() should show encrypted: true for sensitive keys
+ */
+async function migrateToEncryptedStorage() {
+    try {
+        console.log('[Migration] Starting encrypted storage migration...');
+
+        // Get all existing config
+        const allConfig = await getAllConfig();
+
+        // Migration statistics
+        const result = {
+            successful: 0,
+            failed: 0,
+            skipped: 0,
+            failedKeys: []
+        };
+
+        // Process each config entry
+        for (const [key, value] of Object.entries(allConfig)) {
+            try {
+                // Check if data should be encrypted
+                if (!shouldEncrypt(key, value)) {
+                    result.skipped++;
+                    continue;
+                }
+
+                // Check if already encrypted
+                if (value && value.encrypted === true) {
+                    console.log(`[Migration] Skipping '${key}' - already encrypted`);
+                    result.skipped++;
+                    continue;
+                }
+
+                // Log migration start
+                console.log(`[Migration] Encrypting: ${key}`);
+
+                // Re-store using setConfig which will trigger encryption
+                await setConfig(key, value);
+
+                // Log success
+                console.log(`[Migration] Successfully encrypted: ${key}`);
+                result.successful++;
+
+            } catch (recordError) {
+                // Log individual record failure but continue processing
+                console.error(`[Migration] Failed to migrate '${key}':`, recordError);
+                result.failed++;
+                result.failedKeys.push(key);
+            }
+        }
+
+        // Log completion
+        console.log(`[Migration] Migration complete:`);
+        console.log(`[Migration] - Successful: ${result.successful}`);
+        console.log(`[Migration] - Failed: ${result.failed}`);
+        console.log(`[Migration] - Skipped: ${result.skipped}`);
+
+        if (result.failed > 0) {
+            console.warn(`[Migration] Failed keys:`, result.failedKeys);
+        }
+
+        return result;
+
+    } catch (error) {
+        console.error('[Migration] Migration failed:', error);
+        return {
+            successful: 0,
+            failed: 0,
+            skipped: 0,
+            failedKeys: [],
+            error: error.message
+        };
+    }
+}
+
 // ==========================================
 // Token API (Secure Storage)
 // ==========================================
@@ -338,6 +457,7 @@ export const ConfigAPI = {
     setConfig,
     removeConfig,
     getAllConfig,
+    migrateToEncryptedStorage,
 
     // Token operations
     getToken,
