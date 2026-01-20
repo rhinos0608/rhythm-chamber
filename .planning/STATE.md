@@ -17,6 +17,10 @@
 - Zero-backend architecture is permanent (Sovereign tier never deprecated)
 - Security audit is funded by Curator tier revenue (~250-500 users needed for $5k audit)
 - Chamber tier (E2EE sync, portal, managed AI) launches only after external security audit
+- Use existing encryption.js patterns for PBKDF2 with 600k iterations (Phase 9-1)
+- All keys must be non-extractable per KEY-01 requirement (Phase 9-1)
+- Key separation via password/salt modifiers for different purposes (Phase 9-1)
+- Centralized key lifecycle management through KeyManager module (Phase 9-1)
 - PBKDF2 utilities maintain backward compatibility with existing deriveKey() function (Phase 9 Plan 2)
 - All new key derivation functions default to extractable: false per KEY-01 requirement (Phase 9 Plan 2)
 
