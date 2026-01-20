@@ -32,28 +32,31 @@ function generate() {
     // Try DemoController first for active data
     if (DemoController.getActiveData) {
         const activeData = DemoController.getActiveData();
+        // Guard against falsy returns
+        const safeActive = activeData || {};
         data = {
-            streams: activeData.streams,
-            patterns: activeData.patterns,
-            personality: activeData.personality,
-            isDemoMode: activeData.isDemoMode
+            streams: Array.isArray(safeActive.streams) ? safeActive.streams : [],
+            patterns: safeActive.patterns || {},
+            personality: safeActive.personality || {},
+            isDemoMode: !!safeActive.isDemoMode
         };
     } else if (AppState.get) {
         const state = AppState.get();
-        const isDemo = state.demo?.isDemoMode || false;
+        const safeState = state || {};
+        const isDemo = safeState.demo?.isDemoMode || false;
 
         if (isDemo) {
             data = {
-                streams: state.demo.streams,
-                patterns: state.demo.patterns,
-                personality: state.demo.personality,
+                streams: Array.isArray(safeState.demo?.streams) ? safeState.demo.streams : [],
+                patterns: safeState.demo?.patterns || {},
+                personality: safeState.demo?.personality || {},
                 isDemoMode: true
             };
         } else {
             data = {
-                streams: state.data?.streams,
-                patterns: state.data?.patterns,
-                personality: state.data?.personality,
+                streams: Array.isArray(safeState.data?.streams) ? safeState.data.streams : [],
+                patterns: safeState.data?.patterns || {},
+                personality: safeState.data?.personality || {},
                 isDemoMode: false
             };
         }

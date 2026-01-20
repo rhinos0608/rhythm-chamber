@@ -7,8 +7,6 @@
  * - Pillar 3: The Chamber ($4.99/mo or $39/yr) - Convenience & Seamlessness
  */
 
-import { ConfigLoader } from './services/config-loader.js';
-
 // ==========================================
 // Tier Definitions
 // ==========================================

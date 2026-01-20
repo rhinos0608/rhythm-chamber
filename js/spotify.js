@@ -198,8 +198,11 @@ const Spotify = (() => {
      * @returns {boolean}
      */
     function isConfigured() {
-        const clientId = ConfigLoader.get('spotify.clientId', '');
-        return clientId && clientId !== 'your-spotify-client-id';
+    const clientId = ConfigLoader.get('spotify.clientId', '');
+    const redirectUri = ConfigLoader.get('spotify.redirectUri', '') || '';
+    // Ensure redirectUri is a non-empty string; if not, the OAuth flow will break
+    const hasRedirect = typeof redirectUri === 'string' && redirectUri.trim() !== '';
+    return clientId && clientId !== 'your-spotify-client-id' && hasRedirect;
     }
 
     /**
@@ -208,7 +211,7 @@ const Spotify = (() => {
      */
     async function initiateLogin() {
         if (!isConfigured()) {
-            throw new Error('Spotify is not configured. Please add your Client ID to config.js');
+            throw new Error('Spotify is not configured. Please add your Client ID and redirectUri to config.js');
         }
 
         const codeVerifier = generateCodeVerifier();
@@ -217,11 +220,16 @@ const Spotify = (() => {
         // Store verifier for token exchange
         localStorage.setItem(STORAGE_KEYS.CODE_VERIFIER, codeVerifier);
 
+        const redirectUri = ConfigLoader.get('spotify.redirectUri');
+        if (!redirectUri || typeof redirectUri !== 'string') {
+            throw new Error('Spotify redirectUri is missing or invalid. Set spotify.redirectUri in config.js to your app callback URL.');
+        }
+
         const params = new URLSearchParams({
             response_type: 'code',
             client_id: ConfigLoader.get('spotify.clientId'),
             scope: ConfigLoader.get('spotify.scopes', []).join(' '),
-            redirect_uri: ConfigLoader.get('spotify.redirectUri'),
+            redirect_uri: redirectUri,
             code_challenge_method: 'S256',
             code_challenge: codeChallenge
         });

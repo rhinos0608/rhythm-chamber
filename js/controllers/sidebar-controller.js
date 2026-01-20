@@ -85,6 +85,16 @@ async function initSidebar() {
     }
 
     // Subscribe to AppState for reactive view changes
+    // If a previous subscription exists, unsubscribe first to avoid duplicates
+    if (typeof _unsubscribe === 'function') {
+        try {
+            _unsubscribe();
+        } catch (e) {
+            console.warn('[SidebarController] previous unsubscribe threw:', e);
+        }
+        _unsubscribe = null;
+    }
+
     _unsubscribe = AppState.subscribe((state, changedDomains) => {
         if (changedDomains.includes('view')) {
             // Auto-show/hide sidebar based on view
@@ -454,6 +464,29 @@ export const SidebarController = {
     formatRelativeDate,
     escapeHtml,
     appendMessage
+};
+
+// Teardown helper to remove subscriptions and listeners
+SidebarController.destroy = function destroySidebarController() {
+    // Unsubscribe AppState
+    if (typeof _unsubscribe === 'function') {
+        try {
+            _unsubscribe();
+        } catch (e) {
+            console.warn('[SidebarController] unsubscribe failed during destroy:', e);
+        }
+        _unsubscribe = null;
+    }
+
+    // Remove DOM event listeners if initialized
+    try {
+        if (sidebarToggleBtn) sidebarToggleBtn.removeEventListener('click', toggleSidebar);
+        if (sidebarCollapseBtn) sidebarCollapseBtn.removeEventListener('click', toggleSidebar);
+        if (sidebarOverlay) sidebarOverlay.removeEventListener('click', closeSidebar);
+        if (newChatBtn) newChatBtn.removeEventListener('click', handleNewChat);
+    } catch (e) {
+        // Non-fatal
+    }
 };
 
 

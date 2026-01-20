@@ -71,7 +71,7 @@ Rhythm Chamber uses a three-pillar revenue model that separates **Privacy**, **P
 ### Pillar 3: The Chamber ($4.99/mo or $39/yr)
 **Focus:** Convenience & Seamlessness
 
-**Cost:** $4.99/month OR $39/year (17% discount)
+**Cost:** $4.99/month OR $39/year (≈35% discount)
 
 **Features:**
 - **E2EE Sync:** End-to-end encrypted multi-device sync (zero-knowledge)
@@ -153,7 +153,7 @@ Rhythm Chamber uses a three-pillar revenue model that separates **Privacy**, **P
 
 ### Why $4.99/mo or $39/yr for Chamber?
 1. **Obsidian Parity**: $4.99/mo is competitive with Obsidian Sync ($4/mo)
-2. **Annual Discount**: $39/yr (17% discount) encourages upfront payment
+2. **Annual Discount**: $39/yr (≈35% discount) encourages upfront payment
 3. **Infrastructure Costs**: Recurring revenue covers server/API costs with margin
 4. **Convenience Pricing**: Users willing to pay $5/mo for seamlessness (Netflix, Spotify standard)
 5. **Managed AI Value**: Bundling tokens reduces user friction significantly

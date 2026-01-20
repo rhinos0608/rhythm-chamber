@@ -5,7 +5,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 const originalCrypto = globalThis.crypto;
 const originalSecureContext = Object.getOwnPropertyDescriptor(window, 'isSecureContext');
-const originalIndexedDBCore = window.IndexedDBCore;
 
 function stubCrypto(stub) {
     Object.defineProperty(globalThis, 'crypto', {
@@ -40,6 +39,15 @@ function restoreSecureContext() {
     }
 }
 
+// Mock IndexedDBCore before import
+vi.mock('../../js/storage/indexeddb.js', () => ({
+    IndexedDBCore: {
+        STORES: { TOKENS: 'tokens' },
+        clear: vi.fn().mockResolvedValue(),
+        keys: vi.fn().mockResolvedValue([])
+    }
+}));
+
 describe('SecureTokenStore', () => {
     beforeEach(() => {
         vi.resetModules();
@@ -52,22 +60,16 @@ describe('SecureTokenStore', () => {
     });
 
     afterEach(() => {
-        window.IndexedDBCore = originalIndexedDBCore;
         restoreCrypto();
         restoreSecureContext();
     });
 
     it('clears tokens with write-authority bypass', async () => {
-        window.IndexedDBCore = {
-            STORES: { TOKENS: 'tokens' },
-            clear: vi.fn().mockResolvedValue(),
-            keys: vi.fn().mockResolvedValue([])
-        };
-
         const { SecureTokenStore } = await import('../../js/security/secure-token-store.js');
 
         await SecureTokenStore.invalidateAllTokens('test');
 
-        expect(window.IndexedDBCore.clear).toHaveBeenCalledWith('tokens', { bypassAuthority: true });
+        const { IndexedDBCore } = await import('../../js/storage/indexeddb.js');
+        expect(IndexedDBCore.clear).toHaveBeenCalledWith('tokens', { bypassAuthority: true });
     });
 });

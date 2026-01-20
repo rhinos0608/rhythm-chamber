@@ -265,7 +265,7 @@ let backpressureWarningEmitted = false; // Prevent duplicate backpressure warnin
 let droppedCount = 0;
 
 // Event versioning and replay state
-const eventVectorClock = new VectorClock();
+let eventVectorClock = new VectorClock();
 let eventSequenceNumber = 0;
 let eventLogEnabled = false;
 let eventReplayInProgress = false;
@@ -804,6 +804,12 @@ function clearAll() {
     totalEventsProcessed = 0;
     totalEventsFailed = 0;
     recentEventResults.length = 0;
+    // Reset event versioning and replay state
+    eventSequenceNumber = 0;
+    lastEventWatermark = -1;
+    eventLogEnabled = false;
+    eventReplayInProgress = false;
+    eventVectorClock = new VectorClock();
     console.log('[EventBus] All subscribers and circuit breaker state cleared');
 }
 
