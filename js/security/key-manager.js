@@ -130,8 +130,8 @@ const KeyManager = {
      * @returns {boolean} True if in secure context
      */
     isSecureContext() {
-        // Modern browser check
-        if (typeof window !== 'undefined' && window.isSecureContext) {
+        // Modern browser check - verify truthy value (INFRA-01 requirement)
+        if (typeof window !== 'undefined' && (window.isSecureContext === true || Boolean(window.isSecureContext))) {
             return true;
         }
 

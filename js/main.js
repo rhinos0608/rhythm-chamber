@@ -14,7 +14,7 @@
 // Security Check (MUST run first, synchronously)
 // ==========================================
 
-import { Security } from './security/index.js';
+import { Security, SecurityCoordinator } from './security/index.js';
 import { DEPRECATED_WINDOW_GLOBALS, setupDeprecatedWindowGlobals } from './window-globals-debug.js';
 import { ConfigLoader } from './services/config-loader.js';
 
@@ -441,24 +441,55 @@ async function bootstrap() {
             console.log('[Main] Configuration loaded successfully');
         }
 
-        // Initialize KeyManager session for crypto operations
-        // Uses Spotify refresh token as the password (if available)
-        // If no token exists, use a session-based secret
-        let keySessionInitialized = false;
-        const keySessionPassword = localStorage.getItem('spotify_refresh_token') ||
-                                    sessionStorage.getItem('rhythm_chamber_session_salt') ||
-                                    'session-default';
+        // ==========================================
+        // Use SecurityCoordinator for unified security initialization
+        // ==========================================
+        // SecurityCoordinator is the single authority for security module initialization.
+        // It orchestrates: secure context check, KeyManager, Encryption, TokenBinding,
+        // Anomaly detection in the correct order with proper error handling.
+        
+        let securityReport = null;
+        
+        if (!safeModeReason) {
+            // Generate or retrieve session password for KeyManager
+            let keySessionPassword = localStorage.getItem('spotify_refresh_token') ||
+                                     sessionStorage.getItem('rhythm_chamber_session_salt');
 
-        try {
-            if (Security.initializeKeySession) {
-                await Security.initializeKeySession(keySessionPassword);
-                keySessionInitialized = true;
-                console.log('[Main] KeyManager session initialized');
+            if (!keySessionPassword) {
+                // Generate a cryptographically secure random secret if none exists
+                const array = new Uint8Array(32);
+                window.crypto.getRandomValues(array);
+                keySessionPassword = Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('');
+                sessionStorage.setItem('rhythm_chamber_session_salt', keySessionPassword);
             }
-        } catch (error) {
-            console.warn('[Main] KeyManager initialization failed, continuing without key session:', error?.message || error);
-            // Don't fail the entire app if KeyManager init fails
-            // Crypto operations will fail gracefully with clear errors
+
+            try {
+                // Initialize all security modules via SecurityCoordinator
+                securityReport = await SecurityCoordinator.init({
+                    password: keySessionPassword,
+                    enablePrototypePollution: false  // Deferred to window.onload
+                });
+                
+                console.log('[Main] SecurityCoordinator initialization complete:', securityReport.overallState);
+                
+                if (securityReport.warnings.length > 0) {
+                    console.warn('[Main] Security warnings:', securityReport.warnings);
+                }
+                
+                // Check if we should enter safe mode due to security failures
+                if (securityReport.overallState === 'failed') {
+                    safeModeReason = 'Security initialization failed';
+                    console.warn('[Main] Entering Safe Mode due to security failure');
+                } else if (securityReport.overallState === 'degraded') {
+                    console.warn('[Main] Security running in degraded mode - some features may be limited');
+                }
+                
+            } catch (error) {
+                console.warn('[Main] SecurityCoordinator initialization failed:', error?.message || error);
+                safeModeReason = 'Security initialization error: ' + (error?.message || 'Unknown error');
+            }
+        } else {
+            console.warn('[Main] Skipping SecurityCoordinator init due to Safe Mode:', safeModeReason);
         }
 
         // Install global error handlers for fallback error handling
@@ -484,7 +515,7 @@ async function bootstrap() {
 
         // Import and initialize the application
         const { init } = await import('./app.js');
-        await init({ safeModeReason });
+        await init({ safeModeReason, securityReport });
 
         console.log('[Main] Application initialized successfully');
     } catch (error) {
