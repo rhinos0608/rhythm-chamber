@@ -15,7 +15,7 @@
 | 9 | Key Foundation | Establish secure key lifecycle | KEY-01 through KEY-05, INFRA-01, INFRA-02, INFRA-05 | ✓ Complete |
 | 10 | Storage Encryption | Encrypt sensitive data at rest | STORE-01 through STORE-08, INFRA-04 | ✗ Not Started |
 | 11 | Cross-Tab Security | Secure BroadcastChannel communications | XTAB-01 through XTAB-06, INFRA-03 | ✗ Not Started |
-| 12 | KeyManager Integration | Complete Security facade exports | Integration Gap #1, Flow #3 | ○ Gap Closure |
+| 12 | KeyManager Integration | Complete Security facade exports | Integration Gap #1, Flow #3 | ✓ Complete |
 | 13 | Storage Encryption Impl | Implement storage encryption | STORE-01 through STORE-08, Integration Gap #2 | ○ Gap Closure |
 | 14 | Cross-Tab Security Impl | Implement message signing | XTAB-01 through XTAB-06, Integration Gap #3 | ○ Gap Closure |
 
@@ -121,7 +121,7 @@
 | 9 | ✓ | 4 | 100% (Key Foundation complete) |
 | 10 | ✗ | 0 | 0% (Not started - audit gap) |
 | 11 | ✗ | 0 | 0% (Not started - audit gap) |
-| 12 | ○ | 1 | 1% (1 plan created - ready for execution) |
+| 12 | ✓ | 1 | 100% (KeyManager Integration complete) |
 | 13 | ○ | 0 | 0% (Gap closure phase) |
 | 14 | ○ | 0 | 0% (Gap closure phase) |
 
@@ -169,7 +169,7 @@ After v0.9 Security Hardening:
 **Estimated Effort:** 2-4 hours
 
 **Plans:**
-- [ ] 12-01-PLAN.md — Export KeyManager methods from Security facade and resolve getSessionKey naming conflict
+- [x] 12-01-PLAN.md — Export KeyManager methods from Security facade and resolve getSessionKey naming conflict ✓
 
 ---
 
