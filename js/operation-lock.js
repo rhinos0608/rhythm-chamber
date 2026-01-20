@@ -472,9 +472,5 @@ export const OperationLock = {
     withLockAndTimeout
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.OperationLock = OperationLock;
-}
 
 console.log('[OperationLock] Module loaded with deadlock detection, diagnostics and timeout support');

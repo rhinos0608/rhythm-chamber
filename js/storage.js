@@ -17,6 +17,11 @@ import { SafeMode } from './security/safe-mode.js';
 import { WriteAheadLog, WalPriority } from './storage/write-ahead-log.js';
 import { ArchiveService } from './storage/archive-service.js';
 import { QuotaManager } from './storage/quota-manager.js';
+import { IndexedDBCore } from './storage/indexeddb.js';
+import { OperationLock } from './operation-lock.js';
+import { ProfileStorage } from './storage/profiles.js';
+import { ConfigAPI } from './storage/config-api.js';
+import { SyncManager } from './storage/sync-strategy.js';
 
 // ==========================================
 // HNW Hierarchy: Safe Mode Enforcement
@@ -103,7 +108,7 @@ async function processQueue() {
 // Store Constants (for backward compatibility)
 // ==========================================
 
-const STORES = window.IndexedDBCore?.STORES || {
+const STORES = IndexedDBCore?.STORES || {
   STREAMS: 'streams',
   CHUNKS: 'chunks',
   EMBEDDINGS: 'embeddings',
@@ -127,14 +132,14 @@ const Storage = {
    */
   async init() {
     // Initialize IndexedDB
-    await window.IndexedDBCore.initDatabase({
+    await IndexedDBCore.initDatabase({
       onVersionChange: () => {
         if (criticalOperationInProgress) {
           console.warn('[Storage] Version change deferred - critical operation in progress');
           pendingReload = true;
         } else {
           console.log('[Storage] Database version change detected');
-          window.IndexedDBCore.closeDatabase();
+          IndexedDBCore.closeDatabase();
           window.location.reload();
         }
       },
@@ -163,7 +168,7 @@ const Storage = {
       }
     });
 
-    return window.IndexedDBCore.getConnection();
+    return IndexedDBCore.getConnection();
   },
 
   // ==========================================
@@ -173,7 +178,7 @@ const Storage = {
   async saveStreams(streams) {
     assertWriteAllowed('saveStreams');
     return queuedOperation(async () => {
-      const result = await window.IndexedDBCore.put(STORES.STREAMS, {
+      const result = await IndexedDBCore.put(STORES.STREAMS, {
         id: 'all',
         data: streams,
         savedAt: new Date().toISOString()
@@ -184,7 +189,7 @@ const Storage = {
   },
 
   async getStreams() {
-    const result = await window.IndexedDBCore.get(STORES.STREAMS, 'all');
+    const result = await IndexedDBCore.get(STORES.STREAMS, 'all');
     return result?.data || null;
   },
 
@@ -192,7 +197,7 @@ const Storage = {
     assertWriteAllowed('appendStreams');
     return queuedOperation(async () => {
       // Use atomic update to prevent race conditions
-      const result = await window.IndexedDBCore.atomicUpdate(
+      const result = await IndexedDBCore.atomicUpdate(
         STORES.STREAMS,
         'all',
         (currentValue) => {
@@ -213,7 +218,7 @@ const Storage = {
   async clearStreams() {
     assertWriteAllowed('clearStreams');
     return queuedOperation(async () => {
-      await window.IndexedDBCore.clear(STORES.STREAMS);
+      await IndexedDBCore.clear(STORES.STREAMS);
       this._notifyUpdate('streams', 0);
     }, true);
   },
@@ -270,7 +275,7 @@ const Storage = {
 
   async saveChunks(chunks) {
     return queuedOperation(async () => {
-      await window.IndexedDBCore.transaction(STORES.CHUNKS, 'readwrite', (store) => {
+      await IndexedDBCore.transaction(STORES.CHUNKS, 'readwrite', (store) => {
         for (const chunk of chunks) {
           store.put(chunk);
         }
@@ -279,7 +284,7 @@ const Storage = {
   },
 
   async getChunks() {
-    return window.IndexedDBCore.getAll(STORES.CHUNKS);
+    return IndexedDBCore.getAll(STORES.CHUNKS);
   },
 
   // ==========================================
@@ -288,7 +293,7 @@ const Storage = {
 
   async savePersonality(personality) {
     return queuedOperation(async () => {
-      return window.IndexedDBCore.put(STORES.PERSONALITY, {
+      return IndexedDBCore.put(STORES.PERSONALITY, {
         id: 'result',
         ...personality,
         savedAt: new Date().toISOString()
@@ -297,7 +302,7 @@ const Storage = {
   },
 
   async getPersonality() {
-    return window.IndexedDBCore.get(STORES.PERSONALITY, 'result');
+    return IndexedDBCore.get(STORES.PERSONALITY, 'result');
   },
 
   // ==========================================
@@ -306,12 +311,12 @@ const Storage = {
 
   async saveSetting(key, value) {
     return queuedOperation(async () => {
-      return window.IndexedDBCore.put(STORES.SETTINGS, { key, value });
+      return IndexedDBCore.put(STORES.SETTINGS, { key, value });
     });
   },
 
   async getSetting(key) {
-    const result = await window.IndexedDBCore.get(STORES.SETTINGS, key);
+    const result = await IndexedDBCore.get(STORES.SETTINGS, key);
     return result?.value;
   },
 
@@ -330,31 +335,31 @@ const Storage = {
         createdAt: session.createdAt || now,
         messageCount: session.messages?.length || 0
       };
-      const result = await window.IndexedDBCore.put(STORES.CHAT_SESSIONS, data);
+      const result = await IndexedDBCore.put(STORES.CHAT_SESSIONS, data);
       this._notifyUpdate('session', 1);
       return result;
     });
   },
 
   async getSession(id) {
-    return window.IndexedDBCore.get(STORES.CHAT_SESSIONS, id);
+    return IndexedDBCore.get(STORES.CHAT_SESSIONS, id);
   },
 
   async getAllSessions() {
-    return window.IndexedDBCore.getAllByIndex(STORES.CHAT_SESSIONS, 'updatedAt', 'prev');
+    return IndexedDBCore.getAllByIndex(STORES.CHAT_SESSIONS, 'updatedAt', 'prev');
   },
 
   async deleteSession(id) {
-    await window.IndexedDBCore.delete(STORES.CHAT_SESSIONS, id);
+    await IndexedDBCore.delete(STORES.CHAT_SESSIONS, id);
     this._notifyUpdate('session', -1);
   },
 
   async getSessionCount() {
-    return window.IndexedDBCore.count(STORES.CHAT_SESSIONS);
+    return IndexedDBCore.count(STORES.CHAT_SESSIONS);
   },
 
   async clearAllSessions() {
-    await window.IndexedDBCore.clear(STORES.CHAT_SESSIONS);
+    await IndexedDBCore.clear(STORES.CHAT_SESSIONS);
     this._notifyUpdate('session', 0);
   },
 
@@ -364,48 +369,48 @@ const Storage = {
   // ==========================================
 
   async saveProfile(profile) {
-    if (!window.ProfileStorage._storage) {
-      window.ProfileStorage.init(this);
+    if (!ProfileStorage._storage) {
+      ProfileStorage.init(this);
     }
-    await window.ProfileStorage.saveProfile(profile);
+    await ProfileStorage.saveProfile(profile);
     this._notifyUpdate('profile', await this.getProfileCount());
   },
 
   async getAllProfiles() {
-    if (!window.ProfileStorage._storage) window.ProfileStorage.init(this);
-    return window.ProfileStorage.getAllProfiles();
+    if (!ProfileStorage._storage) ProfileStorage.init(this);
+    return ProfileStorage.getAllProfiles();
   },
 
   async getProfile(id) {
-    if (!window.ProfileStorage._storage) window.ProfileStorage.init(this);
-    return window.ProfileStorage.getProfile(id);
+    if (!ProfileStorage._storage) ProfileStorage.init(this);
+    return ProfileStorage.getProfile(id);
   },
 
   async deleteProfile(id) {
-    if (!window.ProfileStorage._storage) window.ProfileStorage.init(this);
-    await window.ProfileStorage.deleteProfile(id);
+    if (!ProfileStorage._storage) ProfileStorage.init(this);
+    await ProfileStorage.deleteProfile(id);
     this._notifyUpdate('profile', await this.getProfileCount());
   },
 
   async getActiveProfileId() {
-    if (!window.ProfileStorage._storage) window.ProfileStorage.init(this);
-    return window.ProfileStorage.getActiveProfileId();
+    if (!ProfileStorage._storage) ProfileStorage.init(this);
+    return ProfileStorage.getActiveProfileId();
   },
 
   async setActiveProfile(id) {
-    if (!window.ProfileStorage._storage) window.ProfileStorage.init(this);
-    await window.ProfileStorage.setActiveProfile(id);
+    if (!ProfileStorage._storage) ProfileStorage.init(this);
+    await ProfileStorage.setActiveProfile(id);
     this._notifyUpdate('activeProfile', id ? 1 : 0);
   },
 
   async getProfileCount() {
-    if (!window.ProfileStorage._storage) window.ProfileStorage.init(this);
-    return window.ProfileStorage.getProfileCount();
+    if (!ProfileStorage._storage) ProfileStorage.init(this);
+    return ProfileStorage.getProfileCount();
   },
 
   async clearAllProfiles() {
-    if (!window.ProfileStorage._storage) window.ProfileStorage.init(this);
-    await window.ProfileStorage.clearAllProfiles();
+    if (!ProfileStorage._storage) ProfileStorage.init(this);
+    await ProfileStorage.clearAllProfiles();
     this._notifyUpdate('profile', 0);
   },
 
@@ -413,13 +418,13 @@ const Storage = {
   // Config & Tokens (delegate to ConfigAPI)
   // ==========================================
 
-  getConfig: (key, defaultValue) => window.ConfigAPI.getConfig(key, defaultValue),
-  setConfig: (key, value) => window.ConfigAPI.setConfig(key, value),
-  removeConfig: (key) => window.ConfigAPI.removeConfig(key),
+  getConfig: (key, defaultValue) => ConfigAPI.getConfig(key, defaultValue),
+  setConfig: (key, value) => ConfigAPI.setConfig(key, value),
+  removeConfig: (key) => ConfigAPI.removeConfig(key),
 
-  getToken: (key) => window.ConfigAPI.getToken(key),
-  setToken: (key, value) => window.ConfigAPI.setToken(key, value),
-  removeToken: (key) => window.ConfigAPI.removeToken(key),
+  getToken: (key) => ConfigAPI.getToken(key),
+  setToken: (key, value) => ConfigAPI.setToken(key, value),
+  removeToken: (key) => ConfigAPI.removeToken(key),
 
   // ==========================================
   // Transactions (multi-backend atomic operations)
@@ -459,9 +464,9 @@ const Storage = {
 
     // Acquire lock if available
     let lockId = null;
-    if (window.OperationLock) {
+    if (OperationLock) {
       try {
-        lockId = await window.OperationLock.acquire('privacy_clear');
+        lockId = await OperationLock.acquire('privacy_clear');
       } catch (e) {
         return { success: false, error: e.message };
       }
@@ -471,7 +476,7 @@ const Storage = {
       // Clear all IndexedDB stores
       for (const storeName of Object.values(STORES)) {
         try {
-          await window.IndexedDBCore.clear(storeName);
+          await IndexedDBCore.clear(storeName);
           results.indexedDB.stores.push(storeName);
         } catch (e) {
           console.warn(`[Storage] Failed to clear store ${storeName}:`, e);
@@ -512,8 +517,8 @@ const Storage = {
 
       return { success: true, ...results };
     } finally {
-      if (lockId && window.OperationLock) {
-        window.OperationLock.release('privacy_clear', lockId);
+      if (lockId && OperationLock) {
+        OperationLock.release('privacy_clear', lockId);
       }
     }
   },
@@ -540,12 +545,12 @@ const Storage = {
    * @returns {boolean} True if IndexedDB is initialized
    */
   isInitialized() {
-    return !!(window.IndexedDBCore?.getConnection?.());
+    return !!(IndexedDBCore?.getConnection?.());
   },
 
   async clear() {
     for (const storeName of Object.values(STORES)) {
-      await window.IndexedDBCore.clear(storeName);
+      await IndexedDBCore.clear(storeName);
     }
   },
 
@@ -605,7 +610,7 @@ const Storage = {
   async clearSensitiveData() {
     console.log('[Storage] Clearing sensitive data (raw streams)...');
 
-    await window.IndexedDBCore.clear(STORES.STREAMS);
+    await IndexedDBCore.clear(STORES.STREAMS);
     sessionStorage.removeItem('rhythm_chamber_conversation');
 
     await this.removeConfig('rhythm_chamber_rag');
@@ -707,7 +712,7 @@ const Storage = {
    * @returns {SyncManager}
    */
   getSyncManager() {
-    return window.SyncManager;
+    return SyncManager;
   },
 
   /**
@@ -715,7 +720,7 @@ const Storage = {
    * @returns {SyncStrategy}
    */
   getSyncStrategy() {
-    return window.SyncManager?.getStrategy() || null;
+    return SyncManager.getStrategy() || null;
   },
 
   /**
@@ -738,10 +743,5 @@ const Storage = {
 
 // Export for ES Module consumers
 export { Storage, STORES };
-
-// Make available globally for backwards compatibility during migration
-if (typeof window !== 'undefined') {
-  window.Storage = Storage;
-}
 
 console.log('[Storage] Facade loaded - delegates to IndexedDBCore, ConfigAPI, StorageMigration');

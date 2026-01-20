@@ -23,6 +23,8 @@
  * @module workers/pattern-worker-pool
  */
 
+import { Patterns } from '../patterns.js';
+
 // ==========================================
 // Configuration
 // ==========================================
@@ -585,8 +587,8 @@ async function detectWithSingleWorker(streams, chunks, onProgress) {
 async function fallbackToSync(streams, chunks) {
     console.log('[PatternWorkerPool] Using synchronous fallback');
 
-    if (typeof window !== 'undefined' && window.Patterns) {
-        return window.Patterns.detectAllPatterns(streams, chunks);
+    if (Patterns) {
+        return Patterns.detectAllPatterns(streams, chunks);
     }
 
     throw new Error('Patterns module not available');

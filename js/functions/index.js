@@ -1,14 +1,20 @@
 /**
  * Function Calling Facade Module
- * 
+ *
  * Unified entry point for all function calling capabilities.
  * Re-exports schemas and provides centralized execute() function.
- * 
+ *
  * HNW Considerations:
  * - Hierarchy: Single entry point for all function operations
  * - Network: Centralizes error handling and logging
  * - Wave: Consistent async execution with retry logic
  */
+
+import { Settings } from '../settings.js';
+import { DataQuery } from '../data-query.js';
+import { DataQuerySchemas } from './schemas/data-queries.js';
+import { TemplateQuerySchemas } from './schemas/template-queries.js';
+import { AnalyticsQuerySchemas } from './schemas/analytics-queries.js';
 
 // ==========================================
 // Unified Execute Function
@@ -76,7 +82,7 @@ async function executeFunction(functionName, args, streams, options = {}) {
     }
 
     // Validate DataQuery is available
-    const dataQueryValidation = validation?.validateDataQuery() || { valid: !!window.DataQuery };
+    const dataQueryValidation = validation?.validateDataQuery() || { valid: !!DataQuery };
     if (!dataQueryValidation.valid) {
         return { error: dataQueryValidation.error || "DataQuery module not loaded." };
     }
@@ -194,9 +200,9 @@ function validateFunctionArgs(functionName, args) {
  */
 function getAllSchemas() {
     return [
-        ...(window.DataQuerySchemas || []),
-        ...(window.TemplateQuerySchemas || []),
-        ...(window.AnalyticsQuerySchemas || [])
+        ...(DataQuerySchemas || []),
+        ...(TemplateQuerySchemas || []),
+        ...(AnalyticsQuerySchemas || [])
     ];
 }
 
@@ -204,21 +210,21 @@ function getAllSchemas() {
  * Get core data query schemas only
  */
 function getDataSchemas() {
-    return window.DataQuerySchemas || [];
+    return DataQuerySchemas || [];
 }
 
 /**
  * Get template schemas only
  */
 function getTemplateSchemas() {
-    return window.TemplateQuerySchemas || [];
+    return TemplateQuerySchemas || [];
 }
 
 /**
  * Get analytics schemas only
  */
 function getAnalyticsSchemas() {
-    return window.AnalyticsQuerySchemas || [];
+    return AnalyticsQuerySchemas || [];
 }
 
 // ==========================================
@@ -241,11 +247,11 @@ function getEnabledSchemas() {
     const allSchemas = getAllSchemas();
 
     // Check if Settings module is available
-    if (!window.Settings?.getEnabledTools) {
+    if (!Settings?.getEnabledTools) {
         return allSchemas; // All enabled by default
     }
 
-    const enabledTools = window.Settings.getEnabledTools();
+    const enabledTools = Settings.getEnabledTools();
 
     // null means all tools are enabled
     if (enabledTools === null) {
@@ -302,10 +308,6 @@ export const Functions = {
     getFunctionSchema
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.Functions = Functions;
-}
 
 // Populate static schema arrays after all modules load
 document.addEventListener('DOMContentLoaded', () => {

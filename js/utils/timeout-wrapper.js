@@ -253,10 +253,5 @@ export const TimeoutWrapper = {
     sleep
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.TimeoutWrapper = TimeoutWrapper;
-    window.TimeoutError = TimeoutError;
-}
 
 console.log('[TimeoutWrapper] Module loaded');

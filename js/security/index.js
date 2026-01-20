@@ -352,8 +352,4 @@ export {
     Anomaly
 };
 
-// Also attach to window for backward compatibility
-if (typeof window !== 'undefined') {
-    window.Security = Security;
-    console.log('[Security] Client-side security module loaded (AES-GCM + XSS Token Protection + Recovery Handlers enabled)');
-}
+console.log('[Security] Client-side security module loaded (AES-GCM + XSS Token Protection + Recovery Handlers enabled)');

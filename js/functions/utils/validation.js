@@ -1,11 +1,13 @@
 /**
  * Validation Utilities for Function Execution
- * 
+ *
  * HNW Considerations:
  * - Hierarchy: Validation at entry point, not scattered through code
  * - Network: Clear error messages propagate up to LLM
  * - Wave: Fail fast before expensive operations
  */
+
+import { DataQuery } from '../../data-query.js';
 
 /**
  * Validate that streams data is available
@@ -35,7 +37,7 @@ function validateStreams(streams) {
  * @returns {{valid: boolean, error?: string}}
  */
 function validateDataQuery() {
-    if (!window.DataQuery) {
+    if (!DataQuery) {
         return {
             valid: false,
             error: "DataQuery module not loaded."
@@ -261,10 +263,6 @@ export const FunctionValidation = {
     formatPeriodLabel
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.FunctionValidation = FunctionValidation;
-}
 
 console.log('[FunctionValidation] Module loaded');
 

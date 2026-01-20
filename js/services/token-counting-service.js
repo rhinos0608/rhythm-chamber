@@ -249,9 +249,4 @@ const TokenCountingService = {
 // ES Module export
 export { TokenCountingService };
 
-// Make available globally for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.TokenCountingService = TokenCountingService;
-}
-
 console.log('[TokenCountingService] Service loaded');

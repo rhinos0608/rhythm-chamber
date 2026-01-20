@@ -304,9 +304,5 @@ export const Parser = {
     terminateWorker
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.Parser = Parser;
-}
 
 console.log('[Parser] Facade module loaded (delegates to parser-worker.js)');

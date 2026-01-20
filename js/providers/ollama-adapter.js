@@ -55,10 +55,15 @@ async function call(config, messages, tools, onProgress = null) {
 
 /**
  * Get the underlying Ollama module
- * @returns {object|null} Ollama module
+ * @returns {object} Ollama module
+ * @throws {Error} If Ollama module is not loaded
  */
 function getOllamaModule() {
-    return ModuleRegistry.getModuleSync('Ollama') || null;
+    const Ollama = ModuleRegistry.getModuleSync('Ollama');
+    if (!Ollama) {
+        throw new Error('Ollama module not loaded. Check browser compatibility.');
+    }
+    return Ollama;
 }
 
 /**
@@ -66,9 +71,12 @@ function getOllamaModule() {
  * @returns {Promise<boolean>}
  */
 async function isAvailable() {
-    const Ollama = ModuleRegistry.getModuleSync('Ollama');
-    if (!Ollama) return false;
-    return Ollama.isAvailable();
+    try {
+        const Ollama = getOllamaModule();
+        return Ollama.isAvailable();
+    } catch (error) {
+        return false;
+    }
 }
 
 /**

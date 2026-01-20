@@ -10,6 +10,8 @@
  * @module services/lock-policy-coordinator
  */
 
+import { OperationLock } from '../operation-lock.js';
+
 // ==========================================
 // Conflict Matrix
 // ==========================================
@@ -207,8 +209,8 @@ function determineResolution(requested, conflicts) {
  * @returns {string[]}
  */
 function getActiveOperations() {
-    if (typeof window !== 'undefined' && window.OperationLock) {
-        return window.OperationLock.getActiveLocks();
+    if (OperationLock) {
+        return OperationLock.getActiveLocks();
     }
     return [];
 }

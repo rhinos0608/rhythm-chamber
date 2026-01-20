@@ -9,6 +9,8 @@
  */
 
 import { EventBus } from './event-bus.js';
+import { ProviderFallbackChain } from './provider-fallback-chain.js';
+import { ProviderCircuitBreaker } from './provider-circuit-breaker.js';
 
 /**
  * Health status levels for UI display
@@ -159,15 +161,11 @@ export class ProviderHealthMonitor {
      * @private
      */
     _refreshHealthData() {
-        if (!window.ProviderFallbackChain || !window.ProviderCircuitBreaker) {
-            return;
-        }
-
         const providers = ['openrouter', 'ollama', 'lmstudio', 'fallback'];
 
         for (const provider of providers) {
-            const healthRecord = window.ProviderFallbackChain.getProviderHealthStatus(provider);
-            const circuitStatus = window.ProviderCircuitBreaker.getStatus(provider);
+            const healthRecord = ProviderFallbackChain.getProviderHealthStatus(provider);
+            const circuitStatus = ProviderCircuitBreaker.getStatus(provider);
 
             if (healthRecord) {
                 const healthData = this._healthData.get(provider);

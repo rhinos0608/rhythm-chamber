@@ -177,10 +177,5 @@ async function shareCard(personality, options = {}) {
 // ES Module export
 export const Cards = { generateCard, downloadCard, shareCard, getShareURL };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.Cards = Cards;
-}
-
 console.log('[Cards] Module loaded');
 

@@ -34,6 +34,12 @@ if (safeModeReason === null) {
 }
 
 // ==========================================
+// Setup Deprecation Warnings for Window Globals
+// ==========================================
+setupDeprecatedWindowGlobals();
+console.log('[Main] Window globals deprecation warnings enabled');
+
+// ==========================================
 // Import ALL Modules (Dependency Order)
 // ==========================================
 
@@ -125,6 +131,7 @@ import { ProfileSynthesizer, ProfileSynthesizerClass } from './profile-synthesiz
 // Utility modules
 import { OperationLock } from './operation-lock.js';
 import { Payments } from './payments.js';
+import { Pricing } from './pricing.js';
 
 // New feature modules (robustness and security enhancements)
 import { QuotaMonitor } from './storage/quota-monitor.js';
@@ -412,12 +419,6 @@ async function loadHeavyModulesOnIntent() {
     return heavyModulesLoading;
 }
 
-// Export for use by other modules (app.js, chat.js, etc.)
-if (typeof window !== 'undefined') {
-    window.loadHeavyModulesOnIntent = loadHeavyModulesOnIntent;
-    window.ConversationOrchestrator = ConversationOrchestrator;
-    window.MessageLifecycleCoordinator = MessageLifecycleCoordinator;
-}
 
 /**
  * Initialize the application after security passes

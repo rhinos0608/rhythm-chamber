@@ -1,14 +1,16 @@
 /**
  * Storage Transaction Layer
- * 
+ *
  * Wraps multi-backend operations with atomic commit/rollback semantics.
  * Coordinates operations across IndexedDB and localStorage.
- * 
+ *
  * HNW Network: Provides transactional consistency for multi-backend operations,
  * preventing partial writes that could corrupt application state.
- * 
+ *
  * @module storage/transaction
  */
+
+import { IndexedDBCore } from './indexeddb.js';
 
 // ==========================================
 // Transaction State
@@ -87,9 +89,9 @@ class TransactionContext {
                 ? { ...value, id: dbKey }
                 : value;
 
-            if (window.IndexedDBCore) {
+            if (IndexedDBCore) {
                 try {
-                    previousValue = await window.IndexedDBCore.get(store, dbKey);
+                    previousValue = await IndexedDBCore.get(store, dbKey);
                 } catch {
                     previousValue = null;
                 }
@@ -126,9 +128,9 @@ class TransactionContext {
         } else if (backend === 'indexeddb') {
             const store = storeOrKey;
 
-            if (window.IndexedDBCore) {
+            if (IndexedDBCore) {
                 try {
-                    previousValue = await window.IndexedDBCore.get(store, key);
+                    previousValue = await IndexedDBCore.get(store, key);
                 } catch {
                     previousValue = null;
                 }
@@ -280,12 +282,12 @@ async function preparePhase(ctx) {
         try {
             if (op.backend === 'indexeddb') {
                 // Check IndexedDB connection is healthy
-                if (!window.IndexedDBCore) {
+                if (!IndexedDBCore) {
                     validationErrors.push('IndexedDB not available');
                     continue;
                 }
                 // Verify connection status if available
-                if (window.IndexedDBCore.getConnectionStatus?.() === 'disconnected') {
+                if (IndexedDBCore.getConnectionStatus?.() === 'disconnected') {
                     validationErrors.push('IndexedDB disconnected - prepare failed');
                 }
             } else if (op.backend === 'localstorage') {
@@ -324,7 +326,7 @@ async function preparePhase(ctx) {
  * @param {TransactionContext} ctx - Transaction context
  */
 async function writeJournal(ctx) {
-    if (!window.IndexedDBCore) {
+    if (!IndexedDBCore) {
         console.warn('[StorageTransaction] IndexedDBCore unavailable, skipping journal');
         return;
     }
@@ -345,7 +347,7 @@ async function writeJournal(ctx) {
             journalTime: Date.now()
         };
 
-        await window.IndexedDBCore.put(JOURNAL_STORE, journal);
+        await IndexedDBCore.put(JOURNAL_STORE, journal);
         ctx.journaled = true;
         console.log(`[StorageTransaction] Journal written for transaction ${ctx.id}`);
     } catch (error) {
@@ -360,12 +362,12 @@ async function writeJournal(ctx) {
  * @param {string} transactionId - Transaction ID to clear
  */
 async function clearJournal(transactionId) {
-    if (!window.IndexedDBCore) {
+    if (!IndexedDBCore) {
         return;
     }
 
     try {
-        await window.IndexedDBCore.delete(JOURNAL_STORE, transactionId);
+        await IndexedDBCore.delete(JOURNAL_STORE, transactionId);
     } catch (error) {
         // Non-critical - journal will expire naturally
         console.warn('[StorageTransaction] Journal cleanup failed:', error);
@@ -379,12 +381,12 @@ async function clearJournal(transactionId) {
  * @returns {Promise<number>} Number of recovered transactions
  */
 async function recoverFromJournal() {
-    if (!window.IndexedDBCore) {
+    if (!IndexedDBCore) {
         return 0;
     }
 
     try {
-        const journals = await window.IndexedDBCore.getAll(JOURNAL_STORE);
+        const journals = await IndexedDBCore.getAll(JOURNAL_STORE);
         let recovered = 0;
 
         for (const journal of journals) {
@@ -502,14 +504,14 @@ async function commit(ctx) {
                     localStorage.removeItem(op.key);
                 }
             } else if (op.backend === 'indexeddb') {
-                if (!window.IndexedDBCore) {
+                if (!IndexedDBCore) {
                     throw new Error('IndexedDBCore not available');
                 }
 
                 if (op.type === 'put') {
-                    await window.IndexedDBCore.put(op.store, op.value);
+                    await IndexedDBCore.put(op.store, op.value);
                 } else if (op.type === 'delete') {
-                    await window.IndexedDBCore.delete(op.store, op.key);
+                    await IndexedDBCore.delete(op.store, op.key);
                 }
             } else if (op.backend === 'securetoken') {
                 // HNW Network: SecureTokenStore integration
@@ -544,15 +546,15 @@ async function commit(ctx) {
 }
 
 async function revertIndexedDBOperation(op) {
-    if (!window.IndexedDBCore) {
+    if (!IndexedDBCore) {
         console.warn('[StorageTransaction] IndexedDBCore not available for rollback');
         return;
     }
 
     if (op.previousValue === null) {
-        await window.IndexedDBCore.delete(op.store, op.key);
+        await IndexedDBCore.delete(op.store, op.key);
     } else {
-        await window.IndexedDBCore.put(op.store, op.previousValue);
+        await IndexedDBCore.put(op.store, op.previousValue);
     }
 }
 

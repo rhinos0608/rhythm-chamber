@@ -1,9 +1,12 @@
 /**
  * Core Data Query Executors
- * 
+ *
  * Execution logic for core data query functions.
  * Uses validation and retry utilities for HNW compliance.
  */
+
+// Phase 4 modules: Analysis & Processing
+import { DataQuery } from '../../data-query.js';
 
 // ==========================================
 // Core Data Query Executors
@@ -32,7 +35,7 @@ function executeGetTopArtists(args, streams) {
         });
     } else {
         // Fall back to year/month filtering
-        const result = window.DataQuery.getTopArtistsForPeriod(streams, {
+        const result = DataQuery.getTopArtistsForPeriod(streams, {
             year,
             month,
             limit: normalizedLimit
@@ -112,7 +115,7 @@ function executeGetTopTracks(args, streams) {
             return streamDate >= dateRange.startDate && streamDate <= dateRange.endDate;
         });
     } else {
-        const result = window.DataQuery.getTopTracksForPeriod(streams, {
+        const result = DataQuery.getTopTracksForPeriod(streams, {
             year,
             month,
             limit: normalizedLimit
@@ -182,7 +185,7 @@ function executeGetTopTracks(args, streams) {
 
 function executeGetArtistHistory(args, streams) {
     const { artist_name } = args;
-    const result = window.DataQuery.findPeakListeningPeriod(streams, artist_name);
+    const result = DataQuery.findPeakListeningPeriod(streams, artist_name);
 
     if (!result.found) {
         return {
@@ -218,7 +221,7 @@ function executeGetListeningStats(args, streams) {
             return streamDate >= dateRange.startDate && streamDate <= dateRange.endDate;
         });
     } else if (year || month) {
-        const result = window.DataQuery.queryByTimePeriod(streams, { year, month });
+        const result = DataQuery.queryByTimePeriod(streams, { year, month });
         if (!result.found) {
             return { error: `No data found for ${validation.formatPeriodLabel({ year, month })}.` };
         }
@@ -280,7 +283,7 @@ function executeGetListeningStats(args, streams) {
 
 function executeComparePeriods(args, streams) {
     const { year1, year2 } = args;
-    const result = window.DataQuery.comparePeriods(
+    const result = DataQuery.comparePeriods(
         streams,
         { year: year1 },
         { year: year2 }
@@ -315,7 +318,7 @@ function executeComparePeriods(args, streams) {
 
 function executeSearchTracks(args, streams) {
     const { track_name } = args;
-    const result = window.DataQuery.queryByTrack(streams, track_name);
+    const result = DataQuery.queryByTrack(streams, track_name);
 
     if (!result.found) {
         return {
@@ -348,10 +351,6 @@ export const DataExecutors = {
     search_tracks: executeSearchTracks
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.DataExecutors = DataExecutors;
-}
 
 console.log('[DataExecutors] Module loaded');
 

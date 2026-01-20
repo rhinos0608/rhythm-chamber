@@ -1,14 +1,20 @@
 /**
  * Sidebar Controller
- * 
+ *
  * Handles sidebar state, session list rendering, and session management UI.
  * Uses AppState for centralized state management.
- * 
+ *
  * HNW Integration:
  * - Subscribes to AppState for reactive updates
  * - Uses AppState.get() for reading state
  * - Uses AppState.update() for state changes
  */
+
+import { Storage } from '../storage.js';
+import { Chat } from '../chat.js';
+import { ChatUIController } from './chat-ui-controller.js';
+import { TokenCounter } from '../token-counter.js';
+import { AppState } from '../state/app-state.js';
 
 const SIDEBAR_STATE_KEY = 'rhythm_chamber_sidebar_collapsed';
 let pendingDeleteSessionId = null;
@@ -47,8 +53,8 @@ async function initSidebar() {
 
     // Restore collapsed state from unified storage or localStorage
     let savedState = null;
-    if (window.Storage?.getConfig) {
-        savedState = await window.Storage.getConfig(SIDEBAR_STATE_KEY);
+    if (Storage.getConfig) {
+        savedState = await Storage.getConfig(SIDEBAR_STATE_KEY);
     }
     if (savedState === null) {
         savedState = localStorage.getItem(SIDEBAR_STATE_KEY);
@@ -74,8 +80,8 @@ async function initSidebar() {
     }
 
     // Register for session updates from Chat module
-    if (window.Chat?.onSessionUpdate) {
-        window.Chat.onSessionUpdate(renderSessionList);
+    if (Chat?.onSessionUpdate) {
+        Chat.onSessionUpdate(renderSessionList);
     }
 
     // Subscribe to AppState for reactive view changes
@@ -151,8 +157,8 @@ function toggleSidebar() {
     AppState.setSidebarCollapsed(newCollapsed);
 
     // Save to unified storage and localStorage
-    if (window.Storage?.setConfig) {
-        window.Storage.setConfig(SIDEBAR_STATE_KEY, newCollapsed).catch(() => { });
+    if (Storage.setConfig) {
+        Storage.setConfig(SIDEBAR_STATE_KEY, newCollapsed).catch(() => { });
     }
     localStorage.setItem(SIDEBAR_STATE_KEY, newCollapsed.toString());
 
@@ -174,8 +180,8 @@ function closeSidebar() {
     AppState.setSidebarCollapsed(true);
 
     // Save to unified storage and localStorage
-    if (window.Storage?.setConfig) {
-        window.Storage.setConfig(SIDEBAR_STATE_KEY, true).catch(() => { });
+    if (Storage.setConfig) {
+        Storage.setConfig(SIDEBAR_STATE_KEY, true).catch(() => { });
     }
     localStorage.setItem(SIDEBAR_STATE_KEY, 'true');
 
@@ -194,8 +200,8 @@ function closeSidebar() {
 async function renderSessionList() {
     if (!sidebarSessions) return;
 
-    const sessions = await window.Chat.listSessions();
-    const currentId = window.Chat.getCurrentSessionId();
+    const sessions = await Chat.listSessions();
+    const currentId = Chat.getCurrentSessionId();
 
     if (sessions.length === 0) {
         sidebarSessions.innerHTML = `
@@ -269,16 +275,16 @@ function escapeHtml(text) {
  * Handle session click - switch to that session
  */
 async function handleSessionClick(sessionId) {
-    const currentId = window.Chat.getCurrentSessionId();
+    const currentId = Chat.getCurrentSessionId();
     if (sessionId === currentId) return;
 
-    await window.Chat.switchSession(sessionId);
+    await Chat.switchSession(sessionId);
 
     // Re-render chat messages
     const messages = document.getElementById('chat-messages');
     if (messages) {
         messages.innerHTML = '';
-        const history = window.Chat.getHistory();
+        const history = Chat.getHistory();
         history.forEach(msg => {
             if (msg.role === 'user' || msg.role === 'assistant') {
                 appendMessage(msg.role, msg.content);
@@ -296,7 +302,7 @@ async function handleSessionClick(sessionId) {
  * Handle new chat button
  */
 async function handleNewChat() {
-    await window.Chat.createNewSession();
+    await Chat.createNewSession();
 
     // Clear chat messages
     const messages = document.getElementById('chat-messages');
@@ -305,8 +311,8 @@ async function handleNewChat() {
     }
 
     // Reset token counter display
-    if (window.TokenCounter?.resetDisplay) {
-        window.TokenCounter.resetDisplay();
+    if (TokenCounter?.resetDisplay) {
+        TokenCounter.resetDisplay();
     }
 
     // Show suggestions
@@ -352,7 +358,7 @@ async function confirmDeleteChat() {
     const sessionId = pendingDeleteSessionId;
     hideDeleteChatModal();
 
-    await window.Chat.deleteSessionById(sessionId);
+    await Chat.deleteSessionById(sessionId);
 
     // If we deleted the current session, clear messages
     const messages = document.getElementById('chat-messages');
@@ -383,7 +389,7 @@ async function handleSessionRename(sessionId) {
     // Save on blur or enter
     const saveTitle = async () => {
         const newTitle = input.value.trim() || 'New Chat';
-        await window.Chat.renameSession(sessionId, newTitle);
+        await Chat.renameSession(sessionId, newTitle);
     };
 
     input.addEventListener('blur', saveTitle);
@@ -414,8 +420,8 @@ function appendMessage(role, content) {
     // Render content using the same safe markdown parser as the chat UI
     let parsedContent = '';
     if (content) {
-        if (window.ChatUIController?.parseMarkdown) {
-            parsedContent = window.ChatUIController.parseMarkdown(content);
+        if (ChatUIController?.parseMarkdown) {
+            parsedContent = ChatUIController.parseMarkdown(content);
         } else {
             parsedContent = escapeHtml(content);
         }

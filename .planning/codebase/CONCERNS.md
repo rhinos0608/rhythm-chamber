@@ -2,13 +2,6 @@
 
 **Analysis Date:** 2025-01-21
 
-## Tech Debt
-
-**Window Global Dependencies:**
-- Issue: Extensive use of window globals for module access with deprecation warnings system in place
-- Files: `js/window-globals-debug.js`, `js/main.js`, `js/chat.js`, `js/rag.js`, `js/genre-enrichment.js`
-- Impact: 124+ deprecated window globals still actively used throughout codebase, creating tight coupling and making refactoring difficult
-- Fix approach: Complete migration to ES module imports, remove window assignments incrementally following deprecation plan (v1.0 → v1.3)
 
 **Large File Complexity:**
 - Issue: Several files exceed 1,000-2,000 lines indicating high complexity and potential violation of single responsibility principle

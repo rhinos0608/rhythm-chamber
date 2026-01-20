@@ -1,16 +1,18 @@
 /**
  * Template Profile Store
- * 
+ *
  * Manages curated template profiles that users can browse and explore.
  * Templates are real listening patterns (anonymized) from consenting users.
- * 
+ *
  * HNW Considerations:
  * - Hierarchy: TemplateProfileStore is the single source of truth for templates
  * - Network: Templates are read-only - never modified by app logic
  * - Wave: Templates load synchronously (bundled with app)
- * 
+ *
  * @module template-profiles
  */
+
+import { DemoData } from './demo-data.js';
 
 // ==========================================
 // Template Schema & Validation
@@ -327,8 +329,8 @@ class TemplateProfileStore {
             }
 
             // Load actual data for templates with sourceId = 'demo_data'
-            if (template.metadata.sourceId === 'demo_data' && window.DemoData) {
-                const demoPackage = window.DemoData.getFullDemoPackage();
+            if (template.metadata.sourceId === 'demo_data' && DemoData) {
+                const demoPackage = DemoData.getFullDemoPackage();
                 template.streams = demoPackage.streams;
                 template.patterns = demoPackage.patterns;
                 template.personality = demoPackage.personality;
@@ -515,12 +517,6 @@ const templateStore = new TemplateProfileStore();
 
 // ES Module exports
 export { templateStore as TemplateProfileStore, TemplateProfileStore as TemplateProfileStoreClass };
-
-// Keep window globals for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.TemplateProfileStore = templateStore;
-    window.TemplateProfileStoreClass = TemplateProfileStore;
-}
 
 console.log('[TemplateProfiles] Module loaded');
 

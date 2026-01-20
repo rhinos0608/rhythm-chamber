@@ -1,11 +1,16 @@
 /**
  * View Controller
- * 
+ *
  * Manages view transitions and DOM updates for different application states.
  * Uses AppState for state management.
- * 
+ *
  * @module ViewController
  */
+
+import { Chat } from '../chat.js';
+import { ProfileDescriptionGenerator } from '../services/profile-description-generator.js';
+import { AppState } from '../state/app-state.js';
+import { SidebarController } from './sidebar-controller.js';
 
 // ==========================================
 // DOM Element References
@@ -162,7 +167,7 @@ function showReveal() {
     const summary = patterns?.summary || {};
 
     // Check if AI description should be generated
-    const canGenerateAI = window.ProfileDescriptionGenerator?.checkLLMAvailability?.()?.available;
+    const canGenerateAI = ProfileDescriptionGenerator?.checkLLMAvailability?.()?.available;
 
     if (canGenerateAI && descriptionEl) {
         // Show loading state for description
@@ -213,8 +218,8 @@ function showReveal() {
     populateScoreBreakdown(personality);
 
     // Init chat context with streams data for queries
-    if (window.Chat?.initChat) {
-        window.Chat.initChat(personality, patterns, summary, streams);
+    if (Chat?.initChat) {
+        Chat.initChat(personality, patterns, summary, streams);
     }
 }
 
@@ -233,7 +238,7 @@ async function generateAIDescription(personality, patterns, summary, description
     const currentGenerationId = ++descriptionEl._generationId;
 
     try {
-        const aiDescription = await window.ProfileDescriptionGenerator.generateDescription(
+        const aiDescription = await ProfileDescriptionGenerator.generateDescription(
             personality,
             patterns,
             summary
@@ -347,8 +352,8 @@ function showLiteReveal() {
     }
 
     // Init chat context
-    if (window.Chat?.initChat) {
-        window.Chat.initChat(personality, litePatterns, litePatterns?.summary, liteData?.recentStreams || null);
+    if (Chat?.initChat) {
+        Chat.initChat(personality, litePatterns, litePatterns?.summary, liteData?.recentStreams || null);
     }
 }
 
@@ -384,7 +389,7 @@ function showChat() {
     if (el.chatSidebar) {
         el.chatSidebar.classList.remove('hidden');
 
-        if (window.SidebarController) {
+        if (SidebarController) {
             // Get appState reference for sidebar (backward compatibility)
             const appStateRef = window.appState || AppState.get();
             SidebarController.updateVisibility(appStateRef);

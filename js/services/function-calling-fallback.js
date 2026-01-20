@@ -1,22 +1,24 @@
 /**
  * Function Calling Fallback Service
- * 
+ *
  * Implements a 4-level fallback network for function calling when
  * native tool_calls are not supported by the LLM provider/model.
- * 
+ *
  * HNW Considerations:
  * - Hierarchy: Clear fallback chain (Level 1 → 2 → 3 → 4)
  * - Network: Integrates with ProviderInterface, Functions, and DataQuery
  * - Wave: Async execution with proper timeout handling per level
- * 
+ *
  * Fallback Levels:
  * 1. Native function calling (OpenAI-style tool_calls)
  * 2. Prompt injection (function definitions as text, parse <function_call> tags)
  * 3. Regex parsing (extract structured data from natural language responses)
  * 4. Direct query (extract intent from user message, run function directly)
- * 
+ *
  * @module services/function-calling-fallback
  */
+
+import { Functions } from '../functions/index.js';
 
 // ==========================================
 // Constants
@@ -468,8 +470,8 @@ export async function executeFunctionCalls(calls, streams) {
     for (const call of calls) {
         try {
             // Use the global Functions module
-            if (window.Functions?.execute) {
-                const result = await window.Functions.execute(call.name, call.arguments, streams);
+            if (Functions?.execute) {
+                const result = await Functions.execute(call.name, call.arguments, streams);
                 results.push({
                     name: call.name,
                     result: result
@@ -621,9 +623,5 @@ export const FunctionCallingFallback = {
     handleFunctionCallingWithFallback
 };
 
-// Window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.FunctionCallingFallback = FunctionCallingFallback;
-}
 
 console.log('[FunctionCallingFallback] Service loaded');

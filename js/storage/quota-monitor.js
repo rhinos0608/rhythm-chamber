@@ -326,9 +326,5 @@ export const QuotaMonitor = {
     QUOTA_CRITICAL_THRESHOLD
 };
 
-// Make available globally for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.QuotaMonitor = QuotaMonitor;
-}
 
 console.log('[QuotaMonitor] Module loaded');

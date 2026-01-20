@@ -1,19 +1,20 @@
 /**
  * Pattern Stream Service
- * 
+ *
  * Enables progressive pattern display for better user experience.
  * Instead of waiting for all patterns to complete, patterns appear one-by-one
  * with animations as they are detected.
- * 
+ *
  * HNW Considerations:
  * - Wave: Pattern-by-pattern propagation creates smooth temporal flow
  * - Network: EventBus integration for decoupled UI updates
  * - Hierarchy: Clear sequence of pattern detection stages
- * 
+ *
  * @module services/pattern-stream
  */
 
 import { EventBus } from './event-bus.js';
+import { Patterns } from '../patterns.js';
 
 // ==========================================
 // Pattern Stream State
@@ -240,8 +241,8 @@ function getProgress() {
  * @returns {Object|null}
  */
 function getPatterns() {
-    if (typeof window !== 'undefined' && window.Patterns) {
-        return window.Patterns;
+    if (Patterns) {
+        return Patterns;
     }
     return null;
 }

@@ -12,7 +12,7 @@
 // ==========================================
 
 // Security (must be first for fail-fast behavior)
-import { Security, SecurityChecklist } from './security.js';
+import { Security, SecurityChecklist } from './security/index.js';
 
 // Core utilities
 import { ModuleRegistry } from './module-registry.js';
@@ -162,7 +162,7 @@ function checkDependencies() {
 
     // HNW Security: Detect Security fallback mode (fail-closed architecture)
     // If Security is using fallback stubs, data encryption is NOT available
-    if (window.Security?._isFallback || window.Security?.isFallbackMode?.()) {
+    if (Security._isFallback || Security.isFallbackMode()) {
         console.warn('[App] Security module in FALLBACK mode - Safe Mode activated');
         safeMode = true;
     }
@@ -1107,8 +1107,8 @@ export { init };
 // Using window.onload ensures all resources are finished before freezing prototypes
 
 window.addEventListener('load', () => {
-    if (window.Security?.enablePrototypePollutionProtection) {
-        window.Security.enablePrototypePollutionProtection();
+    if (Security.enablePrototypePollutionProtection) {
+        Security.enablePrototypePollutionProtection();
         console.log('[App] Prototype pollution protection enabled (window.onload - after all resources loaded)');
     }
 });

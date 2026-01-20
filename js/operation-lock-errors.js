@@ -178,11 +178,3 @@ if (typeof module !== 'undefined' && module.exports) {
     };
 }
 
-// Also attach to window for browser compatibility
-if (typeof window !== 'undefined') {
-    window.LockAcquisitionError = LockAcquisitionError;
-    window.LockTimeoutError = LockTimeoutError;
-    window.LockReleaseError = LockReleaseError;
-    window.LockForceReleaseError = LockForceReleaseError;
-    window.DeadlockError = DeadlockError;
-}

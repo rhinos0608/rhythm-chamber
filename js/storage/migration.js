@@ -1,11 +1,14 @@
 /**
  * Storage Migration Module
- * 
+ *
  * Handles migration of data from localStorage to IndexedDB.
  * Provides atomic migration with backup and rollback capabilities.
- * 
+ *
  * @module storage/migration
  */
+
+import { IndexedDBCore } from './indexeddb.js';
+import { ConfigAPI } from './config-api.js';
 
 // ==========================================
 // Migration Configuration
@@ -46,10 +49,10 @@ async function getLegacyTokenValue(key) {
         return localValue;
     }
 
-    if (window.IndexedDBCore) {
+    if (IndexedDBCore) {
         try {
-            const record = await window.IndexedDBCore.get(
-                window.IndexedDBCore.STORES.TOKENS,
+            const record = await IndexedDBCore.get(
+                IndexedDBCore.STORES.TOKENS,
                 key
             );
             return record ? record.value : null;
@@ -63,9 +66,9 @@ async function getLegacyTokenValue(key) {
 
 async function removeLegacyTokenKey(key) {
     localStorage.removeItem(key);
-    if (window.IndexedDBCore) {
+    if (IndexedDBCore) {
         try {
-            await window.IndexedDBCore.delete(window.IndexedDBCore.STORES.TOKENS, key);
+            await IndexedDBCore.delete(IndexedDBCore.STORES.TOKENS, key);
         } catch (err) {
             console.warn(`[Migration] Error removing legacy token '${key}':`, err);
         }
@@ -80,11 +83,11 @@ async function hasLegacyTokens() {
         }
     }
 
-    if (window.IndexedDBCore) {
+    if (IndexedDBCore) {
         for (const key of MIGRATION_TOKEN_KEYS) {
             try {
-                const record = await window.IndexedDBCore.get(
-                    window.IndexedDBCore.STORES.TOKENS,
+                const record = await IndexedDBCore.get(
+                    IndexedDBCore.STORES.TOKENS,
                     key
                 );
                 if (record?.value != null) {
@@ -116,12 +119,12 @@ function parseExpiryMs(value) {
  */
 async function getMigrationState() {
     try {
-        if (!window.IndexedDBCore) {
+        if (!IndexedDBCore) {
             return null;
         }
 
-        return await window.IndexedDBCore.get(
-            window.IndexedDBCore.STORES.MIGRATION,
+        return await IndexedDBCore.get(
+            IndexedDBCore.STORES.MIGRATION,
             'migration_state'
         );
     } catch (err) {
@@ -149,11 +152,11 @@ async function isMigrationNeeded() {
  */
 async function getCheckpoint() {
     try {
-        if (!window.IndexedDBCore) {
+        if (!IndexedDBCore) {
             return null;
         }
-        return await window.IndexedDBCore.get(
-            window.IndexedDBCore.STORES.MIGRATION,
+        return await IndexedDBCore.get(
+            IndexedDBCore.STORES.MIGRATION,
             'migration_checkpoint'
         );
     } catch (err) {
@@ -168,11 +171,11 @@ async function getCheckpoint() {
  * @returns {Promise<void>}
  */
 async function saveCheckpoint(checkpoint) {
-    if (!window.IndexedDBCore) {
+    if (!IndexedDBCore) {
         return;
     }
     try {
-        await window.IndexedDBCore.put(window.IndexedDBCore.STORES.MIGRATION, {
+        await IndexedDBCore.put(IndexedDBCore.STORES.MIGRATION, {
             id: 'migration_checkpoint',
             ...checkpoint,
             timestamp: Date.now()
@@ -187,12 +190,12 @@ async function saveCheckpoint(checkpoint) {
  * @returns {Promise<void>}
  */
 async function clearCheckpoint() {
-    if (!window.IndexedDBCore) {
+    if (!IndexedDBCore) {
         return;
     }
     try {
-        await window.IndexedDBCore.delete(
-            window.IndexedDBCore.STORES.MIGRATION,
+        await IndexedDBCore.delete(
+            IndexedDBCore.STORES.MIGRATION,
             'migration_checkpoint'
         );
     } catch (err) {
@@ -225,11 +228,11 @@ async function backupLocalStorage() {
         return;
     }
 
-    if (!window.IndexedDBCore) {
+    if (!IndexedDBCore) {
         throw new Error('IndexedDBCore not available');
     }
 
-    await window.IndexedDBCore.put(window.IndexedDBCore.STORES.MIGRATION, {
+    await IndexedDBCore.put(IndexedDBCore.STORES.MIGRATION, {
         id: 'pre_migration_backup',
         backup,
         timestamp: Date.now(),
@@ -245,13 +248,13 @@ async function backupLocalStorage() {
  */
 async function rollbackMigration() {
     try {
-        if (!window.IndexedDBCore) {
+        if (!IndexedDBCore) {
             console.warn('[Migration] IndexedDBCore not available for rollback');
             return false;
         }
 
-        const backup = await window.IndexedDBCore.get(
-            window.IndexedDBCore.STORES.MIGRATION,
+        const backup = await IndexedDBCore.get(
+            IndexedDBCore.STORES.MIGRATION,
             'pre_migration_backup'
         );
 
@@ -266,8 +269,8 @@ async function rollbackMigration() {
         }
 
         // Clear migration state (allows re-migration)
-        await window.IndexedDBCore.delete(
-            window.IndexedDBCore.STORES.MIGRATION,
+        await IndexedDBCore.delete(
+            IndexedDBCore.STORES.MIGRATION,
             'migration_state'
         );
 
@@ -305,7 +308,7 @@ async function migrateFromLocalStorage(onProgress = null) {
     console.log('[Migration] Starting localStorage → IndexedDB migration...');
 
     // Ensure dependencies are available
-    if (!window.IndexedDBCore || !window.ConfigAPI) {
+    if (!IndexedDBCore || !ConfigAPI) {
         console.warn('[Migration] Required modules not loaded, deferring migration');
         return { migrated: false, keysProcessed: 0, deferred: true };
     }
@@ -351,7 +354,7 @@ async function migrateFromLocalStorage(onProgress = null) {
                 } catch {
                     parsedValue = value;
                 }
-                await window.ConfigAPI.setConfig(key, parsedValue);
+                await ConfigAPI.setConfig(key, parsedValue);
                 keysProcessed++;
             } catch (err) {
                 console.warn(`[Migration] Failed to migrate key '${key}':`, err);
@@ -438,8 +441,8 @@ async function migrateFromLocalStorage(onProgress = null) {
                     } else if (key === 'spotify_token_expiry') {
                         migrated = migratedTokenKeys.has('spotify_access_token');
                     }
-                } else if (!window.SecureTokenStore && window.ConfigAPI?.setToken) {
-                    await window.ConfigAPI.setToken(key, value);
+                } else if (!window.SecureTokenStore && ConfigAPI?.setToken) {
+                    await ConfigAPI.setToken(key, value);
                     migrated = true;
                 }
 
@@ -469,7 +472,7 @@ async function migrateFromLocalStorage(onProgress = null) {
     }
 
     // Step 4: Mark migration complete
-    await window.IndexedDBCore.put(window.IndexedDBCore.STORES.MIGRATION, {
+    await IndexedDBCore.put(IndexedDBCore.STORES.MIGRATION, {
         id: 'migration_state',
         version: MIGRATION_MODULE_VERSION,
         completedAt: new Date().toISOString(),

@@ -101,43 +101,47 @@ Power users WANT control:
 
 ## Monetization
 
-### Phase 1: Sovereign Community (Zero Cost to User)
+### Phase 1: Sovereign Community (Three-Pillar Revenue Model)
 
 | Tier | Price | What You Get | Infrastructure | Purpose |
 |------|-------|--------------|----------------|----------|
-| **Free** | $0 | Full local analysis, BYOI chat, basic cards, personality reveal | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
-| **Supporter** | **$39 - one time purchase** | **Obsidian/Notion Export + Relationship Compatibility Reports** | Client-side only | **Seed Capital**: Funds security audit & cloud infrastructure |
-| **Supporter** | **$19 first year, then $9/year** | **Obsidian/Notion Export + Relationship Compatibility Reports** | Client-side only | **Recurring Revenue**: Ongoing support for security & features |
-| **Patron** | **$7/month** | Dev Discord access, roadmap voting, early beta features | Client-side + Discord | **Community**: Recurring revenue for ongoing support |
+| **The Sovereign** | $0 | Full local analysis, BYOI chat, basic cards, personality reveal, 100% client-side | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
+| **The Curator** | **$19.99 one-time** | **PKM Export (Obsidian/Notion), Relationship Resonance Reports, Deep Enrichment (BPM/Key/Producer), Metadata Fixer, Verified Badge** | Client-side only | **Data Power-User**: Permanent license for advanced local features |
+| **The Chamber** | **$4.99/mo or $39/yr** | **E2EE Multi-Device Sync, Chamber Portal (web card hosting), Managed AI (bundled tokens), Weekly Insight Emails, Priority Support** | Hybrid (Client-side + Server-side DB) | **Convenience**: Recurring revenue for cloud services |
 
 ### Security Audit Stretch Goal
 
-**$10,000 raised = Security audit unlocked**
+**$5,000 raised = Security audit unlocked**
 
-When we reach $10,000 in Supporter revenue, we will commission an external security audit to validate our zero-backend architecture and encryption implementation. This audit will be published publicly to build trust with our community.
+When we reach $5,000 in Curator revenue, we will commission an external security audit to validate our zero-backend architecture and encryption implementation. This audit will be published publicly to build trust with our community.
 
 ### Why This Works
 
 - **Zero Risk Entry**: Users try without payment barrier
-- **Community Investment**: Supporters feel ownership in security development
+- **Community Investment**: Curator tier users feel ownership in security development
 - **Borrowed Trust**: External security firm reputation transfers to your product
 - **PKM Export**: "Physical" digital copy of their history that connects to their other notes
 - **Relationship Engine**: Viral loop - one user buys to analyze partner/friend, sells the outcome (relationship insight)
-- **Zero-Backend**: No payment processing infrastructure needed
-- **Viral Loop**: "Compare with Friend" via JSON exchange keeps data private
+- **Deep Enrichment**: Appeals to music nerds who want metadata Spotify doesn't provide (BPM, Key, Producer)
+- **Metadata Fixer**: Solves a real pain point - bulk editing and cleaning listening history
+- **Market-Aligned Pricing**: $19.99 is competitive with stats.fm ($5-10 one-time) and local-first tools like Obsidian ($4/mo for sync)
+- **Convenience Tier**: Chamber subscription targets users who value seamlessness over technical control
 - **BYOI Model**: Appeals to privacy-conscious power users who want control and choice over models/keys
-- **Phase 2 Trigger**: Only after hitting Supporter KPI (~250-1,000) and security audit complete
-- **Revenue Allocation**: Supporter funds go directly to security audit and cloud infrastructure
-- **Lifetime Protection**: Separates access fee from compute costs
-- **Two Points of Failure**: Users can switch between local and cloud modes
-- **Never Deprecate Local**: Free tier remains functional forever
+- **Phase 2 Trigger**: Only after hitting Curator KPI (~250-500 users) and security audit complete
+- **Revenue Allocation**: Curator funds go directly to security audit; Chamber funds cover ongoing infrastructure
+- **Lifetime Protection**: Curator tier is permanent; Chamber tier separates access fee from compute costs
+- **Two Points of Failure**: Users can switch between local (Sovereign/Curator) and cloud (Chamber) modes
+- **Never Deprecate Local**: Sovereign tier remains functional forever
 
 ### Feature Implementation
 - **PKM Export**: Generates folder of Markdown files (one for every Artist, Month, Era) properly interlinked for Obsidian/Notion/Roam
-- **Relationship Compatibility Report**: Upload second person's zip/JSON to generate "You and Sarah have 84% overlap in 'Melancholy' but divergent 'Energy' curves in 2021. Your common anthem is 'Bloodbuzz Ohio'."
-- **Enrichment Mode** (Strategy 3): Connects to public APIs (MusicBrainz, AcoustID) to fetch BPM, Key, Producer Credits, Lyrics for top tracks
-- **Patreon Perks**: Discord access, voting rights, early access
-- **Phase 2**: Multi-device sync, encrypted cloud backup, managed AI setup, **external security partnership**
+- **Relationship Resonance Report**: Upload second person's zip/JSON to generate "You and Sarah have 84% overlap in 'Melancholy' but divergent 'Energy' curves in 2021. Your common anthem is 'Bloodbuzz Ohio'."
+- **Deep Enrichment Mode**: Connects to public APIs (MusicBrainz, AcoustID) to fetch BPM, Key, Producer Credits, and Lyrics for top tracks
+- **Metadata Fixer**: Bulk editing interface for fixing artist names, track titles, and removing duplicates
+- **E2EE Sync**: End-to-end encrypted multi-device sync with zero-knowledge architecture
+- **Chamber Portal**: Private, password-protected web hosting for music identity cards
+- **Managed AI**: Bundled cloud LLM tokens for users who don't want to manage their own API keys
+- **Weekly Insight Emails**: Proactive AI-generated digests of listening patterns sent via email
 
 ---
 

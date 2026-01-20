@@ -260,9 +260,5 @@ export const GeminiProvider = {
     description: 'Google AI models with native function calling. Gemini 2.0 Flash is free!'
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.GeminiProvider = GeminiProvider;
-}
 
 console.log('[GeminiProvider] Provider loaded with OpenAI-compatible endpoint');

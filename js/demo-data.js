@@ -453,10 +453,6 @@ export const DemoData = {
     }
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.DemoData = DemoData;
-}
 
 console.log('[DemoData] Module loaded. Use DemoData.isDemoMode() to check demo state.');
 

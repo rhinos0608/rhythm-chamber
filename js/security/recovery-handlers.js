@@ -1,12 +1,14 @@
 /**
  * Recovery Handlers Module
- * 
+ *
  * Provides executable recovery actions for ErrorContext recovery paths.
  * Each handler corresponds to a recovery path string returned by ErrorContext.getRecoveryPath().
- * 
+ *
  * HNW Note: This converts static recovery path strings into actionable functions,
  * closing the gap between error context creation and actual recovery.
  */
+
+import { Spotify } from '../spotify.js';
 
 const RecoveryHandlers = {
     /**
@@ -14,12 +16,8 @@ const RecoveryHandlers = {
      */
     async reconnect_spotify() {
         console.log('[Recovery] Executing: reconnect_spotify');
-        if (window.Spotify) {
-            window.Spotify.clearTokens();
-            await window.Spotify.initiateLogin();
-        } else {
-            throw new Error('Spotify module not available');
-        }
+        Spotify.clearTokens();
+        await Spotify.initiateLogin();
     },
 
     /**
@@ -27,14 +25,10 @@ const RecoveryHandlers = {
      */
     async refresh_token() {
         console.log('[Recovery] Executing: refresh_token');
-        if (window.Spotify) {
-            const success = await window.Spotify.refreshToken();
-            if (!success) {
-                console.log('[Recovery] Refresh failed, falling back to reconnect');
-                await this.reconnect_spotify();
-            }
-        } else {
-            throw new Error('Spotify module not available');
+        const success = await Spotify.refreshToken();
+        if (!success) {
+            console.log('[Recovery] Refresh failed, falling back to reconnect');
+            await this.reconnect_spotify();
         }
     },
 
@@ -156,11 +150,6 @@ const RecoveryHandlers = {
 
 // Export for ES Module consumers
 export { RecoveryHandlers };
-
-// Make available globally for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.RecoveryHandlers = RecoveryHandlers;
-}
 
 console.log('[RecoveryHandlers] Module loaded - available paths:', RecoveryHandlers.getAvailablePaths());
 

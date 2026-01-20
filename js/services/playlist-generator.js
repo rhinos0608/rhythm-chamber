@@ -1,20 +1,21 @@
 /**
  * Playlist Generator Service
- * 
+ *
  * Creates AI-powered playlists based on listening patterns and preferences.
  * Integrates with Spotify API for actual playlist creation.
- * 
+ *
  * Playlist Types:
  * - Era-based: Playlists from specific listening periods
  * - Energy-based: Mood/energy level playlists
  * - Discovery: New artist recommendations
  * - Nostalgia: Comfort favorites
  * - Time-machine: What you listened to on this date
- * 
+ *
  * @module services/playlist-generator
  */
 
 import { EventBus } from './event-bus.js';
+import { Spotify } from '../spotify.js';
 
 // ==========================================
 // Playlist Types
@@ -300,27 +301,26 @@ function createTimeMachinePlaylist(streams, date = new Date(), options = {}) {
 async function createOnSpotify(playlist, options = {}) {
     const { isPublic = false } = options;
 
-    const spotify = window.Spotify;
-    if (!spotify?.authenticatedFetch) {
+    if (!Spotify.authenticatedFetch) {
         throw new Error('Spotify not connected. Please connect your account.');
     }
 
     // Check if we have the required scope
     const requiredScope = isPublic ? 'playlist-modify-public' : 'playlist-modify-private';
-    const hasScope = await spotify.hasScope?.(requiredScope);
+    const hasScope = await Spotify.hasScope?.(requiredScope);
     if (!hasScope) {
         throw new Error('Playlist creation permission not granted. Please re-connect Spotify.');
     }
 
     // Get user ID
-    const meResponse = await spotify.authenticatedFetch('https://api.spotify.com/v1/me');
+    const meResponse = await Spotify.authenticatedFetch('https://api.spotify.com/v1/me');
     if (!meResponse.ok) {
         throw new Error('Failed to get Spotify user info');
     }
     const me = await meResponse.json();
 
     // Create playlist
-    const createResponse = await spotify.authenticatedFetch(
+    const createResponse = await Spotify.authenticatedFetch(
         `https://api.spotify.com/v1/users/${me.id}/playlists`,
         {
             method: 'POST',
@@ -348,7 +348,7 @@ async function createOnSpotify(playlist, options = {}) {
         // Spotify limits to 100 tracks per request
         for (let i = 0; i < uris.length; i += 100) {
             const batch = uris.slice(i, i + 100);
-            await spotify.authenticatedFetch(
+            await Spotify.authenticatedFetch(
                 `https://api.spotify.com/v1/playlists/${createdPlaylist.id}/tracks`,
                 {
                     method: 'POST',

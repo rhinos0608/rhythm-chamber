@@ -4,6 +4,8 @@
  * Uses character-based estimation (1 token ≈ 4 characters)
  */
 
+import { Settings } from './settings.js';
+
 const TokenCounter = {
     // Default context window (can be overridden by user settings)
     // Users can configure this in the settings tab
@@ -12,8 +14,8 @@ const TokenCounter = {
     // Get context window - uses configurable value from settings
     getContextWindow: function () {
         // Check if user has configured a custom context window
-        if (window.Settings && window.Settings.getContextWindow) {
-            return window.Settings.getContextWindow();
+        if (Settings && Settings.getContextWindow) {
+            return Settings.getContextWindow();
         }
 
         // Fallback to default
@@ -218,8 +220,4 @@ const TokenCounter = {
 // ES Module export
 export { TokenCounter };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.TokenCounter = TokenCounter;
-    console.log('[TokenCounter] Token counting module loaded');
-}
+console.log('[TokenCounter] Token counting module loaded');
