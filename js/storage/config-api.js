@@ -9,7 +9,7 @@
 
 import { IndexedDBCore } from './indexeddb.js';
 import { Security } from '../security/index.js';
-import { shouldEncrypt } from '../security/storage-encryption.js';
+import { shouldEncrypt, secureDelete } from '../security/storage-encryption.js';
 
 // ==========================================
 // Migration Constants
@@ -193,6 +193,13 @@ async function setConfig(key, value) {
 
 /**
  * Remove a config value from unified storage
+ *
+ * SECURE DELETION BEHAVIOR:
+ * - Automatically uses secure deletion for encrypted data (overwrites with random data)
+ * - Checks if record is encrypted before deletion
+ * - Falls back to standard deletion for plaintext data
+ * - Falls back to standard deletion if secure deletion fails
+ *
  * @param {string} key - The config key to remove
  * @returns {Promise<void>}
  */
@@ -200,10 +207,29 @@ async function removeConfig(key) {
     try {
         // Try IndexedDBCore if available
         if (IndexedDBCore) {
-            await IndexedDBCore.delete(IndexedDBCore.STORES.CONFIG, key);
+            // Fetch record to check encryption status before deletion
+            const record = await IndexedDBCore.get(IndexedDBCore.STORES.CONFIG, key);
+
+            // Check if record exists and is encrypted
+            if (record && record.value?.encrypted === true) {
+                console.log(`[ConfigAPI] Using secure deletion for encrypted key '${key}'`);
+
+                try {
+                    // Use secure deletion for encrypted data (overwrites with random data)
+                    await secureDelete(IndexedDBCore.STORES.CONFIG, key);
+                } catch (secureDeleteError) {
+                    // Fall back to standard deletion if secure deletion fails
+                    console.warn(`[ConfigAPI] Secure deletion failed for '${key}', falling back to standard delete:`, secureDeleteError);
+                    await IndexedDBCore.delete(IndexedDBCore.STORES.CONFIG, key);
+                }
+            } else {
+                // Not encrypted - use standard deletion
+                console.log(`[ConfigAPI] Using standard deletion for key '${key}'`);
+                await IndexedDBCore.delete(IndexedDBCore.STORES.CONFIG, key);
+            }
         }
 
-        // Also clean from localStorage
+        // Also clean from localStorage (existing behavior)
         localStorage.removeItem(key);
     } catch (err) {
         console.warn(`[ConfigAPI] Error removing config '${key}':`, err);
