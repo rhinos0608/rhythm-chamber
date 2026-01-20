@@ -341,6 +341,23 @@ const Security = {
     enablePrototypePollutionProtection,
     isPrototypeFreezeEnabled,
 
+    /**
+     * KeyManager Exports
+     *
+     * KeyManager provides three types of non-extractable keys:
+     * - Session key (via getSessionKeyKM): For general crypto operations
+     * - Data encryption key (via getDataEncryptionKey): For storage encryption (API keys, chat history)
+     * - Signing key (via getSigningKey): For HMAC message signing (cross-tab communication)
+     *
+     * IMPORTANT: Two getSessionKey implementations exist:
+     * 1. Security.getSessionKey → Encryption.getSessionKey (legacy, used by rag.js)
+     * 2. Security.getSessionKeyKM → KeyManager.getSessionKey (new, non-extractable)
+     *
+     * Migration Path:
+     * - Use getSessionKeyKM for new code requiring KeyManager's non-extractable session key
+     * - Existing callers (rag.js) continue using getSessionKey for backward compatibility
+     * - Future: Deprecate Encryption.getSessionKey after all callers migrated to KeyManager
+     */
     // Key Management (NEW - Phase 9)
     KeyManager,
     initializeKeySession: KeyManager.initializeSession,
