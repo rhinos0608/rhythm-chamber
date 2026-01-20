@@ -12,6 +12,7 @@ import * as TokenBinding from './token-binding.js';
 import * as Anomaly from './anomaly.js';
 import * as KeyManager from './key-manager.js';
 import * as StorageEncryption from './storage-encryption.js';
+import { SecurityCoordinator } from './security-coordinator.js';
 import './recovery-handlers.js'; // Side-effect import - sets up window.RecoveryHandlers
 
 /**
@@ -279,6 +280,72 @@ const Security = {
     _isFallback: false,
     isFallbackMode: () => false,
 
+    /**
+     * Initialize all security modules via SecurityCoordinator
+     * This is the single authority for security initialization
+     * 
+     * @param {Object} options - Initialization options
+     * @param {string} [options.password] - Password for KeyManager session
+     * @param {boolean} [options.enablePrototypePollution=false] - Enable prototype pollution protection immediately
+     * @returns {Promise<Object>} Initialization report
+     */
+    async init(options = {}) {
+        return SecurityCoordinator.init(options);
+    },
+
+    /**
+     * Check if security is ready
+     * @returns {boolean} True if security is fully initialized
+     */
+    isReady() {
+        return SecurityCoordinator.isReady();
+    },
+
+    /**
+     * Check if security is available (ready or degraded)
+     * @returns {boolean} True if security is available
+     */
+    isAvailable() {
+        return SecurityCoordinator.isAvailable();
+    },
+
+    /**
+     * Check if encryption is available
+     * @returns {boolean} True if encryption operations are available
+     */
+    canEncrypt() {
+        return SecurityCoordinator.canEncrypt();
+    },
+
+    /**
+     * Get detailed initialization report
+     * @returns {Object} Initialization report
+     */
+    getInitializationReport() {
+        return SecurityCoordinator.getInitializationReport();
+    },
+
+    /**
+     * Wait for security to be ready
+     * @param {number} [timeoutMs=30000] - Timeout in milliseconds
+     * @returns {Promise<Object>} Resolves when ready
+     */
+    async waitForReady(timeoutMs = 30000) {
+        return SecurityCoordinator.waitForReady(timeoutMs);
+    },
+
+    /**
+     * Register callback for when security is ready
+     * @param {Function} callback - Callback receiving initialization report
+     * @returns {Function} Unsubscribe function
+     */
+    onReady(callback) {
+        return SecurityCoordinator.onReady(callback);
+    },
+
+    // SecurityCoordinator reference for direct access
+    Coordinator: SecurityCoordinator,
+
     // Obfuscation (legacy, for non-critical data)
     obfuscate,
     deobfuscate,
@@ -413,6 +480,7 @@ const Security = {
 export {
     Security,
     ErrorContext,
+    SecurityCoordinator,
 
     // Individual modules for direct import if needed
     Encryption,
@@ -422,4 +490,4 @@ export {
     StorageEncryption
 };
 
-console.log('[Security] Client-side security module loaded (AES-GCM + XSS Token Protection + Recovery Handlers enabled)');
+console.log('[Security] Client-side security module loaded (SecurityCoordinator + AES-GCM + XSS Token Protection + Recovery Handlers enabled)');

@@ -459,6 +459,7 @@ async function initializeControllers() {
  * Initialize the application
  * @param {Object} options - Initialization options
  * @param {string|null} options.safeModeReason - If set, security check failed with this reason
+ * @param {Object|null} options.securityReport - SecurityCoordinator initialization report
  */
 async function init(options = {}) {
     console.log('[App] Initializing with HNW modular architecture...');
@@ -466,10 +467,23 @@ async function init(options = {}) {
     // HNW Security: Check for Safe Mode from main.js security check
     // This is the primary safe mode trigger (security context failed)
     const safeModeFromMain = options.safeModeReason;
+    const securityReport = options.securityReport;
+    
     if (safeModeFromMain) {
         console.warn('[App] Safe Mode activated from main.js:', safeModeFromMain);
         showSafeModeWarning();
         // Continue with limited functionality
+    }
+    
+    // Log security report if available
+    if (securityReport) {
+        console.log('[App] Security report:', {
+            state: securityReport.overallState,
+            keyManagerReady: securityReport.keyManagerReady,
+            encryptionReady: securityReport.encryptionReady,
+            tokenBindingReady: securityReport.tokenBindingReady,
+            initTime: securityReport.totalInitTime?.toFixed(1) + 'ms'
+        });
     }
 
     // Initialize centralized state AFTER security check

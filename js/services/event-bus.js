@@ -288,8 +288,39 @@ const HEALTH_CONFIG = {
 };
 
 /**
- * Handler execution metrics
- * @type {Map<string, {totalCalls: number, failures: number, totalTimeMs: number, lastCallTime: number, isStuck: boolean, isPaused: boolean}>}
+ * Per-handler circuit breaker configuration
+ */
+const HANDLER_CIRCUIT_CONFIG = {
+    failureThreshold: 5,           // Consecutive failures to open circuit
+    successThresholdHalfOpen: 2,   // Successes in half-open to close circuit
+    cooldownMs: 30000,             // Time before half-open test
+    halfOpenMaxAttempts: 3         // Max attempts in half-open before re-opening
+};
+
+/**
+ * Circuit breaker states for per-handler isolation
+ */
+const CIRCUIT_STATE = {
+    CLOSED: 'closed',      // Normal operation
+    OPEN: 'open',          // Failing, skip execution
+    HALF_OPEN: 'half_open' // Testing recovery
+};
+
+/**
+ * Handler execution metrics with per-handler circuit breaker
+ * @type {Map<string, {
+ *   totalCalls: number,
+ *   failures: number,
+ *   totalTimeMs: number,
+ *   lastCallTime: number,
+ *   isStuck: boolean,
+ *   isPaused: boolean,
+ *   circuitState: string,
+ *   consecutiveFailures: number,
+ *   consecutiveSuccesses: number,
+ *   lastFailureTime: number,
+ *   halfOpenAttempts: number
+ * }>}
  */
 const handlerMetrics = new Map();
 
