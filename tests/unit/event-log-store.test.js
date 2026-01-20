@@ -70,7 +70,7 @@ describe('EventLogStore', () => {
 
         it('should store high-resolution timestamp', async () => {
             const vectorClock = { tab_1: 1 };
-            const beforeTime = performance.now();
+            const beforeTime = Date.now();
 
             const event = await EventLogStore.appendEvent(
                 'test_event',
@@ -79,7 +79,7 @@ describe('EventLogStore', () => {
                 'tab_1'
             );
 
-            const afterTime = performance.now();
+            const afterTime = Date.now();
 
             expect(event.timestamp).toBeGreaterThanOrEqual(beforeTime);
             expect(event.timestamp).toBeLessThanOrEqual(afterTime);

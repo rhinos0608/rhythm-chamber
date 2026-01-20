@@ -4,20 +4,20 @@
  * Tests for Three-Pillar Pricing Model (Sovereign, Curator, Chamber)
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Pricing } from '../../js/pricing.js';
 
 describe('Pricing Module', () => {
     beforeEach(() => {
         // Clear localStorage before each test
-        if (typeof localStorage !== 'undefined') {
+        if (typeof localStorage !== 'undefined' && typeof localStorage.clear === 'function') {
             localStorage.clear();
         }
     });
 
     afterEach(() => {
         // Clean up after each test
-        if (typeof localStorage !== 'undefined') {
+        if (typeof localStorage !== 'undefined' && typeof localStorage.clear === 'function') {
             localStorage.clear();
         }
     });

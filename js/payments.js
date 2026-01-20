@@ -152,7 +152,14 @@ function upgradeToPremium() {
     if (isProductionBuild()) {
         // In production, show upgrade modal with three-pillar options
         if (typeof window !== 'undefined') {
-            const event = new CustomEvent('showPricingModal');
+            // Provide details so handlers can present context-aware pricing modal
+            const premiumInfo = {
+                feature: 'upgrade',
+                requiredTier: 'curator',
+                tierName: 'The Curator',
+                tierPrice: '$19.99'
+            };
+            const event = new CustomEvent('showPricingModal', { detail: premiumInfo });
             window.dispatchEvent(event);
         }
         return;

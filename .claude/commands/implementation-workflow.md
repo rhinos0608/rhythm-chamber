@@ -33,6 +33,6 @@ Follow the Mermaid flowchart above to execute the workflow. Each node type has s
 
 **Branch conditions:**
 - **True**: When condition is true, halt context crawl and give implementation guide
-- **False**: When condition is false, continue until all architectural details are noted
+- **False**: When condition is false, terminate this branch (both True and False lead to End in the flowchart)
 
-**Execution method**: Evaluate the results of the previous processing and automatically select the appropriate branch based on the conditions above.
+**Execution method**: Evaluate the results of the previous processing and automatically select the appropriate branch; both outcomes terminate immediately per the flowchart.

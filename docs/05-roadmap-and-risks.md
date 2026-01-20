@@ -207,19 +207,19 @@ Stats.fm requires server infrastructure, which means:
 - **Pillar 2 - The Curator ($19.99 one-time)**: PKM Export (Obsidian/Notion), Relationship Resonance Reports, Deep Enrichment (BPM/Key/Producer), Metadata Fixer, Verified Badge
   - **Purpose**: Data power-user license for permanent local features
   - **Transparency**: "Your Curator license funds our security audit"
-  - **KPI**: Need ~250-500 Curator users to fund security audit
+  - **KPI**: Need ~300–500 Curator users to fund security audit (see net revenue note below)
 - **Pillar 3 - The Chamber ($4.99/mo or $39/yr)**: E2EE Multi-Device Sync, Chamber Portal (web card hosting), Managed AI (bundled tokens), Weekly Insight Emails, Priority Support
   - **Purpose**: Recurring revenue for cloud infrastructure and convenience features
   - **Trust Signal**: "Secured by [External Firm]" badge
-  - **Funding**: Curator revenue funds external security audit (~$5k)
+  - **Funding**: Curator revenue helps fund an external security audit (target ~$5k). Note: after typical payment processing fees (≈2.9% + $0.30 per transaction), a $19.99 Curator sale nets about $19.11 (19.99 - (19.99*0.029 + 0.30) ≈ $19.11). At that net, ~300 Curator sales yield ≈ $5,733 (safely covering a ~$5k audit); 250 sales would net ≈ $4,777 and fall short.
 - **Why it works**: Zero risk entry, market-aligned pricing, clear value tiers
 
 #### Phase 2: Managed Cloud & AI (Trust-First Launch)
 - **E2EE Sync**: End-to-end encrypted multi-device sync
 - **Value**: Seamless device switching, encrypted backup, managed AI setup
 - **Trust Signal**: "Secured by [External Firm]" badge
-- **Funding**: Curator revenue funds external security audit (~$5k)
-- **Trigger**: Only after hitting Curator KPI (~250-500 users) + security audit complete
+ - **Funding**: Curator revenue funds external security audit (~$5k)
+ - **Trigger**: Only after hitting Curator KPI (~300-500 users) + security audit complete
 - **Architecture**: Hybrid (Server-side DB + Client-side E2EE)
 - **Ongoing Costs**: Chamber subscription covers API/embedding costs with margin
 - **Never Deprecate Local**: Sovereign tier remains functional forever

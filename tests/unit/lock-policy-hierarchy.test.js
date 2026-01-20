@@ -177,7 +177,7 @@ describe('LockPolicy Hierarchy', () => {
             const result = LockPolicy.canAcquireInOrder(['user_message'], ['privacy_clear', 'chat_save']);
             expect(result.allowed).toBe(false);
             expect(result.resolution).toBe('abort');
-            expect(result.reason).toContain('Blocked by');
+            expect(result.reason).toContain('Lock hierarchy violation');
         });
     });
 
@@ -190,7 +190,7 @@ describe('LockPolicy Hierarchy', () => {
             const result = LockPolicy.canAcquireInOrder(['user_message']);
             expect(result.allowed).toBe(false);
             expect(result.resolution).toBe('abort');
-            expect(result.reason).toContain('Blocked by');
+            expect(result.reason).toContain('Lock hierarchy violation');
         });
 
         it('should allow acquiring when OperationLock has no active locks', async () => {

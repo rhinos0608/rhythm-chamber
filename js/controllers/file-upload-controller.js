@@ -192,7 +192,7 @@ async function handleWorkerMessage(e, resolve, reject) {
             console.error('[FileUploadController] Worker error:', error);
             cleanupWorker();
             if (_ViewController) {
-                _ViewController.showUpload();
+                _ViewController.updateProgress(`Error: ${error}`);
             }
             reject(new Error(error));
             break;

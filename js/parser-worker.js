@@ -224,7 +224,7 @@ function validateFile(file) {
  */
 function validateStreams(streams) {
     if (streams.length === 0) {
-        throw new Error('No streams found in file.');
+        throw new Error('No data found in file - empty JSON array.');
     }
 
     if (streams.length > MAX_STREAMS) {
@@ -386,13 +386,20 @@ async function parseJsonFile(file, existingStreams = null) {
     }
 
     postProgress(`Found ${data.length} streams, validating...`);
-
+    
     // Validate streams with 95% threshold
-    const validation = validateStreams(data);
+    let validation;
+    try {
+        validation = validateStreams(data);
+    } catch (validationError) {
+        self.postMessage({ type: 'error', error: validationError.message });
+        return;
+    }
+    
     if (validation.invalidCount > 0) {
         postProgress(`${validation.invalidCount} invalid entries filtered out`);
     }
-
+    
     const normalized = validation.validStreams.map(stream => normalizeStream(stream, file.name));
 
     // Check for overlap with existing data
