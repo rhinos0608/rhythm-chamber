@@ -398,11 +398,22 @@ async function saveSettings(settings) {
         ConfigLoader.set('openrouter.apiUrl', ConfigLoader.get('openrouter.apiUrl', 'https://openrouter.ai/api/v1/chat/completions'));
     }
     if (settings.gemini) {
-        ConfigLoader.set('gemini.apiKey', settings.gemini.apiKey);
-        ConfigLoader.set('gemini.model', settings.gemini.model);
-        ConfigLoader.set('gemini.maxTokens', settings.gemini.maxTokens);
-        ConfigLoader.set('gemini.temperature', settings.gemini.temperature);
-        ConfigLoader.set('gemini.topP', settings.gemini.topP);
+        // Only set keys when explicitly provided to avoid clobbering existing runtime config with undefined
+        if (settings.gemini.apiKey !== undefined) {
+            ConfigLoader.set('gemini.apiKey', settings.gemini.apiKey);
+        }
+        if (settings.gemini.model !== undefined) {
+            ConfigLoader.set('gemini.model', settings.gemini.model);
+        }
+        if (settings.gemini.maxTokens !== undefined) {
+            ConfigLoader.set('gemini.maxTokens', settings.gemini.maxTokens);
+        }
+        if (settings.gemini.temperature !== undefined) {
+            ConfigLoader.set('gemini.temperature', settings.gemini.temperature);
+        }
+        if (settings.gemini.topP !== undefined) {
+            ConfigLoader.set('gemini.topP', settings.gemini.topP);
+        }
     }
     if (settings.spotify?.clientId) {
         ConfigLoader.set('spotify.clientId', settings.spotify.clientId);
@@ -1553,6 +1564,12 @@ async function confirmSessionReset() {
             await Security.clearSessionData();
         } else if (Security.invalidateSessions) {
             Security.invalidateSessions();
+        }
+
+        // Clear KeyManager session keys from memory (KEY-05)
+        if (Security.clearKeySession) {
+            Security.clearKeySession();
+            console.log('[Settings] KeyManager session cleared');
         }
 
         // Clear RAG config from unified storage and localStorage
