@@ -24,10 +24,18 @@ function generateRandomString(length) {
  * Generate a cryptographically secure random salt for key derivation
  * Uses crypto.getRandomValues() for cryptographic security
  *
- * @param {number} length - Number of random bytes (default 32)
- * @returns {string} Hex-encoded salt string
+ * SECURITY: Salts should be unique per-session and stored with encrypted data
+ * Never reuse salts across different encryption operations
+ *
+ * @param {number} length - Number of random bytes (default 32, must be > 0)
+ * @returns {string} Hex-encoded salt string (length * 2 characters)
+ * @throws {Error} If length is not positive
  */
 function generateSalt(length = 32) {
+    if (!Number.isInteger(length) || length <= 0) {
+        throw new Error('Salt length must be a positive integer');
+    }
+
     const saltBytes = crypto.getRandomValues(new Uint8Array(length));
     return Array.from(saltBytes, b => b.toString(16).padStart(2, '0')).join('');
 }
