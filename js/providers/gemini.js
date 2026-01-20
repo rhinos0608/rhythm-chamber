@@ -68,9 +68,12 @@ async function call(apiKey, config, messages, tools, onProgress = null) {
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     try {
-        const apiUrl = config.apiUrl || `${GEMINI_API_BASE}/chat/completions`;
+        // Build URL using URL API to handle existing query params correctly
+        const baseUrl = config.apiUrl || `${GEMINI_API_BASE}/chat/completions`;
+        const url = new URL(baseUrl);
+        url.searchParams.set('key', apiKey);
 
-        const response = await fetch(`${apiUrl}?key=${apiKey}`, {
+        const response = await fetch(url.toString(), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -168,12 +171,21 @@ async function listModels(apiKey) {
         throw new Error('API key required');
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout for model listing
+
     try {
-        const response = await fetch(`${GEMINI_API_BASE}/models?key=${apiKey}`, {
+        const url = new URL(`${GEMINI_API_BASE}/models`);
+        url.searchParams.set('key', apiKey);
+
+        const response = await fetch(url.toString(), {
             headers: {
                 'Content-Type': 'application/json'
-            }
+            },
+            signal: controller.signal
         });
+
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
             throw new Error(`Failed to list models: ${response.status}`);
@@ -182,6 +194,10 @@ async function listModels(apiKey) {
         const data = await response.json();
         return data.data || [];
     } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+            throw new Error('Models request timed out after 10 seconds');
+        }
         console.error('[Gemini] Failed to list models:', error.message);
         throw error;
     }

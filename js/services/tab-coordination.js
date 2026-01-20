@@ -82,7 +82,8 @@ const MESSAGE_TYPES = {
     HEARTBEAT: 'HEARTBEAT',
     EVENT_WATERMARK: 'EVENT_WATERMARK',     // Event replay watermark broadcast
     REPLAY_REQUEST: 'REPLAY_REQUEST',       // Request event replay from primary
-    REPLAY_RESPONSE: 'REPLAY_RESPONSE'      // Replay data from primary
+    REPLAY_RESPONSE: 'REPLAY_RESPONSE',     // Replay data from primary
+    SAFE_MODE_CHANGED: 'SAFE_MODE_CHANGED'  // Cross-tab Safe Mode synchronization
 };
 
 /**
@@ -223,12 +224,19 @@ const clockSkewTracker = {
     },
 
     /**
+     * Calibration success flag
+     * HNW Wave: Tracks whether clock calibration completed successfully
+     */
+    calibrationSucceeded: true,
+
+    /**
      * Reset skew tracking
      */
     reset() {
         this.detectedSkewMs = 0;
         this.lastSkewDetection = 0;
         this.skewSamples = [];
+        this.calibrationSucceeded = true;
     }
 };
 
@@ -271,6 +279,12 @@ let debugMode = false;
 // HNW Wave: Detects OS sleep by tracking visibility change gaps
 let lastVisibilityCheckTime = Date.now();
 const SLEEP_DETECTION_THRESHOLD_MS = 30000; // 30 seconds gap indicates OS sleep
+
+// Message sequence tracking for ordering validation
+// HNW Network: Detects out-of-order BroadcastChannel delivery
+let localSequence = 0; // Sequence number for outgoing messages
+const remoteSequences = new Map(); // Track last sequence per sender: senderId -> lastSeq
+let outOfOrderCount = 0; // Count of out-of-order messages detected
 
 // ==========================================
 // Core Functions
@@ -315,39 +329,78 @@ function initAdaptiveTiming() {
  */
 async function calibrateClockSkew() {
     const CALIBRATION_KEY = 'rhythm_chamber_clock_calibration';
+    const CACHED_SKEW_KEY = 'rhythm_chamber_cached_clock_skew';
     const CALIBRATION_DURATION_MS = 500;
+    const CALIBRATION_TIMEOUT_MS = 5000;  // Maximum time to wait for calibration
 
     try {
-        const localStart = Date.now();
+        // Wrap calibration in a timeout to prevent blocking election indefinitely
+        const calibrationPromise = (async () => {
+            const localStart = Date.now();
 
-        // Write our timestamp to localStorage
-        localStorage.setItem(CALIBRATION_KEY, JSON.stringify({
-            timestamp: localStart,
-            tabId: TAB_ID
-        }));
+            // Write our timestamp to localStorage
+            localStorage.setItem(CALIBRATION_KEY, JSON.stringify({
+                timestamp: localStart,
+                tabId: TAB_ID
+            }));
 
-        // Wait for other tabs to potentially update
-        await new Promise(resolve => setTimeout(resolve, CALIBRATION_DURATION_MS));
+            // Wait for other tabs to potentially update
+            await new Promise(resolve => setTimeout(resolve, CALIBRATION_DURATION_MS));
 
-        // Read back and check for other tab timestamps
-        const stored = localStorage.getItem(CALIBRATION_KEY);
-        if (stored) {
-            const data = JSON.parse(stored);
-            if (data.tabId !== TAB_ID) {
-                // Another tab wrote - calculate skew
-                const localNow = Date.now();
-                const remoteTimestamp = data.timestamp;
-                clockSkewTracker.recordSkew(remoteTimestamp, localNow);
-                console.log(`[TabCoordination] Proactive clock calibration: ` +
-                    `detected ${clockSkewTracker.getSkew().toFixed(0)}ms skew from tab ${data.tabId}`);
+            // Read back and check for other tab timestamps
+            const stored = localStorage.getItem(CALIBRATION_KEY);
+            if (stored) {
+                const data = JSON.parse(stored);
+                if (data.tabId !== TAB_ID) {
+                    // Another tab wrote - calculate skew
+                    const localNow = Date.now();
+                    const remoteTimestamp = data.timestamp;
+                    clockSkewTracker.recordSkew(remoteTimestamp, localNow);
+                    console.log(`[TabCoordination] Proactive clock calibration: ` +
+                        `detected ${clockSkewTracker.getSkew().toFixed(0)}ms skew from tab ${data.tabId}`);
+
+                    // Cache successful calibration for future fallback
+                    localStorage.setItem(CACHED_SKEW_KEY, clockSkewTracker.getSkew().toString());
+                }
             }
-        }
 
-        // Clean up calibration key
-        localStorage.removeItem(CALIBRATION_KEY);
+            // Clean up calibration key
+            localStorage.removeItem(CALIBRATION_KEY);
+            return true;
+        })();
+
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Calibration timeout')), CALIBRATION_TIMEOUT_MS)
+        );
+
+        await Promise.race([calibrationPromise, timeoutPromise]);
+        clockSkewTracker.calibrationSucceeded = true;
         console.log(`[TabCoordination] Clock calibration complete (${CALIBRATION_DURATION_MS}ms)`);
+
     } catch (e) {
         console.warn('[TabCoordination] Clock calibration failed:', e.message);
+        clockSkewTracker.calibrationSucceeded = false;
+
+        // Fallback: use cached skew from previous successful calibration
+        try {
+            const cachedSkew = localStorage.getItem(CACHED_SKEW_KEY);
+            if (cachedSkew) {
+                const parsedSkew = parseFloat(cachedSkew);
+                if (!isNaN(parsedSkew)) {
+                    clockSkewTracker.detectedSkewMs = parsedSkew;
+                    console.log(`[TabCoordination] Using cached clock skew: ${parsedSkew.toFixed(0)}ms`);
+                }
+            }
+        } catch {
+            // Ignore localStorage errors in fallback
+        }
+
+        // Clean up calibration key on failure
+        try {
+            localStorage.removeItem(CALIBRATION_KEY);
+        } catch {
+            // Ignore cleanup errors
+        }
     }
 }
 
@@ -564,11 +617,49 @@ async function initWithSharedWorker() {
 }
 
 /**
+ * Send a message with sequence number for ordering validation
+ * HNW Network: All messages include sequence for duplicate/ordering detection
+ *
+ * @param {Object} msg - Message to send
+ */
+function sendMessage(msg) {
+    localSequence++;
+    coordinationTransport?.postMessage({
+        ...msg,
+        seq: localSequence,
+        senderId: TAB_ID
+    });
+}
+
+/**
  * Create message handler for BroadcastChannel
  */
 function createMessageHandler() {
     return (event) => {
-        const { type, tabId, vectorClock: remoteClock } = event.data;
+        const { type, tabId, vectorClock: remoteClock, seq, senderId } = event.data;
+
+        // Message sequence validation for ordering guarantees
+        // HNW Network: Detect out-of-order or duplicate BroadcastChannel messages
+        if (seq !== undefined && senderId && senderId !== TAB_ID) {
+            const lastSeq = remoteSequences.get(senderId) || 0;
+
+            if (seq <= lastSeq) {
+                // Duplicate message - skip processing
+                if (debugMode) {
+                    console.warn(`[TabCoordination] Duplicate message: seq=${seq} from ${senderId} (last=${lastSeq})`);
+                }
+                return; // Skip duplicate
+            }
+
+            if (seq > lastSeq + 1) {
+                // Out-of-order message - log but continue processing
+                outOfOrderCount++;
+                console.warn(`[TabCoordination] Out-of-order message: expected seq=${lastSeq + 1}, got seq=${seq} from ${senderId} (total OOO: ${outOfOrderCount})`);
+                // We still process it since the message is valid, just arrived out of order
+            }
+
+            remoteSequences.set(senderId, seq);
+        }
 
         // Sync Vector clock with received message
         // This ensures logical ordering and conflict detection across all tabs
@@ -653,6 +744,30 @@ function createMessageHandler() {
                     handleReplayResponse(event.data.events);
                 }
                 break;
+
+            case MESSAGE_TYPES.SAFE_MODE_CHANGED:
+                // Cross-tab Safe Mode synchronization
+                // HNW Hierarchy: Safe Mode is an authority decision shared across all tabs
+                if (tabId !== TAB_ID) {
+                    const { enabled, reason } = event.data;
+                    console.log(`[TabCoordination] Safe Mode changed in another tab: ${enabled ? 'ENABLED' : 'DISABLED'}`, reason);
+
+                    // Update local Safe Mode state via AppState if available
+                    if (window.AppState?.update) {
+                        window.AppState.update('app', {
+                            safeMode: enabled,
+                            safeModeReason: reason
+                        });
+                    }
+
+                    // Show user-facing warning banner if entering safe mode
+                    if (enabled) {
+                        showSafeModeWarningFromRemote(reason);
+                    } else {
+                        hideSafeModeWarning();
+                    }
+                }
+                break;
         }
     };
 }
@@ -662,7 +777,7 @@ function createMessageHandler() {
  */
 function claimPrimary() {
     isPrimaryTab = true;
-    coordinationTransport?.postMessage({
+    sendMessage({
         type: MESSAGE_TYPES.CLAIM_PRIMARY,
         tabId: TAB_ID
     });
@@ -1391,6 +1506,92 @@ function cleanup() {
 }
 
 // ==========================================
+// Safe Mode Cross-Tab Coordination
+// ==========================================
+
+/**
+ * Broadcast Safe Mode change to all other tabs
+ * HNW Hierarchy: Safe Mode is an authority decision that must be synchronized
+ *
+ * @param {boolean} enabled - Whether Safe Mode is enabled
+ * @param {string} reason - Reason for the Safe Mode change
+ */
+function broadcastSafeModeChange(enabled, reason) {
+    sendMessage({
+        type: MESSAGE_TYPES.SAFE_MODE_CHANGED,
+        tabId: TAB_ID,
+        enabled,
+        reason
+    });
+    console.log(`[TabCoordination] Broadcasting Safe Mode change: ${enabled ? 'ENABLED' : 'DISABLED'}`, reason);
+}
+
+/**
+ * Show Safe Mode warning banner when triggered from another tab
+ * @param {string} reason - Reason for entering Safe Mode
+ */
+function showSafeModeWarningFromRemote(reason) {
+    // Create or show the Safe Mode banner
+    let banner = document.getElementById('safe-mode-remote-banner');
+
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'safe-mode-remote-banner';
+        banner.className = 'safe-mode-banner';
+        banner.innerHTML = `
+            <span class="safe-mode-icon">⚠️</span>
+            <span class="safe-mode-message">Safe Mode activated in another tab: <strong>${escapeHtml(reason || 'Unknown reason')}</strong></span>
+            <button class="safe-mode-dismiss" onclick="this.parentElement.remove()">×</button>
+        `;
+        banner.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(135deg, #f39c12, #e74c3c);
+            color: white;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 10000;
+            font-family: system-ui, -apple-system, sans-serif;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        `;
+        document.body.prepend(banner);
+    } else {
+        // Update existing banner
+        const msgEl = banner.querySelector('.safe-mode-message');
+        if (msgEl) {
+            msgEl.innerHTML = `Safe Mode activated in another tab: <strong>${escapeHtml(reason || 'Unknown reason')}</strong>`;
+        }
+        banner.style.display = 'flex';
+    }
+}
+
+/**
+ * Hide Safe Mode warning banner
+ */
+function hideSafeModeWarning() {
+    const banner = document.getElementById('safe-mode-remote-banner');
+    if (banner) {
+        banner.style.display = 'none';
+    }
+}
+
+/**
+ * Escape HTML to prevent XSS
+ * @param {string} str - String to escape
+ * @returns {string} Escaped string
+ */
+function escapeHtml(str) {
+    if (typeof str !== 'string') return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+// ==========================================
 // Public API
 // ==========================================
 
@@ -1435,6 +1636,13 @@ const TabCoordinator = {
     requestEventReplay,
     needsReplay,
     autoReplayIfNeeded,
+
+    // Safe Mode cross-tab synchronization (HNW Hierarchy)
+    broadcastSafeModeChange,
+
+    // Message ordering diagnostics (HNW Network)
+    getOutOfOrderCount: () => outOfOrderCount,
+    resetOutOfOrderCount: () => { outOfOrderCount = 0; },
 
     // Transport info (diagnostics)
     getTransportType: () => sharedWorkerFallback ? 'SharedWorker' : 'BroadcastChannel',

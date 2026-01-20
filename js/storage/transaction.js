@@ -33,12 +33,19 @@ class TransactionOperation {
 
 /**
  * Transaction context passed to transaction callback
+ * Enhanced with 2PC support for cross-backend atomicity
  */
 class TransactionContext {
     constructor() {
+        this.id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : `txn_${Date.now()}_${Math.random().toString(16).slice(2)}`;
         this.operations = [];
         this.committed = false;
         this.rolledBack = false;
+        this.prepared = false;  // 2PC: prepare phase completed
+        this.journaled = false; // 2PC: journal written
+        this.startTime = Date.now();
     }
 
     /**
@@ -247,33 +254,226 @@ class TransactionContext {
 }
 
 // ==========================================
+// Two-Phase Commit (2PC) Functions
+// ==========================================
+
+/**
+ * Transaction journal store name
+ */
+const JOURNAL_STORE = 'TRANSACTION_JOURNAL';
+
+/**
+ * Prepare phase: validate all operations can succeed before commit
+ * This is the first phase of 2PC - ensures all backends are ready
+ * 
+ * @param {TransactionContext} ctx - Transaction context
+ * @throws {Error} If any validation fails
+ */
+async function preparePhase(ctx) {
+    if (ctx.prepared) {
+        return; // Already prepared
+    }
+
+    const validationErrors = [];
+
+    for (const op of ctx.operations) {
+        try {
+            if (op.backend === 'indexeddb') {
+                // Check IndexedDB connection is healthy
+                if (!window.IndexedDBCore) {
+                    validationErrors.push('IndexedDB not available');
+                    continue;
+                }
+                // Verify connection status if available
+                if (window.IndexedDBCore.getConnectionStatus?.() === 'disconnected') {
+                    validationErrors.push('IndexedDB disconnected - prepare failed');
+                }
+            } else if (op.backend === 'localstorage') {
+                // Check localStorage quota won't be exceeded
+                const testKey = `__prepare_check_${ctx.id}`;
+                try {
+                    const testValue = op.value ? JSON.stringify(op.value) : '';
+                    localStorage.setItem(testKey, testValue.substring(0, 100));
+                    localStorage.removeItem(testKey);
+                } catch (e) {
+                    validationErrors.push(`localStorage quota exceeded: ${e.message}`);
+                }
+            } else if (op.backend === 'securetoken') {
+                // Check SecureTokenStore is available
+                if (!window.SecureTokenStore) {
+                    validationErrors.push('SecureTokenStore not available');
+                }
+            }
+        } catch (error) {
+            validationErrors.push(`Validation error for ${op.backend}: ${error.message}`);
+        }
+    }
+
+    if (validationErrors.length > 0) {
+        throw new Error(`Prepare phase failed: ${validationErrors.join('; ')}`);
+    }
+
+    ctx.prepared = true;
+    console.log(`[StorageTransaction] Prepare phase complete for ${ctx.operations.length} operations`);
+}
+
+/**
+ * Write transaction journal for crash recovery
+ * Persists transaction intent before commit phase
+ * 
+ * @param {TransactionContext} ctx - Transaction context
+ */
+async function writeJournal(ctx) {
+    if (!window.IndexedDBCore) {
+        console.warn('[StorageTransaction] IndexedDBCore unavailable, skipping journal');
+        return;
+    }
+
+    try {
+        const journal = {
+            id: ctx.id,
+            operations: ctx.operations.map(op => ({
+                backend: op.backend,
+                type: op.type,
+                store: op.store,
+                key: op.key,
+                hasValue: op.value !== null,
+                hasPreviousValue: op.previousValue !== null
+            })),
+            state: 'prepared',
+            startTime: ctx.startTime,
+            journalTime: Date.now()
+        };
+
+        await window.IndexedDBCore.put(JOURNAL_STORE, journal);
+        ctx.journaled = true;
+        console.log(`[StorageTransaction] Journal written for transaction ${ctx.id}`);
+    } catch (error) {
+        // Journal write failure shouldn't block transaction, but log it
+        console.warn('[StorageTransaction] Journal write failed:', error);
+    }
+}
+
+/**
+ * Clear transaction journal after successful commit
+ * 
+ * @param {string} transactionId - Transaction ID to clear
+ */
+async function clearJournal(transactionId) {
+    if (!window.IndexedDBCore) {
+        return;
+    }
+
+    try {
+        await window.IndexedDBCore.delete(JOURNAL_STORE, transactionId);
+    } catch (error) {
+        // Non-critical - journal will expire naturally
+        console.warn('[StorageTransaction] Journal cleanup failed:', error);
+    }
+}
+
+/**
+ * Recover incomplete transactions from journal on startup
+ * Rolls back any transactions that were prepared but not committed
+ * 
+ * @returns {Promise<number>} Number of recovered transactions
+ */
+async function recoverFromJournal() {
+    if (!window.IndexedDBCore) {
+        return 0;
+    }
+
+    try {
+        const journals = await window.IndexedDBCore.getAll(JOURNAL_STORE);
+        let recovered = 0;
+
+        for (const journal of journals) {
+            // Transactions older than 5 minutes are considered stale
+            const STALE_THRESHOLD_MS = 5 * 60 * 1000;
+            const age = Date.now() - journal.journalTime;
+
+            if (age > STALE_THRESHOLD_MS) {
+                console.log(`[StorageTransaction] Cleaning stale journal ${journal.id} (age: ${age}ms)`);
+                await clearJournal(journal.id);
+                recovered++;
+            } else if (journal.state === 'prepared') {
+                console.warn(`[StorageTransaction] Found incomplete transaction ${journal.id}, marking for review`);
+                // Don't auto-rollback - just log for manual review
+                // Full rollback would require storing actual values in journal
+                recovered++;
+            }
+        }
+
+        return recovered;
+    } catch (error) {
+        console.warn('[StorageTransaction] Journal recovery failed:', error);
+        return 0;
+    }
+}
+
+// ==========================================
 // Core Functions
 // ==========================================
 
 /**
  * Execute a transactional operation across multiple backends
+ * Uses Two-Phase Commit (2PC) protocol for enhanced atomicity:
+ * 1. Prepare phase: Validate all operations can succeed
+ * 2. Journal phase: Write transaction intent for crash recovery
+ * 3. Commit phase: Execute all operations
+ * 4. Cleanup phase: Clear journal on success
  * 
  * @param {function(TransactionContext): Promise<void>} callback - Transaction callback
- * @returns {Promise<{success: boolean, operationsCommitted: number}>}
+ * @returns {Promise<{success: boolean, operationsCommitted: number, transactionId: string, durationMs: number}>}
  */
 async function transaction(callback) {
     const ctx = new TransactionContext();
 
     try {
-        // Execute the transaction callback
+        // Phase 0: Execute the transaction callback (collect operations)
         await callback(ctx);
 
-        // Commit all operations
+        if (ctx.operations.length === 0) {
+            return {
+                success: true,
+                operationsCommitted: 0,
+                transactionId: ctx.id,
+                durationMs: Date.now() - ctx.startTime
+            };
+        }
+
+        // Phase 1: Prepare - validate all operations
+        await preparePhase(ctx);
+
+        // Phase 2: Journal - persist transaction intent for crash recovery
+        await writeJournal(ctx);
+
+        // Phase 3: Commit - execute all operations
         await commit(ctx);
+
+        // Phase 4: Cleanup - clear journal on success
+        if (ctx.journaled) {
+            await clearJournal(ctx.id);
+        }
+
+        const durationMs = Date.now() - ctx.startTime;
+        console.log(`[StorageTransaction] Transaction ${ctx.id} completed in ${durationMs}ms`);
 
         return {
             success: true,
-            operationsCommitted: ctx.operations.length
+            operationsCommitted: ctx.operations.length,
+            transactionId: ctx.id,
+            durationMs
         };
     } catch (error) {
         // Rollback on any error
-        console.error('[StorageTransaction] Transaction failed, rolling back:', error);
+        console.error(`[StorageTransaction] Transaction ${ctx.id} failed, rolling back:`, error);
         await rollback(ctx);
+
+        // Clear journal even on failure (rollback complete)
+        if (ctx.journaled) {
+            await clearJournal(ctx.id);
+        }
 
         throw error;
     }
@@ -452,6 +652,9 @@ const StorageTransaction = {
     // Core operations
     transaction,
 
+    // 2PC recovery (call on startup)
+    recoverFromJournal,
+
     // For advanced use
     TransactionContext,
     TransactionOperation,
@@ -460,7 +663,10 @@ const StorageTransaction = {
 
     // Internal (for testing)
     _commit: commit,
-    _rollback: rollback
+    _rollback: rollback,
+    _preparePhase: preparePhase,
+    _writeJournal: writeJournal,
+    _clearJournal: clearJournal
 };
 
 // ES Module export

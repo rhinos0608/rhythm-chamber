@@ -662,6 +662,14 @@ function showSettingsModal() {
                             </select>
                             <span class="settings-hint">Choose a Gemini model (free tier options available)</span>
                         </div>
+
+                        <div class="settings-field">
+                            <label for="setting-gemini-max-tokens">Max Response Length</label>
+                            <input type="number" id="setting-gemini-max-tokens"
+                                   value="${settings.gemini?.maxTokens || 8192}"
+                                   min="100" max="8192" step="100">
+                            <span class="settings-hint">tokens (max 8192 for Gemini)</span>
+                        </div>
                     </div>
 
                     <!-- Common Parameters (all providers) -->
@@ -1216,6 +1224,7 @@ function saveFromModal() {
     const geminiApiKeyInput = document.getElementById('setting-gemini-api-key');
     const geminiModel = document.getElementById('setting-gemini-model')?.value || 'gemini-2.5-flash';
     const geminiApiKey = geminiApiKeyInput?.value?.trim();
+    const geminiMaxTokens = parseInt(document.getElementById('setting-gemini-max-tokens')?.value) || 8192;
 
     const spotifyInput = document.getElementById('setting-spotify-client-id');
 
@@ -1253,7 +1262,7 @@ function saveFromModal() {
         gemini: {
             model: geminiModel,
             apiKey: geminiApiKey || '',
-            maxTokens: Math.min(Math.max(maxTokens, 100), 8192),
+            maxTokens: Math.min(Math.max(geminiMaxTokens, 100), 8192),
             temperature: Math.min(Math.max(temperature, 0), 2),
             topP: Math.min(Math.max(topP, 0), 1)
         },
@@ -2022,6 +2031,138 @@ async function saveToolsAndClose() {
 
     hideToolsModal();
     showToast('Tool settings saved!');
+}
+
+// ==========================================
+// Global Provider Health Toast Notifications
+// HNW Reliability: Notify users of provider issues even when settings modal is closed
+// ==========================================
+
+let lastToastedHealthStatus = new Map(); // Track status to avoid duplicate toasts
+
+/**
+ * Show a health-specific toast notification with action button
+ * @param {string} provider - Provider name
+ * @param {Object} health - Health data
+ */
+function showHealthToast(provider, health) {
+    // Prevent duplicate toasts for same provider+status
+    const toastKey = `${provider}_${health.status}`;
+    const lastToast = lastToastedHealthStatus.get(toastKey);
+    const now = Date.now();
+
+    // Don't show same status toast within 5 minutes
+    if (lastToast && (now - lastToast) < 5 * 60 * 1000) {
+        return;
+    }
+    lastToastedHealthStatus.set(toastKey, now);
+
+    // Remove existing health toast if present
+    const existing = document.querySelector('.health-toast');
+    if (existing) existing.remove();
+
+    const providerName = LLM_PROVIDERS.find(p => p.id === provider)?.name || provider;
+
+    const toast = document.createElement('div');
+    toast.className = 'health-toast toast-warning';
+    toast.innerHTML = `
+        <span class="toast-icon">⚠️</span>
+        <span class="toast-message">${providerName} is ${formatHealthStatus(health.status)}</span>
+        <button class="toast-action" onclick="Settings.showSettingsModal(); this.parentElement.remove();">Check Settings</button>
+        <button class="toast-dismiss" onclick="this.parentElement.remove()">×</button>
+    `;
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #fff3cd, #ffc107);
+        color: #856404;
+        border: 1px solid #ffc107;
+        border-radius: 8px;
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        z-index: 9999;
+        font-family: system-ui, -apple-system, sans-serif;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        animation: slideInRight 0.3s ease;
+    `;
+
+    // Add animation keyframes if not already present
+    if (!document.getElementById('health-toast-styles')) {
+        const style = document.createElement('style');
+        style.id = 'health-toast-styles';
+        style.textContent = `
+            @keyframes slideInRight {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            .toast-action {
+                background: #856404;
+                color: white;
+                border: none;
+                padding: 4px 12px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 12px;
+            }
+            .toast-action:hover { background: #6b4e03; }
+            .toast-dismiss {
+                background: transparent;
+                border: none;
+                color: #856404;
+                font-size: 18px;
+                cursor: pointer;
+                padding: 0 4px;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    document.body.appendChild(toast);
+
+    // Auto-dismiss after 10 seconds
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.style.opacity = '0';
+            setTimeout(() => toast.remove(), 300);
+        }
+    }, 10000);
+}
+
+/**
+ * Initialize global health monitoring (runs on module load)
+ * Subscribes to health updates and shows toasts for degradation
+ */
+function initGlobalHealthMonitoring() {
+    if (!ProviderHealthMonitor) {
+        console.log('[Settings] ProviderHealthMonitor not available, skipping global health monitoring');
+        return;
+    }
+
+    ProviderHealthMonitor.onHealthUpdate((healthSnapshot) => {
+        // Skip if settings modal is open (modal has its own UI)
+        if (document.getElementById('settings-modal')) {
+            return;
+        }
+
+        // Check current provider status
+        const currentProvider = getSettings().llm.provider;
+        const providerHealth = healthSnapshot[currentProvider];
+
+        if (providerHealth && (providerHealth.status === 'degraded' || providerHealth.status === 'unhealthy')) {
+            showHealthToast(currentProvider, providerHealth);
+        }
+    });
+
+    console.log('[Settings] Global provider health monitoring initialized');
+}
+
+// Initialize global health monitoring when module loads
+if (typeof window !== 'undefined') {
+    // Defer initialization to ensure ProviderHealthMonitor is ready
+    setTimeout(initGlobalHealthMonitoring, 1000);
 }
 
 // ES Module export
