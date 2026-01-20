@@ -251,6 +251,10 @@ async function migrateFromLocalStorage(onProgress = null) {
     let keysProcessed = checkpoint?.keysProcessed || 0;
     const CHECKPOINT_INTERVAL = 100; // Save checkpoint every 100 records (for larger migrations)
 
+    // HNW Reliability: Calculate 50% checkpoint for small migrations
+    const halfwayPoint = Math.floor(allConfigKeys.length / 2);
+    let checkpointedHalfway = checkpoint?.checkpointedHalfway || false;
+
     // Step 2: Migrate config keys
     for (let i = Math.max(0, startIndex); i < allConfigKeys.length; i++) {
         const key = allConfigKeys[i];
@@ -276,14 +280,29 @@ async function migrateFromLocalStorage(onProgress = null) {
             onProgress(i + 1, totalKeys, `Migrating ${key}...`);
         }
 
-        // Checkpoint periodically (for large migrations)
-        if ((i + 1) % CHECKPOINT_INTERVAL === 0) {
+        // Checkpoint logic:
+        // - For small migrations (<100 records): checkpoint at 50%
+        // - For large migrations: checkpoint every 100 records
+        const currentIndex = i + 1;
+        const isSmallMigration = totalKeys < CHECKPOINT_INTERVAL;
+        const shouldCheckpointHalfway = isSmallMigration &&
+            currentIndex === halfwayPoint &&
+            !checkpointedHalfway &&
+            halfwayPoint > 0;
+        const shouldCheckpointInterval = (currentIndex % CHECKPOINT_INTERVAL === 0);
+
+        if (shouldCheckpointHalfway || shouldCheckpointInterval) {
             await saveCheckpoint({
                 lastProcessedIndex: i,
                 keysProcessed,
                 totalKeys,
-                phase: 'config'
+                phase: 'config',
+                checkpointedHalfway: checkpointedHalfway || shouldCheckpointHalfway
             });
+            if (shouldCheckpointHalfway) {
+                checkpointedHalfway = true;
+                console.log(`[Migration] Checkpoint at 50% (${currentIndex}/${totalKeys}) for small migration`);
+            }
         }
     }
 

@@ -562,7 +562,9 @@ async function checkGeminiHealth() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT);
 
-        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/models?key=' + apiKey, {
+        // Use Authorization header instead of query parameter to avoid exposing the key
+        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/models', {
+            headers: { 'Authorization': `Bearer ${apiKey}` },
             signal: controller.signal
         });
         clearTimeout(timeoutId);

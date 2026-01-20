@@ -185,6 +185,20 @@ const EVENT_SCHEMAS = {
     'embedding:error': {
         description: 'Embedding error occurred',
         payload: { error: 'string', context: 'string?' }
+    },
+
+    // Backpressure signaling events (producer notifications)
+    'eventbus:backpressure_warning': {
+        description: 'Queue at 80% capacity, producers should slow down',
+        payload: { queueSize: 'number', maxSize: 'number', percentFull: 'number' }
+    },
+    'eventbus:storm_start': {
+        description: 'Event storm started, events may be dropped',
+        payload: { eventsPerSecond: 'number', threshold: 'number', startTime: 'number' }
+    },
+    'eventbus:storm_end': {
+        description: 'Event storm ended, normal processing resumed',
+        payload: { durationMs: 'number', totalDropped: 'number' }
     }
 };
 
@@ -217,7 +231,8 @@ const CIRCUIT_BREAKER_CONFIG = {
     overflowStrategy: 'drop_low_priority', // 'drop_low_priority', 'drop_oldest', 'reject_all'
     stormThreshold: 100,             // Events per second to trigger storm warning
     stormWindowMs: 1000,             // Window for storm detection
-    cooldownMs: 5000                 // Cooldown after storm
+    cooldownMs: 5000,                // Cooldown after storm
+    backpressureWarningThreshold: 0.8 // Warn producers at 80% queue capacity
 };
 
 // ==========================================
@@ -244,6 +259,9 @@ let eventsThisWindow = 0;
 let windowStart = Date.now();
 let stormActive = false;
 let stormCooldownUntil = 0;
+let stormStartTime = 0;         // Track storm start for lifecycle events
+let stormDroppedAtStart = 0;    // Track drops at storm start
+let backpressureWarningEmitted = false; // Prevent duplicate backpressure warnings
 let droppedCount = 0;
 
 // Event versioning and replay state
@@ -383,9 +401,19 @@ function emit(eventType, payload = {}, options = {}) {
             // Check if storm threshold was exceeded
             if (eventsThisWindow > CIRCUIT_BREAKER_CONFIG.stormThreshold && !stormActive) {
                 stormActive = true;
+                stormStartTime = timestamp;
+                stormDroppedAtStart = droppedCount;
                 stormCooldownUntil = timestamp + CIRCUIT_BREAKER_CONFIG.cooldownMs;
                 console.warn(`[EventBus] Event storm detected: ${eventsThisWindow} events in ${CIRCUIT_BREAKER_CONFIG.stormWindowMs}ms`);
-                // Emit storm warning (bypass circuit breaker to avoid recursion)
+
+                // Emit storm START event (producer notification)
+                emit('eventbus:storm_start', {
+                    eventsPerSecond: eventsThisWindow,
+                    threshold: CIRCUIT_BREAKER_CONFIG.stormThreshold,
+                    startTime: stormStartTime
+                }, { bypassCircuitBreaker: true, skipValidation: true });
+
+                // Legacy event for backwards compatibility
                 emit('eventbus:storm', {
                     eventsPerSecond: eventsThisWindow,
                     threshold: CIRCUIT_BREAKER_CONFIG.stormThreshold
@@ -394,13 +422,36 @@ function emit(eventType, payload = {}, options = {}) {
             // Reset window
             windowStart = timestamp;
             eventsThisWindow = 0;
-            // Check cooldown
+            backpressureWarningEmitted = false; // Reset backpressure warning each window
+
+            // Check cooldown - emit storm END event when storm ends
             if (stormActive && timestamp > stormCooldownUntil) {
+                const stormDuration = timestamp - stormStartTime;
+                const totalDroppedDuringStorm = droppedCount - stormDroppedAtStart;
+
+                // Emit storm END event (producer notification)
+                emit('eventbus:storm_end', {
+                    durationMs: stormDuration,
+                    totalDropped: totalDroppedDuringStorm
+                }, { bypassCircuitBreaker: true, skipValidation: true });
+
                 stormActive = false;
-                console.log('[EventBus] Event storm cooldown complete');
+                console.log(`[EventBus] Event storm ended (duration: ${stormDuration}ms, dropped: ${totalDroppedDuringStorm})`);
             }
         }
         eventsThisWindow++;
+
+        // Proactive backpressure warning at 80% queue capacity
+        const queuePercentFull = pendingEvents.length / CIRCUIT_BREAKER_CONFIG.maxQueueSize;
+        if (queuePercentFull >= CIRCUIT_BREAKER_CONFIG.backpressureWarningThreshold && !backpressureWarningEmitted) {
+            backpressureWarningEmitted = true;
+            emit('eventbus:backpressure_warning', {
+                queueSize: pendingEvents.length,
+                maxSize: CIRCUIT_BREAKER_CONFIG.maxQueueSize,
+                percentFull: queuePercentFull
+            }, { bypassCircuitBreaker: true, skipValidation: true });
+            console.warn(`[EventBus] Backpressure warning: queue at ${(queuePercentFull * 100).toFixed(1)}% capacity`);
+        }
 
         // Queue overflow handling
         if (pendingEvents.length >= CIRCUIT_BREAKER_CONFIG.maxQueueSize) {
