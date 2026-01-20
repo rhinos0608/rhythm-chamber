@@ -33,20 +33,18 @@
 4. Raw key material is never persisted to storage
 5. Secure context validation blocks crypto operations on non-HTTPS
 
-**Tasks:**
-- Create `js/security/key-manager.js` module
-- Implement `deriveSessionKey(password, salt)` using PBKDF2
-- Implement `getDataEncryptionKey()` for wrapped storage keys
-- Implement `getSigningKey()` for HMAC operations
-- Implement `clearSession()` for cleanup
-- Add secure context check to `js/main.js`
-- Extend `js/security/encryption.js` with PBKDF2 utilities
-- Add crypto error handling that doesn't leak details
+**Plans:**
+- [ ] 09-01-PLAN.md — Create KeyManager module with non-extractable key lifecycle
+- [ ] 09-02-PLAN.md — Extend encryption.js with PBKDF2 utilities
+- [ ] 09-03-PLAN.md — Integrate KeyManager into Security facade
+- [ ] 09-04-PLAN.md — Wire KeyManager into main.js bootstrap and settings.js logout
 
 **Files to Create/Modify:**
 - `js/security/key-manager.js` (new)
 - `js/security/encryption.js` (extend)
-- `js/main.js` (add secure context check)
+- `js/security/index.js` (add KeyManager export)
+- `js/main.js` (add KeyManager initialization)
+- `js/settings.js` (add KeyManager cleanup)
 
 ---
 
@@ -115,7 +113,7 @@
 | Phase | Status | Plans | Progress |
 |-------|--------|-------|----------|
 | 1-8 | ✓ | 8 | 100% (MVP complete) |
-| 9 | ○ | 0 | 0% |
+| 9 | ○ | 4 | 0% |
 | 10 | ○ | 0 | 0% |
 | 11 | ○ | 0 | 0% |
 
@@ -132,3 +130,4 @@ After v0.9 Security Hardening:
 
 ---
 *Roadmap created: 2025-01-21*
+*Updated: 2026-01-21 - Phase 9 plans created*
