@@ -12,6 +12,27 @@ import { Security } from '../security/index.js';
 import { shouldEncrypt } from '../security/storage-encryption.js';
 
 // ==========================================
+// Migration Constants
+// ==========================================
+
+/**
+ * Migration version for encrypted storage tracking
+ *
+ * This version number is embedded in encrypted data metadata and used for:
+ * - Future migration detection: Different versions may need different handling
+ * - Key rotation planning: Knowing which key version was used for encryption
+ * - Data migration patterns: Understanding how data was encrypted over time
+ *
+ * INCREMENT THIS VALUE WHEN:
+ * - Changing encryption metadata structure
+ * - Implementing new key rotation strategy
+ * - Modifying encryption algorithm or parameters
+ *
+ * @constant {number}
+ */
+const MIGRATION_VERSION = 1;
+
+// ==========================================
 // Config API
 // ==========================================
 
@@ -124,6 +145,7 @@ async function setConfig(key, value) {
                 valueToStore = {
                     encrypted: true,
                     keyVersion: 1,  // Key version for future rotation support
+                    migrationVersion: MIGRATION_VERSION,  // Migration version for tracking
                     value: encrypted
                 };
 
