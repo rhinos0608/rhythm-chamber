@@ -1,0 +1,82 @@
+[
+  {
+    "content": "Phase 1: Remove Qdrant integration from js/rag.js (~200 lines)",
+    "status": "completed",
+    "activeForm": "Removing Qdrant integration from js/rag.js"
+  },
+  {
+    "content": "Phase 1: Remove Qdrant configuration UI from js/settings.js (~70 lines)",
+    "status": "completed",
+    "activeForm": "Removing Qdrant configuration UI from js/settings.js"
+  },
+  {
+    "content": "Phase 1: Clean up storage keys (js/storage/keys.js, js/storage.js)",
+    "status": "completed",
+    "activeForm": "Cleaning up storage keys"
+  },
+  {
+    "content": "Phase 1: Update AGENT_CONTEXT.md to reflect WASM-only status",
+    "status": "in_progress",
+    "activeForm": "Updating AGENT_CONTEXT.md to reflect WASM-only status"
+  },
+  {
+    "content": "Phase 1: Update README.md to remove Qdrant setup instructions",
+    "status": "pending",
+    "activeForm": "Updating README.md to remove Qdrant setup instructions"
+  },
+  {
+    "content": "Phase 1: Update SECURITY.md to remove Qdrant examples",
+    "status": "pending",
+    "activeForm": "Updating SECURITY.md to remove Qdrant examples"
+  },
+  {
+    "content": "Phase 1: Update technical documentation (docs/03-technical-architecture.md, etc.)",
+    "status": "pending",
+    "activeForm": "Updating technical documentation"
+  },
+  {
+    "content": "Phase 2: Add INT8 quantization to js/local-embeddings.js",
+    "status": "pending",
+    "activeForm": "Adding INT8 quantization to js/local-embeddings.js"
+  },
+  {
+    "content": "Phase 2: Create battery-aware-mode-selector.js service",
+    "status": "pending",
+    "activeForm": "Creating battery-aware-mode-selector.js service"
+  },
+  {
+    "content": "Phase 2: Integrate PerformanceProfiler + WaveTelemetry for embeddings",
+    "status": "pending",
+    "activeForm": "Integrating PerformanceProfiler + WaveTelemetry for embeddings"
+  },
+  {
+    "content": "Phase 2: Add embedding event schemas to EventBus",
+    "status": "pending",
+    "activeForm": "Adding embedding event schemas to EventBus"
+  },
+  {
+    "content": "Phase 3: Create embeddings-onboarding.js component",
+    "status": "pending",
+    "activeForm": "Creating embeddings-onboarding.js component"
+  },
+  {
+    "content": "Phase 3: Create embeddings-progress.js component",
+    "status": "pending",
+    "activeForm": "Creating embeddings-progress.js component"
+  },
+  {
+    "content": "Phase 3: Build enhanced processing modal with stage-based progress",
+    "status": "pending",
+    "activeForm": "Building enhanced processing modal with stage-based progress"
+  },
+  {
+    "content": "Phase 3: Implement background processing with Web Workers",
+    "status": "pending",
+    "activeForm": "Implementing background processing with Web Workers"
+  },
+  {
+    "content": "Phase 3: Add CSS for new embedding components",
+    "status": "pending",
+    "activeForm": "Adding CSS for new embedding components"
+  }
+]
