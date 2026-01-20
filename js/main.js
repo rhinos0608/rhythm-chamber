@@ -441,6 +441,26 @@ async function bootstrap() {
             console.log('[Main] Configuration loaded successfully');
         }
 
+        // Initialize KeyManager session for crypto operations
+        // Uses Spotify refresh token as the password (if available)
+        // If no token exists, use a session-based secret
+        let keySessionInitialized = false;
+        const keySessionPassword = localStorage.getItem('spotify_refresh_token') ||
+                                    sessionStorage.getItem('rhythm_chamber_session_salt') ||
+                                    'session-default';
+
+        try {
+            if (Security.initializeKeySession) {
+                await Security.initializeKeySession(keySessionPassword);
+                keySessionInitialized = true;
+                console.log('[Main] KeyManager session initialized');
+            }
+        } catch (error) {
+            console.warn('[Main] KeyManager initialization failed, continuing without key session:', error?.message || error);
+            // Don't fail the entire app if KeyManager init fails
+            // Crypto operations will fail gracefully with clear errors
+        }
+
         // Install global error handlers for fallback error handling
         installGlobalErrorHandler();
 
