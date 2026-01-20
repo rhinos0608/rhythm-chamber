@@ -61,8 +61,14 @@ function requireSecureContext() {
     }
 }
 
-// Enforce secure context at module load
-requireSecureContext();
+// Enforce secure context at module load, but degrade to fallback instead of crashing
+let _secureContextAvailable = true;
+try {
+    requireSecureContext();
+} catch (error) {
+    _secureContextAvailable = false;
+    console.warn('[SecureTokenStore] Secure context unavailable, running in fallback mode:', error.message);
+}
 
 // ==========================================
 // Device Fingerprinting (Stable UUID-based)
@@ -75,6 +81,11 @@ requireSecureContext();
  * @returns {Promise<string>} SHA-256 hash of the stable device UUID
  */
 async function generateDeviceFingerprint() {
+    if (!_secureContextAvailable) {
+        console.warn('[SecureTokenStore] Cannot generate fingerprint: insecure context');
+        return null;
+    }
+
     // Get or create stable device ID
     let deviceId = localStorage.getItem(DEVICE_ID_KEY);
     if (!deviceId) {
@@ -96,6 +107,10 @@ async function generateDeviceFingerprint() {
  * @returns {string}
  */
 function getSessionSalt() {
+    if (!_secureContextAvailable) {
+        return null;
+    }
+
     let salt = sessionStorage.getItem(SALT_KEY);
     if (!salt) {
         salt = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36);
@@ -137,6 +152,10 @@ async function createBinding(fingerprint) {
  * @returns {Promise<{ valid: boolean, reason?: string }>}
  */
 async function verifyBinding() {
+    if (!_secureContextAvailable) {
+        return { valid: false, reason: 'insecure_context' };
+    }
+
     // Always regenerate fingerprint for comparison
     const currentFingerprint = await generateDeviceFingerprint();
     _deviceFingerprint = currentFingerprint;
@@ -180,6 +199,10 @@ async function verifyBinding() {
  * @returns {Promise<{ valid: boolean, reason?: string }>}
  */
 async function verifyBindingReadOnly() {
+    if (!_secureContextAvailable) {
+        return { valid: false, reason: 'insecure_context' };
+    }
+
     // Always regenerate fingerprint for comparison
     const currentFingerprint = await generateDeviceFingerprint();
     _deviceFingerprint = currentFingerprint;
@@ -219,6 +242,11 @@ async function verifyBindingReadOnly() {
  * @returns {Promise<boolean>}
  */
 async function store(tokenKey, value, options = {}) {
+    if (!_secureContextAvailable) {
+        console.warn('[SecureTokenStore] Store blocked: insecure context');
+        return false;
+    }
+
     // MANDATORY: Verify binding first
     const bindingResult = await verifyBinding();
 
@@ -271,6 +299,11 @@ async function store(tokenKey, value, options = {}) {
  * @returns {Promise<string|null>}
  */
 async function retrieve(tokenKey) {
+    if (!_secureContextAvailable) {
+        console.warn('[SecureTokenStore] Retrieve blocked: insecure context');
+        return null;
+    }
+
     // MANDATORY: Verify binding first - NO BYPASS POSSIBLE
     const bindingResult = await verifyBinding();
 
@@ -326,6 +359,11 @@ async function retrieve(tokenKey) {
  * @returns {Promise<{value: string, expiresIn?: number, metadata?: object}|null>}
  */
 async function retrieveWithOptions(tokenKey) {
+    if (!_secureContextAvailable) {
+        console.warn('[SecureTokenStore] retrieveWithOptions blocked: insecure context');
+        return null;
+    }
+
     const bindingResult = await verifyBinding();
 
     if (!bindingResult.valid) {
@@ -384,6 +422,11 @@ async function retrieveWithOptions(tokenKey) {
  * @returns {Promise<boolean>}
  */
 async function invalidate(tokenKey) {
+    if (!_secureContextAvailable) {
+        console.warn('[SecureTokenStore] Invalidate blocked: insecure context');
+        return false;
+    }
+
     // MANDATORY: Verify binding first (consistent with store/retrieve)
     const bindingResult = await verifyBinding();
 
@@ -418,6 +461,10 @@ async function invalidate(tokenKey) {
  * @returns {Promise<void>}
  */
 async function invalidateAllTokens(reason) {
+    if (!_secureContextAvailable) {
+        console.warn('[SecureTokenStore] Invalidate all blocked: insecure context');
+        return;
+    }
     console.warn('[SecureTokenStore] Invalidating ALL tokens - Reason:', reason);
 
     let totalCleared = 0;
@@ -431,7 +478,7 @@ async function invalidateAllTokens(reason) {
                     const idbKeys = await window.IndexedDBCore.keys(window.IndexedDBCore.STORES.TOKENS);
                     totalCleared += idbKeys ? idbKeys.length : 0;
                 }
-                await window.IndexedDBCore.clear(window.IndexedDBCore.STORES.TOKENS);
+                await window.IndexedDBCore.clear(window.IndexedDBCore.STORES.TOKENS, { bypassAuthority: true });
             } catch (idbError) {
                 console.warn('[SecureTokenStore] IndexedDB clear error:', idbError);
             }
@@ -547,6 +594,7 @@ async function init() {
 // ==========================================
 
 export const SecureTokenStore = {
+    isAvailable: () => _secureContextAvailable,
     // Initialization
     init,
 

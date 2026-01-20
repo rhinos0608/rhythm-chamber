@@ -9,6 +9,55 @@
 const TOKEN_BINDING_KEY = 'rhythm_chamber_token_binding';
 const DEVICE_FINGERPRINT_KEY = 'rhythm_chamber_device_fp';
 const SESSION_SALT_KEY = 'rhythm_chamber_session_salt';
+const TOKEN_BINDING_GUIDANCE = 'Open the app via HTTPS or http://localhost to enable secure token binding. File:// and embedded contexts cannot connect Spotify securely.';
+
+let lastFailure = null;
+
+function setTokenBindingFailure(reason, userMessage, details = {}) {
+    lastFailure = {
+        reason,
+        userMessage,
+        timestamp: Date.now(),
+        ...details
+    };
+}
+
+function getTokenBindingFailure() {
+    return lastFailure;
+}
+
+function clearTokenBindingFailure() {
+    lastFailure = null;
+}
+
+function isCryptoSupported() {
+    if (typeof crypto === 'undefined' || !crypto?.getRandomValues || !crypto?.subtle) {
+        return {
+            ok: false,
+            reason: 'crypto_unavailable',
+            message: `Web Crypto is unavailable in this browser context. ${TOKEN_BINDING_GUIDANCE}`
+        };
+    }
+    return { ok: true };
+}
+
+function ensureSessionSalt() {
+    try {
+        let salt = sessionStorage.getItem(SESSION_SALT_KEY);
+        if (!salt) {
+            if (crypto?.getRandomValues) {
+                salt = generateRandomString(32);
+            } else {
+                salt = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            }
+            sessionStorage.setItem(SESSION_SALT_KEY, salt);
+        }
+        return salt;
+    } catch (error) {
+        console.warn('[Security] Unable to set session salt:', error?.message || error);
+        return 'no-session';
+    }
+}
 
 /**
  * Generate a random string of specified length
@@ -48,7 +97,7 @@ async function generateDeviceFingerprint() {
         screen.colorDepth,
         navigator.hardwareConcurrency || 'unknown',
         // Add session-specific component to prevent cross-tab attacks
-        sessionStorage.getItem(SESSION_SALT_KEY) || 'no-session'
+        ensureSessionSalt() || 'no-session'
     ];
 
     const fingerprint = await hashData(components.join('|'));
@@ -96,7 +145,8 @@ function checkSecureContext() {
         // Insecure remote HTTP connection
         return {
             secure: false,
-            reason: `Insecure connection: ${origin}. Token binding requires HTTPS or localhost.`
+            reason: `Insecure connection: ${origin}. Token binding requires HTTPS or localhost.`,
+            guidance: TOKEN_BINDING_GUIDANCE
         };
     }
 
@@ -107,7 +157,8 @@ function checkSecureContext() {
         if (!isLocalHost && !isFile) {
             return {
                 secure: false,
-                reason: 'Not running in a secure context (HTTPS required for sensitive operations)'
+                reason: 'Not running in a secure context (HTTPS required for sensitive operations)',
+                guidance: TOKEN_BINDING_GUIDANCE
             };
         }
         // Allow localhost even if isSecureContext is false (dev servers)
@@ -123,7 +174,8 @@ function checkSecureContext() {
         } catch (e) {
             return {
                 secure: false,
-                reason: 'Running in cross-origin iframe - possible clickjacking attack'
+                reason: 'Running in cross-origin iframe - possible clickjacking attack',
+                guidance: TOKEN_BINDING_GUIDANCE
             };
         }
     }
@@ -132,7 +184,8 @@ function checkSecureContext() {
     if (protocol === 'data:' || protocol === 'blob:') {
         return {
             secure: false,
-            reason: 'Running in potentially malicious context (data: or blob: protocol)'
+            reason: 'Running in potentially malicious context (data: or blob: protocol)',
+            guidance: TOKEN_BINDING_GUIDANCE
         };
     }
 
@@ -172,14 +225,35 @@ function checkSecureContext() {
 async function createTokenBinding(token) {
     if (!token) return false;
 
+    clearTokenBindingFailure();
+
     // Verify secure context first
     const securityCheck = checkSecureContext();
     if (!securityCheck.secure) {
-        console.error('[Security] Cannot create token binding:', securityCheck.reason);
+        const message = securityCheck.reason
+            ? `${securityCheck.reason} ${TOKEN_BINDING_GUIDANCE}`
+            : TOKEN_BINDING_GUIDANCE;
+        setTokenBindingFailure('insecure_context', message, { reason: securityCheck.reason });
+        console.error('[Security] Cannot create token binding:', message);
         return false;
     }
 
-    const fingerprint = await generateDeviceFingerprint();
+    const cryptoCheck = isCryptoSupported();
+    if (!cryptoCheck.ok) {
+        setTokenBindingFailure(cryptoCheck.reason, cryptoCheck.message);
+        console.error('[Security] Cannot create token binding:', cryptoCheck.message);
+        return false;
+    }
+
+    let fingerprint;
+    try {
+        fingerprint = await generateDeviceFingerprint();
+    } catch (error) {
+        const message = `Token binding failed. ${TOKEN_BINDING_GUIDANCE}`;
+        setTokenBindingFailure('fingerprint_failed', message, { error: error?.message || String(error) });
+        console.error('[Security] Cannot create token binding:', message);
+        return false;
+    }
 
     // Store fingerprint for future verification
     sessionStorage.setItem(DEVICE_FINGERPRINT_KEY, fingerprint);
@@ -201,6 +275,12 @@ async function createTokenBinding(token) {
  */
 async function verifyTokenBinding(token) {
     if (!token) return false;
+
+    const cryptoCheck = isCryptoSupported();
+    if (!cryptoCheck.ok) {
+        setTokenBindingFailure(cryptoCheck.reason, cryptoCheck.message);
+        throw new Error(cryptoCheck.message);
+    }
 
     const storedBinding = localStorage.getItem(TOKEN_BINDING_KEY);
     if (!storedBinding) {
@@ -343,6 +423,8 @@ export {
     createTokenBinding,
     verifyTokenBinding,
     clearTokenBinding,
+    getTokenBindingFailure,
+    clearTokenBindingFailure,
 
     // Token expiry management
     calculateProcessingTokenExpiry,

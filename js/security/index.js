@@ -315,6 +315,8 @@ const Security = {
     createTokenBinding: TokenBinding.createTokenBinding,
     verifyTokenBinding: TokenBinding.verifyTokenBinding,
     clearTokenBinding: TokenBinding.clearTokenBinding,
+    getTokenBindingFailure: TokenBinding.getTokenBindingFailure,
+    clearTokenBindingFailure: TokenBinding.clearTokenBindingFailure,
     calculateProcessingTokenExpiry: TokenBinding.calculateProcessingTokenExpiry,
     checkTokenRefreshNeeded: TokenBinding.checkTokenRefreshNeeded,
 

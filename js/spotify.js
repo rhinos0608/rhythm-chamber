@@ -22,6 +22,102 @@ const Spotify = (() => {
         me: 'https://api.spotify.com/v1/me'
     };
 
+    // In-memory token cache to avoid frequent secure store reads
+    let accessTokenCache = null;
+    let accessTokenExpiry = null;
+    let refreshTokenCache = null;
+
+    /**
+     * Persist tokens to the secure token vault with fallback to localStorage for legacy sessions.
+     * @param {object} data - Token response payload
+     * @param {boolean} clearVerifier - Whether to clear the PKCE verifier
+     */
+    async function persistTokens(data, clearVerifier = false) {
+        const expiresInMs = data.expires_in ? data.expires_in * 1000 : null;
+
+        accessTokenCache = data.access_token;
+        accessTokenExpiry = expiresInMs ? Date.now() + expiresInMs : null;
+        if (data.refresh_token) {
+            refreshTokenCache = data.refresh_token;
+        }
+
+        if (!window.SecureTokenStore?.isAvailable?.()) {
+            throw new Error('Secure token vault unavailable. Use HTTPS/localhost to continue.');
+        }
+
+        const storedAccess = await window.SecureTokenStore.store('spotify_access_token', data.access_token, {
+            expiresIn: expiresInMs,
+            metadata: { source: 'spotify_oauth' }
+        });
+        if (!storedAccess) {
+            throw new Error('Failed to store Spotify access token securely.');
+        }
+
+        if (data.refresh_token) {
+            const storedRefresh = await window.SecureTokenStore.store('spotify_refresh_token', data.refresh_token, {
+                metadata: { source: 'spotify_oauth' }
+            });
+            if (!storedRefresh) {
+                throw new Error('Failed to store Spotify refresh token securely.');
+            }
+        }
+
+        if (clearVerifier) {
+            localStorage.removeItem(STORAGE_KEYS.CODE_VERIFIER);
+        }
+    }
+
+    /**
+     * Load access token (and expiry) from secure storage.
+     */
+    async function loadAccessToken() {
+        if (accessTokenCache && accessTokenExpiry && Date.now() < accessTokenExpiry) {
+            return { token: accessTokenCache, expiry: accessTokenExpiry };
+        }
+
+        if (!window.SecureTokenStore?.retrieveWithOptions) {
+            console.warn('[Spotify] Secure token store unavailable for retrieval');
+            return { token: null, expiry: null };
+        }
+
+        try {
+            const stored = await window.SecureTokenStore.retrieveWithOptions('spotify_access_token');
+            if (stored?.value) {
+                accessTokenCache = stored.value;
+                accessTokenExpiry = stored.expiresIn ? Date.now() + stored.expiresIn : null;
+                return { token: accessTokenCache, expiry: accessTokenExpiry };
+            }
+        } catch (e) {
+            console.warn('[Spotify] Secure token retrieval failed:', e.message);
+        }
+
+        return { token: null, expiry: null };
+    }
+
+    /**
+     * Load refresh token from secure storage.
+     */
+    async function loadRefreshToken() {
+        if (refreshTokenCache) return refreshTokenCache;
+
+        if (!window.SecureTokenStore?.retrieve) {
+            console.warn('[Spotify] Secure token store unavailable for refresh token retrieval');
+            return null;
+        }
+
+        try {
+            const stored = await window.SecureTokenStore.retrieve('spotify_refresh_token');
+            if (stored) {
+                refreshTokenCache = stored;
+                return refreshTokenCache;
+            }
+        } catch (e) {
+            console.warn('[Spotify] Secure refresh token retrieval failed:', e.message);
+        }
+
+        return null;
+    }
+
     // ==========================================
     // PKCE Helpers
     // ==========================================
@@ -169,21 +265,14 @@ const Spotify = (() => {
             if (window.Security?.createTokenBinding) {
                 const bindingSuccess = await window.Security.createTokenBinding(data.access_token);
                 if (!bindingSuccess) {
-                    throw new Error('Failed to create security binding - token rejected');
+                    const bindingFailure = window.Security.getTokenBindingFailure?.();
+                    const failureMessage = bindingFailure?.userMessage || bindingFailure?.reason || 'Failed to create security binding.';
+                    throw new Error(failureMessage);
                 }
             }
 
             // Store tokens only after successful binding
-            localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, data.access_token);
-            if (data.refresh_token) {
-                localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, data.refresh_token);
-            }
-            // Store expiry time (current time + expires_in seconds)
-            const expiryTime = Date.now() + (data.expires_in * 1000);
-            localStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
-
-            // Clean up verifier
-            localStorage.removeItem(STORAGE_KEYS.CODE_VERIFIER);
+            await persistTokens(data, true);
 
             return true;
         } catch (error) {
@@ -196,31 +285,41 @@ const Spotify = (() => {
      * Check if we have a valid access token
      * @returns {boolean}
      */
-    function hasValidToken() {
-        const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-        const expiry = localStorage.getItem(STORAGE_KEYS.TOKEN_EXPIRY);
-
+    async function hasValidToken() {
+        const { token, expiry } = await loadAccessToken();
         if (!token || !expiry) return false;
-
-        // Check if token is expired (with 5 min buffer)
-        return Date.now() < (parseInt(expiry) - 300000);
+        return Date.now() < (expiry - 300000); // 5 minute buffer
     }
 
     /**
      * Get the current access token
      * @returns {string|null}
      */
-    function getAccessToken() {
-        return localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+    async function getAccessToken() {
+        const { token } = await loadAccessToken();
+        return token;
     }
 
     /**
      * Clear all Spotify tokens (logout)
      */
-    function clearTokens() {
+    async function clearTokens() {
+        accessTokenCache = null;
+        accessTokenExpiry = null;
+        refreshTokenCache = null;
+
         Object.values(STORAGE_KEYS).forEach(key => {
             localStorage.removeItem(key);
         });
+
+        if (window.SecureTokenStore?.invalidate) {
+            try {
+                await window.SecureTokenStore.invalidate('spotify_access_token');
+                await window.SecureTokenStore.invalidate('spotify_refresh_token');
+            } catch (e) {
+                console.warn('[Spotify] Secure token invalidation failed:', e.message);
+            }
+        }
 
         // SECURITY: Clear token binding on logout
         if (window.Security?.clearTokenBinding) {
@@ -248,7 +347,7 @@ const Spotify = (() => {
                     async (lock) => {
                         if (lock) {
                             // Double-check if another tab already refreshed
-                            if (hasValidToken()) {
+                            if (await hasValidToken()) {
                                 console.log('[Spotify] Token already refreshed by another tab');
                                 return true;
                             }
@@ -306,7 +405,7 @@ const Spotify = (() => {
         }
 
         // Check if another tab succeeded while we were waiting
-        if (hasValidToken()) {
+        if (await hasValidToken()) {
             console.log('[Spotify] Token refreshed by another tab');
             return true;
         }
@@ -317,7 +416,7 @@ const Spotify = (() => {
 
         try {
             // Double-check token validity (another tab may have just refreshed)
-            if (hasValidToken()) {
+            if (await hasValidToken()) {
                 console.log('[Spotify] Token already valid');
                 return true;
             }
@@ -333,7 +432,7 @@ const Spotify = (() => {
      * Actual token refresh implementation (extracted for mutex wrappers)
      */
     async function performTokenRefresh() {
-        const refreshTokenValue = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+        const refreshTokenValue = await loadRefreshToken();
 
         if (!refreshTokenValue) {
             console.warn('[Spotify] No refresh token available');
@@ -380,21 +479,14 @@ const Spotify = (() => {
             if (window.Security?.createTokenBinding) {
                 const bindingSuccess = await window.Security.createTokenBinding(data.access_token);
                 if (!bindingSuccess) {
-                    throw new Error('Failed to update security binding during refresh');
+                    const bindingFailure = window.Security.getTokenBindingFailure?.();
+                    const failureMessage = bindingFailure?.userMessage || bindingFailure?.reason || 'Failed to update security binding during refresh.';
+                    throw new Error(failureMessage);
                 }
             }
 
             // Update tokens
-            localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, data.access_token);
-
-            // New refresh token may be provided (Refresh Token Rotation)
-            if (data.refresh_token) {
-                localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, data.refresh_token);
-            }
-
-            // Update expiry (current time + expires_in seconds)
-            const expiryTime = Date.now() + (data.expires_in * 1000);
-            localStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
+            await persistTokens(data);
 
             console.log('[Spotify] Token refreshed successfully');
             return true;
@@ -414,8 +506,8 @@ const Spotify = (() => {
      * HNW Fix: Check if token can be refreshed
      * @returns {boolean}
      */
-    function canRefreshToken() {
-        return !!localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN) && isConfigured();
+    async function canRefreshToken() {
+        return !!(await loadRefreshToken()) && isConfigured();
     }
 
     /**
@@ -423,12 +515,12 @@ const Spotify = (() => {
      * @returns {Promise<boolean>} Whether a valid token is available
      */
     async function ensureValidToken() {
-        if (hasValidToken()) {
+        if (await hasValidToken()) {
             return true;
         }
 
         // Token expired or missing - try to refresh
-        if (canRefreshToken()) {
+        if (await canRefreshToken()) {
             return await refreshToken();
         }
 
@@ -453,7 +545,7 @@ const Spotify = (() => {
             throw new Error('No valid access token. Please connect to Spotify again.');
         }
 
-        const token = getAccessToken();
+        const token = await getAccessToken();
 
         // SECURITY: Verify token binding before each API call
         if (window.Security?.verifyTokenBinding) {
@@ -461,7 +553,7 @@ const Spotify = (() => {
                 await window.Security.verifyTokenBinding(token);
             } catch (bindingError) {
                 // Token binding failed - possible theft
-                clearTokens();
+                await clearTokens();
                 throw bindingError;
             }
         }
@@ -481,7 +573,7 @@ const Spotify = (() => {
 
             if (refreshed) {
                 // Retry with new token
-                const newToken = getAccessToken();
+                const newToken = await getAccessToken();
                 const retryResponse = await fetch(url, {
                     ...options,
                     headers: {
@@ -496,7 +588,7 @@ const Spotify = (() => {
             }
 
             // Refresh failed or retry failed - clear tokens and fail
-            clearTokens();
+            await clearTokens();
             throw new Error('Session expired. Please reconnect to Spotify.');
         }
 
@@ -702,14 +794,12 @@ const Spotify = (() => {
 
         // Check every 5 minutes
         tokenRefreshInterval = setInterval(async () => {
-            const expiry = localStorage.getItem(STORAGE_KEYS.TOKEN_EXPIRY);
+            const { expiry } = await loadAccessToken();
             if (!expiry) return;
-
-            const expiryTime = parseInt(expiry, 10);
 
             // Use Security module for smart refresh check
             if (window.Security?.checkTokenRefreshNeeded) {
-                const { shouldRefresh, urgency } = window.Security.checkTokenRefreshNeeded(expiryTime, true);
+                const { shouldRefresh, urgency } = window.Security.checkTokenRefreshNeeded(expiry, true);
 
                 if (shouldRefresh) {
                     console.log(`[Spotify] Proactive token refresh (urgency: ${urgency})...`);
@@ -722,7 +812,7 @@ const Spotify = (() => {
                 }
             } else {
                 // Fallback: refresh if expiring within 10 minutes
-                const timeUntilExpiry = expiryTime - Date.now();
+                const timeUntilExpiry = expiry - Date.now();
                 if (timeUntilExpiry < 10 * 60 * 1000 && timeUntilExpiry > 0) {
                     console.log('[Spotify] Proactive token refresh (legacy check)...');
                     try {
@@ -789,11 +879,10 @@ const Spotify = (() => {
      * This prevents API calls from failing after the user returns to a dormant tab
      */
     async function checkTokenStalenessOnVisible() {
-        const expiry = localStorage.getItem(STORAGE_KEYS.TOKEN_EXPIRY);
+        const { expiry } = await loadAccessToken();
         if (!expiry) return;
 
-        const expiryTime = parseInt(expiry, 10);
-        const timeUntilExpiry = expiryTime - Date.now();
+        const timeUntilExpiry = expiry - Date.now();
 
         // Proactively refresh if expiring within 5 minutes
         if (timeUntilExpiry < 5 * 60 * 1000 && timeUntilExpiry > 0) {

@@ -57,6 +57,29 @@ const PAUSE_EVERY_N_ITEMS = 50000; // Pause after every 50k items
 let lastPauseTime = 0;
 const MIN_PAUSE_INTERVAL_MS = 5000; // At least 5s between pauses
 
+// Prototype pollution guard (mirrors security module subset)
+const PROTOTYPE_POLLUTION_KEYS = ['__proto__', 'constructor', 'prototype'];
+
+function sanitizeObject(obj) {
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(sanitizeObject);
+
+    const sanitized = {};
+    for (const [key, value] of Object.entries(obj)) {
+        if (PROTOTYPE_POLLUTION_KEYS.includes(key)) {
+            console.warn('[Worker] Blocked prototype pollution key:', key);
+            continue;
+        }
+        sanitized[key] = sanitizeObject(value);
+    }
+    return sanitized;
+}
+
+function safeJsonParse(json) {
+    const parsed = JSON.parse(json);
+    return sanitizeObject(parsed);
+}
+
 /**
  * Pause processing for memory pressure relief
  * @param {string} reason - Why we're pausing (memory_api or chunk_count)
@@ -356,7 +379,7 @@ async function parseJsonFile(file, existingStreams = null) {
     postProgress('Reading JSON file...');
 
     const text = await file.text();
-    const data = JSON.parse(text);
+    const data = safeJsonParse(text);
 
     if (!Array.isArray(data)) {
         throw new Error('JSON file must contain an array of streams.');
@@ -459,14 +482,16 @@ async function parseZipFile(file, existingStreams = null) {
         postProgress(`Parsing file ${i + 1}/${streamingFiles.length}...`);
 
         const content = await entry.async('text');
-        const data = JSON.parse(content);
+        const data = safeJsonParse(content);
 
         // NEW: Process in chunks if data is large
         if (data.length > 10000) {
             // Large file - process in chunks
             for (let j = 0; j < data.length; j += 10000) {
                 const chunk = data.slice(j, j + 10000);
-                allRawStreams = allRawStreams.concat(chunk);
+                for (const item of chunk) {
+                    allRawStreams.push(item);
+                }
 
                 // Check memory and pause if needed
                 await checkMemoryAndPause();
@@ -475,7 +500,9 @@ async function parseZipFile(file, existingStreams = null) {
                 postProgress(`Processing chunk ${Math.floor(j / 10000) + 1}/${Math.ceil(data.length / 10000)} of file ${i + 1}...`);
             }
         } else {
-            allRawStreams = allRawStreams.concat(data);
+            for (const item of data) {
+                allRawStreams.push(item);
+            }
         }
 
         // Send partial update for incremental saving (with backpressure)
