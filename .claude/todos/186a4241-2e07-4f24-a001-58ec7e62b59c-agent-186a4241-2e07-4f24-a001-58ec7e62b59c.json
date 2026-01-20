@@ -1,0 +1,37 @@
+[
+  {
+    "content": "Fix ErrorRecoveryCoordinator circular dependency",
+    "status": "completed",
+    "activeForm": "Fixing ErrorRecoveryCoordinator circular dependency"
+  },
+  {
+    "content": "Fix StorageDegradationManager event loop blocking",
+    "status": "completed",
+    "activeForm": "Fixing StorageDegradationManager event loop blocking"
+  },
+  {
+    "content": "Fix PerformanceProfiler memory leak",
+    "status": "completed",
+    "activeForm": "Fixing PerformanceProfiler memory leak"
+  },
+  {
+    "content": "Fix ProviderFallbackChain TOCTOU race",
+    "status": "completed",
+    "activeForm": "Fixing ProviderFallbackChain TOCTOU race"
+  },
+  {
+    "content": "Fix TabCoordination division by zero",
+    "status": "completed",
+    "activeForm": "Fixing TabCoordination division by zero"
+  },
+  {
+    "content": "Add queue depth limit to ErrorRecoveryCoordinator",
+    "status": "completed",
+    "activeForm": "Adding queue depth limit to ErrorRecoveryCoordinator"
+  },
+  {
+    "content": "Write 50 unit tests for new services",
+    "status": "pending",
+    "activeForm": "Writing unit tests for new services"
+  }
+]

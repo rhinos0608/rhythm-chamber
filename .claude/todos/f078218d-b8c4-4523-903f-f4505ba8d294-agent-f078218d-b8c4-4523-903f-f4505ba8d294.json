@@ -1,0 +1,42 @@
+[
+  {
+    "content": "Create ErrorRecoveryCoordinator service to resolve authority conflicts",
+    "status": "in_progress",
+    "activeForm": "Creating ErrorRecoveryCoordinator service"
+  },
+  {
+    "content": "Implement storage degradation modes for quota exceeded scenarios",
+    "status": "pending",
+    "activeForm": "Implementing storage degradation modes"
+  },
+  {
+    "content": "Add clock skew detection and handling to tab coordination",
+    "status": "pending",
+    "activeForm": "Adding clock skew handling"
+  },
+  {
+    "content": "Implement automatic provider fallback chain to prevent cascade failures",
+    "status": "pending",
+    "activeForm": "Implementing provider fallback chain"
+  },
+  {
+    "content": "Add comprehensive JSDoc type annotations to core modules",
+    "status": "pending",
+    "activeForm": "Adding JSDoc annotations to core modules"
+  },
+  {
+    "content": "Add performance markers for Chrome DevTools profiling",
+    "status": "pending",
+    "activeForm": "Adding performance markers"
+  },
+  {
+    "content": "Write comprehensive unit tests for new services",
+    "status": "pending",
+    "activeForm": "Writing unit tests"
+  },
+  {
+    "content": "Update AGENT_CONTEXT.md with architectural improvements",
+    "status": "pending",
+    "activeForm": "Updating documentation"
+  }
+]
