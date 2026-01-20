@@ -21,6 +21,18 @@ function generateRandomString(length) {
 }
 
 /**
+ * Generate a cryptographically secure random salt for key derivation
+ * Uses crypto.getRandomValues() for cryptographic security
+ *
+ * @param {number} length - Number of random bytes (default 32)
+ * @returns {string} Hex-encoded salt string
+ */
+function generateSalt(length = 32) {
+    const saltBytes = crypto.getRandomValues(new Uint8Array(length));
+    return Array.from(saltBytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
  * Generate or retrieve session salt
  * Includes session version for invalidation support
  */
@@ -78,11 +90,11 @@ async function hashData(data) {
 
 /**
  * Derive a cryptographic key from password/token using PBKDF2
- * 
+ *
  * SECURITY: Uses 600,000 iterations per OWASP 2024 recommendations
  * for PBKDF2-SHA256. This provides strong resistance to GPU attacks.
  * Key derivation takes ~200-400ms on modern hardware.
- * 
+ *
  * @param {string} password - Password or token to derive from
  * @param {string} salt - Salt (use session salt or fixed app salt)
  * @returns {Promise<CryptoKey>} Derived key for encryption/decryption
@@ -107,6 +119,59 @@ async function deriveKey(password, salt = 'rhythm-chamber-v1') {
         keyMaterial,
         { name: 'AES-GCM', length: 256 },
         false,
+        ['encrypt', 'decrypt']
+    );
+}
+
+/**
+ * Derive a non-extractable cryptographic key using PBKDF2
+ * All keys created with this function cannot be exported from memory
+ *
+ * SECURITY: Keys are non-extractable - they cannot be exported via exportKey()
+ * This satisfies KEY-01 requirement for non-extractable session keys
+ *
+ * @param {string} password - Password or token to derive from
+ * @param {string} salt - Salt for key derivation (use unique per-session salt)
+ * @param {string} keyType - Type of key: 'aes-gcm' for encryption, 'hmac' for signing
+ * @returns {Promise<CryptoKey>} Non-extractable derived key
+ */
+async function deriveKeyNonExtractable(password, salt, keyType = 'aes-gcm') {
+    const encoder = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(password),
+        'PBKDF2',
+        false, // Key material not extractable
+        ['deriveKey']
+    );
+
+    if (keyType === 'hmac') {
+        // Derive HMAC signing key
+        return crypto.subtle.deriveKey(
+            {
+                name: 'PBKDF2',
+                salt: encoder.encode(salt),
+                iterations: 600000,
+                hash: 'SHA-256'
+            },
+            keyMaterial,
+            { name: 'HMAC', hash: 'SHA-256' },
+            false, // NON-EXTRACTABLE
+            ['sign', 'verify']
+        );
+    }
+
+    // Default: AES-GCM encryption key
+    return crypto.subtle.deriveKey(
+        {
+            name: 'PBKDF2',
+            salt: encoder.encode(salt),
+            iterations: 600000,
+            hash: 'SHA-256'
+        },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        false, // NON-EXTRACTABLE
         ['encrypt', 'decrypt']
     );
 }
@@ -271,6 +336,7 @@ function clearSessionData() {
 export {
     // Key derivation and hashing
     deriveKey,
+    deriveKeyNonExtractable,
     hashData,
 
     // Encryption/decryption
@@ -290,5 +356,6 @@ export {
     clearSessionData,
 
     // Utilities
-    generateRandomString
+    generateRandomString,
+    generateSalt
 };
