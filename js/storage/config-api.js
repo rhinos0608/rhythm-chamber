@@ -17,6 +17,13 @@ import { shouldEncrypt } from '../security/storage-encryption.js';
 
 /**
  * Get a config value from unified storage
+ *
+ * DECRYPTION BEHAVIOR:
+ * - Automatically decrypts encrypted data after retrieval
+ * - Checks for encrypted flag in metadata wrapper
+ * - Falls back to defaultValue on decryption failure (graceful degradation)
+ * - Supports mixed encrypted/plaintext database state
+ *
  * @param {string} key - The config key
  * @param {*} defaultValue - Default if not found
  * @returns {Promise<*>} The stored value or default
@@ -30,6 +37,39 @@ async function getConfig(key, defaultValue = null) {
                 key
             );
             if (result) {
+                // Check if data is encrypted
+                if (result.value && result.value.encrypted === true) {
+                    console.log(`[ConfigAPI] Decrypting sensitive data for key '${key}'`);
+
+                    try {
+                        // Get encryption key from KeyManager
+                        const encKey = await Security.getDataEncryptionKey();
+
+                        // Decrypt the value
+                        const decrypted = await Security.StorageEncryption.decrypt(
+                            result.value.value,
+                            encKey
+                        );
+
+                        // Check if decryption succeeded
+                        if (decrypted !== null) {
+                            console.log(`[ConfigAPI] Successfully decrypted data for key '${key}'`);
+                            // Parse JSON and return
+                            return JSON.parse(decrypted);
+                        } else {
+                            // Decryption failed - return defaultValue
+                            console.warn(`[ConfigAPI] Decryption returned null for key '${key}', returning default value`);
+                            return defaultValue;
+                        }
+
+                    } catch (decryptError) {
+                        // Fall back to defaultValue on decryption failure
+                        console.warn(`[ConfigAPI] Decryption failed for '${key}', returning default value:`, decryptError);
+                        return defaultValue;
+                    }
+                }
+
+                // Not encrypted - return value as-is
                 return result.value;
             }
         }
