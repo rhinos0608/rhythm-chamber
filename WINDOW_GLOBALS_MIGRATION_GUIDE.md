@@ -295,6 +295,33 @@ import { Security } from './security/index.js';
 const encrypted = await Security.encryptData(data);
 ```
 
+### Security Facade Key Exports
+
+#### KeyManager Keys (Phase 12+)
+
+For storage encryption and message signing, use KeyManager's non-extractable keys:
+
+```javascript
+// Data encryption key (for storage encryption)
+const dataKey = await Security.getDataEncryptionKey();
+
+// Signing key (for message signing)
+const signingKey = await Security.getSigningKey();
+
+// KeyManager session key (non-extractable)
+const sessionKey = await Security.getSessionKeyKM();
+```
+
+#### Legacy getSessionKey (Pre-Phase 12)
+
+The legacy `Security.getSessionKey` uses Encryption.getSessionKey (extractable key material):
+```javascript
+// Old implementation - still works for backward compatibility
+const sessionKey = await Security.getSessionKey();
+```
+
+**Migration:** Use `getSessionKeyKM` for new code requiring non-extractable keys.
+
 ### Phase 3: Operation Management Migration (Week 4)
 
 #### 3.1 Operation Lock System
