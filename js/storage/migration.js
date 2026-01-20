@@ -37,6 +37,76 @@ const MIGRATION_EXEMPT_KEYS = [
 ];
 
 // ==========================================
+// Legacy Token Helpers
+// ==========================================
+
+async function getLegacyTokenValue(key) {
+    const localValue = localStorage.getItem(key);
+    if (localValue !== null) {
+        return localValue;
+    }
+
+    if (window.IndexedDBCore) {
+        try {
+            const record = await window.IndexedDBCore.get(
+                window.IndexedDBCore.STORES.TOKENS,
+                key
+            );
+            return record ? record.value : null;
+        } catch (err) {
+            console.warn(`[Migration] Error reading legacy token '${key}':`, err);
+        }
+    }
+
+    return null;
+}
+
+async function removeLegacyTokenKey(key) {
+    localStorage.removeItem(key);
+    if (window.IndexedDBCore) {
+        try {
+            await window.IndexedDBCore.delete(window.IndexedDBCore.STORES.TOKENS, key);
+        } catch (err) {
+            console.warn(`[Migration] Error removing legacy token '${key}':`, err);
+        }
+    }
+}
+
+async function hasLegacyTokens() {
+    for (const key of MIGRATION_TOKEN_KEYS) {
+        const localValue = localStorage.getItem(key);
+        if (localValue !== null) {
+            return true;
+        }
+    }
+
+    if (window.IndexedDBCore) {
+        for (const key of MIGRATION_TOKEN_KEYS) {
+            try {
+                const record = await window.IndexedDBCore.get(
+                    window.IndexedDBCore.STORES.TOKENS,
+                    key
+                );
+                if (record?.value != null) {
+                    return true;
+                }
+            } catch (err) {
+                console.warn(`[Migration] Error checking legacy token '${key}':`, err);
+            }
+        }
+    }
+
+    return false;
+}
+
+function parseExpiryMs(value) {
+    if (value === null || value === undefined) return null;
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isNaN(parsed)) return null;
+    return parsed;
+}
+
+// ==========================================
 // Migration State
 // ==========================================
 
@@ -66,7 +136,11 @@ async function getMigrationState() {
  */
 async function isMigrationNeeded() {
     const state = await getMigrationState();
-    return !state || state.version < MIGRATION_MODULE_VERSION;
+    if (!state || state.version < MIGRATION_MODULE_VERSION) {
+        return true;
+    }
+
+    return await hasLegacyTokens();
 }
 
 /**
@@ -220,7 +294,10 @@ async function rollbackMigration() {
 async function migrateFromLocalStorage(onProgress = null) {
     // Check if already migrated
     const state = await getMigrationState();
-    if (state && state.version >= MIGRATION_MODULE_VERSION) {
+    const needsVersionMigration = !state || state.version < MIGRATION_MODULE_VERSION;
+    const legacyTokensPresent = await hasLegacyTokens();
+
+    if (!needsVersionMigration && !legacyTokensPresent) {
         console.log('[Migration] Migration already complete (v' + state.version + ')');
         return { migrated: false, keysProcessed: 0 };
     }
@@ -237,18 +314,24 @@ async function migrateFromLocalStorage(onProgress = null) {
     const checkpoint = await getCheckpoint();
     let startIndex = 0;
 
-    if (checkpoint) {
+    if (checkpoint && needsVersionMigration) {
         startIndex = checkpoint.lastProcessedIndex + 1;
         console.log(`[Migration] Resuming from checkpoint at index ${startIndex}`);
     } else {
+        if (!needsVersionMigration && checkpoint) {
+            await clearCheckpoint();
+        }
         // Step 1: Backup everything first (atomic safety)
-        await backupLocalStorage();
+        if (needsVersionMigration) {
+            await backupLocalStorage();
+        }
+        startIndex = needsVersionMigration ? 0 : MIGRATION_CONFIG_KEYS.length;
     }
 
     const allConfigKeys = [...MIGRATION_CONFIG_KEYS];
     const allTokenKeys = [...MIGRATION_TOKEN_KEYS];
     const totalKeys = allConfigKeys.length + allTokenKeys.length;
-    let keysProcessed = checkpoint?.keysProcessed || 0;
+    let keysProcessed = (checkpoint && needsVersionMigration) ? checkpoint.keysProcessed : 0;
     const CHECKPOINT_INTERVAL = 100; // Save checkpoint every 100 records (for larger migrations)
 
     // HNW Reliability: Calculate 50% checkpoint for small migrations
@@ -307,25 +390,72 @@ async function migrateFromLocalStorage(onProgress = null) {
     }
 
     // Step 3: Migrate token keys (checkpoint after each - critical data)
+    const legacyTokenValues = {};
+    for (const key of allTokenKeys) {
+        legacyTokenValues[key] = await getLegacyTokenValue(key);
+    }
+
+    const migratedTokenKeys = new Set();
+    const secureStoreAvailable = !!window.SecureTokenStore?.isAvailable?.();
+    if (!secureStoreAvailable && legacyTokensPresent) {
+        console.warn('[Migration] SecureTokenStore unavailable; token migration deferred');
+    }
+
     const tokenStartIndex = Math.max(0, startIndex - allConfigKeys.length);
     for (let i = tokenStartIndex; i < allTokenKeys.length; i++) {
         const key = allTokenKeys[i];
-        const value = localStorage.getItem(key);
+        const value = legacyTokenValues[key];
 
         if (value !== null) {
             try {
-                await window.ConfigAPI.setToken(key, value);
-                keysProcessed++;
+                let migrated = false;
 
-                // HNW Hierarchy: Checkpoint after each token for critical data safety
-                // Tokens are few (3 keys) but critical for app configuration
-                await saveCheckpoint({
-                    lastProcessedIndex: allConfigKeys.length + i,
-                    keysProcessed,
-                    totalKeys,
-                    phase: 'token',
-                    lastKey: key
-                });
+                if (secureStoreAvailable && window.SecureTokenStore?.store) {
+                    if (key === 'spotify_access_token') {
+                        const rawExpiry = legacyTokenValues.spotify_token_expiry;
+                        const expiryMs = parseExpiryMs(rawExpiry);
+                        const options = {
+                            metadata: { source: 'migration' }
+                        };
+                        if (expiryMs !== null) {
+                            options.expiresIn = Math.max(0, expiryMs - Date.now());
+                        }
+
+                        migrated = await window.SecureTokenStore.store(key, value, options);
+                        if (migrated) {
+                            migratedTokenKeys.add('spotify_access_token');
+                            if (rawExpiry !== null && rawExpiry !== undefined) {
+                                migratedTokenKeys.add('spotify_token_expiry');
+                            }
+                        }
+                    } else if (key === 'spotify_refresh_token') {
+                        migrated = await window.SecureTokenStore.store(key, value, {
+                            metadata: { source: 'migration' }
+                        });
+                        if (migrated) {
+                            migratedTokenKeys.add(key);
+                        }
+                    } else if (key === 'spotify_token_expiry') {
+                        migrated = migratedTokenKeys.has('spotify_access_token');
+                    }
+                } else if (!window.SecureTokenStore && window.ConfigAPI?.setToken) {
+                    await window.ConfigAPI.setToken(key, value);
+                    migrated = true;
+                }
+
+                if (migrated) {
+                    keysProcessed++;
+
+                    // HNW Hierarchy: Checkpoint after each token for critical data safety
+                    // Tokens are few (3 keys) but critical for app configuration
+                    await saveCheckpoint({
+                        lastProcessedIndex: allConfigKeys.length + i,
+                        keysProcessed,
+                        totalKeys,
+                        phase: 'token',
+                        lastKey: key
+                    });
+                }
             } catch (err) {
                 console.warn(`[Migration] Failed to migrate token '${key}':`, err);
             }
@@ -349,12 +479,14 @@ async function migrateFromLocalStorage(onProgress = null) {
     // Clear checkpoint on success
     await clearCheckpoint();
 
-    // Step 5: Clear migrated keys from localStorage (backup retained)
-    for (const key of MIGRATION_CONFIG_KEYS) {
-        localStorage.removeItem(key);
+    // Step 5: Clear migrated keys from legacy storage (backup retained)
+    if (needsVersionMigration) {
+        for (const key of MIGRATION_CONFIG_KEYS) {
+            localStorage.removeItem(key);
+        }
     }
-    for (const key of MIGRATION_TOKEN_KEYS) {
-        localStorage.removeItem(key);
+    for (const key of migratedTokenKeys) {
+        await removeLegacyTokenKey(key);
     }
 
     console.log(`[Migration] Migration complete. Processed ${keysProcessed} keys.`);

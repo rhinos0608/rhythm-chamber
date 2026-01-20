@@ -239,19 +239,20 @@ async function getSessionStatus() {
         return { configured: false, valid: false, error: 'Spotify module not available' };
     }
 
-    try {
-        const configured = _Spotify.isConfigured();
-        const valid = configured ? await _Spotify.ensureValidToken() : false;
+        try {
+            const configured = _Spotify.isConfigured();
+            const valid = configured ? await _Spotify.ensureValidToken() : false;
+            const token = configured ? await _Spotify.getAccessToken() : null;
 
-        return {
-            configured,
-            valid,
-            hasToken: !!_Spotify.getAccessToken()
-        };
-    } catch (error) {
-        return {
-            configured: _Spotify.isConfigured(),
-            valid: false,
+            return {
+                configured,
+                valid,
+                hasToken: !!token
+            };
+        } catch (error) {
+            return {
+                configured: _Spotify.isConfigured(),
+                valid: false,
             error: error.message
         };
     }

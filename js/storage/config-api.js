@@ -132,6 +132,14 @@ async function getAllConfig() {
  */
 async function getToken(key) {
     try {
+        if (window.SecureTokenStore?.isAvailable?.()) {
+            return await window.SecureTokenStore.retrieve(key);
+        }
+        if (window.SecureTokenStore) {
+            console.warn(`[ConfigAPI] SecureTokenStore unavailable; token access blocked for '${key}'.`);
+            return null;
+        }
+
         if (window.IndexedDBCore) {
             const result = await window.IndexedDBCore.get(
                 window.IndexedDBCore.STORES.TOKENS,
@@ -140,11 +148,11 @@ async function getToken(key) {
             return result ? result.value : null;
         }
 
-        // Fallback to localStorage
+        // Legacy fallback for environments without SecureTokenStore
         return localStorage.getItem(key);
     } catch (err) {
         console.warn(`[ConfigAPI] Error getting token '${key}':`, err);
-        return localStorage.getItem(key);
+        return null;
     }
 }
 
@@ -156,6 +164,20 @@ async function getToken(key) {
  */
 async function setToken(key, value) {
     try {
+        if (window.SecureTokenStore?.isAvailable?.()) {
+            const stored = await window.SecureTokenStore.store(key, value, {
+                metadata: { source: 'config_api' }
+            });
+            if (!stored) {
+                throw new Error('SecureTokenStore refused token write');
+            }
+            return;
+        }
+        if (window.SecureTokenStore) {
+            console.warn(`[ConfigAPI] SecureTokenStore unavailable; token write blocked for '${key}'.`);
+            return;
+        }
+
         if (window.IndexedDBCore) {
             await window.IndexedDBCore.put(window.IndexedDBCore.STORES.TOKENS, {
                 key,
@@ -165,11 +187,10 @@ async function setToken(key, value) {
             return;
         }
 
-        // Fallback to localStorage
+        // Legacy fallback for environments without SecureTokenStore
         localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
     } catch (err) {
         console.warn(`[ConfigAPI] Error setting token '${key}':`, err);
-        localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
     }
 }
 
@@ -180,7 +201,10 @@ async function setToken(key, value) {
  */
 async function removeToken(key) {
     try {
-        if (window.IndexedDBCore) {
+        if (window.SecureTokenStore?.isAvailable?.()) {
+            await window.SecureTokenStore.invalidate(key);
+        }
+        if (!window.SecureTokenStore && window.IndexedDBCore) {
             await window.IndexedDBCore.delete(window.IndexedDBCore.STORES.TOKENS, key);
         }
         localStorage.removeItem(key);
@@ -196,11 +220,15 @@ async function removeToken(key) {
  */
 async function clearAllTokens() {
     try {
-        if (window.IndexedDBCore) {
+        if (window.SecureTokenStore?.isAvailable?.()) {
+            await window.SecureTokenStore.invalidateAllTokens('config_api_clear');
+        }
+
+        if (!window.SecureTokenStore && window.IndexedDBCore) {
             await window.IndexedDBCore.clear(window.IndexedDBCore.STORES.TOKENS);
         }
 
-        // Clear known token keys from localStorage
+        // Clear known token keys from localStorage (legacy cleanup)
         ['spotify_access_token', 'spotify_token_expiry', 'spotify_refresh_token'].forEach(key => {
             localStorage.removeItem(key);
         });
@@ -233,4 +261,3 @@ if (typeof window !== 'undefined') {
 }
 
 console.log('[ConfigAPI] Unified config API loaded');
-

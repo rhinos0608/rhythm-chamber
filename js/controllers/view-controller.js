@@ -34,6 +34,37 @@ function initElements() {
     return _elements;
 }
 
+/**
+ * Render a list of items into a container element safely.
+ * @param {HTMLElement} container
+ * @param {Array} items
+ * @param {Function} renderItem - Receives item, returns an element
+ */
+function renderList(container, items, renderItem) {
+    container.innerHTML = '';
+    if (!Array.isArray(items)) return;
+    items.forEach(item => {
+        const el = renderItem(item);
+        if (el) container.appendChild(el);
+    });
+}
+
+/**
+ * Render pill-style tags safely.
+ * @param {HTMLElement} container
+ * @param {Array<string>} tags
+ */
+function renderTags(container, tags) {
+    container.innerHTML = '';
+    if (!Array.isArray(tags)) return;
+    tags.forEach(tag => {
+        const span = document.createElement('span');
+        span.className = 'genre-tag';
+        span.textContent = tag;
+        container.appendChild(span);
+    });
+}
+
 // ==========================================
 // View Transition Functions
 // ==========================================
@@ -171,7 +202,11 @@ function showReveal() {
     // Evidence
     const evidenceItems = document.getElementById('evidence-items');
     if (evidenceItems && personality.allEvidence) {
-        evidenceItems.innerHTML = personality.allEvidence.map(e => `<li>${e}</li>`).join('');
+        renderList(evidenceItems, personality.allEvidence, (text) => {
+            const li = document.createElement('li');
+            li.textContent = text;
+            return li;
+        });
     }
 
     // Score Breakdown
@@ -249,9 +284,12 @@ function populateScoreBreakdown(personality) {
     explainer.style.display = '';
 
     if (scoreBreakdown) {
-        scoreBreakdown.innerHTML = personality.breakdown.map(item =>
-            `<li class="${item.points > 0 ? 'score-positive' : 'score-zero'}">${item.label} (${item.points > 0 ? '+' + item.points : '0'} points)</li>`
-        ).join('');
+        renderList(scoreBreakdown, personality.breakdown, (item) => {
+            const li = document.createElement('li');
+            li.className = item.points > 0 ? 'score-positive' : 'score-zero';
+            li.textContent = `${item.label} (${item.points > 0 ? '+' + item.points : '0'} points)`;
+            return li;
+        });
     }
 
     if (scoreTotal) {
@@ -295,13 +333,17 @@ function showLiteReveal() {
     const genreTags = document.getElementById('lite-genre-tags');
     const genres = litePatterns?.summary?.topGenres || [];
     if (genreTags) {
-        genreTags.innerHTML = genres.map(g => `<span class="genre-tag">${g}</span>`).join('');
+        renderTags(genreTags, genres);
     }
 
     // Evidence
     const evidenceItems = document.getElementById('lite-evidence-items');
     if (evidenceItems && personality.allEvidence) {
-        evidenceItems.innerHTML = personality.allEvidence.map(e => `<li>${e}</li>`).join('');
+        renderList(evidenceItems, personality.allEvidence, (text) => {
+            const li = document.createElement('li');
+            li.textContent = text;
+            return li;
+        });
     }
 
     // Init chat context
