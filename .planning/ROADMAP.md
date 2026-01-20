@@ -121,7 +121,7 @@
 | 9 | ✓ | 4 | 100% (Key Foundation complete) |
 | 10 | ✗ | 0 | 0% (Not started - audit gap) |
 | 11 | ✗ | 0 | 0% (Not started - audit gap) |
-| 12 | ○ | 0 | 0% (Gap closure phase) |
+| 12 | ○ | 1 | 1% (1 plan created - ready for execution) |
 | 13 | ○ | 0 | 0% (Gap closure phase) |
 | 14 | ○ | 0 | 0% (Gap closure phase) |
 
@@ -167,6 +167,9 @@ After v0.9 Security Hardening:
 - All files calling Encryption.getSessionKey or KeyManager.getSessionKey
 
 **Estimated Effort:** 2-4 hours
+
+**Plans:**
+- [ ] 12-01-PLAN.md — Export KeyManager methods from Security facade and resolve getSessionKey naming conflict
 
 ---
 
