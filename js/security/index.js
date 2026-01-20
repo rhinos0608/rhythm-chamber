@@ -11,6 +11,7 @@ import * as Encryption from './encryption.js';
 import * as TokenBinding from './token-binding.js';
 import * as Anomaly from './anomaly.js';
 import * as KeyManager from './key-manager.js';
+import * as StorageEncryption from './storage-encryption.js';
 import './recovery-handlers.js'; // Side-effect import - sets up window.RecoveryHandlers
 
 /**
@@ -363,6 +364,10 @@ const Security = {
      *
      * Migration status: All existing callers use legacy implementation.
      * New code should use getSessionKeyKM for non-extractable keys.
+     *
+     * StorageEncryption Integration:
+     * StorageEncryption module uses KeyManager.getDataEncryptionKey() for encrypting sensitive data.
+     * Pattern: Security.StorageEncryption.encrypt(data, await Security.getDataEncryptionKey())
      */
     // Key Management (NEW - Phase 9)
     KeyManager,
@@ -372,7 +377,36 @@ const Security = {
     isKeySessionActive: KeyManager.isSessionActive,
     getDataEncryptionKey: KeyManager.getDataEncryptionKey,
     getSigningKey: KeyManager.getSigningKey,
-    getSessionKeyKM: KeyManager.getSessionKey
+    getSessionKeyKM: KeyManager.getSessionKey,
+
+    /**
+     * StorageEncryption Module (NEW - Phase 13)
+     *
+     * Provides AES-GCM-256 encryption/decryption operations for sensitive data storage.
+     * Integrates with KeyManager's non-extractable data encryption key.
+     *
+     * Methods:
+     * - encrypt(data, key): Encrypt data with AES-GCM-256 using unique IV per operation
+     * - decrypt(encryptedData, key): Decrypt AES-GCM-256 data (extracts IV from ciphertext)
+     * - encryptWithMetadata(data, key, keyVersion): Encrypt with metadata wrapper for storage
+     * - decryptFromMetadata(wrappedData, key): Decrypt from metadata wrapper
+     *
+     * Usage Pattern:
+     * const encKey = await Security.getDataEncryptionKey();
+     * const encrypted = await Security.StorageEncryption.encrypt('sensitive data', encKey);
+     * const decrypted = await Security.StorageEncryption.decrypt(encrypted, encKey);
+     *
+     * Security Features:
+     * - AES-GCM-256 authenticated encryption
+     * - Unique 96-bit IV per encryption operation (never reused)
+     * - IV stored alongside ciphertext for decryption
+     * - Non-extractable keys from KeyManager
+     * - Graceful error handling (decrypt returns null on failure)
+     *
+     * Integration with ConfigAPI (Phase 13-02):
+     * ConfigAPI will use StorageEncryption to encrypt API keys and chat history before storage.
+     */
+    StorageEncryption
 };
 
 // Export for ES6 modules
@@ -384,7 +418,8 @@ export {
     Encryption,
     TokenBinding,
     Anomaly,
-    KeyManager
+    KeyManager,
+    StorageEncryption
 };
 
 console.log('[Security] Client-side security module loaded (AES-GCM + XSS Token Protection + Recovery Handlers enabled)');
