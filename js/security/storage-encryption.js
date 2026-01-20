@@ -353,6 +353,97 @@ const StorageEncryption = {
         }
 
         return await this.decrypt(encryptedValue, key);
+    },
+
+    /**
+     * Migrate encrypted data from old key to new key (key rotation)
+     *
+     * KEY ROTATION: This method enables secure migration of encrypted data when
+     * encryption keys change. It decrypts data with the old key and re-encrypts
+     * with the new key, maintaining data confidentiality during key rotation.
+     *
+     * SECURITY CONSIDERATIONS:
+     * - Old and new keys must both be non-extractable CryptoKey objects
+     * - Migration happens in memory - old encrypted data remains in storage
+     * - Caller must overwrite old encrypted data after successful migration
+     * - Failed migrations return null, allowing graceful error handling
+     *
+     * USE CASES:
+     * - Password change: Derive new key from new password, migrate existing data
+     * - Key versioning: Upgrade from weaker to stronger encryption
+     * - Key compromise: Rotate to new key if old key is suspected compromised
+     * - Algorithm upgrades: Migrate data when changing encryption parameters
+     *
+     * @param {CryptoKey} oldKey - Previous encryption key (must be valid for existing encrypted data)
+     * @param {CryptoKey} newKey - New encryption key (will be used for re-encryption)
+     * @param {string} encryptedData - Base64-encoded encrypted data from encrypt()
+     * @returns {Promise<string|null>} Re-encrypted data with new key, or null if migration fails
+     *
+     * @example
+     * // Key rotation after password change
+     * const oldKey = await Security.getDataEncryptionKey(); // Current key
+     * const newKey = await Security.deriveDataEncryptionKey(newPassword); // New key
+     * const oldEncrypted = 'base64-encoded-data';
+     * const newEncrypted = await StorageEncryption.migrateData(oldKey, newKey, oldEncrypted);
+     * if (newEncrypted !== null) {
+     *   // Save newEncrypted to storage, delete oldEncrypted
+     * } else {
+     *   // Migration failed - handle error
+     * }
+     *
+     * @example
+     * // Batch migration for all encrypted config
+     * const allConfig = await ConfigAPI.getAllConfig();
+     * for (const [key, value] of Object.entries(allConfig)) {
+     *   if (value.encrypted && value.keyVersion === 1) {
+     *     const migrated = await StorageEncryption.migrateData(oldKey, newKey, value.value);
+     *     if (migrated) {
+     *       await ConfigAPI.setConfig(key, { encrypted: true, keyVersion: 2, value: migrated });
+     *     }
+     *   }
+     * }
+     */
+    async migrateData(oldKey, newKey, encryptedData) {
+        try {
+            // Validate inputs
+            if (!oldKey || !(oldKey instanceof CryptoKey)) {
+                throw new Error('Old key must be a CryptoKey object from KeyManager');
+            }
+
+            if (!newKey || !(newKey instanceof CryptoKey)) {
+                throw new Error('New key must be a CryptoKey object from KeyManager');
+            }
+
+            if (typeof encryptedData !== 'string') {
+                throw new Error('Encrypted data must be a base64-encoded string');
+            }
+
+            console.log('[StorageEncryption] Starting key migration...');
+
+            // Step 1: Decrypt data using old key
+            const decrypted = await this.decrypt(encryptedData, oldKey);
+
+            // If decryption fails (returns null), abort migration immediately
+            if (decrypted === null) {
+                console.error('[StorageEncryption] Migration failed: Unable to decrypt with old key');
+                return null;
+            }
+
+            console.log('[StorageEncryption] Successfully decrypted with old key');
+
+            // Step 2: Re-encrypt decrypted data using new key
+            const reEncrypted = await this.encrypt(decrypted, newKey);
+
+            console.log('[StorageEncryption] Successfully re-encrypted with new key');
+            console.log('[StorageEncryption] Key migration completed successfully');
+
+            return reEncrypted;
+
+        } catch (error) {
+            // Log migration failure but don't throw - allow graceful degradation
+            console.error('[StorageEncryption] Key migration failed:', error);
+            return null;
+        }
     }
 };
 
