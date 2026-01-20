@@ -8,6 +8,8 @@
  */
 
 import { IndexedDBCore } from './indexeddb.js';
+import { Security } from '../security/index.js';
+import { shouldEncrypt } from '../security/storage-encryption.js';
 
 // ==========================================
 // Config API
@@ -51,29 +53,76 @@ async function getConfig(key, defaultValue = null) {
 
 /**
  * Set a config value in unified storage
+ *
+ * ENCRYPTION BEHAVIOR:
+ * - Automatically encrypts sensitive data before storage (API keys, chat history)
+ * - Uses data classification to determine what needs encryption
+ * - Wraps encrypted data in metadata object with key version
+ * - Falls back to plaintext storage on encryption failure (graceful degradation)
+ *
  * @param {string} key - The config key
  * @param {*} value - The value to store
  * @returns {Promise<void>}
  */
 async function setConfig(key, value) {
     try {
+        let valueToStore = value;
+
+        // Check if data should be encrypted based on key name and value patterns
+        if (shouldEncrypt(key, value)) {
+            console.log(`[ConfigAPI] Encrypting sensitive data for key '${key}'`);
+
+            try {
+                // Get encryption key from KeyManager
+                const encKey = await Security.getDataEncryptionKey();
+
+                // Encrypt the value (convert to JSON string first)
+                const valueToEncrypt = JSON.stringify(value);
+                const encrypted = await Security.StorageEncryption.encrypt(valueToEncrypt, encKey);
+
+                // Wrap encrypted data in metadata object
+                valueToStore = {
+                    encrypted: true,
+                    keyVersion: 1,  // Key version for future rotation support
+                    value: encrypted
+                };
+
+                console.log(`[ConfigAPI] Successfully encrypted data for key '${key}'`);
+
+            } catch (encryptError) {
+                // Fall back to plaintext storage on encryption failure
+                console.warn(`[ConfigAPI] Encryption failed for '${key}', falling back to plaintext:`, encryptError);
+                valueToStore = value; // Use original value
+            }
+        }
+
         // Try IndexedDBCore if available
         if (IndexedDBCore) {
             await IndexedDBCore.put(IndexedDBCore.STORES.CONFIG, {
                 key,
-                value,
+                value: valueToStore,
                 updatedAt: new Date().toISOString()
             });
             return;
         }
 
-        // Fall back to localStorage
-        localStorage.setItem(key, JSON.stringify(value));
+        // Fall back to localStorage (only for non-encrypted data)
+        if (!valueToStore?.encrypted) {
+            localStorage.setItem(key, JSON.stringify(valueToStore));
+        } else {
+            console.warn(`[ConfigAPI] Cannot store encrypted data in localStorage for key '${key}'`);
+            throw new Error('Encrypted data requires IndexedDB');
+        }
+
     } catch (err) {
         console.warn(`[ConfigAPI] Error setting config '${key}':`, err);
-        // Try localStorage as last resort
+        // Try localStorage as last resort (only for non-encrypted data)
         try {
-            localStorage.setItem(key, JSON.stringify(value));
+            if (!value?.encrypted) {
+                localStorage.setItem(key, JSON.stringify(value));
+            } else {
+                console.error(`[ConfigAPI] Cannot store encrypted data in localStorage for key '${key}'`);
+            }
         } catch (e) {
             console.error(`[ConfigAPI] Failed to set config '${key}':`, e);
         }
