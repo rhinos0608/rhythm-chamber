@@ -10,6 +10,7 @@
 import * as Encryption from './encryption.js';
 import * as TokenBinding from './token-binding.js';
 import * as Anomaly from './anomaly.js';
+import * as KeyManager from './key-manager.js';
 import './recovery-handlers.js'; // Side-effect import - sets up window.RecoveryHandlers
 
 /**
@@ -338,7 +339,14 @@ const Security = {
     sanitizeObject,
     safeJsonParse,
     enablePrototypePollutionProtection,
-    isPrototypeFreezeEnabled
+    isPrototypeFreezeEnabled,
+
+    // Key Management (NEW - Phase 9)
+    KeyManager,
+    initializeKeySession: KeyManager.initializeSession,
+    clearKeySession: KeyManager.clearSession,
+    isSecureContextKeyManager: KeyManager.isSecureContext,
+    isKeySessionActive: KeyManager.isSessionActive
 };
 
 // Export for ES6 modules
@@ -349,7 +357,8 @@ export {
     // Individual modules for direct import if needed
     Encryption,
     TokenBinding,
-    Anomaly
+    Anomaly,
+    KeyManager
 };
 
 console.log('[Security] Client-side security module loaded (AES-GCM + XSS Token Protection + Recovery Handlers enabled)');
