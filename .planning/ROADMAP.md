@@ -39,10 +39,10 @@
 5. Secure context validation blocks crypto operations on non-HTTPS
 
 **Plans:**
-- [ ] 09-01-PLAN.md — Create KeyManager module with non-extractable key lifecycle
-- [ ] 09-02-PLAN.md — Extend encryption.js with PBKDF2 utilities
-- [ ] 09-03-PLAN.md — Integrate KeyManager into Security facade
-- [ ] 09-04-PLAN.md — Wire KeyManager into main.js bootstrap and settings.js logout
+- [x] 09-01-PLAN.md — Create KeyManager module with non-extractable key lifecycle
+- [x] 09-02-PLAN.md — Extend encryption.js with PBKDF2 utilities
+- [x] 09-03-PLAN.md — Integrate KeyManager into Security facade
+- [x] 09-04-PLAN.md — Wire KeyManager into main.js bootstrap and settings.js logout
 
 **Files to Create/Modify:**
 - `js/security/key-manager.js` (new)
@@ -122,7 +122,7 @@
 | 10 | ✗ | 0 | 0% (Not started - audit gap) |
 | 11 | ✗ | 0 | 0% (Not started - audit gap) |
 | 12 | ✓ | 1 | 100% (KeyManager Integration complete) |
-| 13 | ○ | 0 | 0% (Gap closure phase) |
+| 13 | ○ | 4 | 0% (Gap closure phase) |
 | 14 | ○ | 0 | 0% (Gap closure phase) |
 
 ---
@@ -192,24 +192,22 @@ After v0.9 Security Hardening:
 4. Existing plaintext API keys migrated to encrypted format
 5. Secure deletion implemented for encrypted data
 
-**Tasks:**
-- Create `js/security/storage-encryption.js` module
-- Implement shouldEncrypt(key, value) for data classification
-- Implement encryptData(data, key) with AES-GCM-256
-- Implement decryptData(encryptedData, key) with IV extraction
-- Implement unique IV generation per encryption (STORE-05)
-- Implement IV storage alongside ciphertext (STORE-06)
-- Implement migrateData(oldKey, newKey) for key rotation (STORE-07)
-- Implement secureDelete(storeName, key) for overwrite (STORE-08)
-- Integrate into `js/storage/config-api.js`
-- Add encryptValue() wrapper in setConfig()
-- Add decryptValue() wrapper in getConfig()
-- Migrate existing plaintext API keys to encrypted storage
+**Plans:**
+- [ ] 13-01-PLAN.md — Create StorageEncryption module with AES-GCM-256 operations
+- [ ] 13-02-PLAN.md — Implement data classification and ConfigAPI integration
+- [ ] 13-03-PLAN.md — Implement key rotation and migration logic
+- [ ] 13-04-PLAN.md — Implement secure deletion and integration tests
+
+**Wave Structure:**
+- Wave 1: 13-01 (StorageEncryption module)
+- Wave 2: 13-02 (Classification + ConfigAPI integration)
+- Wave 3: 13-03 (Key rotation + migration)
+- Wave 4: 13-04 (Secure deletion + tests)
 
 **Files to Create/Modify:**
 - `js/security/storage-encryption.js` (new)
 - `js/storage/config-api.js` (integrate encryption)
-- `js/storage/indexeddb.js` (optional: wrap CONFIG store operations)
+- `tests/integration/storage-encryption-test.js` (new)
 
 **Estimated Effort:** 16-24 hours
 
@@ -272,3 +270,4 @@ After v0.9 Security Hardening:
 ---
 *Roadmap created: 2025-01-21*
 *Updated: 2026-01-21 - Gap closure phases 12-14 added after audit*
+*Updated: 2026-01-21 - Phase 13 plans created (4 plans in 4 waves)*
