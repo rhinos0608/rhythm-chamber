@@ -12,13 +12,149 @@
  * - Each encryption MUST use a unique IV (never reused)
  * - Keys MUST be non-extractable CryptoKey objects from KeyManager
  * - IV is public information but MUST be unique per operation
- * - This module provides ONLY encryption/decryption (no classification, rotation, deletion)
+ * - This module provides encryption/decryption and data classification
  *
  * Usage:
  *   const encKey = await Security.getDataEncryptionKey();
  *   const encrypted = await StorageEncryption.encrypt('sensitive data', encKey);
  *   const decrypted = await StorageEncryption.decrypt(encrypted, encKey);
+ *   const shouldProtect = shouldEncrypt('openrouter.apiKey', 'sk-or-v1-test');
  */
+
+// ==========================================
+// DATA CLASSIFICATION
+// ==========================================
+
+/**
+ * Sensitive data patterns for automatic encryption classification
+ *
+ * Pattern types:
+ * 1. Key name patterns - Config keys that typically contain sensitive data
+ * 2. Value patterns - API key formats that indicate sensitive data
+ *
+ * SECURITY: These patterns follow OWASP guidelines for secrets identification.
+ * When adding new patterns, consider:
+ * - False positive rate (encrypting non-sensitive data is harmless but inefficient)
+ * - False negative rate (missing sensitive data is a security issue)
+ * - Future LLM providers (add comment patterns for maintainability)
+ *
+ * @constant {Array<string>}
+ */
+const SENSITIVE_PATTERNS = [
+    // LLM API keys - provider specific
+    'openrouter.apiKey',           // OpenRouter API key
+    'gemini.apiKey',               // Google Gemini API key
+    'claude.apiKey',               // Anthropic Claude API key
+    'openai.apiKey',               // OpenAI API key
+    'cohere.apiKey',               // Cohere API key
+    'huggingface.apiKey',          // HuggingFace API key
+
+    // Chat history and conversation data
+    'chat_',                       // Chat history entries (prefix pattern)
+    'conversation.',               // Conversation data
+    'messages.',                   // Message stores
+
+    // Future providers - add as needed
+    // 'mistral.apiKey',             // Mistral AI API key
+    // 'replicate.apiKey',           // Replicate API key
+    // 'anthropic.apiKey',           // Anthropic API key (if different from claude)
+];
+
+/**
+ * Classify data as sensitive for encryption
+ *
+ * Determines whether data should be encrypted based on key name patterns and value patterns.
+ * This implements defense-in-depth by encrypting data that matches known sensitive patterns.
+ *
+ * CLASSIFICATION LOGIC:
+ * 1. Key name patterns - Check if key matches SENSITIVE_PATTERNS
+ * 2. Chat history patterns - Check if key starts with 'chat_' or contains 'chat'
+ * 3. Value patterns - Check if value matches known API key formats
+ *
+ * SECURITY RATIONALE:
+ * - Key-based classification: Prevents misclassification of sensitive data
+ * - Value-based classification: Catches sensitive data with non-standard key names
+ * - Chat history protection: User conversations are sensitive by default
+ * - Provider-specific patterns: Each LLM provider has unique API key format
+ *
+ * @param {string} key - The config key name (e.g., 'openrouter.apiKey')
+ * @param {*} value - The config value (will be converted to string for pattern matching)
+ * @returns {boolean} True if data should be encrypted, false otherwise
+ *
+ * @example
+ * // Key-based classification
+ * shouldEncrypt('openrouter.apiKey', 'sk-or-v1-abc123')  // true
+ * shouldEncrypt('theme', 'dark')                          // false
+ *
+ * @example
+ * // Chat history classification
+ * shouldEncrypt('chat_20240120', [{role: 'user', content: 'hello'}])  // true
+ * shouldEncrypt('chat_summary', 'Great conversation')                  // true
+ *
+ * @example
+ * // Value-based classification (catches non-standard key names)
+ * shouldEncrypt('myCustomKey', 'sk-or-v1-abc123')      // true (OpenRouter format)
+ * shouldEncrypt('myCustomKey', 'AIzaSyABC123')         // true (Gemini format)
+ * shouldEncrypt('myCustomKey', 'sk-ant-abc123')        // true (Claude format)
+ * shouldEncrypt('myCustomKey', 'regular-string')       // false
+ */
+export function shouldEncrypt(key, value) {
+    try {
+        // Handle null/undefined inputs gracefully
+        if (!key || typeof key !== 'string') {
+            return false;
+        }
+
+        // 1. Check key name patterns against SENSITIVE_PATTERNS
+        if (SENSITIVE_PATTERNS.some(pattern => key.includes(pattern))) {
+            console.log(`[StorageEncryption] Classifying '${key}' as sensitive (key pattern match)`);
+            return true;
+        }
+
+        // 2. Check chat history patterns
+        // Chat history is sensitive by default - contains user conversations
+        if (key.startsWith('chat_') || key.includes('chat')) {
+            console.log(`[StorageEncryption] Classifying '${key}' as sensitive (chat history)`);
+            return true;
+        }
+
+        // 3. Check value patterns for API key formats
+        // This catches sensitive data with non-standard key names
+        if (value && typeof value === 'string') {
+            // OpenRouter API keys: sk-or-v1-*
+            if (value.startsWith('sk-or-v1-')) {
+                console.log(`[StorageEncryption] Classifying '${key}' as sensitive (OpenRouter API key format)`);
+                return true;
+            }
+
+            // Google Gemini API keys: AIzaSy*
+            if (value.startsWith('AIzaSy')) {
+                console.log(`[StorageEncryption] Classifying '${key}' as sensitive (Gemini API key format)`);
+                return true;
+            }
+
+            // Anthropic Claude API keys: sk-ant-*
+            if (value.startsWith('sk-ant-')) {
+                console.log(`[StorageEncryption] Classifying '${key}' as sensitive (Claude API key format)`);
+                return true;
+            }
+
+            // OpenAI API keys: sk-*
+            if (value.startsWith('sk-') && !value.startsWith('sk-ant-')) {
+                console.log(`[StorageEncryption] Classifying '${key}' as sensitive (OpenAI API key format)`);
+                return true;
+            }
+        }
+
+        // Default: not sensitive
+        return false;
+
+    } catch (error) {
+        // Fail closed - on classification error, encrypt to be safe
+        console.error('[StorageEncryption] Error in shouldEncrypt classification, defaulting to encryption:', error);
+        return true;
+    }
+}
 
 const StorageEncryption = {
     /**
