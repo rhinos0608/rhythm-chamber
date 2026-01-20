@@ -1,18 +1,22 @@
 /**
  * Profile Description Generator
- * 
+ *
  * Generates AI-powered custom personality descriptions based on
  * actual listening data when an LLM provider is configured.
- * 
+ *
  * HNW Considerations:
  * - Wave: Generates description asynchronously, UI shows loading state
  * - Network: Uses existing Chat module for LLM calls
  * - Hierarchy: Falls back to generic description if LLM unavailable
- * 
+ *
  * @module ProfileDescriptionGenerator
  */
 
 'use strict';
+
+import { ConfigLoader } from '../services/config-loader.js';
+import { Settings } from '../settings.js';
+import { ProviderInterface } from '../providers/provider-interface.js';
 
 // ==========================================
 // LLM Availability Detection
@@ -23,7 +27,7 @@
  * @returns {{ available: boolean, provider: string|null, reason: string }}
  */
 function checkLLMAvailability() {
-    const settings = window.Settings?.getSettings?.();
+    const settings = Settings?.getSettings?.();
 
     if (!settings) {
         return { available: false, provider: null, reason: 'Settings not loaded' };
@@ -34,7 +38,7 @@ function checkLLMAvailability() {
     // Check provider-specific availability
     switch (provider) {
         case 'openrouter':
-            const hasKey = window.Settings?.hasApiKey?.() ||
+            const hasKey = Settings?.hasApiKey?.() ||
                 (settings.openrouter?.apiKey &&
                     settings.openrouter.apiKey !== '' &&
                     settings.openrouter.apiKey !== 'your-api-key-here');
@@ -151,16 +155,16 @@ async function generateDescription(personality, patterns, summary, onProgress = 
 
     try {
         // Get settings and build provider config
-        const settings = window.Settings?.getSettings?.() || {};
+        const settings = Settings?.getSettings?.() || {};
         const provider = settings.llm?.provider || availability.provider || 'ollama';
-        const baseConfig = window.Config?.openrouter || {};
+        const baseConfig = ConfigLoader.get('openrouter', {});
 
         // Get API key for OpenRouter
         const apiKey = settings.openrouter?.apiKey || baseConfig.apiKey || null;
 
         // Use ProviderInterface to build config and call the provider
-        if (window.ProviderInterface?.buildProviderConfig && window.ProviderInterface?.callProvider) {
-            const providerConfig = window.ProviderInterface.buildProviderConfig(provider, settings, baseConfig);
+        if (ProviderInterface?.buildProviderConfig && ProviderInterface?.callProvider) {
+            const providerConfig = ProviderInterface.buildProviderConfig(provider, settings, baseConfig);
 
             // Override some settings for shorter generation
             providerConfig.maxTokens = 200;
@@ -171,7 +175,7 @@ async function generateDescription(personality, patterns, summary, onProgress = 
                 { role: 'user', content: prompt }
             ];
 
-            const response = await window.ProviderInterface.callProvider(
+            const response = await ProviderInterface.callProvider(
                 providerConfig,
                 apiKey,
                 messages,
@@ -209,9 +213,9 @@ async function generateDescription(personality, patterns, summary, onProgress = 
  * Direct OpenRouter API call (fallback if Chat module doesn't have sendMessageDirect)
  */
 async function callOpenRouterDirect(prompt, settings) {
-    const apiKey = settings?.openrouter?.apiKey || window.Config?.openrouter?.apiKey;
+    const apiKey = settings?.openrouter?.apiKey || ConfigLoader.get('openrouter.apiKey');
     const model = settings?.openrouter?.model || 'xiaomi/mimo-v2-flash:free';
-    const apiUrl = window.Config?.openrouter?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions';
+    const apiUrl = ConfigLoader.get('openrouter.apiUrl', 'https://openrouter.ai/api/v1/chat/completions');
 
     const response = await fetch(apiUrl, {
         method: 'POST',
@@ -250,9 +254,5 @@ export const ProfileDescriptionGenerator = {
     buildDescriptionPrompt
 };
 
-// Window global for backward compatibility
-if (typeof window !== 'undefined') {
-    window.ProfileDescriptionGenerator = ProfileDescriptionGenerator;
-}
 
 console.log('[ProfileDescriptionGenerator] Module loaded');

@@ -717,10 +717,6 @@ export const AnalyticsExecutors = {
     get_offline_listening: executeGetOfflineListening
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.AnalyticsExecutors = AnalyticsExecutors;
-}
 
 console.log('[AnalyticsExecutors] Module loaded');
 

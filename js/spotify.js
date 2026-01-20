@@ -3,6 +3,9 @@
  * Handles PKCE OAuth flow and Spotify Web API calls for Quick Snapshot feature
  */
 
+import { Security } from './security/index.js';
+import { ConfigLoader } from './services/config-loader.js';
+
 const Spotify = (() => {
     // Storage keys
     const STORAGE_KEYS = {
@@ -195,8 +198,8 @@ const Spotify = (() => {
      * @returns {boolean}
      */
     function isConfigured() {
-        return window.Config?.spotify?.clientId &&
-            window.Config.spotify.clientId !== 'your-spotify-client-id';
+        const clientId = ConfigLoader.get('spotify.clientId', '');
+        return clientId && clientId !== 'your-spotify-client-id';
     }
 
     /**
@@ -216,9 +219,9 @@ const Spotify = (() => {
 
         const params = new URLSearchParams({
             response_type: 'code',
-            client_id: window.Config.spotify.clientId,
-            scope: window.Config.spotify.scopes.join(' '),
-            redirect_uri: window.Config.spotify.redirectUri,
+            client_id: ConfigLoader.get('spotify.clientId'),
+            scope: ConfigLoader.get('spotify.scopes', []).join(' '),
+            redirect_uri: ConfigLoader.get('spotify.redirectUri'),
             code_challenge_method: 'S256',
             code_challenge: codeChallenge
         });
@@ -245,10 +248,10 @@ const Spotify = (() => {
                     'Content-Type': 'application/x-www-form-urlencoded'
                 },
                 body: new URLSearchParams({
-                    client_id: window.Config.spotify.clientId,
+                    client_id: ConfigLoader.get('spotify.clientId'),
                     grant_type: 'authorization_code',
                     code: code,
-                    redirect_uri: window.Config.spotify.redirectUri,
+                    redirect_uri: ConfigLoader.get('spotify.redirectUri'),
                     code_verifier: codeVerifier
                 })
             });
@@ -262,10 +265,10 @@ const Spotify = (() => {
 
             // SECURITY: Create token binding BEFORE storing token
             // This prevents storing an unbound token if binding fails
-            if (window.Security?.createTokenBinding) {
-                const bindingSuccess = await window.Security.createTokenBinding(data.access_token);
+            if (Security.createTokenBinding) {
+                const bindingSuccess = await Security.createTokenBinding(data.access_token);
                 if (!bindingSuccess) {
-                    const bindingFailure = window.Security.getTokenBindingFailure?.();
+                    const bindingFailure = Security.getTokenBindingFailure();
                     const failureMessage = bindingFailure?.userMessage || bindingFailure?.reason || 'Failed to create security binding.';
                     throw new Error(failureMessage);
                 }
@@ -322,8 +325,8 @@ const Spotify = (() => {
         }
 
         // SECURITY: Clear token binding on logout
-        if (window.Security?.clearTokenBinding) {
-            window.Security.clearTokenBinding();
+        if (Security.clearTokenBinding) {
+            Security.clearTokenBinding();
         }
     }
 
@@ -453,7 +456,7 @@ const Spotify = (() => {
                     'Content-Type': 'application/x-www-form-urlencoded'
                 },
                 body: new URLSearchParams({
-                    client_id: window.Config.spotify.clientId,
+                    client_id: ConfigLoader.get('spotify.clientId'),
                     grant_type: 'refresh_token',
                     refresh_token: refreshTokenValue
                 })
@@ -464,9 +467,9 @@ const Spotify = (() => {
 
                 // SECURITY: Invalidate all sessions when refresh fails
                 // This prevents stale sessions from persisting after auth issues
-                if (window.Security?.invalidateSessions) {
+                if (Security.invalidateSessions) {
                     console.warn('[Spotify] Invalidating sessions due to refresh failure');
-                    window.Security.invalidateSessions();
+                    Security.invalidateSessions();
                 }
 
                 return false;
@@ -476,10 +479,10 @@ const Spotify = (() => {
 
             // SECURITY: Create binding BEFORE updating storage
             // This prevents race conditions where an unbound token is valid
-            if (window.Security?.createTokenBinding) {
-                const bindingSuccess = await window.Security.createTokenBinding(data.access_token);
+            if (Security.createTokenBinding) {
+                const bindingSuccess = await Security.createTokenBinding(data.access_token);
                 if (!bindingSuccess) {
-                    const bindingFailure = window.Security.getTokenBindingFailure?.();
+                    const bindingFailure = Security.getTokenBindingFailure();
                     const failureMessage = bindingFailure?.userMessage || bindingFailure?.reason || 'Failed to update security binding during refresh.';
                     throw new Error(failureMessage);
                 }
@@ -494,8 +497,8 @@ const Spotify = (() => {
             console.error('[Spotify] Token refresh error:', error);
 
             // SECURITY: Invalidate sessions on network/auth errors
-            if (window.Security?.invalidateSessions) {
-                window.Security.invalidateSessions();
+            if (Security.invalidateSessions) {
+                Security.invalidateSessions();
             }
 
             return false;
@@ -548,9 +551,9 @@ const Spotify = (() => {
         const token = await getAccessToken();
 
         // SECURITY: Verify token binding before each API call
-        if (window.Security?.verifyTokenBinding) {
+        if (Security.verifyTokenBinding) {
             try {
-                await window.Security.verifyTokenBinding(token);
+                await Security.verifyTokenBinding(token);
             } catch (bindingError) {
                 // Token binding failed - possible theft
                 await clearTokens();
@@ -798,8 +801,8 @@ const Spotify = (() => {
             if (!expiry) return;
 
             // Use Security module for smart refresh check
-            if (window.Security?.checkTokenRefreshNeeded) {
-                const { shouldRefresh, urgency } = window.Security.checkTokenRefreshNeeded(expiry, true);
+            if (Security.checkTokenRefreshNeeded) {
+                const { shouldRefresh, urgency } = Security.checkTokenRefreshNeeded(expiry, true);
 
                 if (shouldRefresh) {
                     console.log(`[Spotify] Proactive token refresh (urgency: ${urgency})...`);
@@ -941,10 +944,5 @@ const Spotify = (() => {
 
 // ES Module export
 export { Spotify };
-
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.Spotify = Spotify;
-}
 
 console.log('[Spotify] Module loaded');

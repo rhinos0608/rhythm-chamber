@@ -1,14 +1,16 @@
 /**
  * Turn Queue Service
- * 
+ *
  * Serializes conversation message processing to prevent interleaving.
  * Ensures each message is fully processed before the next begins.
- * 
+ *
  * HNW Wave: Prevents timing chaos from rapid-fire messages by
  * enforcing sequential processing with proper queuing.
- * 
+ *
  * @module services/turn-queue
  */
+
+import { Chat } from '../chat.js';
 
 // ==========================================
 // Queue State
@@ -158,15 +160,12 @@ async function processNext() {
 }
 
 /**
- * Get the Chat module (handles both ES modules and window globals)
- * 
- * @returns {Object|null}
+ * Get the Chat module
+ *
+ * @returns {Object} Chat module
  */
 function getChatModule() {
-    if (typeof window !== 'undefined' && window.Chat) {
-        return window.Chat;
-    }
-    return null;
+    return Chat;
 }
 
 /**

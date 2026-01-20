@@ -87,6 +87,3 @@ const Config = {
         url: window.location.origin
     }
 };
-
-// Make config available globally
-window.Config = Config;

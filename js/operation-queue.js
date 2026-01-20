@@ -1,28 +1,13 @@
 /**
  * Operation Queue System
- * 
+ *
  * Provides queuing and retry logic for non-critical operations that can
  * be deferred when locks are held. Part of the Operation Lock Contract.
  */
 
 // Import OperationLock and error classes
-let OperationLock, LockAcquisitionError;
-
-if (typeof require !== 'undefined') {
-    try {
-        const lockModule = require('./operation-lock.js');
-        const errorModule = require('./operation-lock-errors.js');
-        OperationLock = lockModule.OperationLock;
-        LockAcquisitionError = errorModule.LockAcquisitionError;
-    } catch (e) {
-        // Fallback to window globals
-        OperationLock = window.OperationLock;
-        LockAcquisitionError = window.LockAcquisitionError || Error;
-    }
-} else if (typeof window !== 'undefined') {
-    OperationLock = window.OperationLock;
-    LockAcquisitionError = window.LockAcquisitionError || Error;
-}
+import { OperationLock } from './operation-lock.js';
+import { LockAcquisitionError } from './operation-lock-errors.js';
 
 /**
  * Priority levels for queued operations
@@ -398,15 +383,7 @@ const OperationQueueModule = {
     STATUS
 };
 
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = OperationQueueModule;
-}
-
-if (typeof window !== 'undefined') {
-    window.OperationQueue = OperationQueue;
-    window.QueuedOperation = QueuedOperation;
-    window.QUEUE_PRIORITY = PRIORITY;
-    window.QUEUE_STATUS = STATUS;
-}
+// ES Module exports
+export { OperationQueue, QueuedOperation, PRIORITY as QUEUE_PRIORITY, STATUS as QUEUE_STATUS };
 
 console.log('[OperationQueue] Module loaded with retry logic and priority support');

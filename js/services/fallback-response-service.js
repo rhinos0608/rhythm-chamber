@@ -9,6 +9,8 @@
 
 'use strict';
 
+import { Settings } from '../settings.js';
+
 // ==========================================
 // Dependencies (injected via init)
 // ==========================================
@@ -132,7 +134,7 @@ function generateFallbackResponse(message, queryContext) {
     }
 
     // Default response - provider-aware messaging
-    const currentProvider = window.Settings?.getSettings?.()?.llm?.provider || 'openrouter';
+    const currentProvider = Settings?.getSettings?.()?.llm?.provider || 'openrouter';
     const providerHint = currentProvider === 'openrouter'
         ? 'connect an OpenRouter API key in settings'
         : currentProvider === 'lmstudio'
@@ -159,10 +161,5 @@ const FallbackResponseService = {
 
 // ES Module export
 export { FallbackResponseService };
-
-// Make available globally for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.FallbackResponseService = FallbackResponseService;
-}
 
 console.log('[FallbackResponseService] Service loaded');

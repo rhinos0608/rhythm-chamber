@@ -955,9 +955,5 @@ export const Patterns = {
     detectImmediateVibe
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.Patterns = Patterns;
-}
 
 console.log('[Patterns] Module loaded with async worker support');

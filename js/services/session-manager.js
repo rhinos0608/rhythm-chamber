@@ -1,15 +1,17 @@
 /**
  * Session Manager Service
- * 
+ *
  * Handles chat session lifecycle: creation, loading, saving, deletion, and switching.
  * Extracted from chat.js to separate session concerns from chat orchestration.
- * 
+ *
  * @module services/session-manager
  */
 
 'use strict';
 
 import { EventBus } from './event-bus.js';
+import { Storage } from '../storage.js';
+import { DataVersion } from './data-version.js';
 
 // ==========================================
 // Constants
@@ -67,8 +69,8 @@ async function init() {
 async function loadOrCreateSession() {
     // Try unified storage first for current session ID
     let savedSessionId = null;
-    if (window.Storage?.getConfig) {
-        savedSessionId = await window.Storage.getConfig(SESSION_CURRENT_SESSION_KEY);
+    if (Storage.getConfig) {
+        savedSessionId = await Storage.getConfig(SESSION_CURRENT_SESSION_KEY);
     }
     // Fallback to localStorage
     if (!savedSessionId) {
@@ -126,8 +128,8 @@ async function createNewSession(initialMessages = []) {
     }
 
     // Save current session ID to unified storage and localStorage
-    if (window.Storage?.setConfig) {
-        window.Storage.setConfig(SESSION_CURRENT_SESSION_KEY, currentSessionId).catch(e =>
+    if (Storage.setConfig) {
+        Storage.setConfig(SESSION_CURRENT_SESSION_KEY, currentSessionId).catch(e =>
             console.warn('[SessionManager] Failed to save session ID to unified storage:', e)
         );
     }
@@ -149,13 +151,13 @@ async function createNewSession(initialMessages = []) {
  * @returns {Promise<Object|null>} Session object or null if not found/invalid
  */
 async function loadSession(sessionId) {
-    if (!window.Storage?.getSession) {
+    if (!Storage.getSession) {
         console.warn('[SessionManager] Storage not available');
         return null;
     }
 
     try {
-        const session = await window.Storage.getSession(sessionId);
+        const session = await Storage.getSession(sessionId);
 
         if (!session) {
             console.warn(`[SessionManager] Session ${sessionId} not found`);
@@ -180,8 +182,8 @@ async function loadSession(sessionId) {
         }
 
         // Save current session ID to unified storage and localStorage
-        if (window.Storage?.setConfig) {
-            window.Storage.setConfig(SESSION_CURRENT_SESSION_KEY, currentSessionId).catch(e =>
+        if (Storage.setConfig) {
+            Storage.setConfig(SESSION_CURRENT_SESSION_KEY, currentSessionId).catch(e =>
                 console.warn('[SessionManager] Failed to save session ID to unified storage:', e)
             );
         }
@@ -201,7 +203,7 @@ async function loadSession(sessionId) {
  * Save current session to IndexedDB immediately
  */
 async function saveCurrentSession() {
-    if (!currentSessionId || !window.Storage?.saveSession) {
+    if (!currentSessionId || !Storage.saveSession) {
         return;
     }
 
@@ -223,7 +225,7 @@ async function saveCurrentSession() {
             }
         };
 
-        await window.Storage.saveSession(session);
+        await Storage.saveSession(session);
         console.log('[SessionManager] Session saved:', currentSessionId);
         notifySessionUpdate('session:updated', { sessionId: currentSessionId, field: 'messages' });
     } catch (e) {
@@ -314,7 +316,7 @@ async function recoverEmergencyBackup() {
         }
 
         // Check if session exists with fewer messages
-        const existing = await window.Storage?.getSession?.(backup.sessionId);
+        const existing = await Storage.getSession?.(backup.sessionId);
         if (existing) {
             const existingCount = existing.messages?.length || 0;
             const backupCount = backup.messages?.length || 0;
@@ -323,12 +325,12 @@ async function recoverEmergencyBackup() {
                 // Backup has more messages - update existing session
                 existing.messages = backup.messages;
                 existing.createdAt = backup.createdAt || existing.createdAt;
-                await window.Storage.saveSession(existing);
+                await Storage.saveSession(existing);
                 console.log('[SessionManager] Recovered', backupCount - existingCount, 'messages from emergency backup');
             }
         } else if (backup.messages && backup.messages.length > 0) {
             // Session doesn't exist, create it from backup
-            await window.Storage?.saveSession?.({
+            await Storage.saveSession?.({
                 id: backup.sessionId,
                 title: 'Recovered Chat',
                 createdAt: backup.createdAt || new Date().toISOString(),
@@ -374,11 +376,11 @@ let previousSessionId = null;
  * @returns {Promise<Array>} Array of session objects
  */
 async function listSessions() {
-    if (!window.Storage?.getAllSessions) {
+    if (!Storage.getAllSessions) {
         return [];
     }
     try {
-        return await window.Storage.getAllSessions();
+        return await Storage.getAllSessions();
     } catch (e) {
         console.error('[SessionManager] Failed to list sessions:', e);
         return [];
@@ -391,12 +393,12 @@ async function listSessions() {
  * @returns {Promise<boolean>} Success status
  */
 async function deleteSessionById(sessionId) {
-    if (!window.Storage?.deleteSession) {
+    if (!Storage.deleteSession) {
         return false;
     }
 
     try {
-        await window.Storage.deleteSession(sessionId);
+        await Storage.deleteSession(sessionId);
 
         // If we deleted the current session, create a new one
         if (sessionId === currentSessionId) {
@@ -418,15 +420,15 @@ async function deleteSessionById(sessionId) {
  * @returns {Promise<boolean>} Success status
  */
 async function renameSession(sessionId, newTitle) {
-    if (!window.Storage?.getSession || !window.Storage?.saveSession) {
+    if (!Storage.getSession || !Storage.saveSession) {
         return false;
     }
 
     try {
-        const session = await window.Storage.getSession(sessionId);
+        const session = await Storage.getSession(sessionId);
         if (session) {
             session.title = newTitle;
-            await window.Storage.saveSession(session);
+            await Storage.saveSession(session);
             notifySessionUpdate('session:updated', { sessionId, field: 'title' });
             return true;
         }
@@ -474,8 +476,8 @@ function getHistory() {
 function addMessageToHistory(message) {
     if (typeof window !== 'undefined' && window._sessionData) {
         // Tag message with current data version for stale detection
-        if (window.DataVersion?.tagMessage) {
-            window.DataVersion.tagMessage(message);
+        if (DataVersion.tagMessage) {
+            DataVersion.tagMessage(message);
         }
         window._sessionData.messages.push(message);
     }
@@ -618,10 +620,5 @@ const SessionManager = {
 
 // ES Module export
 export { SessionManager };
-
-// Make available globally for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.SessionManager = SessionManager;
-}
 
 console.log('[SessionManager] Service loaded');

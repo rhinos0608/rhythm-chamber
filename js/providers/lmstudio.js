@@ -434,10 +434,6 @@ export const LMStudioProvider = {
     type: 'local'
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.LMStudioProvider = LMStudioProvider;
-}
 
 console.log('[LMStudioProvider] Provider loaded');
 

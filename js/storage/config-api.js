@@ -1,11 +1,13 @@
 /**
  * Config API Module
- * 
+ *
  * Unified configuration storage API for the application.
  * Provides key-value storage with IndexedDB backend and localStorage fallback.
- * 
+ *
  * @module storage/config-api
  */
+
+import { IndexedDBCore } from './indexeddb.js';
 
 // ==========================================
 // Config API
@@ -20,9 +22,9 @@
 async function getConfig(key, defaultValue = null) {
     try {
         // Try IndexedDBCore if available
-        if (window.IndexedDBCore) {
-            const result = await window.IndexedDBCore.get(
-                window.IndexedDBCore.STORES.CONFIG,
+        if (IndexedDBCore) {
+            const result = await IndexedDBCore.get(
+                IndexedDBCore.STORES.CONFIG,
                 key
             );
             if (result) {
@@ -56,8 +58,8 @@ async function getConfig(key, defaultValue = null) {
 async function setConfig(key, value) {
     try {
         // Try IndexedDBCore if available
-        if (window.IndexedDBCore) {
-            await window.IndexedDBCore.put(window.IndexedDBCore.STORES.CONFIG, {
+        if (IndexedDBCore) {
+            await IndexedDBCore.put(IndexedDBCore.STORES.CONFIG, {
                 key,
                 value,
                 updatedAt: new Date().toISOString()
@@ -86,8 +88,8 @@ async function setConfig(key, value) {
 async function removeConfig(key) {
     try {
         // Try IndexedDBCore if available
-        if (window.IndexedDBCore) {
-            await window.IndexedDBCore.delete(window.IndexedDBCore.STORES.CONFIG, key);
+        if (IndexedDBCore) {
+            await IndexedDBCore.delete(IndexedDBCore.STORES.CONFIG, key);
         }
 
         // Also clean from localStorage
@@ -104,9 +106,9 @@ async function removeConfig(key) {
  */
 async function getAllConfig() {
     try {
-        if (window.IndexedDBCore) {
-            const records = await window.IndexedDBCore.getAll(
-                window.IndexedDBCore.STORES.CONFIG
+        if (IndexedDBCore) {
+            const records = await IndexedDBCore.getAll(
+                IndexedDBCore.STORES.CONFIG
             );
             const config = {};
             for (const record of records) {
@@ -140,9 +142,9 @@ async function getToken(key) {
             return null;
         }
 
-        if (window.IndexedDBCore) {
-            const result = await window.IndexedDBCore.get(
-                window.IndexedDBCore.STORES.TOKENS,
+        if (IndexedDBCore) {
+            const result = await IndexedDBCore.get(
+                IndexedDBCore.STORES.TOKENS,
                 key
             );
             return result ? result.value : null;
@@ -178,8 +180,8 @@ async function setToken(key, value) {
             return;
         }
 
-        if (window.IndexedDBCore) {
-            await window.IndexedDBCore.put(window.IndexedDBCore.STORES.TOKENS, {
+        if (IndexedDBCore) {
+            await IndexedDBCore.put(IndexedDBCore.STORES.TOKENS, {
                 key,
                 value,
                 updatedAt: new Date().toISOString()
@@ -204,8 +206,8 @@ async function removeToken(key) {
         if (window.SecureTokenStore?.isAvailable?.()) {
             await window.SecureTokenStore.invalidate(key);
         }
-        if (!window.SecureTokenStore && window.IndexedDBCore) {
-            await window.IndexedDBCore.delete(window.IndexedDBCore.STORES.TOKENS, key);
+        if (!window.SecureTokenStore && IndexedDBCore) {
+            await IndexedDBCore.delete(IndexedDBCore.STORES.TOKENS, key);
         }
         localStorage.removeItem(key);
     } catch (err) {
@@ -224,8 +226,8 @@ async function clearAllTokens() {
             await window.SecureTokenStore.invalidateAllTokens('config_api_clear');
         }
 
-        if (!window.SecureTokenStore && window.IndexedDBCore) {
-            await window.IndexedDBCore.clear(window.IndexedDBCore.STORES.TOKENS);
+        if (!window.SecureTokenStore && IndexedDBCore) {
+            await IndexedDBCore.clear(IndexedDBCore.STORES.TOKENS);
         }
 
         // Clear known token keys from localStorage (legacy cleanup)
@@ -255,9 +257,5 @@ export const ConfigAPI = {
     clearAllTokens
 };
 
-// Keep window global for backwards compatibility during migration
-if (typeof window !== 'undefined') {
-    window.ConfigAPI = ConfigAPI;
-}
 
 console.log('[ConfigAPI] Unified config API loaded');

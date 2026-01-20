@@ -266,10 +266,6 @@ export const CircuitBreaker = {
     getErrorMessage
 };
 
-// Make available globally for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.CircuitBreaker = CircuitBreaker;
-}
 
 console.log('[CircuitBreaker] Module loaded (' + TIMEOUT_MS + 'ms timeout, no call limit)');
 

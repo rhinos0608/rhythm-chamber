@@ -134,10 +134,6 @@ export const TemplateExecutors = {
     synthesize_profile: executeSynthesizeProfile
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.TemplateExecutors = TemplateExecutors;
-}
 
 console.log('[TemplateExecutors] Module loaded');
 

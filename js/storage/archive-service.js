@@ -13,6 +13,7 @@
  */
 
 import { EventBus } from '../services/event-bus.js';
+import { IndexedDBCore } from './indexeddb.js';
 
 // ==========================================
 // Configuration
@@ -70,7 +71,7 @@ async function archiveOldStreams(options = {}) {
 
     try {
         // Get current streams
-        const streamsRecord = await window.IndexedDBCore.get(ARCHIVE_CONFIG.STREAMS_STORE, 'all');
+        const streamsRecord = await IndexedDBCore.get(ARCHIVE_CONFIG.STREAMS_STORE, 'all');
         const streams = streamsRecord?.data || [];
 
         if (streams.length === 0) {
@@ -145,14 +146,14 @@ async function archiveOldStreams(options = {}) {
         }
 
         // Get existing archive
-        const existingArchive = await window.IndexedDBCore.get('config', 'archived_streams_data');
+        const existingArchive = await IndexedDBCore.get('config', 'archived_streams_data');
         const archivedStreams = existingArchive?.streams || [];
 
         // Merge new archived streams with existing
         const mergedArchive = [...archivedStreams, ...toArchive];
 
         // Save archived streams to config store
-        await window.IndexedDBCore.put('config', {
+        await IndexedDBCore.put('config', {
             key: 'archived_streams_data',
             streams: mergedArchive,
             lastArchiveDate: new Date().toISOString(),
@@ -160,7 +161,7 @@ async function archiveOldStreams(options = {}) {
         });
 
         // Update current streams (keep only non-archived)
-        await window.IndexedDBCore.put(ARCHIVE_CONFIG.STREAMS_STORE, {
+        await IndexedDBCore.put(ARCHIVE_CONFIG.STREAMS_STORE, {
             id: 'all',
             data: toKeep,
             savedAt: new Date().toISOString()
@@ -216,7 +217,7 @@ async function restoreFromArchive(options = {}) {
 
     try {
         // Get archived streams
-        const archiveRecord = await window.IndexedDBCore.get('config', 'archived_streams_data');
+        const archiveRecord = await IndexedDBCore.get('config', 'archived_streams_data');
         const archivedStreams = archiveRecord?.streams || [];
 
         if (archivedStreams.length === 0) {
@@ -246,7 +247,7 @@ async function restoreFromArchive(options = {}) {
         }
 
         // Get current streams and merge
-        const streamsRecord = await window.IndexedDBCore.get(ARCHIVE_CONFIG.STREAMS_STORE, 'all');
+        const streamsRecord = await IndexedDBCore.get(ARCHIVE_CONFIG.STREAMS_STORE, 'all');
         const currentStreams = streamsRecord?.data || [];
         const mergedStreams = [...currentStreams, ...toRestore];
 
@@ -258,7 +259,7 @@ async function restoreFromArchive(options = {}) {
         });
 
         // Save merged streams
-        await window.IndexedDBCore.put(ARCHIVE_CONFIG.STREAMS_STORE, {
+        await IndexedDBCore.put(ARCHIVE_CONFIG.STREAMS_STORE, {
             id: 'all',
             data: mergedStreams,
             savedAt: new Date().toISOString()
@@ -266,9 +267,9 @@ async function restoreFromArchive(options = {}) {
 
         // Update or clear archive
         if (clearArchive && remaining.length === 0) {
-            await window.IndexedDBCore.delete('config', 'archived_streams_data');
+            await IndexedDBCore.delete('config', 'archived_streams_data');
         } else if (remaining.length > 0) {
-            await window.IndexedDBCore.put('config', {
+            await IndexedDBCore.put('config', {
                 key: 'archived_streams_data',
                 streams: remaining,
                 lastArchiveDate: archiveRecord.lastArchiveDate,
@@ -297,7 +298,7 @@ async function restoreFromArchive(options = {}) {
  */
 async function getArchiveStats() {
     try {
-        const archiveRecord = await window.IndexedDBCore.get('config', 'archived_streams_data');
+        const archiveRecord = await IndexedDBCore.get('config', 'archived_streams_data');
         const archivedStreams = archiveRecord?.streams || [];
 
         if (archivedStreams.length === 0) {
@@ -328,10 +329,10 @@ async function getArchiveStats() {
  */
 async function clearArchive() {
     try {
-        const archiveRecord = await window.IndexedDBCore.get('config', 'archived_streams_data');
+        const archiveRecord = await IndexedDBCore.get('config', 'archived_streams_data');
         const count = archiveRecord?.streams?.length || 0;
 
-        await window.IndexedDBCore.delete('config', 'archived_streams_data');
+        await IndexedDBCore.delete('config', 'archived_streams_data');
 
         console.log(`[ArchiveService] Cleared ${count} archived streams`);
 
@@ -356,9 +357,5 @@ export const ArchiveService = {
     CONFIG: ARCHIVE_CONFIG
 };
 
-// Optional window global for debugging
-if (typeof window !== 'undefined') {
-    window.ArchiveService = ArchiveService;
-}
 
 console.log('[ArchiveService] Archive service loaded');

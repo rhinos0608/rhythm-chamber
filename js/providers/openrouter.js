@@ -208,10 +208,6 @@ export const OpenRouterProvider = {
     type: 'cloud'
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.OpenRouterProvider = OpenRouterProvider;
-}
 
 console.log('[OpenRouterProvider] Provider loaded');
 

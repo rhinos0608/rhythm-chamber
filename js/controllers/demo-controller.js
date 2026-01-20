@@ -1,13 +1,18 @@
 /**
  * Demo Controller
- * 
+ *
  * Handles demo mode with isolated data sandbox.
  * Extracted from app.js to separate demo concerns from main app flow.
- * 
+ *
  * @module controllers/demo-controller
  */
 
 'use strict';
+
+// Phase 4 modules: Analysis & Processing
+import { Patterns } from '../patterns.js';
+import { IndexedDBCore } from '../storage/indexeddb.js';
+import { Chat } from '../chat.js';
 
 // ==========================================
 // Dependencies (injected via init)
@@ -215,14 +220,14 @@ async function loadDemoMode() {
             computedPatterns.isDemoData = true;
             console.log('[DemoController] Computed patterns dynamically from streams');
         } else {
-            // Fallback: use window.Patterns if dependency injection failed
-            if (window.Patterns?.detectAllPatterns) {
-                computedPatterns = window.Patterns.detectAllPatterns(demoPackage.streams, []);
+            // Fallback: use imported Patterns if dependency injection failed
+            if (Patterns?.detectAllPatterns) {
+                computedPatterns = Patterns.detectAllPatterns(demoPackage.streams, []);
                 if (!computedPatterns || typeof computedPatterns !== 'object') {
                     throw new Error('detectAllPatterns returned no patterns');
                 }
                 computedPatterns.isDemoData = true;
-                console.warn('[DemoController] Using window.Patterns fallback');
+                console.warn('[DemoController] Using Patterns fallback');
             } else {
                 throw new Error('Patterns module not available for demo pattern computation');
             }
@@ -304,23 +309,23 @@ async function flushPendingOperations() {
     const promises = [];
 
     // Flush pending chat saves
-    if (window.Chat?.flushPendingSaveAsync) {
+    if (Chat?.flushPendingSaveAsync) {
         promises.push(
-            window.Chat.flushPendingSaveAsync().catch(e =>
+            Chat.flushPendingSaveAsync().catch(e =>
                 console.warn('[DemoController] Chat flush failed:', e)
             )
         );
     }
 
     // Flush IndexedDB operations if available
-    if (window.IndexedDBCore?.getConnection) {
+    if (IndexedDBCore?.getConnection) {
         // Force any pending transactions to complete
-        const conn = window.IndexedDBCore.getConnection();
+        const conn = IndexedDBCore.getConnection();
         if (conn) {
             // IndexedDB doesn't have a flush, but we can ensure transactions complete
             // by doing a small read operation
             promises.push(
-                window.IndexedDBCore.count?.('config').catch(() => { })
+                IndexedDBCore.count?.('config').catch(() => { })
             );
         }
     }

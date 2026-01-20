@@ -16,6 +16,8 @@
 
 'use strict';
 
+import { IndexedDBCore } from '../storage/indexeddb.js';
+
 // ==========================================
 // Constants
 // ==========================================
@@ -274,9 +276,9 @@ async function store(tokenKey, value, options = {}) {
 
     try {
         // Store in IndexedDB if available, fall back to localStorage
-        if (window.IndexedDBCore) {
-            await window.IndexedDBCore.put(
-                window.IndexedDBCore.STORES.TOKENS,
+        if (IndexedDBCore) {
+            await IndexedDBCore.put(
+                IndexedDBCore.STORES.TOKENS,
                 { key: storageKey, ...tokenData }
             );
         } else {
@@ -319,9 +321,9 @@ async function retrieve(tokenKey) {
         let tokenData = null;
 
         // Try IndexedDB first
-        if (window.IndexedDBCore) {
-            const record = await window.IndexedDBCore.get(
-                window.IndexedDBCore.STORES.TOKENS,
+        if (IndexedDBCore) {
+            const record = await IndexedDBCore.get(
+                IndexedDBCore.STORES.TOKENS,
                 storageKey
             );
             tokenData = record;
@@ -377,9 +379,9 @@ async function retrieveWithOptions(tokenKey) {
     try {
         let tokenData = null;
 
-        if (window.IndexedDBCore) {
-            const record = await window.IndexedDBCore.get(
-                window.IndexedDBCore.STORES.TOKENS,
+        if (IndexedDBCore) {
+            const record = await IndexedDBCore.get(
+                IndexedDBCore.STORES.TOKENS,
                 storageKey
             );
             tokenData = record;
@@ -439,9 +441,9 @@ async function invalidate(tokenKey) {
     const storageKey = TOKEN_STORE_PREFIX + tokenKey;
 
     try {
-        if (window.IndexedDBCore) {
-            await window.IndexedDBCore.delete(
-                window.IndexedDBCore.STORES.TOKENS,
+        if (IndexedDBCore) {
+            await IndexedDBCore.delete(
+                IndexedDBCore.STORES.TOKENS,
                 storageKey
             );
         }
@@ -471,14 +473,14 @@ async function invalidateAllTokens(reason) {
 
     try {
         // Clear IndexedDB tokens and count them
-        if (window.IndexedDBCore) {
+        if (IndexedDBCore) {
             try {
                 // Try to get count before clearing if API available
-                if (window.IndexedDBCore.keys) {
-                    const idbKeys = await window.IndexedDBCore.keys(window.IndexedDBCore.STORES.TOKENS);
+                if (IndexedDBCore.keys) {
+                    const idbKeys = await IndexedDBCore.keys(IndexedDBCore.STORES.TOKENS);
                     totalCleared += idbKeys ? idbKeys.length : 0;
                 }
-                await window.IndexedDBCore.clear(window.IndexedDBCore.STORES.TOKENS, { bypassAuthority: true });
+                await IndexedDBCore.clear(IndexedDBCore.STORES.TOKENS, { bypassAuthority: true });
             } catch (idbError) {
                 console.warn('[SecureTokenStore] IndexedDB clear error:', idbError);
             }
@@ -616,9 +618,5 @@ export const SecureTokenStore = {
     getStatus
 };
 
-// Make available globally for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.SecureTokenStore = SecureTokenStore;
-}
 
 console.log('[SecureTokenStore] Module loaded (binding-enforced token storage)');

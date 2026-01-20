@@ -393,9 +393,5 @@ export const ProviderCircuitBreaker = {
     forceState
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.ProviderCircuitBreaker = ProviderCircuitBreaker;
-}
 
 console.log('[ProviderCircuitBreaker] Module loaded');

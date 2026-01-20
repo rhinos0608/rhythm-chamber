@@ -1,9 +1,9 @@
 /**
  * Security Module - ES Module Re-export
- * 
+ *
  * This file re-exports the modular security system for easy importing.
  * All security functionality comes from js/security/index.js.
- * 
+ *
  * ARCHITECTURE:
  * - js/security/encryption.js - Cryptographic operations (AES-GCM, PBKDF2)
  * - js/security/token-binding.js - XSS protection (device fingerprinting, token binding)
@@ -11,12 +11,14 @@
  * - js/security/recovery-handlers.js - Recovery action handlers
  * - js/security/index.js - Unified facade
  * - js/security.js - This file (re-export for convenient imports)
- * 
+ *
  * Usage:
  *   import { Security } from './security.js';
  *   // or
  *   import { Security, ErrorContext } from './security/index.js';
  */
+
+import { Settings } from './settings.js';
 
 // Re-export everything from the security facade
 export { Security, ErrorContext, Encryption, TokenBinding, Anomaly } from './security/index.js';
@@ -181,8 +183,8 @@ function showSecurityChecklist() {
         setTimeout(() => {
             modal.remove();
             // Show welcome toast
-            if (window.Settings?.showToast) {
-                window.Settings.showToast('Welcome to Rhythm Chamber! Stay secure.', 3000);
+            if (Settings?.showToast) {
+                Settings.showToast('Welcome to Rhythm Chamber! Stay secure.', 3000);
             }
         }, 200);
     }
@@ -211,9 +213,5 @@ export const SecurityChecklist = {
     show: showSecurityChecklist
 };
 
-// Make available globally for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.SecurityChecklist = SecurityChecklist;
-}
 
 console.log('[Security] Module loaded with SecurityChecklist');

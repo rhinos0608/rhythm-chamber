@@ -1,6 +1,6 @@
 /**
  * Settings Module for Rhythm Chamber
- * 
+ *
  * Handles in-app configuration display for AI and Spotify settings.
  * The source of truth is config.js - this module provides a UI to view
  * and optionally override those settings via localStorage.
@@ -9,6 +9,14 @@
 import { ModuleRegistry } from './module-registry.js';
 import { StorageBreakdownUI } from './storage-breakdown-ui.js';
 import ProviderHealthMonitor from './services/provider-health-monitor.js';
+import { ConfigLoader } from './services/config-loader.js';
+import { Storage } from './storage.js';
+import { Security } from './security/index.js';
+import { DataQuerySchemas } from './functions/schemas/data-queries.js';
+import { Functions } from './functions/index.js';
+import { Spotify } from './spotify.js';
+import { AnalyticsQuerySchemas } from './functions/schemas/analytics-queries.js';
+import { TemplateQuerySchemas } from './functions/schemas/template-queries.js';
 
 // Available LLM providers
 const LLM_PROVIDERS = [
@@ -80,8 +88,8 @@ async function migrateLocalStorageSettings() {
         const parsed = JSON.parse(stored);
 
         // Migrate to IndexedDB
-        if (window.Storage?.setConfig) {
-            await window.Storage.setConfig('rhythm_chamber_settings', parsed);
+        if (Storage.setConfig) {
+            await Storage.setConfig('rhythm_chamber_settings', parsed);
 
             // Mark migration complete and remove old localStorage data
             localStorage.setItem(SETTINGS_MIGRATED_KEY, 'true');
@@ -111,9 +119,9 @@ async function migrateLocalStorageSettings() {
  */
 function getSettings() {
     // Read directly from config.js as the source of truth
-    const configOpenrouter = window.Config?.openrouter || {};
-    const configSpotify = window.Config?.spotify || {};
-    const configGemini = window.Config?.gemini || {};
+    const configOpenrouter = ConfigLoader.get('openrouter', {});
+    const configSpotify = ConfigLoader.get('spotify', {});
+    const configGemini = ConfigLoader.get('gemini', {});
 
     // Build settings object from config.js
     const settings = {
@@ -193,9 +201,9 @@ async function getSettingsAsync() {
     await migrateLocalStorageSettings();
 
     // Read directly from config.js as the source of truth
-    const configOpenrouter = window.Config?.openrouter || {};
-    const configSpotify = window.Config?.spotify || {};
-    const configGemini = window.Config?.gemini || {};
+    const configOpenrouter = ConfigLoader.get('openrouter', {});
+    const configSpotify = ConfigLoader.get('spotify', {});
+    const configGemini = ConfigLoader.get('gemini', {});
 
     // Build settings object from config.js
     const settings = {
@@ -245,9 +253,9 @@ async function getSettingsAsync() {
     };
 
     // After migration, read only from IndexedDB (single source of user overrides)
-    if (settingsMigrationComplete && window.Storage?.getConfig) {
+    if (settingsMigrationComplete && Storage.getConfig) {
         try {
-            const storedConfig = await window.Storage.getConfig('rhythm_chamber_settings');
+            const storedConfig = await Storage.getConfig('rhythm_chamber_settings');
             if (storedConfig) {
                 applySettingsOverrides(settings, storedConfig);
             }
@@ -258,9 +266,9 @@ async function getSettingsAsync() {
     }
 
     // Pre-migration fallback: Try IndexedDB first, then localStorage
-    if (window.Storage?.getConfig) {
+    if (Storage.getConfig) {
         try {
-            const storedConfig = await window.Storage.getConfig('rhythm_chamber_settings');
+            const storedConfig = await Storage.getConfig('rhythm_chamber_settings');
             if (storedConfig) {
                 applySettingsOverrides(settings, storedConfig);
                 return settings;
@@ -368,9 +376,9 @@ function applySettingsOverrides(settings, parsed) {
  */
 async function saveSettings(settings) {
     // Save to IndexedDB only (localStorage fallback removed for HNW simplification)
-    if (window.Storage?.setConfig) {
+    if (Storage.setConfig) {
         try {
-            await window.Storage.setConfig('rhythm_chamber_settings', settings);
+            await Storage.setConfig('rhythm_chamber_settings', settings);
             console.log('[Settings] Saved to IndexedDB');
         } catch (e) {
             console.warn('[Settings] Failed to save to IndexedDB:', e);
@@ -381,34 +389,23 @@ async function saveSettings(settings) {
     }
 
     // Update the runtime Config object so changes take effect immediately
-    if (window.Config) {
-        if (settings.openrouter) {
-            window.Config.openrouter = {
-                ...window.Config.openrouter,
-                apiKey: settings.openrouter.apiKey || window.Config.openrouter?.apiKey,
-                model: settings.openrouter.model,
-                maxTokens: settings.openrouter.maxTokens,
-                temperature: settings.openrouter.temperature,
-                contextWindow: settings.openrouter.contextWindow,
-                apiUrl: window.Config.openrouter?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions'
-            };
-        }
-        if (settings.gemini) {
-            window.Config.gemini = {
-                ...window.Config.gemini,
-                apiKey: settings.gemini.apiKey,
-                model: settings.gemini.model,
-                maxTokens: settings.gemini.maxTokens,
-                temperature: settings.gemini.temperature,
-                topP: settings.gemini.topP
-            };
-        }
-        if (settings.spotify?.clientId) {
-            window.Config.spotify = {
-                ...window.Config.spotify,
-                clientId: settings.spotify.clientId
-            };
-        }
+    if (settings.openrouter) {
+        ConfigLoader.set('openrouter.apiKey', settings.openrouter.apiKey || ConfigLoader.get('openrouter.apiKey'));
+        ConfigLoader.set('openrouter.model', settings.openrouter.model);
+        ConfigLoader.set('openrouter.maxTokens', settings.openrouter.maxTokens);
+        ConfigLoader.set('openrouter.temperature', settings.openrouter.temperature);
+        ConfigLoader.set('openrouter.contextWindow', settings.openrouter.contextWindow);
+        ConfigLoader.set('openrouter.apiUrl', ConfigLoader.get('openrouter.apiUrl', 'https://openrouter.ai/api/v1/chat/completions'));
+    }
+    if (settings.gemini) {
+        ConfigLoader.set('gemini.apiKey', settings.gemini.apiKey);
+        ConfigLoader.set('gemini.model', settings.gemini.model);
+        ConfigLoader.set('gemini.maxTokens', settings.gemini.maxTokens);
+        ConfigLoader.set('gemini.temperature', settings.gemini.temperature);
+        ConfigLoader.set('gemini.topP', settings.gemini.topP);
+    }
+    if (settings.spotify?.clientId) {
+        ConfigLoader.set('spotify.clientId', settings.spotify.clientId);
     }
 
     console.log('[Settings] Saved and applied to runtime Config');
@@ -419,9 +416,9 @@ async function saveSettings(settings) {
  * HNW Hierarchy: Only clears from IndexedDB (single source of truth)
  */
 async function clearSettings() {
-    if (window.Storage?.removeConfig) {
+    if (Storage.removeConfig) {
         try {
-            await window.Storage.removeConfig('rhythm_chamber_settings');
+            await Storage.removeConfig('rhythm_chamber_settings');
             console.log('[Settings] Cleared from IndexedDB');
         } catch (e) {
             console.warn('[Settings] Failed to clear from IndexedDB:', e);
@@ -455,7 +452,7 @@ function getContextWindow() {
  * Check if API key is configured (in config.js or localStorage)
  */
 function hasApiKey() {
-    const key = window.Config?.openrouter?.apiKey;
+    const key = ConfigLoader.get('openrouter.apiKey');
     return key && key !== '' && key !== 'your-api-key-here';
 }
 
@@ -463,7 +460,7 @@ function hasApiKey() {
  * Check if Spotify is configured (in config.js or localStorage)
  */
 function hasSpotifyConfig() {
-    const clientId = window.Config?.spotify?.clientId;
+    const clientId = ConfigLoader.get('spotify.clientId');
     return clientId && clientId !== '' && clientId !== 'your-spotify-client-id';
 }
 
@@ -480,12 +477,12 @@ function showSettingsModal() {
     const settings = getSettings();
 
     // Determine if API key is from config.js (show masked) or needs to be entered
-    const hasConfigKey = window.Config?.openrouter?.apiKey &&
-        window.Config.openrouter.apiKey !== 'your-api-key-here';
+    const hasConfigKey = ConfigLoader.get('openrouter.apiKey') &&
+        ConfigLoader.get('openrouter.apiKey') !== 'your-api-key-here';
     const apiKeyDisplay = hasConfigKey ? settings.openrouter.apiKey : '';
 
-    const hasConfigSpotify = window.Config?.spotify?.clientId &&
-        window.Config.spotify.clientId !== 'your-spotify-client-id';
+    const hasConfigSpotify = ConfigLoader.get('spotify.clientId') &&
+        ConfigLoader.get('spotify.clientId') !== 'your-spotify-client-id';
     const spotifyDisplay = hasConfigSpotify ? settings.spotify.clientId : '';
 
     const modal = document.createElement('div');
@@ -808,13 +805,17 @@ function showSettingsModal() {
                                 ▶️ Resume
                             </button>
                         ` : ''}
-                        ${ModuleRegistry.getModuleSync('RAG')?.isConfigured() ? `
-                            <span class="settings-hint success">✓ ${ModuleRegistry.getModuleSync('RAG').getConfig()?.chunksCount || 0} chunks indexed</span>
-                        ` : ModuleRegistry.getModuleSync('RAG')?.getCheckpoint?.() ? `
-                            <span class="settings-hint warning">⚠️ Interrupted - click Resume to continue</span>
-                        ` : `
-                            <span class="settings-hint">Generate embeddings to enable semantic search</span>
-                        `}
+                        ${(() => {
+                            const RAG = ModuleRegistry.getModuleSync('RAG');
+                            if (RAG?.isConfigured?.()) {
+                                const chunksCount = RAG.getConfig?.()?.chunksCount || 0;
+                                return `<span class="settings-hint success">✓ ${chunksCount} chunks indexed</span>`;
+                            } else if (RAG?.getCheckpoint?.()) {
+                                return `<span class="settings-hint warning">⚠️ Interrupted - click Resume to continue</span>`;
+                            } else {
+                                return `<span class="settings-hint">Generate embeddings to enable semantic search</span>`;
+                            }
+                        })()}
                     </div>
                     
                     <div id="embedding-progress" class="embedding-progress" style="display: none;">
@@ -1102,7 +1103,7 @@ function refreshTravelStatusUI() {
 
     if (!statusEl || !travelBtn) return;
 
-    const travelStatus = window.Security?.getTravelOverrideStatus?.() || { active: false };
+    const travelStatus = Security.getTravelOverrideStatus() || { active: false };
 
     if (travelStatus.active && travelStatus.expiresAt) {
         const expires = new Date(travelStatus.expiresAt);
@@ -1122,19 +1123,19 @@ function refreshTravelStatusUI() {
  * Toggle travel override to reduce false positives for VPN/travel
  */
 function toggleTravelMode() {
-    if (!window.Security?.setTravelOverride || !window.Security?.getTravelOverrideStatus) {
+    if (!Security.setTravelOverride || !Security.getTravelOverrideStatus) {
         showToast('Security module not loaded');
         return;
     }
 
-    const travelStatus = window.Security.getTravelOverrideStatus();
+    const travelStatus = Security.getTravelOverrideStatus();
 
     if (travelStatus.active) {
-        window.Security.clearTravelOverride?.();
+        Security.clearTravelOverride();
         showToast('Travel mode disabled. Geographic anomaly detection is back to normal.');
     } else {
-        window.Security.setTravelOverride(12, 'user_travel_override');
-        window.Security.clearSecurityLockout?.();
+        Security.setTravelOverride(12, 'user_travel_override');
+        Security.clearSecurityLockout();
         showToast('Travel mode enabled for 12 hours. Geo anomaly checks are relaxed for VPN/travel.');
     }
 
@@ -1146,19 +1147,19 @@ function toggleTravelMode() {
  * Rebinds via Spotify OAuth to prove legitimacy
  */
 async function verifyIdentity() {
-    if (!window.Spotify?.isConfigured?.()) {
+    if (!Spotify.isConfigured?.()) {
         showToast('Add your Spotify Client ID before verifying identity.');
         return;
     }
 
     try {
-        window.Security?.clearSecurityLockout?.();
-        window.Security?.setTravelOverride?.(12, 'verified_travel');
-        window.Security?.clearTokenBinding?.();
-        window.Spotify?.clearTokens?.();
+        Security.clearSecurityLockout();
+        Security.setTravelOverride(12, 'verified_travel');
+        Security.clearTokenBinding();
+        Spotify.clearTokens();
 
         showToast('Redirecting to Spotify to verify identity...');
-        await window.Spotify.initiateLogin();
+        await Spotify.initiateLogin();
     } catch (error) {
         console.error('[Settings] Identity verification failed:', error);
         showToast('Could not start verification: ' + error.message);
@@ -1442,7 +1443,7 @@ async function showSessionResetModal() {
     if (existing) existing.remove();
 
     // Get current session version for display
-    const currentVersion = window.Security?.getSessionVersion?.() || 1;
+    const currentVersion = Security.getSessionVersion() || 1;
     const newVersion = currentVersion + 1;
 
     // Generate a proof hash that will change after reset
@@ -1548,17 +1549,17 @@ async function confirmSessionReset() {
 
     try {
         // Perform session invalidation
-        if (window.Security?.clearSessionData) {
-            await window.Security.clearSessionData();
-        } else if (window.Security?.invalidateSessions) {
-            window.Security.invalidateSessions();
+        if (Security.clearSessionData) {
+            await Security.clearSessionData();
+        } else if (Security.invalidateSessions) {
+            Security.invalidateSessions();
         }
 
         // Clear RAG config from unified storage and localStorage
-        if (window.Storage?.removeConfig) {
-            await window.Storage.removeConfig('rhythm_chamber_rag');
-            await window.Storage.removeConfig('rhythm_chamber_rag_checkpoint');
-            await window.Storage.removeConfig('rhythm_chamber_rag_checkpoint_cipher');
+        if (Storage.removeConfig) {
+            await Storage.removeConfig('rhythm_chamber_rag');
+            await Storage.removeConfig('rhythm_chamber_rag_checkpoint');
+            await Storage.removeConfig('rhythm_chamber_rag_checkpoint_cipher');
         }
         // Also clear from localStorage (backward compat)
         localStorage.removeItem('rhythm_chamber_rag');
@@ -1567,7 +1568,7 @@ async function confirmSessionReset() {
 
 
         // Get new version for display
-        const newVersion = window.Security?.getSessionVersion?.() || 'new';
+        const newVersion = Security.getSessionVersion() || 'new';
 
         // Show success message
         hideSessionResetModal();
@@ -1758,9 +1759,9 @@ async function saveEnabledTools(enabledTools) {
     }
 
     // Also save to unified storage
-    if (window.Storage?.setConfig) {
+    if (Storage.setConfig) {
         try {
-            await window.Storage.setConfig('rhythm_chamber_enabled_tools', enabledTools);
+            await Storage.setConfig('rhythm_chamber_enabled_tools', enabledTools);
         } catch (e) {
             console.warn('[Settings] Failed to save enabled tools to unified storage:', e);
         }
@@ -1801,7 +1802,7 @@ function getToolsByCategory() {
     };
 
     // Data query tools
-    const dataSchemas = window.DataQuerySchemas || [];
+    const dataSchemas = DataQuerySchemas || [];
     for (const schema of dataSchemas) {
         categories.data.tools.push({
             name: schema.function.name,
@@ -1810,7 +1811,7 @@ function getToolsByCategory() {
     }
 
     // Analytics tools
-    const analyticsSchemas = window.AnalyticsQuerySchemas || [];
+    const analyticsSchemas = AnalyticsQuerySchemas || [];
     for (const schema of analyticsSchemas) {
         categories.analytics.tools.push({
             name: schema.function.name,
@@ -1819,7 +1820,7 @@ function getToolsByCategory() {
     }
 
     // Template tools
-    const templateSchemas = window.TemplateQuerySchemas || [];
+    const templateSchemas = TemplateQuerySchemas || [];
     for (const schema of templateSchemas) {
         categories.templates.tools.push({
             name: schema.function.name,
@@ -1994,7 +1995,7 @@ function onToggleAllTools(enabled) {
  * Get all tool names from schemas
  */
 function getAllToolNames() {
-    const schemas = window.Functions?.getAllSchemas?.() || [];
+    const schemas = Functions?.getAllSchemas?.() || [];
     return schemas.map(s => s.function.name);
 }
 
@@ -2213,10 +2214,6 @@ export const Settings = {
     DEFAULT_ENDPOINTS
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.Settings = Settings;
-}
 
 console.log('[Settings] Module loaded');
 

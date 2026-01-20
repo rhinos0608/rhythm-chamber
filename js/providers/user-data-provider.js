@@ -1,13 +1,14 @@
 /**
  * User Data Provider
- * 
+ *
  * Data provider implementation for real user data stored in IndexedDB.
  * Delegates to Storage facade for actual data access.
- * 
+ *
  * @module providers/user-data-provider
  */
 
 import { EventBus } from '../services/event-bus.js';
+import { Storage } from '../storage.js';
 
 // ==========================================
 // User Data Provider Implementation
@@ -18,10 +19,7 @@ import { EventBus } from '../services/event-bus.js';
  * @returns {Object|null}
  */
 function getStorage() {
-    if (typeof window !== 'undefined' && window.Storage) {
-        return window.Storage;
-    }
-    return null;
+    return Storage;
 }
 
 /**

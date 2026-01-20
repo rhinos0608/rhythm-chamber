@@ -1,11 +1,13 @@
 /**
  * Chat UI Controller
- * 
+ *
  * Handles chat message display, streaming, and user interactions.
  * Separates UI concerns from the Chat module's business logic.
- * 
+ *
  * @module controllers/chat-ui-controller
  */
+
+import { Chat } from '../chat.js';
 
 // ==========================================
 // Constants
@@ -247,7 +249,7 @@ function addUserMessageActions(messageEl, originalText) {
     deleteBtn.onclick = () => {
         const messages = document.getElementById(CHAT_UI_MESSAGE_CONTAINER_ID);
         const index = Array.from(messages.children).indexOf(messageEl);
-        if (window.Chat?.deleteMessage?.(index)) {
+        if (Chat?.deleteMessage?.(index)) {
             messageEl.remove();
         }
     };
@@ -284,10 +286,10 @@ function addAssistantMessageActions(messageEl, text) {
     regenBtn.innerHTML = '↻';
     regenBtn.title = 'Regenerate';
     regenBtn.onclick = async () => {
-        if (window.processMessageResponse && window.Chat?.regenerateLastResponse) {
+        if (window.processMessageResponse && Chat?.regenerateLastResponse) {
             messageEl.remove();
             await window.processMessageResponse((options) =>
-                window.Chat.regenerateLastResponse(options)
+                Chat.regenerateLastResponse(options)
             );
         }
     };
@@ -301,7 +303,7 @@ function addAssistantMessageActions(messageEl, text) {
     deleteBtn.onclick = () => {
         const messages = document.getElementById(CHAT_UI_MESSAGE_CONTAINER_ID);
         const index = Array.from(messages.children).indexOf(messageEl);
-        if (window.Chat?.deleteMessage?.(index)) {
+        if (Chat?.deleteMessage?.(index)) {
             messageEl.remove();
         }
     };
@@ -324,10 +326,10 @@ function addErrorMessageActions(messageEl) {
     retryBtn.innerHTML = '↻ Try Again';
     retryBtn.title = 'Try Again';
     retryBtn.onclick = async () => {
-        if (window.processMessageResponse && window.Chat?.regenerateLastResponse) {
+        if (window.processMessageResponse && Chat?.regenerateLastResponse) {
             messageEl.remove();
             await window.processMessageResponse((options) =>
-                window.Chat.regenerateLastResponse(options)
+                Chat.regenerateLastResponse(options)
             );
         }
     };
@@ -373,7 +375,7 @@ function enableEditMode(messageEl, currentText) {
         const index = Array.from(messages.children).indexOf(messageEl);
 
         // Validate we can edit
-        if (!window.Chat?.editMessage) {
+        if (!Chat?.editMessage) {
             console.error('[ChatUI] Chat.editMessage not available');
             return;
         }
@@ -397,12 +399,12 @@ function enableEditMode(messageEl, currentText) {
         // editMessage internally truncates history and calls sendMessage
         if (window.processMessageResponse) {
             await window.processMessageResponse((options) =>
-                window.Chat.editMessage(index, newText, options)
+                Chat.editMessage(index, newText, options)
             );
         } else {
             // Fallback: call editMessage directly without progress UI
             console.warn('[ChatUI] processMessageResponse not available, using fallback');
-            await window.Chat.editMessage(index, newText);
+            await Chat.editMessage(index, newText);
         }
     };
 

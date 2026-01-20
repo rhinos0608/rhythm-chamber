@@ -10,6 +10,8 @@
  * @version 1.0.0
  */
 
+import { Storage } from '../storage.js';
+
 /**
  * Initialize observability settings in the settings modal
  */
@@ -226,9 +228,9 @@ async function toggleMonitoring(enabled) {
     }
 
     // Save preference to IndexedDB (consistent with HNW settings cascade)
-    if (window.Storage?.setConfig) {
+    if (Storage.setConfig) {
         try {
-            await window.Storage.setConfig('observability_enabled', enabled);
+            await Storage.setConfig('observability_enabled', enabled);
         } catch (e) {
             console.warn('[ObservabilitySettings] Failed to save preference:', e);
         }
@@ -274,9 +276,9 @@ async function loadObservabilitySettings() {
     let enabled = true; // Default: enabled
 
     // Try IndexedDB first
-    if (window.Storage?.getConfig) {
+    if (Storage.getConfig) {
         try {
-            const stored = await window.Storage.getConfig('observability_enabled');
+            const stored = await Storage.getConfig('observability_enabled');
             if (stored !== undefined && stored !== null) {
                 enabled = stored;
             }
@@ -318,9 +320,5 @@ export const ObservabilitySettings = {
     loadObservabilitySettings
 };
 
-// Make available globally for onclick handlers
-if (typeof window !== 'undefined') {
-    window.ObservabilitySettings = ObservabilitySettings;
-}
 
 console.log('[ObservabilitySettings] Module loaded');

@@ -58,6 +58,9 @@ let loadError = null;
 let isInitialized = false;
 let currentBackend = null;  // 'webgpu' or 'wasm'
 
+// Module-level cache for dynamically loaded Transformers.js library
+let cachedTransformers = null;
+
 // ==========================================
 // Transformers.js Dynamic Loading
 // ==========================================
@@ -67,19 +70,15 @@ let currentBackend = null;  // 'webgpu' or 'wasm'
  * This avoids bundling the large library
  */
 async function loadTransformersJS() {
-    if (window.transformers?.pipeline) {
-        return window.transformers;
-    }
-
-    // Check if already loaded via script tag
-    if (window.Transformers) {
-        return window.Transformers;
+    // Return cached version if available
+    if (cachedTransformers?.pipeline) {
+        return cachedTransformers;
     }
 
     // Dynamic import from CDN
     try {
         const transformers = await import(CDN_URL);
-        window.transformers = transformers;
+        cachedTransformers = transformers;
         return transformers;
     } catch (e) {
         console.error('[LocalEmbeddings] Failed to load Transformers.js:', e);

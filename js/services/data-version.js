@@ -1,18 +1,21 @@
 /**
  * Data Version Service
- * 
+ *
  * Generates version hashes based on current data state.
  * Messages store this version; regeneration compares to detect staleness.
- * 
+ *
  * HNW Considerations:
  * - Hierarchy: Single source of data version truth
  * - Network: Enables stale data detection across components
  * - Wave: Tracks data changes over time
- * 
+ *
  * @module services/data-version
  */
 
 'use strict';
+
+import { DemoController } from '../controllers/demo-controller.js';
+import { AppState } from '../state/app-state.js';
 
 // ==========================================
 // Version Generation
@@ -27,16 +30,16 @@ function generate() {
     let data = null;
 
     // Try DemoController first for active data
-    if (window.DemoController?.getActiveData) {
-        const activeData = window.DemoController.getActiveData();
+    if (DemoController.getActiveData) {
+        const activeData = DemoController.getActiveData();
         data = {
             streams: activeData.streams,
             patterns: activeData.patterns,
             personality: activeData.personality,
             isDemoMode: activeData.isDemoMode
         };
-    } else if (window.AppState?.get) {
-        const state = window.AppState.get();
+    } else if (AppState.get) {
+        const state = AppState.get();
         const isDemo = state.demo?.isDemoMode || false;
 
         if (isDemo) {
@@ -212,9 +215,5 @@ export const DataVersion = {
     checkRegenerationContext
 };
 
-// Make available globally for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.DataVersion = DataVersion;
-}
 
 console.log('[DataVersion] Module loaded');

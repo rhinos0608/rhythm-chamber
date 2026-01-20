@@ -13,6 +13,13 @@
 import { ModuleRegistry } from '../module-registry.js';
 import { withTimeout, TimeoutError } from '../utils/timeout-wrapper.js';
 import { ProviderCircuitBreaker } from '../services/provider-circuit-breaker.js';
+import { ConfigLoader } from '../services/config-loader.js';
+import { Settings } from '../settings.js';
+
+// Import provider modules directly
+import { OpenRouterProvider } from './openrouter.js';
+import { LMStudioProvider } from './lmstudio.js';
+import { GeminiProvider } from './gemini.js';
 
 // ==========================================
 // Timeout Constants
@@ -197,19 +204,19 @@ async function callProvider(config, apiKey, messages, tools, onProgress = null) 
 /**
  * Get the provider module if loaded
  * @param {string} provider - Provider name
- * @returns {object|null} Provider module or null
+ * @returns {object|null} Provider module or null if not available
  */
 function getProviderModule(provider) {
     switch (provider) {
         case 'ollama':
             return ModuleRegistry.getModuleSync('OllamaProvider') || null;
         case 'lmstudio':
-            return window.LMStudioProvider || null;
+            return LMStudioProvider || null;
         case 'gemini':
-            return window.GeminiProvider || null;
+            return GeminiProvider || null;
         case 'openrouter':
         default:
-            return window.OpenRouterProvider || null;
+            return OpenRouterProvider || null;
     }
 }
 
@@ -228,7 +235,7 @@ async function isProviderAvailable(provider) {
         case 'lmstudio':
             // LM Studio has no built-in detection, so check endpoint
             try {
-                const endpoint = window.Settings?.get?.()?.llm?.lmstudioEndpoint || 'http://localhost:1234/v1';
+                const endpoint = Settings?.get?.()?.llm?.lmstudioEndpoint || 'http://localhost:1234/v1';
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 5000);
                 const response = await fetch(`${endpoint}/models`, {
@@ -242,14 +249,14 @@ async function isProviderAvailable(provider) {
 
         case 'gemini':
             // Gemini is available if we have an API key
-            const geminiApiKey = window.Settings?.get?.()?.gemini?.apiKey;
+            const geminiApiKey = Settings?.get?.()?.gemini?.apiKey;
             return !!geminiApiKey && geminiApiKey !== 'your-api-key-here';
 
         case 'openrouter':
         default:
             // OpenRouter is always "available" if we have an API key
-            const apiKey = window.Settings?.get?.()?.openrouter?.apiKey ||
-                window.Config?.apiKey;
+            const apiKey = Settings?.get?.()?.openrouter?.apiKey ||
+                ConfigLoader.get('openrouter.apiKey');
             return !!apiKey;
     }
 }
@@ -325,7 +332,7 @@ const HEALTH_CHECK_TIMEOUT = 5000;
  */
 async function checkOpenRouterHealth() {
     const start = Date.now();
-    const apiKey = window.Settings?.get?.()?.openrouter?.apiKey || window.Config?.apiKey;
+    const apiKey = Settings?.get?.()?.openrouter?.apiKey || ConfigLoader.get('openrouter.apiKey');
 
     if (!apiKey || apiKey === 'your-api-key-here') {
         return {
@@ -407,7 +414,7 @@ async function checkOpenRouterHealth() {
  */
 async function checkOllamaHealth() {
     const start = Date.now();
-    const endpoint = window.Settings?.get?.()?.llm?.ollamaEndpoint || 'http://localhost:11434';
+    const endpoint = Settings?.get?.()?.llm?.ollamaEndpoint || 'http://localhost:11434';
 
     try {
         const controller = new AbortController();
@@ -477,7 +484,7 @@ async function checkOllamaHealth() {
  */
 async function checkLMStudioHealth() {
     const start = Date.now();
-    const endpoint = window.Settings?.get?.()?.llm?.lmstudioEndpoint || 'http://localhost:1234/v1';
+    const endpoint = Settings?.get?.()?.llm?.lmstudioEndpoint || 'http://localhost:1234/v1';
 
     try {
         const controller = new AbortController();
@@ -546,7 +553,7 @@ async function checkLMStudioHealth() {
  */
 async function checkGeminiHealth() {
     const start = Date.now();
-    const apiKey = window.Settings?.get?.()?.gemini?.apiKey;
+    const apiKey = Settings?.get?.()?.gemini?.apiKey;
 
     if (!apiKey || apiKey === 'your-api-key-here') {
         return {
@@ -676,9 +683,5 @@ export const ProviderInterface = {
     TIMEOUTS: PROVIDER_TIMEOUTS
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.ProviderInterface = ProviderInterface;
-}
 
 console.log('[ProviderInterface] LLM provider abstraction layer loaded with health checks');

@@ -1,15 +1,18 @@
 /**
  * Ollama Integration Module for Rhythm Chamber
- * 
+ *
  * Provides local LLM support via Ollama.
  * This is the differentiating feature - zero data sent to cloud.
- * 
+ *
  * Default endpoint: http://localhost:11434
- * 
+ *
  * API Reference: https://github.com/ollama/ollama/blob/main/docs/api.md
- * 
+ *
  * BRING YOUR OWN AI: Users run AI models on their own hardware for maximum privacy.
  */
+
+// Import ModuleRegistry for accessing dynamically loaded modules
+import { ModuleRegistry } from './module-registry.js';
 
 // ==========================================
 // Configuration
@@ -64,9 +67,15 @@ const TOOL_CAPABLE_MODELS = [
  */
 function getEndpoint() {
     try {
-        const settings = window.Settings?.getSettings() || {};
+        const Settings = ModuleRegistry.getModuleSync('Settings');
+        if (!Settings) {
+            console.warn('[Ollama] Settings module not loaded, using default endpoint');
+            return DEFAULT_OLLAMA_ENDPOINT;
+        }
+        const settings = Settings.getSettings() || {};
         return settings.ollama?.endpoint || DEFAULT_OLLAMA_ENDPOINT;
-    } catch {
+    } catch (error) {
+        console.warn('[Ollama] Failed to get settings:', error);
         return DEFAULT_OLLAMA_ENDPOINT;
     }
 }

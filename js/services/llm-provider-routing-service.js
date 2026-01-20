@@ -120,9 +120,4 @@ const LLMProviderRoutingService = {
 // ES Module export
 export { LLMProviderRoutingService };
 
-// Make available globally for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.LLMProviderRoutingService = LLMProviderRoutingService;
-}
-
 console.log('[LLMProviderRoutingService] Service loaded');

@@ -699,9 +699,5 @@ export const IndexedDBCore = {
     detectWriteConflict
 };
 
-// Keep window global for backwards compatibility during migration
-if (typeof window !== 'undefined') {
-    window.IndexedDBCore = IndexedDBCore;
-}
 
 console.log('[IndexedDBCore] Core module loaded');

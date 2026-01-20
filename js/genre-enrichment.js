@@ -1,15 +1,17 @@
 /**
  * Genre Enrichment Module for Rhythm Chamber
- * 
+ *
  * Solves the "Genre Gap" - Spotify exports lack genre data.
- * Uses a pre-bundled static map for top artists (instant) + 
+ * Uses a pre-bundled static map for top artists (instant) +
  * MusicBrainz API for lazy enrichment of remaining artists.
- * 
+ *
  * HNW Considerations:
  * - Hierarchy: Static map is authority, API is fallback
  * - Network: Rate-limited queue prevents API abuse
  * - Wave: Progressive enrichment doesn't block UI
  */
+
+import { Storage } from './storage.js';
 
 // ==========================================
 // Static Artist-Genre Map (Top ~500 Artists)
@@ -282,12 +284,10 @@ async function loadCachedGenres() {
     if (genreCache) return genreCache;
 
     try {
-        if (window.Storage?.getConfig) {
-            const cached = await window.Storage.getConfig('rhythm_chamber_genre_cache');
-            if (cached) {
-                genreCache = cached;
-                return genreCache;
-            }
+        const cached = await Storage.getConfig('rhythm_chamber_genre_cache');
+        if (cached) {
+            genreCache = cached;
+            return genreCache;
         }
     } catch (e) {
         console.warn('[GenreEnrichment] Failed to load cache:', e);
@@ -304,9 +304,7 @@ async function saveCachedGenres() {
     if (!genreCache) return;
 
     try {
-        if (window.Storage?.setConfig) {
-            await window.Storage.setConfig('rhythm_chamber_genre_cache', genreCache);
-        }
+        await Storage.setConfig('rhythm_chamber_genre_cache', genreCache);
     } catch (e) {
         console.warn('[GenreEnrichment] Failed to save cache:', e);
     }
@@ -610,10 +608,6 @@ export const GenreEnrichment = {
     }
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.GenreEnrichment = GenreEnrichment;
-}
 
 console.log(`[GenreEnrichment] Module loaded with ${getStaticMapSize()} artists in static map.`);
 

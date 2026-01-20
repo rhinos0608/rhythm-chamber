@@ -409,9 +409,5 @@ export const Personality = {
     generateRevealInsight
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.Personality = Personality;
-}
 
 console.log('[Personality] Module loaded');

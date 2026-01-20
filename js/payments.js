@@ -5,30 +5,34 @@
  * - All core features (Analysis, Chat, RAG) are FREE.
  * - No user accounts, no server storage.
  *
- * FUTURE MONETIZATION:
- * - "Cloud Sync" for $2/month or $10 One-time.
- * - Pays for encrypted server storage and cross-device sync.
+ * FUTURE MONETIZATION (Three-Pillar Model):
+ * - Pillar 1: The Sovereign ($0) - Privacy & Viral Growth
+ * - Pillar 2: The Curator ($19.99 one-time) - Data Power-User
+ * - Pillar 3: The Chamber ($4.99/mo or $39/yr) - Convenience & Seamlessness
  *
  * PRODUCTION BUILD:
  * - Set Config.PRODUCTION_BUILD = true OR
- * - Set Config.PAYMENT_MODE = 'supporter'
- * - This enables license verification for Supporter tier
+ * - Set Config.PAYMENT_MODE = 'production'
+ * - This enables license verification for Curator and Chamber tiers
  */
+
+import { ConfigLoader } from './services/config-loader.js';
+import { Settings } from './settings.js';
 
 // ==========================================
 // Production Build Detection
 // ==========================================
 
 /**
- * Check if this is a production (Supporter) release build
+ * Check if this is a production release build
  * Set via Config.PRODUCTION_BUILD or Config.PAYMENT_MODE
  */
 function isProductionBuild() {
     if (typeof window === 'undefined') return false;
-    const config = window.Config || {};
-    return config.PRODUCTION_BUILD === true ||
-        config.PAYMENT_MODE === 'supporter' ||
-        config.PAYMENT_MODE === 'production';
+    return ConfigLoader.get('PRODUCTION_BUILD', false) === true ||
+        ConfigLoader.get('PAYMENT_MODE', '') === 'curator' ||
+        ConfigLoader.get('PAYMENT_MODE', '') === 'chamber' ||
+        ConfigLoader.get('PAYMENT_MODE', '') === 'production';
 }
 
 /**
@@ -55,6 +59,11 @@ function checkLicenseStatus() {
             if (license.validUntil && new Date(license.validUntil) > new Date()) {
                 return true;
             }
+
+            if (!license.validUntil && license.tier === 'curator') {
+                // Curator tier is one-time, no expiry
+                return true;
+            }
         }
     } catch (e) {
         // Handle localStorage access errors (SSR, storage disabled, quota exceeded, etc.)
@@ -66,11 +75,11 @@ function checkLicenseStatus() {
 }
 
 /**
- * Check if user has premium access
- * 
+ * Check if user has premium access (Curator or Chamber tier)
+ *
  * HNW Note: Client-side entitlement = no real security.
  * For MVP, everything is free. For production, verify server-side.
- * 
+ *
  * @returns {boolean} True if user has premium access
  */
 function isPremium() {
@@ -91,6 +100,7 @@ function getPremiumStatus() {
     if (isProductionBuild()) {
         const hasLicense = checkLicenseStatus();
         let activatedAt = null;
+        let tier = 'sovereign';
 
         if (hasLicense) {
             try {
@@ -99,24 +109,33 @@ function getPremiumStatus() {
                     const license = JSON.parse(licenseData);
                     // Extract activation date from license object
                     activatedAt = license.activatedAt || license.date || null;
+                    tier = license.tier || 'sovereign';
                 }
             } catch (e) {
                 console.warn('[Payments] Failed to parse license for activation date:', e);
             }
         }
 
+        const tierNames = {
+            sovereign: 'The Sovereign',
+            curator: 'The Curator',
+            chamber: 'The Chamber'
+        };
+
         return {
             active: hasLicense,
-            plan: hasLicense ? 'supporter' : 'free',
+            plan: tier,
+            tierName: tierNames[tier] || 'The Sovereign',
             productionBuild: true,
             activatedAt,
-            description: hasLicense ? 'Supporter Tier - Premium Features Enabled' : 'Free Tier - Upgrade for Premium Features'
+            description: hasLicense ? `${tierNames[tier]} Tier - Premium Features Enabled` : 'The Sovereign Tier - Upgrade for Premium Features'
         };
     }
 
     return {
         active: true,
         plan: 'mvp_free',
+        tierName: 'The Sovereign',
         productionBuild: false,
         activatedAt: new Date().toISOString(),
         description: 'MVP Free Tier - All Features Enabled',
@@ -127,17 +146,19 @@ function getPremiumStatus() {
 /**
  * Placeholder for upgrade flow
  * In MVP, shows a toast explaining all features are free
+ * In production, redirects to pricing page or shows upgrade modal
  */
 function upgradeToPremium() {
     if (isProductionBuild()) {
-        // In production, redirect to payment page
-        const config = window.Config || {};
-        const paymentUrl = config.PAYMENT_URL || 'https://rhythm-chamber.com/upgrade';
-        window.open(paymentUrl, '_blank');
+        // In production, show upgrade modal with three-pillar options
+        if (typeof window !== 'undefined') {
+            const event = new CustomEvent('showPricingModal');
+            window.dispatchEvent(event);
+        }
         return;
     }
 
-    if (window.Settings?.showToast) {
+    if (Settings?.showToast) {
         Settings.showToast("All features are free during MVP! Enjoy! 🎉");
     }
 }
@@ -160,7 +181,7 @@ function deactivatePremium() {
  * Placeholder for upgrade modal
  */
 function showUpgradeModal() {
-    upgradeToPremium(); // Just show toast for MVP
+    upgradeToPremium();
 }
 
 /**
@@ -192,31 +213,27 @@ export const Payments = {
     isProductionBuild,
     checkLicenseStatus,
 
-    // Available plans (informational)
+    // Available plans (informational) - Three-Pillar Model
     PLANS: {
-        mvp_free: {
-            name: 'MVP Core',
+        sovereign: {
+            name: 'The Sovereign',
             price: '$0',
-            features: ['Full Analysis', 'Chat', 'Semantic Search (BYO Keys)', 'Local Storage']
+            features: ['Full Local Analysis', 'BYOI Chat (Your Models/Keys)', 'Basic Cards', 'Personality Reveal', '100% Client-Side']
         },
-        supporter: {
-            name: 'Supporter',
-            price: '$39 one-time OR $19 first year, then $9/year',
-            features: ['Obsidian/Notion Export', 'Relationship Compatibility Reports', 'Verified Badge', 'Friend Compare']
+        curator: {
+            name: 'The Curator',
+            price: '$19.99 one-time',
+            features: ['PKM Export (Obsidian/Notion)', 'Relationship Resonance Reports', 'Deep Enrichment (BPM/Key/Producer)', 'Metadata Fixer', 'Verified Badge']
         },
-        cloud_sync: {
-            name: 'Cloud Sync',
-            price: '$2/mo or $10/life',
+        chamber: {
+            name: 'The Chamber',
+            price: '$4.99/mo or $39/yr',
             status: 'coming_soon',
-            features: ['Encrypted Cloud Backup', 'Cross-Device Sync', 'Web Access']
+            features: ['E2EE Multi-Device Sync', 'Chamber Portal (Web Card Hosting)', 'Managed AI (Bundled Tokens)', 'Weekly Insight Emails', 'Priority Support']
         }
     }
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.Payments = Payments;
-}
 
-console.log('[Payments] Module loaded');
+console.log('[Payments] Module loaded - Three-Pillar Model');
 

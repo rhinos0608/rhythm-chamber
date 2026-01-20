@@ -309,11 +309,5 @@ export const VectorClockModule = {
     VersionedData
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.VectorClock = VectorClock;
-    window.VersionedData = VersionedData;
-    window.VectorClockModule = VectorClockModule;
-}
 
 console.log('[VectorClock] Module loaded');

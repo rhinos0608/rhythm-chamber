@@ -12,9 +12,9 @@
 
 | Tier | Cost | Features | Infrastructure | Purpose |
 |------|------|----------|----------------|----------|
-| **Free** | **$0** | Full local analysis, BYOI chat (your models/keys), basic cards, personality reveal, 100% Client-side. | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
-| **Supporter** | **$39 one-time OR $19 first year, then $9/year** | **Obsidian/Notion Export + Relationship Compatibility Reports**, "Verified" badge, friend compare JSON import | Client-side only | **Seed Capital**: Funds security audit & cloud infrastructure |
-| **Patron** | **$7/month** | Dev Discord access, roadmap voting rights, early beta features, priority support | Client-side + Discord | **Community**: Recurring revenue for ongoing support |
+| **The Sovereign (Free)** | **$0** | Full local analysis, BYOI chat (your models/keys), basic cards, personality reveal, 100% Client-side. | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
+| **The Curator** | **$19.99 one-time** | **PKM Export (Obsidian/Notion)**, **Relationship Resonance Reports**, **Deep Enrichment (BPM/Key/Producer)**, **Metadata Fixer** | Client-side only | **Data Power-User**: One-time license for permanent local features |
+| **The Chamber** | **$4.99/mo or $39/yr** | **E2EE Sync**, **Chamber Portal** (web card hosting), **Managed AI** (bundled tokens), **Weekly Insight Emails** | Hybrid (Client-side + Server-side DB) | **Convenience**: Recurring revenue for cloud services |
 
 ### Phase 2: Managed Cloud & AI (Trust-First Launch)
 
@@ -25,22 +25,21 @@
 
 > **Note on "Device Backup"**: This is intentionally NOT "Cloud Sync". It's manual backup/restore between devices — not real-time sync. No CRDTs, no conflict resolution, just "last-write-wins" encrypted blob storage. This keeps costs low (~$20-50/month for 1000 users) and complexity minimal.
 
-**Key Strategy - "Sovereign-to-Managed" Pipeline:**
-- **Community First**: 100% free local tool builds trust and user base
-- **Seed Funding**: $39 one-time OR $19 first year, then $9/year Supporter tier acts as "crowdfunding" for security
-- **External Security**: Revenue funds reputable security firm audit & partnership
-- **Marketing Asset**: "Audited by X" badge becomes sales feature for Phase 2
-- **Clear KPI**: Need ~250-1,000 Supporters before launching cloud tier
-- **Transparency**: Explicitly state "Your Supporter funds our security audit"
+**Key Strategy - "Three-Pillar Revenue Model":**
+- **Pillar 1 (The Sovereign - Free)**: Privacy & Viral Growth — 100% free local tool builds trust and user base
+- **Pillar 2 (The Curator - $19.99 one-time)**: Data Power-User tier — PKM Export, Relationship Resonance, Deep Enrichment, Metadata Fixer
+- **Pillar 3 (The Chamber - $4.99/mo or $39/yr)**: Convenience tier — E2EE Sync, Chamber Portal, Managed AI, Weekly Insight Emails
+- **External Security**: Curator tier revenue funds reputable security firm audit & partnership
+- **Marketing Asset**: "Audited by X" badge becomes sales feature for Chamber tier
+- **Clear KPI**: Need ~250-1,000 Curator users before expanding Chamber infrastructure
+- **Transparency**: Explicitly state "Your Curator license funds our security audit"
 - **One Codebase**: All features in main app, unlocked with license key
-- **Hacker-Resistant**: Accept bypassing, target supporters who want to pay
-- **CLI version**: Wraps existing `js/parser.js` and `js/data-query.js` in Node.js
-- **Friend compare**: Local JSON export/import, zero backend
-- **Phase 2 Trigger**: Only after hitting Supporter KPI and security audit complete
-- **Ongoing Costs**: $10/month covers API/embedding costs with margin
-- **Lifetime Protection**: Separates access fee from compute costs
-- **Two Points of Failure**: Users can switch between local and cloud modes
-- **Never Deprecate Local**: Free tier remains functional forever
+- **Hacker-Resistant**: Accept bypassing, target users who want to pay
+- **Friend compare**: Local JSON export/import, zero backend (Curator feature)
+- **Ongoing Costs**: Chamber subscription covers API/embedding costs with margin
+- **Lifetime Protection**: Curator tier is permanent; Chamber tier separates access fee from compute costs
+- **Two Points of Failure**: Users can switch between local (Sovereign/Curator) and cloud (Chamber) modes
+- **Never Deprecate Local**: Sovereign tier remains functional forever
 
 **Why it works:**
 - **Zero Risk Entry**: Users try without payment barrier

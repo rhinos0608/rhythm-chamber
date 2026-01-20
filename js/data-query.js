@@ -354,10 +354,6 @@ export const DataQuery = {
     extractEntityFromQuery
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.DataQuery = DataQuery;
-}
 
 console.log('[DataQuery] Module loaded');
 

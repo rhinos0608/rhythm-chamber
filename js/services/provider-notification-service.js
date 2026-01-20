@@ -8,6 +8,7 @@
  */
 
 import { EventBus } from './event-bus.js';
+import { Settings } from '../settings.js';
 
 /**
  * Notification types
@@ -429,10 +430,10 @@ export class ProviderNotificationService {
         }
 
         // Show toast notification
-        if (window.Settings?.showToast) {
+        if (Settings?.showToast) {
             const message = this._formatToastMessage(notification);
             const duration = notification.severity === NotificationSeverity.ERROR ? 5000 : 3000;
-            window.Settings.showToast(message, duration);
+            Settings.showToast(message, duration);
         }
 
         // Emit notification event for UI components

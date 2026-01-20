@@ -177,10 +177,5 @@ const DATA_QUERY_SCHEMAS = [
 // ES Module export
 export { DATA_QUERY_SCHEMAS as DataQuerySchemas };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.DataQuerySchemas = DATA_QUERY_SCHEMAS;
-}
-
 console.log('[DataQuerySchemas] Module loaded');
 

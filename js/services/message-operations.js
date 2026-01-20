@@ -1,13 +1,16 @@
 /**
  * Message Operations Service
- * 
+ *
  * Handles chat message operations: regeneration, deletion, editing, and query context generation.
  * Extracted from chat.js to separate message concerns from chat orchestration.
- * 
+ *
  * @module services/message-operations
  */
 
 'use strict';
+
+import { Settings } from '../settings.js';
+import { DataVersion } from './data-version.js';
 
 // ==========================================
 // Dependencies (injected via init)
@@ -74,8 +77,8 @@ async function regenerateLastResponse(conversationHistory, sendMessageFn, option
     // Check for stale data context before regeneration
     // The user may have uploaded new data since this message was generated
     const lastAssistantMsg = conversationHistory.slice().reverse().find(m => m.role === 'assistant');
-    if (lastAssistantMsg && window.DataVersion?.checkRegenerationContext) {
-        const staleCheck = window.DataVersion.checkRegenerationContext(lastAssistantMsg);
+    if (lastAssistantMsg && DataVersion.checkRegenerationContext) {
+        const staleCheck = DataVersion.checkRegenerationContext(lastAssistantMsg);
         if (staleCheck.shouldWarn) {
             console.warn('[MessageOperations] Regenerating with stale data context:', staleCheck.message);
             // Notify caller via callback if provided
@@ -362,7 +365,7 @@ function generateFallbackResponse(message, queryContext) {
     }
 
     // Default response - provider-aware messaging
-    const currentProvider = window.Settings?.getSettings?.()?.llm?.provider || 'openrouter';
+    const currentProvider = Settings?.getSettings?.()?.llm?.provider || 'openrouter';
     const providerHint = currentProvider === 'openrouter'
         ? 'connect an OpenRouter API key in settings'
         : currentProvider === 'lmstudio'
@@ -491,10 +494,5 @@ const MessageOperations = {
 
 // ES Module export
 export { MessageOperations };
-
-// Make available globally for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.MessageOperations = MessageOperations;
-}
 
 console.log('[MessageOperations] Service loaded');

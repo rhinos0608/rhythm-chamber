@@ -22,6 +22,7 @@ import { NativeToolStrategy } from './services/tool-strategies/native-strategy.j
 import { PromptInjectionStrategy } from './services/tool-strategies/prompt-injection-strategy.js';
 import { IntentExtractionStrategy } from './services/tool-strategies/intent-extraction-strategy.js';
 import { ModuleRegistry } from './module-registry.js';
+import { ConfigLoader } from './services/config-loader.js';
 
 // Turn serialization import
 import { TurnQueue } from './services/turn-queue.js';
@@ -37,6 +38,22 @@ import { SessionManager } from './services/session-manager.js';
 
 // Token Counter import
 import { TokenCounter } from './token-counter.js';
+
+// Prompts import
+import { Prompts } from './prompts.js';
+
+// Storage import
+import { Storage } from './storage.js';
+
+// Phase 4 modules: Analysis & Processing
+import { Patterns } from './patterns.js';
+import { Personality } from './personality.js';
+import { Parser } from './parser.js';
+import { DataQuery } from './data-query.js';
+
+// Provider imports
+import { ProviderInterface } from './providers/provider-interface.js';
+import { Settings } from './settings.js';
 
 // New coordinator imports
 import { ConversationOrchestrator } from './services/conversation-orchestrator.js';
@@ -84,30 +101,30 @@ async function initChat(personality, patterns, summary, streams = null) {
     await SessionManager.init();
 
     // Register for storage updates to refresh data
-    if (window.Storage?.onUpdate) {
-        window.Storage.onUpdate(handleStorageUpdate);
+    if (Storage.onUpdate) {
+        Storage.onUpdate(handleStorageUpdate);
     }
 
     // Initialize ConversationOrchestrator
-    if (window.ConversationOrchestrator?.init) {
-        window.ConversationOrchestrator.init({
-            TokenCounter: window.TokenCounter,
-            DataQuery: window.DataQuery,
+    if (ConversationOrchestrator?.init) {
+        ConversationOrchestrator.init({
+            TokenCounter: TokenCounter,
+            DataQuery: DataQuery,
             RAG: ModuleRegistry.getModuleSync('RAG'),
-            Prompts: window.Prompts
+            Prompts: Prompts
         });
-        window.ConversationOrchestrator.setUserContext(userContext);
-        window.ConversationOrchestrator.setStreamsData(streams);
+        ConversationOrchestrator.setUserContext(userContext);
+        ConversationOrchestrator.setStreamsData(streams);
     }
 
     // Initialize MessageOperations with dependencies (for backward compatibility)
     // Note: MessageOperations now delegates to ConversationOrchestrator for state access
     if (window.MessageOperations?.init) {
         window.MessageOperations.init({
-            DataQuery: window.DataQuery,
+            DataQuery: DataQuery,
             RAG: ModuleRegistry.getModuleSync('RAG'),
-            TokenCounter: window.TokenCounter,
-            ConversationOrchestrator: window.ConversationOrchestrator
+            TokenCounter: TokenCounter,
+            ConversationOrchestrator: ConversationOrchestrator
         });
         // MessageOperations now gets state from ConversationOrchestrator
         // No need to duplicate state here
@@ -116,7 +133,7 @@ async function initChat(personality, patterns, summary, streams = null) {
     // Initialize TokenCountingService with dependencies
     if (window.TokenCountingService?.init) {
         window.TokenCountingService.init({
-            TokenCounter: window.TokenCounter
+            TokenCounter: TokenCounter
         });
     }
 
@@ -134,7 +151,7 @@ async function initChat(personality, patterns, summary, streams = null) {
             Functions: window.Functions,
             SessionManager: SessionManager,
             FunctionCallingFallback: window.FunctionCallingFallback,
-            buildSystemPrompt: (...args) => window.ConversationOrchestrator?.buildSystemPrompt(...args),
+            buildSystemPrompt: (...args) => ConversationOrchestrator?.buildSystemPrompt(...args),
             callLLM: callLLMWrapper,
             streamsData: streams,
             timeoutMs: CHAT_FUNCTION_TIMEOUT_MS
@@ -144,9 +161,9 @@ async function initChat(personality, patterns, summary, streams = null) {
     // Initialize LLMProviderRoutingService with dependencies
     if (window.LLMProviderRoutingService?.init) {
         window.LLMProviderRoutingService.init({
-            ProviderInterface: window.ProviderInterface,
-            Settings: window.Settings,
-            Config: window.Config
+            ProviderInterface: ProviderInterface,
+            Settings: Settings,
+            Config: ConfigLoader.getAll()
         });
     }
 
@@ -159,24 +176,24 @@ async function initChat(personality, patterns, summary, streams = null) {
     }
 
     // Initialize MessageLifecycleCoordinator
-    if (window.MessageLifecycleCoordinator?.init) {
-        window.MessageLifecycleCoordinator.init({
+    if (MessageLifecycleCoordinator?.init) {
+        MessageLifecycleCoordinator.init({
             SessionManager: SessionManager,
-            ConversationOrchestrator: window.ConversationOrchestrator,
+            ConversationOrchestrator: ConversationOrchestrator,
             LLMProviderRoutingService: window.LLMProviderRoutingService,
             ToolCallHandlingService: window.ToolCallHandlingService,
             TokenCountingService: window.TokenCountingService,
             FallbackResponseService: window.FallbackResponseService,
             CircuitBreaker: window.CircuitBreaker,
             ModuleRegistry: ModuleRegistry,
-            Settings: window.Settings,
-            Config: window.Config,
+            Settings: Settings,
+            Config: ConfigLoader.getAll(),
             Functions: window.Functions,
             WaveTelemetry: window.WaveTelemetry
         });
     }
 
-    return window.ConversationOrchestrator?.buildSystemPrompt() || '';
+    return ConversationOrchestrator?.buildSystemPrompt() || '';
 }
 
 /**
@@ -186,11 +203,11 @@ async function initChat(personality, patterns, summary, streams = null) {
 async function handleStorageUpdate(event) {
     if (event.type === 'streams' && event.count > 0) {
         console.log('[Chat] Data updated, refreshing streams...');
-        const streamsData = await window.Storage.getStreams();
+        const streamsData = await Storage.getStreams();
 
         // Update ConversationOrchestrator as single source of truth
-        if (window.ConversationOrchestrator?.setStreamsData) {
-            window.ConversationOrchestrator.setStreamsData(streamsData);
+        if (ConversationOrchestrator?.setStreamsData) {
+            ConversationOrchestrator.setStreamsData(streamsData);
         }
 
         // ToolCallHandlingService still needs direct update for backward compatibility
@@ -353,32 +370,32 @@ function requireCoordinator(coordinatorName, coordinator) {
 export const Chat = {
     initChat,
     sendMessage: (...args) => {
-        const coordinator = requireCoordinator('MessageLifecycleCoordinator', window.MessageLifecycleCoordinator);
+        const coordinator = requireCoordinator('MessageLifecycleCoordinator', MessageLifecycleCoordinator);
         return coordinator.sendMessage(...args);
     },
     regenerateLastResponse: (...args) => {
-        const coordinator = requireCoordinator('MessageLifecycleCoordinator', window.MessageLifecycleCoordinator);
+        const coordinator = requireCoordinator('MessageLifecycleCoordinator', MessageLifecycleCoordinator);
         return coordinator.regenerateLastResponse(...args);
     },
     deleteMessage: (...args) => {
-        const coordinator = requireCoordinator('MessageLifecycleCoordinator', window.MessageLifecycleCoordinator);
+        const coordinator = requireCoordinator('MessageLifecycleCoordinator', MessageLifecycleCoordinator);
         return coordinator.deleteMessage(...args);
     },
     editMessage: (...args) => {
-        const coordinator = requireCoordinator('MessageLifecycleCoordinator', window.MessageLifecycleCoordinator);
+        const coordinator = requireCoordinator('MessageLifecycleCoordinator', MessageLifecycleCoordinator);
         return coordinator.editMessage(...args);
     },
     clearHistory: (...args) => {
-        const coordinator = requireCoordinator('MessageLifecycleCoordinator', window.MessageLifecycleCoordinator);
+        const coordinator = requireCoordinator('MessageLifecycleCoordinator', MessageLifecycleCoordinator);
         return coordinator.clearHistory(...args);
     },
     clearConversation,
     getHistory: (...args) => {
-        const coordinator = requireCoordinator('MessageLifecycleCoordinator', window.MessageLifecycleCoordinator);
+        const coordinator = requireCoordinator('MessageLifecycleCoordinator', MessageLifecycleCoordinator);
         return coordinator.getHistory(...args);
     },
     setStreamsData: (...args) => {
-        const coordinator = requireCoordinator('ConversationOrchestrator', window.ConversationOrchestrator);
+        const coordinator = requireCoordinator('ConversationOrchestrator', ConversationOrchestrator);
         return coordinator.setStreamsData(...args);
     },
     // Session management

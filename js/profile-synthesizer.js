@@ -1,16 +1,21 @@
 /**
  * Profile Synthesizer
- * 
+ *
  * AI-driven profile synthesis from template profiles.
  * Combines patterns from multiple templates to create custom profiles.
- * 
+ *
  * HNW Considerations:
  * - Hierarchy: Synthesizer only combines, never creates raw patterns
  * - Network: Derives from TemplateProfileStore, passes through Personality for classification
  * - Wave: Synthesis is async with progress feedback
- * 
+ *
  * @module profile-synthesizer
  */
+
+// Phase 4 modules: Analysis & Processing
+import { Patterns } from './patterns.js';
+import { Personality } from './personality.js';
+import { TemplateProfileStore } from './template-profiles.js';
 
 // ==========================================
 // Configuration
@@ -36,7 +41,7 @@ class ProfileSynthesizer {
      * Initialize with template store reference
      */
     init() {
-        this._templateStore = window.TemplateProfileStore;
+        this._templateStore = TemplateProfileStore;
         if (!this._templateStore) {
             console.warn('[ProfileSynthesizer] TemplateProfileStore not available');
         }
@@ -71,8 +76,8 @@ class ProfileSynthesizer {
         if (onProgress) onProgress(70, 'Detecting personality...');
 
         // Step 4: Run through personality detection
-        const patterns = window.Patterns?.detect(syntheticStreams) || combinedPatterns;
-        const personality = window.Personality?.classifyPersonality(patterns) || null;
+        const patterns = Patterns?.detectAllPatterns(syntheticStreams, []) || combinedPatterns;
+        const personality = Personality?.classifyPersonality(patterns) || null;
 
         if (onProgress) onProgress(90, 'Finalizing profile...');
 
@@ -131,8 +136,8 @@ class ProfileSynthesizer {
         const combinedPatterns = this._combinePatterns(templateSelection);
         const syntheticStreams = this._createSyntheticStreams(combinedPatterns, templateSelection);
 
-        const patterns = window.Patterns?.detect(syntheticStreams) || combinedPatterns;
-        const personality = window.Personality?.classifyPersonality(patterns) || null;
+        const patterns = Patterns?.detectAllPatterns(syntheticStreams, []) || combinedPatterns;
+        const personality = Personality?.classifyPersonality(patterns) || null;
 
         return {
             id: this._generateProfileId(),
@@ -497,12 +502,6 @@ const profileSynthesizer = new ProfileSynthesizer();
 
 // ES Module exports
 export { profileSynthesizer as ProfileSynthesizer, ProfileSynthesizer as ProfileSynthesizerClass };
-
-// Keep window globals for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.ProfileSynthesizer = profileSynthesizer;
-    window.ProfileSynthesizerClass = ProfileSynthesizer;
-}
 
 console.log('[ProfileSynthesizer] Module loaded');
 

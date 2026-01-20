@@ -75,10 +75,6 @@ export const FunctionRetry = {
     withRetry
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.FunctionRetry = FunctionRetry;
-}
 
 console.log('[FunctionRetry] Module loaded');
 

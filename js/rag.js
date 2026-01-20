@@ -22,6 +22,8 @@ const LOCAL_EMBEDDING_DIMENSIONS = 384; // all-MiniLM-L6-v2 output dimension
 import { ModuleRegistry } from './module-registry.js';
 import { Patterns } from './patterns.js';
 import { Storage } from './storage.js';
+import { Security } from './security/index.js';
+import { OperationLock } from './operation-lock.js';
 
 // EmbeddingWorker instance (lazy-loaded)
 let embeddingWorker = null;
@@ -179,9 +181,7 @@ function isLocalMode() {
  * @returns {Promise<{supported: boolean, reason?: string}>}
  */
 async function checkLocalSupport() {
-    const LocalEmbeddings =
-        ModuleRegistry.getModuleSync('LocalEmbeddings') ||
-        (ModuleRegistry.getModule ? await ModuleRegistry.getModule('LocalEmbeddings') : null);
+    const LocalEmbeddings = ModuleRegistry.getModuleSync('LocalEmbeddings');
 
     if (!LocalEmbeddings?.isSupported) {
         return { supported: false, reason: 'LocalEmbeddings module not loaded' };
@@ -200,8 +200,8 @@ async function getConfig() {
     try {
         // Try unified storage first (IndexedDB after migration)
         let config = {};
-        if (window.Storage?.getConfig) {
-            const storedConfig = await window.Storage.getConfig(RAG_STORAGE_KEY);
+        if (Storage.getConfig) {
+            const storedConfig = await Storage.getConfig(RAG_STORAGE_KEY);
             if (storedConfig) {
                 config = storedConfig;
             }
@@ -236,9 +236,9 @@ async function saveConfig(config) {
     };
 
     // Store in unified storage (IndexedDB)
-    if (window.Storage?.setConfig) {
+    if (Storage.setConfig) {
         try {
-            await window.Storage.setConfig(RAG_STORAGE_KEY, nonSensitive);
+            await Storage.setConfig(RAG_STORAGE_KEY, nonSensitive);
         } catch (e) {
             console.warn('[RAG] Failed to save to unified storage:', e);
         }
@@ -291,7 +291,7 @@ async function isStale() {
         return true;
     }
 
-    const currentHash = await window.Storage?.getDataHash?.();
+    const currentHash = await Storage.getDataHash?.();
     return currentHash !== config.dataHash;
 }
 
@@ -303,12 +303,12 @@ async function isStale() {
 async function getCheckpoint() {
     try {
         // Try unified storage first (IndexedDB)
-        if (window.Storage?.getConfig) {
-            const cipher = await window.Storage.getConfig(RAG_CHECKPOINT_CIPHER_KEY);
-            if (cipher && window.Security?.decryptData) {
+        if (Storage.getConfig) {
+            const cipher = await Storage.getConfig(RAG_CHECKPOINT_CIPHER_KEY);
+            if (cipher && Security.decryptData) {
                 try {
-                    const sessionKey = await window.Security.getSessionKey();
-                    const decrypted = await window.Security.decryptData(cipher, sessionKey);
+                    const sessionKey = await Security.getSessionKey();
+                    const decrypted = await Security.decryptData(cipher, sessionKey);
                     if (decrypted) {
                         return JSON.parse(decrypted);
                     }
@@ -318,7 +318,7 @@ async function getCheckpoint() {
             }
 
             // Check for unencrypted checkpoint in unified storage
-            const plainCheckpoint = await window.Storage.getConfig(RAG_CHECKPOINT_KEY);
+            const plainCheckpoint = await Storage.getConfig(RAG_CHECKPOINT_KEY);
             if (plainCheckpoint) {
                 return plainCheckpoint;
             }
@@ -326,10 +326,10 @@ async function getCheckpoint() {
 
         // Fallback to localStorage
         const cipher = localStorage.getItem(RAG_CHECKPOINT_CIPHER_KEY);
-        if (cipher && window.Security?.decryptData) {
+        if (cipher && Security.decryptData) {
             try {
-                const sessionKey = await window.Security.getSessionKey();
-                const decrypted = await window.Security.decryptData(cipher, sessionKey);
+                const sessionKey = await Security.getSessionKey();
+                const decrypted = await Security.decryptData(cipher, sessionKey);
                 if (decrypted) {
                     return JSON.parse(decrypted);
                 }
@@ -358,18 +358,18 @@ async function saveCheckpoint(data) {
     };
 
     // Try to encrypt checkpoint
-    if (window.Security?.encryptData && window.Security?.getSessionKey) {
+    if (Security.encryptData && Security.getSessionKey) {
         try {
-            const sessionKey = await window.Security.getSessionKey();
-            const encrypted = await window.Security.encryptData(
+            const sessionKey = await Security.getSessionKey();
+            const encrypted = await Security.encryptData(
                 JSON.stringify(checkpoint),
                 sessionKey
             );
 
             // Save to unified storage (IndexedDB)
-            if (window.Storage?.setConfig) {
-                await window.Storage.setConfig(RAG_CHECKPOINT_CIPHER_KEY, encrypted);
-                await window.Storage.removeConfig(RAG_CHECKPOINT_KEY);
+            if (Storage.setConfig) {
+                await Storage.setConfig(RAG_CHECKPOINT_CIPHER_KEY, encrypted);
+                await Storage.removeConfig(RAG_CHECKPOINT_KEY);
             }
             // Also save to localStorage as fallback
             localStorage.setItem(RAG_CHECKPOINT_CIPHER_KEY, encrypted);
@@ -381,8 +381,8 @@ async function saveCheckpoint(data) {
     }
 
     // Fallback to unencrypted (if Security module not loaded)
-    if (window.Storage?.setConfig) {
-        await window.Storage.setConfig(RAG_CHECKPOINT_KEY, checkpoint);
+    if (Storage.setConfig) {
+        await Storage.setConfig(RAG_CHECKPOINT_KEY, checkpoint);
     }
     localStorage.setItem(RAG_CHECKPOINT_KEY, JSON.stringify(checkpoint));
 }
@@ -393,10 +393,10 @@ async function saveCheckpoint(data) {
  */
 async function clearCheckpoint() {
     // Clear from unified storage
-    if (window.Storage?.removeConfig) {
+    if (Storage.removeConfig) {
         try {
-            await window.Storage.removeConfig(RAG_CHECKPOINT_KEY);
-            await window.Storage.removeConfig(RAG_CHECKPOINT_CIPHER_KEY);
+            await Storage.removeConfig(RAG_CHECKPOINT_KEY);
+            await Storage.removeConfig(RAG_CHECKPOINT_CIPHER_KEY);
         } catch (e) {
             console.warn('[RAG] Failed to clear checkpoint from unified storage:', e);
         }
@@ -426,8 +426,8 @@ async function getEmbeddingManifest() {
 
     try {
         // Try unified storage first
-        if (window.Storage?.getConfig) {
-            const manifest = await window.Storage.getConfig(MANIFEST_KEY);
+        if (Storage.getConfig) {
+            const manifest = await Storage.getConfig(MANIFEST_KEY);
             if (manifest) return manifest;
         }
 
@@ -459,9 +459,9 @@ async function saveEmbeddingManifest(manifest) {
     manifest.updatedAt = Date.now();
 
     // Save to unified storage
-    if (window.Storage?.setConfig) {
+    if (Storage.setConfig) {
         try {
-            await window.Storage.setConfig(MANIFEST_KEY, manifest);
+            await Storage.setConfig(MANIFEST_KEY, manifest);
         } catch (e) {
             console.warn('[RAG] Failed to save manifest to unified storage:', e);
         }
@@ -481,9 +481,9 @@ async function saveEmbeddingManifest(manifest) {
 async function clearEmbeddingManifest() {
     const MANIFEST_KEY = 'rhythm_chamber_embedding_manifest';
 
-    if (window.Storage?.removeConfig) {
+    if (Storage.removeConfig) {
         try {
-            await window.Storage.removeConfig(MANIFEST_KEY);
+            await Storage.removeConfig(MANIFEST_KEY);
         } catch (e) {
             console.warn('[RAG] Failed to clear manifest from unified storage:', e);
         }
@@ -1018,9 +1018,9 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abo
 
     // HNW Hierarchy: Acquire operation lock
     let embeddingLockId = null;
-    if (window.OperationLock) {
+    if (OperationLock) {
         try {
-            embeddingLockId = await window.OperationLock.acquire('embedding_generation');
+            embeddingLockId = await OperationLock.acquire('embedding_generation');
         } catch (lockError) {
             throw new Error(`Cannot generate embeddings: ${lockError.message}`);
         }
@@ -1109,8 +1109,8 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abo
 
     } finally {
         // HNW Hierarchy: Always release operation lock
-        if (embeddingLockId && window.OperationLock) {
-            window.OperationLock.release('embedding_generation', embeddingLockId);
+        if (embeddingLockId && OperationLock) {
+            OperationLock.release('embedding_generation', embeddingLockId);
         }
     }
 }
@@ -1126,11 +1126,19 @@ async function searchLocal(query, limit = 5) {
     const LocalEmbeddings = ModuleRegistry.getModuleSync('LocalEmbeddings');
     const LocalVectorStore = ModuleRegistry.getModuleSync('LocalVectorStore');
 
-    if (!LocalEmbeddings?.isReady()) {
+    if (!LocalEmbeddings) {
+        throw new Error('LocalEmbeddings module not loaded. Check browser compatibility.');
+    }
+
+    if (!LocalVectorStore) {
+        throw new Error('LocalVectorStore module not loaded. Check browser compatibility.');
+    }
+
+    if (!LocalEmbeddings.isReady()) {
         throw new Error('Local embeddings not initialized. Generate embeddings first.');
     }
 
-    if (!LocalVectorStore?.isReady()) {
+    if (!LocalVectorStore.isReady()) {
         await LocalVectorStore.init();
     }
 
@@ -1154,9 +1162,12 @@ async function searchLocal(query, limit = 5) {
  */
 async function clearLocalEmbeddings() {
     const LocalVectorStore = ModuleRegistry.getModuleSync('LocalVectorStore');
-    if (LocalVectorStore) {
-        await LocalVectorStore.clear();
+
+    if (!LocalVectorStore) {
+        throw new Error('LocalVectorStore module not loaded. Check browser compatibility.');
     }
+
+    await LocalVectorStore.clear();
 
     // Update config
     const config = await getConfig() || {};

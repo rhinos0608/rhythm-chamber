@@ -396,10 +396,5 @@ export const Utils = {
     StorageCircuitBreaker
 };
 
-// Keep window global for backwards compatibility
-if (typeof window !== 'undefined') {
-    window.Utils = Utils;
-    window.StorageCircuitBreaker = StorageCircuitBreaker;
-}
 
 console.log('[Utils] Module loaded with StorageCircuitBreaker');
