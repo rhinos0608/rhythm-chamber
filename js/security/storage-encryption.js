@@ -447,4 +447,110 @@ const StorageEncryption = {
     }
 };
 
+/**
+ * Secure deletion of encrypted data from IndexedDB
+ *
+ * SECURITY RATIONALE: When deleting encrypted sensitive data (API keys, chat history),
+ * overwrite with random data before deletion to prevent forensic recovery. This follows
+ * secure data sanitization best practices for preventing data recovery from storage media.
+ *
+ * HOW IT WORKS:
+ * 1. Fetch the record from IndexedDB
+ * 2. Check if it's encrypted (value.encrypted === true)
+ * 3. If encrypted:
+ *    - Generate random data matching the encrypted value length
+ *    - Overwrite the record with random data
+ *    - Delete the record
+ * 4. If not encrypted:
+ *    - Skip overwriting (plaintext doesn't need sanitization)
+ *    - Delete the record directly
+ *
+ * GRACEFUL DEGRADATION:
+ * - If record doesn't exist, return immediately (nothing to delete)
+ * - If overwrite fails, log warning and proceed to delete
+ * - If delete fails, log error but don't throw
+ *
+ * @param {string} storeName - IndexedDB store name
+ * @param {string} key - Record key to delete
+ * @returns {Promise<void>}
+ *
+ * @example
+ * // Delete encrypted API key securely
+ * await secureDelete('config', 'openrouter.apiKey');
+ *
+ * @example
+ * // Delete chat history securely
+ * await secureDelete('config', 'chat_20240120');
+ */
+export async function secureDelete(storeName, key) {
+    try {
+        // Import IndexedDBCore dynamically to avoid circular dependency
+        const { IndexedDBCore } = await import('../storage/indexeddb.js');
+
+        // Step 1: Fetch the record to check if it exists and is encrypted
+        const record = await IndexedDBCore.get(storeName, key);
+
+        // If record doesn't exist, nothing to delete
+        if (!record) {
+            console.log(`[StorageEncryption] Record '${key}' not found in store '${storeName}', nothing to delete`);
+            return;
+        }
+
+        // Step 2: Check if record is encrypted
+        const isEncrypted = record.value?.encrypted === true;
+
+        if (isEncrypted) {
+            console.log(`[StorageEncryption] Securely deleting encrypted record '${key}' from store '${storeName}'`);
+
+            try {
+                // Step 3: Generate random data to overwrite encrypted value
+                // Calculate length of the encrypted value string
+                const encryptedValue = record.value.value;
+                const valueLength = encryptedValue.length;
+
+                // Generate random bytes matching the encrypted value length
+                const randomBytes = crypto.getRandomValues(new Uint8Array(valueLength));
+
+                // Convert to base64 to match the encrypted data format
+                const randomBase64 = btoa(String.fromCharCode(...randomBytes));
+
+                // Step 4: Overwrite the record with random data
+                await IndexedDBCore.put(storeName, {
+                    key: key,
+                    value: {
+                        encrypted: true,
+                        keyVersion: record.value.keyVersion || 1,
+                        value: randomBase64 // Overwritten with random data
+                    },
+                    updatedAt: new Date().toISOString()
+                });
+
+                console.log(`[StorageEncryption] Successfully overwrote encrypted record '${key}' with random data`);
+
+            } catch (overwriteError) {
+                // If overwrite fails, log warning but proceed to delete
+                console.warn(`[StorageEncryption] Failed to overwrite record '${key}' with random data:`, overwriteError);
+                console.warn(`[StorageEncryption] Proceeding with deletion anyway`);
+            }
+
+            // Step 5: Delete the record (whether overwrite succeeded or not)
+            try {
+                await IndexedDBCore.delete(storeName, key);
+                console.log(`[StorageEncryption] Successfully deleted encrypted record '${key}'`);
+            } catch (deleteError) {
+                console.error(`[StorageEncryption] Failed to delete record '${key}':`, deleteError);
+            }
+
+        } else {
+            // Not encrypted - skip overwriting, just delete
+            console.log(`[StorageEncryption] Record '${key}' is not encrypted, using standard deletion`);
+            await IndexedDBCore.delete(storeName, key);
+        }
+
+    } catch (error) {
+        // Never throw exceptions - graceful degradation
+        console.error(`[StorageEncryption] Secure deletion failed for '${key}':`, error);
+    }
+}
+
 export { StorageEncryption };
