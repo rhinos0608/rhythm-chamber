@@ -1,6 +1,6 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System** + **ToolStrategy Pattern** + **ES Module Migration (Complete)** + **Unit Testing (Vitest)** + **Chat Module Refactoring** + **HNW Structural Improvements (9 modules)** + **HNW Phase 2 Advanced Improvements (5 modules)** + **Phase 1 Architecture (EventBus, DataProvider)** + **Phase 2 Advanced Features (Sharing, Temporal, Playlist)** + **Error Boundaries & LRU Vector Cache** + **Phase 3 Critical Infrastructure** + **Phase 3 Enhanced** + **Session 23: Module Migration Completion + Performance Optimizations** + **HNW Phase 5: System Resilience (IndexedDB Retry, QuotaManager, Faster Failover, EventBus Domains)** + **WASM-Only Semantic Search (100% Client-Side, Qdrant Removed, INT8 Quantization, Battery-Aware Mode)** + **Event Replay System (VectorClock Ordering, Cross-Tab Coordination, Persistent Event Log)** + **Phase 6: Provider Health Monitoring & Automatic Fallback (Real-time UI, Circuit Breaker Integration, Enhanced Error Messages)** + **Phase 7: Mobile Heartbeat Fixes, Write-Ahead Log, Context-Aware Error Recovery (DeviceDetection, WAL, Priority System)** + **Reliability Improvements (ConfigLoader, EventBus Health Monitoring, SharedWorker Fallback, TurnQueue Observability)**
+> **Status:** Free MVP + Quick Snapshot + Settings UI + AI Function Calling + Semantic Search (Free) + Chat Sessions + HNW Fixes + Security Hardening v2 + Modular Refactoring + **Fail-Closed Security (Safe Mode) + Centralized Storage Keys** + **Operation Lock Contract & Race Condition Fixes** + **Function Calling Fallback System** + **ToolStrategy Pattern** + **ES Module Migration (Complete)** + **Unit Testing (Vitest)** + **Chat Module Refactoring** + **HNW Structural Improvements (9 modules)** + **HNW Phase 2 Advanced Improvements (5 modules)** + **Phase 1 Architecture (EventBus, DataProvider)** + **Phase 2 Advanced Features (Sharing, Temporal, Playlist)** + **Error Boundaries & LRU Vector Cache** + **Phase 3 Critical Infrastructure** + **Phase 3 Enhanced** + **Session 23: Module Migration Completion + Performance Optimizations** + **HNW Phase 5: System Resilience (IndexedDB Retry, QuotaManager, Faster Failover, EventBus Domains)** + **WASM-Only Semantic Search (100% Client-Side, Qdrant Removed, INT8 Quantization, Battery-Aware Mode)** + **Event Replay System (VectorClock Ordering, Cross-Tab Coordination, Persistent Event Log)** + **Phase 6: Provider Health Monitoring & Automatic Fallback (Real-time UI, Circuit Breaker Integration, Enhanced Error Messages)** + **Phase 7: Mobile Heartbeat Fixes, Write-Ahead Log, Context-Aware Error Recovery (DeviceDetection, WAL, Priority System)** + **Reliability Improvements (ConfigLoader, EventBus Health Monitoring, SharedWorker Fallback, TurnQueue Observability)** + **v0.9 Security Hardening (COMPLETE) — 23/23 Requirements: KeyManager, StorageEncryption (AES-GCM-256), MessageSecurity (HMAC-SHA256)**
 
 ---
 
@@ -2370,6 +2370,84 @@ async function sendMessage(message) {
 
 ---
 
+## Development Methodology: GSD (Get Shit Done) System
+
+**Version:** 1.8.0
+
+This project uses the **GSD (Get Shit Done)** system—an AI-orchestrated project management framework for systematic software development through phases, plans, tasks, and waves.
+
+### Core Concepts
+
+**Hierarchy:** Milestones → Phases → Plans → Tasks → Waves
+
+```
+Milestone (e.g., v0.9 Security Hardening)
+    └── Phase (e.g., 09-key-foundation)
+            ├── Plan 01 (Wave 1) ──┐
+            ├── Plan 02 (Wave 1) ──┤─ Parallel Execution
+            ├── Plan 03 (Wave 2) ──┘   (after Wave 1 complete)
+            └── Plan 04 (Wave 3)       (after Wave 2 complete)
+```
+
+### Key Workflows
+
+| Workflow | Purpose | Frequency |
+|----------|---------|-----------|
+| `execute-phase` | Execute all plans in a phase using wave-based parallelization | Most common (90%) |
+| `execute-plan` | Execute single PLAN.md and create SUMMARY.md | Per plan |
+| `verify-work` | User Acceptance Testing (UAT) with persistent state | Post-phase |
+| `complete-milestone` | Mark shipped versions, create historical records | Per release |
+
+### Planning System Location
+
+**Path:** `~/.claude/get-shit-done/`
+
+**Structure:**
+```
+.planning/
+├── PROJECT.md              # Living project context
+├── STATE.md                # Current position and decisions
+├── ROADMAP.md              # Phase-level planning
+├── REQUIREMENTS.md         # Current milestone requirements
+├── phases/                 # Phase directories with PLAN/SUMMARY
+├── research/               # Research artifacts
+└── milestones/             # Historical milestone records
+```
+
+### Documentation Artifacts
+
+| Artifact | Purpose | Created By |
+|----------|---------|------------|
+| PLAN.md | Executable plan with tasks and verification | Planner agent |
+| SUMMARY.md | Completion record with metrics, commits, decisions | Executor agent |
+| VERIFICATION.md | Phase verification results | Verifier agent |
+| STATE.md | Current position and accumulated decisions | Orchestrator |
+
+### Key Patterns
+
+- **Autonomous Execution**: Plans marked `autonomous: true` execute without checkpoints
+- **Wave-Based Parallelization**: Dependency-aware parallel execution
+- **Must-Haves Validation**: Truths, artifacts, and key links verification
+- **Atomic Commits**: Each task commits individually to git
+- **Checkpoint Handling**: Human verification at strategic points
+
+### Current Milestone: v0.9 Security Hardening
+
+**Status:** ✅ COMPLETE
+**Phases:** 6 phases (Phases 9-14)
+**Requirements:** 23/23 satisfied (100%)
+**Integration Gaps Closed:** 3 critical gaps
+
+**Phases Completed:**
+- Phase 9: Key Foundation (4 plans) — Secure key lifecycle
+- Phase 12: KeyManager Integration (1 plan) — Gap closure #1
+- Phase 13: Storage Encryption Implementation (4 plans) — Gap closure #2
+- Phase 14: Cross-Tab Security Implementation (2 plans) — Gap closure #3
+
+**Full Documentation:** `docs/gsd-system.md`
+
+---
+
 ## Security Considerations
 
 ### Core Security Model
@@ -2398,6 +2476,26 @@ This application uses a **100% client-side security model**. All security measur
 | **Dependency Hardening** | `app.js` | checkDependencies() validates all critical modules at startup |
 | **Vector Search Worker** | `workers/vector-search-worker.js` | Offloads cosine similarity to background thread for 60fps maintenance |
 | **Operation Lock Contract** | `operation-lock.js` + `operation-lock-errors.js` + `operation-queue.js` | Standardized failure propagation, race condition fixes, retry logic |
+| **v0.9 Security Hardening** | `js/security/` (KeyManager, StorageEncryption, MessageSecurity) | **COMPLETE** — 23/23 requirements: Non-extractable keys (PBKDF2 600k), AES-GCM-256 storage encryption, HMAC-SHA256 message signing |
+
+**v0.9 Security Milestone (✅ Complete)**
+
+| Module | Purpose | Key Features |
+|--------|---------|-------------|
+| **KeyManager** | Centralized key lifecycle | Non-extractable keys, PBKDF2 600k iterations, 3 key types (session/data/signing) |
+| **StorageEncryption** | AES-GCM-256 encryption | Unique IV per operation, data classification, key rotation, secure deletion |
+| **MessageSecurity** | HMAC-SHA256 message security | Signature verification, timestamp validation, nonce tracking, sanitization |
+
+**Security Guarantees:**
+- ✅ All API keys encrypted at rest (AES-GCM-256)
+- ✅ Chat history encrypted with unique IV per operation
+- ✅ All cross-tab messages authenticated with HMAC-SHA256
+- ✅ Replay attack prevention (timestamps + nonces)
+- ✅ Sensitive data sanitized from broadcasts
+- ✅ Keys cleared on logout (KEY-05)
+- ✅ Secure context validation (HTTPS/localhost only)
+
+**Full details:** `docs/security-milestone-v0.9.md`
 
 ---
 
@@ -2448,13 +2546,13 @@ npx serve .
 - [ ] WASM embeddings for semantic search (v1.1)
 - [ ] Playlist generation based on patterns (v1.1)
 
-#### Supporter Tier ($39 one-time OR $19 first year, then $9/year)
+#### Curator Tier ($19.99 one-time)
 - [x] **Obsidian/Notion Export**: Generates folder of Markdown files with proper interlinking
 - [x] **Relationship Compatibility Reports**: Upload friend's data to generate insights
 - [x] "Verified" badge on cards
 - [x] Friend compare via JSON export/import
 
-#### Patreon Tier ($7/month)
+#### Chamber Tier ($4.99/mo or $39/yr)
 - [ ] Dev Discord community
 - [ ] Roadmap voting rights
 - [ ] Early access to beta features
