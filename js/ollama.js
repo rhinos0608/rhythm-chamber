@@ -561,6 +561,11 @@ async function embed(input, model = 'nomic-embed-text') {
  * @returns {Promise<object>} Response in OpenAI-compatible format
  */
 async function chatCompletion(messages, config, tools = null) {
+    // Validate required parameters
+    if (!Array.isArray(messages) || messages.length === 0) {
+        throw new Error('Messages array is required and must not be empty');
+    }
+
     const {
         model = 'llama3.2',
         temperature = 0.7,

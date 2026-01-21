@@ -41,8 +41,12 @@ const GEMINI_MODELS = {
  * @returns {Promise<object>} OpenAI-compatible response
  */
 async function call(apiKey, config, messages, tools, onProgress = null) {
+    // Validate required parameters
     if (!apiKey) {
         throw new Error('Google AI Studio API key required. Set in Settings.');
+    }
+    if (!Array.isArray(messages) || messages.length === 0) {
+        throw new Error('Messages array is required and must not be empty');
     }
 
     const body = {
