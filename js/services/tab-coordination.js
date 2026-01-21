@@ -12,6 +12,7 @@ import { WaveTelemetry } from './wave-telemetry.js';
 import { EventBus } from './event-bus.js';
 import { DeviceDetection } from './device-detection.js';
 import { SharedWorkerCoordinator } from '../workers/shared-worker-coordinator.js';
+import { Security } from '../security/index.js';
 
 // ==========================================
 // Constants
@@ -474,12 +475,11 @@ async function initWithBroadcastChannel() {
     receivedPrimaryClaim = false;
     electionAborted = false;
 
-    // Announce candidacy with Vector clock for deterministic ordering
-    broadcastChannel.postMessage({
+    // Announce candidacy with Vector clock for deterministic ordering and message security
+    sendMessage({
         type: MESSAGE_TYPES.CANDIDATE,
         tabId: TAB_ID,
-        vectorClock: vectorClock.tick(),
-        senderId: vectorClock.processId
+        vectorClock: vectorClock.tick()
     });
 
     // Wait for other candidates
@@ -559,12 +559,11 @@ async function initWithSharedWorker() {
 
     console.log('[TabCoordination] Announcing candidacy via SharedWorker:', TAB_ID);
 
-    // Announce candidacy
-    coordinationTransport.postMessage({
+    // Announce candidacy with message security
+    sendMessage({
         type: MESSAGE_TYPES.CANDIDATE,
         tabId: TAB_ID,
-        vectorClock: vectorClock.tick(),
-        senderId: vectorClock.processId
+        vectorClock: vectorClock.tick()
     });
 
     // Wait for election window
@@ -578,11 +577,10 @@ async function initWithSharedWorker() {
 
         if (isPrimaryTab) {
             console.log('[TabCoordination] Won SharedWorker election, claiming primary');
-            coordinationTransport.postMessage({
+            sendMessage({
                 type: MESSAGE_TYPES.CLAIM_PRIMARY,
                 tabId: TAB_ID,
-                vectorClock: vectorClock.tick(),
-                senderId: vectorClock.processId
+                vectorClock: vectorClock.tick()
             });
         } else {
             console.log('[TabCoordination] Lost election via SharedWorker to:', sortedCandidates[0]);
@@ -617,18 +615,52 @@ async function initWithSharedWorker() {
 }
 
 /**
- * Send a message with sequence number for ordering validation
+ * Send a message with sequence number for ordering validation and message security
  * HNW Network: All messages include sequence for duplicate/ordering detection
+ * Phase 14: All messages are signed, sanitized, timestamped, and include nonce
  *
  * @param {Object} msg - Message to send
  */
-function sendMessage(msg) {
-    localSequence++;
-    coordinationTransport?.postMessage({
-        ...msg,
-        seq: localSequence,
-        senderId: TAB_ID
-    });
+async function sendMessage(msg) {
+    try {
+        localSequence++;
+
+        // Add timestamp if not present
+        if (!msg.timestamp) {
+            msg.timestamp = Date.now();
+        }
+
+        // Sanitize message to remove sensitive data
+        const sanitizedMsg = Security.MessageSecurity.sanitizeMessage(msg);
+
+        // Generate nonce for replay prevention
+        const nonce = `${TAB_ID}_${localSequence}_${msg.timestamp}`;
+
+        // Get signing key and sign message
+        const signingKey = await Security.getSigningKey();
+        const signature = await Security.MessageSecurity.signMessage(sanitizedMsg, signingKey);
+
+        // Add signature, origin, and nonce to message
+        const signedMessage = {
+            ...sanitizedMsg,
+            seq: localSequence,
+            senderId: TAB_ID,
+            signature,
+            origin: window.location.origin,
+            nonce
+        };
+
+        coordinationTransport?.postMessage(signedMessage);
+    } catch (error) {
+        console.error('[TabCoordination] Message signing failed:', error);
+        // Fail-safe: Send unsigned message if signing fails
+        coordinationTransport?.postMessage({
+            ...msg,
+            seq: localSequence,
+            senderId: TAB_ID,
+            timestamp: msg.timestamp || Date.now()
+        });
+    }
 }
 
 /**
@@ -672,11 +704,10 @@ function createMessageHandler() {
                 // Another tab announced candidacy - collect it for election
                 // If we're already primary, assert dominance so new tab knows leader exists
                 if (isPrimaryTab && tabId !== TAB_ID) {
-                    coordinationTransport?.postMessage({
+                    sendMessage({
                         type: MESSAGE_TYPES.CLAIM_PRIMARY,
                         tabId: TAB_ID,
-                        vectorClock: vectorClock.tick(),
-                        senderId: vectorClock.processId
+                        vectorClock: vectorClock.tick()
                     });
                 }
                 // Collect candidate for election with its timestamp for deterministic ordering
@@ -865,8 +896,8 @@ async function initiateReElection() {
     receivedPrimaryClaim = false;
     electionAborted = false;
 
-    // Announce candidacy
-    coordinationTransport?.postMessage({
+    // Announce candidacy with message security
+    sendMessage({
         type: MESSAGE_TYPES.CANDIDATE,
         tabId: TAB_ID
     });
@@ -913,7 +944,7 @@ function startHeartbeat() {
  * HNW Wave: Dual timestamp system prevents clock skew issues
  * HNW Wave: Heartbeat quality monitoring for mobile
  */
-function sendHeartbeat() {
+async function sendHeartbeat() {
     const wallClockTime = Date.now();
     const currentVectorClock = vectorClock.tick();
 
@@ -927,13 +958,12 @@ function sendHeartbeat() {
     }
     lastHeartbeatSentTime = wallClockTime;
 
-    // Send via coordination transport (BroadcastChannel or SharedWorker)
-    coordinationTransport?.postMessage({
+    // Send via coordination transport with message security
+    sendMessage({
         type: MESSAGE_TYPES.HEARTBEAT,
         tabId: TAB_ID,
         timestamp: wallClockTime,
         vectorClock: currentVectorClock,
-        senderId: vectorClock.processId,
         // HNW Wave: Include device info for adaptive follower behavior
         deviceInfo: {
             isMobile: DeviceDetection.isMobile(),
@@ -1171,15 +1201,14 @@ function stopWatermarkBroadcast() {
 /**
  * Broadcast current event watermark to all tabs
  */
-function broadcastWatermark() {
+async function broadcastWatermark() {
     if (!broadcastChannel) return;
 
-    broadcastChannel.postMessage({
+    sendMessage({
         type: MESSAGE_TYPES.EVENT_WATERMARK,
         tabId: TAB_ID,
         watermark: lastEventWatermark,
-        vectorClock: vectorClock.tick(),
-        senderId: vectorClock.processId
+        vectorClock: vectorClock.tick()
     });
 }
 
@@ -1229,13 +1258,12 @@ async function handleReplayRequest(requestingTabId, fromWatermark) {
             forward: true
         });
 
-        // Send replay response to requesting tab
-        coordinationTransport?.postMessage({
+        // Send replay response to requesting tab with message security
+        sendMessage({
             type: MESSAGE_TYPES.REPLAY_RESPONSE,
             tabId: TAB_ID,
             events: eventLog,
-            vectorClock: vectorClock.tick(),
-            senderId: vectorClock.processId
+            vectorClock: vectorClock.tick()
         });
     } catch (error) {
         console.error('[TabCoordination] Error handling replay request:', error);
@@ -1289,12 +1317,11 @@ async function requestEventReplay(fromWatermark) {
 
     console.log(`[TabCoordination] Requesting event replay from watermark ${fromWatermark}`);
 
-    broadcastChannel.postMessage({
+    sendMessage({
         type: MESSAGE_TYPES.REPLAY_REQUEST,
         tabId: TAB_ID,
         fromWatermark,
-        vectorClock: vectorClock.tick(),
-        senderId: vectorClock.processId
+        vectorClock: vectorClock.tick()
     });
 }
 
@@ -1455,9 +1482,9 @@ function cleanup() {
     // Stop watermark broadcast
     stopWatermarkBroadcast();
 
-    // Notify other tabs of release
+    // Notify other tabs of release with message security
     if (isPrimaryTab && coordinationTransport) {
-        coordinationTransport.postMessage({
+        sendMessage({
             type: MESSAGE_TYPES.RELEASE_PRIMARY,
             tabId: TAB_ID
         });
