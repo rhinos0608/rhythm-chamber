@@ -13,6 +13,7 @@
  * - Keys MUST be non-extractable CryptoKey objects from KeyManager
  * - IV is public information but MUST be unique per operation
  * - This module provides encryption/decryption and data classification
+ * - Logging uses centralized logger to prevent sensitive data exposure
  *
  * Usage:
  *   const encKey = await Security.getDataEncryptionKey();
@@ -20,6 +21,11 @@
  *   const decrypted = await StorageEncryption.decrypt(encrypted, encKey);
  *   const shouldProtect = shouldEncrypt('openrouter.apiKey', 'sk-or-v1-test');
  */
+
+import { createLogger } from '../utils/logger.js';
+
+// Create module-specific logger with automatic sanitization of sensitive data
+const logger = createLogger('StorageEncryption');
 
 // ==========================================
 // DATA CLASSIFICATION
@@ -107,14 +113,14 @@ export function shouldEncrypt(key, value) {
 
         // 1. Check key name patterns against SENSITIVE_PATTERNS
         if (SENSITIVE_PATTERNS.some(pattern => key.includes(pattern))) {
-            console.log(`[StorageEncryption] Classifying '${key}' as sensitive (key pattern match)`);
+            logger.debug(`Classifying '${key}' as sensitive (key pattern match)`);
             return true;
         }
 
         // 2. Check chat history patterns
         // Chat history is sensitive by default - contains user conversations
         if (key.startsWith('chat_') || key.includes('chat')) {
-            console.log(`[StorageEncryption] Classifying '${key}' as sensitive (chat history)`);
+            logger.debug(`Classifying '${key}' as sensitive (chat history)`);
             return true;
         }
 
@@ -123,25 +129,25 @@ export function shouldEncrypt(key, value) {
         if (value && typeof value === 'string') {
             // OpenRouter API keys: sk-or-v1-*
             if (value.startsWith('sk-or-v1-')) {
-                console.log(`[StorageEncryption] Classifying '${key}' as sensitive (OpenRouter API key format)`);
+                logger.debug(`Classifying '${key}' as sensitive (OpenRouter API key format)`);
                 return true;
             }
 
             // Google Gemini API keys: AIzaSy*
             if (value.startsWith('AIzaSy')) {
-                console.log(`[StorageEncryption] Classifying '${key}' as sensitive (Gemini API key format)`);
+                logger.debug(`Classifying '${key}' as sensitive (Gemini API key format)`);
                 return true;
             }
 
             // Anthropic Claude API keys: sk-ant-*
             if (value.startsWith('sk-ant-')) {
-                console.log(`[StorageEncryption] Classifying '${key}' as sensitive (Claude API key format)`);
+                logger.debug(`Classifying '${key}' as sensitive (Claude API key format)`);
                 return true;
             }
 
             // OpenAI API keys: sk-*
             if (value.startsWith('sk-') && !value.startsWith('sk-ant-')) {
-                console.log(`[StorageEncryption] Classifying '${key}' as sensitive (OpenAI API key format)`);
+                logger.debug(`Classifying '${key}' as sensitive (OpenAI API key format)`);
                 return true;
             }
         }
@@ -151,7 +157,7 @@ export function shouldEncrypt(key, value) {
 
     } catch (error) {
         // Fail closed - on classification error, encrypt to be safe
-        console.error('[StorageEncryption] Error in shouldEncrypt classification, defaulting to encryption:', error);
+        logger.error('Error in shouldEncrypt classification, defaulting to encryption:', error);
         return true;
     }
 }
@@ -217,11 +223,11 @@ const StorageEncryption = {
             // Return as base64-encoded string for easy storage
             const base64Encoded = btoa(String.fromCharCode(...combined));
 
-            console.log('[StorageEncryption] Data encrypted successfully');
+            logger.debug('Data encrypted successfully');
             return base64Encoded;
 
         } catch (error) {
-            console.error('[StorageEncryption] Encryption failed:', error);
+            logger.error('Encryption failed:', error);
             throw new Error(`Failed to encrypt data: ${error.message}`);
         }
     },
@@ -245,7 +251,7 @@ const StorageEncryption = {
      * const encKey = await Security.getDataEncryptionKey();
      * const decrypted = await StorageEncryption.decrypt(encrypted, encKey);
      * if (decrypted === null) {
-     *   console.error('Decryption failed - wrong key or corrupted data');
+     *   logger.error('Decryption failed - wrong key or corrupted data');
      * }
      */
     async decrypt(encryptedData, key) {
@@ -291,13 +297,13 @@ const StorageEncryption = {
             const decoder = new TextDecoder();
             const decryptedText = decoder.decode(decrypted);
 
-            console.log('[StorageEncryption] Data decrypted successfully');
+            logger.debug('Data decrypted successfully');
             return decryptedText;
 
         } catch (error) {
             // Graceful degradation - return null instead of throwing
             // This allows calling code to handle decryption failures gracefully
-            console.error('[StorageEncryption] Decryption failed:', error);
+            logger.error('Decryption failed:', error);
             return null;
         }
     },
@@ -348,7 +354,7 @@ const StorageEncryption = {
         const encryptedValue = wrappedData?.value || wrappedData;
 
         if (!encryptedValue || typeof encryptedValue !== 'string') {
-            console.error('[StorageEncryption] Invalid wrapped data format');
+            logger.error('Invalid wrapped data format');
             return null;
         }
 
@@ -418,30 +424,30 @@ const StorageEncryption = {
                 throw new Error('Encrypted data must be a base64-encoded string');
             }
 
-            console.log('[StorageEncryption] Starting key migration...');
+            logger.info('Starting key migration...');
 
             // Step 1: Decrypt data using old key
             const decrypted = await this.decrypt(encryptedData, oldKey);
 
             // If decryption fails (returns null), abort migration immediately
             if (decrypted === null) {
-                console.error('[StorageEncryption] Migration failed: Unable to decrypt with old key');
+                logger.error('Migration failed: Unable to decrypt with old key');
                 return null;
             }
 
-            console.log('[StorageEncryption] Successfully decrypted with old key');
+            logger.debug('Successfully decrypted with old key');
 
             // Step 2: Re-encrypt decrypted data using new key
             const reEncrypted = await this.encrypt(decrypted, newKey);
 
-            console.log('[StorageEncryption] Successfully re-encrypted with new key');
-            console.log('[StorageEncryption] Key migration completed successfully');
+            logger.debug('Successfully re-encrypted with new key');
+            logger.info('Key migration completed successfully');
 
             return reEncrypted;
 
         } catch (error) {
             // Log migration failure but don't throw - allow graceful degradation
-            console.error('[StorageEncryption] Key migration failed:', error);
+            logger.error('Key migration failed:', error);
             return null;
         }
     }
@@ -492,7 +498,7 @@ export async function secureDelete(storeName, key) {
 
         // If record doesn't exist, nothing to delete
         if (!record) {
-            console.log(`[StorageEncryption] Record '${key}' not found in store '${storeName}', nothing to delete`);
+            logger.debug(`Record '${key}' not found in store '${storeName}', nothing to delete`);
             return;
         }
 
@@ -500,7 +506,7 @@ export async function secureDelete(storeName, key) {
         const isEncrypted = record.value?.encrypted === true;
 
         if (isEncrypted) {
-            console.log(`[StorageEncryption] Securely deleting encrypted record '${key}' from store '${storeName}'`);
+            logger.debug(`Securely deleting encrypted record '${key}' from store '${storeName}'`);
 
             try {
                 // Step 3: Generate random data to overwrite encrypted value
@@ -525,31 +531,31 @@ export async function secureDelete(storeName, key) {
                     updatedAt: new Date().toISOString()
                 });
 
-                console.log(`[StorageEncryption] Successfully overwrote encrypted record '${key}' with random data`);
+                logger.debug(`Successfully overwrote encrypted record '${key}' with random data`);
 
             } catch (overwriteError) {
                 // If overwrite fails, log warning but proceed to delete
-                console.warn(`[StorageEncryption] Failed to overwrite record '${key}' with random data:`, overwriteError);
-                console.warn(`[StorageEncryption] Proceeding with deletion anyway`);
+                logger.warn(`Failed to overwrite record '${key}' with random data:`, overwriteError);
+                logger.warn('Proceeding with deletion anyway');
             }
 
             // Step 5: Delete the record (whether overwrite succeeded or not)
             try {
                 await IndexedDBCore.delete(storeName, key);
-                console.log(`[StorageEncryption] Successfully deleted encrypted record '${key}'`);
+                logger.debug(`Successfully deleted encrypted record '${key}'`);
             } catch (deleteError) {
-                console.error(`[StorageEncryption] Failed to delete record '${key}':`, deleteError);
+                logger.error(`Failed to delete record '${key}':`, deleteError);
             }
 
         } else {
             // Not encrypted - skip overwriting, just delete
-            console.log(`[StorageEncryption] Record '${key}' is not encrypted, using standard deletion`);
+            logger.debug(`Record '${key}' is not encrypted, using standard deletion`);
             await IndexedDBCore.delete(storeName, key);
         }
 
     } catch (error) {
         // Never throw exceptions - graceful degradation
-        console.error(`[StorageEncryption] Secure deletion failed for '${key}':`, error);
+        logger.error(`Secure deletion failed for '${key}':`, error);
     }
 }
 
