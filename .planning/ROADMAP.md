@@ -16,7 +16,7 @@
 | 10 | Storage Encryption | Encrypt sensitive data at rest | STORE-01 through STORE-08, INFRA-04 | ✗ Not Started |
 | 11 | Cross-Tab Security | Secure BroadcastChannel communications | XTAB-01 through XTAB-06, INFRA-03 | ✗ Not Started |
 | 12 | KeyManager Integration | Complete Security facade exports | Integration Gap #1, Flow #3 | ✓ Complete |
-| 13 | Storage Encryption Impl | Implement storage encryption | STORE-01 through STORE-08, Integration Gap #2 | ○ Gap Closure |
+| 13 | Storage Encryption Impl | Implement storage encryption | STORE-01 through STORE-08, Integration Gap #2 | ✓ Complete |
 | 14 | Cross-Tab Security Impl | Implement message signing | XTAB-01 through XTAB-06, Integration Gap #3 | ○ Gap Closure |
 
 **Total:** 23 requirements + 3 integration gaps + 3 flow fixes mapped to 6 phases
@@ -123,7 +123,7 @@
 | 11 | ✗ | 0 | 0% (Not started - audit gap) |
 | 12 | ✓ | 1 | 100% (KeyManager Integration complete) |
 | 13 | ✓ | 4 | 100% (Storage Encryption complete) |
-| 14 | ○ | 0 | 0% (Gap closure phase) |
+| 14 | ○ | 2 | 0% (Gap closure phase - plans created) |
 
 ---
 
@@ -234,18 +234,13 @@ After v0.9 Security Hardening:
 5. Messages older than 5 seconds rejected
 6. Nonce tracking prevents replay attacks
 
-**Tasks:**
-- Create `js/security/message-security.js` module
-- Implement signMessage(message) using HMAC-SHA256
-- Implement verifyMessage(message, signature) using HMAC-SHA256
-- Implement sanitizeMessage(message) to remove sensitive data
-- Implement validateTimestamp(message) with 5-second window
-- Add nonce tracking for replay attack prevention
-- Integrate into `js/services/tab-coordination.js`
-- Add signMessage() call in sendMessage()
-- Add verifyMessage() call in createMessageHandler()
-- Add origin validation in message handler
-- Add timestamp validation with 5-second window
+**Plans:**
+- [ ] 14-01-PLAN.md — Create MessageSecurity module with HMAC-SHA256 operations
+- [ ] 14-02-PLAN.md — Integrate MessageSecurity into tab coordination service
+
+**Wave Structure:**
+- Wave 1: 14-01 (MessageSecurity module)
+- Wave 2: 14-02 (Tab coordination integration)
 
 **Files to Create/Modify:**
 - `js/security/message-security.js` (new)
@@ -271,3 +266,4 @@ After v0.9 Security Hardening:
 *Roadmap created: 2025-01-21*
 *Updated: 2026-01-21 - Gap closure phases 12-14 added after audit*
 *Updated: 2026-01-21 - Phase 13 plans created (4 plans in 4 waves)*
+*Updated: 2026-01-21 - Phase 14 plans created (2 plans in 2 waves)*
