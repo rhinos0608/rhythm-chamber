@@ -524,10 +524,28 @@ function detectAllPatterns(streams, chunks, onProgress, onPartial = null) {
 // Worker Message Handler
 // ==========================================
 
-self.onmessage = function (e) {
-    const { type, requestId, streams, chunks, timestamp } = e.data;
+// Dedicated heartbeat port (set when HEARTBEAT_CHANNEL message received)
+let heartbeatPort = null;
 
-    // Handle heartbeat request
+self.onmessage = function (e) {
+    const { type, requestId, streams, chunks, timestamp, port } = e.data;
+
+    // Handle heartbeat channel setup (dedicated MessageChannel)
+    if (type === 'HEARTBEAT_CHANNEL') {
+        heartbeatPort = port;
+        heartbeatPort.onmessage = function(event) {
+            if (event.data.type === 'HEARTBEAT') {
+                heartbeatPort.postMessage({
+                    type: 'HEARTBEAT_RESPONSE',
+                    timestamp: event.data.timestamp || Date.now()
+                });
+            }
+        };
+        console.log('[PatternWorker] Dedicated heartbeat channel established');
+        return;
+    }
+
+    // Handle legacy heartbeat request (fallback when MessageChannel unavailable)
     if (type === 'HEARTBEAT') {
         self.postMessage({
             type: 'HEARTBEAT_RESPONSE',
@@ -564,4 +582,4 @@ self.onmessage = function (e) {
     }
 };
 
-console.log('[PatternWorker] Worker loaded with partial result streaming');
+console.log('[PatternWorker] Worker loaded with partial result streaming and dedicated heartbeat support');

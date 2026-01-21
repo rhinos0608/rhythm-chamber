@@ -199,6 +199,14 @@ const EVENT_SCHEMAS = {
     'eventbus:storm_end': {
         description: 'Event storm ended, normal processing resumed',
         payload: { durationMs: 'number', totalDropped: 'number' }
+    },
+    'eventbus:handler_circuit_open': {
+        description: 'Handler circuit breaker opened due to failures',
+        payload: { handlerId: 'string', failures: 'number', lastError: 'string' }
+    },
+    'eventbus:health_degraded': {
+        description: 'EventBus health degraded',
+        payload: { status: 'string', failureRate: 'number', stuckHandlers: 'number', pausedHandlers: 'number', avgLatencyMs: 'number' }
     }
 };
 
@@ -642,11 +650,26 @@ function emit(eventType, payload = {}, options = {}) {
             continue;
         }
 
+        // Get or initialize handler metrics with circuit breaker state
+        let handlerHealthMetrics = handlerMetrics.get(id);
+        if (!handlerHealthMetrics) {
+            handlerHealthMetrics = initializeHandlerMetrics();
+            handlerMetrics.set(id, handlerHealthMetrics);
+        }
+
         // Skip paused handlers (health monitoring)
-        const handlerHealthMetrics = handlerMetrics.get(id);
-        if (handlerHealthMetrics?.isPaused) {
+        if (handlerHealthMetrics.isPaused) {
             if (debugMode) {
                 console.log(`[EventBus] Skipping paused handler ${id}`);
+            }
+            continue;
+        }
+
+        // Per-handler circuit breaker check
+        const circuitState = checkHandlerCircuitState(id, handlerHealthMetrics);
+        if (circuitState === CIRCUIT_STATE.OPEN) {
+            if (debugMode) {
+                console.log(`[EventBus] Skipping handler ${id} (circuit OPEN)`);
             }
             continue;
         }
@@ -658,12 +681,12 @@ function emit(eventType, payload = {}, options = {}) {
         try {
             handler(payload, eventMeta);
             const durationMs = performance.now() - handlerStartTime;
-            recordHandlerMetrics(id, durationMs, true);
+            recordHandlerSuccess(id, durationMs);
         } catch (error) {
             const durationMs = performance.now() - handlerStartTime;
-            recordHandlerMetrics(id, durationMs, false);
+            recordHandlerFailure(id, durationMs, error);
             console.error(`[EventBus] Handler ${id} threw error for "${eventType}":`, error);
-            // Don't stop other handlers from executing
+            // Don't stop other handlers from executing - isolated by circuit breaker
         }
     }
 
@@ -684,6 +707,9 @@ function emit(eventType, payload = {}, options = {}) {
  * Emit an event asynchronously (next tick)
  * Useful for avoiding synchronous cascades
  * 
+ * NOTE: This does NOT await async handlers - it just defers emit() to the next microtask.
+ * For awaiting async handlers, use emitAndAwait() or emitParallel() instead.
+ * 
  * @param {string} eventType - Event type
  * @param {Object} [payload={}] - Event payload
  * @returns {Promise<boolean>} Resolves when handlers complete
@@ -695,6 +721,366 @@ function emitAsync(eventType, payload = {}) {
             resolve(result);
         });
     });
+}
+
+/**
+ * Emit an event and await all async handlers sequentially
+ * 
+ * Handlers are executed in priority order, one at a time.
+ * If a handler returns a Promise, it is awaited before calling the next handler.
+ * This ensures handlers complete in order and allows proper error isolation.
+ * 
+ * @param {string} eventType - Event type
+ * @param {Object} [payload={}] - Event payload
+ * @param {Object} [options] - Emit options
+ * @param {boolean} [options.skipValidation=false] - Skip payload validation
+ * @param {boolean} [options.bypassCircuitBreaker=false] - Skip circuit breaker checks
+ * @param {string} [options.domain='global'] - Event domain for filtering
+ * @param {boolean} [options.stopOnError=false] - Stop processing if a handler throws
+ * @returns {Promise<{handled: boolean, results: Array<{handlerId: string, success: boolean, error?: Error, durationMs: number}>}>}
+ */
+async function emitAndAwait(eventType, payload = {}, options = {}) {
+    const timestamp = Date.now();
+    const priority = EVENT_PRIORITIES[eventType] ?? PRIORITY.NORMAL;
+    const eventDomain = options.domain ?? 'global';
+    const stopOnError = options.stopOnError ?? false;
+    
+    // Run circuit breaker checks (same as emit())
+    if (!options.bypassCircuitBreaker) {
+        // Update storm window
+        if (timestamp - windowStart > CIRCUIT_BREAKER_CONFIG.stormWindowMs) {
+            windowStart = timestamp;
+            eventsThisWindow = 0;
+        }
+        eventsThisWindow++;
+        
+        // Queue overflow handling - simplified check
+        if (pendingEvents.length >= CIRCUIT_BREAKER_CONFIG.maxQueueSize) {
+            if (CIRCUIT_BREAKER_CONFIG.overflowStrategy === 'reject_all') {
+                droppedCount++;
+                return { handled: false, results: [], dropped: true };
+            }
+        }
+    }
+    
+    // Event versioning
+    const currentVectorClock = eventVectorClock.tick();
+    eventSequenceNumber++;
+    const sequenceNumber = eventSequenceNumber;
+    
+    // Store event in log if enabled
+    if (eventLogEnabled && !eventReplayInProgress && !options.skipEventLog) {
+        persistEvent(eventType, payload, currentVectorClock, sequenceNumber, options)
+            .catch(err => console.warn('[EventBus] Failed to persist event:', err));
+    }
+    
+    lastEventWatermark = sequenceNumber;
+    
+    // Validate payload
+    if (!options.skipValidation && EVENT_SCHEMAS[eventType]) {
+        const validationResult = validatePayload(eventType, payload);
+        if (!validationResult.valid && debugMode) {
+            console.warn(`[EventBus] Payload validation warning for "${eventType}":`, validationResult.errors);
+        }
+    }
+    
+    // Add to trace
+    if (debugMode || eventTrace.length < MAX_TRACE_SIZE) {
+        eventTrace.push({
+            event: eventType,
+            payload: sanitizePayload(payload),
+            timestamp
+        });
+        if (eventTrace.length > MAX_TRACE_SIZE) {
+            eventTrace.shift();
+        }
+    }
+    
+    if (debugMode) {
+        console.log(`[EventBus] EmitAndAwait "${eventType}"`, sanitizePayload(payload));
+    }
+    
+    // Get handlers
+    const eventHandlers = subscribers.get(eventType) || [];
+    const wildcardHandlers = subscribers.get('*') || [];
+    const allHandlers = [...eventHandlers, ...wildcardHandlers]
+        .sort((a, b) => a.priority - b.priority);
+    
+    if (allHandlers.length === 0) {
+        return { handled: false, results: [] };
+    }
+    
+    const eventMeta = {
+        type: eventType,
+        timestamp,
+        priority,
+        stormActive,
+        domain: eventDomain,
+        vectorClock: currentVectorClock,
+        sequenceNumber,
+        isReplay: eventReplayInProgress,
+        isAsync: true
+    };
+    
+    const results = [];
+    
+    // Execute handlers sequentially, awaiting each one
+    for (const { handler, id, domain: handlerDomain } of allHandlers) {
+        // Domain filtering
+        const domainMatches = handlerDomain === 'global' || handlerDomain === eventDomain;
+        if (!domainMatches) {
+            continue;
+        }
+        
+        // Get or initialize handler metrics
+        let handlerHealthMetrics = handlerMetrics.get(id);
+        if (!handlerHealthMetrics) {
+            handlerHealthMetrics = initializeHandlerMetrics();
+            handlerMetrics.set(id, handlerHealthMetrics);
+        }
+        
+        // Skip paused handlers
+        if (handlerHealthMetrics.isPaused) {
+            continue;
+        }
+        
+        // Per-handler circuit breaker check
+        const circuitState = checkHandlerCircuitState(id, handlerHealthMetrics);
+        if (circuitState === CIRCUIT_STATE.OPEN) {
+            continue;
+        }
+        
+        const handlerStartTime = performance.now();
+        markHandlerStarted(id);
+        
+        try {
+            // Await the handler if it returns a Promise
+            const handlerResult = handler(payload, eventMeta);
+            if (handlerResult && typeof handlerResult.then === 'function') {
+                await handlerResult;
+            }
+            
+            const durationMs = performance.now() - handlerStartTime;
+            recordHandlerSuccess(id, durationMs);
+            
+            results.push({
+                handlerId: id,
+                success: true,
+                durationMs
+            });
+        } catch (error) {
+            const durationMs = performance.now() - handlerStartTime;
+            recordHandlerFailure(id, durationMs, error);
+            
+            results.push({
+                handlerId: id,
+                success: false,
+                error,
+                durationMs
+            });
+            
+            console.error(`[EventBus] Async handler ${id} threw error for "${eventType}":`, error);
+            
+            if (stopOnError) {
+                break;
+            }
+        }
+    }
+    
+    return {
+        handled: results.length > 0,
+        results
+    };
+}
+
+/**
+ * Emit an event and run all async handlers in parallel
+ * 
+ * All handlers are started simultaneously and the function resolves
+ * when all handlers have completed (or failed).
+ * 
+ * Use this when handlers are independent and can run concurrently.
+ * 
+ * @param {string} eventType - Event type
+ * @param {Object} [payload={}] - Event payload
+ * @param {Object} [options] - Emit options
+ * @param {boolean} [options.skipValidation=false] - Skip payload validation
+ * @param {boolean} [options.bypassCircuitBreaker=false] - Skip circuit breaker checks
+ * @param {string} [options.domain='global'] - Event domain for filtering
+ * @param {number} [options.timeoutMs=30000] - Timeout for each handler (default 30s)
+ * @returns {Promise<{handled: boolean, results: Array<{handlerId: string, success: boolean, error?: Error, durationMs: number, timedOut?: boolean}>}>}
+ */
+async function emitParallel(eventType, payload = {}, options = {}) {
+    const timestamp = Date.now();
+    const priority = EVENT_PRIORITIES[eventType] ?? PRIORITY.NORMAL;
+    const eventDomain = options.domain ?? 'global';
+    const timeoutMs = options.timeoutMs ?? 30000;
+    
+    // Run circuit breaker checks
+    if (!options.bypassCircuitBreaker) {
+        if (timestamp - windowStart > CIRCUIT_BREAKER_CONFIG.stormWindowMs) {
+            windowStart = timestamp;
+            eventsThisWindow = 0;
+        }
+        eventsThisWindow++;
+        
+        if (pendingEvents.length >= CIRCUIT_BREAKER_CONFIG.maxQueueSize) {
+            if (CIRCUIT_BREAKER_CONFIG.overflowStrategy === 'reject_all') {
+                droppedCount++;
+                return { handled: false, results: [], dropped: true };
+            }
+        }
+    }
+    
+    // Event versioning
+    const currentVectorClock = eventVectorClock.tick();
+    eventSequenceNumber++;
+    const sequenceNumber = eventSequenceNumber;
+    
+    // Store event in log if enabled
+    if (eventLogEnabled && !eventReplayInProgress && !options.skipEventLog) {
+        persistEvent(eventType, payload, currentVectorClock, sequenceNumber, options)
+            .catch(err => console.warn('[EventBus] Failed to persist event:', err));
+    }
+    
+    lastEventWatermark = sequenceNumber;
+    
+    // Validate payload
+    if (!options.skipValidation && EVENT_SCHEMAS[eventType]) {
+        const validationResult = validatePayload(eventType, payload);
+        if (!validationResult.valid && debugMode) {
+            console.warn(`[EventBus] Payload validation warning for "${eventType}":`, validationResult.errors);
+        }
+    }
+    
+    // Add to trace
+    if (debugMode || eventTrace.length < MAX_TRACE_SIZE) {
+        eventTrace.push({
+            event: eventType,
+            payload: sanitizePayload(payload),
+            timestamp
+        });
+        if (eventTrace.length > MAX_TRACE_SIZE) {
+            eventTrace.shift();
+        }
+    }
+    
+    if (debugMode) {
+        console.log(`[EventBus] EmitParallel "${eventType}"`, sanitizePayload(payload));
+    }
+    
+    // Get handlers
+    const eventHandlers = subscribers.get(eventType) || [];
+    const wildcardHandlers = subscribers.get('*') || [];
+    const allHandlers = [...eventHandlers, ...wildcardHandlers]
+        .sort((a, b) => a.priority - b.priority);
+    
+    if (allHandlers.length === 0) {
+        return { handled: false, results: [] };
+    }
+    
+    const eventMeta = {
+        type: eventType,
+        timestamp,
+        priority,
+        stormActive,
+        domain: eventDomain,
+        vectorClock: currentVectorClock,
+        sequenceNumber,
+        isReplay: eventReplayInProgress,
+        isAsync: true,
+        isParallel: true
+    };
+    
+    // Build list of handlers to execute
+    const handlerPromises = [];
+    
+    for (const { handler, id, domain: handlerDomain } of allHandlers) {
+        // Domain filtering
+        const domainMatches = handlerDomain === 'global' || handlerDomain === eventDomain;
+        if (!domainMatches) {
+            continue;
+        }
+        
+        // Get or initialize handler metrics
+        let handlerHealthMetrics = handlerMetrics.get(id);
+        if (!handlerHealthMetrics) {
+            handlerHealthMetrics = initializeHandlerMetrics();
+            handlerMetrics.set(id, handlerHealthMetrics);
+        }
+        
+        // Skip paused handlers
+        if (handlerHealthMetrics.isPaused) {
+            continue;
+        }
+        
+        // Per-handler circuit breaker check
+        const circuitState = checkHandlerCircuitState(id, handlerHealthMetrics);
+        if (circuitState === CIRCUIT_STATE.OPEN) {
+            continue;
+        }
+        
+        // Create a promise for this handler with timeout
+        const handlerPromise = (async () => {
+            const handlerStartTime = performance.now();
+            markHandlerStarted(id);
+            
+            try {
+                // Create timeout promise
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error(`Handler timeout after ${timeoutMs}ms`)), timeoutMs);
+                });
+                
+                // Race handler against timeout
+                const handlerResult = handler(payload, eventMeta);
+                if (handlerResult && typeof handlerResult.then === 'function') {
+                    await Promise.race([handlerResult, timeoutPromise]);
+                }
+                
+                const durationMs = performance.now() - handlerStartTime;
+                recordHandlerSuccess(id, durationMs);
+                
+                return {
+                    handlerId: id,
+                    success: true,
+                    durationMs
+                };
+            } catch (error) {
+                const durationMs = performance.now() - handlerStartTime;
+                const timedOut = error.message.includes('Handler timeout');
+                
+                recordHandlerFailure(id, durationMs, error);
+                
+                if (!timedOut) {
+                    console.error(`[EventBus] Parallel handler ${id} threw error for "${eventType}":`, error);
+                } else {
+                    console.warn(`[EventBus] Parallel handler ${id} timed out for "${eventType}"`);
+                }
+                
+                return {
+                    handlerId: id,
+                    success: false,
+                    error,
+                    durationMs,
+                    timedOut
+                };
+            }
+        })();
+        
+        handlerPromises.push(handlerPromise);
+    }
+    
+    if (handlerPromises.length === 0) {
+        return { handled: false, results: [] };
+    }
+    
+    // Wait for all handlers to complete
+    const results = await Promise.all(handlerPromises);
+    
+    return {
+        handled: true,
+        results
+    };
 }
 
 // ==========================================
@@ -924,14 +1310,7 @@ function performHealthCheck() {
  */
 function recordHandlerMetrics(handlerId, durationMs, success) {
     if (!handlerMetrics.has(handlerId)) {
-        handlerMetrics.set(handlerId, {
-            totalCalls: 0,
-            failures: 0,
-            totalTimeMs: 0,
-            lastCallTime: 0,
-            isStuck: false,
-            isPaused: false
-        });
+        handlerMetrics.set(handlerId, initializeHandlerMetrics());
     }
 
     const metrics = handlerMetrics.get(handlerId);
@@ -967,21 +1346,214 @@ function recordHandlerMetrics(handlerId, durationMs, success) {
 }
 
 /**
+ * Initialize handler metrics with circuit breaker state
+ * @returns {Object} Initialized metrics object
+ */
+function initializeHandlerMetrics() {
+    return {
+        totalCalls: 0,
+        failures: 0,
+        totalTimeMs: 0,
+        lastCallTime: 0,
+        isStuck: false,
+        isPaused: false,
+        // Per-handler circuit breaker state
+        circuitState: CIRCUIT_STATE.CLOSED,
+        consecutiveFailures: 0,
+        consecutiveSuccesses: 0,
+        lastFailureTime: 0,
+        halfOpenAttempts: 0
+    };
+}
+
+/**
+ * Check and update handler circuit breaker state
+ * @param {string} handlerId - Handler identifier
+ * @param {Object} metrics - Handler metrics object
+ * @returns {string} Current circuit state after evaluation
+ */
+function checkHandlerCircuitState(handlerId, metrics) {
+    const now = Date.now();
+    
+    // CLOSED - normal operation
+    if (metrics.circuitState === CIRCUIT_STATE.CLOSED) {
+        return CIRCUIT_STATE.CLOSED;
+    }
+    
+    // OPEN - check if cooldown expired for half-open transition
+    if (metrics.circuitState === CIRCUIT_STATE.OPEN) {
+        const timeSinceFailure = now - metrics.lastFailureTime;
+        
+        if (timeSinceFailure >= HANDLER_CIRCUIT_CONFIG.cooldownMs) {
+            // Transition to HALF_OPEN for testing
+            metrics.circuitState = CIRCUIT_STATE.HALF_OPEN;
+            metrics.halfOpenAttempts = 0;
+            metrics.consecutiveSuccesses = 0;
+            console.log(`[EventBus] Handler ${handlerId} circuit: OPEN -> HALF_OPEN (testing recovery)`);
+            return CIRCUIT_STATE.HALF_OPEN;
+        }
+        
+        return CIRCUIT_STATE.OPEN;
+    }
+    
+    // HALF_OPEN - allow limited attempts for testing
+    if (metrics.circuitState === CIRCUIT_STATE.HALF_OPEN) {
+        if (metrics.halfOpenAttempts >= HANDLER_CIRCUIT_CONFIG.halfOpenMaxAttempts) {
+            // Too many attempts in half-open, re-open circuit
+            metrics.circuitState = CIRCUIT_STATE.OPEN;
+            metrics.lastFailureTime = now;
+            console.warn(`[EventBus] Handler ${handlerId} circuit: HALF_OPEN -> OPEN (max attempts exceeded)`);
+            return CIRCUIT_STATE.OPEN;
+        }
+        return CIRCUIT_STATE.HALF_OPEN;
+    }
+    
+    return CIRCUIT_STATE.CLOSED;
+}
+
+/**
+ * Record successful handler execution for circuit breaker
+ * @param {string} handlerId - Handler identifier
+ * @param {number} durationMs - Execution time in milliseconds
+ */
+function recordHandlerSuccess(handlerId, durationMs) {
+    const metrics = handlerMetrics.get(handlerId);
+    if (!metrics) return;
+    
+    // Update standard metrics
+    recordHandlerMetrics(handlerId, durationMs, true);
+    
+    // Update circuit breaker state
+    metrics.consecutiveFailures = 0;
+    metrics.consecutiveSuccesses++;
+    
+    if (metrics.circuitState === CIRCUIT_STATE.HALF_OPEN) {
+        metrics.halfOpenAttempts++;
+        
+        // Check if enough successes to close circuit
+        if (metrics.consecutiveSuccesses >= HANDLER_CIRCUIT_CONFIG.successThresholdHalfOpen) {
+            metrics.circuitState = CIRCUIT_STATE.CLOSED;
+            metrics.halfOpenAttempts = 0;
+            console.log(`[EventBus] Handler ${handlerId} circuit: HALF_OPEN -> CLOSED (recovered)`);
+        }
+    }
+}
+
+/**
+ * Record failed handler execution for circuit breaker
+ * @param {string} handlerId - Handler identifier
+ * @param {number} durationMs - Execution time in milliseconds
+ * @param {Error} error - The error that occurred
+ */
+function recordHandlerFailure(handlerId, durationMs, error) {
+    const metrics = handlerMetrics.get(handlerId);
+    if (!metrics) return;
+    
+    // Update standard metrics
+    recordHandlerMetrics(handlerId, durationMs, false);
+    
+    // Update circuit breaker state
+    metrics.consecutiveSuccesses = 0;
+    metrics.consecutiveFailures++;
+    metrics.lastFailureTime = Date.now();
+    
+    if (metrics.circuitState === CIRCUIT_STATE.HALF_OPEN) {
+        // Failure in half-open immediately re-opens circuit
+        metrics.circuitState = CIRCUIT_STATE.OPEN;
+        metrics.halfOpenAttempts = 0;
+        console.warn(`[EventBus] Handler ${handlerId} circuit: HALF_OPEN -> OPEN (failure during test)`);
+    } else if (metrics.circuitState === CIRCUIT_STATE.CLOSED) {
+        // Check if we should open the circuit
+        if (metrics.consecutiveFailures >= HANDLER_CIRCUIT_CONFIG.failureThreshold) {
+            metrics.circuitState = CIRCUIT_STATE.OPEN;
+            console.warn(`[EventBus] Handler ${handlerId} circuit: CLOSED -> OPEN (${metrics.consecutiveFailures} consecutive failures)`);
+            
+            // Emit circuit breaker event for monitoring
+            emit('eventbus:handler_circuit_open', {
+                handlerId,
+                failures: metrics.consecutiveFailures,
+                lastError: error?.message || 'Unknown error'
+            }, { bypassCircuitBreaker: true, skipValidation: true, skipEventLog: true });
+        }
+    }
+}
+
+/**
+ * Get circuit breaker state for a specific handler
+ * @param {string} handlerId - Handler identifier
+ * @returns {Object|null} Circuit breaker state or null if not found
+ */
+function getHandlerCircuitState(handlerId) {
+    const metrics = handlerMetrics.get(handlerId);
+    if (!metrics) return null;
+    
+    return {
+        state: metrics.circuitState,
+        consecutiveFailures: metrics.consecutiveFailures,
+        consecutiveSuccesses: metrics.consecutiveSuccesses,
+        lastFailureTime: metrics.lastFailureTime,
+        halfOpenAttempts: metrics.halfOpenAttempts,
+        cooldownRemaining: metrics.circuitState === CIRCUIT_STATE.OPEN
+            ? Math.max(0, HANDLER_CIRCUIT_CONFIG.cooldownMs - (Date.now() - metrics.lastFailureTime))
+            : 0
+    };
+}
+
+/**
+ * Force reset a handler's circuit breaker to CLOSED
+ * @param {string} handlerId - Handler identifier
+ * @returns {boolean} True if reset was successful
+ */
+function resetHandlerCircuit(handlerId) {
+    const metrics = handlerMetrics.get(handlerId);
+    if (!metrics) return false;
+    
+    const previousState = metrics.circuitState;
+    metrics.circuitState = CIRCUIT_STATE.CLOSED;
+    metrics.consecutiveFailures = 0;
+    metrics.consecutiveSuccesses = 0;
+    metrics.halfOpenAttempts = 0;
+    metrics.isPaused = false;
+    metrics.isStuck = false;
+    
+    console.log(`[EventBus] Handler ${handlerId} circuit manually reset: ${previousState} -> CLOSED`);
+    return true;
+}
+
+/**
+ * Get all handlers with their circuit breaker states
+ * @returns {Object} Map of handler IDs to circuit states
+ */
+function getAllHandlerCircuitStates() {
+    const states = {};
+    for (const [handlerId, metrics] of handlerMetrics) {
+        states[handlerId] = {
+            circuitState: metrics.circuitState,
+            consecutiveFailures: metrics.consecutiveFailures,
+            isPaused: metrics.isPaused,
+            isStuck: metrics.isStuck
+        };
+    }
+    return states;
+}
+
+/**
  * Mark handler as starting execution
  * @param {string} handlerId - Handler identifier
  */
 function markHandlerStarted(handlerId) {
     if (!handlerMetrics.has(handlerId)) {
-        handlerMetrics.set(handlerId, {
-            totalCalls: 0,
-            failures: 0,
-            totalTimeMs: 0,
-            lastCallTime: Date.now(),
-            isStuck: false,
-            isPaused: false
-        });
+        const metrics = initializeHandlerMetrics();
+        metrics.lastCallTime = Date.now();
+        handlerMetrics.set(handlerId, metrics);
     } else {
-        handlerMetrics.get(handlerId).lastCallTime = Date.now();
+        const metrics = handlerMetrics.get(handlerId);
+        metrics.lastCallTime = Date.now();
+        
+        // Increment half-open attempts if in that state
+        if (metrics.circuitState === CIRCUIT_STATE.HALF_OPEN) {
+            metrics.halfOpenAttempts++;
+        }
     }
 }
 
@@ -1055,7 +1627,7 @@ function getHealthStatus() {
 }
 
 /**
- * Reset a stuck or paused handler
+ * Reset a stuck or paused handler (also resets circuit breaker)
  * @param {string} handlerId - Handler identifier
  * @returns {boolean} True if handler was reset
  */
@@ -1066,7 +1638,13 @@ function resetHandler(handlerId) {
     metrics.isStuck = false;
     metrics.isPaused = false;
     metrics.failures = 0;
-    console.log(`[EventBus] Handler ${handlerId} reset`);
+    // Also reset circuit breaker state
+    metrics.circuitState = CIRCUIT_STATE.CLOSED;
+    metrics.consecutiveFailures = 0;
+    metrics.consecutiveSuccesses = 0;
+    metrics.halfOpenAttempts = 0;
+    
+    console.log(`[EventBus] Handler ${handlerId} fully reset (including circuit breaker)`);
     return true;
 }
 
@@ -1284,6 +1862,8 @@ export const EventBus = {
     // Emitting
     emit,
     emitAsync,
+    emitAndAwait,
+    emitParallel,
 
     // Debug & diagnostics
     setDebugMode,
@@ -1304,6 +1884,13 @@ export const EventBus = {
     resetHandler,
     resetHealth,
     configureHealth,
+
+    // Per-handler circuit breaker
+    getHandlerCircuitState,
+    resetHandlerCircuit,
+    getAllHandlerCircuitStates,
+    CIRCUIT_STATE,
+    HANDLER_CIRCUIT_CONFIG,
 
     // Event versioning and replay
     enableEventLog,

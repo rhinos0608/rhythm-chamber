@@ -95,11 +95,12 @@ let initialized = false;
 let requestId = 0;
 const pendingRequests = new Map();
 
-// Heartbeat state
+// Heartbeat state - using dedicated MessageChannel for isolation
 let heartbeatInterval = null;
 const HEARTBEAT_INTERVAL_MS = 5000; // 5 seconds
 const STALE_WORKER_TIMEOUT_MS = 15000; // 15 seconds
 const workerLastHeartbeat = new Map(); // Track last heartbeat response from each worker
+const workerHeartbeatChannels = new Map(); // Track dedicated heartbeat MessageChannel per worker
 
 // Backpressure state (HNW Wave)
 let pendingResultCount = 0;
@@ -163,6 +164,9 @@ async function init(options = {}) {
 
             // Initialize heartbeat tracking for this worker
             workerLastHeartbeat.set(worker, Date.now());
+            
+            // Create dedicated MessageChannel for heartbeats (prevents contention with work messages)
+            setupHeartbeatChannel(worker, i);
         }
 
         initialized = true;
@@ -342,7 +346,53 @@ function handleWorkerError(error) {
 }
 
 /**
- * Send heartbeat to all workers
+ * Setup dedicated MessageChannel for heartbeat communication
+ * This isolates heartbeat messages from work messages to prevent:
+ * 1. Large work payloads delaying heartbeat responses
+ * 2. False positive stale detection during heavy computation
+ * 
+ * @param {Worker} worker - The worker to setup heartbeat channel for
+ * @param {number} index - Worker index for logging
+ */
+function setupHeartbeatChannel(worker, index) {
+    try {
+        // Create a dedicated MessageChannel for this worker's heartbeats
+        const channel = new MessageChannel();
+        
+        // Store the channel for later use
+        workerHeartbeatChannels.set(worker, {
+            port: channel.port1,
+            index
+        });
+        
+        // Setup handler for heartbeat responses on port1
+        channel.port1.onmessage = (event) => {
+            const { type, timestamp } = event.data;
+            if (type === 'HEARTBEAT_RESPONSE') {
+                workerLastHeartbeat.set(worker, timestamp || Date.now());
+                if (false) { // Set to true for verbose heartbeat logging
+                    console.log(`[PatternWorkerPool] Worker ${index} heartbeat received via dedicated channel`);
+                }
+            }
+        };
+        
+        // Transfer port2 to the worker
+        worker.postMessage({
+            type: 'HEARTBEAT_CHANNEL',
+            port: channel.port2
+        }, [channel.port2]);
+        
+        console.log(`[PatternWorkerPool] Heartbeat channel established for worker ${index}`);
+    } catch (error) {
+        // Fallback: some environments don't support MessageChannel transferable
+        console.warn(`[PatternWorkerPool] MessageChannel not available for worker ${index}, using fallback:`, error.message);
+        workerHeartbeatChannels.delete(worker);
+    }
+}
+
+/**
+ * Send heartbeat to all workers via dedicated channels
+ * Falls back to regular postMessage if MessageChannel unavailable
  *
  * @returns {void}
  */
@@ -355,10 +405,21 @@ function sendHeartbeat() {
 
     workers.forEach((workerInfo, index) => {
         try {
-            workerInfo.worker.postMessage({
-                type: 'HEARTBEAT',
-                timestamp
-            });
+            const channelInfo = workerHeartbeatChannels.get(workerInfo.worker);
+            
+            if (channelInfo && channelInfo.port) {
+                // Use dedicated heartbeat channel (preferred - doesn't contend with work)
+                channelInfo.port.postMessage({
+                    type: 'HEARTBEAT',
+                    timestamp
+                });
+            } else {
+                // Fallback: use regular worker postMessage
+                workerInfo.worker.postMessage({
+                    type: 'HEARTBEAT',
+                    timestamp
+                });
+            }
         } catch (error) {
             console.error(`[PatternWorkerPool] Failed to send heartbeat to worker ${index}:`, error);
         }
@@ -411,6 +472,16 @@ function checkStaleWorkers() {
         console.warn(`[PatternWorkerPool] Worker ${index} is stale, restarting...`);
 
         try {
+            // Clean up old heartbeat channel
+            const oldChannel = workerHeartbeatChannels.get(workerInfo.worker);
+            if (oldChannel && oldChannel.port) {
+                try {
+                    oldChannel.port.close();
+                } catch (e) { /* ignore */ }
+            }
+            workerHeartbeatChannels.delete(workerInfo.worker);
+            workerLastHeartbeat.delete(workerInfo.worker);
+            
             // Terminate the stale worker
             workerInfo.worker.terminate();
 
@@ -427,8 +498,11 @@ function checkStaleWorkers() {
 
             // Reset heartbeat tracking
             workerLastHeartbeat.set(newWorker, Date.now());
+            
+            // Setup new heartbeat channel
+            setupHeartbeatChannel(newWorker, index);
 
-            console.log(`[PatternWorkerPool] Worker ${index} restarted successfully`);
+            console.log(`[PatternWorkerPool] Worker ${index} restarted successfully with new heartbeat channel`);
         } catch (error) {
             console.error(`[PatternWorkerPool] Failed to restart worker ${index}:`, error);
         }
@@ -707,6 +781,16 @@ function terminate() {
     // Stop heartbeat monitoring
     stopHeartbeat();
 
+    // Clean up heartbeat channels
+    for (const [worker, channelInfo] of workerHeartbeatChannels.entries()) {
+        try {
+            if (channelInfo && channelInfo.port) {
+                channelInfo.port.close();
+            }
+        } catch (e) { /* ignore */ }
+    }
+    workerHeartbeatChannels.clear();
+
     // Clear heartbeat tracking
     workerLastHeartbeat.clear();
 
@@ -717,7 +801,7 @@ function terminate() {
     workers = [];
     initialized = false;
 
-    console.log('[PatternWorkerPool] Terminated all workers');
+    console.log('[PatternWorkerPool] Terminated all workers and heartbeat channels');
 }
 
 /**

@@ -167,7 +167,20 @@ async function getCheckpoint() {
 
 /**
  * Save checkpoint for resumable migration
+ * 
+ * WRITE-AHEAD MODE: When intent is specified, this is a write-ahead checkpoint
+ * that records the INTENT to perform an operation. After the operation succeeds,
+ * call saveCheckpoint again with status='complete' to mark it done.
+ * 
+ * On resume:
+ * - 'pending': Re-execute the operation (may have failed before completing)
+ * - 'complete': Skip this key (already done)
+ * - 'failed': Skip (already failed, don't retry)
+ * 
  * @param {Object} checkpoint - Checkpoint data
+ * @param {string} [checkpoint.intent] - Operation intent: 'config' | 'token'
+ * @param {string} [checkpoint.key] - Key being processed
+ * @param {string} [checkpoint.status] - Status: 'pending' | 'complete' | 'failed'
  * @returns {Promise<void>}
  */
 async function saveCheckpoint(checkpoint) {
@@ -183,6 +196,68 @@ async function saveCheckpoint(checkpoint) {
     } catch (err) {
         console.warn('[Migration] Error saving checkpoint:', err);
     }
+}
+
+/**
+ * Save write-ahead intent checkpoint before processing a key
+ * @param {string} intent - 'config' | 'token'
+ * @param {string} key - Key to process
+ * @param {number} index - Current index
+ * @param {number} keysProcessed - Keys processed so far
+ * @param {number} totalKeys - Total keys
+ * @returns {Promise<void>}
+ */
+async function saveWriteAheadCheckpoint(intent, key, index, keysProcessed, totalKeys) {
+    await saveCheckpoint({
+        intent,
+        key,
+        index,
+        keysProcessed,
+        totalKeys,
+        status: 'pending',
+        phase: intent
+    });
+}
+
+/**
+ * Mark write-ahead checkpoint as complete
+ * @param {string} intent - 'config' | 'token'
+ * @param {string} key - Key that was processed
+ * @param {number} index - Current index
+ * @param {number} keysProcessed - Keys processed so far
+ * @param {number} totalKeys - Total keys
+ * @returns {Promise<void>}
+ */
+async function markCheckpointComplete(intent, key, index, keysProcessed, totalKeys) {
+    await saveCheckpoint({
+        intent,
+        key,
+        index,
+        lastProcessedIndex: index,
+        keysProcessed,
+        totalKeys,
+        status: 'complete',
+        phase: intent
+    });
+}
+
+/**
+ * Mark write-ahead checkpoint as failed
+ * @param {string} intent - 'config' | 'token'
+ * @param {string} key - Key that failed
+ * @param {number} index - Current index
+ * @param {string} error - Error message
+ * @returns {Promise<void>}
+ */
+async function markCheckpointFailed(intent, key, index, error) {
+    await saveCheckpoint({
+        intent,
+        key,
+        index,
+        status: 'failed',
+        error,
+        phase: intent
+    });
 }
 
 /**
@@ -341,13 +416,16 @@ async function migrateFromLocalStorage(onProgress = null) {
     const halfwayPoint = Math.floor(allConfigKeys.length / 2);
     let checkpointedHalfway = checkpoint?.checkpointedHalfway || false;
 
-    // Step 2: Migrate config keys
+    // Step 2: Migrate config keys with write-ahead checkpointing
     for (let i = Math.max(0, startIndex); i < allConfigKeys.length; i++) {
         const key = allConfigKeys[i];
         const value = localStorage.getItem(key);
 
         if (value !== null) {
             try {
+                // WRITE-AHEAD: Save intent before operation
+                await saveWriteAheadCheckpoint('config', key, i, keysProcessed, totalKeys);
+                
                 let parsedValue;
                 try {
                     parsedValue = JSON.parse(value);
@@ -356,8 +434,13 @@ async function migrateFromLocalStorage(onProgress = null) {
                 }
                 await ConfigAPI.setConfig(key, parsedValue);
                 keysProcessed++;
+                
+                // Mark complete after successful operation
+                await markCheckpointComplete('config', key, i, keysProcessed, totalKeys);
             } catch (err) {
                 console.warn(`[Migration] Failed to migrate key '${key}':`, err);
+                // Mark as failed so we skip on resume
+                await markCheckpointFailed('config', key, i, err.message || String(err));
             }
         }
 
@@ -366,9 +449,7 @@ async function migrateFromLocalStorage(onProgress = null) {
             onProgress(i + 1, totalKeys, `Migrating ${key}...`);
         }
 
-        // Checkpoint logic:
-        // - For small migrations (<100 records): checkpoint at 50%
-        // - For large migrations: checkpoint every 100 records
+        // Legacy checkpoint logic for large migrations (keep for compatibility)
         const currentIndex = i + 1;
         const isSmallMigration = totalKeys < CHECKPOINT_INTERVAL;
         const shouldCheckpointHalfway = isSmallMigration &&

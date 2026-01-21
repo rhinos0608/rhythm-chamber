@@ -18,13 +18,17 @@
  * Error thrown when a timeout budget is exhausted
  */
 class BudgetExhaustedError extends Error {
-    constructor({ operation, allocated, consumed, parent }) {
-        super(`Timeout budget exhausted for ${operation}: allocated ${allocated}ms, consumed ${consumed}ms`);
+    constructor({ operation, allocated, consumed, parent, reason = null }) {
+        const message = reason 
+            ? `Timeout budget exhausted for ${operation}: ${reason}`
+            : `Timeout budget exhausted for ${operation}: allocated ${allocated}ms, consumed ${consumed}ms`;
+        super(message);
         this.name = 'BudgetExhaustedError';
         this.operation = operation;
         this.allocated = allocated;
         this.consumed = consumed;
         this.parent = parent;
+        this.reason = reason;
     }
 }
 
@@ -35,6 +39,12 @@ class BudgetExhaustedError extends Error {
 /**
  * Represents an allocated timeout budget with abort signal integration
  * HNW Hierarchy: Links timeout budgets to AbortControllers for cascading cleanup
+ * 
+ * STRICT HIERARCHY RULES:
+ * 1. Child budget cannot exceed parent's remaining time at creation
+ * 2. Child's remaining() is always min(ownRemaining, parent.remaining())
+ * 3. Parent abort cascades to all children
+ * 4. Children cannot extend parent deadlines
  */
 class TimeoutBudgetInstance {
     constructor(operation, budgetMs, parent = null, options = {}) {
@@ -53,6 +63,23 @@ class TimeoutBudgetInstance {
         this._externalSignal = options.signal || null;
         this._timeoutId = null;
         this._abortHandlers = [];
+
+        // STRICT HIERARCHY: Validate child deadline against parent deadline
+        if (parent) {
+            const parentDeadline = parent.startTime + parent.budgetMs;
+            const childDeadline = this.startTime + budgetMs;
+            
+            if (childDeadline > parentDeadline) {
+                const parentRemaining = parent.remaining();
+                throw new BudgetExhaustedError({
+                    operation,
+                    allocated: budgetMs,
+                    consumed: 0,
+                    parent: parent.operation,
+                    reason: `Child deadline (${budgetMs}ms) exceeds parent remaining (${parentRemaining}ms)`
+                });
+            }
+        }
 
         // Link to external signal if provided
         if (this._externalSignal) {
@@ -100,12 +127,45 @@ class TimeoutBudgetInstance {
 
     /**
      * Get remaining budget in milliseconds
+     * STRICT HIERARCHY: Returns minimum of own remaining and parent remaining
+     * This ensures children cannot outlive parents
      * @returns {number}
      */
     remaining() {
         if (this.aborted) return 0;
-        const elapsed = Date.now() - this.startTime;
-        return Math.max(0, this.budgetMs - elapsed);
+        
+        const ownRemaining = Math.max(0, this.budgetMs - this.elapsed());
+        
+        // STRICT HIERARCHY: Child remaining is capped by parent remaining
+        if (this.parent) {
+            const parentRemaining = this.parent.remaining();
+            return Math.min(ownRemaining, parentRemaining);
+        }
+        
+        return ownRemaining;
+    }
+
+    /**
+     * Get own remaining time (ignoring parent)
+     * Useful for debugging and accounting
+     * @returns {number}
+     */
+    ownRemaining() {
+        if (this.aborted) return 0;
+        return Math.max(0, this.budgetMs - this.elapsed());
+    }
+
+    /**
+     * Get the deadline timestamp for this budget
+     * @returns {number} Timestamp when this budget expires
+     */
+    getDeadline() {
+        if (this.parent) {
+            const parentDeadline = this.parent.getDeadline();
+            const ownDeadline = this.startTime + this.budgetMs;
+            return Math.min(ownDeadline, parentDeadline);
+        }
+        return this.startTime + this.budgetMs;
     }
 
     /**
@@ -186,31 +246,42 @@ class TimeoutBudgetInstance {
     /**
      * Subdivide budget for a child operation
      * 
+     * STRICT HIERARCHY RULES:
+     * 1. Child budget cannot exceed parent's remaining time
+     * 2. Child deadline cannot exceed parent deadline
+     * 3. Child inherits parent's abort signal (cascade)
+     * 
      * @param {string} childOperation - Child operation name
      * @param {number} childBudgetMs - Budget for child (must fit within remaining)
      * @param {Object} [options] - Options including signal
      * @returns {TimeoutBudgetInstance}
+     * @throws {BudgetExhaustedError} If child budget exceeds available time
      */
     subdivide(childOperation, childBudgetMs, options = {}) {
         const available = this.remaining();
 
+        // STRICT HIERARCHY: Child cannot exceed parent's remaining time
         if (childBudgetMs > available) {
             throw new BudgetExhaustedError({
                 operation: childOperation,
                 allocated: childBudgetMs,
                 consumed: this.budgetMs - available,
-                parent: this.operation
+                parent: this.operation,
+                reason: `Requested ${childBudgetMs}ms but only ${available}ms available from parent "${this.operation}"`
             });
         }
 
-        // Child inherits parent's signal by default
+        // Child inherits parent's signal by default (ensures cascade abort)
         const childOptions = {
             ...options,
             signal: options.signal ?? this.signal
         };
 
+        // Create child with this as parent (triggers deadline validation in constructor)
         const child = new TimeoutBudgetInstance(childOperation, childBudgetMs, this, childOptions);
         this.children.push(child);
+        
+        console.log(`[TimeoutBudget] Subdivided ${this.operation} → ${childOperation}: ${childBudgetMs}ms of ${available}ms available`);
 
         return child;
     }
@@ -249,8 +320,12 @@ class TimeoutBudgetInstance {
             allocated: this.budgetMs,
             elapsed: this.elapsed(),
             remaining: this.remaining(),
+            ownRemaining: this.ownRemaining(),
+            deadline: this.getDeadline(),
             exhausted: this.isExhausted(),
             aborted: this.aborted,
+            hasParent: !!this.parent,
+            parentOperation: this.parent?.operation || null,
             children: this.children.map(c => c.getAccounting())
         };
     }
