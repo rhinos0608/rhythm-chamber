@@ -23,6 +23,11 @@ const SESSION_CURRENT_SESSION_KEY = 'rhythm_chamber_current_session';
 const SESSION_EMERGENCY_BACKUP_KEY = 'rhythm_chamber_emergency_backup';  // Sync backup for beforeunload
 const SESSION_EMERGENCY_BACKUP_MAX_AGE_MS = 3600000;  // 1 hour max age for emergency backups
 
+// Message limit constants (DATA LOSS WARNING)
+const MAX_SAVED_MESSAGES = 100;  // Maximum messages saved per session
+const MESSAGE_LIMIT_WARNING_THRESHOLD = 90;  // Warn when approaching limit
+let hasWarnedAboutMessageLimit = false;  // Track if user has been warned
+
 // ==========================================
 // State Management
 // ==========================================
@@ -32,12 +37,12 @@ let currentSessionCreatedAt = null;
 let autoSaveTimeoutId = null;
 let _eventListenersRegistered = false; // Track if event listeners are registered to prevent duplicates
 
-// In-memory session data with lock for thread-safety
+// In-memory session data with async mutex for thread-safety
 let _sessionData = { id: null, messages: [] };
-let _sessionDataLock = false; // Simple lock to prevent concurrent access
+let _sessionDataLock = Promise.resolve(); // Async mutex: promises chain sequentially
 
 /**
- * Get session data safely (with lock protection)
+ * Get session data safely (returns a snapshot)
  * @returns {Object} Copy of session data
  */
 function getSessionData() {
@@ -49,7 +54,7 @@ function getSessionData() {
 }
 
 /**
- * Set session data safely (with lock protection)
+ * Set session data safely (no lock - use updateSessionData for concurrent updates)
  * @param {Object} data - New session data
  */
 function setSessionData(data) {
@@ -59,12 +64,50 @@ function setSessionData(data) {
     };
 }
 
+/**
+ * Update session data atomically with mutex protection.
+ * This prevents lost update races when multiple async operations
+ * try to modify session data concurrently within the same tab.
+ *
+ * @param {Function} updaterFn - Function that receives current data and returns new data
+ * @returns {Promise<void>}
+ */
+async function updateSessionData(updaterFn) {
+    const previousLock = _sessionDataLock;
+    let releaseLock;
+
+    // Create new lock in the chain
+    _sessionDataLock = new Promise(resolve => {
+        releaseLock = resolve;
+    });
+
+    // Wait for previous updates to complete
+    await previousLock;
+
+    try {
+        const currentData = getSessionData();
+        const newData = updaterFn(currentData);
+        _sessionData = {
+            id: newData.id || null,
+            messages: newData.messages ? [...newData.messages] : []
+        };
+
+        // Sync to window for legacy compatibility (read-only)
+        if (typeof window !== 'undefined') {
+            window._sessionData = getSessionData();
+        }
+    } finally {
+        releaseLock(); // Release the lock for next operation
+    }
+}
+
 // ==========================================
 // Core Functions
 // ==========================================
 
 /**
- * Generate a UUID for session IDs
+ * Generate a UUID v4 for session IDs
+ * @returns {string} A randomly generated UUID following version 4 format
  */
 function generateUUID() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -93,6 +136,7 @@ async function init() {
 /**
  * Load existing session or create a new one
  * Uses unified Storage API with localStorage fallback
+ * @returns {Promise<Object>} The loaded or newly created session object
  */
 async function loadOrCreateSession() {
     // Try unified storage first for current session ID
@@ -148,15 +192,20 @@ async function createNewSession(initialMessages = []) {
         await saveCurrentSession();
     }
 
+    // Reset message limit warning flag for new session (DATA LOSS WARNING)
+    hasWarnedAboutMessageLimit = false;
+
     currentSessionId = generateUUID();
     currentSessionCreatedAt = new Date().toISOString();
 
-    // Store session data in memory (will be saved to storage)
+    // Store session data in module-local memory (protected from external mutations)
+    _sessionData = {
+        id: currentSessionId,
+        messages: [...initialMessages]
+    };
+    // Sync to window for legacy compatibility (read-only)
     if (typeof window !== 'undefined') {
-        window._sessionData = {
-            id: currentSessionId,
-            messages: [...initialMessages]
-        };
+        window._sessionData = getSessionData();
     }
 
     // Save current session ID to unified storage and localStorage
@@ -209,12 +258,14 @@ async function loadSession(sessionId) {
         currentSessionId = session.id;
         currentSessionCreatedAt = session.createdAt;
 
-        // Store session data in memory
+        // Store session data in module-local memory (protected from external mutations)
+        _sessionData = {
+            id: session.id,
+            messages: session.messages || []
+        };
+        // Sync to window for legacy compatibility (read-only)
         if (typeof window !== 'undefined') {
-            window._sessionData = {
-                id: session.id,
-                messages: session.messages || []
-            };
+            window._sessionData = getSessionData();
         }
 
         // Save current session ID to unified storage and localStorage
@@ -247,23 +298,40 @@ async function saveCurrentSession() {
         return;
     }
 
-    // Get messages from memory
-    const messages = typeof window !== 'undefined' && window._sessionData
-        ? window._sessionData.messages
-        : [];
+    // Get messages from module-local memory (thread-safe access)
+    const messages = _sessionData.messages || [];
+    const messageCount = messages.length;
+
+    // Warn when approaching message limit (DATA LOSS WARNING)
+    if (messageCount >= MESSAGE_LIMIT_WARNING_THRESHOLD && !hasWarnedAboutMessageLimit) {
+        hasWarnedAboutMessageLimit = true;
+        if (typeof window !== 'undefined' && window.showToast) {
+            window.showToast(
+                `You have ${messageCount} messages in this chat. Only the most recent ${MAX_SAVED_MESSAGES} messages will be saved permanently.`,
+                6000
+            );
+        }
+        console.warn(`[SessionManager] Approaching message limit: ${messageCount}/${MAX_SAVED_MESSAGES}`);
+    }
 
     try {
         const session = {
             id: currentSessionId,
             title: generateSessionTitle(messages),
             createdAt: currentSessionCreatedAt,
-            messages: messages.slice(-100), // Limit to 100 messages
+            messages: messages.slice(-MAX_SAVED_MESSAGES), // Limit to MAX_SAVED_MESSAGES messages
             metadata: {
                 personalityName: window._userContext?.personality?.name || 'Unknown',
                 personalityEmoji: window._userContext?.personality?.emoji || '🎵',
                 isLiteMode: false
             }
         };
+
+        // Log warning when messages are actually truncated (DATA LOSS WARNING)
+        if (messageCount > MAX_SAVED_MESSAGES) {
+            const truncatedCount = messageCount - MAX_SAVED_MESSAGES;
+            console.warn(`[SessionManager] Truncated ${truncatedCount} old messages (only ${MAX_SAVED_MESSAGES} most recent saved)`);
+        }
 
         await Storage.saveSession(session);
         console.log('[SessionManager] Session saved:', currentSessionId);
@@ -300,7 +368,7 @@ async function flushPendingSaveAsync() {
         clearTimeout(autoSaveTimeoutId);
         autoSaveTimeoutId = null;
     }
-    if (currentSessionId && typeof window !== 'undefined' && window._sessionData) {
+    if (currentSessionId && _sessionData.id) {
         try {
             await saveCurrentSession();
             console.log('[SessionManager] Session flushed on visibility change');
@@ -316,9 +384,9 @@ async function flushPendingSaveAsync() {
  * Next load will detect this and migrate to IndexedDB
  */
 function emergencyBackupSync() {
-    if (!currentSessionId || typeof window === 'undefined' || !window._sessionData) return;
+    if (!currentSessionId || !_sessionData.id) return;
 
-    const messages = window._sessionData.messages || [];
+    const messages = _sessionData.messages || [];
     if (messages.length === 0) return;
 
     const backup = {
@@ -517,8 +585,11 @@ async function renameSession(sessionId, newTitle) {
  * Clear conversation history and create new session
  */
 async function clearConversation() {
+    // Clear module-local state
+    _sessionData = { id: null, messages: [] };
+    // Sync to window for legacy compatibility (read-only)
     if (typeof window !== 'undefined') {
-        window._sessionData = { id: null, messages: [] };
+        window._sessionData = getSessionData();
     }
     await createNewSession();
 }
@@ -536,8 +607,9 @@ function getCurrentSessionId() {
  * @returns {Array} Copy of current conversation history
  */
 function getHistory() {
-    if (typeof window !== 'undefined' && window._sessionData) {
-        return [...window._sessionData.messages];
+    // Return a copy from module-local memory (thread-safe access)
+    if (_sessionData.messages) {
+        return [..._sessionData.messages];
     }
     return [];
 }
@@ -548,12 +620,18 @@ function getHistory() {
  * @param {Object} message - Message object with role and content
  */
 function addMessageToHistory(message) {
-    if (typeof window !== 'undefined' && window._sessionData) {
+    // Use module-local state with immutable update pattern (thread-safe)
+    if (_sessionData.messages) {
         // Tag message with current data version for stale detection
         if (DataVersion.tagMessage) {
             DataVersion.tagMessage(message);
         }
-        window._sessionData.messages.push(message);
+        // Create new array reference instead of mutating (prevents race conditions)
+        _sessionData.messages = [..._sessionData.messages, message];
+        // Sync to window for legacy compatibility (read-only)
+        if (typeof window !== 'undefined') {
+            window._sessionData = getSessionData();
+        }
     }
 }
 
@@ -563,8 +641,16 @@ function addMessageToHistory(message) {
  * @returns {boolean} Success status
  */
 function removeMessageFromHistory(index) {
-    if (typeof window !== 'undefined' && window._sessionData && index >= 0 && index < window._sessionData.messages.length) {
-        window._sessionData.messages.splice(index, 1);
+    // Use module-local state with immutable update pattern (thread-safe)
+    if (_sessionData.messages && index >= 0 && index < _sessionData.messages.length) {
+        // Create new array without the removed item (prevents race conditions)
+        const newMessages = [..._sessionData.messages];
+        newMessages.splice(index, 1);
+        _sessionData.messages = newMessages;
+        // Sync to window for legacy compatibility (read-only)
+        if (typeof window !== 'undefined') {
+            window._sessionData = getSessionData();
+        }
         return true;
     }
     return false;
@@ -575,8 +661,13 @@ function removeMessageFromHistory(index) {
  * @param {number} length - New length
  */
 function truncateHistory(length) {
-    if (typeof window !== 'undefined' && window._sessionData) {
-        window._sessionData.messages = window._sessionData.messages.slice(0, length);
+    // Use module-local state with immutable update pattern (thread-safe)
+    if (_sessionData.messages) {
+        _sessionData.messages = _sessionData.messages.slice(0, length);
+        // Sync to window for legacy compatibility (read-only)
+        if (typeof window !== 'undefined') {
+            window._sessionData = getSessionData();
+        }
     }
 }
 
@@ -585,8 +676,11 @@ function truncateHistory(length) {
  * @param {Array} messages - New message array
  */
 function replaceHistory(messages) {
-    if (typeof window !== 'undefined' && window._sessionData) {
-        window._sessionData.messages = [...messages];
+    // Use module-local state with immutable update pattern (thread-safe)
+    _sessionData.messages = [...messages];
+    // Sync to window for legacy compatibility (read-only)
+    if (typeof window !== 'undefined') {
+        window._sessionData = getSessionData();
     }
 }
 
@@ -683,6 +777,7 @@ const SessionManager = {
     removeMessageFromHistory,
     truncateHistory,
     replaceHistory,
+    updateSessionData, // NEW: Atomic update with mutex protection
 
     // Persistence
     saveCurrentSession,
