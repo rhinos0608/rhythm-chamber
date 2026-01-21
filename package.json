@@ -9,6 +9,9 @@
   "scripts": {
     "dev": "npx http-server . -p 8080 -c-1",
     "dev:coop-coep": "node scripts/dev-server-with-coop-coep.mjs 8080",
+    "dev:dist": "npx http-server dist -p 8080 -c-1",
+    "build": "node scripts/build.mjs",
+    "build:dev": "node scripts/build.mjs",
     "test": "npx playwright test",
     "pretest": "npm run lint:globals",
     "test:unit": "vitest run tests/unit/",
@@ -30,9 +33,19 @@
     "url": "https://github.com/rhinos0608/rhythm-chamber/issues"
   },
   "homepage": "https://github.com/rhinos0608/rhythm-chamber#readme",
+  "browserslist": [
+    "Chrome >= 90",
+    "Edge >= 90",
+    "Firefox >= 90",
+    "Safari >= 14.5",
+    "iOS >= 14.5",
+    "not IE 11",
+    "not dead"
+  ],
   "devDependencies": {
     "@playwright/test": "^1.57.0",
     "@types/node": "^25.0.6",
+    "esbuild": "^0.24.0",
     "happy-dom": "^20.3.1",
     "http-server": "^14.1.1",
     "vitest": "^4.0.17"
