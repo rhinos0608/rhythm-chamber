@@ -18,6 +18,9 @@ import { SidebarController } from './sidebar-controller.js';
 
 let _elements = null;
 
+// AbortController for cancelling pending AI description requests (RACE CONDITION FIX)
+let descriptionAbortController = null;
+
 /**
  * Initialize DOM element references
  * Called once on first use
@@ -177,8 +180,17 @@ function showReveal() {
         descriptionEl.innerHTML = '<span class="ai-description-loading">✨ Crafting your personalized description...</span>';
         descriptionEl.classList.add('generating');
 
-        // Generate AI description async
-        generateAIDescription(personality, patterns, summary, descriptionEl);
+        // Generate AI description async with error handling
+        generateAIDescription(personality, patterns, summary, descriptionEl)
+            .catch(err => {
+                // Catch any errors that occur before internal try/catch
+                console.error('[ViewController] Critical error in AI description background task:', err);
+                // Clean up UI state
+                if (descriptionEl) {
+                    descriptionEl.classList.remove('generating');
+                    descriptionEl.textContent = personality?.description || 'Description unavailable';
+                }
+            });
     } else {
         // Use generic description
         if (descriptionEl) {
@@ -234,7 +246,16 @@ function showReveal() {
  * @param {HTMLElement} descriptionEl - Element to update
  */
 async function generateAIDescription(personality, patterns, summary, descriptionEl) {
-    // Create/increment generation ID to prevent race conditions
+    // Cancel any pending description request (RACE CONDITION FIX with AbortController)
+    if (descriptionAbortController) {
+        descriptionAbortController.abort();
+    }
+
+    // Create new AbortController for this request
+    descriptionAbortController = new AbortController();
+    const signal = descriptionAbortController.signal;
+
+    // Create/increment generation ID as additional race condition protection
     if (!descriptionEl._generationId) {
         descriptionEl._generationId = 0;
     }
@@ -247,7 +268,13 @@ async function generateAIDescription(personality, patterns, summary, description
             summary
         );
 
-        // Only update if this is still the current generation
+        // Check if request was aborted (RACE CONDITION FIX)
+        if (signal.aborted) {
+            console.log('[ViewController] AI description request was aborted - newer request in progress');
+            return;
+        }
+
+        // Only update if this is still the current generation (double protection)
         if (descriptionEl._generationId !== currentGenerationId) {
             console.log('[ViewController] Skipping outdated AI description generation');
             return;
@@ -264,11 +291,22 @@ async function generateAIDescription(personality, patterns, summary, description
             descriptionEl.classList.remove('generating');
         }
     } catch (error) {
+        // Check if error is due to abort (RACE CONDITION FIX)
+        if (error.name === 'AbortError' || signal.aborted) {
+            console.log('[ViewController] AI description request aborted - skipping');
+            return;
+        }
+
         console.error('[ViewController] AI description generation failed:', error);
         // Only fallback if this is still the current generation
         if (descriptionEl._generationId === currentGenerationId) {
             descriptionEl.textContent = personality.description;
             descriptionEl.classList.remove('generating');
+        }
+    } finally {
+        // Clear abort controller if this is still the current request
+        if (descriptionEl._generationId === currentGenerationId) {
+            descriptionAbortController = null;
         }
     }
 }
@@ -407,6 +445,24 @@ function showChat() {
 // ==========================================
 // Public API
 // ==========================================
+// Cleanup
+// ==========================================
+
+/**
+ * Clean up resources (abort pending requests, clear references)
+ * Call when destroying the view or during page unload
+ */
+function destroy() {
+    // Abort any pending AI description requests
+    if (descriptionAbortController) {
+        descriptionAbortController.abort();
+        descriptionAbortController = null;
+    }
+    // Clear element cache
+    _elements = null;
+}
+
+// ==========================================
 
 // ES Module export
 export const ViewController = {
@@ -416,7 +472,8 @@ export const ViewController = {
     showLiteReveal,
     showChat,
     updateProgress,
-    populateScoreBreakdown
+    populateScoreBreakdown,
+    destroy
 };
 
 

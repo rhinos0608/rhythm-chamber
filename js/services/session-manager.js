@@ -210,14 +210,22 @@ async function createNewSession(initialMessages = []) {
 
     // Save current session ID to unified storage and localStorage
     if (Storage.setConfig) {
-        Storage.setConfig(SESSION_CURRENT_SESSION_KEY, currentSessionId).catch(e =>
-            console.warn('[SessionManager] Failed to save session ID to unified storage:', e)
-        );
+        Storage.setConfig(SESSION_CURRENT_SESSION_KEY, currentSessionId).catch(e => {
+            console.error('[SessionManager] Failed to save session ID to unified storage:', e);
+            // Notify user if toast available - this is a critical data persistence issue
+            if (typeof window !== 'undefined' && window.showToast) {
+                window.showToast('Warning: Session may not be remembered on reload due to storage issues.', 4000);
+            }
+        });
     }
     try {
         localStorage.setItem(SESSION_CURRENT_SESSION_KEY, currentSessionId);
     } catch (e) {
         console.error('[SessionManager] Failed to set current session ID in localStorage:', e);
+        // Notify user - this is a critical data persistence issue
+        if (typeof window !== 'undefined' && window.showToast) {
+            window.showToast('Warning: Session may not be remembered on reload due to storage issues.', 4000);
+        }
     }
 
     // Save immediately if we have messages
@@ -270,14 +278,22 @@ async function loadSession(sessionId) {
 
         // Save current session ID to unified storage and localStorage
         if (Storage.setConfig) {
-            Storage.setConfig(SESSION_CURRENT_SESSION_KEY, currentSessionId).catch(e =>
-                console.warn('[SessionManager] Failed to save session ID to unified storage:', e)
-            );
+            Storage.setConfig(SESSION_CURRENT_SESSION_KEY, currentSessionId).catch(e => {
+                console.error('[SessionManager] Failed to save session ID to unified storage:', e);
+                // Notify user if toast available - this is a critical data persistence issue
+                if (typeof window !== 'undefined' && window.showToast) {
+                    window.showToast('Warning: Session may not be remembered on reload due to storage issues.', 4000);
+                }
+            });
         }
         try {
             localStorage.setItem(SESSION_CURRENT_SESSION_KEY, currentSessionId);
         } catch (e) {
             console.error('[SessionManager] Failed to set current session ID in localStorage:', e);
+            // Notify user - this is a critical data persistence issue
+            if (typeof window !== 'undefined' && window.showToast) {
+                window.showToast('Warning: Session may not be remembered on reload due to storage issues.', 4000);
+            }
         }
 
         console.log('[SessionManager] Loaded session:', sessionId, 'with', (session.messages || []).length, 'messages');
