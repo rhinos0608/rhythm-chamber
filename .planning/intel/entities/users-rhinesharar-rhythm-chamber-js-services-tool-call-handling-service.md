@@ -9,23 +9,19 @@ status: active
 
 ## Purpose
 
-Handles LLM-requested tool calls with fallback support for models without native function calling. Separates tool call concerns from chat orchestration.
+Handles LLM-requested tool calls with fallback support for models without native function calling. Extracted from chat.js to separate tool call concerns from chat orchestration.
 
 ## Exports
 
-- `ToolCallHandlingService` - Main service object with init, handleToolCalls, and strategy management methods
+- **ToolCallHandlingService** - Main service object containing initialization, execution, retry logic, and strategy management for tool calls
 
 ## Dependencies
 
-- [[timeout-budget-manager]]
 - [[native-strategy]]
 - [[prompt-injection-strategy]]
 - [[intent-extraction-strategy]]
-- CircuitBreaker (injected)
-- Functions (injected)
-- SessionManager (injected)
-- FunctionCallingFallback (injected)
-- ConversationOrchestrator (injected)
+- [[timeout-budget-manager]]
+- [[provider-health-authority]]
 
 ## Used By
 
@@ -33,4 +29,4 @@ TBD
 
 ## Notes
 
-Circuit breaker limits: max 5 function calls per turn, 30s timeout per function. Strategies include native tool calling, prompt injection fallback, and intent extraction fallback.
+Service uses retry logic with exponential backoff for transient errors. Supports multiple tool calling strategies (native, prompt injection, intent extraction) based on model capabilities. Maintains backward compatibility with CircuitBreaker through ProviderHealthAuthority.

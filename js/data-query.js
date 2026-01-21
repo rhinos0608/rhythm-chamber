@@ -1,9 +1,13 @@
 /**
  * Data Query Module for Rhythm Chamber
- * 
+ *
  * Provides query utilities for the chat to access actual streaming data.
  * This enables the AI to answer specific questions about listening history.
  */
+
+import { createLogger } from './utils/logger.js';
+
+const logger = createLogger('DataQuery');
 
 /**
  * Query streaming data by time period
@@ -355,5 +359,5 @@ export const DataQuery = {
 };
 
 
-console.log('[DataQuery] Module loaded');
+logger.info('Module loaded');
 

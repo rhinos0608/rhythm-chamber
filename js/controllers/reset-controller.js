@@ -1,13 +1,15 @@
 /**
  * Reset Controller
- * 
+ *
  * Handles data reset operations with proper worker cleanup.
  * Extracted from app.js to separate reset concerns from main app flow.
- * 
+ *
  * @module controllers/reset-controller
  */
 
 'use strict';
+
+import { setupModalFocusTrap } from '../utils/focus-trap.js';
 
 // ==========================================
 // Dependencies (injected via init)
@@ -27,6 +29,10 @@ let _FileUploadController = null;
 // ==========================================
 
 let pendingDeleteSessionId = null;
+
+// Focus trap cleanup functions for modals
+let resetModalFocusTrapCleanup = null;
+let privacyModalFocusTrapCleanup = null;
 
 // ==========================================
 // Core Functions
@@ -76,6 +82,14 @@ function showResetConfirmModal() {
     const modal = document.getElementById('reset-confirm-modal');
     if (modal) {
         modal.style.display = 'flex';
+
+        // Set up focus trap for accessibility (WCAG 2.1.2)
+        // Clean up any existing trap first
+        if (resetModalFocusTrapCleanup) {
+            resetModalFocusTrapCleanup();
+            resetModalFocusTrapCleanup = null;
+        }
+        resetModalFocusTrapCleanup = setupModalFocusTrap('reset-confirm-modal', () => hideResetConfirmModal());
     }
 }
 
@@ -83,6 +97,12 @@ function showResetConfirmModal() {
  * Hide reset confirmation modal
  */
 function hideResetConfirmModal() {
+    // Clean up focus trap first (restores focus to previous element)
+    if (resetModalFocusTrapCleanup) {
+        resetModalFocusTrapCleanup();
+        resetModalFocusTrapCleanup = null;
+    }
+
     const modal = document.getElementById('reset-confirm-modal');
     if (modal) {
         modal.style.display = 'none';
@@ -296,6 +316,21 @@ async function showPrivacyDashboard() {
 
     // Show modal
     modal.style.display = 'flex';
+
+    // Set up focus trap for accessibility (WCAG 2.1.2)
+    // Clean up any existing trap first
+    if (privacyModalFocusTrapCleanup) {
+        privacyModalFocusTrapCleanup();
+        privacyModalFocusTrapCleanup = null;
+    }
+    privacyModalFocusTrapCleanup = setupModalFocusTrap('privacy-dashboard-modal', () => {
+        // Hide modal on Escape
+        modal.style.display = 'none';
+        if (privacyModalFocusTrapCleanup) {
+            privacyModalFocusTrapCleanup();
+            privacyModalFocusTrapCleanup = null;
+        }
+    });
 }
 
 /**

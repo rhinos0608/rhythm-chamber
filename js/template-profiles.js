@@ -13,6 +13,9 @@
  */
 
 import { DemoData } from './demo-data.js';
+import { createLogger } from './utils/logger.js';
+
+const logger = createLogger('TemplateProfiles');
 
 // ==========================================
 // Template Schema & Validation
@@ -324,7 +327,7 @@ class TemplateProfileStore {
 
         TEMPLATES.forEach(template => {
             if (!validateTemplate(template)) {
-                console.warn(`[TemplateStore] Invalid template: ${template.id}`);
+                logger.warn(`Invalid template: ${template.id}`);
                 return;
             }
 
@@ -340,7 +343,7 @@ class TemplateProfileStore {
         });
 
         this._initialized = true;
-        console.log(`[TemplateStore] Loaded ${this.templates.size} templates`);
+        logger.debug(`Loaded ${this.templates.size} templates`);
     }
 
     /**
@@ -518,5 +521,5 @@ const templateStore = new TemplateProfileStore();
 // ES Module exports
 export { templateStore as TemplateProfileStore, TemplateProfileStore as TemplateProfileStoreClass };
 
-console.log('[TemplateProfiles] Module loaded');
+logger.info('Module loaded');
 

@@ -9,24 +9,22 @@ status: active
 
 ## Purpose
 
-Unified abstraction layer for all LLM providers (OpenRouter, Ollama, LM Studio, Gemini) handling configuration building and request routing with support for both local and cloud AI infrastructure.
+Unified abstraction layer for all LLM providers (OpenRouter, Ollama, LM Studio, Gemini) that handles configuration building and request routing with support for both local and cloud AI infrastructure.
 
 ## Exports
 
-- `ProviderInterface` - Main interface class for LLM provider management and request routing
-- `buildProviderConfig()` - Builds provider-specific configuration objects
-- `getProviderTimeout()` - Returns timeout values for cloud vs local providers
+- `ProviderInterface` - Main interface class for managing LLM provider configurations and routing requests
 
 ## Dependencies
 
-- [[js-module-registry]]
-- [[js-utils-timeout-wrapper]]
-- [[js-services-provider-circuit-breaker]]
-- [[js-services-config-loader]]
-- [[js-settings]]
-- [[js-providers-openrouter]]
-- [[js-providers-lmstudio]]
-- [[js-providers-gemini]]
+- [[module-registry]]
+- [[timeout-wrapper]]
+- [[provider-health-authority]]
+- [[config-loader]]
+- [[settings]]
+- [[openrouter]]
+- [[lmstudio]]
+- [[gemini]]
 
 ## Used By
 
@@ -34,4 +32,6 @@ TBD
 
 ## Notes
 
-Implements "Bring Your Own AI" philosophy allowing users to choose between local (maximum privacy) or cloud AI infrastructure. Includes 90s timeout for local providers and 60s for cloud APIs. Privacy metadata flags (`isLocal`, `privacyLevel`) included in configs for UI consumption.
+- Supports "Bring Your Own AI" philosophy allowing users to choose local or cloud AI infrastructure
+- Local providers (Ollama, LM Studio) flagged with `isLocal: true` and `privacyLevel: 'maximum'`
+- Different timeout values: 60s for cloud APIs, 90s for local LLMs

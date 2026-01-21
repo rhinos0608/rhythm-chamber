@@ -192,6 +192,7 @@ function simpleHash(data) {
 
 /**
  * Debounce function calls
+ * Delays function execution until after waitMs have elapsed since the last call
  * @param {Function} func - Function to debounce
  * @param {number} waitMs - Wait time in milliseconds
  */
@@ -204,6 +205,39 @@ function debounce(func, waitMs) {
         };
         clearTimeout(timeout);
         timeout = setTimeout(later, waitMs);
+    };
+}
+
+/**
+ * Throttle function calls
+ * Ensures function is called at most once per limitMs interval
+ * Use for high-frequency events like dragover, resize, scroll
+ * @param {Function} func - Function to throttle
+ * @param {number} limitMs - Minimum time between calls in milliseconds
+ * @returns {Function} Throttled function
+ */
+function throttle(func, limitMs) {
+    let inThrottle;
+    let lastArgs;
+    let lastThis;
+
+    return function executedFunction(...args) {
+        lastArgs = args;
+        lastThis = this;
+
+        if (!inThrottle) {
+            func.apply(lastThis, lastArgs);
+            inThrottle = true;
+
+            setTimeout(() => {
+                inThrottle = false;
+                // Optionally call with last args on trailing edge
+                // Uncomment below for trailing-edge throttle:
+                // if (lastArgs) func.apply(lastThis, lastArgs);
+                // lastArgs = null;
+                // lastThis = null;
+            }, limitMs);
+        }
     };
 }
 
@@ -384,6 +418,25 @@ const StorageCircuitBreaker = {
     }
 };
 
+/**
+ * Safely truncate a string to a maximum length, handling Unicode surrogate pairs correctly.
+ * This prevents splitting multi-byte characters like emojis or rare CJK characters.
+ * @param {string} str - The string to truncate
+ * @param {number} maxLength - Maximum length in characters
+ * @param {string} suffix - Optional suffix to add when truncated (default: '...')
+ * @returns {string} Truncated string
+ */
+function safeTruncate(str, maxLength, suffix = '...') {
+    if (!str || str.length <= maxLength) return str || '';
+    // Use Array.from to properly handle Unicode surrogate pairs
+    // This iterates by code points rather than UTF-16 code units
+    const chars = Array.from(str);
+    if (chars.length <= maxLength) return str;
+    const suffixLength = suffix.length;
+    const truncateLength = Math.max(0, maxLength - suffixLength);
+    return chars.slice(0, truncateLength).join('') + suffix;
+}
+
 // ES Module export
 export const Utils = {
     fetchWithTimeout,
@@ -392,7 +445,9 @@ export const Utils = {
     sleep,
     simpleHash,
     debounce,
+    throttle,
     formatDuration,
+    safeTruncate,
     StorageCircuitBreaker
 };
 

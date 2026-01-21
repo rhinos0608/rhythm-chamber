@@ -19,6 +19,7 @@ import { EventBus } from '../services/event-bus.js';
 import { escapeHtml } from '../utils/html-escape.js';
 import { Utils } from '../utils.js';
 import { STORAGE_KEYS } from '../storage/keys.js';
+import { setupModalFocusTrap } from '../utils/focus-trap.js';
 
 const SIDEBAR_STATE_KEY = STORAGE_KEYS.SIDEBAR_COLLAPSED;
 let pendingDeleteSessionId = null;
@@ -28,6 +29,9 @@ let _unsubscribe = null; // AppState subscription cleanup
 let currentRenameInput = null;
 let currentRenameBlurHandler = null;
 let currentRenameKeydownHandler = null;
+
+// Focus trap cleanup for delete chat modal
+let deleteChatModalFocusTrapCleanup = null;
 
 // DOM elements (lazily initialized)
 let chatSidebar = null;

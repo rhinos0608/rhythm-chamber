@@ -1,6 +1,6 @@
 # Rhythm Chamber Documentation Index
 
-**Last Updated:** 2026-01-21
+**Last Updated:** 2026-01-22
 
 ---
 
@@ -10,6 +10,7 @@
 |--------|------------|
 | **Users** | [README.md](../README.md) - Product overview and getting started |
 | **Developers** | [Technical Architecture](03-technical-architecture.md) - Zero-backend, BYOI architecture |
+| **Contributors** | [Contributing Guide](../CONTRIBUTING.md) - Contribution guidelines |
 | **Security Researchers** | [SECURITY.md](../SECURITY.md) - Comprehensive security model |
 | **Development Workflow** | [GSD System](gsd-system.md) - Development methodology |
 
@@ -70,7 +71,12 @@
   - `REQUIREMENTS.md` - Requirements specification
   - `phases/*/` - Phase directories with PLAN/SUMMARY
 
+### Contributor Guides
+- [Contributing Guide](../CONTRIBUTING.md) - How to contribute, PR guidelines, code style
+- [Testing Guide](../TESTING.md) - Running and writing tests, test patterns
+
 ### Testing
+- [Testing Guide](../TESTING.md) - Comprehensive testing documentation
 - Unit tests: `tests/unit/` (Vitest)
 - E2E tests: `tests/rhythm-chamber.spec.ts` (Playwright)
 - Integration tests: `tests/integration/`

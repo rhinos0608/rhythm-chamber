@@ -46,6 +46,10 @@ export class NativeToolStrategy extends BaseToolStrategy {
             tool_calls: responseMessage.tool_calls
         });
 
+        // Track if any function calls returned errors
+        let hadFunctionErrors = false;
+        const functionErrors = [];
+
         // Execute each function call
         for (const toolCall of responseMessage.tool_calls) {
             // Check circuit breaker before each call
@@ -69,13 +73,18 @@ export class NativeToolStrategy extends BaseToolStrategy {
                 args = JSON.parse(rawArgs);
             } catch (parseError) {
                 console.warn(`[NativeToolStrategy] Invalid arguments for ${functionName}:`, rawArgs);
+                // Track parse error for proper error reporting
+                hadFunctionErrors = true;
+                functionErrors.push({ function: functionName, error: `Invalid arguments: ${parseError.message}` });
                 if (onProgress) onProgress({ type: 'tool_end', tool: functionName, error: true });
                 return {
                     earlyReturn: {
                         status: 'error',
                         content: this.buildParseError(functionName, rawArgs),
                         role: 'assistant',
-                        isFunctionError: true
+                        isFunctionError: true,
+                        hadFunctionErrors: true,
+                        functionErrors: [{ function: functionName, error: `Invalid arguments: ${parseError.message}` }]
                     }
                 };
             }
@@ -88,18 +97,32 @@ export class NativeToolStrategy extends BaseToolStrategy {
                 result = await this.executeWithTimeout(functionName, args, streamsData);
             } catch (execError) {
                 console.error(`[NativeToolStrategy] Execution failed:`, execError);
+                // Track execution error for proper error reporting
+                hadFunctionErrors = true;
+                functionErrors.push({ function: functionName, error: execError.message });
                 if (onProgress) onProgress({ type: 'tool_end', tool: functionName, error: true });
-                return {
+                const errorReturn = {
                     earlyReturn: {
                         status: 'error',
                         content: `Function call '${functionName}' failed: ${execError.message}. Please try again or select a different model.`,
                         role: 'assistant',
-                        isFunctionError: true
+                        isFunctionError: true,
+                        hadFunctionErrors: true,
+                        functionErrors: [{ function: functionName, error: execError.message }]
                     }
                 };
+                return errorReturn;
             }
 
             console.log(`[NativeToolStrategy] Result:`, result);
+
+            // Check if function returned an error object
+            if (result && typeof result === 'object' && 'error' in result) {
+                hadFunctionErrors = true;
+                functionErrors.push({ function: functionName, error: result.error });
+                console.warn(`[NativeToolStrategy] Function ${functionName} returned error:`, result.error);
+            }
+
             if (onProgress) onProgress({ type: 'tool_end', tool: functionName, result });
 
             // Add tool result to conversation
@@ -122,10 +145,23 @@ export class NativeToolStrategy extends BaseToolStrategy {
             const response = await callLLM(providerConfig, key, followUpMessages, undefined);
             // HNW Fix: Safely handle missing choices array
             const choices = Array.isArray(response?.choices) ? response.choices : [];
-            return { responseMessage: choices[0]?.message ?? null };
+            const result = {
+                responseMessage: choices[0]?.message ?? null
+            };
+            // Include function error information if any occurred
+            if (hadFunctionErrors) {
+                result.functionErrors = functionErrors;
+                result.hadFunctionErrors = true;
+            }
+            return result;
         } catch (error) {
             console.error('[NativeToolStrategy] Follow-up LLM call failed:', error);
-            return { responseMessage: null };
+            const result = { responseMessage: null };
+            if (hadFunctionErrors) {
+                result.functionErrors = functionErrors;
+                result.hadFunctionErrors = true;
+            }
+            return result;
         }
     }
 

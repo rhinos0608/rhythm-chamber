@@ -24,6 +24,7 @@ import { Patterns } from './patterns.js';
 import { Storage } from './storage.js';
 import { Security } from './security/index.js';
 import { OperationLock } from './operation-lock.js';
+import { safeJsonParse } from './utils/safe-json.js';
 
 // EmbeddingWorker instance (lazy-loaded)
 let embeddingWorker = null;
@@ -208,9 +209,10 @@ async function getConfig() {
         }
 
         // Fallback to localStorage (pre-migration or if IndexedDB unavailable)
+        // SECURITY: Use safeJsonParse to prevent DoS from malformed JSON
         if (!config || Object.keys(config).length === 0) {
             const stored = localStorage.getItem(RAG_STORAGE_KEY);
-            config = stored ? JSON.parse(stored) : {};
+            config = safeJsonParse(stored, {});
         }
 
         return Object.keys(config).length > 0 ? config : null;

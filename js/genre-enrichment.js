@@ -12,6 +12,9 @@
  */
 
 import { Storage } from './storage.js';
+import { createLogger } from './utils/logger.js';
+
+const logger = createLogger('GenreEnrichment');
 
 // ==========================================
 // Static Artist-Genre Map (Top ~500 Artists)
@@ -290,7 +293,7 @@ async function loadCachedGenres() {
             return genreCache;
         }
     } catch (e) {
-        console.warn('[GenreEnrichment] Failed to load cache:', e);
+        logger.warn('Failed to load cache', e);
     }
 
     genreCache = {};
@@ -306,7 +309,7 @@ async function saveCachedGenres() {
     try {
         await Storage.setConfig('rhythm_chamber_genre_cache', genreCache);
     } catch (e) {
-        console.warn('[GenreEnrichment] Failed to save cache:', e);
+        logger.warn('Failed to save cache', e);
     }
 }
 
@@ -501,7 +504,7 @@ async function processApiQueue() {
                 await saveCachedGenres();
             }
         } catch (e) {
-            console.warn(`[GenreEnrichment] Failed to fetch genre for "${artistName}":`, e.message);
+            logger.warn(`Failed to fetch genre for "${artistName}"`, e);
         }
 
         // Rate limit: wait before next request
@@ -609,5 +612,5 @@ export const GenreEnrichment = {
 };
 
 
-console.log(`[GenreEnrichment] Module loaded with ${getStaticMapSize()} artists in static map.`);
+logger.info(`Module loaded with ${getStaticMapSize()} artists in static map.`);
 

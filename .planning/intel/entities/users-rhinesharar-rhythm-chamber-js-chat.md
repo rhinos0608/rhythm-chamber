@@ -9,15 +9,15 @@ status: active
 
 ## Purpose
 
-Chat orchestration module coordinating API calls, prompt building, and function calling while delegating specialized concerns to service layer components.
+Central chat orchestration module that coordinates API calls, prompt building, and function calling while delegating specialized concerns to focused service modules.
 
 ## Exports
 
-- **Chat**: Main chat controller class managing conversation flow, tool strategies, and message lifecycle
+- **Chat**: Main chat orchestration class that manages conversation flow, tool calling, and LLM interactions
 
 ## Dependencies
 
-[[js-services-tool-strategies-native-strategy]], [[js-services-tool-strategies-prompt-injection-strategy]], [[js-services-tool-strategies-intent-extraction-strategy]], [[module-registry]], [[js-services-config-loader]], [[js-services-turn-queue]], [[js-services-timeout-budget-manager]], [[js-services-wave-telemetry]], [[js-services-llm-provider-routing-service]], [[js-services-token-counting-service]], [[js-services-tool-call-handling-service]], [[js-services-fallback-response-service]], [[js-services-circuit-breaker]], [[js-services-function-calling-fallback]], [[js-services-message-operations]], [[js-services-session-manager]], [[token-counter]], [[prompts]], [[storage]], [[patterns]], [[personality]], [[parser]], [[data-query]], [[js-providers-provider-interface]], [[settings]], [[js-services-conversation-orchestrator]], [[js-services-message-lifecycle-coordinator]]
+[[logger]], [[native-strategy]], [[prompt-injection-strategy]], [[intent-extraction-strategy]], [[module-registry]], [[config-loader]], [[turn-queue]], [[timeout-budget-manager]], [[wave-telemetry]], [[llm-provider-routing-service]], [[token-counting-service]], [[tool-call-handling-service]], [[fallback-response-service]], [[circuit-breaker]], [[function-calling-fallback]], [[functions]], [[message-operations]], [[session-manager]], [[token-counter]], [[prompts]], [[storage]], [[patterns]], [[personality]], [[parser]], [[data-query]], [[provider-interface]], [[settings]], [[conversation-orchestrator]], [[message-lifecycle-coordinator]]
 
 ## Used By
 
@@ -25,4 +25,4 @@ TBD
 
 ## Notes
 
-Implements HNW (Has-Needs-Wheres) compliant architecture with clear delegation boundaries. Session state management, message operations, and LLM calls are delegated to specialized services. Supports multiple tool strategies (Native, PromptInjection, IntentExtraction) for function calling.
+This is a coordination facade that delegates to specialized services per HNW (High-level Network Wrestling) architecture pattern. It does not directly manage session state, message operations, or LLM calls—those are delegated to focused service modules.

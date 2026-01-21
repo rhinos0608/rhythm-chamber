@@ -433,16 +433,24 @@ async function migrateFromLocalStorage(onProgress = null) {
             try {
                 // WRITE-AHEAD: Save intent before operation
                 await saveWriteAheadCheckpoint('config', key, i, keysProcessed, totalKeys);
-                
+
                 let parsedValue;
                 try {
                     parsedValue = JSON.parse(value);
-                } catch {
-                    parsedValue = value;
+                } catch (parseError) {
+                    // IMPROVED ERROR HANDLING: Log the specific error and value details
+                    console.error(`[Migration] Corrupted JSON for key '${key}':`, {
+                        error: parseError.message,
+                        valueLength: value.length,
+                        valuePreview: value.substring(0, 100)
+                    });
+                    // Skip this key - don't migrate invalid data
+                    await markCheckpointFailed('config', key, i, `Invalid JSON: ${parseError.message}`, keysProcessed, totalKeys, i - 1);
+                    continue; // Skip to next key
                 }
                 await ConfigAPI.setConfig(key, parsedValue);
                 keysProcessed++;
-                
+
                 // Mark complete after successful operation
                 await markCheckpointComplete('config', key, i, keysProcessed, totalKeys);
             } catch (err) {

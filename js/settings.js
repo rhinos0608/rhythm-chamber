@@ -451,15 +451,35 @@ function applySettingsOverrides(settings, parsed) {
  * HNW Hierarchy: Storage module is the single authority for persistence
  * Settings cascade: config.js (defaults) → IndexedDB (user overrides)
  * Note: This does NOT modify config.js - it stores overrides
+ *
+ * SCHEMA VALIDATION: Settings are validated before saving
+ * CROSS-TAB SYNC: Emits events and sets localStorage version for other tabs
  */
 async function saveSettings(settings) {
+    // Validate settings before saving
+    const validation = SettingsSchema.validate(settings);
+
+    if (validation.errors.length > 0) {
+        console.warn('[Settings] Validation errors before save:', validation.errors);
+        // Use sanitized version for saving
+        settings = validation.sanitized;
+    }
+
+    // Add version to settings
+    settings._version = SettingsSchema.VERSION;
+
     // Save to IndexedDB only (localStorage fallback removed for HNW simplification)
     if (Storage.setConfig) {
         try {
             await Storage.setConfig(STORAGE_KEYS.SETTINGS, settings);
             console.log('[Settings] Saved to IndexedDB');
+            // Emit cross-tab sync event via localStorage (works across tabs)
+            localStorage.setItem('rhythm_chamber_settings_version', Date.now().toString());
+            // Emit internal event for same-tab listeners
+            EventBus.emit('settings:saved', { version: settings._version });
         } catch (e) {
             console.warn('[Settings] Failed to save to IndexedDB:', e);
+            EventBus.emit('settings:save_failed', { error: e.message });
             throw e; // Propagate error so caller knows save failed
         }
     } else {
@@ -2245,6 +2265,36 @@ async function saveToolsAndClose() {
         }
     }
 }
+
+// ==========================================
+// Cross-Tab Synchronization
+// ==========================================
+
+/**
+ * Initialize cross-tab synchronization for settings
+ * Listens for storage events from other tabs and reloads settings when changed
+ */
+function initCrossTabSync() {
+    // Listen for storage events from other tabs
+    window.addEventListener('storage', (e) => {
+        if (e.key === 'rhythm_chamber_settings_version' && e.newValue && e.newValue !== e.oldValue) {
+            console.log('[Settings] Detected settings change in another tab, reloading...');
+            // Reload settings from IndexedDB
+            getSettingsAsync().then(settings => {
+                _cachedSettings = settings;
+                // Emit event for UI to update
+                EventBus.emit('settings:changed', settings);
+            }).catch(err => {
+                console.warn('[Settings] Failed to reload settings after cross-tab change:', err);
+            });
+        }
+    });
+
+    console.log('[Settings] Cross-tab synchronization initialized');
+}
+
+// Initialize cross-tab sync on module load
+initCrossTabSync();
 
 // ES Module export
 export const Settings = {

@@ -7,6 +7,10 @@
  * - Pillar 3: The Chamber ($4.99/mo or $39/yr) - Convenience & Seamlessness
  */
 
+import { createLogger } from './utils/logger.js';
+
+const logger = createLogger('Pricing');
+
 // ==========================================
 // Tier Definitions
 // ==========================================
@@ -161,7 +165,7 @@ function getCurrentTier() {
             }
         }
     } catch (e) {
-        console.warn('[Pricing] Failed to parse license:', e);
+        logger.warn('Failed to parse license', e);
     }
 
     return 'sovereign';
@@ -177,7 +181,7 @@ function hasFeatureAccess(feature) {
     const featureDefinition = FEATURES[feature];
 
     if (!featureDefinition) {
-        console.warn(`[Pricing] Unknown feature: ${feature}`);
+        logger.warn(`Unknown feature: ${feature}`);
         return false;
     }
 
@@ -341,4 +345,4 @@ export const Pricing = {
 };
 
 
-console.log('[Pricing] Module loaded - Three-Pillar Model initialized');
+logger.info('Module loaded - Three-Pillar Model initialized');
