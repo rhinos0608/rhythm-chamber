@@ -1,13 +1,15 @@
 /**
  * LM Studio Provider
- * 
+ *
  * Handles API calls to LM Studio (OpenAI-compatible local server).
  * Supports streaming with thinking block detection.
- * 
+ *
  * BRING YOUR OWN AI: Users run AI models on their own hardware for maximum privacy.
- * 
+ *
  * @module providers/lmstudio
  */
+
+import { safeJsonParse } from '../utils/safe-json.js';
 
 // ==========================================
 // Configuration
@@ -194,35 +196,35 @@ async function handleStreamingResponse(response, onProgress) {
             // Skip non-JSON lines (SSE comments, empty data, etc.)
             if (!data.startsWith('{')) continue;
 
-            try {
-                const parsed = JSON.parse(data);
+            const parsed = safeJsonParse(data, null);
+            if (!parsed) continue;
 
-                // Handle both streaming delta format AND complete message format
-                const delta = parsed.choices?.[0]?.delta;
-                const message = parsed.choices?.[0]?.message;
+            // Handle both streaming delta format AND complete message format
+            const delta = parsed.choices?.[0]?.delta;
+            const message = parsed.choices?.[0]?.message;
 
-                // For complete (non-streaming) responses embedded in stream
-                if (message?.content && !delta) {
-                    fullContent = message.content;
-                    if (message.tool_calls) {
-                        for (const tc of message.tool_calls) {
-                            toolCallsById[tc.id || `call_${Object.keys(toolCallsById).length}`] = {
-                                id: tc.id || `call_${Object.keys(toolCallsById).length}`,
-                                type: 'function',
-                                function: {
-                                    name: tc.function?.name || '',
-                                    arguments: typeof tc.function?.arguments === 'string'
-                                        ? tc.function.arguments
-                                        : JSON.stringify(tc.function?.arguments || {})
-                                }
-                            };
-                        }
+            // For complete (non-streaming) responses embedded in stream
+            if (message?.content && !delta) {
+                fullContent = message.content;
+                if (message.tool_calls) {
+                    for (const tc of message.tool_calls) {
+                        toolCallsById[tc.id || `call_${Object.keys(toolCallsById).length}`] = {
+                            id: tc.id || `call_${Object.keys(toolCallsById).length}`,
+                            type: 'function',
+                            function: {
+                                name: tc.function?.name || '',
+                                arguments: typeof tc.function?.arguments === 'string'
+                                    ? tc.function.arguments
+                                    : JSON.stringify(tc.function?.arguments || {})
+                            }
+                        };
                     }
-                    lastMessage = parsed;
-                    continue;
                 }
+                lastMessage = parsed;
+                continue;
+            }
 
-                if (delta?.content) {
+            if (delta?.content) {
                     const token = delta.content;
 
                     // Detect thinking blocks (<think>...</think>)
@@ -285,13 +287,7 @@ async function handleStreamingResponse(response, onProgress) {
                     }
                 }
 
-                lastMessage = parsed;
-            } catch (e) {
-                // Log parse errors for debugging (only in dev)
-                if (data.length > 0 && data.startsWith('{')) {
-                    console.debug('[LMStudio] Failed to parse chunk:', data.substring(0, 100));
-                }
-            }
+            lastMessage = parsed;
         }
     }
 
@@ -302,8 +298,8 @@ async function handleStreamingResponse(response, onProgress) {
             data = data.slice(6);
         }
         if (data.startsWith('{')) {
-            try {
-                const parsed = JSON.parse(data);
+            const parsed = safeJsonParse(data, null);
+            if (parsed) {
                 const message = parsed.choices?.[0]?.message;
                 if (message?.content) {
                     fullContent = message.content;
@@ -323,8 +319,6 @@ async function handleStreamingResponse(response, onProgress) {
                     }
                 }
                 lastMessage = parsed;
-            } catch (e) {
-                console.debug('[LMStudio] Failed to parse final buffer');
             }
         }
     }

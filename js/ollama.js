@@ -13,6 +13,7 @@
 
 // Import ModuleRegistry for accessing dynamically loaded modules
 import { ModuleRegistry } from './module-registry.js';
+import { safeJsonParse } from './utils/safe-json.js';
 
 // ==========================================
 // Configuration
@@ -246,18 +247,18 @@ async function pullModel(modelName, onProgress = () => { }) {
         const lines = decoder.decode(value).split('\n').filter(Boolean);
         for (const line of lines) {
             try {
-                const data = JSON.parse(line);
-                if (data.completed && data.total) {
+                const data = safeJsonParse(line, null);
+                if (data && data.completed && data.total) {
                     onProgress({
                         status: data.status,
                         completed: data.completed,
                         total: data.total,
                         percent: Math.round((data.completed / data.total) * 100)
                     });
-                } else if (data.status) {
+                } else if (data && data.status) {
                     onProgress({ status: data.status });
                 }
-            } catch { /* Ignore parse errors */ }
+            } catch { /* Ignore non-JSON errors */ }
         }
     }
 }
@@ -284,7 +285,7 @@ function preprocessMessages(messages) {
                         name: tc.function.name,
                         // Convert string arguments back to object if needed
                         arguments: typeof tc.function.arguments === 'string'
-                            ? JSON.parse(tc.function.arguments)
+                            ? safeJsonParse(tc.function.arguments, {})
                             : tc.function.arguments
                     }
                 }))
@@ -418,31 +419,23 @@ async function handleStreamingResponse(response, onToken) {
             const trimmedLine = line.trim();
             if (!trimmedLine) continue;
 
-            try {
-                const data = JSON.parse(trimmedLine);
-                if (data.message?.content) {
-                    fullContent += data.message.content;
-                    onToken(data.message.content);
-                }
-                lastData = data;
-            } catch {
-                // Ignore parse errors for non-JSON lines
+            const data = safeJsonParse(trimmedLine, null);
+            if (data && data.message?.content) {
+                fullContent += data.message.content;
+                onToken(data.message.content);
             }
+            if (data) lastData = data;
         }
     }
 
     // Process any remaining buffer content
     if (buffer.trim()) {
-        try {
-            const data = JSON.parse(buffer.trim());
-            if (data.message?.content) {
-                fullContent += data.message.content;
-                onToken(data.message.content);
-            }
-            lastData = data;
-        } catch {
-            // Ignore
+        const data = safeJsonParse(buffer.trim(), null);
+        if (data && data.message?.content) {
+            fullContent += data.message.content;
+            onToken(data.message.content);
         }
+        if (data) lastData = data;
     }
 
     console.log('[Ollama] Streaming complete - content length:', fullContent.length);
@@ -500,13 +493,11 @@ async function generate(prompt, model, options = {}) {
 
             const lines = decoder.decode(value).split('\n').filter(Boolean);
             for (const line of lines) {
-                try {
-                    const data = JSON.parse(line);
-                    if (data.response) {
-                        fullResponse += data.response;
-                        onToken(data.response);
-                    }
-                } catch { /* Ignore parse errors */ }
+                const data = safeJsonParse(line, null);
+                if (data && data.response) {
+                    fullResponse += data.response;
+                    onToken(data.response);
+                }
             }
         }
         return fullResponse;

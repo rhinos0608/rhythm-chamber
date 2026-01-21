@@ -16,19 +16,77 @@ import { Functions } from './functions/index.js';
 import { Spotify } from './spotify.js';
 import { AnalyticsQuerySchemas } from './functions/schemas/analytics-queries.js';
 import { TemplateQuerySchemas } from './functions/schemas/template-queries.js';
+import { InputValidation } from './utils/input-validation.js';
+import { safeJsonParse } from './utils/safe-json.js';
+import { STORAGE_KEYS } from './storage/keys.js';
+
+// ==========================================
+// Constants - Provider Configuration
+// ==========================================
+
+/** Provider identifiers */
+const PROVIDER_ID = {
+    OLLAMA: 'ollama',
+    LM_STUDIO: 'lmstudio',
+    GEMINI: 'gemini',
+    OPENROUTER: 'openrouter'
+};
 
 // Available LLM providers
 const LLM_PROVIDERS = [
-    { id: 'ollama', name: 'Ollama (Local)', description: 'Run AI models on your own hardware - zero data transmission' },
-    { id: 'lmstudio', name: 'LM Studio (Local)', description: 'User-friendly local AI with OpenAI-compatible API' },
-    { id: 'gemini', name: 'Gemini (Google AI Studio)', description: 'Google AI models - Gemini 2.0 Flash is FREE!' },
-    { id: 'openrouter', name: 'OpenRouter (Cloud)', description: 'Optional cloud provider for premium models' }
+    { id: PROVIDER_ID.OLLAMA, name: 'Ollama (Local)', description: 'Run AI models on your own hardware - zero data transmission' },
+    { id: PROVIDER_ID.LM_STUDIO, name: 'LM Studio (Local)', description: 'User-friendly local AI with OpenAI-compatible API' },
+    { id: PROVIDER_ID.GEMINI, name: 'Gemini (Google AI Studio)', description: 'Google AI models - Gemini 2.0 Flash is FREE!' },
+    { id: PROVIDER_ID.OPENROUTER, name: 'OpenRouter (Cloud)', description: 'Optional cloud provider for premium models' }
 ];
 
 // Default endpoints for local providers
 const DEFAULT_ENDPOINTS = {
     ollama: 'http://localhost:11434',
     lmstudio: 'http://localhost:1234/v1'
+};
+
+// ==========================================
+// Constants - UI Configuration
+// ==========================================
+
+/** UI display constants */
+const UI_CONFIG = {
+    MOBILE_BREAKPOINT_PX: 768,
+    DEFAULT_TOAST_DURATION_MS: 2000,
+    TOAST_ANIMATION_DELAY_MS: 10,
+    TOAST_CLOSE_DELAY_MS: 300,
+    MODAL_CLOSE_DELAY_MS: 200
+};
+
+// ==========================================
+// Constants - LLM Configuration
+// ==========================================
+
+/** LLM parameter bounds and defaults */
+const LLM_CONFIG = {
+    MIN_TEMP: 0,
+    MAX_TEMP: 2,
+    DEFAULT_TEMP: 0.7,
+    MIN_TOP_P: 0,
+    MAX_TOP_P: 1,
+    DEFAULT_TOP_P: 0.9,
+    MIN_FREQUENCY_PENALTY: -2,
+    MAX_FREQUENCY_PENALTY: 2,
+    DEFAULT_FREQUENCY_PENALTY: 0,
+    MIN_PRESENCE_PENALTY: -2,
+    MAX_PRESENCE_PENALTY: 2,
+    DEFAULT_PRESENCE_PENALTY: 0,
+    DEFAULT_MAX_TOKENS: 4500,
+    DEFAULT_MAX_TOKENS_GEMINI: 8192,
+    MIN_MAX_TOKENS: 100,
+    MAX_MAX_TOKENS: 8000,
+    MIN_MAX_TOKENS_GEMINI: 100,
+    MAX_MAX_TOKENS_GEMINI: 8192,
+    DEFAULT_CONTEXT_WINDOW: 4096,
+    MIN_CONTEXT_WINDOW: 1024,
+    MAX_CONTEXT_WINDOW: 128000,
+    DEFAULT_CONTEXT_STEP: 1024
 };
 
 // Available models for the dropdown (OpenRouter)
@@ -88,7 +146,11 @@ async function migrateLocalStorageSettings() {
     }
 
     try {
-        const parsed = JSON.parse(stored);
+        const parsed = safeJsonParse(stored, null);
+        if (!parsed) {
+            console.error('[Settings] Stored settings are corrupted');
+            return false;
+        }
 
         // Migrate to IndexedDB
         if (Storage.setConfig) {
@@ -189,11 +251,9 @@ function getSettings() {
     // Pre-migration fallback: Apply localStorage overrides
     const stored = localStorage.getItem('rhythm_chamber_settings');
     if (stored) {
-        try {
-            const parsed = JSON.parse(stored);
+        const parsed = safeJsonParse(stored, null);
+        if (parsed) {
             applySettingsOverrides(settings, parsed);
-        } catch (e) {
-            console.error('Failed to parse stored settings:', e);
         }
     }
 
@@ -293,11 +353,9 @@ async function getSettingsAsync() {
     // Fall back to localStorage only if migration hasn't completed
     const stored = localStorage.getItem('rhythm_chamber_settings');
     if (stored) {
-        try {
-            const parsed = JSON.parse(stored);
+        const parsed = safeJsonParse(stored, null);
+        if (parsed) {
             applySettingsOverrides(settings, parsed);
-        } catch (e) {
-            console.error('Failed to parse stored settings:', e);
         }
     }
 
@@ -432,7 +490,9 @@ async function saveSettings(settings) {
     }
 
     // HNW: Update cached settings for sync access via getSettings()
-    _cachedSettings = await getSettingsAsync();
+    // Directly cache the settings object to avoid unnecessary async read-back
+    // This prevents race conditions where another read could return stale data
+    _cachedSettings = settings;
 
     console.log('[Settings] Saved and applied to runtime Config');
 }
@@ -676,9 +736,9 @@ async function showSettingsModal() {
                         <div class="settings-field">
                             <label for="setting-gemini-max-tokens">Max Response Length</label>
                             <input type="number" id="setting-gemini-max-tokens"
-                                   value="${settings.gemini?.maxTokens || 8192}"
-                                   min="100" max="8192" step="100">
-                            <span class="settings-hint">tokens (max 8192 for Gemini)</span>
+                                   value="${settings.gemini?.maxTokens || LLM_CONFIG.DEFAULT_MAX_TOKENS_GEMINI}"
+                                   min="${LLM_CONFIG.MIN_MAX_TOKENS_GEMINI}" max="${LLM_CONFIG.MAX_MAX_TOKENS_GEMINI}" step="100">
+                            <span class="settings-hint">tokens (max ${LLM_CONFIG.MAX_MAX_TOKENS_GEMINI} for Gemini)</span>
                         </div>
                     </div>
 
@@ -686,17 +746,17 @@ async function showSettingsModal() {
                     <div class="settings-row">
                         <div class="settings-field">
                             <label for="setting-max-tokens">Max Response Length</label>
-                            <input type="number" id="setting-max-tokens" 
-                                   value="${settings.openrouter.maxTokens}" 
-                                   min="100" max="8000" step="100">
+                            <input type="number" id="setting-max-tokens"
+                                   value="${settings.openrouter.maxTokens}"
+                                   min="${LLM_CONFIG.MIN_MAX_TOKENS}" max="${LLM_CONFIG.MAX_MAX_TOKENS}" step="100">
                             <span class="settings-hint">tokens (higher = longer responses)</span>
                         </div>
-                        
+
                         <div class="settings-field">
                             <label for="setting-temperature">Temperature</label>
-                            <input type="range" id="setting-temperature" 
-                                   value="${settings.openrouter.temperature}" 
-                                   min="0" max="2" step="0.1">
+                            <input type="range" id="setting-temperature"
+                                   value="${settings.openrouter.temperature}"
+                                   min="${LLM_CONFIG.MIN_TEMP}" max="${LLM_CONFIG.MAX_TEMP}" step="0.1">
                             <span class="settings-hint" id="temp-value">${settings.openrouter.temperature} (${settings.openrouter.temperature < 0.4 ? 'focused' : settings.openrouter.temperature > 1.0 ? 'creative' : 'balanced'})</span>
                         </div>
                     </div>
@@ -704,38 +764,38 @@ async function showSettingsModal() {
                     <!-- Context Window Configuration -->
                     <div class="settings-field">
                         <label for="setting-context-window">Context Window Size</label>
-                        <input type="number" id="setting-context-window" 
-                               value="${settings.openrouter.contextWindow}" 
-                               min="1024" max="128000" step="1024">
-                        <span class="settings-hint">tokens (default: 4096, adjust based on your model)</span>
+                        <input type="number" id="setting-context-window"
+                               value="${settings.openrouter.contextWindow}"
+                               min="${LLM_CONFIG.MIN_CONTEXT_WINDOW}" max="${LLM_CONFIG.MAX_CONTEXT_WINDOW}" step="${LLM_CONFIG.DEFAULT_CONTEXT_STEP}">
+                        <span class="settings-hint">tokens (default: ${LLM_CONFIG.DEFAULT_CONTEXT_WINDOW}, adjust based on your model)</span>
                     </div>
-                    
+
                     <!-- Advanced Parameters (collapsible) -->
                     <details class="settings-advanced">
                         <summary>Advanced Parameters</summary>
                         <div class="settings-row">
                             <div class="settings-field">
                                 <label for="setting-top-p">Top P (Nucleus Sampling)</label>
-                                <input type="range" id="setting-top-p" 
-                                       value="${settings.openrouter.topP}" 
-                                       min="0" max="1" step="0.05">
+                                <input type="range" id="setting-top-p"
+                                       value="${settings.openrouter.topP}"
+                                       min="${LLM_CONFIG.MIN_TOP_P}" max="${LLM_CONFIG.MAX_TOP_P}" step="0.05">
                                 <span class="settings-hint" id="top-p-value">${settings.openrouter.topP}</span>
                             </div>
-                            
+
                             <div class="settings-field">
                                 <label for="setting-freq-penalty">Frequency Penalty</label>
-                                <input type="range" id="setting-freq-penalty" 
-                                       value="${settings.openrouter.frequencyPenalty}" 
-                                       min="-2" max="2" step="0.1">
+                                <input type="range" id="setting-freq-penalty"
+                                       value="${settings.openrouter.frequencyPenalty}"
+                                       min="${LLM_CONFIG.MIN_FREQUENCY_PENALTY}" max="${LLM_CONFIG.MAX_FREQUENCY_PENALTY}" step="0.1">
                                 <span class="settings-hint" id="freq-penalty-value">${settings.openrouter.frequencyPenalty}</span>
                             </div>
                         </div>
-                        
+
                         <div class="settings-field">
                             <label for="setting-pres-penalty">Presence Penalty</label>
-                            <input type="range" id="setting-pres-penalty" 
-                                   value="${settings.openrouter.presencePenalty}" 
-                                   min="-2" max="2" step="0.1">
+                            <input type="range" id="setting-pres-penalty"
+                                   value="${settings.openrouter.presencePenalty}"
+                                   min="${LLM_CONFIG.MIN_PRESENCE_PENALTY}" max="${LLM_CONFIG.MAX_PRESENCE_PENALTY}" step="0.1">
                             <span class="settings-hint" id="pres-penalty-value">${settings.openrouter.presencePenalty} (positive = more topic diversity)</span>
                         </div>
                     </details>
@@ -993,7 +1053,7 @@ function hideSettingsModal() {
     const modal = document.getElementById('settings-modal');
     if (modal) {
         modal.classList.add('closing');
-        setTimeout(() => modal.remove(), 200);
+        setTimeout(() => modal.remove(), UI_CONFIG.MODAL_CLOSE_DELAY_MS);
     }
 }
 
@@ -1107,6 +1167,61 @@ async function initStorageBreakdown() {
 }
 
 /**
+ * Validate settings before saving
+ * @returns {{valid: boolean, errors: string[]}}
+ */
+function validateSettingsInputs(settings) {
+    const errors = [];
+
+    // Validate API keys if provided
+    if (settings.openrouter?.apiKey) {
+        const keyCheck = InputValidation.validateApiKey('openrouter', settings.openrouter.apiKey);
+        if (!keyCheck.valid) {
+            errors.push(`OpenRouter API key: ${keyCheck.error}`);
+        }
+    }
+
+    if (settings.gemini?.apiKey) {
+        const keyCheck = InputValidation.validateApiKey('gemini', settings.gemini.apiKey);
+        if (!keyCheck.valid) {
+            errors.push(`Gemini API key: ${keyCheck.error}`);
+        }
+    }
+
+    if (settings.spotify?.clientId) {
+        const keyCheck = InputValidation.validateApiKey('spotify', settings.spotify.clientId);
+        if (!keyCheck.valid) {
+            errors.push(`Spotify Client ID: ${keyCheck.error}`);
+        }
+    }
+
+    // Validate endpoint URLs
+    if (settings.llm?.ollamaEndpoint) {
+        const urlCheck = InputValidation.validateUrl(settings.llm.ollamaEndpoint, ['http', 'https']);
+        if (!urlCheck.valid) {
+            errors.push(`Ollama endpoint: ${urlCheck.error}`);
+        }
+    }
+
+    if (settings.llm?.lmstudioEndpoint) {
+        const urlCheck = InputValidation.validateUrl(settings.llm.lmstudioEndpoint, ['http', 'https']);
+        if (!urlCheck.valid) {
+            errors.push(`LM Studio endpoint: ${urlCheck.error}`);
+        }
+    }
+
+    // Validate model IDs
+    if (settings.openrouter?.model) {
+        const modelCheck = InputValidation.validateModelId(settings.openrouter.model);
+        if (!modelCheck.valid) {
+            errors.push(`OpenRouter model: ${modelCheck.error}`);
+        }
+    }
+
+    return { valid: errors.length === 0, errors };
+}
+
+/**
  * Save settings from the modal form
  */
 async function saveFromModal() {
@@ -1140,6 +1255,22 @@ async function saveFromModal() {
     // Only save API key if user actually entered one (field not readonly)
     const apiKey = apiKeyInput?.readOnly ? null : apiKeyInput?.value?.trim();
     const spotifyClientId = spotifyInput?.readOnly ? null : spotifyInput?.value?.trim();
+
+    // Build settings object for validation
+    const settingsToValidate = {
+        openrouter: { apiKey, model },
+        gemini: { apiKey: geminiApiKey },
+        spotify: { clientId: spotifyClientId },
+        llm: { ollamaEndpoint, lmstudioEndpoint }
+    };
+
+    // Validate inputs before saving
+    const validation = validateSettingsInputs(settingsToValidate);
+    if (!validation.valid) {
+        console.error('[Settings] Validation failed:', validation.errors);
+        showToast('Settings validation failed:\n' + validation.errors.join('\n'));
+        return;
+    }
 
     const settings = {
         llm: {
@@ -1188,13 +1319,31 @@ async function saveFromModal() {
         settings.spotify.clientId = spotifyClientId;
     }
 
+    // Get the save button for state feedback
+    const saveButton = document.querySelector('[data-action="save-settings"]');
+    const originalButtonText = saveButton?.textContent || 'Save Changes';
+
+    // Set loading state
+    if (saveButton) {
+        saveButton.disabled = true;
+        saveButton.classList.add('btn-loading');
+        saveButton.innerHTML = '<span class="btn-spinner"></span> Saving...';
+    }
+
     try {
         await saveSettings(settings);
         hideSettingsModal();
-        showToast('Settings saved!');
+        showToast('Settings saved!', 'success');
     } catch (error) {
         console.error('[Settings] Failed to save:', error);
-        showToast('Failed to save settings: ' + error.message);
+        showToast('Failed to save settings: ' + error.message, 'error');
+    } finally {
+        // Reset button state (modal might be hidden, so check if element exists)
+        if (saveButton && document.body.contains(saveButton)) {
+            saveButton.disabled = false;
+            saveButton.classList.remove('btn-loading');
+            saveButton.textContent = originalButtonText;
+        }
     }
 }
 
@@ -1226,7 +1375,7 @@ function copyToClipboard(text, button) {
 /**
  * Show a toast notification
  */
-function showToast(message, duration = 2000) {
+function showToast(message, duration = UI_CONFIG.DEFAULT_TOAST_DURATION_MS) {
     const existing = document.querySelector('.toast');
     if (existing) existing.remove();
 
@@ -1235,10 +1384,10 @@ function showToast(message, duration = 2000) {
     toast.textContent = message;
     document.body.appendChild(toast);
 
-    setTimeout(() => toast.classList.add('show'), 10);
+    setTimeout(() => toast.classList.add('show'), UI_CONFIG.TOAST_ANIMATION_DELAY_MS);
     setTimeout(() => {
         toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 300);
+        setTimeout(() => toast.remove(), UI_CONFIG.TOAST_CLOSE_DELAY_MS);
     }, duration);
 }
 
@@ -1460,7 +1609,7 @@ function hideSessionResetModal() {
     const modal = document.getElementById('session-reset-modal');
     if (modal) {
         modal.classList.add('closing');
-        setTimeout(() => modal.remove(), 200);
+        setTimeout(() => modal.remove(), UI_CONFIG.MODAL_CLOSE_DELAY_MS);
     }
 }
 
@@ -1678,11 +1827,7 @@ async function refreshOllamaModels() {
 function getEnabledTools() {
     const stored = localStorage.getItem('rhythm_chamber_enabled_tools');
     if (stored) {
-        try {
-            return JSON.parse(stored);
-        } catch (e) {
-            console.error('[Settings] Failed to parse enabled tools:', e);
-        }
+        return safeJsonParse(stored, null);
     }
     // Default: all tools enabled
     return null; // null means "all enabled"
@@ -1897,10 +2042,15 @@ function showToolsModal() {
 
 /**
  * Truncate description for display
+ * Uses Array.from to properly handle Unicode surrogate pairs
  */
 function truncateDescription(text, maxLength) {
     if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength - 3) + '...';
+    // Use Array.from to properly handle Unicode (emojis, CJK characters)
+    // which prevents splitting multi-byte characters during truncation
+    const chars = Array.from(text);
+    if (chars.length <= maxLength) return text;
+    return chars.slice(0, maxLength - 3).join('') + '...';
 }
 
 /**
@@ -1910,7 +2060,7 @@ function hideToolsModal() {
     const modal = document.getElementById('tools-modal');
     if (modal) {
         modal.classList.add('closing');
-        setTimeout(() => modal.remove(), 200);
+        setTimeout(() => modal.remove(), UI_CONFIG.MODAL_CLOSE_DELAY_MS);
     }
 }
 
@@ -1989,23 +2139,46 @@ function updateToolsCount(enabled, total) {
 async function saveToolsAndClose() {
     const modal = document.getElementById('tools-modal');
     const pendingData = modal?.dataset.pending;
+    const saveButton = document.querySelector('[data-action="save-tools"]');
+    const originalButtonText = saveButton?.textContent || 'Save Changes';
 
-    if (pendingData) {
-        const enabledTools = JSON.parse(pendingData);
-        const allTools = getAllToolNames();
-
-        // If all tools are enabled, store null (default)
-        if (enabledTools.length === allTools.length) {
-            await saveEnabledTools(null);
-        } else {
-            await saveEnabledTools(enabledTools);
-        }
-
-        console.log(`[Settings] Saved ${enabledTools.length}/${allTools.length} tools enabled`);
+    // Set loading state
+    if (saveButton) {
+        saveButton.disabled = true;
+        saveButton.classList.add('btn-loading');
+        saveButton.innerHTML = '<span class="btn-spinner"></span> Saving...';
     }
 
-    hideToolsModal();
-    showToast('Tool settings saved!');
+    try {
+        if (pendingData) {
+            // Parse JSON with error handling (CRITICAL FIX - prevents crash on malformed data)
+            const enabledTools = safeJsonParse(pendingData, []);
+
+            const allTools = getAllToolNames();
+
+            // If all tools are enabled, store null (default)
+            if (enabledTools.length === allTools.length) {
+                await saveEnabledTools(null);
+            } else {
+                await saveEnabledTools(enabledTools);
+            }
+
+            console.log(`[Settings] Saved ${enabledTools.length}/${allTools.length} tools enabled`);
+        }
+
+        hideToolsModal();
+        showToast('Tool settings saved!', 'success');
+    } catch (error) {
+        console.error('[Settings] Failed to save tools:', error);
+        showToast('Failed to save tools: ' + error.message, 'error');
+    } finally {
+        // Reset button state
+        if (saveButton && document.body.contains(saveButton)) {
+            saveButton.disabled = false;
+            saveButton.classList.remove('btn-loading');
+            saveButton.textContent = originalButtonText;
+        }
+    }
 }
 
 // ES Module export
