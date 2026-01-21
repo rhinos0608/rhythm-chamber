@@ -11,6 +11,7 @@ import { NativeToolStrategy } from './tool-strategies/native-strategy.js';
 import { PromptInjectionStrategy } from './tool-strategies/prompt-injection-strategy.js';
 import { IntentExtractionStrategy } from './tool-strategies/intent-extraction-strategy.js';
 import { TimeoutBudget } from './timeout-budget-manager.js';
+import { ProviderHealthAuthority } from './provider-health-authority.js';
 
 'use strict';
 
@@ -18,7 +19,7 @@ import { TimeoutBudget } from './timeout-budget-manager.js';
 // Dependencies (injected via init)
 // ==========================================
 
-let _CircuitBreaker = null;
+let _CircuitBreaker = null; // Kept for backward compatibility, now uses ProviderHealthAuthority
 let _Functions = null;
 let _SessionManager = null;
 let _FunctionCallingFallback = null;
@@ -283,6 +284,17 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
         // Even if not fully successful, if we have a result, use it (e.g., validation error result)
         console.log(`[ToolCallHandlingService] Function result:`, result);
 
+        // EDGE CASE: Validate result is not empty/null/undefined before adding to history
+        // Empty tool results can cause LLM parsing issues on follow-up call
+        const hasValidContent = result !== null && result !== undefined &&
+            !(typeof result === 'string' && result.trim() === '') &&
+            !(typeof result === 'object' && Object.keys(result).length === 0);
+
+        if (!hasValidContent) {
+            console.warn(`[ToolCallHandlingService] Tool ${functionName} returned empty result, using placeholder`);
+            result = { result: '(No output)', _empty: true };
+        }
+
         // Notify UI: Tool end
         if (onProgress) onProgress({ type: 'tool_end', tool: functionName, result });
 
@@ -324,7 +336,23 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
         };
     }
 
-    const response = await _callLLM(providerConfig, key, followUpMessages, undefined);
+    // Guard: Wrap follow-up LLM call in try/catch to preserve tool results if summary fails
+    let response;
+    try {
+        response = await _callLLM(providerConfig, key, followUpMessages, undefined);
+    } catch (llmError) {
+        console.error('[ToolCallHandlingService] Follow-up summary generation failed:', llmError);
+        // Return early with partial success status - tools executed but summary failed
+        return {
+            earlyReturn: {
+                status: 'partial_success',
+                content: `Tools executed successfully, but final summary generation failed (${llmError.message}). Please try again.`,
+                role: 'assistant',
+                isFunctionError: true,
+                toolsSucceeded: true
+            }
+        };
+    }
     return { responseMessage: response.choices?.[0]?.message };
 }
 
@@ -520,11 +548,29 @@ async function handleToolCallsWithFallback(
 
                 // Only return successful results - throw on errors to trigger next strategy
                 if (result && !result.earlyReturn?.status?.includes('error')) {
-                    console.log(`[ToolCallHandlingService] Strategy ${candidate.strategy.strategyName} succeeded`);
+                    // Check if any function calls returned errors (even though strategy completed)
+                    if (result.hadFunctionErrors) {
+                        const errorSummary = result.functionErrors
+                            ?.map(e => `${e.function}: ${e.error}`)
+                            .join('; ');
+                        console.warn(`[ToolCallHandlingService] Strategy ${candidate.strategy.strategyName} completed with function errors: ${errorSummary}`);
+                    } else {
+                        console.log(`[ToolCallHandlingService] Strategy ${candidate.strategy.strategyName} succeeded`);
+                    }
                     return result;
                 }
 
-                // Strategy returned an error - throw to let other strategies try
+                // Strategy returned an error - check if it was due to function errors
+                if (result.earlyReturn?.hadFunctionErrors) {
+                    const errorSummary = result.earlyReturn.functionErrors
+                        ?.map(e => `${e.function}: ${e.error}`)
+                        .join('; ') || result.earlyReturn.content;
+                    console.warn(`[ToolCallHandlingService] Strategy ${candidate.strategy.strategyName} failed with function errors: ${errorSummary}`);
+                } else {
+                    console.warn(`[ToolCallHandlingService] Strategy ${candidate.strategy.strategyName} failed: ${result?.earlyReturn?.content || 'Unknown error'}`);
+                }
+
+                // Throw to let other strategies try
                 throw new Error(result?.earlyReturn?.content || 'Strategy failed');
             } catch (strategyError) {
                 // Re-throw to let Promise.any try next strategy

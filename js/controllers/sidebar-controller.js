@@ -17,10 +17,16 @@ import { TokenCounter } from '../token-counter.js';
 import { AppState } from '../state/app-state.js';
 import { EventBus } from '../services/event-bus.js';
 import { escapeHtml } from '../utils/html-escape.js';
+import { Utils } from '../utils.js';
 
 const SIDEBAR_STATE_KEY = 'rhythm_chamber_sidebar_collapsed';
 let pendingDeleteSessionId = null;
 let _unsubscribe = null; // AppState subscription cleanup
+
+// Rename input tracking for event listener cleanup (MEMORY LEAK FIX)
+let currentRenameInput = null;
+let currentRenameBlurHandler = null;
+let currentRenameKeydownHandler = null;
 
 // DOM elements (lazily initialized)
 let chatSidebar = null;
@@ -103,14 +109,19 @@ async function initSidebar() {
         _unsubscribe = null;
     }
 
-    _unsubscribe = AppState.subscribe((state, changedDomains) => {
+    _unsubscribe = AppState.subscribe(async (state, changedDomains) => {
         if (changedDomains.includes('view')) {
             // Auto-show/hide sidebar based on view
             if (state.view.current === 'chat') {
                 if (chatSidebar) {
                     chatSidebar.classList.remove('hidden');
                     updateSidebarVisibility();
-                    renderSessionList();
+                    // Safely await renderSessionList with error handling
+                    try {
+                        await renderSessionList();
+                    } catch (err) {
+                        console.error('[SidebarController] Failed to render session list:', err);
+                    }
                 }
             } else {
                 hideSidebarForNonChatViews();
@@ -127,10 +138,10 @@ async function initSidebar() {
     if (resizeHandler) {
         window.removeEventListener('resize', resizeHandler);
     }
-    resizeHandler = () => {
+    resizeHandler = Utils.throttle(() => {
         // Re-evaluate overlay visibility when crossing mobile breakpoint
         updateSidebarVisibility();
-    };
+    }, 100); // Throttle resize to once per 100ms
     window.addEventListener('resize', resizeHandler);
 
     // Initial sidebar hidden (shown only in chat view)
@@ -187,7 +198,8 @@ function toggleSidebar() {
 
     // Save to unified storage and localStorage
     if (Storage.setConfig) {
-        Storage.setConfig(SIDEBAR_STATE_KEY, newCollapsed).catch(() => { });
+        Storage.setConfig(SIDEBAR_STATE_KEY, newCollapsed)
+            .catch(err => console.warn('[SidebarController] Failed to save sidebar state:', err));
     }
     localStorage.setItem(SIDEBAR_STATE_KEY, newCollapsed.toString());
 
@@ -210,7 +222,8 @@ function closeSidebar() {
 
     // Save to unified storage and localStorage
     if (Storage.setConfig) {
-        Storage.setConfig(SIDEBAR_STATE_KEY, true).catch(() => { });
+        Storage.setConfig(SIDEBAR_STATE_KEY, true)
+            .catch(err => console.warn('[SidebarController] Failed to save sidebar state on close:', err));
     }
     localStorage.setItem(SIDEBAR_STATE_KEY, 'true');
 
@@ -227,6 +240,9 @@ function closeSidebar() {
  * Render session list in sidebar
  */
 async function renderSessionList() {
+    // Clean up rename input listeners before re-rendering (MEMORY LEAK FIX)
+    cleanupRenameInput();
+
     if (!sidebarSessions) return;
 
     const sessions = await Chat.listSessions();
@@ -234,9 +250,10 @@ async function renderSessionList() {
 
     if (sessions.length === 0) {
         sidebarSessions.innerHTML = `
-            <div class="sidebar-empty">
-                <div class="emoji">💬</div>
-                <p>No conversations yet.<br>Start a new chat!</p>
+            <div class="sidebar-empty" role="status">
+                <span class="emoji" aria-hidden="true">💬</span>
+                <p>Your chat history is empty.<br>Ask a question to start exploring!</p>
+                <button class="empty-action" data-action="new-chat-from-empty" aria-label="Start a new chat">Start a Chat</button>
             </div>
         `;
         return;
@@ -247,28 +264,36 @@ async function renderSessionList() {
         const date = new Date(session.updatedAt || session.createdAt);
         const dateStr = formatRelativeDate(date);
         const emoji = session.metadata?.personalityEmoji || '🎵';
+        const title = session.title || 'New Chat';
+        const activeLabel = isActive ? ' (current)' : '';
 
         // SAFE: Use data-action attributes instead of inline onclick to prevent XSS
         // session.id is escaped via escapeHtml() to prevent injection
+        // A11Y: Added proper roles and labels for screen readers
         return `
             <div class="session-item ${isActive ? 'active' : ''}"
+                 role="listitem"
+                 tabindex="${isActive ? '0' : '-1'}"
+                 aria-label="${escapeHtml(title)}${activeLabel}"
                  data-session-id="${escapeHtml(session.id)}"
                  data-action="sidebar-session-click">
-                <div class="session-title">${escapeHtml(session.title || 'New Chat')}</div>
+                <div class="session-title">${escapeHtml(title)}</div>
                 <div class="session-meta">
-                    <span class="emoji">${emoji}</span>
+                    <span class="emoji" aria-hidden="true">${emoji}</span>
                     <span>${dateStr}</span>
-                    <span>·</span>
+                    <span aria-hidden="true">·</span>
                     <span>${session.messageCount || 0} msgs</span>
                 </div>
                 <div class="session-actions">
                     <button class="session-action-btn"
                             data-action="sidebar-session-rename"
                             data-session-id="${escapeHtml(session.id)}"
+                            aria-label="Rename chat: ${escapeHtml(title)}"
                             title="Rename">✏️</button>
                     <button class="session-action-btn delete"
                             data-action="sidebar-session-delete"
                             data-session-id="${escapeHtml(session.id)}"
+                            aria-label="Delete chat: ${escapeHtml(title)}"
                             title="Delete">🗑️</button>
                 </div>
             </div>
@@ -309,6 +334,10 @@ function handleSessionAction(event) {
             if (sessionId) {
                 handleSessionClick(sessionId);
             }
+            break;
+        case 'new-chat-from-empty':
+            event.preventDefault();
+            handleNewChat();
             break;
         case 'sidebar-session-rename':
             event.stopPropagation();
@@ -456,6 +485,9 @@ async function confirmDeleteChat() {
  * Handle session rename
  */
 async function handleSessionRename(sessionId) {
+    // Clean up any existing rename input listeners first (MEMORY LEAK FIX)
+    cleanupRenameInput();
+
     const sessionEl = document.querySelector(`[data-session-id="${sessionId}"]`);
     if (!sessionEl) return;
 
@@ -471,8 +503,11 @@ async function handleSessionRename(sessionId) {
     input.focus();
     input.select();
 
+    // Store reference for cleanup (MEMORY LEAK FIX)
+    currentRenameInput = input;
+
     // Save on blur or enter
-    const saveTitle = async () => {
+    currentRenameBlurHandler = async () => {
         const newTitle = input.value.trim() || 'New Chat';
         try {
             await Chat.renameSession(sessionId, newTitle);
@@ -484,17 +519,39 @@ async function handleSessionRename(sessionId) {
                 window.showToast('Failed to rename chat. Please try again.', 4000);
             }
         }
+        // Clean up listeners after save completes (MEMORY LEAK FIX)
+        cleanupRenameInput();
     };
 
-    input.addEventListener('blur', saveTitle);
-    input.addEventListener('keydown', (e) => {
+    currentRenameKeydownHandler = (e) => {
         if (e.key === 'Enter') {
             input.blur();
         } else if (e.key === 'Escape') {
             input.value = currentTitle;
             input.blur();
         }
-    });
+    };
+
+    input.addEventListener('blur', currentRenameBlurHandler);
+    input.addEventListener('keydown', currentRenameKeydownHandler);
+}
+
+/**
+ * Clean up rename input event listeners (MEMORY LEAK FIX)
+ * Called before re-rendering session list and in destroy()
+ */
+function cleanupRenameInput() {
+    if (currentRenameInput) {
+        if (currentRenameBlurHandler) {
+            currentRenameInput.removeEventListener('blur', currentRenameBlurHandler);
+        }
+        if (currentRenameKeydownHandler) {
+            currentRenameInput.removeEventListener('keydown', currentRenameKeydownHandler);
+        }
+        currentRenameInput = null;
+        currentRenameBlurHandler = null;
+        currentRenameKeydownHandler = null;
+    }
 }
 
 // ==========================================
@@ -577,6 +634,9 @@ SidebarController.destroy = function destroySidebarController() {
         window.removeEventListener('resize', resizeHandler);
         resizeHandler = null;
     }
+
+    // Clean up rename input event listeners (MEMORY LEAK FIX)
+    cleanupRenameInput();
 
     // Remove DOM event listeners if initialized
     try {
