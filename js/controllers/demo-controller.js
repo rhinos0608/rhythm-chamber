@@ -34,8 +34,8 @@ const DEMO_SESSION_KEY = 'rhythm_chamber_demo_session';
 
 /**
  * Demo-specific storage wrapper
- * Uses prefixed keys to ensure complete isolation from user data
- * All data is session-only - never persisted to IndexedDB
+ * Uses IndexedDB to avoid SessionStorage size limitations
+ * Provides complete isolation from user data through separate stores
  */
 const DemoStorage = {
     // In-memory cache for demo session data
@@ -45,7 +45,7 @@ const DemoStorage = {
     /**
      * Initialize demo storage with safeguards
      */
-    init() {
+    async init() {
         if (this._initialized) return;
 
         this._cache.clear();
@@ -54,31 +54,60 @@ const DemoStorage = {
     },
 
     /**
-     * Set demo data (session-only, never persisted)
+     * Set demo data - uses IndexedDB for large data
      * @param {string} key - Data key
      * @param {*} value - Data value (any serializable type)
      */
-    set(key, value) {
-        if (!this._initialized) this.init();
+    async set(key, value) {
+        if (!this._initialized) await this.init();
 
         const prefixedKey = DEMO_STORAGE_PREFIX + key;
         this._cache.set(prefixedKey, value);
 
-        // Also store in sessionStorage for tab persistence
+        // Store session flags in sessionStorage (small data)
+        if (key === 'isDemoMode' || key === 'loadedAt') {
+            try {
+                sessionStorage.setItem(prefixedKey, JSON.stringify(value));
+            } catch (e) {
+                console.warn('[DemoStorage] SessionStorage write failed:', e.message);
+            }
+            return;
+        }
+
+        // Store large data in IndexedDB
         try {
-            sessionStorage.setItem(prefixedKey, JSON.stringify(value));
+            let storeName;
+            if (key === 'streams') {
+                storeName = 'demo_streams';
+            } else if (key === 'patterns') {
+                storeName = 'demo_patterns';
+            } else if (key === 'personality') {
+                storeName = 'demo_personality';
+            } else {
+                storeName = 'demo_streams'; // default
+            }
+
+            const data = {
+                id: prefixedKey,
+                key: key,
+                value: value,
+                timestamp: Date.now()
+            };
+
+            await IndexedDBCore.put(storeName, data, { bypassAuthority: true });
+            console.log(`[DemoStorage] Stored ${key} in IndexedDB`);
         } catch (e) {
-            console.warn('[DemoStorage] SessionStorage write failed:', e.message);
+            console.error('[DemoStorage] IndexedDB write failed:', e.message);
         }
     },
 
     /**
-     * Get demo data
+     * Get demo data - uses IndexedDB for large data
      * @param {string} key - Data key
-     * @returns {*} Stored value or null
+     * @returns {Promise<*>} Stored value or null
      */
-    get(key) {
-        if (!this._initialized) this.init();
+    async get(key) {
+        if (!this._initialized) await this.init();
 
         const prefixedKey = DEMO_STORAGE_PREFIX + key;
 
@@ -87,16 +116,41 @@ const DemoStorage = {
             return this._cache.get(prefixedKey);
         }
 
-        // Fall back to sessionStorage
+        // Check sessionStorage for flags (small data)
+        if (key === 'isDemoMode' || key === 'loadedAt') {
+            try {
+                const stored = sessionStorage.getItem(prefixedKey);
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    this._cache.set(prefixedKey, parsed);
+                    return parsed;
+                }
+            } catch (e) {
+                console.warn('[DemoStorage] SessionStorage read failed:', e.message);
+            }
+            return null;
+        }
+
+        // Fall back to IndexedDB for large data
         try {
-            const stored = sessionStorage.getItem(prefixedKey);
-            if (stored) {
-                const parsed = JSON.parse(stored);
-                this._cache.set(prefixedKey, parsed);
-                return parsed;
+            let storeName;
+            if (key === 'streams') {
+                storeName = 'demo_streams';
+            } else if (key === 'patterns') {
+                storeName = 'demo_patterns';
+            } else if (key === 'personality') {
+                storeName = 'demo_personality';
+            } else {
+                storeName = 'demo_streams'; // default
+            }
+
+            const result = await IndexedDBCore.get(storeName, prefixedKey);
+            if (result && result.value !== undefined) {
+                this._cache.set(prefixedKey, result.value);
+                return result.value;
             }
         } catch (e) {
-            console.warn('[DemoStorage] SessionStorage read failed:', e.message);
+            console.warn('[DemoStorage] IndexedDB read failed:', e.message);
         }
 
         return null;
@@ -105,7 +159,7 @@ const DemoStorage = {
     /**
      * Clear all demo data
      */
-    clear() {
+    async clear() {
         this._cache.clear();
 
         // Clear all demo-prefixed sessionStorage keys
@@ -122,26 +176,37 @@ const DemoStorage = {
             console.warn('[DemoStorage] SessionStorage clear failed:', e.message);
         }
 
+        // Clear IndexedDB demo stores
+        try {
+            await IndexedDBCore.clear('demo_streams', { bypassAuthority: true });
+            await IndexedDBCore.clear('demo_patterns', { bypassAuthority: true });
+            await IndexedDBCore.clear('demo_personality', { bypassAuthority: true });
+            console.log('[DemoStorage] Cleared all demo data from IndexedDB');
+        } catch (e) {
+            console.error('[DemoStorage] IndexedDB clear failed:', e.message);
+        }
+
         this._initialized = false;
         console.log('[DemoStorage] Cleared all demo data');
     },
 
     /**
      * Check if demo storage has data
-     * @returns {boolean}
+     * @returns {Promise<boolean>}
      */
-    hasData() {
-        return this._cache.size > 0 || this.get('streams') !== null;
+    async hasData() {
+        const streams = await this.get('streams');
+        return this._cache.size > 0 || streams !== null;
     },
 
     /**
      * Validate demo data integrity
-     * @returns {{ valid: boolean, reason?: string }}
+     * @returns {Promise<{ valid: boolean, reason?: string }>}
      */
-    validate() {
-        const streams = this.get('streams');
-        const patterns = this.get('patterns');
-        const personality = this.get('personality');
+    async validate() {
+        const streams = await this.get('streams');
+        const patterns = await this.get('patterns');
+        const personality = await this.get('personality');
 
         if (!streams || !Array.isArray(streams)) {
             return { valid: false, reason: 'Missing or invalid demo streams' };
@@ -243,7 +308,7 @@ async function loadDemoMode() {
         DemoStorage.set('loadedAt', Date.now());
 
         // Validate demo data integrity before proceeding
-        const validation = DemoStorage.validate();
+        const validation = await DemoStorage.validate();
         if (!validation.valid) {
             throw new Error(validation.reason);
         }

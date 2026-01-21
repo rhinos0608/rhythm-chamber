@@ -15,6 +15,7 @@ import { Chat } from '../chat.js';
 import { ChatUIController } from './chat-ui-controller.js';
 import { TokenCounter } from '../token-counter.js';
 import { AppState } from '../state/app-state.js';
+import { EventBus } from '../services/event-bus.js';
 
 const SIDEBAR_STATE_KEY = 'rhythm_chamber_sidebar_collapsed';
 let pendingDeleteSessionId = null;
@@ -79,10 +80,8 @@ async function initSidebar() {
         newChatBtn.addEventListener('click', handleNewChat);
     }
 
-    // Register for session updates from Chat module
-    if (Chat?.onSessionUpdate) {
-        Chat.onSessionUpdate(renderSessionList);
-    }
+    // Register for session updates from EventBus
+    EventBus.on('session:*', renderSessionList);
 
     // Subscribe to AppState for reactive view changes
     // If a previous subscription exists, unsubscribe first to avoid duplicates
@@ -478,6 +477,15 @@ SidebarController.destroy = function destroySidebarController() {
         _unsubscribe = null;
     }
 
+    // Unregister session update callback
+    if (Chat?.offSessionUpdate && typeof renderSessionList === 'function') {
+        try {
+            Chat.offSessionUpdate(renderSessionList);
+        } catch (e) {
+            console.warn('[SidebarController] Failed to unregister session update callback:', e);
+        }
+    }
+
     // Remove DOM event listeners if initialized
     try {
         if (sidebarToggleBtn) sidebarToggleBtn.removeEventListener('click', toggleSidebar);
@@ -485,10 +493,16 @@ SidebarController.destroy = function destroySidebarController() {
         if (sidebarOverlay) sidebarOverlay.removeEventListener('click', closeSidebar);
         if (newChatBtn) newChatBtn.removeEventListener('click', handleNewChat);
     } catch (e) {
-        // Non-fatal
+        console.warn('[SidebarController] Failed to remove event listener:', e);
     }
 };
 
 
 console.log('[SidebarController] Controller loaded');
+
+// Expose on window for inline onclick handlers in rendered HTML
+// This is needed because session items use onclick="SidebarController.handleSessionClick(...)"
+if (typeof window !== 'undefined') {
+    window.SidebarController = SidebarController;
+}
 

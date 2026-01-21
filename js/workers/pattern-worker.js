@@ -532,7 +532,8 @@ self.onmessage = function (e) {
 
     // Handle heartbeat channel setup (dedicated MessageChannel)
     if (type === 'HEARTBEAT_CHANNEL') {
-        heartbeatPort = port;
+        // Get port from e.ports[0] (transferred port), fallback to e.data.port
+        heartbeatPort = e.ports && e.ports[0] ? e.ports[0] : (e.data && e.data.port);
         heartbeatPort.onmessage = function(event) {
             if (event.data.type === 'HEARTBEAT') {
                 heartbeatPort.postMessage({

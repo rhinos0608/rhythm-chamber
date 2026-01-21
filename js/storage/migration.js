@@ -212,6 +212,7 @@ async function saveWriteAheadCheckpoint(intent, key, index, keysProcessed, total
         intent,
         key,
         index,
+        lastProcessedIndex: index - 1,
         keysProcessed,
         totalKeys,
         status: 'pending',
@@ -247,13 +248,19 @@ async function markCheckpointComplete(intent, key, index, keysProcessed, totalKe
  * @param {string} key - Key that failed
  * @param {number} index - Current index
  * @param {string} error - Error message
+ * @param {number} keysProcessed - Keys processed so far
+ * @param {number} totalKeys - Total keys
+ * @param {number} [lastProcessedIndex] - Last successfully processed index
  * @returns {Promise<void>}
  */
-async function markCheckpointFailed(intent, key, index, error) {
+async function markCheckpointFailed(intent, key, index, error, keysProcessed, totalKeys, lastProcessedIndex) {
     await saveCheckpoint({
         intent,
         key,
         index,
+        lastProcessedIndex: lastProcessedIndex !== undefined ? lastProcessedIndex : index - 1,
+        keysProcessed,
+        totalKeys,
         status: 'failed',
         error,
         phase: intent
@@ -440,7 +447,7 @@ async function migrateFromLocalStorage(onProgress = null) {
             } catch (err) {
                 console.warn(`[Migration] Failed to migrate key '${key}':`, err);
                 // Mark as failed so we skip on resume
-                await markCheckpointFailed('config', key, i, err.message || String(err));
+                await markCheckpointFailed('config', key, i, err.message || String(err), keysProcessed, totalKeys, i - 1);
             }
         }
 

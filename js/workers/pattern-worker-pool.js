@@ -24,6 +24,7 @@
  */
 
 import { Patterns } from '../patterns.js';
+import { EventBus } from '../services/event-bus.js';
 
 // ==========================================
 // Configuration
@@ -314,15 +315,13 @@ function handleWorkerError(error) {
     // Emit failure event for UI notification
     // HNW Wave: Enables user-friendly error display
     const errorMessage = error?.message || 'Unknown worker error';
-    if (typeof window !== 'undefined' && window.EventBus?.emit) {
-        window.EventBus.emit('pattern:worker_failure', {
-            workerIndex,
-            error: errorMessage,
-            timestamp: Date.now(),
-            affectedPatterns: PATTERN_GROUPS[workerIndex] || []
-        });
-        console.log('[PatternWorkerPool] Emitted pattern:worker_failure event');
-    }
+    EventBus.emit('pattern:worker_failure', {
+        workerIndex,
+        error: errorMessage,
+        timestamp: Date.now(),
+        affectedPatterns: PATTERN_GROUPS[workerIndex] || []
+    });
+    console.log('[PatternWorkerPool] Emitted pattern:worker_failure event');
 
     for (const [reqId, request] of pendingRequests.entries()) {
         if (request.completedWorkers >= request.totalWorkers) {

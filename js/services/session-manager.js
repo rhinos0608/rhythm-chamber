@@ -611,7 +611,10 @@ const SessionManager = {
     emergencyBackupSync,
     recoverEmergencyBackup,
 
-    // Utilities\n    listSessions,\n    setUserContext,\n    // NOTE: onSessionUpdate removed - use EventBus.on('session:*') instead
+    // Utilities
+    listSessions,
+    setUserContext,
+    // NOTE: onSessionUpdate removed - use EventBus.on('session:*') instead
 
     // Exposed for testing
     generateUUID,

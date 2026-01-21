@@ -304,17 +304,17 @@ export class ErrorRecoveryCoordinator {
      */
     _subscribeToErrorEvents() {
         // Subscribe to all error events with highest priority
-        this._eventBus.subscribe('ERROR:*', async (event, data) => {
+        this._eventBus.on('ERROR:*', async (event, data) => {
             await this._handleErrorEvent(event, data);
         }, { priority: 1000 });
 
         // Subscribe to security-specific errors
-        this._eventBus.subscribe('SECURITY:ERROR', async (event, data) => {
+        this._eventBus.on('SECURITY:ERROR', async (event, data) => {
             await this._handleSecurityError(data);
         }, { priority: 1000 });
 
         // Subscribe to storage errors
-        this._eventBus.subscribe('STORAGE:ERROR', async (event, data) => {
+        this._eventBus.on('STORAGE:ERROR', async (event, data) => {
             await this._handleStorageError(data);
         }, { priority: 1000 });
 
@@ -1133,7 +1133,7 @@ export class ErrorRecoveryCoordinator {
             }, timeoutMs);
 
             // Subscribe to state changes
-            unsubscribe = this._eventBus.subscribe('RECOVERY:STATE_CHANGE', (event, data) => {
+            unsubscribe = this._eventBus.on('RECOVERY:STATE_CHANGE', (event, data) => {
                 if (data.state === RecoveryState.IDLE) {
                     if (timeoutHandle) {
                         clearTimeout(timeoutHandle);

@@ -21,6 +21,7 @@
 import { TabCoordinator } from '../services/tab-coordination.js';
 import { DeviceDetection } from '../services/device-detection.js';
 import { SafeMode } from '../security/safe-mode.js';
+import { EventBus } from '../services/event-bus.js';
 
 // ==========================================
 // Constants
@@ -528,41 +529,10 @@ async function replayWal() {
         walState.isReplaying = false;
 
         // Emit event for any blocked writes waiting on replay
-        if (typeof window !== 'undefined' && window.EventBus?.emit) {
-            window.EventBus.emit('wal:replay_complete', {
-                timestamp: Date.now(),
-                entriesReplayed: entriesReplayedCount
-            });
-        }
-    }
-
-        console.log(`[WAL] Replaying ${pendingEntries.length} entries`);
-
-        // Reset PROCESSING entries to PENDING
-        walState.entries.forEach(entry => {
-            if (entry.status === WalStatus.PROCESSING) {
-                entry.status = WalStatus.PENDING;
-                entry.error = 'Reset after crash';
-            }
+        EventBus.emit('wal:replay_complete', {
+            timestamp: Date.now(),
+            entriesReplayed: entriesReplayedCount
         });
-
-        // Process the WAL
-        await processWal();
-
-        console.log('[WAL] Crash recovery replay complete');
-
-    } catch (error) {
-        console.error('[WAL] Error replaying WAL:', error);
-    } finally {
-        walState.isReplaying = false;
-        
-        // Emit event for any blocked writes waiting on replay
-        if (typeof window !== 'undefined' && window.EventBus?.emit) {
-            window.EventBus.emit('wal:replay_complete', {
-                timestamp: Date.now(),
-                entriesReplayed: pendingEntries?.length || 0
-            });
-        }
     }
 }
 

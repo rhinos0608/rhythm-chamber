@@ -749,17 +749,139 @@ async function emitAndAwait(eventType, payload = {}, options = {}) {
     if (!options.bypassCircuitBreaker) {
         // Update storm window
         if (timestamp - windowStart > CIRCUIT_BREAKER_CONFIG.stormWindowMs) {
+            // Check if storm threshold was exceeded
+            if (eventsThisWindow > CIRCUIT_BREAKER_CONFIG.stormThreshold && !stormActive) {
+                stormActive = true;
+                stormStartTime = timestamp;
+                stormDroppedAtStart = droppedCount;
+                stormCooldownUntil = timestamp + CIRCUIT_BREAKER_CONFIG.cooldownMs;
+                console.warn(`[EventBus] Event storm detected: ${eventsThisWindow} events in ${CIRCUIT_BREAKER_CONFIG.stormWindowMs}ms`);
+
+                // Emit storm START event (producer notification)
+                emit('eventbus:storm_start', {
+                    eventsPerSecond: eventsThisWindow,
+                    threshold: CIRCUIT_BREAKER_CONFIG.stormThreshold,
+                    startTime: stormStartTime
+                }, { bypassCircuitBreaker: true, skipValidation: true });
+
+                // Legacy event for backwards compatibility
+                emit('eventbus:storm', {
+                    eventsPerSecond: eventsThisWindow,
+                    threshold: CIRCUIT_BREAKER_CONFIG.stormThreshold
+                }, { bypassCircuitBreaker: true, skipValidation: true });
+            }
+            // Reset window
             windowStart = timestamp;
             eventsThisWindow = 0;
+            backpressureWarningEmitted = false;
+
+            // Check cooldown - emit storm END event when storm ends
+            if (stormActive && timestamp > stormCooldownUntil) {
+                const stormDuration = timestamp - stormStartTime;
+                const totalDroppedDuringStorm = droppedCount - stormDroppedAtStart;
+
+                // Emit storm END event (producer notification)
+                emit('eventbus:storm_end', {
+                    durationMs: stormDuration,
+                    totalDropped: totalDroppedDuringStorm
+                }, { bypassCircuitBreaker: true, skipValidation: true });
+
+                stormActive = false;
+                console.log(`[EventBus] Event storm ended (duration: ${stormDuration}ms, dropped: ${totalDroppedDuringStorm})`);
+            }
         }
         eventsThisWindow++;
-        
-        // Queue overflow handling - simplified check
+
+        // Proactive backpressure warning at 80% queue capacity
+        const queuePercentFull = pendingEvents.length / CIRCUIT_BREAKER_CONFIG.maxQueueSize;
+        if (queuePercentFull >= CIRCUIT_BREAKER_CONFIG.backpressureWarningThreshold && !backpressureWarningEmitted) {
+            backpressureWarningEmitted = true;
+            emit('eventbus:backpressure_warning', {
+                queueSize: pendingEvents.length,
+                maxSize: CIRCUIT_BREAKER_CONFIG.maxQueueSize,
+                percentFull: queuePercentFull
+            }, { bypassCircuitBreaker: true, skipValidation: true });
+            console.warn(`[EventBus] Backpressure warning: queue at ${(queuePercentFull * 100).toFixed(1)}% capacity`);
+        }
+
+        // Queue overflow handling
         if (pendingEvents.length >= CIRCUIT_BREAKER_CONFIG.maxQueueSize) {
-            if (CIRCUIT_BREAKER_CONFIG.overflowStrategy === 'reject_all') {
+            const strategy = CIRCUIT_BREAKER_CONFIG.overflowStrategy;
+
+            if (strategy === 'reject_all') {
                 droppedCount++;
+                // Emit drop event for monitoring
+                emit('CIRCUIT_BREAKER:DROPPED', {
+                    count: 1,
+                    eventType,
+                    reason: 'queue_full_reject_all',
+                    totalDropped: droppedCount
+                }, { bypassCircuitBreaker: true, skipValidation: true });
+                if (debugMode) {
+                    console.warn(`[EventBus] Event rejected (queue full): ${eventType}`);
+                }
                 return { handled: false, results: [], dropped: true };
+            } else if (strategy === 'drop_low_priority') {
+                // Find lowest priority event to drop
+                const lowestPriorityIndex = pendingEvents.reduce((lowest, event, index) => {
+                    if (pendingEvents[lowest].priority < event.priority) {
+                        return index;
+                    }
+                    return lowest;
+                }, 0);
+
+                // Only drop if new event has equal or lower priority
+                if (priority >= pendingEvents[lowestPriorityIndex].priority) {
+                    droppedCount++;
+                    // Emit drop event for monitoring
+                    emit('CIRCUIT_BREAKER:DROPPED', {
+                        count: 1,
+                        eventType,
+                        reason: 'priority_too_low',
+                        totalDropped: droppedCount
+                    }, { bypassCircuitBreaker: true, skipValidation: true });
+                    if (debugMode) {
+                        console.warn(`[EventBus] Event rejected (equal or lower priority than queue): ${eventType}`);
+                    }
+                    return { handled: false, results: [], dropped: true };
+                }
+
+                // Drop lowest priority event
+                const dropped = pendingEvents.splice(lowestPriorityIndex, 1)[0];
+                droppedCount++;
+                // Emit drop event for monitoring
+                emit('CIRCUIT_BREAKER:DROPPED', {
+                    count: 1,
+                    eventType: dropped.eventType,
+                    reason: 'displaced_by_higher_priority',
+                    totalDropped: droppedCount
+                }, { bypassCircuitBreaker: true, skipValidation: true });
+                if (debugMode) {
+                    console.warn(`[EventBus] Dropped low-priority event: ${dropped.eventType}`);
+                }
+            } else if (strategy === 'drop_oldest') {
+                const dropped = pendingEvents.shift();
+                droppedCount++;
+                // Emit drop event for monitoring
+                emit('CIRCUIT_BREAKER:DROPPED', {
+                    count: 1,
+                    eventType: dropped?.eventType || 'unknown',
+                    reason: 'oldest_dropped',
+                    totalDropped: droppedCount
+                }, { bypassCircuitBreaker: true, skipValidation: true });
+                if (debugMode) {
+                    console.warn(`[EventBus] Dropped oldest event: ${dropped?.eventType}`);
+                }
             }
+        }
+
+        // Add to pending queue for tracking
+        const pendingEventEntry = { eventType, timestamp, priority };
+        pendingEvents.push(pendingEventEntry);
+
+        // Trim queue to max size
+        while (pendingEvents.length > CIRCUIT_BREAKER_CONFIG.maxQueueSize) {
+            pendingEvents.shift();
         }
     }
     
@@ -1024,22 +1146,24 @@ async function emitParallel(eventType, payload = {}, options = {}) {
         const handlerPromise = (async () => {
             const handlerStartTime = performance.now();
             markHandlerStarted(id);
-            
+
+            let timerId = null;
+
             try {
                 // Create timeout promise
                 const timeoutPromise = new Promise((_, reject) => {
-                    setTimeout(() => reject(new Error(`Handler timeout after ${timeoutMs}ms`)), timeoutMs);
+                    timerId = setTimeout(() => reject(new Error(`Handler timeout after ${timeoutMs}ms`)), timeoutMs);
                 });
-                
+
                 // Race handler against timeout
                 const handlerResult = handler(payload, eventMeta);
                 if (handlerResult && typeof handlerResult.then === 'function') {
                     await Promise.race([handlerResult, timeoutPromise]);
                 }
-                
+
                 const durationMs = performance.now() - handlerStartTime;
                 recordHandlerSuccess(id, durationMs);
-                
+
                 return {
                     handlerId: id,
                     success: true,
@@ -1048,15 +1172,15 @@ async function emitParallel(eventType, payload = {}, options = {}) {
             } catch (error) {
                 const durationMs = performance.now() - handlerStartTime;
                 const timedOut = error.message.includes('Handler timeout');
-                
+
                 recordHandlerFailure(id, durationMs, error);
-                
+
                 if (!timedOut) {
                     console.error(`[EventBus] Parallel handler ${id} threw error for "${eventType}":`, error);
                 } else {
                     console.warn(`[EventBus] Parallel handler ${id} timed out for "${eventType}"`);
                 }
-                
+
                 return {
                     handlerId: id,
                     success: false,
@@ -1064,6 +1188,12 @@ async function emitParallel(eventType, payload = {}, options = {}) {
                     durationMs,
                     timedOut
                 };
+            } finally {
+                // Clear timeout timer to prevent leaks
+                if (timerId !== null) {
+                    clearTimeout(timerId);
+                    timerId = null;
+                }
             }
         })();
         
@@ -1419,17 +1549,15 @@ function checkHandlerCircuitState(handlerId, metrics) {
 function recordHandlerSuccess(handlerId, durationMs) {
     const metrics = handlerMetrics.get(handlerId);
     if (!metrics) return;
-    
+
     // Update standard metrics
     recordHandlerMetrics(handlerId, durationMs, true);
-    
+
     // Update circuit breaker state
     metrics.consecutiveFailures = 0;
     metrics.consecutiveSuccesses++;
-    
+
     if (metrics.circuitState === CIRCUIT_STATE.HALF_OPEN) {
-        metrics.halfOpenAttempts++;
-        
         // Check if enough successes to close circuit
         if (metrics.consecutiveSuccesses >= HANDLER_CIRCUIT_CONFIG.successThresholdHalfOpen) {
             metrics.circuitState = CIRCUIT_STATE.CLOSED;

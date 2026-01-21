@@ -12,7 +12,7 @@
 
 import { EventBus } from './event-bus.js';
 import { Storage } from '../storage.js';
-import { StorageKeys } from '../storage/keys.js';
+import { STORAGE_KEYS } from '../storage/keys.js';
 
 /**
  * Degradation tier enumeration
@@ -157,48 +157,48 @@ export class StorageDegradationManager {
      */
     _initializeItemRegistry() {
         // Critical data - never delete
-        this._registerItem(StorageKeys.PERSONALITY_RESULT, {
+        this._registerItem(STORAGE_KEYS.PERSONALITY_RESULT, {
             priority: CleanupPriority.NEVER_DELETE,
             category: 'personality',
             regeneratable: false
         });
 
-        this._registerItem(StorageKeys.USER_SETTINGS, {
+        this._registerItem(STORAGE_KEYS.USER_SETTINGS, {
             priority: CleanupPriority.NEVER_DELETE,
             category: 'settings',
             regeneratable: false
         });
 
         // Active session - never delete
-        this._registerItem(StorageKeys.ACTIVE_SESSION_ID, {
+        this._registerItem(STORAGE_KEYS.ACTIVE_SESSION_ID, {
             priority: CleanupPriority.NEVER_DELETE,
             category: 'session',
             regeneratable: false
         });
 
         // Embeddings - regeneratable, high cleanup priority
-        this._registerItem(StorageKeys.EMBEDDING_CACHE, {
+        this._registerItem(STORAGE_KEYS.EMBEDDING_CACHE, {
             priority: CleanupPriority.AGGRESSIVE,
             category: 'embedding',
             regeneratable: true
         });
 
         // Chat sessions - medium priority based on age
-        this._registerItem(StorageKeys.CHAT_SESSIONS, {
+        this._registerItem(STORAGE_KEYS.CHAT_SESSIONS, {
             priority: CleanupPriority.MEDIUM,
             category: 'session',
             regeneratable: false
         });
 
         // Chunks - regeneratable from streams
-        this._registerItem(StorageKeys.AGGREGATED_CHUNKS, {
+        this._registerItem(STORAGE_KEYS.AGGREGATED_CHUNKS, {
             priority: CleanupPriority.HIGH,
             category: 'chunk',
             regeneratable: true
         });
 
         // Raw streams - keep recent, aggressive cleanup for old
-        this._registerItem(StorageKeys.RAW_STREAMS, {
+        this._registerItem(STORAGE_KEYS.RAW_STREAMS, {
             priority: CleanupPriority.HIGH,
             category: 'stream',
             regeneratable: false
@@ -226,17 +226,17 @@ export class StorageDegradationManager {
      */
     _subscribeToStorageEvents() {
         // Monitor storage writes
-        this._eventBus.subscribe('STORAGE:WRITE', async (event, data) => {
+        this._eventBus.on('STORAGE:WRITE', async (event, data) => {
             await this._onStorageWrite(data);
         });
 
         // Monitor storage errors
-        this._eventBus.subscribe('STORAGE:ERROR', async (event, data) => {
+        this._eventBus.on('STORAGE:ERROR', async (event, data) => {
             await this._onStorageError(data);
         });
 
         // Monitor quota changes
-        this._eventBus.subscribe('STORAGE:QUOTA_CHANGE', async (event, data) => {
+        this._eventBus.on('STORAGE:QUOTA_CHANGE', async (event, data) => {
             await this._checkQuotaAndDegrade();
         });
 

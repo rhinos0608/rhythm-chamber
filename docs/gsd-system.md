@@ -170,13 +170,13 @@ Plans marked `autonomous: true` execute without checkpoints. Checkpoint plans pa
 ### Wave-Based Parallelization
 ```javascript
 // Wave 1: Plans 01-02 execute in parallel
-Promise.all([
-  executePlan(09-01),
-  executePlan(09-02)
-])
+await Promise.all([
+  executePlan('09-01'),
+  executePlan('09-02')
+]);
 
 // Wave 2: Plan 03 executes after Wave 1 complete
-executePlan(09-03)
+await executePlan('09-03');
 ```
 
 ### Must-Haves Validation

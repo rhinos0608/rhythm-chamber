@@ -168,7 +168,7 @@ We're not building a better stats.fm. We're building the next evolution of music
 | Tier | Price | What You Get | Infrastructure | Purpose |
 |------|-------|--------------|----------------|----------|
 | **Sovereign** | **$0** | Full local analysis, BYOI chat, basic cards, personality reveal | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
-| **Curator** | **$19.99 one-time** | PKM Export, Relationship Resonance, Deep Enrichment, Metadata Fixer | Client-side only | **Seed Capital**: Funds security audit (~$5k goal) |
+| **Curator** | **$19.99 one-time** | PKM Export, Relationship Resonance, Deep Enrichment, Metadata Fixer | Client-side only | **Seed Capital**: Funds security audit ($10,000 goal) |
 | **Chamber** | **$4.99/mo or $39/yr** | E2EE Sync, Chamber Portal, Managed AI, Weekly Insights | Hybrid (client + server) | **Recurring Revenue**: Sustainable operations, infrastructure costs |
 
 ### Security Audit Stretch Goal

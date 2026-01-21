@@ -500,11 +500,11 @@ function showSettingsModal() {
     modal.id = 'settings-modal';
     modal.className = 'settings-modal';
     modal.innerHTML = `
-        <div class="settings-overlay" onclick="Settings.hideSettingsModal()"></div>
+        <div class="settings-overlay" data-action="hide-settings-modal"></div>
         <div class="settings-content">
             <div class="settings-header">
                 <h2>⚙️ Settings</h2>
-                <button class="settings-close" onclick="Settings.hideSettingsModal()">×</button>
+                <button class="settings-close" data-action="hide-settings-modal">×</button>
             </div>
             
             <div class="settings-body">
@@ -518,7 +518,7 @@ function showSettingsModal() {
                     <!-- Provider Selection -->
                     <div class="settings-field">
                         <label for="setting-llm-provider">LLM Provider</label>
-                        <select id="setting-llm-provider" onchange="Settings.onProviderChange(this.value)">
+                        <select id="setting-llm-provider" data-change-action="provider-change">
                             ${LLM_PROVIDERS.map(p => `
                                 <option value="${p.id}" ${settings.llm.provider === p.id ? 'selected' : ''}>
                                     ${p.name}
@@ -555,14 +555,14 @@ function showSettingsModal() {
                             <input type="text" id="setting-ollama-endpoint" 
                                    value="${settings.llm.ollamaEndpoint}" 
                                    placeholder="http://localhost:11434">
-                            <button class="btn btn-small" onclick="Settings.testOllamaConnection()">Test</button>
+                            <button class="btn btn-small" data-action="test-ollama">Test</button>
                         </div>
                         <div class="settings-field">
                             <label for="setting-ollama-model">Model</label>
                             <select id="setting-ollama-model">
                                 <option value="${settings.ollama.model}">${settings.ollama.model}</option>
                             </select>
-                            <button class="btn btn-small" onclick="Settings.refreshOllamaModels()">↻ Refresh</button>
+                            <button class="btn btn-small" data-action="refresh-ollama-models">↻ Refresh</button>
                             <span class="settings-hint">Run <code>ollama list</code> to see available models</span>
                         </div>
                     </div>
@@ -608,8 +608,8 @@ function showSettingsModal() {
                                    value="${apiKeyDisplay}" 
                                    placeholder="${hasConfigKey ? '••••••••••••••••' : 'sk-or-v1-...'}" 
                                    ${hasConfigKey ? 'readonly' : ''}
-                                   autocomplete="off">
-                            <button class="btn-show-password" onclick="Settings.togglePasswordVisibility('setting-api-key', this)">Show</button>
+                                    autocomplete="off">
+                            <button class="btn-show-password" data-action="toggle-password" data-target="setting-api-key">Show</button>
                         </div>
                         
                         <div class="settings-field">
@@ -656,8 +656,8 @@ function showSettingsModal() {
                             <input type="password" id="setting-gemini-api-key"
                                    value="${settings.gemini?.apiKey || ''}"
                                    placeholder="AIzaSy..."
-                                   autocomplete="off">
-                            <button class="btn-show-password" onclick="Settings.togglePasswordVisibility('setting-gemini-api-key', this)">Show</button>
+                                    autocomplete="off">
+                            <button class="btn-show-password" data-action="toggle-password" data-target="setting-gemini-api-key">Show</button>
                             <span class="settings-hint">Your Google AI Studio API key</span>
                         </div>
 
@@ -759,7 +759,7 @@ function showSettingsModal() {
                     
                     <div class="settings-info">
                         <strong>Redirect URI:</strong> <code>${window.location.origin}/app.html</code>
-                        <button class="btn-copy" onclick="Settings.copyToClipboard('${window.location.origin}/app.html', this)">Copy</button>
+                        <button class="btn-copy" data-action="copy-url">Copy</button>
                     </div>
                 </div>
                 
@@ -795,10 +795,10 @@ function showSettingsModal() {
                             <strong>Traveling or on a VPN?</strong>
                             <p>Geographic anomaly detection can block rapid location changes. Use travel mode to relax checks or verify with Spotify to prove it's you.</p>
                             <div class="travel-actions">
-                                <button class="btn btn-secondary" id="travel-mode-btn" onclick="Settings.toggleTravelMode()">
+                                <button class="btn btn-secondary" id="travel-mode-btn" data-action="toggle-travel-mode">
                                     I am traveling / on VPN
                                 </button>
-                                <button class="btn btn-primary" id="verify-identity-btn" onclick="Settings.verifyIdentity()">
+                                <button class="btn btn-primary" id="verify-identity-btn" data-action="verify-identity">
                                     Verify with Spotify
                                 </button>
                             </div>
@@ -808,11 +808,11 @@ function showSettingsModal() {
                     
                     
                     <div class="settings-field">
-                        <button class="btn btn-primary" id="generate-embeddings-btn" onclick="Settings.generateEmbeddings()">
+                        <button class="btn btn-primary" id="generate-embeddings-btn" data-action="generate-embeddings">
                             ${ModuleRegistry.getModuleSync('RAG')?.isConfigured() ? '🔄 Regenerate Embeddings' : '⚡ Generate Embeddings'}
                         </button>
                         ${ModuleRegistry.getModuleSync('RAG')?.getCheckpoint?.() ? `
-                            <button class="btn btn-secondary" id="resume-embeddings-btn" onclick="Settings.resumeEmbeddings()">
+                            <button class="btn btn-secondary" id="resume-embeddings-btn" data-action="resume-embeddings">
                                 ▶️ Resume
                             </button>
                         ` : ''}
@@ -833,7 +833,7 @@ function showSettingsModal() {
                         <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
                         <div class="progress-actions">
                             <span class="progress-text" id="progress-text">Processing...</span>
-                            <button class="btn btn-secondary btn-sm" id="cancel-embeddings-btn" onclick="Settings.cancelEmbeddings()">
+                            <button class="btn btn-secondary btn-sm" id="cancel-embeddings-btn" data-action="cancel-embeddings">
                                 ✕ Cancel
                             </button>
                         </div>
@@ -841,7 +841,7 @@ function showSettingsModal() {
                     
                     <!-- Session Reset with Cryptographic Proof -->
                     <div class="settings-field session-controls">
-                        <button class="btn btn-danger-outline" onclick="Settings.showSessionResetModal()">
+                        <button class="btn btn-danger-outline" data-action="show-session-reset">
                             🔒 Reset Security Session
                         </button>
                         <span class="settings-hint">Invalidates all encrypted credentials and forces re-authentication</span>
@@ -863,8 +863,8 @@ function showSettingsModal() {
             </div>
             
             <div class="settings-footer">
-                <button class="btn btn-secondary" onclick="Settings.hideSettingsModal()">Close</button>
-                <button class="btn btn-primary" onclick="Settings.saveFromModal()">Save Changes</button>
+                <button class="btn btn-secondary" data-action="hide-settings-modal">Close</button>
+                <button class="btn btn-primary" data-action="save-settings">Save Changes</button>
             </div>
         </div>
     `;
@@ -873,6 +873,71 @@ function showSettingsModal() {
 
     // Initialize travel/VPN override status UI
     refreshTravelStatusUI();
+
+    // Event delegation for settings modal actions
+    modal.addEventListener('click', (e) => {
+        const actionElement = e.target.closest('[data-action]');
+        if (!actionElement) return;
+
+        const action = actionElement.dataset.action;
+        switch (action) {
+            case 'hide-settings-modal':
+                hideSettingsModal();
+                break;
+            case 'test-ollama':
+                testOllamaConnection();
+                break;
+            case 'refresh-ollama-models':
+                refreshOllamaModels();
+                break;
+            case 'toggle-password': {
+                const target = actionElement.dataset.target;
+                togglePasswordVisibility(target, actionElement);
+                break;
+            }
+            case 'copy-url':
+                copyToClipboard(window.location.origin + '/app.html', actionElement);
+                break;
+            case 'toggle-travel-mode':
+                toggleTravelMode();
+                break;
+            case 'verify-identity':
+                verifyIdentity();
+                break;
+            case 'generate-embeddings':
+                generateEmbeddings();
+                break;
+            case 'resume-embeddings':
+                resumeEmbeddings();
+                break;
+            case 'cancel-embeddings':
+                cancelEmbeddings();
+                break;
+            case 'show-session-reset':
+                showSessionResetModal();
+                break;
+            case 'save-settings':
+                saveFromModal();
+                break;
+            case 'switch-provider': {
+                const provider = actionElement.dataset.provider;
+                switchProviderFromHealth(provider);
+                break;
+            }
+        }
+    });
+
+    modal.addEventListener('change', (e) => {
+        const actionElement = e.target.closest('[data-change-action]');
+        if (!actionElement) return;
+
+        const action = actionElement.dataset.changeAction;
+        switch (action) {
+            case 'provider-change':
+                onProviderChange(e.target.value);
+                break;
+        }
+    });
 
     // Add temperature slider listener
     const tempSlider = document.getElementById('setting-temperature');
@@ -1034,14 +1099,14 @@ function createProviderActions(provider, health, currentProvider) {
             const target = healthyFallbacks[0]?.id || LLM_PROVIDERS.find(p => p.id !== currentProvider)?.id;
 
             if (target) {
-                return `<button class="provider-health-action primary" onclick="Settings.switchProviderFromHealth('${target}')">Switch Provider</button>`;
+                return `<button class="provider-health-action primary" data-action="switch-provider" data-provider="${target}">Switch Provider</button>`;
             }
             return ''; // No alternative providers available
         }
         return '';
     }
 
-    return `<button class="provider-health-action" onclick="Settings.switchProviderFromHealth('${provider}')">Switch to ${LLM_PROVIDERS.find(p => p.id === provider)?.name.split(' ')[0]}</button>`;
+    return `<button class="provider-health-action" data-action="switch-provider" data-provider="${provider}">Switch to ${LLM_PROVIDERS.find(p => p.id === provider)?.name.split(' ')[0]}</button>`;
 }
 
 /**
@@ -1473,7 +1538,7 @@ async function showSessionResetModal() {
     modal.id = 'session-reset-modal';
     modal.className = 'session-reset-modal';
     modal.innerHTML = `
-        <div class="session-reset-overlay" onclick="Settings.hideSessionResetModal()"></div>
+        <div class="session-reset-overlay" data-action="hide-session-reset"></div>
         <div class="session-reset-content">
             <div class="session-reset-header">
                 <h2>🔒 Reset Security Session</h2>
@@ -1517,8 +1582,8 @@ async function showSessionResetModal() {
             </div>
             
             <div class="session-reset-footer">
-                <button class="btn btn-secondary" onclick="Settings.hideSessionResetModal()">Cancel</button>
-                <button class="btn btn-danger" id="confirm-reset-btn" onclick="Settings.confirmSessionReset()">
+                <button class="btn btn-secondary" data-action="hide-session-reset">Cancel</button>
+                <button class="btn btn-danger" id="confirm-reset-btn" data-action="confirm-session-reset">
                     Reset Session
                 </button>
             </div>
@@ -1526,6 +1591,22 @@ async function showSessionResetModal() {
     `;
 
     document.body.appendChild(modal);
+
+    // Event delegation for session reset modal actions
+    modal.addEventListener('click', (e) => {
+        const actionElement = e.target.closest('[data-action]');
+        if (!actionElement) return;
+
+        const action = actionElement.dataset.action;
+        switch (action) {
+            case 'hide-session-reset':
+                hideSessionResetModal();
+                break;
+            case 'confirm-session-reset':
+                confirmSessionReset();
+                break;
+        }
+    });
 
     // Add escape key listener
     const escHandler = (e) => {
@@ -1873,11 +1954,11 @@ function showToolsModal() {
     modal.id = 'tools-modal';
     modal.className = 'tools-modal';
     modal.innerHTML = `
-        <div class="tools-overlay" onclick="Settings.hideToolsModal()"></div>
+        <div class="tools-overlay" data-action="hide-tools-modal"></div>
         <div class="tools-content">
             <div class="tools-header">
                 <h2>🧰 AI Tools</h2>
-                <button class="tools-close" onclick="Settings.hideToolsModal()">×</button>
+                <button class="tools-close" data-action="hide-tools-modal">×</button>
             </div>
             
             <div class="tools-body">
@@ -1890,7 +1971,7 @@ function showToolsModal() {
                 <div class="tools-bulk-actions">
                     <label class="tool-toggle bulk-toggle">
                         <input type="checkbox" id="toggle-all-tools" ${allEnabled ? 'checked' : ''} 
-                               onchange="Settings.onToggleAllTools(this.checked)">
+                               data-change-action="toggle-all-tools">
                         <span class="toggle-slider"></span>
                         <span class="toggle-label"><strong>Enable All Tools</strong></span>
                     </label>
@@ -1905,10 +1986,10 @@ function showToolsModal() {
                         <div class="tools-list">
                             ${category.tools.map(tool => `
                                 <label class="tool-toggle" title="${tool.description}">
-                                    <input type="checkbox" 
+                                    <input type="checkbox"
                                            data-tool="${tool.name}"
                                            ${enabledTools === null || enabledTools.includes(tool.name) ? 'checked' : ''}
-                                           onchange="Settings.onToolToggle('${tool.name}', this.checked)">
+                                           data-change-action="toggle-tool" data-tool-name="${tool.name}">
                                     <span class="toggle-slider"></span>
                                     <span class="toggle-label">
                                         <code>${tool.name}</code>
@@ -1922,13 +2003,46 @@ function showToolsModal() {
             </div>
             
             <div class="tools-footer">
-                <button class="btn btn-secondary" onclick="Settings.hideToolsModal()">Close</button>
-                <button class="btn btn-primary" onclick="Settings.saveToolsAndClose()">Save Changes</button>
+                <button class="btn btn-secondary" data-action="hide-tools-modal">Close</button>
+                <button class="btn btn-primary" data-action="save-tools">Save Changes</button>
             </div>
         </div>
     `;
 
     document.body.appendChild(modal);
+
+    // Event delegation for tools modal actions
+    modal.addEventListener('click', (e) => {
+        const actionElement = e.target.closest('[data-action]');
+        if (!actionElement) return;
+
+        const action = actionElement.dataset.action;
+        switch (action) {
+            case 'hide-tools-modal':
+                hideToolsModal();
+                break;
+            case 'save-tools':
+                saveToolsAndClose();
+                break;
+        }
+    });
+
+    modal.addEventListener('change', (e) => {
+        const actionElement = e.target.closest('[data-change-action]');
+        if (!actionElement) return;
+
+        const action = actionElement.dataset.changeAction;
+        switch (action) {
+            case 'toggle-all-tools':
+                onToggleAllTools(e.target.checked);
+                break;
+            case 'toggle-tool': {
+                const toolName = actionElement.dataset.toolName;
+                onToolToggle(toolName, e.target.checked);
+                break;
+            }
+        }
+    });
 
     // Add escape key listener
     modal.addEventListener('keydown', (e) => {

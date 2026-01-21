@@ -507,6 +507,7 @@ async function bootstrap() {
         ModuleRegistry.register('RAG', () => import('./rag.js'), 'RAG');
         ModuleRegistry.register('LocalVectorStore', () => import('./local-vector-store.js'), 'LocalVectorStore');
         ModuleRegistry.register('LocalEmbeddings', () => import('./local-embeddings.js'), 'LocalEmbeddings');
+        ModuleRegistry.register('StorageDegradationManager', () => import('./services/storage-degradation-manager.js'), 'default');
 
         // Heavy modules are now loaded on-demand when user shows intent
         // (clicks "Start Analysis" or enters Chat tab)

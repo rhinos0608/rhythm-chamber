@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "updated": 1768983039892,
+  "naming": {},
+  "directories": {
+    "controllers": {
+      "purpose": "Controllers",
+      "files": 1
+    },
+    "services": {
+      "purpose": "Service layer",
+      "files": 1
+    }
+  },
+  "suffixes": {}
+}

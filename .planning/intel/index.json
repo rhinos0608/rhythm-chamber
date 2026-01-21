@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "updated": 1768983039891,
+  "files": {
+    "/Users/rhinesharar/rhythm-chamber/.planning/codebase/build-index.js": {
+      "exports": [
+        "foo",
+        "bar",
+        "Baz",
+        "default",
+        "Bar",
+        "baz",
+        "processFile",
+        "extractExports",
+        "extractImports",
+        "main",
+        "Foo"
+      ],
+      "imports": [
+        "baz",
+        "bar",
+        "foo",
+        "fs",
+        "path"
+      ],
+      "indexed": 1768982073939
+    },
+    "/Users/rhinesharar/rhythm-chamber/.planning/codebase/build-index.mjs": {
+      "exports": [
+        "foo",
+        "bar",
+        "Baz",
+        "default",
+        "Bar",
+        "baz",
+        "Foo"
+      ],
+      "imports": [
+        "fs",
+        "path",
+        "url",
+        "baz",
+        "bar",
+        "foo"
+      ],
+      "indexed": 1768982515806
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/controllers/demo-controller.js": {
+      "exports": [
+        "DemoController"
+      ],
+      "imports": [
+        "../patterns.js",
+        "../storage/indexeddb.js",
+        "../chat.js"
+      ],
+      "indexed": 1768982793546
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/security/security-coordinator.js": {
+      "exports": [
+        "SecurityCoordinatorClass",
+        "InitState",
+        "SecurityCoordinator"
+      ],
+      "imports": [
+        "./encryption.js",
+        "./token-binding.js",
+        "./anomaly.js",
+        "./key-manager.js",
+        "./storage-encryption.js",
+        "./safe-mode.js"
+      ],
+      "indexed": 1768982897995
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/security/index.js": {
+      "exports": [
+        "Security",
+        "ErrorContext",
+        "SecurityCoordinator",
+        "SecurityChecklist",
+        "SafeMode",
+        "// Individual modules for direct import if needed\n    Encryption",
+        "TokenBinding",
+        "Anomaly",
+        "KeyManager",
+        "StorageEncryption",
+        "MessageSecurity"
+      ],
+      "imports": [
+        "./encryption.js",
+        "./token-binding.js",
+        "./anomaly.js",
+        "./key-manager.js",
+        "./storage-encryption.js",
+        "./message-security.js",
+        "./security-coordinator.js",
+        "./safe-mode.js",
+        "./checklist.js",
+        "./recovery-handlers.js"
+      ],
+      "indexed": 1768982929014
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/services/message-lifecycle-coordinator.js": {
+      "exports": [
+        "MessageLifecycleCoordinator"
+      ],
+      "imports": [
+        "./turn-queue.js",
+        "./timeout-budget-manager.js"
+      ],
+      "indexed": 1768983039891
+    }
+  }
+}
