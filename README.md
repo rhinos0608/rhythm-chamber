@@ -57,6 +57,16 @@ Plus: Your AI notices your patterns and writes personalized narratives about you
 | [API Setup](docs/API_SETUP.md) | Power user configuration |
 | [GSD System](docs/gsd-system.md) | Development methodology and workflows |
 | [Security Milestone v0.9](docs/security-milestone-v0.9.md) | Security hardening completion report |
+| [Deployment Guide](docs/DEPLOYMENT.md) | Deployment instructions for Vercel, Netlify, etc. |
+
+### Developer Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Contributing](CONTRIBUTING.md) | Contribution guidelines and development workflow |
+| [Testing Guide](TESTING.md) | Running and writing tests |
+| [Security Model](SECURITY.md) | Comprehensive security model and threat analysis |
+| [Agent Reference](AGENT_CONTEXT.md) | Technical documentation for AI agents |
 
 ---
 
@@ -85,6 +95,45 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 - **"Template & Synth profiles"** — Generate synthetic profiles for comparison via the profile synthesizer
 - **"Identity over statistics"** — "You're an Emotional Archaeologist" vs "Top Artists: A, B, C"
 - **"Self-healing AI providers"** — Automatic fallback when providers fail, with real-time health monitoring and smart troubleshooting guidance
+
+---
+
+## Browser Compatibility
+
+Rhythm Chamber is built for **modern browsers** and uses contemporary web platform APIs that are not compatible with legacy browsers like Internet Explorer 11.
+
+### Supported Browsers
+
+| Browser | Minimum Version | Status |
+|---------|----------------|--------|
+| Chrome | 90+ | Fully Supported |
+| Edge | 90+ | Fully Supported |
+| Firefox | 90+ | Fully Supported |
+| Safari | 14.5+ | Fully Supported |
+| iOS Safari | 14.5+ | Fully Supported |
+| Android Chrome | 90+ | Fully Supported |
+
+### Required Features
+
+The application requires these browser features:
+
+- **ES Modules** - For code organization
+- **Web Crypto API** - For client-side encryption
+- **IndexedDB** - For local data storage
+- **Async/await** - For asynchronous operations
+- **BroadcastChannel** - For cross-tab communication
+- **CSS Grid & Custom Properties** - For modern layouts
+
+### Not Supported
+
+- Internet Explorer 11 (no Web Crypto, no ES modules)
+- Firefox < 90 (no optional chaining, no SharedWorker fallback)
+- Safari < 14.5 (no optional chaining, no BroadcastChannel)
+- Android browser < Chrome 90
+
+A friendly upgrade message will be displayed if your browser doesn't support required features.
+
+---
 
 ### Why This Works
 

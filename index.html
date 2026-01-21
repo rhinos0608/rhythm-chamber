@@ -8,7 +8,7 @@
   <meta name="description"
     content="Understand why your music matters. Chat with your complete Spotify history. Runs privately in your browser. BYOI for power users.">
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:;">
+    content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';">
 
   <!-- Open Graph -->
   <meta property="og:title" content="Rhythm Chamber — Chat With Your Spotify Data">
@@ -243,6 +243,9 @@
         style="margin-top: var(--space-md);">⚙️ Settings</button>
     </footer>
   </div>
+
+  <!-- Browser Compatibility Check -->
+  <script src="js/compatibility.js?v=1"></script>
 
   <!-- Scripts -->
   <!-- Settings module for landing page (ES module) - Config loaded dynamically -->
