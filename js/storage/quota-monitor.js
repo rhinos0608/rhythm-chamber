@@ -1,13 +1,15 @@
 /**
  * IndexedDB Quota Monitor
- * 
+ *
  * Provides storage quota estimation and monitoring for user feedback.
  * Displays usage like "Using 45MB of 120MB available" in settings and header.
- * 
+ *
  * @module storage/quota-monitor
  */
 
 'use strict';
+
+import { escapeHtml } from '../utils/html-escape.js';
 
 // ==========================================
 // Constants
@@ -173,15 +175,17 @@ async function updateSettingsDisplay() {
         return;
     }
 
+    // SAFE: status.displayText and status.percentUsed are computed internally from storage APIs
+    // The values are numeric and formatted, not user input, but we escape for defense-in-depth
     container.innerHTML = `
         <div class="quota-info">
             <div class="quota-bar-container">
-                <div class="quota-bar" style="width: ${Math.min(status.percentUsed, 100)}%; 
+                <div class="quota-bar" style="width: ${Math.min(status.percentUsed, 100)}%;
                     background: ${status.status === 'critical' ? 'var(--error, #e74c3c)' :
             status.status === 'warning' ? 'var(--warning, #f39c12)' :
                 'var(--accent, #3498db)'};"></div>
             </div>
-            <span class="quota-text">${status.displayText}</span>
+            <span class="quota-text">${escapeHtml(status.displayText)}</span>
             <span class="quota-percent ${status.status}">${status.percentUsed.toFixed(1)}%</span>
         </div>
     `;

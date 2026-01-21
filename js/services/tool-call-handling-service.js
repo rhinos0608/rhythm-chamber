@@ -24,14 +24,61 @@ let _SessionManager = null;
 let _FunctionCallingFallback = null;
 let _buildSystemPrompt = null;
 let _callLLM = null;
-let _streamsData = null;
+let _ConversationOrchestrator = null;
 let _timeoutMs = 30000;
+
+// Retry configuration
+const MAX_FUNCTION_RETRIES = 2;
+const RETRY_BASE_DELAY_MS = 300;
 
 // ==========================================
 // State Management
 // ==========================================
 
 let toolStrategies = null;
+
+// ==========================================
+// Retry Helpers
+// ==========================================
+
+/**
+ * Check if an error is retryable (transient)
+ * @param {Error} err - The error to check
+ * @returns {boolean} Whether the error is retryable
+ */
+function isRetryableError(err) {
+    if (!err) return false;
+
+    const msg = (err.message || '').toLowerCase();
+    return msg.includes('timeout') ||
+        msg.includes('rate limit') ||
+        msg.includes('429') ||
+        msg.includes('503') ||
+        msg.includes('network') ||
+        msg.includes('fetch') ||
+        msg.includes('temporary') ||
+        err.name === 'AbortError';
+}
+
+/**
+ * Check if a function result indicates a validation error
+ * @param {Object} result - Function execution result
+ * @returns {boolean} Whether the result has validation errors
+ */
+function hasValidationError(result) {
+    return result?.validationErrors && Array.isArray(result.validationErrors) && result.validationErrors.length > 0;
+}
+
+/**
+ * Delay with exponential backoff
+ * @param {number} attempt - Current attempt number
+ * @returns {Promise<void>}
+ */
+function retryDelay(attempt) {
+    const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+    const jitter = Math.random() * 50;
+    return new Promise(resolve => setTimeout(resolve, delay + jitter));
+}
 
 // ==========================================
 // Core Functions
@@ -48,18 +95,18 @@ function init(dependencies) {
     _FunctionCallingFallback = dependencies.FunctionCallingFallback;
     _buildSystemPrompt = dependencies.buildSystemPrompt;
     _callLLM = dependencies.callLLM;
-    _streamsData = dependencies.streamsData;
+    _ConversationOrchestrator = dependencies.ConversationOrchestrator;
     _timeoutMs = dependencies.timeoutMs || 30000;
 
     console.log('[ToolCallHandlingService] Initialized with dependencies');
 }
 
 /**
- * Set streams data (can be called after init to update)
- * @param {Array} streams - Streaming history data
+ * Get streams data from ConversationOrchestrator (single source of truth)
+ * @returns {Array} Streaming history data
  */
-function setStreamsData(streams) {
-    _streamsData = streams;
+function getStreamsData() {
+    return _ConversationOrchestrator?.getStreamsData() || null;
 }
 
 /**
@@ -146,56 +193,95 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
         // This ensures we don't exceed the 50s total budget for 5 calls
         const functionBudget = TimeoutBudget.allocate(`function_${functionName}`, 10000);
 
-        // Execute the function with AbortController for true cancellation
-        // This enables proper cleanup when timeout occurs, rather than just ignoring the result
+        // Execute with retry logic for transient errors and validation issues
         let result;
-        const abortController = new AbortController();
-        const timeoutId = setTimeout(() => {
-            abortController.abort();
-        }, _timeoutMs);
+        let lastError;
+        let succeeded = false;
 
-        try {
-            // Guard: Check if Functions is available
-            if (!_Functions || typeof _Functions.execute !== 'function') {
+        for (let attempt = 0; attempt <= MAX_FUNCTION_RETRIES && !succeeded; attempt++) {
+            const abortController = new AbortController();
+            const timeoutId = setTimeout(() => {
+                abortController.abort();
+            }, _timeoutMs);
+
+            try {
+                // Guard: Check if Functions is available
+                if (!_Functions || typeof _Functions.execute !== 'function') {
+                    clearTimeout(timeoutId);
+                    throw new Error(`Functions service not available - cannot execute ${functionName}`);
+                }
+
+                result = await _Functions.execute(functionName, args, getStreamsData(), {
+                    signal: abortController.signal
+                });
                 clearTimeout(timeoutId);
-                throw new Error(`Functions service not available - cannot execute ${functionName}`);
+
+                // Check if aborted while executing
+                if (result?.aborted) {
+                    throw new Error(`Function ${functionName} timed out after ${_timeoutMs}ms`);
+                }
+
+                // Check for validation errors - these might be fixed by retry with normalized args
+                if (hasValidationError(result)) {
+                    if (attempt < MAX_FUNCTION_RETRIES) {
+                        console.warn(`[ToolCallHandlingService] Validation error for ${functionName} (attempt ${attempt + 1}), retrying...`, result.validationErrors);
+                        await retryDelay(attempt);
+                        lastError = new Error(`Validation failed: ${result.validationErrors.join(', ')}`);
+                        continue;
+                    }
+                    // Last attempt failed with validation error - return the error result
+                    console.error(`[ToolCallHandlingService] Validation failed after ${MAX_FUNCTION_RETRIES + 1} attempts`);
+                    break;
+                }
+
+                // Check for function execution errors in result
+                if (result?.error) {
+                    if (attempt < MAX_FUNCTION_RETRIES && isRetryableError(new Error(result.error))) {
+                        console.warn(`[ToolCallHandlingService] Retryable error for ${functionName} (attempt ${attempt + 1}): ${result.error}`);
+                        await retryDelay(attempt);
+                        lastError = new Error(result.error);
+                        continue;
+                    }
+                    // Non-retryable error or last attempt - use this result
+                    break;
+                }
+
+                succeeded = true;
+            } catch (funcError) {
+                clearTimeout(timeoutId);
+                lastError = funcError;
+
+                if (attempt < MAX_FUNCTION_RETRIES && isRetryableError(funcError)) {
+                    console.warn(`[ToolCallHandlingService] Retryable error for ${functionName} (attempt ${attempt + 1}): ${funcError.message}`);
+                    await retryDelay(attempt);
+                    continue;
+                }
+                // Non-retryable error or last attempt
+                console.error(`[ToolCallHandlingService] Function execution failed after ${attempt + 1} attempts:`, funcError);
+                break;
             }
+        }
 
-            result = await _Functions.execute(functionName, args, _streamsData, {
-                signal: abortController.signal
-            });
-            clearTimeout(timeoutId);
+        // Release the function budget
+        TimeoutBudget.release(functionBudget);
 
-            // Check if aborted while executing
-            if (result?.aborted) {
-                throw new Error(`Function ${functionName} timed out after ${_timeoutMs}ms`);
-            }
-        } catch (funcError) {
-            clearTimeout(timeoutId);
-            console.error(`[ToolCallHandlingService] Function execution failed:`, funcError);
+        // If we never succeeded and have a last error, return error status
+        if (!succeeded && lastError && !result?.error) {
+            // Notify UI: Tool error
+            if (onProgress) onProgress({ type: 'tool_end', tool: functionName, error: true });
 
-            // Notify UI: Tool error (optional state update)
-            if (onProgress) onProgress({ type: 'tool_end', tool: functionName, error: true }); // Reset UI state
-
-            // Return error status to allow UI to show retry
             return {
                 earlyReturn: {
                     status: 'error',
-                    content: `Function call '${functionName}' failed: ${funcError.message}. Please try again or select a different model.`,
+                    content: `Function call '${functionName}' failed after ${MAX_FUNCTION_RETRIES + 1} attempts: ${lastError.message}. Please try again.`,
                     role: 'assistant',
                     isFunctionError: true
                 }
             };
-        } finally {
-            // Release the function budget
-            TimeoutBudget.release(functionBudget);
         }
 
+        // Even if not fully successful, if we have a result, use it (e.g., validation error result)
         console.log(`[ToolCallHandlingService] Function result:`, result);
-
-        // Note: isCodeLikeToolArguments check removed here. The JSON parse failure
-        // check above (line ~765) already catches malformed tool arguments including code.
-        // Checking rawArgs again after successful execution creates false positives.
 
         // Notify UI: Tool end
         if (onProgress) onProgress({ type: 'tool_end', tool: functionName, result });
@@ -356,7 +442,7 @@ async function handleToolCallsWithFallback(
             tools,
             messages,
             userMessage,
-            streamsData: _streamsData,
+            streamsData: getStreamsData(),
             buildSystemPrompt: _buildSystemPrompt,
             callLLM: _callLLM
         };
@@ -547,13 +633,13 @@ You can change your AI model in Settings (⚙️).`;
 const ToolCallHandlingService = {
     // Lifecycle
     init,
-    setStreamsData,
 
     // Core operations
     handleToolCalls,
     handleToolCallsWithFallback,
 
     // Utilities
+    getStreamsData,
     isCodeLikeToolArguments,
     buildToolCodeOnlyError
 };

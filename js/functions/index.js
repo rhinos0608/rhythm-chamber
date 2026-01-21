@@ -67,6 +67,9 @@ async function executeFunction(functionName, args, streams, options = {}) {
         };
     }
 
+    // Use normalized arguments (fixes enum case mismatches, type coercions)
+    const normalizedArgs = argsValidation.normalizedArgs || args;
+
     // Template functions don't require user streams
     if (TemplateFunctionNames.includes(functionName)) {
         const executor = TemplateExecutors?.[functionName];
@@ -75,7 +78,7 @@ async function executeFunction(functionName, args, streams, options = {}) {
         }
 
         try {
-            return await Promise.resolve(executor(args));
+            return await Promise.resolve(executor(normalizedArgs));
         } catch (err) {
             return { error: `Template function error: ${err.message}` };
         }
@@ -108,7 +111,7 @@ async function executeFunction(functionName, args, streams, options = {}) {
     if (retry?.withRetry) {
         try {
             return await retry.withRetry(
-                () => Promise.resolve(executor(args, streams)),
+                () => Promise.resolve(executor(normalizedArgs, streams)),
                 functionName
             );
         } catch (err) {
@@ -118,7 +121,7 @@ async function executeFunction(functionName, args, streams, options = {}) {
 
     // Fallback without retry
     try {
-        return await Promise.resolve(executor(args, streams));
+        return await Promise.resolve(executor(normalizedArgs, streams));
     } catch (err) {
         return { error: `Failed to execute ${functionName}: ${err.message}` };
     }
@@ -138,12 +141,13 @@ async function executeFunction(functionName, args, streams, options = {}) {
  */
 function validateFunctionArgs(functionName, args) {
     const errors = [];
+    const normalizedArgs = { ...args }; // Copy for normalization
 
     // Get schema for this function
     const schema = getFunctionSchema(functionName);
     if (!schema) {
         // No schema = no validation (fail-open for backwards compatibility)
-        return { valid: true, errors: [] };
+        return { valid: true, errors: [], normalizedArgs: args };
     }
 
     const properties = schema.function?.parameters?.properties || {};
@@ -156,7 +160,7 @@ function validateFunctionArgs(functionName, args) {
         }
     }
 
-    // Validate parameter types
+    // Validate parameter types and normalize values
     if (args && typeof args === 'object') {
         for (const [key, value] of Object.entries(args)) {
             const paramSchema = properties[key];
@@ -167,7 +171,7 @@ function validateFunctionArgs(functionName, args) {
                 continue;
             }
 
-            // Type validation
+            // Type validation with normalization
             const expectedType = paramSchema.type;
             const actualType = Array.isArray(value) ? 'array' : typeof value;
 
@@ -177,22 +181,40 @@ function validateFunctionArgs(functionName, args) {
                     continue; // integers are numbers in JS
                 }
                 if (expectedType === 'number' && typeof value === 'string' && !isNaN(Number(value))) {
-                    continue; // coercible string
+                    normalizedArgs[key] = Number(value); // Normalize string numbers
+                    continue;
                 }
 
                 errors.push(`Parameter '${key}' expected ${expectedType}, got ${actualType}`);
             }
 
-            // Enum validation
+            // Enum validation with normalization
             if (paramSchema.enum && !paramSchema.enum.includes(value)) {
-                errors.push(`Parameter '${key}' must be one of: ${paramSchema.enum.join(', ')}`);
+                // Try to normalize: case-insensitive match for strings
+                if (typeof value === 'string') {
+                    const normalized = value.trim();
+                    const exactMatch = paramSchema.enum.find(e => e === normalized);
+                    const caseMatch = paramSchema.enum.find(e => e.toLowerCase() === normalized.toLowerCase());
+
+                    if (exactMatch) {
+                        normalizedArgs[key] = exactMatch;
+                    } else if (caseMatch) {
+                        console.warn(`[Functions] Normalized '${key}' from "${value}" to "${caseMatch}"`);
+                        normalizedArgs[key] = caseMatch;
+                    } else {
+                        errors.push(`Parameter '${key}' must be one of: ${paramSchema.enum.join(', ')}`);
+                    }
+                } else {
+                    errors.push(`Parameter '${key}' must be one of: ${paramSchema.enum.join(', ')}`);
+                }
             }
         }
     }
 
     return {
         valid: errors.length === 0,
-        errors
+        errors,
+        normalizedArgs: Object.keys(normalizedArgs).length > 0 ? normalizedArgs : args
     };
 }
 

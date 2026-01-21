@@ -29,9 +29,11 @@ import { EventBus } from '../services/event-bus.js';
 
 const WAL_STORAGE_KEY = 'rhythm_chamber_wal';
 const WAL_SEQUENCE_KEY = 'rhythm_chamber_wal_sequence';
+const WAL_RESULTS_KEY = 'rhythm_chamber_wal_results'; // Track operation results for crash recovery
 const WAL_MAX_SIZE = 100; // Maximum number of entries in WAL
 const WAL_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 const WAL_REPLAY_DELAY_MS = 1000; // Delay before replay to avoid conflicts
+const WAL_RESULTS_MAX_AGE_MS = 5 * 60 * 1000; // Keep results for 5 minutes
 
 /**
  * WAL entry status
@@ -69,7 +71,8 @@ const walState = {
     isReplaying: false,    // Is WAL being replayed
     lastReplayTime: 0,     // Last time WAL was replayed
     batchTimeout: null,    // Batch processing timeout
-    cleanupInterval: null  // Cleanup interval
+    cleanupInterval: null, // Cleanup interval
+    operationResults: new Map() // Track operation results for crash recovery
 };
 
 // ==========================================
@@ -173,6 +176,76 @@ function clearWal() {
     }
 }
 
+/**
+ * Save operation results to localStorage for crash recovery
+ * @returns {boolean} True if saved successfully
+ */
+function saveOperationResults() {
+    try {
+        const results = [];
+        for (const [entryId, result] of walState.operationResults.entries()) {
+            results.push({ entryId, result, timestamp: Date.now() });
+        }
+        localStorage.setItem(WAL_RESULTS_KEY, JSON.stringify(results));
+        return true;
+    } catch (error) {
+        console.error('[WAL] Failed to save operation results:', error);
+        return false;
+    }
+}
+
+/**
+ * Load operation results from localStorage
+ */
+function loadOperationResults() {
+    try {
+        const stored = localStorage.getItem(WAL_RESULTS_KEY);
+        if (stored) {
+            const results = JSON.parse(stored);
+            const now = Date.now();
+            for (const { entryId, result, timestamp } of results) {
+                // Only load results that are recent
+                if (now - timestamp < WAL_RESULTS_MAX_AGE_MS) {
+                    walState.operationResults.set(entryId, result);
+                }
+            }
+            console.log(`[WAL] Loaded ${walState.operationResults.size} operation results from storage`);
+        }
+    } catch (error) {
+        console.error('[WAL] Failed to load operation results:', error);
+    }
+}
+
+/**
+ * Get operation result by entry ID
+ * @param {string} entryId - WAL entry ID
+ * @returns {Object|null} Operation result or null if not found
+ */
+function getOperationResult(entryId) {
+    // Check in-memory results first
+    if (walState.operationResults.has(entryId)) {
+        return walState.operationResults.get(entryId);
+    }
+
+    // Check persisted results
+    try {
+        const stored = localStorage.getItem(WAL_RESULTS_KEY);
+        if (stored) {
+            const results = JSON.parse(stored);
+            const found = results.find(r => r.entryId === entryId);
+            if (found && Date.now() - found.timestamp < WAL_RESULTS_MAX_AGE_MS) {
+                // Cache in memory
+                walState.operationResults.set(entryId, found.result);
+                return found.result;
+            }
+        }
+    } catch (error) {
+        console.error('[WAL] Failed to get operation result:', error);
+    }
+
+    return null;
+}
+
 // ==========================================
 // Write Queue
 // ==========================================
@@ -184,16 +257,15 @@ function clearWal() {
  * The resolve/reject callbacks attached to WAL entries are **NOT persisted** across page reloads.
  * If the browser crashes or reloads while operations are queued, callers' Promises will never settle.
  *
+ * **RECOVERY MECHANISM:**
+ * - Operation results are persisted to localStorage for 5 minutes
+ * - Use `WriteAheadLog.getOperationResult(entryId)` to check operation status after reload
+ * - The returned object includes { promise, entryId } for tracking
+ *
  * **Implications:**
  * - The returned Promise from this function will only settle if the page remains alive
- * - After a crash/reload, queued WAL entries are replayed but original callbacks are lost
- * - Callers should NOT rely on Promise completion for critical operations
- *
- * **Recommended alternatives:**
- * - Poll the persisted WAL state to check operation completion
- * - Use external persisted acknowledgement (e.g., operation result stored separately)
- * - Re-query operation state after page reload using operation IDs
- * - Design for idempotency to safely retry operations
+ * - After a crash/reload, use getOperationResult() with the entryId to check if operation completed
+ * - Callers should design for idempotency to safely retry operations
  *
  * **REPLAY BLOCKING:**
  * If WAL replay is in progress, new writes are blocked until replay completes.
@@ -204,7 +276,7 @@ function clearWal() {
  * @param {string} operation - Operation name
  * @param {Array} args - Operation arguments
  * @param {string} priority - Priority level
- * @returns {Promise<any>} Promise that resolves when operation is processed (only if page remains alive)
+ * @returns {Promise<{ promise: Promise, entryId: string }>} Promise and entryId for result tracking
  */
 async function queueWrite(operation, args, priority = WalPriority.NORMAL) {
     // Block writes during WAL replay to prevent ordering conflicts
@@ -213,35 +285,83 @@ async function queueWrite(operation, args, priority = WalPriority.NORMAL) {
         await waitForReplayComplete();
         console.log(`[WAL] Replay complete, proceeding with write: ${operation}`);
     }
-    
+
     // Check if encryption is available
     if (SafeMode.canEncrypt()) {
         // Process immediately if encryption is available
-        return executeOperation(operation, args);
+        const result = await executeOperation(operation, args);
+        // Return in same format for consistency
+        const entryId = `immediate-${Date.now()}`;
+        return { promise: Promise.resolve(result), entryId };
     }
 
     // Queue for later processing if in Safe Mode
-    return new Promise((resolve, reject) => {
+    return new Promise((resolveOuter) => {
         const entry = createWalEntry(operation, args, priority);
-        entry.resolve = resolve;
-        entry.reject = reject;
 
-        walState.entries.push(entry);
+        // Store entryId in closure for result tracking
+        const entryId = entry.id;
 
-        // Save to persistent storage
-        saveWal();
+        new Promise((resolve, reject) => {
+            entry.resolve = resolve;
+            entry.reject = reject;
 
-        // Trigger processing if not already processing
-        if (!walState.isProcessing) {
-            scheduleProcessing();
-        }
+            walState.entries.push(entry);
 
-        console.log(`[WAL] Queued write operation: ${operation} (${priority})`);
+            // Save to persistent storage
+            saveWal();
+
+            // Trigger processing if not already processing
+            if (!walState.isProcessing) {
+                scheduleProcessing();
+            }
+
+            console.log(`[WAL] Queued write operation: ${operation} (${priority})`);
+
+            // Return both the promise and entryId for tracking
+            resolveOuter({
+                promise: new Promise((res, rej) => {
+                    entry.promise = { resolve: res, reject: rej };
+                }),
+                entryId: entryId
+            });
+        }).then((result) => {
+            // CRITICAL FIX: Use entryId from closure, not result
+            // When operation completes, save result for crash recovery
+            const operationResult = {
+                success: !result?.error,
+                result: result,
+                completedAt: Date.now()
+            };
+            walState.operationResults.set(entryId, operationResult);
+            saveOperationResults();
+
+            // Resolve the inner promise
+            if (result.promise) {
+                result.promise.resolve(operationResult.result);
+            }
+        }).catch((error) => {
+            // CRITICAL FIX: Use entryId from closure, not error
+            // Save error result
+            const operationResult = {
+                success: false,
+                error: error.message,
+                completedAt: Date.now()
+            };
+            walState.operationResults.set(entryId, operationResult);
+            saveOperationResults();
+
+            // Reject the inner promise
+            if (error.promise) {
+                error.promise.reject(error);
+            }
+        });
     });
 }
 
 /**
  * Wait for WAL replay to complete
+ * CRITICAL FIX: Use event-based approach instead of polling to avoid race condition
  * @param {number} [timeoutMs=30000] - Maximum time to wait
  * @returns {Promise<void>} Resolves when replay is complete or timeout
  */
@@ -249,20 +369,37 @@ function waitForReplayComplete(timeoutMs = 30000) {
     if (!walState.isReplaying) {
         return Promise.resolve();
     }
-    
+
     return new Promise((resolve) => {
         const startTime = Date.now();
-        
-        const checkInterval = setInterval(() => {
-            if (!walState.isReplaying) {
-                clearInterval(checkInterval);
-                resolve();
-            } else if (Date.now() - startTime > timeoutMs) {
-                console.warn('[WAL] Timeout waiting for replay to complete, proceeding anyway');
-                clearInterval(checkInterval);
-                resolve(); // Continue anyway after timeout to prevent deadlock
-            }
-        }, 100);
+        let timeoutHandle;
+        let eventHandler;
+
+        const cleanup = () => {
+            if (timeoutHandle) clearTimeout(timeoutHandle);
+            if (eventHandler) EventBus.off('wal:replay_complete', eventHandler);
+        };
+
+        // Set timeout as fallback
+        timeoutHandle = setTimeout(() => {
+            cleanup();
+            console.warn('[WAL] Timeout waiting for replay to complete, proceeding anyway');
+            resolve();
+        }, timeoutMs);
+
+        // Listen for replay complete event (immediate notification)
+        eventHandler = () => {
+            cleanup();
+            resolve();
+        };
+
+        EventBus.on('wal:replay_complete', eventHandler);
+
+        // Double-check state in case event was already emitted
+        if (!walState.isReplaying) {
+            cleanup();
+            resolve();
+        }
     });
 }
 
@@ -374,9 +511,22 @@ async function processWal() {
                         entry.status = WalStatus.COMMITTED;
                         entry.error = null;
 
+                        // Save operation result for crash recovery
+                        const operationResult = {
+                            success: true,
+                            result: result,
+                            completedAt: Date.now()
+                        };
+                        walState.operationResults.set(entry.id, operationResult);
+                        saveOperationResults();
+
                         // Resolve promise if queued
                         if (entry.resolve) {
                             entry.resolve(result);
+                        }
+                        // Also resolve the newer promise format
+                        if (entry.promise?.resolve) {
+                            entry.promise.resolve(result);
                         }
 
                         console.log(`[WAL] ✓ Committed: ${entry.operation} (${entry.sequence})`);
@@ -392,10 +542,22 @@ async function processWal() {
                     entry.status = WalStatus.FAILED;
                     entry.error = error.message || String(error);
 
+                    // Save error result for crash recovery
+                    const operationResult = {
+                        success: false,
+                        error: entry.error,
+                        completedAt: Date.now()
+                    };
+                    walState.operationResults.set(entry.id, operationResult);
+                    saveOperationResults();
+
                     // Reject promise if too many attempts
                     if (entry.attempts >= 3) {
                         if (entry.reject) {
                             entry.reject(error);
+                        }
+                        if (entry.promise?.reject) {
+                            entry.promise.reject(error);
                         }
                         console.error(`[WAL] ✗ Failed after ${entry.attempts} attempts: ${entry.operation}`);
                     } else {
@@ -607,6 +769,9 @@ async function init() {
     // Load existing WAL
     loadWal();
 
+    // Load operation results for crash recovery
+    loadOperationResults();
+
     // Start monitoring
     startMonitoring();
 
@@ -672,6 +837,9 @@ export const WriteAheadLog = {
     // Maintenance
     cleanupWal,
     clearWal,
+
+    // Crash Recovery
+    getOperationResult,
 
     // Constants
     WalStatus,

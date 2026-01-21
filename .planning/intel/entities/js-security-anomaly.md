@@ -1,5 +1,5 @@
 ---
-path: /Users/rhinesharar/rhythm-chamber/js/security/anomaly.js
+path: js/security/anomaly.js
 type: service
 updated: 2026-01-21
 status: active

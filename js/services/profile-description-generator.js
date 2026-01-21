@@ -24,10 +24,13 @@ import { ProviderInterface } from '../providers/provider-interface.js';
 
 /**
  * Check if an LLM provider is available for profile generation
+ * @param {Object} [passedSettings] - Optional settings object (use async getSettingsAsync to get saved settings)
  * @returns {{ available: boolean, provider: string|null, reason: string }}
  */
-function checkLLMAvailability() {
-    const settings = Settings?.getSettings?.();
+function checkLLMAvailability(passedSettings = null) {
+    // Use passed settings if provided, otherwise fall back to sync getSettings()
+    // IMPORTANT: For accurate results, await Settings.getSettingsAsync() and pass the result
+    const settings = passedSettings || Settings?.getSettings?.();
 
     if (!settings) {
         return { available: false, provider: null, reason: 'Settings not loaded' };
@@ -137,7 +140,11 @@ Write the description now:`;
  * @returns {Promise<string|null>} Generated description or null on failure
  */
 async function generateDescription(personality, patterns, summary, onProgress = null) {
-    const availability = checkLLMAvailability();
+    // CRITICAL: Use async getSettingsAsync to read saved settings from IndexedDB
+    // The sync getSettings() returns defaults when cache is empty
+    const settings = await Settings?.getSettingsAsync?.() || {};
+
+    const availability = checkLLMAvailability(settings);
 
     if (!availability.available) {
         console.log('[ProfileDescGen] LLM not available:', availability.reason);
@@ -154,8 +161,6 @@ async function generateDescription(personality, patterns, summary, onProgress = 
     const systemPrompt = 'You are a creative writer specializing in music journalism. Be concise and insightful.';
 
     try {
-        // Get settings and build provider config
-        const settings = Settings?.getSettings?.() || {};
         const provider = settings.llm?.provider || availability.provider || 'ollama';
         const baseConfig = ConfigLoader.get('openrouter', {});
 

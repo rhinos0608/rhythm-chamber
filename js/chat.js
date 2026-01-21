@@ -167,7 +167,7 @@ async function initChat(personality, patterns, summary, streams = null) {
             FunctionCallingFallback: FunctionCallingFallback,
             buildSystemPrompt: (...args) => ConversationOrchestrator?.buildSystemPrompt(...args),
             callLLM: callLLMWrapper,
-            streamsData: streams,
+            ConversationOrchestrator: ConversationOrchestrator,
             timeoutMs: CHAT_FUNCTION_TIMEOUT_MS
         });
     }
@@ -221,17 +221,11 @@ async function handleStorageUpdate(event) {
         const streamsData = await Storage.getStreams();
 
         // Update ConversationOrchestrator as single source of truth
+        // ToolCallHandlingService now retrieves streams data from ConversationOrchestrator
         if (ConversationOrchestrator?.setStreamsData) {
             ConversationOrchestrator.setStreamsData(streamsData);
         }
 
-        // ToolCallHandlingService still needs direct update for backward compatibility
-        // TODO: Refactor ToolCallHandlingService to use ConversationOrchestrator in future
-        if (ToolCallHandlingService?.setStreamsData) {
-            ToolCallHandlingService.setStreamsData(streamsData);
-        }
-
-        // MessageOperations now delegates to ConversationOrchestrator, no update needed
         console.log('[Chat] Storage update completed - ConversationOrchestrator is source of truth');
     }
 }
@@ -354,9 +348,13 @@ function clearConversation() {
 // ==========================================
 // Session Persistence Event Handlers
 // HNW Fix: Correct sync/async strategy for tab close
+// NOTE: Event listeners are registered in session-manager.js to prevent duplicates
+// The functions below delegate to SessionManager implementations
 // ==========================================
 
-if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+// Only register event listeners if SessionManager hasn't already done so
+// This prevents duplicate registration since SessionManager is imported before this code runs
+if (typeof window !== 'undefined' && typeof document !== 'undefined' && !SessionManager.eventListenersRegistered) {
     // Async save when tab goes hidden (mobile switch, minimize, tab switch)
     // visibilitychange gives us time for async operations
     document.addEventListener('visibilitychange', () => {

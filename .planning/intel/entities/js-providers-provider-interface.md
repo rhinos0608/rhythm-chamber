@@ -35,6 +35,7 @@ Unified abstraction layer for all LLM providers (OpenRouter, Ollama, LM Studio, 
 - [[js-providers-openrouter]] - OpenRouter provider
 - [[js-providers-lmstudio]] - LM Studio provider
 - [[js-providers-gemini]] - Gemini provider
+- [[js-providers-ollama]] - Ollama provider
 
 ## Used By
 

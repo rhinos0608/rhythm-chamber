@@ -13,13 +13,13 @@ Handles demo mode with isolated data sandbox, separating demo concerns from main
 
 ## Exports
 
-- **DemoController**: Main controller class managing demo mode initialization, data isolation, and cleanup
+- `DemoController` - Main controller class managing demo mode with isolated storage
 
 ## Dependencies
 
-- [[patterns]]
-- [[indexeddb]]
-- [[chat]]
+- [[patterns.js]]
+- [[indexeddb.js]]
+- [[chat.js]]
 
 ## Used By
 
@@ -27,6 +27,4 @@ TBD
 
 ## Notes
 
-- Uses `demo_` prefix and separate IndexedDB stores for complete data isolation
-- Provides in-memory caching with fallback to IndexedDB for large data
-- Exports singleton instance accessed via `DemoController.instance`
+Uses complete isolation from user data through separate IndexedDB stores with `demo_` prefix. Includes in-memory cache and sessionStorage fallback for session flags.

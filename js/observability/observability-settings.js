@@ -14,6 +14,7 @@ import { Storage } from '../storage.js';
 import { PerformanceProfiler } from '../services/performance-profiler.js';
 import { CoreWebVitalsTracker } from './core-web-vitals.js';
 import { MetricsExporter } from './metrics-exporter.js';
+import { escapeHtml } from '../utils/html-escape.js';
 
 /**
  * Initialize observability settings in the settings modal
@@ -31,6 +32,7 @@ export function initObservabilitySettings() {
     observabilitySection.className = 'settings-section';
     observabilitySection.id = 'observability-section';
 
+    // SAFE: Static HTML template with no user input
     observabilitySection.innerHTML = `
         <h3>🔍 Observability & Performance</h3>
         <p class="settings-description">

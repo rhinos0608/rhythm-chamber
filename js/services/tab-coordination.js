@@ -14,6 +14,7 @@ import { DeviceDetection } from './device-detection.js';
 import { SharedWorkerCoordinator } from '../workers/shared-worker-coordinator.js';
 import { Security } from '../security/index.js';
 import { AppState } from '../state/app-state.js';
+import { escapeHtml } from '../utils/html-escape.js';
 
 // ==========================================
 // Constants
@@ -1766,17 +1767,7 @@ function hideSafeModeWarning() {
     }
 }
 
-/**
- * Escape HTML to prevent XSS
- * @param {string} str - String to escape
- * @returns {string} Escaped string
- */
-function escapeHtml(str) {
-    if (typeof str !== 'string') return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-}
+// Escape HTML is now imported from utils/html-escape.js
 
 // ==========================================
 // Public API

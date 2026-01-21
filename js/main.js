@@ -214,6 +214,7 @@ function showSecurityError(reason) {
 
         const causesTitle = document.createElement('p');
         causesTitle.style.marginBottom = '0.5rem';
+        // SAFE: Static HTML literal with no user input
         causesTitle.innerHTML = '<strong>Common causes:</strong>';
         causesBox.appendChild(causesTitle);
 

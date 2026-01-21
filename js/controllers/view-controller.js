@@ -160,8 +160,10 @@ function showReveal() {
     el.resetBtn.style.display = 'block';
 
     // Populate reveal content
-    document.getElementById('personality-emoji').textContent = personality.emoji;
-    document.getElementById('personality-name').textContent = personality.name;
+    const personalityEmojiEl = document.getElementById('personality-emoji');
+    const personalityNameEl = document.getElementById('personality-name');
+    if (personalityEmojiEl) personalityEmojiEl.textContent = personality.emoji;
+    if (personalityNameEl) personalityNameEl.textContent = personality.name;
 
     const descriptionEl = document.getElementById('personality-description');
     const summary = patterns?.summary || {};
@@ -171,6 +173,7 @@ function showReveal() {
 
     if (canGenerateAI && descriptionEl) {
         // Show loading state for description
+        // SAFE: Static HTML literal with no user input
         descriptionEl.innerHTML = '<span class="ai-description-loading">✨ Crafting your personalized description...</span>';
         descriptionEl.classList.add('generating');
 
@@ -330,9 +333,12 @@ function showLiteReveal() {
     el.resetBtn.style.display = 'block';
 
     // Populate lite reveal content
-    document.getElementById('lite-personality-emoji').textContent = personality.emoji;
-    document.getElementById('lite-personality-name').textContent = personality.name;
-    document.getElementById('lite-personality-description').textContent = personality.description;
+    const litePersonalityEmojiEl = document.getElementById('lite-personality-emoji');
+    const litePersonalityNameEl = document.getElementById('lite-personality-name');
+    const litePersonalityDescEl = document.getElementById('lite-personality-description');
+    if (litePersonalityEmojiEl) litePersonalityEmojiEl.textContent = personality.emoji;
+    if (litePersonalityNameEl) litePersonalityNameEl.textContent = personality.name;
+    if (litePersonalityDescEl) litePersonalityDescEl.textContent = personality.description;
 
     // Genre tags
     const genreTags = document.getElementById('lite-genre-tags');

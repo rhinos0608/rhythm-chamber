@@ -8,6 +8,7 @@
  */
 
 import { Chat } from '../chat.js';
+import { escapeHtml } from '../utils/html-escape.js';
 
 // ==========================================
 // Constants
@@ -26,17 +27,26 @@ const CHAT_UI_SUGGESTIONS_ID = 'chat-suggestions';
 let sequenceBuffer = new Map();
 let nextExpectedSeq = 0;
 let gapDetected = false;
+// Edge case: Maximum buffer size to prevent unbounded memory growth
+const MAX_SEQUENCE_BUFFER_SIZE = 100;
 
 /**
  * Process a chunk with sequence validation
  * Buffers out-of-order chunks and processes in-order
- * 
+ *
  * @param {number} seq - Sequence number of the chunk
  * @param {string} data - Chunk data
  * @param {function} handler - Function to call with in-order data
  * @returns {boolean} True if processed immediately, false if buffered
  */
 function processSequencedChunk(seq, data, handler) {
+    // Edge case: Prevent unbounded buffer growth - drop oldest if buffer full
+    if (sequenceBuffer.size >= MAX_SEQUENCE_BUFFER_SIZE) {
+        const oldestSeq = Math.min(...sequenceBuffer.keys());
+        sequenceBuffer.delete(oldestSeq);
+        console.warn(`[ChatUI] Sequence buffer full (${MAX_SEQUENCE_BUFFER_SIZE}), dropped seq ${oldestSeq}`);
+    }
+
     // Add to buffer
     sequenceBuffer.set(seq, data);
 
@@ -93,30 +103,6 @@ function getSequenceBufferStatus() {
 // ==========================================
 // Message Rendering
 // ==========================================
-
-/**
- * Escape HTML to prevent injection in rendered content
- * @param {string} text - Raw text
- * @returns {string} Escaped text
- */
-function escapeHtml(text) {
-    return String(text).replace(/[&<>"']/g, (char) => {
-        switch (char) {
-            case '&':
-                return '&amp;';
-            case '<':
-                return '&lt;';
-            case '>':
-                return '&gt;';
-            case '"':
-                return '&quot;';
-            case "'":
-                return '&#39;';
-            default:
-                return char;
-        }
-    });
-}
 
 /**
  * Parse markdown to HTML for chat messages (safe subset only)
@@ -183,6 +169,8 @@ function createMessageElement(text, role, isError = false) {
     div.className = `message ${role}${isError ? ' error' : ''}`;
 
     // Parse markdown for assistant messages, escape user messages
+    // SAFE: content is escaped via escapeHtml() (assistant) or parseMarkdown() (which also escapes)
+    // The final insertion into innerHTML is safe because all data has been escaped
     const content = role === 'assistant' ? parseMarkdown(text) : escapeHtml(text);
     div.innerHTML = `<div class="message-content">${content}</div>`;
 
@@ -276,6 +264,14 @@ function addAssistantMessageActions(messageEl, text) {
         navigator.clipboard.writeText(text).then(() => {
             copyBtn.innerHTML = '✓';
             setTimeout(() => { copyBtn.innerHTML = '📋'; }, 1500);
+        }).catch((err) => {
+            console.error('[ChatUI] Failed to copy text:', err);
+            copyBtn.innerHTML = '✗';
+            setTimeout(() => { copyBtn.innerHTML = '📋'; }, 1500);
+            // Show toast for better visibility
+            if (window.showToast) {
+                window.showToast('Failed to copy to clipboard. Please copy manually.', 3000);
+            }
         });
     };
     actionsDiv.appendChild(copyBtn);
@@ -406,6 +402,9 @@ function enableEditMode(messageEl, currentText) {
             console.warn('[ChatUI] processMessageResponse not available, using fallback');
             await Chat.editMessage(index, newText);
         }
+
+        // FOCUS FIX: Return focus to chat input after successful edit
+        restoreFocusToChatInput();
     };
 
     const cancelBtn = document.createElement('button');
@@ -415,6 +414,9 @@ function enableEditMode(messageEl, currentText) {
         editContainer.remove();
         if (contentEl) contentEl.style.display = '';
         if (actionsEl) actionsEl.style.display = '';
+        // FOCUS FIX: Return focus to chat input on cancel
+        const chatInput = document.getElementById(CHAT_UI_INPUT_ID);
+        if (chatInput) chatInput.focus();
     };
 
     buttonRow.appendChild(saveBtn);
@@ -424,6 +426,17 @@ function enableEditMode(messageEl, currentText) {
 
     messageEl.appendChild(editContainer);
     textarea.focus();
+}
+
+/**
+ * Restore focus to chat input after message operations
+ * @private
+ */
+function restoreFocusToChatInput() {
+    const chatInput = document.getElementById(CHAT_UI_INPUT_ID);
+    if (chatInput) {
+        chatInput.focus();
+    }
 }
 
 // ==========================================
@@ -462,14 +475,19 @@ function updateLoadingMessage(id, state) {
     switch (state.type) {
         case 'tool_start':
             el.className = 'message tool-execution';
-            el.innerHTML = `<span class="icon">⚡</span> Analyzing data with ${state.tool}...`;
+            // SAFE: state.tool is a predefined tool name from internal tool registry
+            el.innerHTML = `<span class="icon">⚡</span> Analyzing data with ${escapeHtml(state.tool)}...`;
             break;
 
         case 'tool_end':
             el.className = 'message assistant loading';
+            // SAFE: state.tool and error messages come from internal tool system
+            const errorMsg = state.error || state.result?.error;
+            const statusIcon = errorMsg ? '⚠️' : '✅';
+            const statusText = errorMsg ? 'failed' : 'finished';
             el.innerHTML = `
-                <div class="tool-status ${state.error || state.result?.error ? 'error' : 'success'}">
-                    ${state.error || state.result?.error ? '⚠️' : '✅'} ${state.tool || 'Tool'} ${state.error || state.result?.error ? 'failed' : 'finished'}
+                <div class="tool-status ${errorMsg ? 'error' : 'success'}">
+                    ${statusIcon} ${escapeHtml(state.tool || 'Tool')} ${statusText}
                 </div>
                 <div class="typing-indicator"><span></span><span></span><span></span></div>
             `;
@@ -482,6 +500,7 @@ function updateLoadingMessage(id, state) {
                 if (!thinkingEl) {
                     thinkingEl = document.createElement('details');
                     thinkingEl.className = 'thinking-block';
+                    // SAFE: Static HTML template
                     thinkingEl.innerHTML = '<summary>💭 Model reasoning</summary><div class="thinking-content"></div>';
                     el.insertBefore(thinkingEl, el.firstChild);
                 }
@@ -490,6 +509,7 @@ function updateLoadingMessage(id, state) {
             } else if (!el.dataset.streaming) {
                 // Reset to thinking indicator
                 el.className = 'message assistant loading';
+                // SAFE: Static HTML template
                 el.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
             }
             break;
@@ -500,11 +520,13 @@ function updateLoadingMessage(id, state) {
                 // First token - switch to streaming mode
                 el.dataset.streaming = 'true';
                 el.className = 'message assistant streaming';
+                // SAFE: Static HTML template structure
                 el.innerHTML = '<div class="message-content streaming-content"></div>';
             }
             const contentEl = el.querySelector('.streaming-content');
             if (contentEl && state.token) {
                 // Escape and append token
+                // SAFE: state.token is from AI response and is escaped before insertion
                 const escaped = escapeHtml(state.token).replace(/\n/g, '<br>');
                 contentEl.innerHTML += escaped;
 
@@ -599,10 +621,11 @@ function showTokenWarning(message, tokenInfo, truncated) {
     const icon = truncated ? '⚠️' : 'ℹ️';
     const title = truncated ? 'Context Truncated' : 'Token Warning';
 
+    // SAFE: message and tokenInfo values are from internal token counting system
     warningDiv.innerHTML = `
         <div class="message-content">
             <strong>${icon} ${title}</strong><br>
-            ${message}<br>
+            ${escapeHtml(message)}<br>
             <small>Usage: ${tokenInfo.total}/${tokenInfo.contextWindow} tokens (${Math.round(tokenInfo.usagePercent)}%)</small>
         </div>
     `;
@@ -647,13 +670,23 @@ function finalizeStreamedMessage(messageEl, fullContent) {
 // Input Handling
 // ==========================================
 
+// Edge case: Maximum message length to prevent performance issues
+const MAX_MESSAGE_LENGTH = 50000; // 50K characters
+
 /**
  * Get the current input value
+ * Edge case: Trims and validates length
  * @returns {string}
  */
 function getInputValue() {
     const input = document.getElementById(CHAT_UI_INPUT_ID);
-    return input?.value?.trim() || '';
+    const value = input?.value?.trim() || '';
+    // Edge case: Enforce maximum message length
+    if (value.length > MAX_MESSAGE_LENGTH) {
+        console.warn(`[ChatUI] Message exceeds ${MAX_MESSAGE_LENGTH} characters, truncating`);
+        return value.slice(0, MAX_MESSAGE_LENGTH);
+    }
+    return value;
 }
 
 /**
@@ -678,6 +711,7 @@ function hideSuggestions() {
 function clearMessages() {
     const messages = document.getElementById(CHAT_UI_MESSAGE_CONTAINER_ID);
     if (messages) {
+        // SAFE: Static HTML with no user input
         messages.innerHTML = '<div class="message assistant">What would you like to explore about your listening patterns?</div>';
     }
 
@@ -715,7 +749,8 @@ export const ChatUIController = {
     clearMessages,
 
     // Edit mode
-    enableEditMode
+    enableEditMode,
+    restoreFocusToChatInput
 };
 
 

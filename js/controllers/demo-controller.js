@@ -411,6 +411,7 @@ function addDemoBadge() {
         const badge = document.createElement('span');
         badge.id = 'demo-badge';
         badge.className = 'demo-badge';
+        // SAFE: Static text content with no user input
         badge.innerHTML = '🎭 Demo Mode';
         badge.title = 'You are viewing sample data. Upload your own data to see your real personality.';
         badge.style.cssText = `
@@ -445,6 +446,7 @@ function setupDemoChatSuggestions() {
         // Replace with demo-specific suggestions
         // The event listeners from setupEventListeners() use querySelectorAll at init time,
         // so these NEW elements need their own handlers
+        // SAFE: Static HTML with pre-defined demo questions (no user input)
         suggestions.innerHTML = `
             <button class="suggestion-chip demo-chip" data-question="Tell me about my MCR obsession">
                 Tell me about my MCR obsession
