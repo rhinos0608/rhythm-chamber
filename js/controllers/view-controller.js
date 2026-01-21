@@ -390,8 +390,8 @@ function showChat() {
         el.chatSidebar.classList.remove('hidden');
 
         if (SidebarController) {
-            // Get appState reference for sidebar (backward compatibility)
-            const appStateRef = window.appState || AppState.get();
+            // Get appState reference for sidebar
+            const appStateRef = AppState.get();
             SidebarController.updateVisibility(appStateRef);
             SidebarController.renderSessionList();
         }

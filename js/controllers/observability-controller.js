@@ -567,7 +567,7 @@ export class ObservabilityController {
             return;
         }
 
-        if (!window.MetricsExporter) return;
+        if (!MetricsExporter) return;
         console.log(`[ObservabilityController] Pause job ${jobId}`);
         // TODO: Implement job pause functionality
     }
@@ -584,7 +584,7 @@ export class ObservabilityController {
             return;
         }
 
-        if (!window.MetricsExporter) return;
+        if (!MetricsExporter) return;
         console.log(`[ObservabilityController] Delete job ${jobId}`);
         // TODO: Implement job deletion functionality
     }
@@ -601,7 +601,7 @@ export class ObservabilityController {
             return;
         }
 
-        if (!window.MetricsExporter) return;
+        if (!MetricsExporter) return;
         console.log(`[ObservabilityController] Remove service ${endpoint}`);
         // TODO: Implement service removal functionality
     }
@@ -641,14 +641,14 @@ export class ObservabilityController {
         this._updateElement('metric-system-status', systemStatus.text);
 
         // Measurement count
-        if (window.PerformanceProfiler) {
-            const stats = window.PerformanceProfiler.getStatistics();
+        if (PerformanceProfiler) {
+            const stats = PerformanceProfiler.getStatistics();
             this._updateElement('metric-measurement-count', stats.count);
         }
 
         // Memory usage
-        if (window.PerformanceProfiler) {
-            const memoryStats = window.PerformanceProfiler.getMemoryStatistics();
+        if (PerformanceProfiler) {
+            const memoryStats = PerformanceProfiler.getMemoryStatistics();
             this._updateElement('metric-memory-usage',
                 `${memoryStats.currentUsage?.toFixed(1) || '--'}%`);
             this._updateElement('metric-memory-trend',
@@ -656,8 +656,8 @@ export class ObservabilityController {
         }
 
         // Degradation alerts
-        if (window.PerformanceProfiler) {
-            const alerts = window.PerformanceProfiler.getDegradationAlerts();
+        if (PerformanceProfiler) {
+            const alerts = PerformanceProfiler.getDegradationAlerts();
             this._updateElement('metric-alert-count', alerts.length);
 
             const indicator = this._container.querySelector('#metric-alert-indicator');
@@ -676,12 +676,12 @@ export class ObservabilityController {
      * @private
      */
     _updateWebVitalsTab() {
-        if (!window.CoreWebVitalsTracker) return;
+        if (!CoreWebVitalsTracker) return;
 
         const vitalsTypes = [WebVitalType.LCP, WebVitalType.FID, WebVitalType.CLS, WebVitalType.INP, WebVitalType.TTFB];
 
         vitalsTypes.forEach(type => {
-            const metric = window.CoreWebVitalsTracker.getLatestMetric(type);
+            const metric = CoreWebVitalsTracker.getLatestMetric(type);
 
             if (metric) {
                 this._updateElement(`vital-${type}-value`, metric.value.toFixed(2));
@@ -703,10 +703,10 @@ export class ObservabilityController {
      * @private
      */
     _updatePerformanceTab() {
-        if (!window.PerformanceProfiler) return;
+        if (!PerformanceProfiler) return;
 
         for (const category of Object.values(PerformanceCategory)) {
-            const stats = window.PerformanceProfiler.getStatistics(category);
+            const stats = PerformanceProfiler.getStatistics(category);
 
             this._updateElement(`perf-${category}-avg`,
                 `${stats.avgDuration.toFixed(2)} ms`);
@@ -721,9 +721,9 @@ export class ObservabilityController {
      * @private
      */
     _updateMemoryTab() {
-        if (!window.PerformanceProfiler) return;
+        if (!PerformanceProfiler) return;
 
-        const memoryStats = window.PerformanceProfiler.getMemoryStatistics();
+        const memoryStats = PerformanceProfiler.getMemoryStatistics();
 
         // Update gauge and stats
         this._updateElement('memory-percentage',
@@ -747,10 +747,10 @@ export class ObservabilityController {
      * @private
      */
     _updateExportsTab() {
-        if (!window.MetricsExporter) return;
+        if (!MetricsExporter) return;
 
         // Update scheduled exports list
-        const scheduledJobs = window.MetricsExporter.getScheduledJobs();
+        const scheduledJobs = MetricsExporter.getScheduledJobs();
         const scheduledList = this._container.querySelector('#scheduled-exports-list');
 
         if (scheduledJobs.length === 0) {
@@ -773,7 +773,7 @@ export class ObservabilityController {
         }
 
         // Update external services list
-        const services = window.MetricsExporter.getExternalServices();
+        const services = MetricsExporter.getExternalServices();
         const servicesList = this._container.querySelector('#external-services-list');
 
         if (services.length === 0) {
@@ -822,9 +822,9 @@ export class ObservabilityController {
      * @returns {Object} System status object
      */
     _getSystemStatus() {
-        if (window.PerformanceProfiler) {
-            const criticalAlerts = window.PerformanceProfiler.getDegradationAlerts('critical');
-            const warningAlerts = window.PerformanceProfiler.getDegradationAlerts('warning');
+        if (PerformanceProfiler) {
+            const criticalAlerts = PerformanceProfiler.getDegradationAlerts('critical');
+            const warningAlerts = PerformanceProfiler.getDegradationAlerts('warning');
 
             if (criticalAlerts.length > 0) {
                 return { text: 'Critical', class: 'critical' };
@@ -958,7 +958,7 @@ export class ObservabilityController {
      * @param {Object} options - Export options
      */
     async exportNow(format = ExportFormat.JSON, options = {}) {
-        if (!window.MetricsExporter) {
+        if (!MetricsExporter) {
             console.error('[ObservabilityController] MetricsExporter not available');
             return;
         }
@@ -974,7 +974,7 @@ export class ObservabilityController {
         };
 
         try {
-            await window.MetricsExporter.exportNow(config);
+            await MetricsExporter.exportNow(config);
             console.log('[ObservabilityController] Export completed');
         } catch (error) {
             console.error('[ObservabilityController] Export failed:', error);
@@ -986,12 +986,12 @@ export class ObservabilityController {
      * @public
      */
     clearMetrics() {
-        if (window.PerformanceProfiler) {
-            window.PerformanceProfiler.clearMeasurements();
+        if (PerformanceProfiler) {
+            PerformanceProfiler.clearMeasurements();
         }
 
-        if (window.CoreWebVitalsTracker) {
-            window.CoreWebVitalsTracker.clearMetrics();
+        if (CoreWebVitalsTracker) {
+            CoreWebVitalsTracker.clearMetrics();
         }
 
         console.log('[ObservabilityController] Metrics cleared');

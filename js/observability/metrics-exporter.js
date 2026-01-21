@@ -9,6 +9,9 @@
  * @version 1.0.0
  */
 
+import { PerformanceProfiler } from '../services/performance-profiler.js';
+import { CoreWebVitalsTracker } from './core-web-vitals.js';
+
 /**
  * Export format types
  * @readonly
@@ -283,8 +286,8 @@ export class MetricsExporter {
         };
 
         // Get performance metrics
-        if (window.PerformanceProfiler) {
-            const perfReport = window.PerformanceProfiler.getComprehensiveReport();
+        if (PerformanceProfiler) {
+            const perfReport = PerformanceProfiler.getComprehensiveReport();
             metrics.performance = perfReport;
 
             if (config.includeMemory) {
@@ -293,8 +296,8 @@ export class MetricsExporter {
         }
 
         // Get web vitals
-        if (config.includeWebVitals && window.CoreWebVitalsTracker) {
-            metrics.webVitals = window.CoreWebVitalsTracker.getWebVitalsSummary();
+        if (config.includeWebVitals && CoreWebVitalsTracker) {
+            metrics.webVitals = CoreWebVitalsTracker.getWebVitalsSummary();
         }
 
         // System metrics

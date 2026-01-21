@@ -7,13 +7,14 @@
 
 // Phase 4 modules: Analysis & Processing
 import { DataQuery } from '../../data-query.js';
+import { FunctionValidation } from '../utils/validation.js';
 
 // ==========================================
 // Core Data Query Executors
 // ==========================================
 
 function executeGetTopArtists(args, streams) {
-    const validation = window.FunctionValidation;
+    const validation = FunctionValidation;
     const { year, month, quarter, season, limit = 10, sort_by = 'plays' } = args;
 
     // Validate limit
@@ -97,7 +98,7 @@ function executeGetTopArtists(args, streams) {
 }
 
 function executeGetTopTracks(args, streams) {
-    const validation = window.FunctionValidation;
+    const validation = FunctionValidation;
     const { year, month, quarter, season, limit = 10, sort_by = 'plays' } = args;
 
     const limitResult = validation.validateLimit(limit, 50);
@@ -206,7 +207,7 @@ function executeGetArtistHistory(args, streams) {
 }
 
 function executeGetListeningStats(args, streams) {
-    const validation = window.FunctionValidation;
+    const validation = FunctionValidation;
     const { year, month, quarter, season } = args;
 
     const dateRange = validation.parseDateRange({ year, month, quarter, season });

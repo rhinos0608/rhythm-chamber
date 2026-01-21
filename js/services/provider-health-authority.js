@@ -512,22 +512,34 @@ export function blacklist(provider, durationMs = config.blacklistDurationMs) {
 }
 
 /**
+ * Helper: Clear provider blacklist expiry with notification
+ * Extracted to avoid duplicate cleanup logic in unblacklist() and isBlacklisted()
+ *
+ * @param {string} provider - Provider name
+ * @param {Object} state - Provider state object
+ * @param {string} reason - Reason for clearing (e.g., 'expired', 'manually removed')
+ */
+function clearBlacklistExpiry(provider, state, reason = 'removed') {
+    state.blacklistExpiry = null;
+    state.healthStatus = deriveHealthStatus(state);
+
+    console.log(`[ProviderHealthAuthority] ${provider} blacklist ${reason}`);
+
+    EventBus.emit('PROVIDER:UNBLACKLISTED', { provider });
+
+    notifyHealthUpdate(provider, state);
+}
+
+/**
  * Remove a provider from the blacklist
- * 
+ *
  * @param {string} provider - Provider name
  */
 export function unblacklist(provider) {
     const state = getOrCreateState(provider);
-    
+
     if (state.blacklistExpiry) {
-        state.blacklistExpiry = null;
-        state.healthStatus = deriveHealthStatus(state);
-        
-        console.log(`[ProviderHealthAuthority] Removed ${provider} from blacklist`);
-        
-        EventBus.emit('PROVIDER:UNBLACKLISTED', { provider });
-        
-        notifyHealthUpdate(provider, state);
+        clearBlacklistExpiry(provider, state, 'manually removed');
     }
 }
 
@@ -543,15 +555,8 @@ export function isBlacklisted(provider) {
     
     const now = Date.now();
     if (now >= state.blacklistExpiry) {
-        // Expired - clean up
-        state.blacklistExpiry = null;
-        state.healthStatus = deriveHealthStatus(state);
-        
-        console.log(`[ProviderHealthAuthority] ${provider} blacklist expired`);
-        
-        EventBus.emit('PROVIDER:UNBLACKLISTED', { provider });
-        notifyHealthUpdate(provider, state);
-        
+        // Expired - clean up using helper
+        clearBlacklistExpiry(provider, state, 'expired');
         return false;
     }
     

@@ -1,14 +1,16 @@
 /**
  * Analytics Query Executors
- * 
+ *
  * NEW stats.fm and Spotify Wrapped-style function executors.
  * These provide deeper analytics using available data fields.
- * 
+ *
  * HNW Considerations:
  * - Hierarchy: Each executor handles single function type
  * - Network: Consistent return format for all functions
  * - Wave: Filter operations before aggregation for performance
  */
+
+import { FunctionValidation } from '../utils/validation.js';
 
 // ==========================================
 // Helper Functions
@@ -18,7 +20,7 @@
  * Filter streams by date range
  */
 function filterByDateRange(streams, params) {
-    const validation = window.FunctionValidation;
+    const validation = FunctionValidation;
     const dateRange = validation.parseDateRange(params);
 
     if (dateRange.error) {
@@ -49,7 +51,7 @@ function filterByDateRange(streams, params) {
 // ==========================================
 
 function executeGetBottomTracks(args, streams) {
-    const validation = window.FunctionValidation;
+    const validation = FunctionValidation;
     const { year, month, quarter, limit = 10, min_plays = 1 } = args;
 
     const result = filterByDateRange(streams, { year, month, quarter });
@@ -89,7 +91,7 @@ function executeGetBottomTracks(args, streams) {
 }
 
 function executeGetBottomArtists(args, streams) {
-    const validation = window.FunctionValidation;
+    const validation = FunctionValidation;
     const { year, month, quarter, limit = 10, min_plays = 1 } = args;
 
     const result = filterByDateRange(streams, { year, month, quarter });
@@ -127,7 +129,7 @@ function executeGetBottomArtists(args, streams) {
 }
 
 function executeGetListeningClock(args, streams) {
-    const validation = window.FunctionValidation;
+    const validation = FunctionValidation;
     const { year, month, group_by = 'period' } = args;
 
     const result = filterByDateRange(streams, { year, month });
@@ -194,7 +196,7 @@ function executeGetListeningClock(args, streams) {
 }
 
 function executeGetListeningStreaks(args, streams) {
-    const validation = window.FunctionValidation;
+    const validation = FunctionValidation;
     const { year, min_streak_days = 3 } = args;
 
     const result = filterByDateRange(streams, { year });
@@ -249,7 +251,7 @@ function executeGetListeningStreaks(args, streams) {
 }
 
 function executeGetTimeByArtist(args, streams) {
-    const validation = window.FunctionValidation;
+    const validation = FunctionValidation;
     const { year, month, quarter, limit = 10 } = args;
 
     const result = filterByDateRange(streams, { year, month, quarter });
@@ -291,7 +293,7 @@ function executeGetTimeByArtist(args, streams) {
 }
 
 function executeGetPlatformStats(args, streams) {
-    const validation = window.FunctionValidation;
+    const validation = FunctionValidation;
     const { year } = args;
 
     const result = filterByDateRange(streams, { year });
@@ -334,7 +336,7 @@ function executeGetPlatformStats(args, streams) {
 // ==========================================
 
 function executeGetDiscoveryStats(args, streams) {
-    const validation = window.FunctionValidation;
+    const validation = FunctionValidation;
     const { year, breakdown = 'monthly' } = args;
 
     if (!year) {
@@ -413,7 +415,7 @@ function executeGetDiscoveryStats(args, streams) {
 }
 
 function executeGetSkipPatterns(args, streams) {
-    const validation = window.FunctionValidation;
+    const validation = FunctionValidation;
     const { year, type = 'tracks', limit = 10 } = args;
 
     const result = filterByDateRange(streams, { year });
@@ -488,7 +490,7 @@ function executeGetSkipPatterns(args, streams) {
 }
 
 function executeGetShuffleHabits(args, streams) {
-    const validation = window.FunctionValidation;
+    const validation = FunctionValidation;
     const { year, breakdown = 'overall' } = args;
 
     const result = filterByDateRange(streams, { year });
@@ -554,7 +556,7 @@ function executeGetShuffleHabits(args, streams) {
 }
 
 function executeGetPeakListeningDay(args, streams) {
-    const validation = window.FunctionValidation;
+    const validation = FunctionValidation;
     const { year, metric = 'plays' } = args;
 
     const result = filterByDateRange(streams, { year });
@@ -593,7 +595,7 @@ function executeGetPeakListeningDay(args, streams) {
 }
 
 function executeGetCompletionRate(args, streams) {
-    const validation = window.FunctionValidation;
+    const validation = FunctionValidation;
     const { year, threshold = 0.8, breakdown = 'overall' } = args;
 
     const result = filterByDateRange(streams, { year });
@@ -649,7 +651,7 @@ function executeGetCompletionRate(args, streams) {
 }
 
 function executeGetOfflineListening(args, streams) {
-    const validation = window.FunctionValidation;
+    const validation = FunctionValidation;
     const { year, limit = 10 } = args;
 
     const result = filterByDateRange(streams, { year });

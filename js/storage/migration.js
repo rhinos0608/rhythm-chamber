@@ -9,6 +9,7 @@
 
 import { IndexedDBCore } from './indexeddb.js';
 import { ConfigAPI } from './config-api.js';
+import { SecureTokenStore } from '../security/secure-token-store.js';
 
 // ==========================================
 // Migration Configuration
@@ -487,7 +488,7 @@ async function migrateFromLocalStorage(onProgress = null) {
     }
 
     const migratedTokenKeys = new Set();
-    const secureStoreAvailable = !!window.SecureTokenStore?.isAvailable?.();
+    const secureStoreAvailable = !!SecureTokenStore?.isAvailable?.();
     if (!secureStoreAvailable && legacyTokensPresent) {
         console.warn('[Migration] SecureTokenStore unavailable; token migration deferred');
     }
@@ -501,7 +502,7 @@ async function migrateFromLocalStorage(onProgress = null) {
             try {
                 let migrated = false;
 
-                if (secureStoreAvailable && window.SecureTokenStore?.store) {
+                if (secureStoreAvailable && SecureTokenStore?.store) {
                     if (key === 'spotify_access_token') {
                         const rawExpiry = legacyTokenValues.spotify_token_expiry;
                         const expiryMs = parseExpiryMs(rawExpiry);
@@ -512,7 +513,7 @@ async function migrateFromLocalStorage(onProgress = null) {
                             options.expiresIn = Math.max(0, expiryMs - Date.now());
                         }
 
-                        migrated = await window.SecureTokenStore.store(key, value, options);
+                        migrated = await SecureTokenStore.store(key, value, options);
                         if (migrated) {
                             migratedTokenKeys.add('spotify_access_token');
                             if (rawExpiry !== null && rawExpiry !== undefined) {
@@ -520,7 +521,7 @@ async function migrateFromLocalStorage(onProgress = null) {
                             }
                         }
                     } else if (key === 'spotify_refresh_token') {
-                        migrated = await window.SecureTokenStore.store(key, value, {
+                        migrated = await SecureTokenStore.store(key, value, {
                             metadata: { source: 'migration' }
                         });
                         if (migrated) {
@@ -529,7 +530,7 @@ async function migrateFromLocalStorage(onProgress = null) {
                     } else if (key === 'spotify_token_expiry') {
                         migrated = migratedTokenKeys.has('spotify_access_token');
                     }
-                } else if (!window.SecureTokenStore && ConfigAPI?.setToken) {
+                } else if (!SecureTokenStore && ConfigAPI?.setToken) {
                     await ConfigAPI.setToken(key, value);
                     migrated = true;
                 }

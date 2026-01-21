@@ -1,51 +1,116 @@
 {
   "version": 1,
-  "updated": 1768983039891,
+  "updated": 1768988960115,
   "files": {
-    "/Users/rhinesharar/rhythm-chamber/.planning/codebase/build-index.js": {
+    "./js/app.js": {
       "exports": [
-        "foo",
-        "bar",
-        "Baz",
-        "default",
-        "Bar",
-        "baz",
-        "processFile",
-        "extractExports",
-        "extractImports",
-        "main",
-        "Foo"
+        "init"
       ],
       "imports": [
-        "baz",
-        "bar",
-        "foo",
-        "fs",
-        "path"
+        "./security/index.js",
+        "./module-registry.js",
+        "./state/app-state.js",
+        "./storage.js",
+        "./patterns.js",
+        "./personality.js",
+        "./data-query.js",
+        "./prompts.js",
+        "./token-counter.js",
+        "./functions/index.js",
+        "./cards.js",
+        "./spotify.js",
+        "./settings.js",
+        "./chat.js",
+        "./controllers/view-controller.js",
+        "./controllers/file-upload-controller.js",
+        "./controllers/spotify-controller.js",
+        "./controllers/demo-controller.js",
+        "./controllers/reset-controller.js",
+        "./controllers/sidebar-controller.js",
+        "./controllers/chat-ui-controller.js",
+        "./services/tab-coordination.js",
+        "./services/session-manager.js",
+        "./services/message-operations.js",
+        "./services/event-bus.js",
+        "./storage/event-log-store.js",
+        "./operation-lock.js",
+        "./services/circuit-breaker.js",
+        "./services/function-calling-fallback.js",
+        "./services/data-version.js",
+        "./demo-data.js",
+        "./template-profiles.js",
+        "./profile-synthesizer.js"
       ],
-      "indexed": 1768982073939
+      "indexed": 1768982875197
     },
-    "/Users/rhinesharar/rhythm-chamber/.planning/codebase/build-index.mjs": {
+    "./js/cards.js": {
       "exports": [
-        "foo",
-        "bar",
-        "Baz",
-        "default",
-        "Bar",
-        "baz",
-        "Foo"
+        "Cards"
+      ],
+      "imports": [],
+      "indexed": 1768982875197
+    },
+    "./js/chat.js": {
+      "exports": [
+        "Chat"
       ],
       "imports": [
-        "fs",
-        "path",
-        "url",
-        "baz",
-        "bar",
-        "foo"
+        "./services/tool-strategies/native-strategy.js",
+        "./services/tool-strategies/prompt-injection-strategy.js",
+        "./services/tool-strategies/intent-extraction-strategy.js",
+        "./module-registry.js",
+        "./services/config-loader.js",
+        "./services/turn-queue.js",
+        "./services/timeout-budget-manager.js",
+        "./services/wave-telemetry.js",
+        "./services/session-manager.js",
+        "./token-counter.js",
+        "./prompts.js",
+        "./storage.js",
+        "./patterns.js",
+        "./personality.js",
+        "./parser.js",
+        "./data-query.js",
+        "./providers/provider-interface.js",
+        "./settings.js",
+        "./services/conversation-orchestrator.js",
+        "./services/message-lifecycle-coordinator.js"
       ],
-      "indexed": 1768982515806
+      "indexed": 1768982875197
     },
-    "/Users/rhinesharar/rhythm-chamber/js/controllers/demo-controller.js": {
+    "./js/config.example.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875198
+    },
+    "./js/config.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875198
+    },
+    "./js/context-aware-recovery.js": {
+      "exports": [
+        "ContextAwareRecovery"
+      ],
+      "imports": [
+        "./operation-lock.js",
+        "./services/tab-coordination.js",
+        "./services/device-detection.js",
+        "./security/recovery-handlers.js",
+        "./services/event-bus.js"
+      ],
+      "indexed": 1768982875199
+    },
+    "./js/controllers/chat-ui-controller.js": {
+      "exports": [
+        "ChatUIController"
+      ],
+      "imports": [
+        "../chat.js"
+      ],
+      "indexed": 1768982875200
+    },
+    "./js/controllers/demo-controller.js": {
       "exports": [
         "DemoController"
       ],
@@ -54,7 +119,1627 @@
         "../storage/indexeddb.js",
         "../chat.js"
       ],
-      "indexed": 1768982793546
+      "indexed": 1768982875200
+    },
+    "./js/controllers/file-upload-controller.js": {
+      "exports": [
+        "FileUploadController"
+      ],
+      "imports": [],
+      "indexed": 1768982875200
+    },
+    "./js/controllers/observability-controller.js": {
+      "exports": [
+        "ObservabilityController",
+        "ObservabilityControllerSingleton"
+      ],
+      "imports": [
+        "../services/performance-profiler.js",
+        "../observability/core-web-vitals.js",
+        "../observability/metrics-exporter.js"
+      ],
+      "indexed": 1768982875201
+    },
+    "./js/controllers/reset-controller.js": {
+      "exports": [
+        "ResetController"
+      ],
+      "imports": [],
+      "indexed": 1768982875201
+    },
+    "./js/controllers/sidebar-controller.js": {
+      "exports": [
+        "SidebarController"
+      ],
+      "imports": [
+        "../storage.js",
+        "../chat.js",
+        "./chat-ui-controller.js",
+        "../token-counter.js",
+        "../state/app-state.js",
+        "../services/event-bus.js"
+      ],
+      "indexed": 1768982875201
+    },
+    "./js/controllers/spotify-controller.js": {
+      "exports": [
+        "SpotifyController"
+      ],
+      "imports": [],
+      "indexed": 1768982875202
+    },
+    "./js/controllers/view-controller.js": {
+      "exports": [
+        "ViewController"
+      ],
+      "imports": [
+        "../chat.js",
+        "../services/profile-description-generator.js",
+        "../state/app-state.js",
+        "./sidebar-controller.js"
+      ],
+      "indexed": 1768982875202
+    },
+    "./js/data-query.js": {
+      "exports": [
+        "DataQuery"
+      ],
+      "imports": [],
+      "indexed": 1768982875202
+    },
+    "./js/demo-data.js": {
+      "exports": [
+        "DemoData"
+      ],
+      "imports": [],
+      "indexed": 1768982875203
+    },
+    "./js/embedding-worker.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875203
+    },
+    "./js/embeddings/embeddings-onboarding.js": {
+      "exports": [
+        "EmbeddingsOnboarding"
+      ],
+      "imports": [
+        "../services/event-bus.js",
+        "../services/battery-aware-mode-selector.js"
+      ],
+      "indexed": 1768982875204
+    },
+    "./js/embeddings/embeddings-progress.js": {
+      "exports": [
+        "EmbeddingsProgress"
+      ],
+      "imports": [
+        "../services/event-bus.js"
+      ],
+      "indexed": 1768982875204
+    },
+    "./js/embeddings/embeddings-task-manager.js": {
+      "exports": [
+        "EmbeddingsTaskManager"
+      ],
+      "imports": [
+        "../services/event-bus.js",
+        "../local-embeddings.js"
+      ],
+      "indexed": 1768982875205
+    },
+    "./js/functions/executors/analytics-executors.js": {
+      "exports": [
+        "AnalyticsExecutors"
+      ],
+      "imports": [],
+      "indexed": 1768982875205
+    },
+    "./js/functions/executors/data-executors.js": {
+      "exports": [
+        "DataExecutors"
+      ],
+      "imports": [
+        "../../data-query.js"
+      ],
+      "indexed": 1768982875205
+    },
+    "./js/functions/executors/template-executors.js": {
+      "exports": [
+        "TemplateExecutors"
+      ],
+      "imports": [],
+      "indexed": 1768982875206
+    },
+    "./js/functions/index.js": {
+      "exports": [
+        "Functions"
+      ],
+      "imports": [
+        "../settings.js",
+        "../data-query.js",
+        "./schemas/data-queries.js",
+        "./schemas/template-queries.js",
+        "./schemas/analytics-queries.js"
+      ],
+      "indexed": 1768982875206
+    },
+    "./js/functions/schemas/analytics-queries.js": {
+      "exports": [
+        "AnalyticsQuerySchemas"
+      ],
+      "imports": [],
+      "indexed": 1768982875206
+    },
+    "./js/functions/schemas/data-queries.js": {
+      "exports": [
+        "DataQuerySchemas"
+      ],
+      "imports": [],
+      "indexed": 1768982875207
+    },
+    "./js/functions/schemas/template-queries.js": {
+      "exports": [
+        "TemplateQuerySchemas",
+        "TemplateFunctionNames"
+      ],
+      "imports": [],
+      "indexed": 1768982875207
+    },
+    "./js/functions/schemas/universal-schema.js": {
+      "exports": [
+        "UniversalSchema"
+      ],
+      "imports": [],
+      "indexed": 1768982875207
+    },
+    "./js/functions/utils/retry.js": {
+      "exports": [
+        "FunctionRetry"
+      ],
+      "imports": [],
+      "indexed": 1768982875208
+    },
+    "./js/functions/utils/validation.js": {
+      "exports": [
+        "FunctionValidation"
+      ],
+      "imports": [
+        "../../data-query.js"
+      ],
+      "indexed": 1768982875208
+    },
+    "./js/genre-enrichment.js": {
+      "exports": [
+        "GenreEnrichment"
+      ],
+      "imports": [
+        "./storage.js"
+      ],
+      "indexed": 1768982875208
+    },
+    "./js/local-embeddings.js": {
+      "exports": [
+        "LocalEmbeddings"
+      ],
+      "imports": [
+        "./services/event-bus.js"
+      ],
+      "indexed": 1768982875209
+    },
+    "./js/local-vector-store.js": {
+      "exports": [
+        "LocalVectorStore"
+      ],
+      "imports": [
+        "./storage/lru-cache.js"
+      ],
+      "indexed": 1768982875210
+    },
+    "./js/main.js": {
+      "exports": [],
+      "imports": [
+        "./security/index.js",
+        "./window-globals-debug.js",
+        "./services/config-loader.js",
+        "./utils.js",
+        "./module-registry.js",
+        "./storage/keys.js",
+        "./storage/indexeddb.js",
+        "./storage/config-api.js",
+        "./storage/migration.js",
+        "./storage/sync-strategy.js",
+        "./storage/profiles.js",
+        "./storage.js",
+        "./state/app-state.js",
+        "./patterns.js",
+        "./personality.js",
+        "./data-query.js",
+        "./prompts.js",
+        "./parser.js",
+        "./genre-enrichment.js",
+        "./token-counter.js",
+        "./providers/provider-interface.js",
+        "./providers/openrouter.js",
+        "./providers/lmstudio.js",
+        "./providers/gemini.js",
+        "./spotify.js",
+        "./settings.js",
+        "./chat.js",
+        "./services/conversation-orchestrator.js",
+        "./services/message-lifecycle-coordinator.js",
+        "./cards.js",
+        "./functions/utils/retry.js",
+        "./functions/utils/validation.js",
+        "./functions/schemas/data-queries.js",
+        "./functions/schemas/template-queries.js",
+        "./functions/schemas/analytics-queries.js",
+        "./functions/executors/data-executors.js",
+        "./functions/executors/template-executors.js",
+        "./functions/executors/analytics-executors.js",
+        "./functions/index.js",
+        "./services/tab-coordination.js",
+        "./services/session-manager.js",
+        "./services/message-operations.js",
+        "./services/worker-coordinator.js",
+        "./services/event-bus.js",
+        "./storage/event-log-store.js",
+        "./controllers/chat-ui-controller.js",
+        "./controllers/sidebar-controller.js",
+        "./controllers/view-controller.js",
+        "./controllers/file-upload-controller.js",
+        "./controllers/spotify-controller.js",
+        "./controllers/demo-controller.js",
+        "./controllers/reset-controller.js",
+        "./demo-data.js",
+        "./template-profiles.js",
+        "./profile-synthesizer.js",
+        "./operation-lock.js",
+        "./payments.js",
+        "./pricing.js",
+        "./storage/quota-monitor.js",
+        "./services/circuit-breaker.js",
+        "./security/secure-token-store.js",
+        "./services/data-version.js",
+        "./services/function-calling-fallback.js",
+        "./services/profile-description-generator.js",
+        "./services/llm-provider-routing-service.js",
+        "./services/token-counting-service.js",
+        "./services/tool-call-handling-service.js",
+        "./services/fallback-response-service.js",
+        "./services/error-boundary.js"
+      ],
+      "indexed": 1768982875210
+    },
+    "./js/module-registry.js": {
+      "exports": [
+        "ModuleRegistry"
+      ],
+      "imports": [
+        "./module-registry.js"
+      ],
+      "indexed": 1768982875210
+    },
+    "./js/observability/core-web-vitals.js": {
+      "exports": [
+        "WebVitalType",
+        "PerformanceRating",
+        "CoreWebVitalsTracker",
+        "CoreWebVitalsSingleton"
+      ],
+      "imports": [],
+      "indexed": 1768982875210
+    },
+    "./js/observability/init-observability.js": {
+      "exports": [
+        "initObservability",
+        "getObservability",
+        "isObservabilityInitialized",
+        "disableObservability"
+      ],
+      "imports": [
+        "../services/event-bus.js",
+        "./core-web-vitals.js",
+        "../services/performance-profiler.js",
+        "./metrics-exporter.js",
+        "../controllers/observability-controller.js"
+      ],
+      "indexed": 1768982875211
+    },
+    "./js/observability/metrics-exporter.js": {
+      "exports": [
+        "ExportFormat",
+        "ScheduleType",
+        "ExternalService",
+        "MetricsExporter",
+        "flatMetrics",
+        "getMetricsExporter"
+      ],
+      "imports": [],
+      "indexed": 1768982875212
+    },
+    "./js/observability/observability-settings.js": {
+      "exports": [
+        "initObservabilitySettings",
+        "ObservabilitySettings"
+      ],
+      "imports": [
+        "../storage.js"
+      ],
+      "indexed": 1768982875212
+    },
+    "./js/ollama.js": {
+      "exports": [
+        "Ollama"
+      ],
+      "imports": [
+        "./module-registry.js"
+      ],
+      "indexed": 1768982875216
+    },
+    "./js/operation-lock-errors.js": {
+      "exports": [
+        "LockAcquisitionError",
+        "LockTimeoutError",
+        "LockReleaseError",
+        "LockForceReleaseError",
+        "DeadlockError"
+      ],
+      "imports": [],
+      "indexed": 1768982875219
+    },
+    "./js/operation-lock.js": {
+      "exports": [
+        "OperationLock"
+      ],
+      "imports": [
+        "./operation-lock-errors.js"
+      ],
+      "indexed": 1768982875219
+    },
+    "./js/operation-queue.js": {
+      "exports": [
+        "OperationQueue",
+        "QueuedOperation",
+        "QUEUE_PRIORITY",
+        "QUEUE_STATUS"
+      ],
+      "imports": [
+        "./operation-lock.js",
+        "./operation-lock-errors.js"
+      ],
+      "indexed": 1768982875227
+    },
+    "./js/parser-worker.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875231
+    },
+    "./js/parser.js": {
+      "exports": [
+        "Parser"
+      ],
+      "imports": [],
+      "indexed": 1768982875231
+    },
+    "./js/patterns.js": {
+      "exports": [
+        "Patterns"
+      ],
+      "imports": [],
+      "indexed": 1768982875232
+    },
+    "./js/payments.js": {
+      "exports": [
+        "Payments"
+      ],
+      "imports": [
+        "./services/config-loader.js",
+        "./settings.js"
+      ],
+      "indexed": 1768982875232
+    },
+    "./js/personality.js": {
+      "exports": [
+        "PERSONALITY_TYPES",
+        "LITE_PERSONALITY_TYPES",
+        "Personality"
+      ],
+      "imports": [],
+      "indexed": 1768982875232
+    },
+    "./js/pricing.js": {
+      "exports": [
+        "Pricing"
+      ],
+      "imports": [],
+      "indexed": 1768982875235
+    },
+    "./js/profile-synthesizer.js": {
+      "exports": [
+        "ProfileSynthesizer",
+        "ProfileSynthesizerClass"
+      ],
+      "imports": [
+        "./patterns.js",
+        "./personality.js",
+        "./template-profiles.js"
+      ],
+      "indexed": 1768982875236
+    },
+    "./js/prompts.js": {
+      "exports": [
+        "Prompts"
+      ],
+      "imports": [],
+      "indexed": 1768982875236
+    },
+    "./js/providers/capabilities.js": {
+      "exports": [
+        "CAPABILITIES",
+        "DataCapabilities"
+      ],
+      "imports": [
+        "../state/app-state.js"
+      ],
+      "indexed": 1768982875237
+    },
+    "./js/providers/data-provider-interface.js": {
+      "exports": [
+        "DataProvider"
+      ],
+      "imports": [
+        "../services/event-bus.js"
+      ],
+      "indexed": 1768982875237
+    },
+    "./js/providers/demo-data-provider.js": {
+      "exports": [
+        "DemoDataProvider"
+      ],
+      "imports": [
+        "../services/event-bus.js"
+      ],
+      "indexed": 1768982875238
+    },
+    "./js/providers/gemini.js": {
+      "exports": [
+        "GeminiProvider"
+      ],
+      "imports": [],
+      "indexed": 1768982875239
+    },
+    "./js/providers/lmstudio.js": {
+      "exports": [
+        "LMStudioProvider"
+      ],
+      "imports": [],
+      "indexed": 1768982875239
+    },
+    "./js/providers/ollama-adapter.js": {
+      "exports": [
+        "OllamaProvider"
+      ],
+      "imports": [
+        "../module-registry.js"
+      ],
+      "indexed": 1768982875240
+    },
+    "./js/providers/openrouter.js": {
+      "exports": [
+        "OpenRouterProvider"
+      ],
+      "imports": [],
+      "indexed": 1768982875240
+    },
+    "./js/providers/provider-interface.js": {
+      "exports": [
+        "ProviderInterface"
+      ],
+      "imports": [
+        "../module-registry.js",
+        "../utils/timeout-wrapper.js",
+        "../services/provider-circuit-breaker.js",
+        "../services/config-loader.js",
+        "../settings.js",
+        "./openrouter.js",
+        "./lmstudio.js",
+        "./gemini.js"
+      ],
+      "indexed": 1768982875240
+    },
+    "./js/providers/user-data-provider.js": {
+      "exports": [
+        "UserDataProvider"
+      ],
+      "imports": [
+        "../services/event-bus.js",
+        "../storage.js"
+      ],
+      "indexed": 1768982875245
+    },
+    "./js/rag.js": {
+      "exports": [
+        "RAG"
+      ],
+      "imports": [
+        "./module-registry.js",
+        "./patterns.js",
+        "./storage.js",
+        "./security/index.js",
+        "./operation-lock.js"
+      ],
+      "indexed": 1768982875246
+    },
+    "./js/security.js": {
+      "exports": [
+        "Security",
+        "ErrorContext",
+        "Encryption",
+        "TokenBinding",
+        "Anomaly",
+        "SecurityChecklist",
+        "RecoveryHandlers"
+      ],
+      "imports": [
+        "./security.js",
+        "./security/index.js"
+      ],
+      "indexed": 1768982875246
+    },
+    "./js/security/anomaly.js": {
+      "exports": [
+        "isRateLimited",
+        "recordFailedAttempt",
+        "recordConnectionHash",
+        "countRecentGeoChanges",
+        "checkSuspiciousActivity",
+        "clearSecurityLockout",
+        "calculateAdaptiveThreshold",
+        "setTravelOverride",
+        "clearTravelOverride",
+        "getTravelOverrideStatus"
+      ],
+      "imports": [],
+      "indexed": 1768982875246
+    },
+    "./js/security/checklist.js": {
+      "exports": [
+        "SecurityChecklist"
+      ],
+      "imports": [
+        "../settings.js"
+      ],
+      "indexed": 1768982875246
+    },
+    "./js/security/encryption.js": {
+      "exports": [
+        "deriveKey",
+        "deriveKeyNonExtractable",
+        "hashData",
+        "encryptData",
+        "decryptData",
+        "getSessionKey",
+        "storeEncryptedCredentials",
+        "getEncryptedCredentials",
+        "clearEncryptedCredentials",
+        "getSessionSalt",
+        "getSessionVersion",
+        "invalidateSessions",
+        "clearSessionData",
+        "generateRandomString",
+        "generateSalt"
+      ],
+      "imports": [],
+      "indexed": 1768982875247
+    },
+    "./js/security/index.js": {
+      "exports": [
+        "Security",
+        "ErrorContext",
+        "SecurityCoordinator",
+        "SecurityChecklist",
+        "Encryption",
+        "TokenBinding",
+        "Anomaly",
+        "KeyManager",
+        "StorageEncryption",
+        "MessageSecurity"
+      ],
+      "imports": [
+        "./encryption.js",
+        "./token-binding.js",
+        "./anomaly.js",
+        "./key-manager.js",
+        "./storage-encryption.js",
+        "./message-security.js",
+        "./security-coordinator.js",
+        "./checklist.js",
+        "./recovery-handlers.js"
+      ],
+      "indexed": 1768982875247
+    },
+    "./js/security/key-manager.js": {
+      "exports": [
+        "KeyManager"
+      ],
+      "imports": [],
+      "indexed": 1768982875247
+    },
+    "./js/security/message-security.js": {
+      "exports": [
+        "MessageSecurity"
+      ],
+      "imports": [],
+      "indexed": 1768982875247
+    },
+    "./js/security/recovery-handlers.js": {
+      "exports": [
+        "RecoveryHandlers"
+      ],
+      "imports": [
+        "../spotify.js"
+      ],
+      "indexed": 1768982875248
+    },
+    "./js/security/safe-mode.js": {
+      "exports": [
+        "initModule",
+        "isCapabilityAvailable",
+        "getAvailableCapabilities",
+        "getSafeModeStatus",
+        "requireCapability",
+        "canEncrypt",
+        "canBindTokens",
+        "canDetectAnomalies",
+        "hasPrototypePollutionProtection",
+        "logErrorSummaryOnce",
+        "SafeMode"
+      ],
+      "imports": [],
+      "indexed": 1768982875248
+    },
+    "./js/security/secure-token-store.js": {
+      "exports": [
+        "SecureTokenStore"
+      ],
+      "imports": [
+        "../storage/indexeddb.js"
+      ],
+      "indexed": 1768982875248
+    },
+    "./js/security/security-coordinator.js": {
+      "exports": [
+        "SecurityCoordinatorClass",
+        "InitState",
+        "SecurityCoordinator"
+      ],
+      "imports": [
+        "./encryption.js",
+        "./token-binding.js",
+        "./anomaly.js",
+        "./key-manager.js",
+        "./storage-encryption.js",
+        "./safe-mode.js"
+      ],
+      "indexed": 1768982875249
+    },
+    "./js/security/storage-encryption.js": {
+      "exports": [
+        "StorageEncryption",
+        "shouldEncrypt",
+        "secureDelete"
+      ],
+      "imports": [],
+      "indexed": 1768982875249
+    },
+    "./js/security/token-binding.js": {
+      "exports": [
+        "generateDeviceFingerprint",
+        "checkSecureContext",
+        "createTokenBinding",
+        "verifyTokenBinding",
+        "clearTokenBinding",
+        "getTokenBindingFailure",
+        "clearTokenBindingFailure",
+        "calculateProcessingTokenExpiry",
+        "checkTokenRefreshNeeded",
+        "setupNavigationCleanup"
+      ],
+      "imports": [],
+      "indexed": 1768982875250
+    },
+    "./js/services/battery-aware-mode-selector.js": {
+      "exports": [
+        "BatteryAwareModeSelector"
+      ],
+      "imports": [
+        "./event-bus.js"
+      ],
+      "indexed": 1768982875250
+    },
+    "./js/services/cascading-abort-controller.js": {
+      "exports": [
+        "CascadingAbortError",
+        "CascadingAbort"
+      ],
+      "imports": [],
+      "indexed": 1768982875250
+    },
+    "./js/services/circuit-breaker.js": {
+      "exports": [
+        "CircuitBreaker"
+      ],
+      "imports": [],
+      "indexed": 1768982875250
+    },
+    "./js/services/config-loader.js": {
+      "exports": [
+        "ConfigLoader"
+      ],
+      "imports": [],
+      "indexed": 1768982875250
+    },
+    "./js/services/conversation-orchestrator.js": {
+      "exports": [
+        "ConversationOrchestrator"
+      ],
+      "imports": [
+        "../token-counter.js"
+      ],
+      "indexed": 1768982875251
+    },
+    "./js/services/data-version.js": {
+      "exports": [
+        "DataVersion"
+      ],
+      "imports": [
+        "../controllers/demo-controller.js",
+        "../state/app-state.js"
+      ],
+      "indexed": 1768982875251
+    },
+    "./js/services/device-detection.js": {
+      "exports": [
+        "DeviceDetection"
+      ],
+      "imports": [],
+      "indexed": 1768982875251
+    },
+    "./js/services/error-boundary.js": {
+      "exports": [
+        "ErrorBoundary",
+        "createChatBoundary",
+        "createCardBoundary",
+        "installGlobalErrorHandler"
+      ],
+      "imports": [],
+      "indexed": 1768982875252
+    },
+    "./js/services/error-recovery-coordinator.js": {
+      "exports": [
+        "RecoveryPriority",
+        "RecoveryDomain",
+        "RecoveryState",
+        "ErrorRecoveryCoordinator",
+        "new"
+      ],
+      "imports": [
+        "./event-bus.js"
+      ],
+      "indexed": 1768982875252
+    },
+    "./js/services/event-bus.js": {
+      "exports": [
+        "EventBus"
+      ],
+      "imports": [
+        "./vector-clock.js",
+        "../storage/event-log-store.js",
+        "./tab-coordination.js"
+      ],
+      "indexed": 1768982875253
+    },
+    "./js/services/fallback-response-service.js": {
+      "exports": [
+        "FallbackResponseService"
+      ],
+      "imports": [
+        "../settings.js"
+      ],
+      "indexed": 1768982875253
+    },
+    "./js/services/function-calling-fallback.js": {
+      "exports": [
+        "CAPABILITY_LEVELS",
+        "detectCapabilityLevel",
+        "supportsNativeFunctionCalling",
+        "buildFunctionDefinitionsText",
+        "buildPromptInjectionAddition",
+        "buildLevel2Request",
+        "parseFunctionCallsFromText",
+        "extractQueryIntent",
+        "executeFunctionCalls",
+        "buildFunctionResultsMessage",
+        "handleFunctionCallingWithFallback",
+        "FunctionCallingFallback"
+      ],
+      "imports": [
+        "../functions/index.js"
+      ],
+      "indexed": 1768982875253
+    },
+    "./js/services/lamport-clock.js": {
+      "exports": [
+        "LamportClock"
+      ],
+      "imports": [],
+      "indexed": 1768982875254
+    },
+    "./js/services/llm-provider-routing-service.js": {
+      "exports": [
+        "LLMProviderRoutingService"
+      ],
+      "imports": [],
+      "indexed": 1768982875254
+    },
+    "./js/services/lock-policy-coordinator.js": {
+      "exports": [
+        "LockPolicy"
+      ],
+      "imports": [
+        "../operation-lock.js"
+      ],
+      "indexed": 1768982875254
+    },
+    "./js/services/message-lifecycle-coordinator.js": {
+      "exports": [
+        "MessageLifecycleCoordinator"
+      ],
+      "imports": [
+        "./turn-queue.js",
+        "./timeout-budget-manager.js"
+      ],
+      "indexed": 1768982875254
+    },
+    "./js/services/message-operations.js": {
+      "exports": [
+        "MessageOperations"
+      ],
+      "imports": [
+        "../settings.js",
+        "./data-version.js"
+      ],
+      "indexed": 1768982875255
+    },
+    "./js/services/pattern-comparison.js": {
+      "exports": [
+        "PatternComparison"
+      ],
+      "imports": [
+        "./event-bus.js"
+      ],
+      "indexed": 1768982875256
+    },
+    "./js/services/pattern-stream.js": {
+      "exports": [
+        "PatternStream"
+      ],
+      "imports": [
+        "./event-bus.js",
+        "../patterns.js"
+      ],
+      "indexed": 1768982875256
+    },
+    "./js/services/performance-profiler.js": {
+      "exports": [
+        "PerformanceCategory",
+        "PerformanceProfiler",
+        "mark",
+        "measure",
+        "startOperation",
+        "measureAsync",
+        "getPerformanceReport",
+        "PerformanceProfilerSingleton"
+      ],
+      "imports": [],
+      "indexed": 1768982875257
+    },
+    "./js/services/playlist-generator.js": {
+      "exports": [
+        "PlaylistGenerator"
+      ],
+      "imports": [
+        "./event-bus.js",
+        "../spotify.js"
+      ],
+      "indexed": 1768982875257
+    },
+    "./js/services/profile-description-generator.js": {
+      "exports": [
+        "ProfileDescriptionGenerator"
+      ],
+      "imports": [],
+      "indexed": 1768982875258
+    },
+    "./js/services/profile-sharing.js": {
+      "exports": [
+        "ProfileSharing"
+      ],
+      "imports": [
+        "../storage.js"
+      ],
+      "indexed": 1768982875258
+    },
+    "./js/services/provider-circuit-breaker.js": {
+      "exports": [
+        "ProviderCircuitBreaker"
+      ],
+      "imports": [],
+      "indexed": 1768982875259
+    },
+    "./js/services/provider-fallback-chain.js": {
+      "exports": [
+        "ProviderFallbackChain"
+      ],
+      "imports": [
+        "./provider-health-authority.js",
+        "./provider-notification-service.js",
+        "./provider-health-monitor.js"
+      ],
+      "indexed": 1768982875259
+    },
+    "./js/services/provider-health-authority.js": {
+      "exports": [
+        "HealthAuthority"
+      ],
+      "imports": [
+        "./provider-health-monitor.js"
+      ],
+      "indexed": 1768982875260
+    },
+    "./js/services/provider-health-monitor.js": {
+      "exports": [
+        "ProviderHealthMonitor",
+        "ProviderHealth"
+      ],
+      "imports": [],
+      "indexed": 1768982875260
+    },
+    "./js/services/provider-notification-service.js": {
+      "exports": [
+        "ProviderNotificationService"
+      ],
+      "imports": [],
+      "indexed": 1768982875260
+    },
+    "./js/services/session-manager.js": {
+      "exports": [
+        "SessionManager"
+      ],
+      "imports": [],
+      "indexed": 1768982875261
+    },
+    "./js/services/state-machine-coordinator.js": {
+      "exports": [
+        "StateMachineCoordinator"
+      ],
+      "imports": [
+        "../operation-lock.js"
+      ],
+      "indexed": 1768982875261
+    },
+    "./js/services/storage-degradation-manager.js": {
+      "exports": [
+        "StorageDegradationManager"
+      ],
+      "imports": [
+        "../storage/indexeddb.js",
+        "../storage/quota-manager.js"
+      ],
+      "indexed": 1768982875262
+    },
+    "./js/services/tab-coordination.js": {
+      "exports": [
+        "TabCoordination"
+      ],
+      "imports": [],
+      "indexed": 1768982875262
+    },
+    "./js/services/temporal-analysis.js": {
+      "exports": [
+        "TemporalAnalysis"
+      ],
+      "imports": [],
+      "indexed": 1768982875263
+    },
+    "./js/services/timeout-budget-manager.js": {
+      "exports": [
+        "TimeoutBudgetManager"
+      ],
+      "imports": [],
+      "indexed": 1768982875263
+    },
+    "./js/services/token-counting-service.js": {
+      "exports": [
+        "TokenCountingService"
+      ],
+      "imports": [
+        "../token-counter.js"
+      ],
+      "indexed": 1768982875263
+    },
+    "./js/services/tool-call-handling-service.js": {
+      "exports": [
+        "ToolCallHandlingService"
+      ],
+      "imports": [],
+      "indexed": 1768982875264
+    },
+    "./js/services/tool-strategies/base-strategy.js": {
+      "exports": [
+        "BaseStrategy"
+      ],
+      "imports": [],
+      "indexed": 1768982875264
+    },
+    "./js/services/tool-strategies/index.js": {
+      "exports": [
+        "BaseStrategy",
+        "NativeStrategy",
+        "PromptInjectionStrategy",
+        "IntentExtractionStrategy"
+      ],
+      "imports": [
+        "./base-strategy.js",
+        "./native-strategy.js",
+        "./prompt-injection-strategy.js",
+        "./intent-extraction-strategy.js"
+      ],
+      "indexed": 1768982875264
+    },
+    "./js/services/tool-strategies/intent-extraction-strategy.js": {
+      "exports": [
+        "IntentExtractionStrategy"
+      ],
+      "imports": [
+        "./base-strategy.js"
+      ],
+      "indexed": 1768982875265
+    },
+    "./js/services/tool-strategies/native-strategy.js": {
+      "exports": [
+        "NativeStrategy"
+      ],
+      "imports": [
+        "./base-strategy.js"
+      ],
+      "indexed": 1768982875265
+    },
+    "./js/services/tool-strategies/prompt-injection-strategy.js": {
+      "exports": [
+        "PromptInjectionStrategy"
+      ],
+      "imports": [
+        "./base-strategy.js"
+      ],
+      "indexed": 1768982875265
+    },
+    "./js/services/turn-queue.js": {
+      "exports": [
+        "TurnQueue"
+      ],
+      "imports": [],
+      "indexed": 1768982875266
+    },
+    "./js/services/vector-clock.js": {
+      "exports": [
+        "VectorClock"
+      ],
+      "imports": [],
+      "indexed": 1768982875266
+    },
+    "./js/services/wave-telemetry.js": {
+      "exports": [
+        "WaveTelemetry"
+      ],
+      "imports": [],
+      "indexed": 1768982875266
+    },
+    "./js/services/worker-coordinator.js": {
+      "exports": [
+        "WorkerCoordinator"
+      ],
+      "imports": [
+        "./event-bus.js"
+      ],
+      "indexed": 1768982875267
+    },
+    "./js/settings.js": {
+      "exports": [
+        "Settings"
+      ],
+      "imports": [],
+      "indexed": 1768982875267
+    },
+    "./js/spotify.js": {
+      "exports": [
+        "Spotify"
+      ],
+      "imports": [],
+      "indexed": 1768982875267
+    },
+    "./js/state/app-state.js": {
+      "exports": [
+        "AppState"
+      ],
+      "imports": [],
+      "indexed": 1768982875268
+    },
+    "./js/storage-breakdown-ui.js": {
+      "exports": [
+        "StorageBreakdownUI"
+      ],
+      "imports": [],
+      "indexed": 1768982875268
+    },
+    "./js/storage.js": {
+      "exports": [
+        "Storage"
+      ],
+      "imports": [
+        "./storage/indexeddb.js",
+        "./storage/keys.js",
+        "./storage/migration.js",
+        "./storage/profiles.js"
+      ],
+      "indexed": 1768982875269
+    },
+    "./js/storage/archive-service.js": {
+      "exports": [
+        "ArchiveService"
+      ],
+      "imports": [
+        "../storage.js"
+      ],
+      "indexed": 1768982875270
+    },
+    "./js/storage/config-api.js": {
+      "exports": [
+        "ConfigAPI"
+      ],
+      "imports": [],
+      "indexed": 1768982875271
+    },
+    "./js/storage/event-log-store.js": {
+      "exports": [
+        "EventLogStore"
+      ],
+      "imports": [
+        "./transaction.js"
+      ],
+      "indexed": 1768982875272
+    },
+    "./js/storage/indexeddb.js": {
+      "exports": [
+        "IndexedDBStorage"
+      ],
+      "imports": [
+        "../operation-lock.js"
+      ],
+      "indexed": 1768982875272
+    },
+    "./js/storage/keys.js": {
+      "exports": [
+        "KEYS"
+      ],
+      "imports": [],
+      "indexed": 1768982875273
+    },
+    "./js/storage/lru-cache.js": {
+      "exports": [
+        "LRUCache"
+      ],
+      "imports": [],
+      "indexed": 1768982875274
+    },
+    "./js/storage/migration.js": {
+      "exports": [
+        "Migration"
+      ],
+      "imports": [],
+      "indexed": 1768982875275
+    },
+    "./js/storage/profiles.js": {
+      "exports": [
+        "Profiles"
+      ],
+      "imports": [],
+      "indexed": 1768982875276
+    },
+    "./js/storage/quota-manager.js": {
+      "exports": [
+        "QuotaManager"
+      ],
+      "imports": [
+        "./quota-monitor.js"
+      ],
+      "indexed": 1768982875277
+    },
+    "./js/storage/quota-monitor.js": {
+      "exports": [
+        "QuotaMonitor"
+      ],
+      "imports": [],
+      "indexed": 1768982875277
+    },
+    "./js/storage/sync-strategy.js": {
+      "exports": [
+        "SyncStrategy"
+      ],
+      "imports": [],
+      "indexed": 1768982875278
+    },
+    "./js/storage/transaction.js": {
+      "exports": [
+        "Transaction"
+      ],
+      "imports": [
+        "./write-ahead-log.js"
+      ],
+      "indexed": 1768982875279
+    },
+    "./js/storage/write-ahead-log.js": {
+      "exports": [
+        "WriteAheadLog",
+        "WalPriority",
+        "WalEntry",
+        "WalState"
+      ],
+      "imports": [],
+      "indexed": 1768982875280
+    },
+    "./js/template-profiles.js": {
+      "exports": [
+        "TemplateProfiles"
+      ],
+      "imports": [],
+      "indexed": 1768982875281
+    },
+    "./js/token-counter.js": {
+      "exports": [
+        "TokenCounter"
+      ],
+      "imports": [],
+      "indexed": 1768982875282
+    },
+    "./js/utils.js": {
+      "exports": [
+        "Utils"
+      ],
+      "imports": [],
+      "indexed": 1768982875283
+    },
+    "./js/utils/timeout-wrapper.js": {
+      "exports": [
+        "TimeoutWrapper"
+      ],
+      "imports": [],
+      "indexed": 1768982875284
+    },
+    "./js/window-globals-debug.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875285
+    },
+    "./js/workers/pattern-worker-pool.js": {
+      "exports": [
+        "PatternWorkerPool"
+      ],
+      "imports": [],
+      "indexed": 1768982875285
+    },
+    "./js/workers/pattern-worker.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875286
+    },
+    "./js/workers/shared-worker-coordinator.js": {
+      "exports": [
+        "SharedWorkerCoordinator"
+      ],
+      "imports": [],
+      "indexed": 1768982875287
+    },
+    "./js/workers/shared-worker.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875288
+    },
+    "./js/workers/vector-search-worker.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875289
+    },
+    "./playwright.config.ts": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875290
+    },
+    "./scripts/dev-server-with-coop-coep.mjs": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875291
+    },
+    "./scripts/lint-window-globals.mjs": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875292
+    },
+    "./test_ghosted_fix.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875293
+    },
+    "./tests/integration/keymanager-browser-test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875294
+    },
+    "./tests/integration/keymanager-integration-test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875295
+    },
+    "./tests/integration/storage-encryption-test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875296
+    },
+    "./tests/integration/storage-integration.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875297
+    },
+    "./tests/rhythm-chamber.spec.ts": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875298
+    },
+    "./tests/token-counter-test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875299
+    },
+    "./tests/unit/chat-queue.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875300
+    },
+    "./tests/unit/chat-timeout-budget.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875301
+    },
+    "./tests/unit/config-loader.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875302
+    },
+    "./tests/unit/data-provider.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875303
+    },
+    "./tests/unit/embeddings-checkpoint.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875304
+    },
+    "./tests/unit/error-boundary.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875305
+    },
+    "./tests/unit/event-bus.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875306
+    },
+    "./tests/unit/event-log-store.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875307
+    },
+    "./tests/unit/eventbus-replay.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875308
+    },
+    "./tests/unit/hnw-improvements.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875309
+    },
+    "./tests/unit/hnw-structural.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875310
+    },
+    "./tests/unit/indexeddb-retry.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875311
+    },
+    "./tests/unit/local-vector-store.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875312
+    },
+    "./tests/unit/lock-policy-hierarchy.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875313
+    },
+    "./tests/unit/lru-cache.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875314
+    },
+    "./tests/unit/observability/core-web-vitals.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875315
+    },
+    "./tests/unit/observability/metrics-exporter.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875316
+    },
+    "./tests/unit/observability/performance-profiler.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875317
+    },
+    "./tests/unit/operation-lock.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875318
+    },
+    "./tests/unit/pattern-stream.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875319
+    },
+    "./tests/unit/patterns.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875320
+    },
+    "./tests/unit/phase2-services.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875321
+    },
+    "./tests/unit/pricing.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875322
+    },
+    "./tests/unit/provider-circuit-breaker.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875323
+    },
+    "./tests/unit/provider-health-monitor.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875324
+    },
+    "./tests/unit/provider-notification-service.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875325
+    },
+    "./tests/unit/quota-manager.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 17689875326
+    },
+    "./tests/unit/schema-adapters.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875327
+    },
+    "./tests/unit/schemas.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875328
+    },
+    "./tests/unit/secure-token-store.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875329
+    },
+    "./tests/unit/storage-migration.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875330
+    },
+    "./tests/unit/storage-transaction.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875331
+    },
+    "./tests/unit/tab-coordination.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875332
+    },
+    "./tests/unit/tab-coordinator-watermark.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875333
+    },
+    "./tests/unit/timeout-wrapper.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875334
+    },
+    "./tests/unit/token-binding.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875335
+    },
+    "./tests/unit/vector-clock.test.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875336
+    },
+    "./tests/unit/vitest-setup.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875337
+    },
+    "./vitest.config.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1768982875338
+    },
+    "/Users/rhinesharar/rhythm-chamber/.planning/codebase/build-index.mjs": {
+      "exports": [
+        "foo",
+        "baz",
+        "bar",
+        "Baz",
+        "default",
+        "Bar",
+        "Foo"
+      ],
+      "imports": [
+        "fs",
+        "path",
+        "url",
+        "@babel/parser",
+        "baz",
+        "bar",
+        "foo"
+      ],
+      "indexed": 1768984791931
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/controllers/sidebar-controller.js": {
+      "exports": [
+        "SidebarController"
+      ],
+      "imports": [
+        "../storage.js",
+        "../chat.js",
+        "./chat-ui-controller.js",
+        "../token-counter.js",
+        "../state/app-state.js",
+        "../services/event-bus.js"
+      ],
+      "indexed": 1768984894463
     },
     "/Users/rhinesharar/rhythm-chamber/js/security/security-coordinator.js": {
       "exports": [
@@ -70,35 +1755,149 @@
         "./storage-encryption.js",
         "./safe-mode.js"
       ],
-      "indexed": 1768982897995
+      "indexed": 1768984974576
     },
-    "/Users/rhinesharar/rhythm-chamber/js/security/index.js": {
+    "/Users/rhinesharar/rhythm-chamber/js/services/event-bus.js": {
       "exports": [
-        "Security",
-        "ErrorContext",
-        "SecurityCoordinator",
-        "SecurityChecklist",
-        "SafeMode",
-        "// Individual modules for direct import if needed\n    Encryption",
-        "TokenBinding",
-        "Anomaly",
-        "KeyManager",
-        "StorageEncryption",
-        "MessageSecurity"
+        "EventBus"
       ],
       "imports": [
-        "./encryption.js",
-        "./token-binding.js",
-        "./anomaly.js",
-        "./key-manager.js",
-        "./storage-encryption.js",
-        "./message-security.js",
-        "./security-coordinator.js",
-        "./safe-mode.js",
-        "./checklist.js",
-        "./recovery-handlers.js"
+        "./vector-clock.js",
+        "../storage/event-log-store.js",
+        "./tab-coordination.js"
       ],
-      "indexed": 1768982929014
+      "indexed": 1768985146214
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/services/provider-health-authority.js": {
+      "exports": [
+        "CircuitState",
+        "HealthStatus",
+        "canExecute",
+        "recordSuccess",
+        "recordFailure",
+        "markHalfOpenRequestStarted",
+        "markHalfOpenRequestCompleted",
+        "blacklist",
+        "unblacklist",
+        "isBlacklisted",
+        "getStatus",
+        "getProviderSnapshot",
+        "getAllStatus",
+        "getAllSnapshots",
+        "getHealthSummary",
+        "reset",
+        "resetAll",
+        "forceState",
+        "configure",
+        "getConfig",
+        "onHealthUpdate",
+        "offHealthUpdate",
+        "execute",
+        "ProviderHealthAuthority"
+      ],
+      "imports": [
+        "./event-bus.js"
+      ],
+      "indexed": 1768985370932
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/services/tab-coordination.js": {
+      "exports": [
+        "TabCoordinator"
+      ],
+      "imports": [
+        "./vector-clock.js",
+        "./wave-telemetry.js",
+        "./event-bus.js",
+        "./device-detection.js",
+        "../workers/shared-worker-coordinator.js",
+        "../security/index.js",
+        "../state/app-state.js"
+      ],
+      "indexed": 1768988581969
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/storage/transaction.js": {
+      "exports": [
+        "StorageTransaction"
+      ],
+      "imports": [
+        "./indexeddb.js",
+        "../services/event-bus.js",
+        "../security/secure-token-store.js"
+      ],
+      "indexed": 1768988871317
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/chat.js": {
+      "exports": [
+        "Chat"
+      ],
+      "imports": [
+        "./services/tool-strategies/native-strategy.js",
+        "./services/tool-strategies/prompt-injection-strategy.js",
+        "./services/tool-strategies/intent-extraction-strategy.js",
+        "./module-registry.js",
+        "./services/config-loader.js",
+        "./services/turn-queue.js",
+        "./services/timeout-budget-manager.js",
+        "./services/wave-telemetry.js",
+        "./services/llm-provider-routing-service.js",
+        "./services/token-counting-service.js",
+        "./services/tool-call-handling-service.js",
+        "./services/fallback-response-service.js",
+        "./services/circuit-breaker.js",
+        "./services/function-calling-fallback.js",
+        "./functions/index.js",
+        "./services/message-operations.js",
+        "./services/session-manager.js",
+        "./token-counter.js",
+        "./prompts.js",
+        "./storage.js",
+        "./patterns.js",
+        "./personality.js",
+        "./parser.js",
+        "./data-query.js",
+        "./providers/provider-interface.js",
+        "./settings.js",
+        "./services/conversation-orchestrator.js",
+        "./services/message-lifecycle-coordinator.js"
+      ],
+      "indexed": 1768987173741
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/functions/index.js": {
+      "exports": [
+        "Functions"
+      ],
+      "imports": [
+        "../settings.js",
+        "../data-query.js",
+        "./schemas/data-queries.js",
+        "./schemas/template-queries.js",
+        "./schemas/analytics-queries.js",
+        "./utils/validation.js",
+        "./utils/retry.js",
+        "./executors/data-executors.js",
+        "./executors/template-executors.js",
+        "./executors/analytics-executors.js"
+      ],
+      "indexed": 1768986993493
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/functions/executors/analytics-executors.js": {
+      "exports": [
+        "AnalyticsExecutors"
+      ],
+      "imports": [
+        "../utils/validation.js"
+      ],
+      "indexed": 1768987042324
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/functions/executors/data-executors.js": {
+      "exports": [
+        "DataExecutors"
+      ],
+      "imports": [
+        "../../data-query.js",
+        "../utils/validation.js"
+      ],
+      "indexed": 1768987043364
     },
     "/Users/rhinesharar/rhythm-chamber/js/services/message-lifecycle-coordinator.js": {
       "exports": [
@@ -108,7 +1907,153 @@
         "./turn-queue.js",
         "./timeout-budget-manager.js"
       ],
-      "indexed": 1768983039891
+      "indexed": 1768987107059
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/functions/executors/template-executors.js": {
+      "exports": [
+        "TemplateExecutors"
+      ],
+      "imports": [
+        "../../template-profiles.js",
+        "../../profile-synthesizer.js"
+      ],
+      "indexed": 1768987535080
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/spotify.js": {
+      "exports": [
+        "Spotify"
+      ],
+      "imports": [
+        "./security/index.js",
+        "./services/config-loader.js",
+        "./security/secure-token-store.js"
+      ],
+      "indexed": 1768988530469
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/controllers/reset-controller.js": {
+      "exports": [
+        "ResetController"
+      ],
+      "imports": [],
+      "indexed": 1768988644552
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/app.js": {
+      "exports": [
+        "init"
+      ],
+      "imports": [
+        "./security/index.js",
+        "./module-registry.js",
+        "./state/app-state.js",
+        "./storage.js",
+        "./patterns.js",
+        "./personality.js",
+        "./data-query.js",
+        "./prompts.js",
+        "./token-counter.js",
+        "./functions/index.js",
+        "./cards.js",
+        "./spotify.js",
+        "./settings.js",
+        "./chat.js",
+        "./controllers/view-controller.js",
+        "./controllers/file-upload-controller.js",
+        "./controllers/spotify-controller.js",
+        "./controllers/demo-controller.js",
+        "./controllers/reset-controller.js",
+        "./controllers/sidebar-controller.js",
+        "./controllers/chat-ui-controller.js",
+        "./services/tab-coordination.js",
+        "./services/session-manager.js",
+        "./services/message-operations.js",
+        "./services/event-bus.js",
+        "./storage/event-log-store.js",
+        "./operation-lock.js",
+        "./services/circuit-breaker.js",
+        "./services/function-calling-fallback.js",
+        "./services/data-version.js",
+        "./demo-data.js",
+        "./template-profiles.js",
+        "./profile-synthesizer.js"
+      ],
+      "indexed": 1768988960115
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/controllers/view-controller.js": {
+      "exports": [
+        "ViewController"
+      ],
+      "imports": [
+        "../chat.js",
+        "../services/profile-description-generator.js",
+        "../state/app-state.js",
+        "./sidebar-controller.js"
+      ],
+      "indexed": 1768988707682
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/controllers/observability-controller.js": {
+      "exports": [
+        "ObservabilityController",
+        "default",
+        "ObservabilityControllerSingleton"
+      ],
+      "imports": [
+        "../services/performance-profiler.js",
+        "../observability/core-web-vitals.js",
+        "../observability/metrics-exporter.js"
+      ],
+      "indexed": 1768988792374
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/storage/migration.js": {
+      "exports": [
+        "StorageMigration"
+      ],
+      "imports": [
+        "./indexeddb.js",
+        "./config-api.js",
+        "../security/secure-token-store.js"
+      ],
+      "indexed": 1768988857675
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/storage/config-api.js": {
+      "exports": [
+        "ConfigAPI"
+      ],
+      "imports": [
+        "./indexeddb.js",
+        "../security/index.js",
+        "../security/storage-encryption.js",
+        "../security/secure-token-store.js"
+      ],
+      "indexed": 1768988900457
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/observability/observability-settings.js": {
+      "exports": [
+        "initObservabilitySettings",
+        "ObservabilitySettings"
+      ],
+      "imports": [
+        "../storage.js",
+        "../services/performance-profiler.js",
+        "./core-web-vitals.js",
+        "./metrics-exporter.js"
+      ],
+      "indexed": 1768988917956
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/observability/metrics-exporter.js": {
+      "exports": [
+        "ExportFormat",
+        "ScheduleType",
+        "ExternalService",
+        "MetricsExporter",
+        "flatMetrics",
+        "getMetricsExporter",
+        "default"
+      ],
+      "imports": [
+        "../services/performance-profiler.js",
+        "./core-web-vitals.js"
+      ],
+      "indexed": 1768988941240
     }
   }
 }

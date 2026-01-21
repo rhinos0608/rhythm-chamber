@@ -28,6 +28,7 @@ let _Settings = null;
 let _Config = null;
 let _Functions = null;
 let _WaveTelemetry = null;
+let _MessageOperations = null;
 
 // Track if we've already shown fallback notification this session
 let _hasShownFallbackNotification = false;
@@ -36,6 +37,26 @@ let _hasShownFallbackNotification = false;
 const CHAT_API_TIMEOUT_MS = 60000;
 const LOCAL_LLM_TIMEOUT_MS = 90000;
 const CHAT_FUNCTION_TIMEOUT_MS = 30000;
+
+/**
+ * Build user-friendly error message with provider-specific hints
+ * @param {Error} error - The error that occurred
+ * @param {string} provider - The provider that was being used
+ * @returns {string} Formatted error message for display
+ */
+function buildUserErrorMessage(error, provider) {
+    const providerHints = {
+        ollama: 'Ensure Ollama is running (`ollama serve`)',
+        lmstudio: 'Check LM Studio server is enabled',
+        gemini: 'Verify your Gemini API key in Settings',
+        openrouter: 'Check your OpenRouter API key in Settings'
+    };
+
+    const hint = providerHints[provider] || 'Check your provider settings';
+
+    return `**Connection Error**\n\n${error.message}\n\n💡 **Tip:** ${hint}\n\nClick "Try Again" after fixing the issue.`;
+}
+
 
 /**
  * Initialize MessageLifecycleCoordinator
@@ -53,6 +74,7 @@ function init(dependencies) {
     _Config = dependencies.Config;
     _Functions = dependencies.Functions;
     _WaveTelemetry = dependencies.WaveTelemetry;
+    _MessageOperations = dependencies.MessageOperations;
     console.log('[MessageLifecycleCoordinator] Initialized');
 }
 
@@ -148,6 +170,11 @@ async function processMessage(message, optionsOrKey = null) {
                 role: 'assistant',
                 content: fallbackResponse
             });
+            // Show subtle fallback notification once per session
+            if (!_hasShownFallbackNotification && _Settings?.showToast) {
+                _Settings.showToast('Using offline response mode - add an API key for AI responses', 4000);
+                _hasShownFallbackNotification = true;
+            }
             return {
                 content: fallbackResponse,
                 status: 'success',
@@ -290,18 +317,24 @@ async function processMessage(message, optionsOrKey = null) {
         } catch (error) {
             console.error('[MessageLifecycleCoordinator] Chat error:', error);
 
-            const queryContext = _ConversationOrchestrator.generateQueryContext(message);
-            const fallbackResponse = _FallbackResponseService.generateFallbackResponse(message, queryContext);
+            // Build user-friendly error message with provider-specific hints
+            const currentProvider = settings?.llm?.provider || 'unknown';
+            const errorMessage = buildUserErrorMessage(error, currentProvider);
 
             _SessionManager.addMessageToHistory({
                 role: 'assistant',
-                content: fallbackResponse,
+                content: errorMessage,
                 error: true
             });
             _SessionManager.saveConversation();
 
+            // Always show error toast with actionable information
+            if (_Settings?.showToast) {
+                _Settings.showToast(`Error: ${error.message}`, 5000);
+            }
+
             return {
-                content: fallbackResponse,
+                content: errorMessage,
                 status: 'error',
                 error: error.message,
                 role: 'assistant'
@@ -318,8 +351,8 @@ async function processMessage(message, optionsOrKey = null) {
 async function regenerateLastResponse(options = null) {
     const conversationHistory = _SessionManager.getHistory();
 
-    if (typeof window.MessageOperations !== 'undefined') {
-        return window.MessageOperations.regenerateLastResponse(
+    if (typeof _MessageOperations !== 'undefined') {
+        return _MessageOperations.regenerateLastResponse(
             conversationHistory,
             sendMessage,
             options
@@ -353,8 +386,8 @@ async function regenerateLastResponse(options = null) {
 function deleteMessage(index) {
     const conversationHistory = _SessionManager.getHistory();
 
-    if (typeof window.MessageOperations !== 'undefined') {
-        const result = window.MessageOperations.deleteMessage(index, conversationHistory);
+    if (typeof _MessageOperations !== 'undefined') {
+        const result = _MessageOperations.deleteMessage(index, conversationHistory);
         _SessionManager.saveConversation();
         return result;
     }
@@ -372,8 +405,8 @@ function deleteMessage(index) {
 async function editMessage(index, newText, options = null) {
     const conversationHistory = _SessionManager.getHistory();
 
-    if (typeof window.MessageOperations !== 'undefined') {
-        return window.MessageOperations.editMessage(
+    if (typeof _MessageOperations !== 'undefined') {
+        return _MessageOperations.editMessage(
             index,
             newText,
             conversationHistory,

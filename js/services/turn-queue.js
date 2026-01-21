@@ -123,10 +123,13 @@ async function processNext() {
             throw new Error('Chat module not available');
         }
 
-        // Process the message
+        // Process the message - bypass queue to avoid infinite recursion
+        // TurnQueue already serializes turns, so we call sendMessage with bypassQueue: true
+        const options = currentTurn.options || {};
         const result = await Chat.sendMessage(
             currentTurn.message,
-            currentTurn.options
+            options,
+            { bypassQueue: true }
         );
 
         currentTurn.status = 'completed';

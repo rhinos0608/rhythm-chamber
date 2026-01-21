@@ -10,6 +10,7 @@
 import { IndexedDBCore } from './indexeddb.js';
 import { Security } from '../security/index.js';
 import { shouldEncrypt, secureDelete } from '../security/storage-encryption.js';
+import { SecureTokenStore } from '../security/secure-token-store.js';
 
 // ==========================================
 // Migration Constants
@@ -390,10 +391,10 @@ async function migrateToEncryptedStorage() {
  */
 async function getToken(key) {
     try {
-        if (window.SecureTokenStore?.isAvailable?.()) {
-            return await window.SecureTokenStore.retrieve(key);
+        if (SecureTokenStore?.isAvailable?.()) {
+            return await SecureTokenStore.retrieve(key);
         }
-        if (window.SecureTokenStore) {
+        if (SecureTokenStore) {
             console.warn(`[ConfigAPI] SecureTokenStore unavailable; token access blocked for '${key}'.`);
             return null;
         }
@@ -422,8 +423,8 @@ async function getToken(key) {
  */
 async function setToken(key, value) {
     try {
-        if (window.SecureTokenStore?.isAvailable?.()) {
-            const stored = await window.SecureTokenStore.store(key, value, {
+        if (SecureTokenStore?.isAvailable?.()) {
+            const stored = await SecureTokenStore.store(key, value, {
                 metadata: { source: 'config_api' }
             });
             if (!stored) {
@@ -431,7 +432,7 @@ async function setToken(key, value) {
             }
             return;
         }
-        if (window.SecureTokenStore) {
+        if (SecureTokenStore) {
             console.warn(`[ConfigAPI] SecureTokenStore unavailable; token write blocked for '${key}'.`);
             return;
         }
@@ -459,10 +460,10 @@ async function setToken(key, value) {
  */
 async function removeToken(key) {
     try {
-        if (window.SecureTokenStore?.isAvailable?.()) {
-            await window.SecureTokenStore.invalidate(key);
+        if (SecureTokenStore?.isAvailable?.()) {
+            await SecureTokenStore.invalidate(key);
         }
-        if (!window.SecureTokenStore && IndexedDBCore) {
+        if (!SecureTokenStore && IndexedDBCore) {
             await IndexedDBCore.delete(IndexedDBCore.STORES.TOKENS, key);
         }
         localStorage.removeItem(key);
@@ -478,11 +479,11 @@ async function removeToken(key) {
  */
 async function clearAllTokens() {
     try {
-        if (window.SecureTokenStore?.isAvailable?.()) {
-            await window.SecureTokenStore.invalidateAllTokens('config_api_clear');
+        if (SecureTokenStore?.isAvailable?.()) {
+            await SecureTokenStore.invalidateAllTokens('config_api_clear');
         }
 
-        if (!window.SecureTokenStore && IndexedDBCore) {
+        if (!SecureTokenStore && IndexedDBCore) {
             await IndexedDBCore.clear(IndexedDBCore.STORES.TOKENS);
         }
 
