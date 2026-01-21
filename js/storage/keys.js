@@ -9,6 +9,13 @@
 
 const STORAGE_KEYS = {
     // ==========================================
+    // Settings Keys
+    // ==========================================
+    SETTINGS: 'rhythm_chamber_settings',
+    SETTINGS_MIGRATED_TO_IDB: 'rhythm_chamber_settings_migrated_to_idb',
+    ENABLED_TOOLS: 'rhythm_chamber_enabled_tools',
+
+    // ==========================================
     // RAG Module Keys
     // ==========================================
     RAG_CONFIG: 'rhythm_chamber_rag',
@@ -20,9 +27,12 @@ const STORAGE_KEYS = {
     // Session Keys
     // ==========================================
     SESSION_ID: 'rhythm_chamber_session_id',
+    CURRENT_SESSION: 'rhythm_chamber_current_session',
     CONVERSATION: 'rhythm_chamber_conversation',
     EMERGENCY_BACKUP: 'rhythm_chamber_emergency_backup',
     PERSISTENCE_CONSENT: 'rhythm_chamber_persistence_consent',
+    SESSION_SALT: 'rhythm_chamber_session_salt',
+    HIDDEN_AT: 'rhythm_chamber_hidden_at',
 
     // ==========================================
     // Spotify OAuth Keys
@@ -53,9 +63,12 @@ const STORAGE_KEYS = {
     // ==========================================
     // Security Keys
     // ==========================================
+    SECURITY: 'rhythm_chamber_security',
+    ENCRYPTED_CREDENTIALS: 'rhythm_chamber_encrypted_creds',
     SECURITY_FAILED_ATTEMPTS: 'rhythm_chamber_security_failed_attempts',
     SECURITY_GEO_LOG: 'rhythm_chamber_security_geo_log',
     SECURITY_TRAVEL_OVERRIDE: 'rhythm_chamber_security_travel_override',
+    SESSION_VERSION: 'rhythm_chamber_session_version',
 
     // ==========================================
     // Migration Keys
@@ -68,7 +81,29 @@ const STORAGE_KEYS = {
     // ==========================================
     SECURE_TOKEN_BINDING: 'rhythm_chamber_secure_binding',
     SECURE_TOKEN_AUDIT: 'rhythm_chamber_token_audit',
-    SECURE_TOKEN_SALT: 'rhythm_chamber_token_salt'
+    SECURE_TOKEN_SALT: 'rhythm_chamber_token_salt',
+    DEVICE_ID: 'rhythm_chamber_device_id',
+    DEVICE_FINGERPRINT: 'rhythm_chamber_device_fp',
+
+    // ==========================================
+    // Write-Ahead Log Keys
+    // ==========================================
+    WAL: 'rhythm_chamber_wal',
+    WAL_SEQUENCE: 'rhythm_chamber_wal_sequence',
+    WAL_RESULTS: 'rhythm_chamber_wal_results',
+
+    // ==========================================
+    // Config Cache Keys
+    // ==========================================
+    CONFIG_CACHE: 'rhythm_chamber_config_cache',
+
+    // ==========================================
+    // Other Keys
+    // ==========================================
+    LICENSE: 'rhythm_chamber_license',
+    GENRE_CACHE: 'rhythm_chamber_genre_cache',
+    DEMO_SESSION: 'rhythm_chamber_demo_session',
+    SECURITY_CHECKLIST_SEEN: 'rhythm_chamber_security_checklist_seen'
 };
 
 // Freeze to prevent accidental modification
