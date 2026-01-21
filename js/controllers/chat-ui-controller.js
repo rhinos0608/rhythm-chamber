@@ -172,7 +172,8 @@ function createMessageElement(text, role, isError = false) {
     // SAFE: content is escaped via escapeHtml() (assistant) or parseMarkdown() (which also escapes)
     // The final insertion into innerHTML is safe because all data has been escaped
     const content = role === 'assistant' ? parseMarkdown(text) : escapeHtml(text);
-    div.innerHTML = `<div class="message-content">${content}</div>`;
+    // I18N FIX: Add dir="auto" to support bidirectional text (RTL/LTR)
+    div.innerHTML = `<div class="message-content" dir="auto">${content}</div>`;
 
     return div;
 }
@@ -521,7 +522,8 @@ function updateLoadingMessage(id, state) {
                 el.dataset.streaming = 'true';
                 el.className = 'message assistant streaming';
                 // SAFE: Static HTML template structure
-                el.innerHTML = '<div class="message-content streaming-content"></div>';
+                // I18N FIX: Add dir="auto" to support bidirectional text (RTL/LTR)
+                el.innerHTML = '<div class="message-content streaming-content" dir="auto"></div>';
             }
             const contentEl = el.querySelector('.streaming-content');
             if (contentEl && state.token) {
@@ -622,8 +624,9 @@ function showTokenWarning(message, tokenInfo, truncated) {
     const title = truncated ? 'Context Truncated' : 'Token Warning';
 
     // SAFE: message and tokenInfo values are from internal token counting system
+    // I18N FIX: Add dir="auto" to support bidirectional text (RTL/LTR)
     warningDiv.innerHTML = `
-        <div class="message-content">
+        <div class="message-content" dir="auto">
             <strong>${icon} ${title}</strong><br>
             ${escapeHtml(message)}<br>
             <small>Usage: ${tokenInfo.total}/${tokenInfo.contextWindow} tokens (${Math.round(tokenInfo.usagePercent)}%)</small>
@@ -682,9 +685,14 @@ function getInputValue() {
     const input = document.getElementById(CHAT_UI_INPUT_ID);
     const value = input?.value?.trim() || '';
     // Edge case: Enforce maximum message length
+    // Use Array.from to properly handle Unicode surrogate pairs (emojis, rare CJK chars)
+    // which prevents splitting multi-byte characters during truncation
     if (value.length > MAX_MESSAGE_LENGTH) {
         console.warn(`[ChatUI] Message exceeds ${MAX_MESSAGE_LENGTH} characters, truncating`);
-        return value.slice(0, MAX_MESSAGE_LENGTH);
+        const chars = Array.from(value);
+        if (chars.length > MAX_MESSAGE_LENGTH) {
+            return chars.slice(0, MAX_MESSAGE_LENGTH).join('');
+        }
     }
     return value;
 }
