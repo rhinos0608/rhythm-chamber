@@ -12,6 +12,7 @@ import * as TokenBinding from './token-binding.js';
 import * as Anomaly from './anomaly.js';
 import * as KeyManager from './key-manager.js';
 import * as StorageEncryption from './storage-encryption.js';
+import * as MessageSecurity from './message-security.js';
 import { SecurityCoordinator } from './security-coordinator.js';
 import './recovery-handlers.js'; // Side-effect import - sets up window.RecoveryHandlers
 
@@ -435,6 +436,10 @@ const Security = {
      * StorageEncryption Integration:
      * StorageEncryption module uses KeyManager.getDataEncryptionKey() for encrypting sensitive data.
      * Pattern: Security.StorageEncryption.encrypt(data, await Security.getDataEncryptionKey())
+     *
+     * MessageSecurity Integration:
+     * MessageSecurity module uses KeyManager.getSigningKey() for HMAC message signing.
+     * Pattern: Security.MessageSecurity.signMessage(message, await Security.getSigningKey())
      */
     // Key Management (NEW - Phase 9)
     KeyManager,
@@ -473,7 +478,43 @@ const Security = {
      * Integration with ConfigAPI (Phase 13-02):
      * ConfigAPI will use StorageEncryption to encrypt API keys and chat history before storage.
      */
-    StorageEncryption
+    StorageEncryption,
+
+    /**
+     * MessageSecurity Module (NEW - Phase 14)
+     *
+     * Provides HMAC-SHA256 message signing and verification for cross-tab communication.
+     * Integrates with KeyManager's non-extractable signing key.
+     *
+     * Methods:
+     * - signMessage(message, signingKey): Sign message using HMAC-SHA256
+     * - verifyMessage(message, signature, signingKey): Verify HMAC-SHA256 signature
+     * - validateTimestamp(message, maxAgeSeconds): Validate message freshness (default: 5s)
+     * - sanitizeMessage(message): Remove sensitive fields (apiKey, token, secret, password)
+     * - isNonceUsed(nonce): Check if nonce has been used before
+     * - markNonceUsed(nonce): Mark nonce as used to prevent replay attacks
+     *
+     * Usage Pattern:
+     * const signingKey = await Security.getSigningKey();
+     * const message = { type: 'update', data: { user: 'alice' }, timestamp: Date.now() };
+     * const signature = await Security.MessageSecurity.signMessage(message, signingKey);
+     * const isValid = await Security.MessageSecurity.verifyMessage(message, signature, signingKey);
+     * const isFresh = Security.MessageSecurity.validateTimestamp(message);
+     * const sanitized = Security.MessageSecurity.sanitizeMessage(message);
+     *
+     * Security Features:
+     * - HMAC-SHA256 message authentication codes
+     * - Non-extractable signing keys from KeyManager
+     * - Message canonicalization for deterministic signatures
+     * - Timestamp validation to prevent replay attacks
+     * - Sensitive data sanitization before broadcasting
+     * - Nonce tracking with 1000-entry cache (FIFO eviction)
+     * - Graceful error handling (verify returns false on failure)
+     *
+     * Integration with Tab Coordination (Phase 14-02):
+     * Tab coordination will use MessageSecurity to secure BroadcastChannel communications.
+     */
+    MessageSecurity
 };
 
 // Export for ES6 modules
@@ -487,7 +528,8 @@ export {
     TokenBinding,
     Anomaly,
     KeyManager,
-    StorageEncryption
+    StorageEncryption,
+    MessageSecurity
 };
 
 console.log('[Security] Client-side security module loaded (SecurityCoordinator + AES-GCM + XSS Token Protection + Recovery Handlers enabled)');
