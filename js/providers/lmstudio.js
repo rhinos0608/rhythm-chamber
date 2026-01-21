@@ -29,6 +29,14 @@ const LMSTUDIO_DEFAULT_ENDPOINT = 'http://localhost:1234/v1';
  * @returns {Promise<object>} OpenAI-compatible response
  */
 async function call(config, messages, tools, onProgress = null) {
+    // Validate required parameters
+    if (!config?.model) {
+        throw new Error('LM Studio model is required but not configured. Ensure a model is loaded in LM Studio.');
+    }
+    if (!Array.isArray(messages) || messages.length === 0) {
+        throw new Error('Messages array is required and must not be empty');
+    }
+
     const useStreaming = typeof onProgress === 'function';
     const endpoint = config.endpoint || LMSTUDIO_DEFAULT_ENDPOINT;
 

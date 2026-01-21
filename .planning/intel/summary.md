@@ -1,7 +1,7 @@
 # Codebase Intelligence Summary
 
-Last updated: 2026-01-21T12:43:24.560Z
-Indexed files: 237
+Last updated: 2026-01-21T12:44:46.179Z
+Indexed files: 241
 
 ## Key Directories
 
@@ -14,4 +14,4 @@ Indexed files: 237
 
 - `*.test.js`: Test files (39 files)
 
-Total exports: 346
+Total exports: 350

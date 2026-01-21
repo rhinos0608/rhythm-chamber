@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": 1768999404558,
+  "updated": 1768999486177,
   "files": {
     "./js/app.js": {
       "exports": [
@@ -2343,7 +2343,37 @@
         "./lmstudio.js",
         "./gemini.js"
       ],
-      "indexed": 1768999404558
+      "indexed": 1768999486177
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/providers/openrouter.js": {
+      "exports": [
+        "OpenRouterProvider"
+      ],
+      "imports": [],
+      "indexed": 1768999425035
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/providers/gemini.js": {
+      "exports": [
+        "GeminiProvider"
+      ],
+      "imports": [],
+      "indexed": 1768999443902
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/providers/lmstudio.js": {
+      "exports": [
+        "LMStudioProvider"
+      ],
+      "imports": [],
+      "indexed": 1768999448242
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/ollama.js": {
+      "exports": [
+        "Ollama"
+      ],
+      "imports": [
+        "./module-registry.js"
+      ],
+      "indexed": 1768999468642
     }
   }
 }

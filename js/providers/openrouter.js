@@ -26,8 +26,15 @@ const OPENROUTER_TIMEOUT_MS = 60000;  // 60 seconds
  * @returns {Promise<object>} OpenAI-compatible response
  */
 async function call(apiKey, config, messages, tools, onProgress = null) {
+    // Validate required parameters
     if (!apiKey) {
         throw new Error('OpenRouter API key required. Set in Settings or config.js');
+    }
+    if (!config?.model) {
+        throw new Error('OpenRouter model is required but not configured. Check your settings.');
+    }
+    if (!Array.isArray(messages) || messages.length === 0) {
+        throw new Error('Messages array is required and must not be empty');
     }
 
     const body = {

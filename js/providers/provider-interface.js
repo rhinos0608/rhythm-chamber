@@ -331,17 +331,19 @@ async function safeJSONParse(response, fallback = null) {
         return fallback;
     }
 
+    // Clone the response so we can fall back to text() if JSON parsing fails
+    // This is necessary because response.json() consumes the body
     try {
-        return await response.json();
+        return await response.clone().json();
     } catch (error) {
         if (error instanceof SyntaxError) {
             console.error('[ProviderInterface] JSON parse error - response may be malformed:', error.message);
-            // Log first 200 chars of response for debugging
+            // Try to get text for debugging (using the original response since clone was consumed)
             try {
                 const text = await response.text();
                 console.debug('[ProviderInterface] Response preview:', text.substring(0, 200));
             } catch (e) {
-                // Response body already consumed, ignore
+                // Response body already consumed by failed json() attempt, ignore
             }
         }
         return fallback;
@@ -660,7 +662,7 @@ async function checkGeminiHealth() {
             };
         }
 
-        const data = await response.json();
+        const data = await safeJSONParse(response, { data: [] });
         const models = data.data?.map(m => m.id) || [];
 
         return {
@@ -678,6 +680,16 @@ async function checkGeminiHealth() {
                 available: false,
                 status: 'timeout',
                 reason: 'Connection timeout - check your internet',
+                models: [],
+                latencyMs
+            };
+        }
+        // Distinguish JSON parse errors from other errors
+        if (error instanceof SyntaxError) {
+            return {
+                available: false,
+                status: 'parse_error',
+                reason: 'Invalid response format from Gemini API',
                 models: [],
                 latencyMs
             };
