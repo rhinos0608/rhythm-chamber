@@ -276,8 +276,8 @@ function set(path, value) {
 // ==========================================
 
 /**
- * Validate configuration structure
- * 
+ * Validate configuration structure and value formats
+ *
  * @param {Object} config - Config to validate
  * @returns {{valid: boolean, warnings: string[]}}
  */
@@ -296,9 +296,71 @@ function validateConfig(config) {
     if (config.openrouter) {
         if (!config.openrouter.apiUrl) {
             warnings.push('openrouter.apiUrl is missing');
+        } else {
+            // Validate URL format
+            try {
+                const url = new URL(config.openrouter.apiUrl);
+                if (!url.protocol.startsWith('https')) {
+                    warnings.push('openrouter.apiUrl should use HTTPS for security');
+                }
+            } catch (e) {
+                warnings.push('openrouter.apiUrl is not a valid URL');
+            }
         }
+
         if (!config.openrouter.model) {
             warnings.push('openrouter.model is missing');
+        } else {
+            // Validate model ID format (basic check)
+            const modelId = config.openrouter.model;
+            if (typeof modelId !== 'string' || modelId.length < 3) {
+                warnings.push('openrouter.model seems invalid (too short)');
+            }
+        }
+
+        // Validate API key format if present (warn if malformed)
+        if (config.openrouter.apiKey && config.openrouter.apiKey.length > 0) {
+            const apiKey = config.openrouter.apiKey;
+            if (!apiKey.startsWith('sk-or-v1-')) {
+                warnings.push('openrouter.apiKey format may be invalid (should start with sk-or-v1-)');
+            }
+            if (apiKey.length < 40) {
+                warnings.push('openrouter.apiKey seems too short');
+            }
+        }
+    }
+
+    // Check Spotify config
+    if (config.spotify) {
+        if (config.spotify.redirectUri) {
+            try {
+                new URL(config.spotify.redirectUri);
+            } catch (e) {
+                warnings.push('spotify.redirectUri is not a valid URL');
+            }
+        }
+
+        // Validate scopes array
+        if (config.spotify.scopes && !Array.isArray(config.spotify.scopes)) {
+            warnings.push('spotify.scopes should be an array');
+        }
+    }
+
+    // Check Stripe config if present
+    if (config.stripe) {
+        if (config.stripe.publishableKey && !config.stripe.publishableKey.startsWith('pk_')) {
+            warnings.push('stripe.publishableKey format may be invalid (should start with pk_)');
+        }
+    }
+
+    // Check app config
+    if (config.app) {
+        if (config.app.url) {
+            try {
+                new URL(config.app.url);
+            } catch (e) {
+                warnings.push('app.url is not a valid URL');
+            }
         }
     }
 
