@@ -1,6 +1,6 @@
 ---
 path: /Users/rhinesharar/rhythm-chamber/js/controllers/sidebar-controller.js
-type: controller
+type: component
 updated: 2026-01-21
 status: active
 ---
@@ -9,21 +9,15 @@ status: active
 
 ## Purpose
 
-Handles sidebar state management, session list rendering, and session management UI interactions. Integrates with AppState for centralized reactive state management.
+Handles sidebar state, session list rendering, and session management UI with centralized state management via AppState.
 
 ## Exports
 
-- `SidebarController` - Controller module for sidebar functionality including initialization, event handling, session management, and view updates
+- `SidebarController` - Main controller class for sidebar functionality
 
 ## Dependencies
 
-- [[js-storage]]
-- [[js-chat]]
-- [[controllers-chat-ui-controller]]
-- [[js-token-counter]]
-- [[state-app-state]]
-- [[services-event-bus]]
-- [[utils-html-escape]]
+[[storage]], [[chat]], [[chat-ui-controller]], [[token-counter]], [[app-state]], [[event-bus]], [[html-escape]], [[utils]], [[storage/keys]], [[focus-trap]]
 
 ## Used By
 
@@ -31,4 +25,6 @@ TBD
 
 ## Notes
 
-Uses HNW (Hybrid No-Workflow) integration pattern with AppState subscriptions. Implements lazy DOM initialization and unified storage fallback to localStorage. Manages session lifecycle including creation, deletion, and switching.
+- Uses AppState for reactive state management with subscription-based updates
+- Implements memory leak fixes for event listener cleanup
+- Includes responsive design support with mobile overlay state synchronization

@@ -9,24 +9,31 @@ status: active
 
 ## Purpose
 
-Handles in-app configuration display for AI and Spotify settings, providing a UI to view and optionally override config.js settings via localStorage.
+Handles in-app configuration display and management for AI and Spotify settings, providing a UI to view and optionally override config.js settings via localStorage.
 
 ## Exports
 
-- `Settings`: Main settings UI controller class that manages display and modification of AI provider and Spotify configuration settings
+- **Settings** - Main settings module class that manages configuration UI, provider selection, and user preferences
 
 ## Dependencies
 
-- [[js-module-registry]]
-- [[js-storage-breakdown-ui]]
-- [[js-services-config-loader]]
-- [[js-storage]]
-- [[js-security-index]]
-- [[js-functions-schemas-data-queries]]
-- [[js-functions-index]]
-- [[js-spotify]]
-- [[js-functions-schemas-analytics-queries]]
-- [[js-functions-schemas-template-queries]]
+- [[module-registry]]
+- [[storage-breakdown-ui]]
+- [[config-loader]]
+- [[storage]]
+- [[security-index]]
+- [[secure-token-store]]
+- [[data-queries]]
+- [[functions-index]]
+- [[spotify]]
+- [[analytics-queries]]
+- [[template-queries]]
+- [[input-validation]]
+- [[safe-json]]
+- [[storage-keys]]
+- [[event-bus]]
+- [[settings-schema]]
+- [[focus-trap]]
 
 ## Used By
 
@@ -34,7 +41,7 @@ TBD
 
 ## Notes
 
-- Source of truth is config.js; this module provides UI layer with localStorage override capability
+- Source of truth is config.js - this module provides UI layer for viewing/overriding settings
 - Manages multiple LLM providers (Ollama, LM Studio, Gemini, OpenRouter)
-- Includes abort controller for embedding cancellation operations
-- Contains settings migration state management
+- Implements modal focus traps for accessibility
+- Uses localStorage for user setting overrides

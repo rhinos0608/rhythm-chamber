@@ -13,17 +13,11 @@ Handles data reset operations with proper worker cleanup. Extracted from app.js 
 
 ## Exports
 
-- **ResetController** - Main controller object containing reset operations and modal management
+- `ResetController` - Main controller object containing all reset-related functions
 
 ## Dependencies
 
-- [[storage]] (Storage)
-- [[app-state]] (AppState)
-- [[spotify]] (Spotify)
-- [[chat]] (Chat)
-- [[operation-lock]] (OperationLock)
-- [[view-controller]] (ViewController)
-- [[file-upload-controller]] (FileUploadController)
+- [[focus-trap.js]]
 
 ## Used By
 
@@ -31,4 +25,4 @@ TBD
 
 ## Notes
 
-Uses dependency injection pattern via `init()` function. Implements operation lock checks to prevent conflicts during file processing or embedding generation.
+Uses dependency injection pattern via init(). All dependencies (_Storage, _AppState, _Spotify, _Chat, _OperationLock, _ViewController, _showToast, _FileUploadController) injected externally. Manages focus trap cleanup for modals. Implements operation lock checking before reset.

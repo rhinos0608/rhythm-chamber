@@ -1,6 +1,6 @@
 ---
 path: /Users/rhinesharar/rhythm-chamber/js/spotify.js
-type: module
+type: service
 updated: 2026-01-21
 status: active
 ---
@@ -9,17 +9,18 @@ status: active
 
 ## Purpose
 
-Spotify OAuth and API module that handles PKCE OAuth flow and Spotify Web API calls for the Quick Snapshot feature.
+Handles Spotify OAuth 2.0 PKCE authentication flow and Spotify Web API integration for the Quick Snapshot feature, providing secure token management and API calls.
 
 ## Exports
 
-- `Spotify` - IIFE module providing Spotify authentication and API interaction
+- `Spotify` - Main module providing authentication (login/logout), token management (refresh/getAccessToken), and API methods (fetchRecentlyPlayed, fetchTopArtists, fetchTopTracks, fetchUserProfile)
 
 ## Dependencies
 
-- [[js-security-security-coordinator]]
-- [[js-services-config-loader]]
-- [[js-security-secure-token-store]]
+- [[security/index.js]]
+- [[services/config-loader.js]]
+- [[security/secure-token-store.js]]
+- [[utils/logger.js]]
 
 ## Used By
 
@@ -27,4 +28,4 @@ TBD
 
 ## Notes
 
-Implements secure token storage using SecureTokenStore with fallback handling for legacy sessions. Uses in-memory caching to reduce secure storage reads. Requires HTTPS or localhost for secure token vault availability.
+Implements PKCE (Proof Key for Code Exchange) OAuth flow with secure token vault storage using SecureTokenStore. Includes in-memory token caching to reduce secure storage reads. Falls back to localStorage for legacy sessions but requires HTTPS/localhost for secure vault operations.

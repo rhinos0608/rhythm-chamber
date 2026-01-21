@@ -60,10 +60,31 @@ async function handleFileUpload(file) {
         return;
     }
 
-    // Validate file type
-    if (!file.name.endsWith('.zip') && !file.name.endsWith('.json')) {
-        _showToast('Please upload a .zip or .json file');
-        return;
+    // Determine expected file type from extension
+    const fileType = file.name.toLowerCase().endsWith('.zip') ? 'zip' : 'json';
+
+    // Validate file type and content using InputValidation utility
+    // Note: We need to dynamically import since InputValidation might not be loaded
+    let InputValidation;
+    try {
+        const module = await import('../utils/input-validation.js');
+        InputValidation = module.InputValidation || module.default;
+    } catch (e) {
+        console.warn('[FileUploadController] InputValidation not available, using basic checks');
+    }
+
+    if (InputValidation) {
+        const validation = await InputValidation.validateFileUpload(file, fileType);
+        if (!validation.valid) {
+            _showToast(validation.error || 'Invalid file');
+            return;
+        }
+    } else {
+        // Fallback to basic extension check
+        if (!file.name.endsWith('.zip') && !file.name.endsWith('.json')) {
+            _showToast('Please upload a .zip or .json file');
+            return;
+        }
     }
 
     // ✅ FIXED: Remove race condition - directly attempt to acquire lock

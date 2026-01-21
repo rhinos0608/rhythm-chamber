@@ -13,11 +13,15 @@ Handles API calls to LM Studio (OpenAI-compatible local server) with streaming s
 
 ## Exports
 
-- `LMStudioProvider` - Provider interface for LM Studio API calls with streaming and tool calling support
+- `LMStudioProvider` - Provider class for LM Studio API integration
+- `call()` - Main async function for making API calls with optional streaming
+- `handleStreamingResponse()` - Processes SSE streaming responses with thinking block detection
+- `mergeThinkingBlocks()` - Merges split thinking blocks in streaming content
 
 ## Dependencies
 
-None
+- [[safe-json.js]] - Safe JSON parsing utilities
+- External: None (uses browser fetch API)
 
 ## Used By
 
@@ -25,4 +29,4 @@ TBD
 
 ## Notes
 
-Bring Your Own AI (BYOAI) implementation - users run AI models on their own hardware for maximum privacy. Supports 90-second timeout for local models and thinking block detection in streaming responses.
+Implements OpenAI-compatible API protocol for local inference. Requires LM Studio running locally with a model loaded. Supports 90-second timeout for local model inference and includes tool/function calling with auto choice mode.

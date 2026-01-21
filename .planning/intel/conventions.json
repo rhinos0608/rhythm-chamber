@@ -1,29 +1,29 @@
 {
   "version": 1,
-  "updated": 1768999486178,
+  "updated": 1769005685415,
   "naming": {},
   "directories": {
     "controllers": {
       "purpose": "Controllers",
-      "files": 14
+      "files": 15
     },
     "utils": {
       "purpose": "Utility functions",
-      "files": 4
+      "files": 8
     },
     "services": {
       "purpose": "Service layer",
-      "files": 53
+      "files": 56
     },
     "tests": {
       "purpose": "Test files",
-      "files": 45
+      "files": 48
     }
   },
   "suffixes": {
     ".test.js": {
       "purpose": "Test files",
-      "count": 39
+      "count": 42
     }
   }
 }

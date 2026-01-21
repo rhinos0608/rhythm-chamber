@@ -17,6 +17,10 @@
  * Data queries are handled by data-query.js
  */
 
+import { createLogger } from './utils/logger.js';
+
+const logger = createLogger('Chat');
+
 // Tool Strategy imports (ToolStrategy pattern for function calling)
 import { NativeToolStrategy } from './services/tool-strategies/native-strategy.js';
 import { PromptInjectionStrategy } from './services/tool-strategies/prompt-injection-strategy.js';
@@ -217,7 +221,7 @@ async function initChat(personality, patterns, summary, streams = null) {
  */
 async function handleStorageUpdate(event) {
     if (event.type === 'streams' && event.count > 0) {
-        console.log('[Chat] Data updated, refreshing streams...');
+        logger.debug('Data updated, refreshing streams...');
         const streamsData = await Storage.getStreams();
 
         // Update ConversationOrchestrator as single source of truth
@@ -226,7 +230,7 @@ async function handleStorageUpdate(event) {
             ConversationOrchestrator.setStreamsData(streamsData);
         }
 
-        console.log('[Chat] Storage update completed - ConversationOrchestrator is source of truth');
+        logger.debug('Storage update completed - ConversationOrchestrator is source of truth');
     }
 }
 
@@ -333,7 +337,7 @@ function getCurrentSessionId() {
 function onSessionUpdate(callback) {
     // NOTE: SessionManager no longer supports onSessionUpdate - use EventBus instead
     // This is kept for backwards compatibility but does nothing
-    console.warn('[Chat] onSessionUpdate is deprecated. Use EventBus.on("session:*", callback) instead.');
+    logger.warn('onSessionUpdate is deprecated. Use EventBus.on("session:*", callback) instead.');
 }
 
 /**
@@ -425,4 +429,4 @@ export const Chat = {
     recoverEmergencyBackup
 };
 
-console.log('[Chat] Module loaded');
+logger.info('Module loaded');
