@@ -485,6 +485,8 @@ async function replayWal() {
     walState.isReplaying = true;
     walState.lastReplayTime = Date.now();
 
+    let entriesReplayedCount = 0;
+
     try {
         console.log('[WAL] Starting crash recovery replay...');
 
@@ -503,6 +505,36 @@ async function replayWal() {
             console.log('[WAL] No entries to replay');
             return;
         }
+
+        console.log(`[WAL] Replaying ${pendingEntries.length} entries`);
+        entriesReplayedCount = pendingEntries.length;
+
+        // Reset PROCESSING entries to PENDING
+        walState.entries.forEach(entry => {
+            if (entry.status === WalStatus.PROCESSING) {
+                entry.status = WalStatus.PENDING;
+                entry.error = 'Reset after crash';
+            }
+        });
+
+        // Process WAL
+        await processWal();
+
+        console.log('[WAL] Crash recovery replay complete');
+
+    } catch (error) {
+        console.error('[WAL] Error replaying WAL:', error);
+    } finally {
+        walState.isReplaying = false;
+
+        // Emit event for any blocked writes waiting on replay
+        if (typeof window !== 'undefined' && window.EventBus?.emit) {
+            window.EventBus.emit('wal:replay_complete', {
+                timestamp: Date.now(),
+                entriesReplayed: entriesReplayedCount
+            });
+        }
+    }
 
         console.log(`[WAL] Replaying ${pendingEntries.length} entries`);
 
@@ -675,6 +707,9 @@ export const WriteAheadLog = {
     WalStatus,
     WalPriority
 };
+
+// Named exports for direct imports
+export { WalStatus, WalPriority };
 
 export default WriteAheadLog;
 
