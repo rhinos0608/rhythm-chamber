@@ -55,6 +55,8 @@ Plus: Your AI notices your patterns and writes personalized narratives about you
 | [Roadmap & Risks](docs/05-roadmap-and-risks.md) | 6-week timeline, competitive positioning |
 | [Advanced Features](docs/06-advanced-features.md) | Local models, transparency |
 | [API Setup](docs/API_SETUP.md) | Power user configuration |
+| [GSD System](docs/gsd-system.md) | Development methodology and workflows |
+| [Security Milestone v0.9](docs/security-milestone-v0.9.md) | Security hardening completion report |
 
 ---
 
@@ -96,8 +98,9 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 
 ## Project Status
 
-✅ **MVP Complete** — Personality types, chat, semantic search, zero-backend architecture  
-🔄 **In Progress** — Viral loop testing, premium model integration  
+✅ **MVP Complete** — Personality types, chat, semantic search, zero-backend architecture
+✅ **v0.9 Security Hardening Complete** — 23/23 security requirements satisfied (AES-GCM-256 encryption, HMAC-SHA256 messaging)
+🔄 **In Progress** — Viral loop testing, premium model integration
 🎯 **Next** — Deploy to production, get 20 beta users
 
 ---
@@ -160,14 +163,13 @@ We're not building a better stats.fm. We're building the next evolution of music
 
 ## Pricing Strategy
 
-### Phase 1: Sovereign Community (Zero Cost to User)
+### Three-Pillar Model
 
 | Tier | Price | What You Get | Infrastructure | Purpose |
 |------|-------|--------------|----------------|----------|
-| **Free** | $0 | Full local analysis, BYOI chat, basic cards, personality reveal | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
-| **Supporter** | **$39 - one time purchase** | **Obsidian/Notion Export + Relationship Compatibility Reports** | Client-side only | **Seed Capital**: Funds security audit & cloud infrastructure |
-| **Supporter** | **$19 first year, then $9/year** | **Obsidian/Notion Export + Relationship Compatibility Reports** | Client-side only | **Recurring Revenue**: Ongoing support for security & features |
-| **Patron** | **$7/month** | Dev Discord access, roadmap voting, early beta features | Client-side + Discord | **Community**: Recurring revenue for ongoing support |
+| **Sovereign** | **$0** | Full local analysis, BYOI chat, basic cards, personality reveal | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
+| **Curator** | **$19.99 one-time** | PKM Export, Relationship Resonance, Deep Enrichment, Metadata Fixer | Client-side only | **Seed Capital**: Funds security audit (~$5k goal) |
+| **Chamber** | **$4.99/mo or $39/yr** | E2EE Sync, Chamber Portal, Managed AI, Weekly Insights | Hybrid (client + server) | **Recurring Revenue**: Sustainable operations, infrastructure costs |
 
 ### Security Audit Stretch Goal
 
