@@ -29,7 +29,7 @@ let fallbackInitialized = false;
 // ==========================================
 
 const INDEXEDDB_NAME = 'rhythm-chamber';
-const INDEXEDDB_VERSION = 5;
+const INDEXEDDB_VERSION = 6;
 
 const INDEXEDDB_STORES = {
     STREAMS: 'streams',
@@ -182,9 +182,159 @@ async function initDatabase(options = {}) {
 
         request.onupgradeneeded = (event) => {
             const database = event.target.result;
-            createStores(database);
+            runMigrations(database, event.oldVersion, event.newVersion);
         };
     });
+}
+
+// ==========================================
+// Schema Migration System
+// ==========================================
+
+/**
+ * Run migrations from oldVersion to newVersion
+ * Sequentially applies each migration function to ensure proper schema evolution
+ *
+ * CRITICAL FIX: Provides explicit migration functions for each version transition
+ * instead of just creating missing stores. This enables:
+ * - Data transformations when schema changes
+ * - Index modifications or deletions
+ * - Proper handling of multi-version upgrades
+ *
+ * @param {IDBDatabase} database - Database instance
+ * @param {number} oldVersion - Previous version number
+ * @param {number} newVersion - New version number
+ */
+function runMigrations(database, oldVersion, newVersion) {
+    console.log(`[IndexedDB] Migrating from version ${oldVersion} to ${newVersion}`);
+
+    // Sequentially apply all migrations from oldVersion to newVersion
+    for (let v = oldVersion; v < newVersion; v++) {
+        const targetVersion = v + 1;
+        console.log(`[IndexedDB] Applying migration v${v} -> v${targetVersion}`);
+
+        try {
+            switch (targetVersion) {
+                case 1:
+                    migrateToV1(database);
+                    break;
+                case 2:
+                    migrateToV2(database);
+                    break;
+                case 3:
+                    migrateToV3(database);
+                    break;
+                case 4:
+                    migrateToV4(database);
+                    break;
+                case 5:
+                    migrateToV5(database);
+                    break;
+                case 6:
+                    migrateToV6(database);
+                    break;
+                default:
+                    console.warn(`[IndexedDB] No migration defined for version ${targetVersion}`);
+            }
+        } catch (error) {
+            console.error(`[IndexedDB] Migration v${v} -> v${targetVersion} failed:`, error);
+            throw error;
+        }
+    }
+
+    // Always ensure stores exist (additive safety net)
+    // This handles any newly added stores in the current version
+    createStores(database);
+
+    console.log(`[IndexedDB] Migration to version ${newVersion} complete`);
+}
+
+/**
+ * Migration to version 1: Initial schema
+ */
+function migrateToV1(database) {
+    // Create initial stores for version 1
+    const stores = ['streams', 'chunks', 'embeddings', 'personality', 'settings'];
+    stores.forEach(storeName => {
+        if (!database.objectStoreNames.contains(storeName)) {
+            database.createObjectStore(storeName, { keyPath: 'id' });
+        }
+    });
+}
+
+/**
+ * Migration to version 2: Add chat sessions store
+ */
+function migrateToV2(database) {
+    if (!database.objectStoreNames.contains('chat_sessions')) {
+        const sessionsStore = database.createObjectStore('chat_sessions', { keyPath: 'id' });
+        sessionsStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+    }
+}
+
+/**
+ * Migration to version 3: Add config and token stores
+ */
+function migrateToV3(database) {
+    if (!database.objectStoreNames.contains('config')) {
+        database.createObjectStore('config', { keyPath: 'key' });
+    }
+    if (!database.objectStoreNames.contains('tokens')) {
+        database.createObjectStore('tokens', { keyPath: 'key' });
+    }
+}
+
+/**
+ * Migration to version 4: Add event log system
+ */
+function migrateToV4(database) {
+    if (!database.objectStoreNames.contains('event_log')) {
+        const eventLogStore = database.createObjectStore('event_log', { keyPath: 'id' });
+        eventLogStore.createIndex('sequenceNumber', 'sequenceNumber', { unique: true });
+        eventLogStore.createIndex('type', 'type', { unique: false });
+        eventLogStore.createIndex('timestamp', 'timestamp', { unique: false });
+    }
+    if (!database.objectStoreNames.contains('event_checkpoint')) {
+        const checkpointStore = database.createObjectStore('event_checkpoint', { keyPath: 'id' });
+        checkpointStore.createIndex('sequenceNumber', 'sequenceNumber', { unique: true });
+    }
+    if (!database.objectStoreNames.contains('migration')) {
+        database.createObjectStore('migration', { keyPath: 'id' });
+    }
+}
+
+/**
+ * Migration to version 5: Add demo mode stores
+ */
+function migrateToV5(database) {
+    if (!database.objectStoreNames.contains('demo_streams')) {
+        const demoStreamsStore = database.createObjectStore('demo_streams', { keyPath: 'id' });
+        demoStreamsStore.createIndex('timestamp', 'timestamp', { unique: false });
+        demoStreamsStore.createIndex('type', 'type', { unique: false });
+    }
+    if (!database.objectStoreNames.contains('demo_patterns')) {
+        const demoPatternsStore = database.createObjectStore('demo_patterns', { keyPath: 'id' });
+        demoPatternsStore.createIndex('timestamp', 'timestamp', { unique: false });
+    }
+    if (!database.objectStoreNames.contains('demo_personality')) {
+        database.createObjectStore('demo_personality', { keyPath: 'id' });
+    }
+}
+
+/**
+ * Migration to version 6: Add transaction journal and compensation stores
+ * HNW Network: Provides durable transaction intent logging for multi-backend atomicity
+ */
+function migrateToV6(database) {
+    if (!database.objectStoreNames.contains('TRANSACTION_JOURNAL')) {
+        const journalStore = database.createObjectStore('TRANSACTION_JOURNAL', { keyPath: 'id' });
+        journalStore.createIndex('journalTime', 'journalTime', { unique: false });
+    }
+    if (!database.objectStoreNames.contains('TRANSACTION_COMPENSATION')) {
+        const compensationStore = database.createObjectStore('TRANSACTION_COMPENSATION', { keyPath: 'id' });
+        compensationStore.createIndex('timestamp', 'timestamp', { unique: false });
+        compensationStore.createIndex('resolved', 'resolved', { unique: false });
+    }
 }
 
 /**
@@ -449,6 +599,21 @@ function createStores(database) {
     // Demo personality store for demo mode personality data
     if (!database.objectStoreNames.contains(INDEXEDDB_STORES.DEMO_PERSONALITY)) {
         database.createObjectStore(INDEXEDDB_STORES.DEMO_PERSONALITY, { keyPath: 'id' });
+    }
+
+    // Transaction journal store for 2PC crash recovery
+    // HNW Network: Provides durable transaction intent logging for multi-backend atomicity
+    if (!database.objectStoreNames.contains('TRANSACTION_JOURNAL')) {
+        const journalStore = database.createObjectStore('TRANSACTION_JOURNAL', { keyPath: 'id' });
+        journalStore.createIndex('journalTime', 'journalTime', { unique: false });
+    }
+
+    // Compensation log store for rollback failure recovery
+    // HNW Network: Persists failed rollback operations for manual recovery
+    if (!database.objectStoreNames.contains('TRANSACTION_COMPENSATION')) {
+        const compensationStore = database.createObjectStore('TRANSACTION_COMPENSATION', { keyPath: 'id' });
+        compensationStore.createIndex('timestamp', 'timestamp', { unique: false });
+        compensationStore.createIndex('resolved', 'resolved', { unique: false });
     }
 }
 

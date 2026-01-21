@@ -24,6 +24,72 @@ import { SecureTokenStore } from '../security/secure-token-store.js';
 const COMPENSATION_LOG_STORE = 'TRANSACTION_COMPENSATION';
 
 // ==========================================
+// In-Memory Compensation Log Fallback
+// ==========================================
+
+/**
+ * CRITICAL FIX: In-memory compensation log fallback for quota exhaustion
+ *
+ * When both IndexedDB and localStorage fail (typically due to quota exhaustion),
+ * compensation logs are stored in memory. This ensures rollback failures are
+ * never lost, even if all persistent storage backends fail.
+ *
+ * The in-memory log survives during the session and can be retrieved via
+ * getCompensationLogs(). Logs are not persisted across page reloads.
+ */
+const inMemoryCompensationLogs = new Map();
+const MAX_IN_MEMORY_LOGS = 100; // Prevent unbounded growth
+
+/**
+ * Add a compensation log entry to in-memory storage
+ * @param {string} transactionId - Transaction ID
+ * @param {Array} entries - Compensation log entries
+ */
+function addInMemoryCompensationLog(transactionId, entries) {
+    // Prevent unbounded growth - evict oldest if at limit
+    if (inMemoryCompensationLogs.size >= MAX_IN_MEMORY_LOGS) {
+        const oldestKey = inMemoryCompensationLogs.keys().next().value;
+        inMemoryCompensationLogs.delete(oldestKey);
+    }
+
+    inMemoryCompensationLogs.set(transactionId, {
+        id: transactionId,
+        entries,
+        timestamp: Date.now(),
+        resolved: false,
+        storage: 'memory' // Flag to indicate in-memory storage
+    });
+
+    console.warn(`[StorageTransaction] Compensation log stored in memory (fallback): ${transactionId}`);
+}
+
+/**
+ * Get an in-memory compensation log entry
+ * @param {string} transactionId - Transaction ID
+ * @returns {Object|null} In-memory log entry or null
+ */
+function getInMemoryCompensationLog(transactionId) {
+    return inMemoryCompensationLogs.get(transactionId) || null;
+}
+
+/**
+ * Get all in-memory compensation log entries
+ * @returns {Array} Array of in-memory log entries
+ */
+function getAllInMemoryCompensationLogs() {
+    return Array.from(inMemoryCompensationLogs.values());
+}
+
+/**
+ * Clear an in-memory compensation log entry
+ * @param {string} transactionId - Transaction ID
+ * @returns {boolean} True if entry was found and cleared
+ */
+function clearInMemoryCompensationLog(transactionId) {
+    return inMemoryCompensationLogs.delete(transactionId);
+}
+
+// ==========================================
 // Transaction State
 // ==========================================
 
@@ -668,6 +734,9 @@ async function rollback(ctx) {
 /**
  * Persist compensation log entries to IndexedDB
  *
+ * CRITICAL FIX: Includes in-memory fallback when both IndexedDB and localStorage fail
+ * (typically due to quota exhaustion). Ensures rollback failures are never lost.
+ *
  * @param {string} transactionId - Transaction ID
  * @param {Array} entries - Compensation log entries
  */
@@ -679,30 +748,49 @@ async function persistCompensationLog(transactionId, entries) {
         resolved: false
     };
 
+    let storageSuccess = false;
+
     // Try to store in compensation log store
-    // If store doesn't exist, try creating it or fall back to localStorage
     if (IndexedDBCore) {
         try {
             await IndexedDBCore.put(COMPENSATION_LOG_STORE, logEntry);
+            storageSuccess = true;
         } catch (storeError) {
-            // Fallback: store in localStorage
-            console.warn('[StorageTransaction] Compensation store not available, using localStorage fallback');
+            console.warn('[StorageTransaction] IndexedDB compensation store write failed:', storeError.message);
+        }
+    }
+
+    // Fallback: try localStorage if IndexedDB failed
+    if (!storageSuccess) {
+        try {
             const existingLogs = JSON.parse(localStorage.getItem('_transaction_compensation_logs') || '[]');
             existingLogs.push(logEntry);
             localStorage.setItem('_transaction_compensation_logs', JSON.stringify(existingLogs));
+            storageSuccess = true;
+            console.warn('[StorageTransaction] Compensation log stored in localStorage fallback');
+        } catch (lsError) {
+            console.warn('[StorageTransaction] localStorage compensation store write failed:', lsError.message);
         }
-    } else {
-        // Fallback: store in localStorage when IndexedDBCore is not available
-        console.warn('[StorageTransaction] IndexedDBCore not available, using localStorage fallback');
-        const existingLogs = JSON.parse(localStorage.getItem('_transaction_compensation_logs') || '[]');
-        existingLogs.push(logEntry);
-        localStorage.setItem('_transaction_compensation_logs', JSON.stringify(existingLogs));
+    }
+
+    // CRITICAL FIX: In-memory fallback when both persistent storage backends fail
+    if (!storageSuccess) {
+        addInMemoryCompensationLog(transactionId, entries);
+
+        // Emit dedicated event for in-memory compensation log
+        EventBus.emit('storage:compensation_log_in_memory', {
+            transactionId,
+            entriesCount: entries.length,
+            timestamp: Date.now()
+        });
     }
 }
 
 /**
  * Get all pending compensation log entries
  * These are rollback failures that need manual review/recovery
+ *
+ * CRITICAL FIX: Includes in-memory compensation logs
  *
  * @returns {Promise<Array>} Compensation log entries
  */
@@ -738,12 +826,23 @@ async function getCompensationLogs() {
         // Ignore parse errors
     }
 
+    // CRITICAL FIX: Include in-memory compensation logs
+    const memoryLogs = getAllInMemoryCompensationLogs();
+    for (const log of memoryLogs.filter(log => !log.resolved)) {
+        if (!seenTransactionIds.has(log.id)) {
+            logs.push(log);
+            seenTransactionIds.add(log.id);
+        }
+    }
+
     return logs;
 }
 
 /**
  * Mark a compensation log entry as resolved
- * 
+ *
+ * CRITICAL FIX: Also handles in-memory compensation logs
+ *
  * @param {string} transactionId - Transaction ID to mark as resolved
  * @returns {Promise<boolean>} True if entry was found and marked
  */
@@ -779,6 +878,16 @@ async function resolveCompensationLog(transactionId) {
         // Ignore errors
     }
 
+    // CRITICAL FIX: Also check in-memory logs
+    const memoryEntry = getInMemoryCompensationLog(transactionId);
+    if (memoryEntry) {
+        memoryEntry.resolved = true;
+        memoryEntry.resolvedAt = Date.now();
+        inMemoryCompensationLogs.set(transactionId, memoryEntry);
+        resolved = true;
+        console.log(`[StorageTransaction] In-memory compensation log ${transactionId} marked as resolved`);
+    }
+
     if (resolved) {
         console.log(`[StorageTransaction] Compensation log ${transactionId} marked as resolved`);
     }
@@ -788,12 +897,14 @@ async function resolveCompensationLog(transactionId) {
 
 /**
  * Clear all resolved compensation logs
- * 
+ *
+ * CRITICAL FIX: Also clears in-memory compensation logs
+ *
  * @returns {Promise<number>} Number of logs cleared
  */
 async function clearResolvedCompensationLogs() {
     let cleared = 0;
-    
+
     // Clear from IndexedDB
     if (IndexedDBCore) {
         try {
@@ -808,7 +919,7 @@ async function clearResolvedCompensationLogs() {
             // Store might not exist
         }
     }
-    
+
     // Clear from localStorage
     try {
         const lsLogs = JSON.parse(localStorage.getItem('_transaction_compensation_logs') || '[]');
@@ -821,7 +932,21 @@ async function clearResolvedCompensationLogs() {
     } catch (e) {
         // Ignore errors
     }
-    
+
+    // CRITICAL FIX: Clear resolved in-memory logs
+    const memoryLogsBefore = inMemoryCompensationLogs.size;
+    for (const [id, log] of inMemoryCompensationLogs.entries()) {
+        if (log.resolved) {
+            inMemoryCompensationLogs.delete(id);
+            cleared++;
+        }
+    }
+    const memoryCleared = memoryLogsBefore - inMemoryCompensationLogs.size;
+
+    if (memoryCleared > 0) {
+        console.log(`[StorageTransaction] Cleared ${memoryCleared} in-memory compensation logs`);
+    }
+
     console.log(`[StorageTransaction] Cleared ${cleared} resolved compensation logs`);
     return cleared;
 }
@@ -886,6 +1011,11 @@ const StorageTransaction = {
     resolveCompensationLog,
     clearResolvedCompensationLogs,
     COMPENSATION_LOG_STORE,
+
+    // In-memory compensation log management (CRITICAL FIX)
+    getInMemoryCompensationLog,
+    getAllInMemoryCompensationLogs,
+    clearInMemoryCompensationLog,
 
     // For advanced use
     TransactionContext,

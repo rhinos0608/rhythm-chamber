@@ -429,6 +429,40 @@ async function executeOperation(operation, args) {
     }
 }
 
+/**
+ * Execute a storage operation for WAL replay with idempotency protection
+ *
+ * CRITICAL FIX: During WAL replay, `add()` operations are converted to `put()` to
+ * ensure idempotency. If an operation was committed but WAL entry wasn't cleared
+ * before a crash, replay would fail with ConstraintError for `add()` operations.
+ * Using `put()` ensures safe replay as it either creates or updates, guaranteeing
+ * the same final state.
+ *
+ * @param {string} operation - Operation name
+ * @param {Array} args - Operation arguments
+ * @param {boolean} isReplay - True if this is a replay operation
+ * @returns {Promise<any>} Operation result
+ */
+async function executeOperationForReplay(operation, args, isReplay = true) {
+    // Import Storage dynamically to avoid circular dependency
+    const { Storage } = await import('../storage.js');
+
+    // Convert add to put for idempotency during replay
+    // This prevents ConstraintError if the operation was already committed
+    let safeOperation = operation;
+    if (isReplay && operation === 'add') {
+        safeOperation = 'put';
+        console.log(`[WAL] Converted 'add' to 'put' for idempotent replay`);
+    }
+
+    // Execute the operation
+    if (typeof Storage[safeOperation] === 'function') {
+        return await Storage[safeOperation](...args);
+    } else {
+        throw new Error(`Unknown storage operation: ${safeOperation}`);
+    }
+}
+
 // ==========================================
 // WAL Processing
 // ==========================================
@@ -506,7 +540,9 @@ async function processWal() {
                 try {
                     // Check if encryption is now available
                     if (SafeMode.canEncrypt()) {
-                        const result = await executeOperation(entry.operation, entry.args);
+                        // CRITICAL FIX: Use executeOperationForReplay for idempotency
+                        // This converts 'add' to 'put' during WAL replay to prevent ConstraintError
+                        const result = await executeOperationForReplay(entry.operation, entry.args, walState.isReplaying);
 
                         entry.status = WalStatus.COMMITTED;
                         entry.error = null;

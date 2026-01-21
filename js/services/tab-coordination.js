@@ -75,7 +75,29 @@ const vectorClock = new VectorClock();
 
 // Use Vector clock for deterministic ordering instead of Date.now()
 // This eliminates clock skew issues between tabs and detects concurrent updates
-const TAB_ID = `${vectorClock.tick()[vectorClock.processId]}-${vectorClock.processId.substring(0, 8)}`;
+// EDGE CASE FIX: Add fallback TAB_ID generation in case vectorClock.tick() fails
+function generateTabId() {
+    try {
+        const tickResult = vectorClock.tick();
+        const processId = vectorClock.processId;
+        const tickValue = tickResult[processId];
+
+        // Validate we got a proper tick value
+        if (tickValue !== undefined && tickValue !== null && typeof processId === 'string' && processId.length > 8) {
+            return `${tickValue}-${processId.substring(0, 8)}`;
+        }
+    } catch (e) {
+        console.warn('[TabCoordination] Vector clock tick failed, using fallback TAB_ID:', e.message);
+    }
+
+    // Fallback: Generate a deterministic ID without vector clock
+    // Using timestamp + random as fallback
+    const fallbackId = `tab_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    console.warn('[TabCoordination] Using fallback TAB_ID:', fallbackId);
+    return fallbackId;
+}
+
+const TAB_ID = generateTabId();
 
 // Message types
 const MESSAGE_TYPES = {
