@@ -65,11 +65,22 @@ function requireSecureContext() {
 
 // Enforce secure context at module load, but degrade to fallback instead of crashing
 let _secureContextAvailable = true;
+let _fallbackReason = null;  // Store the reason for fallback (for UI warnings)
+let _hasWarnedAboutFallback = false;  // Track if we've already warned about fallback
+
 try {
     requireSecureContext();
 } catch (error) {
     _secureContextAvailable = false;
+    _fallbackReason = error.message;
     console.warn('[SecureTokenStore] Secure context unavailable, running in fallback mode:', error.message);
+
+    // Dispatch event for UI to show warning (best effort - may fire before listeners ready)
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('secure-context:unavailable', {
+            detail: { reason: error.message }
+        }));
+    }
 }
 
 // ==========================================
@@ -597,6 +608,9 @@ async function init() {
 
 export const SecureTokenStore = {
     isAvailable: () => _secureContextAvailable,
+    getFallbackReason: () => _fallbackReason,
+    markFallbackWarned: () => { _hasWarnedAboutFallback = true; },
+    hasWarnedFallback: () => _hasWarnedAboutFallback,
     // Initialization
     init,
 

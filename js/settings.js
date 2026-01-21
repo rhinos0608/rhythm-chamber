@@ -11,6 +11,7 @@ import { StorageBreakdownUI } from './storage-breakdown-ui.js';
 import { ConfigLoader } from './services/config-loader.js';
 import { Storage } from './storage.js';
 import { Security } from './security/index.js';
+import { SecureTokenStore } from './security/secure-token-store.js';
 import { DataQuerySchemas } from './functions/schemas/data-queries.js';
 import { Functions } from './functions/index.js';
 import { Spotify } from './spotify.js';
@@ -19,6 +20,13 @@ import { TemplateQuerySchemas } from './functions/schemas/template-queries.js';
 import { InputValidation } from './utils/input-validation.js';
 import { safeJsonParse } from './utils/safe-json.js';
 import { STORAGE_KEYS } from './storage/keys.js';
+import { EventBus } from './services/event-bus.js';
+import { SettingsSchema } from './settings-schema.js';
+import { setupModalFocusTrap } from './utils/focus-trap.js';
+
+// Focus trap cleanup functions for modals
+let settingsFocusTrapCleanup = null;
+let toolsFocusTrapCleanup = null;
 
 // ==========================================
 // Constants - Provider Configuration
@@ -116,7 +124,7 @@ let currentEmbeddingAbortController = null;
 
 // Settings migration state
 let settingsMigrationComplete = false;
-const SETTINGS_MIGRATED_KEY = 'rhythm_chamber_settings_migrated_to_idb';
+const SETTINGS_MIGRATED_KEY = STORAGE_KEYS.SETTINGS_MIGRATED_TO_IDB;
 
 // HNW: Settings cache - populated by getSettingsAsync() for sync access
 // This allows getSettings() to return user's saved settings after initialization
@@ -136,7 +144,7 @@ async function migrateLocalStorageSettings() {
         return false;
     }
 
-    const stored = localStorage.getItem('rhythm_chamber_settings');
+    const stored = localStorage.getItem(STORAGE_KEYS.SETTINGS);
     if (!stored) {
         // No settings to migrate
         localStorage.setItem(SETTINGS_MIGRATED_KEY, 'true');
@@ -154,11 +162,11 @@ async function migrateLocalStorageSettings() {
 
         // Migrate to IndexedDB
         if (Storage.setConfig) {
-            await Storage.setConfig('rhythm_chamber_settings', parsed);
+            await Storage.setConfig(STORAGE_KEYS.SETTINGS, parsed);
 
             // Mark migration complete and remove old localStorage data
             localStorage.setItem(SETTINGS_MIGRATED_KEY, 'true');
-            localStorage.removeItem('rhythm_chamber_settings');
+            localStorage.removeItem(STORAGE_KEYS.SETTINGS);
             settingsMigrationComplete = true;
 
             console.log('[Settings] Migrated settings from localStorage to IndexedDB');
@@ -249,7 +257,7 @@ function getSettings() {
     }
 
     // Pre-migration fallback: Apply localStorage overrides
-    const stored = localStorage.getItem('rhythm_chamber_settings');
+    const stored = localStorage.getItem(STORAGE_KEYS.SETTINGS);
     if (stored) {
         const parsed = safeJsonParse(stored, null);
         if (parsed) {
@@ -325,7 +333,7 @@ async function getSettingsAsync() {
     // After migration, read only from IndexedDB (single source of user overrides)
     if (settingsMigrationComplete && Storage.getConfig) {
         try {
-            const storedConfig = await Storage.getConfig('rhythm_chamber_settings');
+            const storedConfig = await Storage.getConfig(STORAGE_KEYS.SETTINGS);
             if (storedConfig) {
                 applySettingsOverrides(settings, storedConfig);
             }
@@ -340,7 +348,7 @@ async function getSettingsAsync() {
     // Pre-migration fallback: Try IndexedDB first, then localStorage
     if (Storage.getConfig) {
         try {
-            const storedConfig = await Storage.getConfig('rhythm_chamber_settings');
+            const storedConfig = await Storage.getConfig(STORAGE_KEYS.SETTINGS);
             if (storedConfig) {
                 applySettingsOverrides(settings, storedConfig);
                 return settings;
@@ -351,7 +359,7 @@ async function getSettingsAsync() {
     }
 
     // Fall back to localStorage only if migration hasn't completed
-    const stored = localStorage.getItem('rhythm_chamber_settings');
+    const stored = localStorage.getItem(STORAGE_KEYS.SETTINGS);
     if (stored) {
         const parsed = safeJsonParse(stored, null);
         if (parsed) {
@@ -448,7 +456,7 @@ async function saveSettings(settings) {
     // Save to IndexedDB only (localStorage fallback removed for HNW simplification)
     if (Storage.setConfig) {
         try {
-            await Storage.setConfig('rhythm_chamber_settings', settings);
+            await Storage.setConfig(STORAGE_KEYS.SETTINGS, settings);
             console.log('[Settings] Saved to IndexedDB');
         } catch (e) {
             console.warn('[Settings] Failed to save to IndexedDB:', e);
@@ -504,7 +512,7 @@ async function saveSettings(settings) {
 async function clearSettings() {
     if (Storage.removeConfig) {
         try {
-            await Storage.removeConfig('rhythm_chamber_settings');
+            await Storage.removeConfig(STORAGE_KEYS.SETTINGS);
             console.log('[Settings] Cleared from IndexedDB');
         } catch (e) {
             console.warn('[Settings] Failed to clear from IndexedDB:', e);
@@ -666,11 +674,11 @@ async function showSettingsModal() {
                         
                         <div class="settings-field">
                             <label for="setting-api-key">API Key ${hasConfigKey ? '(from config.js)' : ''}</label>
-                            <input type="password" id="setting-api-key" 
-                                   value="${apiKeyDisplay}" 
-                                   placeholder="${hasConfigKey ? '••••••••••••••••' : 'sk-or-v1-...'}" 
+                            <input type="password" id="setting-api-key"
+                                   value="${apiKeyDisplay}"
+                                   placeholder="${hasConfigKey ? '••••••••••••••••' : 'sk-or-v1-...'}"
                                    ${hasConfigKey ? 'readonly' : ''}
-                                    autocomplete="off">
+                                   ${hasConfigKey ? 'autocomplete="off"' : 'autocomplete="new-password"'}>
                             <button class="btn-show-password" data-action="toggle-password" data-target="setting-api-key">Show</button>
                         </div>
                         
@@ -718,7 +726,7 @@ async function showSettingsModal() {
                             <input type="password" id="setting-gemini-api-key"
                                    value="${settings.gemini?.apiKey || ''}"
                                    placeholder="AIzaSy..."
-                                    autocomplete="off">
+                                   autocomplete="new-password">
                             <button class="btn-show-password" data-action="toggle-password" data-target="setting-gemini-api-key">Show</button>
                             <span class="settings-hint">Your Google AI Studio API key</span>
                         </div>
@@ -835,7 +843,16 @@ async function showSettingsModal() {
                         <span class="security-level">Security Level: <strong>Medium</strong></span>
                         <span class="security-description">Requires physical device protection</span>
                     </div>
-                    
+
+                    <!-- Secure Context Warning (shown only when in fallback mode) -->
+                    <div class="security-warning secure-context-warning" id="secure-context-warning" style="display: none;">
+                        <span class="warning-icon">⚠️</span>
+                        <div class="warning-content">
+                            <strong>Insecure Context Detected</strong>
+                            <p id="secure-context-warning-message">Your tokens are stored without encryption. Use HTTPS or localhost for proper security.</p>
+                        </div>
+                    </div>
+
                     <p class="settings-description">
                         RAG-powered semantic search using 100% local browser embeddings.
                         Ask natural questions about your listening history without data leaving your device.
@@ -936,6 +953,17 @@ async function showSettingsModal() {
     // Initialize travel/VPN override status UI
     refreshTravelStatusUI();
 
+    // Check for secure context and show warning if in fallback mode
+    checkAndShowSecureContextWarning();
+
+    // Set up focus trap for accessibility (WCAG 2.1.2)
+    // Clean up any existing trap first
+    if (settingsFocusTrapCleanup) {
+        settingsFocusTrapCleanup();
+        settingsFocusTrapCleanup = null;
+    }
+    settingsFocusTrapCleanup = setupModalFocusTrap('settings-modal', () => hideSettingsModal());
+
     // Event delegation for settings modal actions
     modal.addEventListener('click', (e) => {
         const actionElement = e.target.closest('[data-action]');
@@ -1035,12 +1063,7 @@ async function showSettingsModal() {
         checkOllamaConnection();
     }
 
-    // Add escape key listener
-    modal.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            hideSettingsModal();
-        }
-    });
+    // Note: Escape key handling is now done by the focus trap
 
     // Initialize storage breakdown UI
     initStorageBreakdown();
@@ -1050,6 +1073,12 @@ async function showSettingsModal() {
  * Hide the settings modal
  */
 function hideSettingsModal() {
+    // Clean up focus trap first (restores focus to previous element)
+    if (settingsFocusTrapCleanup) {
+        settingsFocusTrapCleanup();
+        settingsFocusTrapCleanup = null;
+    }
+
     const modal = document.getElementById('settings-modal');
     if (modal) {
         modal.classList.add('closing');
@@ -1103,6 +1132,33 @@ function toggleTravelMode() {
     }
 
     refreshTravelStatusUI();
+}
+
+/**
+ * Check for secure context and show warning if in fallback mode
+ * Issue 5.3: Add UI warning when operating without secure context
+ */
+function checkAndShowSecureContextWarning() {
+    // Check if SecureTokenStore is in fallback mode
+    const isAvailable = SecureTokenStore?.isAvailable?.() ?? true;
+
+    if (!isAvailable) {
+        const warningEl = document.getElementById('secure-context-warning');
+        const messageEl = document.getElementById('secure-context-warning-message');
+
+        if (warningEl) {
+            warningEl.style.display = 'flex';
+
+            // Get specific fallback reason if available
+            const fallbackReason = SecureTokenStore?.getFallbackReason?.();
+            if (messageEl && fallbackReason) {
+                messageEl.textContent = `Your tokens are stored without encryption. Reason: ${fallbackReason}`;
+            }
+
+            // Mark as warned to avoid spam (optional - the warning is only shown when settings are opened)
+            SecureTokenStore?.markFallbackWarned?.();
+        }
+    }
 }
 
 /**
@@ -1639,14 +1695,14 @@ async function confirmSessionReset() {
 
         // Clear RAG config from unified storage and localStorage
         if (Storage.removeConfig) {
-            await Storage.removeConfig('rhythm_chamber_rag');
-            await Storage.removeConfig('rhythm_chamber_rag_checkpoint');
-            await Storage.removeConfig('rhythm_chamber_rag_checkpoint_cipher');
+            await Storage.removeConfig(STORAGE_KEYS.RAG_CONFIG);
+            await Storage.removeConfig(STORAGE_KEYS.RAG_CHECKPOINT);
+            await Storage.removeConfig(STORAGE_KEYS.RAG_CHECKPOINT_CIPHER);
         }
         // Also clear from localStorage (backward compat)
-        localStorage.removeItem('rhythm_chamber_rag');
-        localStorage.removeItem('rhythm_chamber_rag_checkpoint');
-        localStorage.removeItem('rhythm_chamber_rag_checkpoint_cipher');
+        localStorage.removeItem(STORAGE_KEYS.RAG_CONFIG);
+        localStorage.removeItem(STORAGE_KEYS.RAG_CHECKPOINT);
+        localStorage.removeItem(STORAGE_KEYS.RAG_CHECKPOINT_CIPHER);
 
 
         // Get new version for display
@@ -1764,7 +1820,7 @@ async function testOllamaConnection() {
         // Note: The endpoint is read from settings, so we save first
         const tempSettings = getSettings();
         tempSettings.llm.ollamaEndpoint = endpointInput.value;
-        localStorage.setItem('rhythm_chamber_settings', JSON.stringify(tempSettings));
+        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(tempSettings));
     }
 
     await checkOllamaConnection();
@@ -1825,7 +1881,7 @@ async function refreshOllamaModels() {
  * By default, all tools are enabled
  */
 function getEnabledTools() {
-    const stored = localStorage.getItem('rhythm_chamber_enabled_tools');
+    const stored = localStorage.getItem(STORAGE_KEYS.ENABLED_TOOLS);
     if (stored) {
         return safeJsonParse(stored, null);
     }
@@ -1839,15 +1895,15 @@ function getEnabledTools() {
  */
 async function saveEnabledTools(enabledTools) {
     if (enabledTools === null) {
-        localStorage.removeItem('rhythm_chamber_enabled_tools');
+        localStorage.removeItem(STORAGE_KEYS.ENABLED_TOOLS);
     } else {
-        localStorage.setItem('rhythm_chamber_enabled_tools', JSON.stringify(enabledTools));
+        localStorage.setItem(STORAGE_KEYS.ENABLED_TOOLS, JSON.stringify(enabledTools));
     }
 
     // Also save to unified storage
     if (Storage.setConfig) {
         try {
-            await Storage.setConfig('rhythm_chamber_enabled_tools', enabledTools);
+            await Storage.setConfig(STORAGE_KEYS.ENABLED_TOOLS, enabledTools);
         } catch (e) {
             console.warn('[Settings] Failed to save enabled tools to unified storage:', e);
         }
@@ -1999,6 +2055,14 @@ function showToolsModal() {
 
     document.body.appendChild(modal);
 
+    // Set up focus trap for accessibility (WCAG 2.1.2)
+    // Clean up any existing trap first
+    if (toolsFocusTrapCleanup) {
+        toolsFocusTrapCleanup();
+        toolsFocusTrapCleanup = null;
+    }
+    toolsFocusTrapCleanup = setupModalFocusTrap('tools-modal', () => hideToolsModal());
+
     // Event delegation for tools modal actions
     modal.addEventListener('click', (e) => {
         const actionElement = e.target.closest('[data-action]');
@@ -2032,12 +2096,7 @@ function showToolsModal() {
         }
     });
 
-    // Add escape key listener
-    modal.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            hideToolsModal();
-        }
-    });
+    // Note: Escape key handling is now done by the focus trap
 }
 
 /**
@@ -2057,6 +2116,12 @@ function truncateDescription(text, maxLength) {
  * Hide the tools modal
  */
 function hideToolsModal() {
+    // Clean up focus trap first (restores focus to previous element)
+    if (toolsFocusTrapCleanup) {
+        toolsFocusTrapCleanup();
+        toolsFocusTrapCleanup = null;
+    }
+
     const modal = document.getElementById('tools-modal');
     if (modal) {
         modal.classList.add('closing');
