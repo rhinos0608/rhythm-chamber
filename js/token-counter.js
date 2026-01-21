@@ -5,6 +5,7 @@
  */
 
 import { Settings } from './settings.js';
+import { Utils } from './utils.js';
 
 const TokenCounter = {
     // Default context window (can be overridden by user settings)
@@ -169,7 +170,9 @@ const TokenCounter = {
             } else {
                 // Partial truncation of RAG context (rare, but possible)
                 const charsToKeep = Math.max(0, (ragTokens - tokensToRemove) * 4);
-                result.ragContext = result.ragContext.substring(0, charsToKeep);
+                // I18N FIX: Use safeTruncate to prevent splitting surrogate pairs (emojis, CJK)
+                // Pass empty suffix to preserve existing behavior (no "..." added)
+                result.ragContext = Utils.safeTruncate(result.ragContext, charsToKeep, '');
                 tokensToRemove = 0;
             }
         }
@@ -189,7 +192,9 @@ const TokenCounter = {
             const targetMessageTokens = Math.max(0, currentMessageTokens - tokensToRemove);
             const charsToKeep = targetMessageTokens * 4;
 
-            oldestMessage.content = oldestMessage.content.substring(0, charsToKeep);
+            // I18N FIX: Use safeTruncate to prevent splitting surrogate pairs (emojis, CJK)
+            // Pass empty suffix to preserve existing behavior (no "..." added)
+            oldestMessage.content = Utils.safeTruncate(oldestMessage.content, charsToKeep, '');
         }
 
         return result;

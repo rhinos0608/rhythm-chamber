@@ -13,6 +13,7 @@
  */
 
 import { TokenCounter } from '../token-counter.js';
+import { Utils } from '../utils.js';
 
 // Dependencies (injected via init)
 let _TokenCounter = null;
@@ -93,7 +94,9 @@ function buildSystemPrompt(queryContext = null, semanticContext = null) {
                 console.warn(`[ConversationOrchestrator] Semantic context too large (${semanticTokens} tokens), would require ${Math.round((1 - truncationRatio) * 100)}% truncation. Skipping semantic context.`);
             } else {
                 const charsToKeep = Math.floor(semanticContext.length * truncationRatio);
-                const truncatedContext = semanticContext.substring(0, charsToKeep);
+                // I18N FIX: Use safeTruncate to prevent splitting surrogate pairs (emojis, CJK)
+                // Using empty suffix because "..." is added explicitly in the next line
+                const truncatedContext = Utils.safeTruncate(semanticContext, charsToKeep, '');
                 prompt += `\n\n${truncatedContext}...`;
                 console.log(`[ConversationOrchestrator] Semantic context truncated from ${semanticTokens} to ${_TokenCounter.countTokens(truncatedContext)} tokens to fit within budget.`);
             }
