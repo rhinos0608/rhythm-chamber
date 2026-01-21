@@ -67,6 +67,10 @@ Plus: Your AI notices your patterns and writes personalized narratives about you
 | [Testing Guide](TESTING.md) | Running and writing tests |
 | [Security Model](SECURITY.md) | Comprehensive security model and threat analysis |
 | [Agent Reference](AGENT_CONTEXT.md) | Technical documentation for AI agents |
+| [API Reference](API_REFERENCE.md) | Core module API documentation |
+| [Troubleshooting](TROUBLESHOOTING.md) | Common issues and solutions |
+| [Changelog](CHANGELOG.md) | Version history and changes |
+| [Code of Conduct](CODE_OF_CONDUCT.md) | Community guidelines |
 
 ---
 
