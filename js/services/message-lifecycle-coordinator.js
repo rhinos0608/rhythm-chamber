@@ -29,6 +29,9 @@ let _Config = null;
 let _Functions = null;
 let _WaveTelemetry = null;
 
+// Track if we've already shown fallback notification this session
+let _hasShownFallbackNotification = false;
+
 // Timeout constants
 const CHAT_API_TIMEOUT_MS = 60000;
 const LOCAL_LLM_TIMEOUT_MS = 90000;

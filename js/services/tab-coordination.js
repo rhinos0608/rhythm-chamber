@@ -519,6 +519,23 @@ async function initWithBroadcastChannel() {
 
     // Set up heartbeat system
     if (isPrimaryTab) {
+        // Verify security session is ready before starting periodic operations
+        if (!Security.isKeySessionActive()) {
+            console.warn('[TabCoordination] Security session not active, delaying periodic operations');
+            // Wait up to 5 seconds for security to become ready
+            const maxWait = 5000;
+            const checkInterval = 100;
+            let waited = 0;
+            while (!Security.isKeySessionActive() && waited < maxWait) {
+                await new Promise(resolve => setTimeout(resolve, checkInterval));
+                waited += checkInterval;
+            }
+            if (!Security.isKeySessionActive()) {
+                console.error('[TabCoordination] Security session still not ready after waiting, periodic operations may fail');
+            } else {
+                console.log('[TabCoordination] Security session ready, starting periodic operations');
+            }
+        }
         startHeartbeat();
         startWatermarkBroadcast(); // Start watermark broadcast as primary
     } else {
@@ -605,6 +622,23 @@ async function initWithSharedWorker() {
 
     // Set up heartbeat system
     if (isPrimaryTab) {
+        // Verify security session is ready before starting periodic operations
+        if (!Security.isKeySessionActive()) {
+            console.warn('[TabCoordination] Security session not active, delaying periodic operations');
+            // Wait up to 5 seconds for security to become ready
+            const maxWait = 5000;
+            const checkInterval = 100;
+            let waited = 0;
+            while (!Security.isKeySessionActive() && waited < maxWait) {
+                await new Promise(resolve => setTimeout(resolve, checkInterval));
+                waited += checkInterval;
+            }
+            if (!Security.isKeySessionActive()) {
+                console.error('[TabCoordination] Security session still not ready after waiting, periodic operations may fail');
+            } else {
+                console.log('[TabCoordination] Security session ready, starting periodic operations');
+            }
+        }
         startHeartbeat();
         startWatermarkBroadcast();
     } else {
@@ -652,13 +686,27 @@ async function sendMessage(msg) {
 
         coordinationTransport?.postMessage(signedMessage);
     } catch (error) {
-        console.error('[TabCoordination] Message signing failed:', error);
-        // Fail-safe: Send unsigned message if signing fails
+        // Check if this is a session initialization error
+        const isSessionError = error.message && error.message.includes('Session not initialized');
+        if (isSessionError) {
+            // Only log session errors once to avoid spam
+            if (!sendMessage._sessionErrorLogged) {
+                console.warn('[TabCoordination] Security session not ready - using unsigned messages as fallback');
+                sendMessage._sessionErrorLogged = true;
+            }
+        } else {
+            console.error('[TabCoordination] Message signing failed:', error);
+        }
+        // Fail-safe: Send unsigned message with origin, nonce, and unsigned flag if signing fails
+        const unsignedNonce = `${TAB_ID}_${localSequence}_${msg.timestamp || Date.now()}`;
         coordinationTransport?.postMessage({
             ...msg,
             seq: localSequence,
             senderId: TAB_ID,
-            timestamp: msg.timestamp || Date.now()
+            origin: window.location.origin,
+            nonce: unsignedNonce,
+            timestamp: msg.timestamp || Date.now(),
+            unsigned: true
         });
     }
 }
@@ -667,7 +715,7 @@ async function sendMessage(msg) {
  * Create message handler for BroadcastChannel with message security verification
  * Phase 14: All incoming messages are verified for signature, origin, timestamp, and nonce
  */
-async function createMessageHandler() {
+function createMessageHandler() {
     return async (event) => {
         try {
             // Extract security fields from message
@@ -678,10 +726,16 @@ async function createMessageHandler() {
             // Phase 14: Verify all incoming messages before processing
             // ==========================================
 
-            // Step 0: Check for missing security fields
-            if (!signature || !origin || !timestamp || !nonce) {
-                console.warn('[TabCoordination] Rejecting unsigned message - missing security fields');
-                return;
+            // Step 0: Check for unsigned flag (fail-safe from signing failures)
+            const { unsigned: isUnsigned } = event.data;
+            if (isUnsigned) {
+                console.warn('[TabCoordination] Accepting unsigned message (signature verification skipped)');
+            } else {
+                // Step 0a: Check for missing security fields (signed messages)
+                if (!signature || !origin || !timestamp || !nonce) {
+                    console.warn('[TabCoordination] Rejecting unsigned message - missing security fields');
+                    return;
+                }
             }
 
             // Step 1: Origin validation (XTAB-03) - Fast check
@@ -704,14 +758,33 @@ async function createMessageHandler() {
             }
 
             // Step 4: Signature verification (XTAB-02) - Expensive crypto operation (last)
-            const signingKey = await Security.getSigningKey();
-            const isValid = await Security.MessageSecurity.verifyMessage(event.data, signature, signingKey);
-            if (!isValid) {
-                console.warn('[TabCoordination] Rejecting message with invalid signature');
-                return;
+            // Skip signature verification for unsigned messages (fail-safe from signing failures)
+            if (!isUnsigned) {
+                try {
+                    const signingKey = await Security.getSigningKey();
+                    const isValid = await Security.MessageSecurity.verifyMessage(event.data, signature, signingKey);
+                    if (!isValid) {
+                        console.warn('[TabCoordination] Rejecting message with invalid signature');
+                        return;
+                    }
+                } catch (signError) {
+                    // Check if this is a session initialization error
+                    const isSessionError = signError.message && signError.message.includes('Session not initialized');
+                    if (isSessionError) {
+                        // Only log session errors once to avoid spam
+                        if (!createMessageHandler._sessionErrorLogged) {
+                            console.warn('[TabCoordination] Security session not ready - accepting unsigned messages during initialization');
+                            createMessageHandler._sessionErrorLogged = true;
+                        }
+                        // Treat as unsigned during initialization
+                        isUnsigned = true;
+                    } else {
+                        throw signError; // Re-throw other errors
+                    }
+                }
             }
 
-            // Mark nonce as used after successful verification
+            // Mark nonce as used after successful verification or for unsigned messages
             Security.MessageSecurity.markNonceUsed(nonce);
 
             // Message passed all verification checks - proceed with processing

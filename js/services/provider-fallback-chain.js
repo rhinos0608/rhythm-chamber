@@ -225,22 +225,22 @@ export class ProviderFallbackChain {
      */
     _subscribeToEvents() {
         // Subscribe to provider success events
-        this._eventBus.subscribe('PROVIDER:SUCCESS', async (event, data) => {
+        this._eventBus.on('PROVIDER:SUCCESS', async (event, data) => {
             await this._recordProviderSuccess(data.provider, data.latencyMs);
         });
 
         // Subscribe to provider failure events
-        this._eventBus.subscribe('PROVIDER:FAILURE', async (event, data) => {
+        this._eventBus.on('PROVIDER:FAILURE', async (event, data) => {
             await this._recordProviderFailure(data.provider, data.error);
         });
 
         // Subscribe to circuit breaker events
-        this._eventBus.subscribe('CIRCUIT_BREAKER:TRIPPED', async (event, data) => {
+        this._eventBus.on('CIRCUIT_BREAKER:TRIPPED', async (event, data) => {
             await this._handleCircuitBreakerTripped(data.provider);
         });
 
         // Subscribe to circuit breaker recovery events
-        this._eventBus.subscribe('CIRCUIT_BREAKER:RECOVERED', async (event, data) => {
+        this._eventBus.on('CIRCUIT_BREAKER:RECOVERED', async (event, data) => {
             await this._handleCircuitBreakerRecovered(data.provider);
         });
     }

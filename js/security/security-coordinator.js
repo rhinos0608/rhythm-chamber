@@ -22,6 +22,7 @@ import * as TokenBinding from './token-binding.js';
 import * as Anomaly from './anomaly.js';
 import * as KeyManager from './key-manager.js';
 import * as StorageEncryption from './storage-encryption.js';
+import { SafeMode } from './safe-mode.js';
 
 /**
  * Initialization state enum
@@ -166,7 +167,7 @@ class SecurityCoordinatorClass {
                 await this._initKeyManager(sessionPassword);
             }
             
-            // If KeyManager failed and it's required, fail the whole init
+            // If KeyManager failed and it's required, result in degraded mode
             if (this._moduleStates.keyManager.state === InitState.FAILED && this._config.keyManagerRequired) {
                 this._state = InitState.DEGRADED;
                 this._warnings.push('KeyManager failed - encryption features limited');
@@ -289,6 +290,8 @@ class SecurityCoordinatorClass {
             }
             
             this._moduleStates.encryption.state = InitState.READY;
+            // Update SafeMode so storage operations know encryption is available
+            await SafeMode.initModule('encryption', async () => {});
             console.log('[SecurityCoordinator] Encryption module ready');
         } catch (error) {
             this._moduleStates.encryption.state = InitState.FAILED;
@@ -320,6 +323,8 @@ class SecurityCoordinatorClass {
             }
             
             this._moduleStates.tokenBinding.state = InitState.READY;
+            // Update SafeMode so other modules know token binding is available
+            await SafeMode.initModule('tokenBinding', async () => {});
             console.log('[SecurityCoordinator] TokenBinding ready');
         } catch (error) {
             this._moduleStates.tokenBinding.state = InitState.FAILED;
@@ -351,6 +356,8 @@ class SecurityCoordinatorClass {
             }
             
             this._moduleStates.anomalyDetection.state = InitState.READY;
+            // Update SafeMode so other modules know anomaly detection is available
+            await SafeMode.initModule('anomaly', async () => {});
             console.log('[SecurityCoordinator] Anomaly detection ready');
         } catch (error) {
             this._moduleStates.anomalyDetection.state = InitState.FAILED;
@@ -369,25 +376,42 @@ class SecurityCoordinatorClass {
     async _initPrototypePollutionProtection() {
         const startTime = performance.now();
         this._moduleStates.prototypePollution.state = InitState.IN_PROGRESS;
-        
+
         try {
-            // Freeze prototypes
-            Object.freeze(Object.prototype);
-            Object.freeze(Array.prototype);
-            Object.freeze(Function.prototype);
-            
+            // Detect common third-party libraries/polyfills that may be incompatible with sealing
+            const hasIncompatibleLibs = (
+                typeof window.React !== 'undefined' ||
+                typeof window.jQuery !== 'undefined' ||
+                typeof window.$ !== 'undefined' ||
+                typeof window.angular !== 'undefined'
+            );
+
+            if (hasIncompatibleLibs) {
+                console.warn('[SecurityCoordinator] Skipping prototype pollution protection - incompatible libraries detected (React, jQuery, etc.)');
+                this._warnings.push('Prototype pollution protection skipped - incompatible libraries detected');
+                this._moduleStates.prototypePollution.state = InitState.FAILED;
+                return;
+            }
+
+            // Seal prototypes (less restrictive than freeze, prevents addition but allows property modification for existing properties)
+            Object.seal(Object.prototype);
+            Object.seal(Array.prototype);
+            Object.seal(Function.prototype);
+
             this._moduleStates.prototypePollution.state = InitState.READY;
-            console.log('[SecurityCoordinator] Prototype pollution protection enabled');
+            // Update SafeMode so other modules know prototype pollution protection is available
+            await SafeMode.initModule('prototypePollution', async () => {});
+            console.log('[SecurityCoordinator] Prototype pollution protection enabled (sealed - less restrictive than freeze)');
         } catch (error) {
             this._moduleStates.prototypePollution.state = InitState.FAILED;
             this._moduleStates.prototypePollution.error = error;
             this._warnings.push('Prototype pollution protection failed: ' + error.message);
             console.warn('[SecurityCoordinator] Prototype pollution protection failed:', error.message);
         }
-        
+
         this._moduleStates.prototypePollution.initTime = performance.now() - startTime;
     }
-    
+
     /**
      * Enable prototype pollution protection (for deferred call at window.onload)
      * @returns {boolean} True if protection was enabled
@@ -397,14 +421,30 @@ class SecurityCoordinatorClass {
             console.log('[SecurityCoordinator] Prototype pollution protection already enabled');
             return true;
         }
-        
+
         try {
-            Object.freeze(Object.prototype);
-            Object.freeze(Array.prototype);
-            Object.freeze(Function.prototype);
-            
+            // Detect common third-party libraries/polyfills that may be incompatible with sealing
+            const hasIncompatibleLibs = (
+                typeof window.React !== 'undefined' ||
+                typeof window.jQuery !== 'undefined' ||
+                typeof window.$ !== 'undefined' ||
+                typeof window.angular !== 'undefined'
+            );
+
+            if (hasIncompatibleLibs) {
+                console.warn('[SecurityCoordinator] Skipping prototype pollution protection (deferred) - incompatible libraries detected (React, jQuery, etc.)');
+                this._warnings.push('Prototype pollution protection skipped (deferred) - incompatible libraries detected');
+                this._moduleStates.prototypePollution.state = InitState.FAILED;
+                return false;
+            }
+
+            // Seal prototypes (less restrictive than freeze, prevents addition but allows property modification for existing properties)
+            Object.seal(Object.prototype);
+            Object.seal(Array.prototype);
+            Object.seal(Function.prototype);
+
             this._moduleStates.prototypePollution.state = InitState.READY;
-            console.log('[SecurityCoordinator] Prototype pollution protection enabled (deferred)');
+            console.log('[SecurityCoordinator] Prototype pollution protection enabled (deferred, sealed - less restrictive than freeze)');
             return true;
         } catch (error) {
             this._moduleStates.prototypePollution.state = InitState.FAILED;
@@ -457,18 +497,17 @@ class SecurityCoordinatorClass {
      * @private
      */
     async _generateSessionPassword() {
-        // Try to get existing session password
-        let password = localStorage.getItem('spotify_refresh_token') ||
-                       sessionStorage.getItem('rhythm_chamber_session_salt');
-        
+        // Try to get existing session password from sessionStorage only (not localStorage to avoid coupling with Spotify token)
+        let password = sessionStorage.getItem('rhythm_chamber_session_salt');
+
         if (!password) {
-            // Generate a cryptographically secure random secret
+            // Generate a cryptographically secure random salt
             const array = new Uint8Array(32);
             crypto.getRandomValues(array);
             password = Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('');
             sessionStorage.setItem('rhythm_chamber_session_salt', password);
         }
-        
+
         return password;
     }
     

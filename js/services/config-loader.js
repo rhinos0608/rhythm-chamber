@@ -71,7 +71,7 @@ let loadFailed = false;
 let loadError = null;
 
 const CONFIG_CACHE_KEY = 'rhythm_chamber_config_cache';
-const CONFIG_URL = './config.json';
+const CONFIG_URL = './js/config.json';
 const MAX_RETRIES = 3;
 const BASE_RETRY_DELAY_MS = 500;
 

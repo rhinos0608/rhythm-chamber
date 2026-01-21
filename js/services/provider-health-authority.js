@@ -546,6 +546,12 @@ export function isBlacklisted(provider) {
         // Expired - clean up
         state.blacklistExpiry = null;
         state.healthStatus = deriveHealthStatus(state);
+        
+        console.log(`[ProviderHealthAuthority] ${provider} blacklist expired`);
+        
+        EventBus.emit('PROVIDER:UNBLACKLISTED', { provider });
+        notifyHealthUpdate(provider, state);
+        
         return false;
     }
     
@@ -569,7 +575,7 @@ export function getStatus(provider) {
     return {
         provider,
         circuitState: state.circuitState,
-        healthStatus: state.healthStatus,
+        healthStatus: deriveHealthStatus(state),
         consecutiveFailures: state.consecutiveFailures,
         consecutiveSuccesses: state.consecutiveSuccesses,
         totalSuccesses: state.totalSuccesses,

@@ -21,7 +21,7 @@ const writeVectorClock = new VectorClock();
 // ==========================================
 
 const INDEXEDDB_NAME = 'rhythm-chamber';
-const INDEXEDDB_VERSION = 3;
+const INDEXEDDB_VERSION = 5;
 
 const INDEXEDDB_STORES = {
     STREAMS: 'streams',
@@ -32,7 +32,12 @@ const INDEXEDDB_STORES = {
     CHAT_SESSIONS: 'chat_sessions',
     CONFIG: 'config',
     TOKENS: 'tokens',
-    MIGRATION: 'migration'
+    MIGRATION: 'migration',
+    EVENT_LOG: 'event_log',
+    EVENT_CHECKPOINT: 'event_checkpoint',
+    DEMO_STREAMS: 'demo_streams',
+    DEMO_PATTERNS: 'demo_patterns',
+    DEMO_PERSONALITY: 'demo_personality'
 };
 
 // Database connection
@@ -330,6 +335,38 @@ function createStores(database) {
     // Migration state and rollback backup
     if (!database.objectStoreNames.contains(INDEXEDDB_STORES.MIGRATION)) {
         database.createObjectStore(INDEXEDDB_STORES.MIGRATION, { keyPath: 'id' });
+    }
+
+    // Event log store for event replay
+    if (!database.objectStoreNames.contains(INDEXEDDB_STORES.EVENT_LOG)) {
+        const eventLogStore = database.createObjectStore(INDEXEDDB_STORES.EVENT_LOG, { keyPath: 'id' });
+        eventLogStore.createIndex('sequenceNumber', 'sequenceNumber', { unique: true });
+        eventLogStore.createIndex('type', 'type', { unique: false });
+        eventLogStore.createIndex('timestamp', 'timestamp', { unique: false });
+    }
+
+    // Event checkpoint store for rapid recovery
+    if (!database.objectStoreNames.contains(INDEXEDDB_STORES.EVENT_CHECKPOINT)) {
+        const checkpointStore = database.createObjectStore(INDEXEDDB_STORES.EVENT_CHECKPOINT, { keyPath: 'id' });
+        checkpointStore.createIndex('sequenceNumber', 'sequenceNumber', { unique: true });
+    }
+
+    // Demo streams store for demo mode data
+    if (!database.objectStoreNames.contains(INDEXEDDB_STORES.DEMO_STREAMS)) {
+        const demoStreamsStore = database.createObjectStore(INDEXEDDB_STORES.DEMO_STREAMS, { keyPath: 'id' });
+        demoStreamsStore.createIndex('timestamp', 'timestamp', { unique: false });
+        demoStreamsStore.createIndex('type', 'type', { unique: false });
+    }
+
+    // Demo patterns store for demo mode analysis
+    if (!database.objectStoreNames.contains(INDEXEDDB_STORES.DEMO_PATTERNS)) {
+        const demoPatternsStore = database.createObjectStore(INDEXEDDB_STORES.DEMO_PATTERNS, { keyPath: 'id' });
+        demoPatternsStore.createIndex('timestamp', 'timestamp', { unique: false });
+    }
+
+    // Demo personality store for demo mode personality data
+    if (!database.objectStoreNames.contains(INDEXEDDB_STORES.DEMO_PERSONALITY)) {
+        database.createObjectStore(INDEXEDDB_STORES.DEMO_PERSONALITY, { keyPath: 'id' });
     }
 }
 

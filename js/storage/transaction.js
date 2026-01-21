@@ -14,6 +14,7 @@
  */
 
 import { IndexedDBCore } from './indexeddb.js';
+import { EventBus } from '../services/event-bus.js';
 
 // ==========================================
 // Compensation Log Store Name
@@ -583,6 +584,10 @@ async function rollback(ctx) {
     const toRollback = ctx.operations.filter(op => op.committed).reverse();
     const compensationLog = [];
 
+    // Define sensitive field patterns for redaction
+    const sensitiveFieldPatterns = ['securetoken', 'auth', 'token', 'secret', 'password', 'credentials'];
+    const isSensitiveKey = (key) => key && sensitiveFieldPatterns.some(pattern => String(key).toLowerCase().includes(pattern));
+
     for (const op of toRollback) {
         try {
             if (op.backend === 'localstorage') {
@@ -607,16 +612,16 @@ async function rollback(ctx) {
         } catch (rollbackError) {
             console.error('[StorageTransaction] Rollback failed for operation:', op, rollbackError);
             
-            // Log to compensation log for manual recovery
+            // Log to compensation log for manual recovery (sanitized)
             compensationLog.push({
                 transactionId: ctx.id,
                 operation: {
                     backend: op.backend,
                     type: op.type,
-                    store: op.store,
-                    key: op.key
+                    store: isSensitiveKey(op.store) ? '[REDACTED]' : op.store,
+                    key: isSensitiveKey(op.key) ? '[REDACTED]' : op.key
                 },
-                expectedState: op.previousValue,
+                expectedState: isSensitiveKey(op.key) ? '[REDACTED]' : op.previousValue,
                 actualState: 'unknown',
                 error: rollbackError.message || String(rollbackError),
                 timestamp: Date.now()
@@ -633,17 +638,16 @@ async function rollback(ctx) {
             console.warn(`[StorageTransaction] ${compensationLog.length} rollback failure(s) logged for manual recovery`);
             
             // Emit event for UI notification if EventBus is available
-            if (typeof window !== 'undefined' && window.EventBus?.emit) {
-                window.EventBus.emit('storage:compensation_needed', {
-                    transactionId: ctx.id,
-                    failedOperations: compensationLog.length,
-                    timestamp: Date.now()
-                });
-            }
+            EventBus.emit('storage:compensation_needed', {
+                transactionId: ctx.id,
+                failedOperations: compensationLog.length,
+                timestamp: Date.now()
+            });
         } catch (logError) {
             console.error('[StorageTransaction] Failed to persist compensation log:', logError);
-            // Log to console as last resort
+            // Log to console as last resort (already sanitized)
             console.error('[StorageTransaction] COMPENSATION LOG (not persisted):', JSON.stringify(compensationLog, null, 2));
+            console.error(`[StorageTransaction] Rollback failures count: ${compensationLog.length}`);
         }
     }
 
@@ -653,29 +657,33 @@ async function rollback(ctx) {
 
 /**
  * Persist compensation log entries to IndexedDB
- * 
+ *
  * @param {string} transactionId - Transaction ID
  * @param {Array} entries - Compensation log entries
  */
 async function persistCompensationLog(transactionId, entries) {
-    if (!IndexedDBCore) {
-        throw new Error('IndexedDBCore not available');
-    }
-    
     const logEntry = {
         id: transactionId,
         entries,
         timestamp: Date.now(),
         resolved: false
     };
-    
+
     // Try to store in compensation log store
     // If store doesn't exist, try creating it or fall back to localStorage
-    try {
-        await IndexedDBCore.put(COMPENSATION_LOG_STORE, logEntry);
-    } catch (storeError) {
-        // Fallback: store in localStorage
-        console.warn('[StorageTransaction] Compensation store not available, using localStorage fallback');
+    if (IndexedDBCore) {
+        try {
+            await IndexedDBCore.put(COMPENSATION_LOG_STORE, logEntry);
+        } catch (storeError) {
+            // Fallback: store in localStorage
+            console.warn('[StorageTransaction] Compensation store not available, using localStorage fallback');
+            const existingLogs = JSON.parse(localStorage.getItem('_transaction_compensation_logs') || '[]');
+            existingLogs.push(logEntry);
+            localStorage.setItem('_transaction_compensation_logs', JSON.stringify(existingLogs));
+        }
+    } else {
+        // Fallback: store in localStorage when IndexedDBCore is not available
+        console.warn('[StorageTransaction] IndexedDBCore not available, using localStorage fallback');
         const existingLogs = JSON.parse(localStorage.getItem('_transaction_compensation_logs') || '[]');
         existingLogs.push(logEntry);
         localStorage.setItem('_transaction_compensation_logs', JSON.stringify(existingLogs));
@@ -685,30 +693,41 @@ async function persistCompensationLog(transactionId, entries) {
 /**
  * Get all pending compensation log entries
  * These are rollback failures that need manual review/recovery
- * 
+ *
  * @returns {Promise<Array>} Compensation log entries
  */
 async function getCompensationLogs() {
     const logs = [];
-    
+    const seenTransactionIds = new Set();
+
     // Try IndexedDB first
     if (IndexedDBCore) {
         try {
             const dbLogs = await IndexedDBCore.getAll(COMPENSATION_LOG_STORE);
-            logs.push(...(dbLogs || []).filter(log => !log.resolved));
+            for (const log of (dbLogs || []).filter(log => !log.resolved)) {
+                if (!seenTransactionIds.has(log.id)) {
+                    logs.push(log);
+                    seenTransactionIds.add(log.id);
+                }
+            }
         } catch (e) {
             // Store might not exist
         }
     }
-    
-    // Also check localStorage fallback
+
+    // Also check localStorage fallback (deduplicate by transactionId)
     try {
         const lsLogs = JSON.parse(localStorage.getItem('_transaction_compensation_logs') || '[]');
-        logs.push(...lsLogs.filter(log => !log.resolved));
+        for (const log of lsLogs.filter(log => !log.resolved)) {
+            if (!seenTransactionIds.has(log.id)) {
+                logs.push(log);
+                seenTransactionIds.add(log.id);
+            }
+        }
     } catch (e) {
         // Ignore parse errors
     }
-    
+
     return logs;
 }
 
@@ -720,7 +739,7 @@ async function getCompensationLogs() {
  */
 async function resolveCompensationLog(transactionId) {
     let resolved = false;
-    
+
     // Try IndexedDB first
     if (IndexedDBCore) {
         try {
@@ -735,27 +754,25 @@ async function resolveCompensationLog(transactionId) {
             // Store might not exist
         }
     }
-    
-    // Also check localStorage fallback
-    if (!resolved) {
-        try {
-            const lsLogs = JSON.parse(localStorage.getItem('_transaction_compensation_logs') || '[]');
-            const idx = lsLogs.findIndex(log => log.id === transactionId);
-            if (idx >= 0) {
-                lsLogs[idx].resolved = true;
-                lsLogs[idx].resolvedAt = Date.now();
-                localStorage.setItem('_transaction_compensation_logs', JSON.stringify(lsLogs));
-                resolved = true;
-            }
-        } catch (e) {
-            // Ignore errors
+
+    // Always try localStorage fallback (unconditionally)
+    try {
+        const lsLogs = JSON.parse(localStorage.getItem('_transaction_compensation_logs') || '[]');
+        const idx = lsLogs.findIndex(log => log.id === transactionId);
+        if (idx >= 0) {
+            lsLogs[idx].resolved = true;
+            lsLogs[idx].resolvedAt = Date.now();
+            localStorage.setItem('_transaction_compensation_logs', JSON.stringify(lsLogs));
+            resolved = true;
         }
+    } catch (e) {
+        // Ignore errors
     }
-    
+
     if (resolved) {
         console.log(`[StorageTransaction] Compensation log ${transactionId} marked as resolved`);
     }
-    
+
     return resolved;
 }
 

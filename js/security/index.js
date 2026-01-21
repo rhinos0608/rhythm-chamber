@@ -10,11 +10,13 @@
 import * as Encryption from './encryption.js';
 import * as TokenBinding from './token-binding.js';
 import * as Anomaly from './anomaly.js';
-import * as KeyManager from './key-manager.js';
+import { KeyManager } from './key-manager.js';
 import * as StorageEncryption from './storage-encryption.js';
-import * as MessageSecurity from './message-security.js';
+import { MessageSecurity } from './message-security.js';
 import { SecurityCoordinator } from './security-coordinator.js';
+import { SafeMode } from './safe-mode.js';
 import './recovery-handlers.js'; // Side-effect import - sets up window.RecoveryHandlers
+import { SecurityChecklist } from './checklist.js';
 
 /**
  * Unified error context system
@@ -522,6 +524,8 @@ export {
     Security,
     ErrorContext,
     SecurityCoordinator,
+    SecurityChecklist,
+    SafeMode,
 
     // Individual modules for direct import if needed
     Encryption,

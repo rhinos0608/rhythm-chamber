@@ -48,6 +48,30 @@
 const usedNonces = new Set();
 const MAX_NONCE_CACHE_SIZE = 1000;
 
+/**
+ * Deep sort object keys recursively for deterministic JSON serialization
+ * @param {*} obj - Object or value to sort
+ * @returns {*} Sorted object or primitive value
+ */
+function deepSortObject(obj) {
+    if (obj === null || typeof obj !== 'object') {
+        return obj;
+    }
+
+    if (Array.isArray(obj)) {
+        return obj.map(item => deepSortObject(item));
+    }
+
+    const sorted = {};
+    const keys = Object.keys(obj).sort();
+
+    for (const key of keys) {
+        sorted[key] = deepSortObject(obj[key]);
+    }
+
+    return sorted;
+}
+
 const MessageSecurity = {
     /**
      * Sign message using HMAC-SHA256
@@ -99,9 +123,9 @@ const MessageSecurity = {
                 console.log('[MessageSecurity] Added timestamp to message before signing');
             }
 
-            // Canonicalize message: JSON.stringify with sorted keys
-            // This ensures consistent signature for same content regardless of key order
-            const canonicalMessage = JSON.stringify(message, Object.keys(message).sort());
+            // Canonicalize message: Deep sort object keys then JSON.stringify
+            // This ensures consistent signature for same content regardless of nested key order
+            const canonicalMessage = JSON.stringify(deepSortObject(message));
 
             // Convert string to bytes
             const encoder = new TextEncoder();
@@ -185,7 +209,7 @@ const MessageSecurity = {
             }
 
             // Canonicalize message (same method as signMessage)
-            const canonicalMessage = JSON.stringify(message, Object.keys(message).sort());
+            const canonicalMessage = JSON.stringify(deepSortObject(message));
 
             // Convert string to bytes
             const encoder = new TextEncoder();
@@ -370,8 +394,8 @@ const MessageSecurity = {
 
         } catch (error) {
             console.error('[MessageSecurity] Message sanitization failed:', error);
-            // Return original message if sanitization fails (fail-safe)
-            return message;
+            // Return safe fallback if sanitization fails (fail-safe)
+            return { text: '[sanitization failed]' };
         }
     },
 

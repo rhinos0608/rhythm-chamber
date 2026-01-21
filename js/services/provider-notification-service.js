@@ -83,23 +83,23 @@ export class ProviderNotificationService {
      * @private
      */
     _subscribeToEvents() {
-        this._eventBus.subscribe('PROVIDER:FALLBACK', (event, data) => {
+        this._eventBus.on('PROVIDER:FALLBACK', (event, data) => {
             this._handleProviderFallback(data);
         });
 
-        this._eventBus.subscribe('PROVIDER:RECOVERED', (event, data) => {
+        this._eventBus.on('PROVIDER:RECOVERED', (event, data) => {
             this._handleProviderRecovered(data);
         });
 
-        this._eventBus.subscribe('PROVIDER:BLACKLISTED', (event, data) => {
+        this._eventBus.on('PROVIDER:BLACKLISTED', (event, data) => {
             this._handleProviderBlacklisted(data);
         });
 
-        this._eventBus.subscribe('PROVIDER:FAILURE', (event, data) => {
+        this._eventBus.on('PROVIDER:FAILURE', (event, data) => {
             this._handleProviderFailure(data);
         });
 
-        this._eventBus.subscribe('PROVIDER:ALL_FAILED', (event, data) => {
+        this._eventBus.on('PROVIDER:ALL_FAILED', (event, data) => {
             this._handleAllProvidersFailed(data);
         });
     }

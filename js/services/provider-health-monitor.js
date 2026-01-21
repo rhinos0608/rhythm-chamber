@@ -113,23 +113,23 @@ export class ProviderHealthMonitor {
      * @private
      */
     _subscribeToEvents() {
-        this._eventBus.subscribe('PROVIDER:HEALTH_UPDATE', (event, data) => {
+        this._eventBus.on('PROVIDER:HEALTH_UPDATE', (event, data) => {
             this._updateHealthFromEvent(data);
         });
 
-        this._eventBus.subscribe('PROVIDER:BLACKLISTED', (event, data) => {
+        this._eventBus.on('PROVIDER:BLACKLISTED', (event, data) => {
             this._handleProviderBlacklisted(data);
         });
 
-        this._eventBus.subscribe('PROVIDER:UNBLACKLISTED', (event, data) => {
+        this._eventBus.on('PROVIDER:UNBLACKLISTED', (event, data) => {
             this._handleProviderUnblacklisted(data);
         });
 
-        this._eventBus.subscribe('CIRCUIT_BREAKER:TRIPPED', (event, data) => {
+        this._eventBus.on('CIRCUIT_BREAKER:TRIPPED', (event, data) => {
             this._handleCircuitBreakerTripped(data);
         });
 
-        this._eventBus.subscribe('CIRCUIT_BREAKER:RECOVERED', (event, data) => {
+        this._eventBus.on('CIRCUIT_BREAKER:RECOVERED', (event, data) => {
             this._handleCircuitBreakerRecovered(data);
         });
     }

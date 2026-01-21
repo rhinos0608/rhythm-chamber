@@ -41,6 +41,16 @@ const STORAGE_KEYS = {
     ACTIVE_SESSION_ID: 'rhythm_chamber_active_session_id',
 
     // ==========================================
+    // Storage Degradation Manager Keys
+    // ==========================================
+    PERSONALITY_RESULT: 'rhythm_chamber_personality_result',
+    USER_SETTINGS: 'rhythm_chamber_user_settings',
+    EMBEDDING_CACHE: 'rhythm_chamber_embedding_cache',
+    CHAT_SESSIONS: 'rhythm_chamber_chat_sessions',
+    AGGREGATED_CHUNKS: 'rhythm_chamber_aggregated_chunks',
+    RAW_STREAMS: 'rhythm_chamber_raw_streams',
+
+    // ==========================================
     // Security Keys
     // ==========================================
     SECURITY_FAILED_ATTEMPTS: 'rhythm_chamber_security_failed_attempts',
