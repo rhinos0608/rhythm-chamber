@@ -12,15 +12,17 @@
 import { EventBus } from './event-bus.js';
 import { Storage } from '../storage.js';
 import { DataVersion } from './data-version.js';
+import { safeJsonParse } from '../utils/safe-json.js';
+import { STORAGE_KEYS } from '../storage/keys.js';
 
 // ==========================================
 // Constants
 // ==========================================
 
 // Constants for legacy migration
-const CONVERSATION_STORAGE_KEY = 'rhythm_chamber_conversation';  // Legacy key from chat.js
-const SESSION_CURRENT_SESSION_KEY = 'rhythm_chamber_current_session';
-const SESSION_EMERGENCY_BACKUP_KEY = 'rhythm_chamber_emergency_backup';  // Sync backup for beforeunload
+const CONVERSATION_STORAGE_KEY = STORAGE_KEYS.CONVERSATION;  // Legacy key from chat.js
+const SESSION_CURRENT_SESSION_KEY = STORAGE_KEYS.CURRENT_SESSION;
+const SESSION_EMERGENCY_BACKUP_KEY = STORAGE_KEYS.EMERGENCY_BACKUP;  // Sync backup for beforeunload
 const SESSION_EMERGENCY_BACKUP_MAX_AGE_MS = 3600000;  // 1 hour max age for emergency backups
 
 // Message limit constants (DATA LOSS WARNING)
@@ -164,7 +166,7 @@ async function loadOrCreateSession() {
     try {
         const legacyData = sessionStorage.getItem(CONVERSATION_STORAGE_KEY);
         if (legacyData) {
-            const history = JSON.parse(legacyData);
+            const history = safeJsonParse(legacyData, []);
             if (history.length > 0) {
                 console.log('[SessionManager] Migrating legacy conversation to session storage');
                 await createNewSession(history);
@@ -308,6 +310,7 @@ async function loadSession(sessionId) {
 
 /**
  * Save current session to IndexedDB immediately
+ * EDGE CASE FIX: Preserves system prompts during truncation
  */
 async function saveCurrentSession() {
     if (!currentSessionId || !Storage.saveSession) {
@@ -331,11 +334,19 @@ async function saveCurrentSession() {
     }
 
     try {
+        // EDGE CASE FIX: Preserve system prompts during truncation
+        // System prompts are critical for LLM behavior - they should not be truncated
+        const systemMessages = messages.filter(m => m.role === 'system');
+        const nonSystemMessages = messages.filter(m => m.role !== 'system');
+        const messagesToSave = messageCount > MAX_SAVED_MESSAGES
+            ? [...systemMessages, ...nonSystemMessages.slice(-(MAX_SAVED_MESSAGES - systemMessages.length))]
+            : messages;
+
         const session = {
             id: currentSessionId,
             title: generateSessionTitle(messages),
             createdAt: currentSessionCreatedAt,
-            messages: messages.slice(-MAX_SAVED_MESSAGES), // Limit to MAX_SAVED_MESSAGES messages
+            messages: messagesToSave,
             metadata: {
                 personalityName: window._userContext?.personality?.name || 'Unknown',
                 personalityEmoji: window._userContext?.personality?.emoji || '🎵',
@@ -345,8 +356,8 @@ async function saveCurrentSession() {
 
         // Log warning when messages are actually truncated (DATA LOSS WARNING)
         if (messageCount > MAX_SAVED_MESSAGES) {
-            const truncatedCount = messageCount - MAX_SAVED_MESSAGES;
-            console.warn(`[SessionManager] Truncated ${truncatedCount} old messages (only ${MAX_SAVED_MESSAGES} most recent saved)`);
+            const truncatedCount = messageCount - messagesToSave.length;
+            console.warn(`[SessionManager] Truncated ${truncatedCount} old messages (kept ${systemMessages.length} system prompts + ${MAX_SAVED_MESSAGES - systemMessages.length} most recent)`);
         }
 
         await Storage.saveSession(session);
@@ -435,9 +446,13 @@ async function recoverEmergencyBackup() {
     }
     if (!backupStr) return false;
 
-    try {
-        const backup = JSON.parse(backupStr);
+    const backup = safeJsonParse(backupStr, null);
+    if (!backup) {
+        console.warn('[SessionManager] Emergency backup is corrupted or invalid');
+        return false;
+    }
 
+    try {
         // Only recover if backup is recent (< 1 hour old)
         if (Date.now() - backup.timestamp > SESSION_EMERGENCY_BACKUP_MAX_AGE_MS) {
             console.log('[SessionManager] Emergency backup too old, discarding');
@@ -490,15 +505,6 @@ async function recoverEmergencyBackup() {
         return true;
     } catch (e) {
         console.error('[SessionManager] Emergency backup recovery failed:', e);
-        // Keep backup for retry on next load if it was a save/storage failure
-        // Only remove if it's a corrupted/unparseable backup
-        if (e instanceof SyntaxError) {
-            try {
-                localStorage.removeItem(SESSION_EMERGENCY_BACKUP_KEY);
-            } catch (removeError) {
-                console.error('[SessionManager] Failed to remove corrupted emergency backup from localStorage:', removeError);
-            }
-        }
         return false;
     }
 }
@@ -633,6 +639,7 @@ function getHistory() {
 /**
  * Add message to current session
  * Automatically tags message with dataVersion for stale data detection
+ * EDGE CASE FIX: Implements in-memory sliding window to prevent unbounded growth
  * @param {Object} message - Message object with role and content
  */
 function addMessageToHistory(message) {
@@ -642,8 +649,22 @@ function addMessageToHistory(message) {
         if (DataVersion.tagMessage) {
             DataVersion.tagMessage(message);
         }
+
+        // EDGE CASE FIX: Implement in-memory sliding window
+        // Keep system messages and recent messages to prevent unbounded memory growth
+        // Use a higher limit in memory than on disk (2x) for better UX
+        const IN_MEMORY_MAX = MAX_SAVED_MESSAGES * 2;
+        const systemMessages = _sessionData.messages.filter(m => m.role === 'system');
+        const nonSystemMessages = _sessionData.messages.filter(m => m.role !== 'system');
+
         // Create new array reference instead of mutating (prevents race conditions)
-        _sessionData.messages = [..._sessionData.messages, message];
+        if (nonSystemMessages.length >= IN_MEMORY_MAX - systemMessages.length) {
+            // Drop oldest non-system message to make room
+            _sessionData.messages = [...systemMessages, ...nonSystemMessages.slice(-(IN_MEMORY_MAX - systemMessages.length - 1)), message];
+        } else {
+            _sessionData.messages = [..._sessionData.messages, message];
+        }
+
         // Sync to window for legacy compatibility (read-only)
         if (typeof window !== 'undefined') {
             window._sessionData = getSessionData();
@@ -717,12 +738,14 @@ function validateSession(session) {
 /**
  * Generate a title for the session based on first user message
  * Edge case safe: Uses Array.from to avoid splitting emoji surrogate pairs
+ * EDGE CASE FIX: Handles null, undefined, empty string, and non-string content
  */
 function generateSessionTitle(messages) {
     const firstUserMsg = messages.find(m => m.role === 'user');
-    if (firstUserMsg?.content) {
+    // EDGE CASE FIX: Add explicit check for non-empty string content
+    if (firstUserMsg?.content && typeof firstUserMsg.content === 'string' && firstUserMsg.content.trim().length > 0) {
         // Edge case: Use Array.from to respect grapheme clusters and avoid splitting emoji
-        const chars = Array.from(firstUserMsg.content);
+        const chars = Array.from(firstUserMsg.content.trim());
         const title = chars.slice(0, 50).join('');
         return chars.length > 50 ? title + '...' : title;
     }
