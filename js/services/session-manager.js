@@ -696,6 +696,7 @@ function removeMessageFromHistory(index) {
 /**
  * Truncate history to specific length
  * @param {number} length - New length
+ * @returns {void}
  */
 function truncateHistory(length) {
     // Use module-local state with immutable update pattern (thread-safe)
@@ -711,6 +712,7 @@ function truncateHistory(length) {
 /**
  * Replace entire history
  * @param {Array} messages - New message array
+ * @returns {void}
  */
 function replaceHistory(messages) {
     // Use module-local state with immutable update pattern (thread-safe)
@@ -727,6 +729,8 @@ function replaceHistory(messages) {
 
 /**
  * Validate session structure
+ * @param {Object} session - Session object to validate
+ * @returns {boolean} True if session has valid structure
  */
 function validateSession(session) {
     return session
@@ -739,6 +743,8 @@ function validateSession(session) {
  * Generate a title for the session based on first user message
  * Edge case safe: Uses Array.from to avoid splitting emoji surrogate pairs
  * EDGE CASE FIX: Handles null, undefined, empty string, and non-string content
+ * @param {Array} messages - Array of message objects
+ * @returns {string} Generated session title
  */
 function generateSessionTitle(messages) {
     const firstUserMsg = messages.find(m => m.role === 'user');
@@ -756,6 +762,7 @@ function generateSessionTitle(messages) {
  * Notify session update via EventBus
  * @param {string} [eventType='session:updated'] - Event type for EventBus
  * @param {Object} [eventPayload={}] - Additional event payload
+ * @returns {void}
  */
 function notifySessionUpdate(eventType = 'session:updated', eventPayload = {}) {
     // Emit via centralized EventBus - no legacy listeners
@@ -765,6 +772,7 @@ function notifySessionUpdate(eventType = 'session:updated', eventPayload = {}) {
 /**
  * Set user context for session metadata
  * @param {Object} personality - Personality data
+ * @returns {void}
  */
 function setUserContext(personality) {
     if (typeof window !== 'undefined') {

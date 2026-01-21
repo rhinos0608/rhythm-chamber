@@ -79,6 +79,7 @@ function renderTags(container, tags) {
 
 /**
  * Show upload view
+ * @returns {void}
  */
 function showUpload() {
     const el = initElements();

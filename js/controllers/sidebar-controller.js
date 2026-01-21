@@ -18,8 +18,9 @@ import { AppState } from '../state/app-state.js';
 import { EventBus } from '../services/event-bus.js';
 import { escapeHtml } from '../utils/html-escape.js';
 import { Utils } from '../utils.js';
+import { STORAGE_KEYS } from '../storage/keys.js';
 
-const SIDEBAR_STATE_KEY = 'rhythm_chamber_sidebar_collapsed';
+const SIDEBAR_STATE_KEY = STORAGE_KEYS.SIDEBAR_COLLAPSED;
 let pendingDeleteSessionId = null;
 let _unsubscribe = null; // AppState subscription cleanup
 
