@@ -11,6 +11,33 @@
  */
 
 // ==========================================
+// Logging Configuration (MUST run first)
+// ==========================================
+// Configure the centralized logger before any other imports to ensure
+// all logging is properly filtered. This prevents sensitive data exposure
+// and ensures appropriate log levels for development vs production.
+
+import { configureLogger, LOG_LEVELS, createLogger } from './utils/logger.js';
+
+// Detect development environment
+const isDevelopment = typeof window !== 'undefined' && (
+  window.location?.hostname === 'localhost' ||
+  window.location?.hostname === '127.0.0.1' ||
+  window.location?.protocol === 'file:'
+);
+
+// Configure logger based on environment
+// - Development: DEBUG level (verbose logging for debugging)
+// - Production: INFO level (only important state changes and above)
+configureLogger({
+  level: isDevelopment ? LOG_LEVELS.DEBUG : LOG_LEVELS.INFO,
+  releaseStage: isDevelopment ? 'development' : 'production'
+});
+
+// Create module-specific logger
+const logger = createLogger('Main');
+
+// ==========================================
 // Security Check (MUST run first, synchronously)
 // ==========================================
 
@@ -25,19 +52,19 @@ let safeModeReason = null;
 if (!securityCheck.secure) {
     // Don't throw - instead flag for Safe Mode and continue
     // This allows the "Safe Mode" UI in app.js to render
-    console.warn('[Main] Security check failed, entering Safe Mode:', securityCheck.reason);
+    logger.warn('Security check failed, entering Safe Mode:', securityCheck.reason);
     safeModeReason = securityCheck.reason;
 }
 
 if (safeModeReason === null) {
-    console.log('[Main] Security context validated');
+    logger.debug('Security context validated');
 }
 
 // ==========================================
 // Setup Deprecation Warnings for Window Globals
 // ==========================================
 setupDeprecatedWindowGlobals();
-console.log('[Main] Window globals deprecation warnings enabled');
+logger.debug('Window globals deprecation warnings enabled');
 
 // ==========================================
 // Import ALL Modules (Dependency Order)
@@ -85,7 +112,8 @@ import { GeminiProvider } from './providers/gemini.js';
 
 // Spotify
 import { Spotify } from './spotify.js';
-import { Settings } from './settings.js';
+// Settings lazy-loaded on first use (84KB savings)
+// import { Settings } from './settings.js';
 
 // Chat
 import { Chat } from './chat.js';
@@ -153,7 +181,7 @@ import { ErrorBoundary, installGlobalErrorHandler } from './services/error-bound
 // All modules should now be accessed via ES imports.
 // ModuleRegistry is used for lazy-loaded modules (Ollama, RAG, LocalVectorStore, LocalEmbeddings)
 
-console.log('[Main] All modules imported via ES modules - no window globals');
+logger.debug('All modules imported via ES modules - no window globals');
 
 
 // ==========================================
@@ -382,11 +410,11 @@ async function loadHeavyModulesOnIntent() {
 
     // Can't load in safe mode
     if (safeModeReason) {
-        console.warn('[Main] Cannot load heavy modules in Safe Mode');
+        logger.warn('Cannot load heavy modules in Safe Mode');
         return false;
     }
 
-    console.log('[Main] Loading heavy modules on user intent...');
+    logger.debug('Loading heavy modules on user intent...');
 
     heavyModulesLoading = (async () => {
         try {
@@ -399,19 +427,19 @@ async function loadHeavyModulesOnIntent() {
                 'LocalEmbeddings'
             ]);
 
-            console.log('[Main] Heavy modules loaded via ModuleRegistry');
+            logger.debug('Heavy modules loaded via ModuleRegistry');
 
             // Initialize LocalVectorStore worker
             const lvsModule = ModuleRegistry.getModuleSync('LocalVectorStore');
             if (lvsModule?.LocalVectorStore) {
                 await lvsModule.LocalVectorStore.init();
-                console.log('[Main] LocalVectorStore worker initialized');
+                logger.debug('LocalVectorStore worker initialized');
             }
 
             heavyModulesLoaded = true;
             return true;
         } catch (error) {
-            console.error('[Main] Failed to load heavy modules:', error);
+            logger.error('Failed to load heavy modules:', error);
             heavyModulesLoading = null; // Allow retry
             return false;
         }
@@ -425,11 +453,11 @@ async function loadHeavyModulesOnIntent() {
  * Initialize the application after security passes
  */
 async function bootstrap() {
-    console.log('[Main] Bootstrapping application...');
+    logger.info('Bootstrapping application...');
 
     try {
         // Load configuration with retry logic (replaces fragile <script src="config.js">)
-        console.log('[Main] Loading configuration...');
+        logger.debug('Loading configuration...');
         await ConfigLoader.load();
 
         // Install window.Config proxy for backward compatibility
@@ -437,9 +465,9 @@ async function bootstrap() {
 
         const configStatus = ConfigLoader.getLoadStatus();
         if (configStatus.failed) {
-            console.warn('[Main] Config load failed, using defaults:', configStatus.error);
+            logger.warn('Config load failed, using defaults:', configStatus.error);
         } else {
-            console.log('[Main] Configuration loaded successfully');
+            logger.debug('Configuration loaded successfully');
         }
 
         // ==========================================
@@ -471,26 +499,26 @@ async function bootstrap() {
                     enablePrototypePollution: false  // Deferred to window.onload
                 });
                 
-                console.log('[Main] SecurityCoordinator initialization complete:', securityReport.overallState);
-                
+                logger.debug('SecurityCoordinator initialization complete:', securityReport.overallState);
+
                 if (securityReport.warnings.length > 0) {
-                    console.warn('[Main] Security warnings:', securityReport.warnings);
+                    logger.warn('Security warnings:', securityReport.warnings);
                 }
-                
+
                 // Check if we should enter safe mode due to security failures
                 if (securityReport.overallState === 'failed') {
                     safeModeReason = 'Security initialization failed';
-                    console.warn('[Main] Entering Safe Mode due to security failure');
+                    logger.warn('Entering Safe Mode due to security failure');
                 } else if (securityReport.overallState === 'degraded') {
-                    console.warn('[Main] Security running in degraded mode - some features may be limited');
+                    logger.warn('Security running in degraded mode - some features may be limited');
                 }
-                
+
             } catch (error) {
-                console.warn('[Main] SecurityCoordinator initialization failed:', error?.message || error);
+                logger.warn('SecurityCoordinator initialization failed:', error?.message || error);
                 safeModeReason = 'Security initialization error: ' + (error?.message || 'Unknown error');
             }
         } else {
-            console.warn('[Main] Skipping SecurityCoordinator init due to Safe Mode:', safeModeReason);
+            logger.debug('Skipping SecurityCoordinator init due to Safe Mode:', safeModeReason);
         }
 
         // Install global error handlers for fallback error handling
@@ -499,7 +527,7 @@ async function bootstrap() {
         // Initialize WorkerCoordinator for centralized worker lifecycle management
         // This sets up beforeunload handlers for automatic cleanup
         WorkerCoordinator.init();
-        console.log('[Main] WorkerCoordinator initialized');
+        logger.debug('WorkerCoordinator initialized');
 
         // Register heavy modules with ModuleRegistry for lazy loading
         // These are NOT preloaded at startup - loaded on user intent instead
@@ -513,15 +541,15 @@ async function bootstrap() {
         // Heavy modules are now loaded on-demand when user shows intent
         // (clicks "Start Analysis" or enters Chat tab)
         // See loadHeavyModulesOnIntent() above
-        console.log('[Main] Heavy modules registered for on-demand loading');
+        logger.debug('Heavy modules registered for on-demand loading');
 
         // Import and initialize the application
         const { init } = await import('./app.js');
         await init({ safeModeReason, securityReport });
 
-        console.log('[Main] Application initialized successfully');
+        logger.info('Application initialized successfully');
     } catch (error) {
-        console.error('[Main] Failed to initialize application:', error);
+        logger.error('Failed to initialize application:', error);
         showLoadingError(error);
     }
 }

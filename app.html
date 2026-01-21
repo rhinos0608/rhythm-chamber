@@ -8,7 +8,7 @@
     <meta name="description"
         content="Your AI writes your musical story. Every time you visit. On your device. Watching you evolve. Chat with your complete Spotify history. Runs privately in your browser. BYOI for power users.">
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self' 'unsafe-inline' blob: https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://accounts.spotify.com https://api.spotify.com https://openrouter.ai https://cdn.jsdelivr.net http://localhost:11434 http://localhost:1234 http://127.0.0.1:11434 http://127.0.0.1:1234; img-src 'self' data: https://i.scdn.co; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';">
+        content="default-src 'self'; script-src 'self' 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://accounts.spotify.com https://api.spotify.com https://openrouter.ai http://localhost:11434 http://localhost:1234 http://127.0.0.1:11434 http://127.0.0.1:1234; img-src 'self' data: https://i.scdn.co; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';">
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,9 +17,8 @@
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap"
         rel="stylesheet">
 
-    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"
-        integrity="sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi"
-        crossorigin="anonymous"></script>
+    <!-- Vendored marked.js (35KB) - loaded locally for privacy and offline support -->
+    <script src="js/vendor/marked.min.js"></script>
     <link rel="stylesheet" href="css/styles.css">
 </head>
 
@@ -257,13 +256,17 @@
         <div class="modal-overlay" id="reset-confirm-modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="reset-modal-title" aria-describedby="reset-modal-desc">
             <div class="modal-content" style="max-width: 400px; text-align: center;" tabindex="-1">
                 <h3 id="reset-modal-title" style="margin-bottom: var(--space-md);"><span aria-hidden="true">🔄</span> Start Over?</h3>
-                <p id="reset-modal-desc" style="margin-bottom: var(--space-lg); color: var(--text-muted);">
+                <p id="reset-modal-desc" style="margin-bottom: var(--space-md); color: var(--text-muted);">
                     Your data will be cleared. This cannot be undone.
                 </p>
-                <div style="display: flex; gap: var(--space-md); justify-content: center;">
+                <p style="margin-bottom: var(--space-sm); font-size: 0.9rem;">
+                    Type <strong>DELETE</strong> to confirm:
+                </p>
+                <input type="text" id="reset-confirm-input" class="reset-confirm-input" autocomplete="off" placeholder="Type DELETE" aria-label="Type DELETE to confirm">
+                <div style="display: flex; gap: var(--space-md); justify-content: center; margin-top: var(--space-lg);">
                     <button class="btn btn-secondary" data-action="hide-reset-modal">Cancel</button>
-                    <button class="btn btn-destructive" data-action="execute-reset">
-                        Yes, Start Over
+                    <button class="btn btn-destructive" id="reset-confirm-btn" data-action="execute-reset" disabled>
+                        Confirm Reset
                     </button>
                 </div>
             </div>

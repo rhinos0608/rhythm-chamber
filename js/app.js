@@ -17,6 +17,7 @@ import { Security, SecurityChecklist } from './security/index.js';
 // Core utilities
 import { ModuleRegistry } from './module-registry.js';
 import { escapeHtml } from './utils/html-escape.js';
+import { Utils } from './utils.js';
 
 // State management
 import { AppState } from './state/app-state.js';
@@ -41,7 +42,8 @@ import { Cards } from './cards.js';
 
 // Spotify
 import { Spotify } from './spotify.js';
-import { Settings } from './settings.js';
+// Settings lazy-loaded on first use (84KB savings)
+// import { Settings } from './settings.js';
 
 // Chat
 import { Chat } from './chat.js';
@@ -124,8 +126,8 @@ const CRITICAL_DEPENDENCIES = {
     // Security checklist (optional - only shows on first run)
     'SecurityChecklist': { check: () => SecurityChecklist && typeof SecurityChecklist.init === 'function', required: false },
 
-    // Settings module (required for settings/tools modals)
-    'Settings': { check: () => Settings && typeof Settings.showSettingsModal === 'function', required: true }
+    // Settings module lazy-loaded on first use (84KB savings)
+    // 'Settings': { check: () => Settings && typeof Settings.showSettingsModal === 'function', required: true }
 };
 
 /**
@@ -565,21 +567,36 @@ async function init(options = {}) {
     // Check for OAuth callbacks or special modes
     const urlParams = new URLSearchParams(window.location.search);
 
-    // Spotify OAuth callback
+    // VALIDATION: Validate URL parameters before processing
+    // Whitelist of allowed modes
+    const allowedModes = ['demo', 'spotify'];
+
+    // Spotify OAuth callback - validate code format
     if (urlParams.has('code')) {
-        await SpotifyController.handleSpotifyCallback(urlParams.get('code'));
-        window.history.replaceState({}, document.title, window.location.pathname);
-        return;
+        const code = urlParams.get('code');
+        // Basic validation: OAuth codes should be alphanumeric and reasonably long
+        if (code && /^[A-Za-z0-9_-]{10,}$/.test(code)) {
+            await SpotifyController.handleSpotifyCallback(code);
+            window.history.replaceState({}, document.title, window.location.pathname);
+            return;
+        } else {
+            console.warn('[App] Invalid OAuth code format, ignoring');
+        }
     }
 
     // Spotify auth cancelled
     if (urlParams.has('error')) {
-        console.log('Spotify auth cancelled:', urlParams.get('error'));
+        const error = urlParams.get('error');
+        // Sanitize error string to prevent log injection
+        if (error && error.length < 100) {
+            console.log('Spotify auth cancelled:', error.replace(/[<>"']/g, ''));
+        }
         window.history.replaceState({}, document.title, window.location.pathname);
     }
 
     // Spotify Quick Snapshot mode
-    if (urlParams.get('mode') === 'spotify') {
+    const mode = urlParams.get('mode');
+    if (mode === 'spotify' && allowedModes.includes(mode)) {
         window.history.replaceState({}, document.title, window.location.pathname);
         if (Spotify.isConfigured()) {
             setupEventListeners();
@@ -589,8 +606,8 @@ async function init(options = {}) {
         }
     }
 
-    // Demo mode
-    if (urlParams.get('mode') === 'demo') {
+    // Demo mode - validate against whitelist
+    if (mode === 'demo' && allowedModes.includes(mode)) {
         console.log('[App] Demo mode activated');
         window.history.replaceState({}, document.title, window.location.pathname);
 
@@ -600,6 +617,12 @@ async function init(options = {}) {
         setupSpotifyButton();
         await SidebarController.init();
         return;
+    }
+
+    // Warn about unexpected mode parameter
+    if (mode && !allowedModes.includes(mode)) {
+        console.warn(`[App] Unexpected mode parameter: ${mode}`);
+        window.history.replaceState({}, document.title, window.location.pathname);
     }
 
     // Check for existing data
@@ -705,8 +728,9 @@ function setupEventListeners() {
             }
             fileInput.click();
         });
-        uploadZone.addEventListener('dragover', handleDragOver);
-        uploadZone.addEventListener('dragleave', handleDragLeave);
+        // Throttle drag-over events to prevent excessive DOM updates (fires at ~60fps during drag)
+        uploadZone.addEventListener('dragover', Utils.throttle(handleDragOver, 50));
+        uploadZone.addEventListener('dragleave', Utils.throttle(handleDragLeave, 50));
         uploadZone.addEventListener('drop', handleDrop);
         fileInput.addEventListener('change', handleFileSelect);
     }
@@ -760,21 +784,39 @@ function setupEventListeners() {
         console.log(`[App] Action triggered: ${action}`);
 
         // HNW Fix: Defensive handlers that check for function existence to prevent ReferenceError
-        // Settings is accessed via window.Settings, delete chat functions via window.SidebarController
+        // Settings is lazy-loaded on first use (84KB savings)
         const handlers = {
-            // Header actions (Settings module - uses imported ES module)
+            // Header actions (Settings module - lazy-loaded on demand)
             'show-settings': async () => {
-                if (typeof Settings?.showSettingsModal === 'function') {
-                    await Settings.showSettingsModal();
-                } else {
-                    console.error('[App] Settings.showSettingsModal not available');
+                try {
+                    // Dynamic import of settings module (84KB savings on initial load)
+                    const { Settings: LazySettings } = await import('./settings.js');
+                    if (typeof LazySettings?.showSettingsModal === 'function') {
+                        await LazySettings.showSettingsModal();
+                    } else {
+                        console.error('[App] Settings.showSettingsModal not available');
+                    }
+                } catch (err) {
+                    console.error('[App] Failed to load settings module:', err);
+                    if (window.showToast) {
+                        window.showToast('Failed to load settings. Please try again.', 3000);
+                    }
                 }
             },
-            'show-tools': () => {
-                if (typeof Settings?.showToolsModal === 'function') {
-                    Settings.showToolsModal();
-                } else {
-                    console.error('[App] Settings.showToolsModal not available');
+            'show-tools': async () => {
+                try {
+                    // Reuse the already-loaded Settings if cached by module system
+                    const { Settings: LazySettings } = await import('./settings.js');
+                    if (typeof LazySettings?.showToolsModal === 'function') {
+                        LazySettings.showToolsModal();
+                    } else {
+                        console.error('[App] Settings.showToolsModal not available');
+                    }
+                } catch (err) {
+                    console.error('[App] Failed to load settings module:', err);
+                    if (window.showToast) {
+                        window.showToast('Failed to load settings. Please try again.', 3000);
+                    }
                 }
             },
             'show-privacy-dashboard': () => {
@@ -1074,7 +1116,32 @@ async function waitForWorkersAbort(abortController, timeoutMs) {
 // Privacy Dashboard
 // ==========================================
 
-function showToast(message, duration = 3000) {
+/**
+ * Show toast notification with optional type variant
+ * @param {string} message - The message to display
+ * @param {number|string} durationOrType - Duration in ms, or type ('success', 'error', 'warning', 'info')
+ * @param {string} explicitType - Explicit type if first param is duration
+ */
+function showToast(message, durationOrType = 3000, explicitType = null) {
+    let duration = 3000;
+    let type = 'info';
+
+    // Parse arguments: can be (message, duration) or (message, type) or (message, duration, type)
+    if (typeof durationOrType === 'string') {
+        type = durationOrType;
+    } else if (typeof durationOrType === 'number') {
+        duration = durationOrType;
+    }
+    if (explicitType) {
+        type = explicitType;
+    }
+
+    // Validate type
+    const validTypes = ['success', 'error', 'warning', 'info'];
+    if (!validTypes.includes(type)) {
+        type = 'info';
+    }
+
     let toast = document.getElementById('toast-notification');
     if (!toast) {
         toast = document.createElement('div');
@@ -1083,10 +1150,26 @@ function showToast(message, duration = 3000) {
         document.body.appendChild(toast);
     }
 
-    toast.textContent = message;
+    // Remove existing type classes and add new one
+    toast.classList.remove('toast-success', 'toast-error', 'toast-warning', 'toast-info');
+    toast.classList.add(`toast-${type}`);
+
+    // Add icon based on type
+    const icons = {
+        success: '',
+        error: '',
+        warning: '',
+        info: ''
+    };
+    toast.textContent = icons[type] + message;
     toast.classList.add('show');
 
-    setTimeout(() => {
+    // Clear any existing timeout
+    if (toast._hideTimeout) {
+        clearTimeout(toast._hideTimeout);
+    }
+
+    toast._hideTimeout = setTimeout(() => {
         toast.classList.remove('show');
     }, duration);
 }
@@ -1135,6 +1218,7 @@ if (typeof window !== 'undefined') {
     window.showPrivacyDashboard = showPrivacyDashboard;
     window.clearSensitiveData = clearSensitiveData;
     window.processMessageResponse = processMessageResponse;
+    window.showToast = showToast; // Export showToast for use in other modules
 }
 
 // ==========================================
