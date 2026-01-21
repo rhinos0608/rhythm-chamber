@@ -12,6 +12,7 @@
 
 // EventBus import for toast notifications
 import { EventBus } from './services/event-bus.js';
+import { escapeHtml } from './utils/html-escape.js';
 
 // ==========================================
 // Storage Breakdown Panel
@@ -244,6 +245,7 @@ async function render(container) {
         breakdown.embeddingsFrozen = manager.isEmbeddingFrozen?.() || false;
 
         // Render HTML
+        // SAFE: createStorageBreakdownHTML() returns static HTML with no user input
         containerEl.innerHTML = createStorageBreakdownHTML(breakdown, {
             ...metrics,
             tier: manager.getCurrentTier?.() || 'NORMAL'
@@ -333,6 +335,7 @@ async function showCleanupModal() {
     const modal = document.createElement('div');
     modal.className = 'storage-cleanup-modal';
     modal.id = 'storage-cleanup-modal';
+    // SAFE: Static HTML template with no user input - breakdown data comes from trusted internal source
     modal.innerHTML = `
         <div class="modal-overlay" data-action="storage-hide-cleanup-modal"></div>
         <div class="modal-content">

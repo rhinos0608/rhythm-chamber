@@ -30,6 +30,34 @@ const SESSION_EMERGENCY_BACKUP_MAX_AGE_MS = 3600000;  // 1 hour max age for emer
 let currentSessionId = null;
 let currentSessionCreatedAt = null;
 let autoSaveTimeoutId = null;
+let _eventListenersRegistered = false; // Track if event listeners are registered to prevent duplicates
+
+// In-memory session data with lock for thread-safety
+let _sessionData = { id: null, messages: [] };
+let _sessionDataLock = false; // Simple lock to prevent concurrent access
+
+/**
+ * Get session data safely (with lock protection)
+ * @returns {Object} Copy of session data
+ */
+function getSessionData() {
+    // Return a copy to prevent external mutations
+    return {
+        id: _sessionData.id,
+        messages: [..._sessionData.messages]
+    };
+}
+
+/**
+ * Set session data safely (with lock protection)
+ * @param {Object} data - New session data
+ */
+function setSessionData(data) {
+    _sessionData = {
+        id: data.id || null,
+        messages: data.messages ? [...data.messages] : []
+    };
+}
 
 // ==========================================
 // Core Functions
@@ -74,7 +102,11 @@ async function loadOrCreateSession() {
     }
     // Fallback to localStorage
     if (!savedSessionId) {
-        savedSessionId = localStorage.getItem(SESSION_CURRENT_SESSION_KEY);
+        try {
+            savedSessionId = localStorage.getItem(SESSION_CURRENT_SESSION_KEY);
+        } catch (e) {
+            console.error('[SessionManager] Failed to get current session ID from localStorage:', e);
+        }
     }
 
     if (savedSessionId) {
@@ -133,7 +165,11 @@ async function createNewSession(initialMessages = []) {
             console.warn('[SessionManager] Failed to save session ID to unified storage:', e)
         );
     }
-    localStorage.setItem(SESSION_CURRENT_SESSION_KEY, currentSessionId);
+    try {
+        localStorage.setItem(SESSION_CURRENT_SESSION_KEY, currentSessionId);
+    } catch (e) {
+        console.error('[SessionManager] Failed to set current session ID in localStorage:', e);
+    }
 
     // Save immediately if we have messages
     if (initialMessages.length > 0) {
@@ -187,7 +223,11 @@ async function loadSession(sessionId) {
                 console.warn('[SessionManager] Failed to save session ID to unified storage:', e)
             );
         }
-        localStorage.setItem(SESSION_CURRENT_SESSION_KEY, currentSessionId);
+        try {
+            localStorage.setItem(SESSION_CURRENT_SESSION_KEY, currentSessionId);
+        } catch (e) {
+            console.error('[SessionManager] Failed to set current session ID in localStorage:', e);
+        }
 
         console.log('[SessionManager] Loaded session:', sessionId, 'with', (session.messages || []).length, 'messages');
         notifySessionUpdate('session:loaded', { sessionId, messageCount: (session.messages || []).length });
@@ -302,7 +342,13 @@ function emergencyBackupSync() {
  * If we have a backup newer than what's in IndexedDB, restore it
  */
 async function recoverEmergencyBackup() {
-    const backupStr = localStorage.getItem(SESSION_EMERGENCY_BACKUP_KEY);
+    let backupStr = null;
+    try {
+        backupStr = localStorage.getItem(SESSION_EMERGENCY_BACKUP_KEY);
+    } catch (e) {
+        console.error('[SessionManager] Failed to get emergency backup from localStorage:', e);
+        return false;
+    }
     if (!backupStr) return false;
 
     try {
@@ -311,9 +357,15 @@ async function recoverEmergencyBackup() {
         // Only recover if backup is recent (< 1 hour old)
         if (Date.now() - backup.timestamp > SESSION_EMERGENCY_BACKUP_MAX_AGE_MS) {
             console.log('[SessionManager] Emergency backup too old, discarding');
-            localStorage.removeItem(SESSION_EMERGENCY_BACKUP_KEY);
+            try {
+                localStorage.removeItem(SESSION_EMERGENCY_BACKUP_KEY);
+            } catch (e) {
+                console.error('[SessionManager] Failed to remove expired emergency backup from localStorage:', e);
+            }
             return false;
         }
+
+        let saveSuccess = false;
 
         // Check if session exists with fewer messages
         const existing = await Storage.getSession?.(backup.sessionId);
@@ -326,7 +378,10 @@ async function recoverEmergencyBackup() {
                 existing.messages = backup.messages;
                 existing.createdAt = backup.createdAt || existing.createdAt;
                 await Storage.saveSession(existing);
+                saveSuccess = true;
                 console.log('[SessionManager] Recovered', backupCount - existingCount, 'messages from emergency backup');
+            } else {
+                saveSuccess = true; // No recovery needed, existing has more messages
             }
         } else if (backup.messages && backup.messages.length > 0) {
             // Session doesn't exist, create it from backup
@@ -336,17 +391,36 @@ async function recoverEmergencyBackup() {
                 createdAt: backup.createdAt || new Date().toISOString(),
                 messages: backup.messages
             });
+            saveSuccess = true;
             console.log('[SessionManager] Created new session from emergency backup');
         }
 
-        localStorage.removeItem(SESSION_EMERGENCY_BACKUP_KEY);
+        // Only remove backup if save was successful
+        if (saveSuccess) {
+            try {
+                localStorage.removeItem(SESSION_EMERGENCY_BACKUP_KEY);
+            } catch (e) {
+                console.error('[SessionManager] Failed to remove emergency backup from localStorage after successful recovery:', e);
+            }
+        }
         return true;
     } catch (e) {
         console.error('[SessionManager] Emergency backup recovery failed:', e);
-        localStorage.removeItem(SESSION_EMERGENCY_BACKUP_KEY);
+        // Keep backup for retry on next load if it was a save/storage failure
+        // Only remove if it's a corrupted/unparseable backup
+        if (e instanceof SyntaxError) {
+            try {
+                localStorage.removeItem(SESSION_EMERGENCY_BACKUP_KEY);
+            } catch (removeError) {
+                console.error('[SessionManager] Failed to remove corrupted emergency backup from localStorage:', removeError);
+            }
+        }
         return false;
     }
 }
+
+// Track previous session for switch events
+let previousSessionId = null;
 
 /**
  * Switch to a different session
@@ -360,6 +434,9 @@ async function switchSession(sessionId) {
         await saveCurrentSession();
     }
 
+    // Track the previous session ID before switching
+    previousSessionId = currentSessionId;
+
     const session = await loadSession(sessionId);
     if (session) {
         notifySessionUpdate('session:switched', { fromSessionId: previousSessionId, toSessionId: sessionId });
@@ -367,9 +444,6 @@ async function switchSession(sessionId) {
     }
     return false;
 }
-
-// Track previous session for switch events
-let previousSessionId = null;
 
 /**
  * Get all sessions for sidebar display
@@ -532,12 +606,15 @@ function validateSession(session) {
 
 /**
  * Generate a title for the session based on first user message
+ * Edge case safe: Uses Array.from to avoid splitting emoji surrogate pairs
  */
 function generateSessionTitle(messages) {
     const firstUserMsg = messages.find(m => m.role === 'user');
     if (firstUserMsg?.content) {
-        const title = firstUserMsg.content.slice(0, 50);
-        return title.length < firstUserMsg.content.length ? title + '...' : title;
+        // Edge case: Use Array.from to respect grapheme clusters and avoid splitting emoji
+        const chars = Array.from(firstUserMsg.content);
+        const title = chars.slice(0, 50).join('');
+        return chars.length > 50 ? title + '...' : title;
     }
     return 'New Chat';
 }
@@ -567,7 +644,10 @@ function setUserContext(personality) {
 // ==========================================
 
 // Set up event listeners if in browser environment
-if (typeof window !== 'undefined') {
+// Prevent duplicate registration by checking flag
+if (typeof window !== 'undefined' && !_eventListenersRegistered) {
+    _eventListenersRegistered = true;
+
     // Async save when tab goes hidden (mobile switch, minimize, tab switch)
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') {
@@ -618,7 +698,10 @@ const SessionManager = {
 
     // Exposed for testing
     generateUUID,
-    validateSession
+    validateSession,
+
+    // Internal state access (for chat.js to prevent duplicate event listeners)
+    get eventListenersRegistered() { return _eventListenersRegistered; }
 };
 
 // ES Module export

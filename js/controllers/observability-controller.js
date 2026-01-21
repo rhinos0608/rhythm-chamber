@@ -12,6 +12,7 @@
 import { PerformanceProfiler, PerformanceCategory } from '../services/performance-profiler.js';
 import { CoreWebVitalsTracker, WebVitalType, PerformanceRating } from '../observability/core-web-vitals.js';
 import { MetricsExporter, ExportFormat, ScheduleType, ExternalService } from '../observability/metrics-exporter.js';
+import { escapeHtml } from '../utils/html-escape.js';
 
 /**
  * Observability Controller Class
@@ -70,6 +71,18 @@ export class ObservabilityController {
      * @type {Function|null}
      */
     _onActionClick = null;
+
+    /**
+     * @private
+     * @type {Function[]}
+     */
+    _tabClickHandlers = [];
+
+    /**
+     * @private
+     * @type {HTMLElement[]}
+     */
+    _tabElements = [];
 
     /**
      * Initialize the Observability Controller
@@ -413,8 +426,15 @@ export class ObservabilityController {
         const tabs = this._container.querySelectorAll('.tab-btn');
         const contents = this._container.querySelectorAll('.tab-content');
 
+        // Clear any existing tab handlers first (defensive)
+        this._clearTabHandlers();
+
         tabs.forEach(tab => {
-            tab.addEventListener('click', () => {
+            // Store reference for cleanup
+            this._tabElements.push(tab);
+
+            // Create bound handler for cleanup
+            const handler = () => {
                 const targetTab = tab.dataset.tab;
 
                 // Update active tab button
@@ -431,8 +451,27 @@ export class ObservabilityController {
 
                 // Update tab-specific content
                 this._updateTabContent(targetTab);
-            });
+            };
+
+            // Store handler reference for cleanup
+            this._tabClickHandlers.push(handler);
+            tab.addEventListener('click', handler);
         });
+    }
+
+    /**
+     * Clear tab handlers for cleanup
+     * @private
+     */
+    _clearTabHandlers() {
+        this._tabElements.forEach((tab, index) => {
+            const handler = this._tabClickHandlers[index];
+            if (tab && handler) {
+                tab.removeEventListener('click', handler);
+            }
+        });
+        this._tabElements = [];
+        this._tabClickHandlers = [];
     }
 
     /**
@@ -865,17 +904,12 @@ export class ObservabilityController {
     /**
      * Escape HTML to prevent XSS attacks
      * @private
+     * NOTE: Now uses centralized utility from utils/html-escape.js
      * @param {string} text - Text to escape
      * @returns {string} Escaped text
      */
     _escapeHtml(text) {
-        // Coerce all inputs to string first (handles null, undefined, objects with custom toString)
-        const coerced = typeof text === 'string' ? text : String(text);
-
-        // Always run through DOM-escape logic for security
-        const div = document.createElement('div');
-        div.textContent = coerced;
-        return div.innerHTML;
+        return escapeHtml(text);
     }
 
     /**
@@ -1007,6 +1041,9 @@ export class ObservabilityController {
         // Remove event listeners using bound handlers
         this._removeEventListeners();
 
+        // Clear tab handlers (MEMORY LEAK FIX)
+        this._clearTabHandlers();
+
         if (this._container && this._container.parentNode) {
             this._container.parentNode.removeChild(this._container);
         }
@@ -1017,6 +1054,8 @@ export class ObservabilityController {
         this._onToggleDashboard = null;
         this._onSettingsObservability = null;
         this._onActionClick = null;
+        this._tabClickHandlers = [];
+        this._tabElements = [];
 
         console.log('[ObservabilityController] Destroyed');
     }

@@ -316,6 +316,38 @@ function normalizeProviderError(error, provider) {
     return normalized;
 }
 
+/**
+ * Safely parse JSON from a response with proper error handling
+ * Distinguishes between network errors and JSON parse errors
+ * @param {Response} response - Fetch response object
+ * @param {object} fallback - Fallback value if parsing fails
+ * @returns {Promise<object>} Parsed JSON or fallback
+ */
+async function safeJSONParse(response, fallback = null) {
+    // First check content-type header
+    const contentType = response.headers.get('content-type');
+    if (contentType && !contentType.includes('application/json')) {
+        console.warn(`[ProviderInterface] Expected JSON but got ${contentType}`);
+        return fallback;
+    }
+
+    try {
+        return await response.json();
+    } catch (error) {
+        if (error instanceof SyntaxError) {
+            console.error('[ProviderInterface] JSON parse error - response may be malformed:', error.message);
+            // Log first 200 chars of response for debugging
+            try {
+                const text = await response.text();
+                console.debug('[ProviderInterface] Response preview:', text.substring(0, 200));
+            } catch (e) {
+                // Response body already consumed, ignore
+            }
+        }
+        return fallback;
+    }
+}
+
 // ==========================================
 // Provider Health Check System
 // HNW Network: Coordination between UI and provider layer
@@ -376,7 +408,7 @@ async function checkOpenRouterHealth() {
             };
         }
 
-        const data = await response.json();
+        const data = await safeJSONParse(response, { data: [] });
         const models = data.data?.map(m => m.id) || [];
 
         return {
@@ -394,6 +426,16 @@ async function checkOpenRouterHealth() {
                 available: false,
                 status: 'timeout',
                 reason: 'Connection timeout - check your internet',
+                models: [],
+                latencyMs
+            };
+        }
+        // Distinguish JSON parse errors from other errors
+        if (error instanceof SyntaxError) {
+            return {
+                available: false,
+                status: 'parse_error',
+                reason: 'Invalid response format from API',
                 models: [],
                 latencyMs
             };
@@ -437,7 +479,7 @@ async function checkOllamaHealth() {
             };
         }
 
-        const data = await response.json();
+        const data = await safeJSONParse(response, { models: [] });
         const models = data.models?.map(m => m.name) || [];
 
         if (models.length === 0) {
@@ -463,6 +505,16 @@ async function checkOllamaHealth() {
                 available: false,
                 status: 'not_running',
                 reason: 'Connection timeout - is Ollama running? Try: ollama serve',
+                models: [],
+                latencyMs
+            };
+        }
+        // Distinguish JSON parse errors from network errors
+        if (error instanceof SyntaxError) {
+            return {
+                available: false,
+                status: 'parse_error',
+                reason: 'Invalid response from Ollama',
                 models: [],
                 latencyMs
             };
@@ -507,7 +559,7 @@ async function checkLMStudioHealth() {
             };
         }
 
-        const data = await response.json();
+        const data = await safeJSONParse(response, { data: [] });
         const models = data.data?.map(m => m.id) || [];
 
         if (models.length === 0) {
@@ -533,6 +585,16 @@ async function checkLMStudioHealth() {
                 available: false,
                 status: 'not_running',
                 reason: 'Connection timeout - is LM Studio running with server enabled?',
+                models: [],
+                latencyMs
+            };
+        }
+        // Distinguish JSON parse errors from network errors
+        if (error instanceof SyntaxError) {
+            return {
+                available: false,
+                status: 'parse_error',
+                reason: 'Invalid response from LM Studio',
                 models: [],
                 latencyMs
             };

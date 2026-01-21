@@ -16,6 +16,7 @@ import { ChatUIController } from './chat-ui-controller.js';
 import { TokenCounter } from '../token-counter.js';
 import { AppState } from '../state/app-state.js';
 import { EventBus } from '../services/event-bus.js';
+import { escapeHtml } from '../utils/html-escape.js';
 
 const SIDEBAR_STATE_KEY = 'rhythm_chamber_sidebar_collapsed';
 let pendingDeleteSessionId = null;
@@ -28,6 +29,9 @@ let sidebarToggleBtn = null;
 let sidebarCollapseBtn = null;
 let sidebarOverlay = null;
 let newChatBtn = null;
+
+// Resize handler for mobile overlay state sync (RESPONSIVE FIX)
+let resizeHandler = null;
 
 /**
  * Initialize DOM element references
@@ -80,8 +84,13 @@ async function initSidebar() {
         newChatBtn.addEventListener('click', handleNewChat);
     }
 
+    // Setup event delegation for session actions (prevents XSS from inline onclick)
+    if (sidebarSessions) {
+        sidebarSessions.addEventListener('click', handleSessionAction);
+    }
+
     // Register for session updates from EventBus
-    this._sessionHandler = EventBus.on('session:*', renderSessionList);
+    SidebarController._sessionHandler = EventBus.on('session:*', renderSessionList);
 
     // Subscribe to AppState for reactive view changes
     // If a previous subscription exists, unsubscribe first to avoid duplicates
@@ -112,6 +121,17 @@ async function initSidebar() {
             updateSidebarVisibility();
         }
     });
+
+    // Setup resize handler to sync overlay state on breakpoint changes (RESPONSIVE FIX)
+    // Remove existing handler if present
+    if (resizeHandler) {
+        window.removeEventListener('resize', resizeHandler);
+    }
+    resizeHandler = () => {
+        // Re-evaluate overlay visibility when crossing mobile breakpoint
+        updateSidebarVisibility();
+    };
+    window.addEventListener('resize', resizeHandler);
 
     // Initial sidebar hidden (shown only in chat view)
     hideSidebarForNonChatViews();
@@ -228,10 +248,12 @@ async function renderSessionList() {
         const dateStr = formatRelativeDate(date);
         const emoji = session.metadata?.personalityEmoji || '🎵';
 
+        // SAFE: Use data-action attributes instead of inline onclick to prevent XSS
+        // session.id is escaped via escapeHtml() to prevent injection
         return `
-            <div class="session-item ${isActive ? 'active' : ''}" 
-                 data-session-id="${session.id}"
-                 onclick="SidebarController.handleSessionClick('${session.id}')">
+            <div class="session-item ${isActive ? 'active' : ''}"
+                 data-session-id="${escapeHtml(session.id)}"
+                 data-action="sidebar-session-click">
                 <div class="session-title">${escapeHtml(session.title || 'New Chat')}</div>
                 <div class="session-meta">
                     <span class="emoji">${emoji}</span>
@@ -240,11 +262,13 @@ async function renderSessionList() {
                     <span>${session.messageCount || 0} msgs</span>
                 </div>
                 <div class="session-actions">
-                    <button class="session-action-btn" 
-                            onclick="event.stopPropagation(); SidebarController.handleSessionRename('${session.id}')"
+                    <button class="session-action-btn"
+                            data-action="sidebar-session-rename"
+                            data-session-id="${escapeHtml(session.id)}"
                             title="Rename">✏️</button>
-                    <button class="session-action-btn delete" 
-                            onclick="event.stopPropagation(); SidebarController.handleSessionDelete('${session.id}')"
+                    <button class="session-action-btn delete"
+                            data-action="sidebar-session-delete"
+                            data-session-id="${escapeHtml(session.id)}"
                             title="Delete">🗑️</button>
                 </div>
             </div>
@@ -268,12 +292,39 @@ function formatRelativeDate(date) {
 }
 
 /**
- * Escape HTML to prevent XSS
+ * Handle session actions via event delegation (XSS prevention)
+ * Routes click events from data-action attributes to appropriate handlers
  */
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+function handleSessionAction(event) {
+    // Find the clicked element or its ancestor with data-action
+    const target = event.target.closest('[data-action]');
+    if (!target) return;
+
+    const action = target.dataset.action;
+    const sessionId = target.dataset.sessionId;
+
+    switch (action) {
+        case 'sidebar-session-click':
+            event.preventDefault();
+            if (sessionId) {
+                handleSessionClick(sessionId);
+            }
+            break;
+        case 'sidebar-session-rename':
+            event.stopPropagation();
+            event.preventDefault();
+            if (sessionId) {
+                handleSessionRename(sessionId);
+            }
+            break;
+        case 'sidebar-session-delete':
+            event.stopPropagation();
+            event.preventDefault();
+            if (sessionId) {
+                handleSessionDelete(sessionId);
+            }
+            break;
+    }
 }
 
 // ==========================================
@@ -287,7 +338,16 @@ async function handleSessionClick(sessionId) {
     const currentId = Chat.getCurrentSessionId();
     if (sessionId === currentId) return;
 
-    await Chat.switchSession(sessionId);
+    try {
+        await Chat.switchSession(sessionId);
+    } catch (error) {
+        console.error('[SidebarController] Failed to switch session:', error);
+        // Show error to user
+        if (window.showToast) {
+            window.showToast('Failed to switch session. Please try again.', 4000);
+        }
+        return;
+    }
 
     // Re-render chat messages
     const messages = document.getElementById('chat-messages');
@@ -311,7 +371,15 @@ async function handleSessionClick(sessionId) {
  * Handle new chat button
  */
 async function handleNewChat() {
-    await Chat.createNewSession();
+    try {
+        await Chat.createNewSession();
+    } catch (error) {
+        console.error('[SidebarController] Failed to create new session:', error);
+        if (window.showToast) {
+            window.showToast('Failed to create new chat. Please try again.', 4000);
+        }
+        return;
+    }
 
     // Clear chat messages
     const messages = document.getElementById('chat-messages');
@@ -367,7 +435,15 @@ async function confirmDeleteChat() {
     const sessionId = pendingDeleteSessionId;
     hideDeleteChatModal();
 
-    await Chat.deleteSessionById(sessionId);
+    try {
+        await Chat.deleteSessionById(sessionId);
+    } catch (error) {
+        console.error('[SidebarController] Failed to delete session:', error);
+        if (window.showToast) {
+            window.showToast('Failed to delete chat. Please try again.', 4000);
+        }
+        return;
+    }
 
     // If we deleted the current session, clear messages
     const messages = document.getElementById('chat-messages');
@@ -398,7 +474,16 @@ async function handleSessionRename(sessionId) {
     // Save on blur or enter
     const saveTitle = async () => {
         const newTitle = input.value.trim() || 'New Chat';
-        await Chat.renameSession(sessionId, newTitle);
+        try {
+            await Chat.renameSession(sessionId, newTitle);
+        } catch (error) {
+            console.error('[SidebarController] Failed to rename session:', error);
+            // Revert to original title on error
+            input.value = currentTitle;
+            if (window.showToast) {
+                window.showToast('Failed to rename chat. Please try again.', 4000);
+            }
+        }
     };
 
     input.addEventListener('blur', saveTitle);
@@ -461,7 +546,7 @@ export const SidebarController = {
     confirmDeleteChat,
     // Utilities
     formatRelativeDate,
-    escapeHtml,
+    escapeHtml, // Export centralized escapeHtml utility
     appendMessage
 };
 
@@ -485,6 +570,12 @@ SidebarController.destroy = function destroySidebarController() {
         } catch (e) {
             console.warn('[SidebarController] Failed to unregister session update callback:', e);
         }
+    }
+
+    // Remove resize handler (RESPONSIVE FIX - cleanup)
+    if (resizeHandler) {
+        window.removeEventListener('resize', resizeHandler);
+        resizeHandler = null;
     }
 
     // Remove DOM event listeners if initialized

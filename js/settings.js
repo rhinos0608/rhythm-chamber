@@ -8,7 +8,6 @@
 
 import { ModuleRegistry } from './module-registry.js';
 import { StorageBreakdownUI } from './storage-breakdown-ui.js';
-import ProviderHealthMonitor from './services/provider-health-monitor.js';
 import { ConfigLoader } from './services/config-loader.js';
 import { Storage } from './storage.js';
 import { Security } from './security/index.js';
@@ -180,8 +179,10 @@ function getSettings() {
         return _cachedSettings;
     }
 
-    // Post-migration without cache: return defaults (cache will be populated by getSettingsAsync)
+    // Post-migration without cache: warn and return defaults
+    // Callers should use getSettingsAsync() to get saved settings from IndexedDB
     if (settingsMigrationComplete) {
+        console.warn('[Settings] getSettings() called before cache populated - returning defaults. Use getSettingsAsync() for saved settings.');
         return settings;
     }
 
@@ -492,14 +493,15 @@ function hasSpotifyConfig() {
 /**
  * Create and show the settings modal
  */
-function showSettingsModal() {
+async function showSettingsModal() {
     // Remove existing modal if present
     const existing = document.getElementById('settings-modal');
     if (existing) {
         existing.remove();
     }
 
-    const settings = getSettings();
+    // Use async version to get saved settings from IndexedDB
+    const settings = await getSettingsAsync();
 
     // Determine if API key is from config.js (show masked) or needs to be entered
     const hasConfigKey = ConfigLoader.get('openrouter.apiKey') &&
@@ -542,20 +544,6 @@ function showSettingsModal() {
                         <span class="settings-hint" id="provider-hint">
                             ${LLM_PROVIDERS.find(p => p.id === settings.llm.provider)?.description || ''}
                         </span>
-                    </div>
-
-                    <!-- Provider Health Monitoring -->
-                    <div class="provider-health-section">
-                        <div class="provider-health-header">
-                            <span class="provider-health-title">Provider Health Status</span>
-                            <div class="provider-health-overview">
-                                <span class="provider-health-badge" id="provider-health-overall-badge">Checking...</span>
-                            </div>
-                        </div>
-                        <div class="provider-health-list" id="provider-health-list">
-                            <div class="provider-health-item">Loading provider health...</div>
-                        </div>
-                        <div class="provider-health-recommendation" id="provider-health-recommendation" style="display: none;"></div>
                     </div>
 
                     <!-- Ollama Status (shown when ollama selected) -->
@@ -936,11 +924,6 @@ function showSettingsModal() {
             case 'save-settings':
                 saveFromModal();
                 break;
-            case 'switch-provider': {
-                const provider = actionElement.dataset.provider;
-                switchProviderFromHealth(provider);
-                break;
-            }
         }
     });
 
@@ -1001,9 +984,6 @@ function showSettingsModal() {
 
     // Initialize storage breakdown UI
     initStorageBreakdown();
-
-    // Initialize provider health monitoring
-    initProviderHealthMonitoring();
 }
 
 /**
@@ -1014,176 +994,6 @@ function hideSettingsModal() {
     if (modal) {
         modal.classList.add('closing');
         setTimeout(() => modal.remove(), 200);
-    }
-
-    // Stop health monitoring when modal closes
-    if (ProviderHealthMonitor) {
-        ProviderHealthMonitor.stopMonitoring();
-    }
-}
-
-/**
- * Initialize provider health monitoring UI
- */
-function initProviderHealthMonitoring() {
-    if (!ProviderHealthMonitor) return;
-
-    // Subscribe to health updates
-    ProviderHealthMonitor.onHealthUpdate(updateProviderHealthUI);
-
-    // Initial update
-    updateProviderHealthUI();
-}
-
-/**
- * Update provider health UI
- */
-function updateProviderHealthUI() {
-    const healthSnapshot = ProviderHealthMonitor.getHealthSnapshot();
-    const healthSummary = ProviderHealthMonitor.getHealthSummary();
-
-    // Move currentProvider declaration to the top to fix scope issue
-    const currentProvider = getSettings().llm.provider;
-
-    // Update overall badge
-    const overallBadge = document.getElementById('provider-health-overall-badge');
-    if (overallBadge) {
-        overallBadge.textContent = formatHealthStatus(healthSummary.overallStatus);
-        overallBadge.className = 'provider-health-badge ' + healthSummary.overallStatus;
-    }
-
-    // Update provider list
-    const providerList = document.getElementById('provider-health-list');
-    if (providerList) {
-        providerList.innerHTML = '';
-
-        const providers = ['openrouter', 'ollama', 'lmstudio'];
-
-        for (const provider of providers) {
-            const health = healthSnapshot[provider];
-            if (!health) continue;
-
-            const item = createProviderHealthItem(provider, health, currentProvider);
-            providerList.appendChild(item);
-        }
-    }
-
-    // Update recommendation for current provider
-    updateProviderRecommendation(currentProvider, healthSnapshot[currentProvider]);
-}
-
-/**
- * Create provider health item element
- */
-function createProviderHealthItem(provider, health, currentProvider) {
-    const item = document.createElement('div');
-    item.className = 'provider-health-item';
-
-    const providerName = LLM_PROVIDERS.find(p => p.id === provider)?.name || provider;
-
-    item.innerHTML = `
-        <div class="provider-health-info">
-            <span class="status-dot ${health.status}"></span>
-            <span class="provider-health-name">${providerName}</span>
-            <span class="provider-health-status">${formatHealthStatus(health.status)}</span>
-            ${provider === currentProvider ? '<span class="provider-health-badge">Current</span>' : ''}
-        </div>
-        <div class="provider-health-metrics">
-            ${health.avgLatencyMs > 0 ? `<span class="provider-health-metric">⏱️ ${Math.round(health.avgLatencyMs)}ms</span>` : ''}
-            <span class="provider-health-metric">✅ ${health.successCount}</span>
-            ${health.failureCount > 0 ? `<span class="provider-health-metric">❌ ${health.failureCount}</span>` : ''}
-        </div>
-        <div class="provider-health-actions">
-            ${createProviderActions(provider, health, currentProvider)}
-        </div>
-    `;
-
-    return item;
-}
-
-/**
- * Create provider action buttons
- */
-function createProviderActions(provider, health, currentProvider) {
-    if (provider === currentProvider) {
-        if (health.status === 'unhealthy' || health.status === 'blacklisted') {
-            // Find a fallback provider that's not the current one and not unhealthy
-            const healthSnapshot = ProviderHealthMonitor.getHealthSnapshot();
-            const healthyFallbacks = LLM_PROVIDERS.filter(p =>
-                p.id !== currentProvider && healthSnapshot[p.id]?.status === 'healthy'
-            );
-
-            const target = healthyFallbacks[0]?.id || LLM_PROVIDERS.find(p => p.id !== currentProvider)?.id;
-
-            if (target) {
-                return `<button class="provider-health-action primary" data-action="switch-provider" data-provider="${target}">Switch Provider</button>`;
-            }
-            return ''; // No alternative providers available
-        }
-        return '';
-    }
-
-    return `<button class="provider-health-action" data-action="switch-provider" data-provider="${provider}">Switch to ${LLM_PROVIDERS.find(p => p.id === provider)?.name.split(' ')[0]}</button>`;
-}
-
-/**
- * Format health status for display
- */
-function formatHealthStatus(status) {
-    switch (status) {
-        case 'healthy': return 'Healthy';
-        case 'degraded': return 'Slow';
-        case 'unhealthy': return 'Unhealthy';
-        case 'blacklisted': return 'Unavailable';
-        case 'unknown': return 'Unknown';
-        default: return 'Checking...';
-    }
-}
-
-/**
- * Update provider recommendation
- */
-function updateProviderRecommendation(provider, health) {
-    const recommendationEl = document.getElementById('provider-health-recommendation');
-    if (!recommendationEl || !health) return;
-
-    const action = ProviderHealthMonitor.getRecommendedAction(provider);
-
-    if (action.action !== 'none') {
-        recommendationEl.style.display = 'block';
-        recommendationEl.innerHTML = `<strong>Recommendation:</strong> ${action.message}`;
-    } else {
-        recommendationEl.style.display = 'none';
-    }
-}
-
-/**
- * Switch provider from health UI
- */
-async function switchProviderFromHealth(provider) {
-    // Input validation - verify provider exists
-    if (!provider || typeof provider !== 'string') {
-        console.error('[Settings] Invalid provider ID:', provider);
-        showToast('Invalid provider ID');
-        return;
-    }
-
-    const validProvider = LLM_PROVIDERS.find(p => p.id === provider);
-    if (!validProvider) {
-        console.error('[Settings] Unknown provider ID:', provider);
-        showToast(`Unknown provider: ${provider}`);
-        return;
-    }
-
-    const settings = getSettings();
-    try {
-        settings.llm.provider = provider;
-        await saveSettings(settings);
-        showSettingsModal(); // Refresh modal
-        showToast(`Switched to ${validProvider.name}`);
-    } catch (error) {
-        console.error('[Settings] Failed to switch provider:', error);
-        showToast(`Failed to switch provider: ${error.message}`);
     }
 }
 
@@ -1287,14 +1097,19 @@ async function initStorageBreakdown() {
 
     } catch (error) {
         console.error('[Settings] Failed to initialize storage breakdown:', error);
-        container.innerHTML = `<div class="storage-error">Failed to load storage breakdown: ${error.message}</div>`;
+        // SAFE: Use textContent instead of innerHTML to prevent XSS from error.message
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'storage-error';
+        errorDiv.textContent = 'Failed to load storage breakdown: ' + (error.message || 'Unknown error');
+        container.innerHTML = '';
+        container.appendChild(errorDiv);
     }
 }
 
 /**
  * Save settings from the modal form
  */
-function saveFromModal() {
+async function saveFromModal() {
     // Get provider selection
     const provider = document.getElementById('setting-llm-provider')?.value || 'ollama';
     const ollamaEndpoint = document.getElementById('setting-ollama-endpoint')?.value || DEFAULT_ENDPOINTS.ollama;
@@ -1373,11 +1188,14 @@ function saveFromModal() {
         settings.spotify.clientId = spotifyClientId;
     }
 
-    saveSettings(settings);
-    hideSettingsModal();
-
-    // Show confirmation
-    showToast('Settings saved!');
+    try {
+        await saveSettings(settings);
+        hideSettingsModal();
+        showToast('Settings saved!');
+    } catch (error) {
+        console.error('[Settings] Failed to save:', error);
+        showToast('Failed to save settings: ' + error.message);
+    }
 }
 
 /**
@@ -1469,9 +1287,9 @@ async function generateEmbeddings(resume = false) {
         showToast('🎉 Embeddings generated successfully!');
 
         // Refresh the modal to show updated status
-        setTimeout(() => {
+        setTimeout(async () => {
             hideSettingsModal();
-            showSettingsModal();
+            await showSettingsModal();
         }, 1500);
 
     } catch (err) {
@@ -1690,9 +1508,9 @@ async function confirmSessionReset() {
         showToast(`✅ Session reset complete. Now on session v${newVersion}`);
 
         // Refresh settings modal to show updated state
-        setTimeout(() => {
+        setTimeout(async () => {
             hideSettingsModal();
-            showSettingsModal();
+            await showSettingsModal();
         }, 500);
 
     } catch (error) {
@@ -1841,7 +1659,12 @@ async function refreshOllamaModels() {
         }
 
     } catch (error) {
-        modelSelect.innerHTML = `<option value="">Error loading models: ${error.message}</option>`;
+        // SAFE: Use DOM API instead of innerHTML to prevent XSS from error.message
+        modelSelect.innerHTML = '';
+        const errorOption = document.createElement('option');
+        errorOption.value = '';
+        errorOption.textContent = 'Error loading models: ' + (error.message || 'Unknown error');
+        modelSelect.appendChild(errorOption);
     }
 }
 // ==========================================
@@ -2185,138 +2008,6 @@ async function saveToolsAndClose() {
     showToast('Tool settings saved!');
 }
 
-// ==========================================
-// Global Provider Health Toast Notifications
-// HNW Reliability: Notify users of provider issues even when settings modal is closed
-// ==========================================
-
-let lastToastedHealthStatus = new Map(); // Track status to avoid duplicate toasts
-
-/**
- * Show a health-specific toast notification with action button
- * @param {string} provider - Provider name
- * @param {Object} health - Health data
- */
-function showHealthToast(provider, health) {
-    // Prevent duplicate toasts for same provider+status
-    const toastKey = `${provider}_${health.status}`;
-    const lastToast = lastToastedHealthStatus.get(toastKey);
-    const now = Date.now();
-
-    // Don't show same status toast within 5 minutes
-    if (lastToast && (now - lastToast) < 5 * 60 * 1000) {
-        return;
-    }
-    lastToastedHealthStatus.set(toastKey, now);
-
-    // Remove existing health toast if present
-    const existing = document.querySelector('.health-toast');
-    if (existing) existing.remove();
-
-    const providerName = LLM_PROVIDERS.find(p => p.id === provider)?.name || provider;
-
-    const toast = document.createElement('div');
-    toast.className = 'health-toast toast-warning';
-    toast.innerHTML = `
-        <span class="toast-icon">⚠️</span>
-        <span class="toast-message">${providerName} is ${formatHealthStatus(health.status)}</span>
-        <button class="toast-action" onclick="Settings.showSettingsModal(); this.parentElement.remove();">Check Settings</button>
-        <button class="toast-dismiss" onclick="this.parentElement.remove()">×</button>
-    `;
-    toast.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        background: linear-gradient(135deg, #fff3cd, #ffc107);
-        color: #856404;
-        border: 1px solid #ffc107;
-        border-radius: 8px;
-        padding: 12px 16px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        z-index: 9999;
-        font-family: system-ui, -apple-system, sans-serif;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        animation: slideInRight 0.3s ease;
-    `;
-
-    // Add animation keyframes if not already present
-    if (!document.getElementById('health-toast-styles')) {
-        const style = document.createElement('style');
-        style.id = 'health-toast-styles';
-        style.textContent = `
-            @keyframes slideInRight {
-                from { transform: translateX(100%); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
-            }
-            .toast-action {
-                background: #856404;
-                color: white;
-                border: none;
-                padding: 4px 12px;
-                border-radius: 4px;
-                cursor: pointer;
-                font-size: 12px;
-            }
-            .toast-action:hover { background: #6b4e03; }
-            .toast-dismiss {
-                background: transparent;
-                border: none;
-                color: #856404;
-                font-size: 18px;
-                cursor: pointer;
-                padding: 0 4px;
-            }
-        `;
-        document.head.appendChild(style);
-    }
-
-    document.body.appendChild(toast);
-
-    // Auto-dismiss after 10 seconds
-    setTimeout(() => {
-        if (toast.parentElement) {
-            toast.style.opacity = '0';
-            setTimeout(() => toast.remove(), 300);
-        }
-    }, 10000);
-}
-
-/**
- * Initialize global health monitoring (runs on module load)
- * Subscribes to health updates and shows toasts for degradation
- */
-function initGlobalHealthMonitoring() {
-    if (!ProviderHealthMonitor) {
-        console.log('[Settings] ProviderHealthMonitor not available, skipping global health monitoring');
-        return;
-    }
-
-    ProviderHealthMonitor.onHealthUpdate((healthSnapshot) => {
-        // Skip if settings modal is open (modal has its own UI)
-        if (document.getElementById('settings-modal')) {
-            return;
-        }
-
-        // Check current provider status
-        const currentProvider = getSettings().llm.provider;
-        const providerHealth = healthSnapshot[currentProvider];
-
-        if (providerHealth && (providerHealth.status === 'degraded' || providerHealth.status === 'unhealthy')) {
-            showHealthToast(currentProvider, providerHealth);
-        }
-    });
-
-    console.log('[Settings] Global provider health monitoring initialized');
-}
-
-// Initialize global health monitoring when module loads
-if (typeof window !== 'undefined') {
-    // Defer initialization to ensure ProviderHealthMonitor is ready
-    setTimeout(initGlobalHealthMonitoring, 1000);
-}
-
 // ES Module export
 export const Settings = {
     getSettings,
@@ -2347,10 +2038,6 @@ export const Settings = {
     checkOllamaConnection,
     testOllamaConnection,
     refreshOllamaModels,
-    // Provider health monitoring
-    initProviderHealthMonitoring,
-    updateProviderHealthUI,
-    switchProviderFromHealth,
     // Tools modal
     showToolsModal,
     hideToolsModal,

@@ -17,6 +17,28 @@
  * @module services/error-boundary
  */
 
+/**
+ * Error Boundary for UI Widgets
+ *
+ * Provides React-style error boundaries for vanilla JavaScript.
+ * Wraps async operations and renders recovery UI on failure.
+ *
+ * Features:
+ * - Isolates widget crashes from affecting the whole app
+ * - Shows user-friendly error UI with retry button
+ * - Logs errors for debugging
+ * - Preserves original content for recovery
+ *
+ * Usage:
+ *   const boundary = new ErrorBoundary('Chat', '.chat-container');
+ *   await boundary.wrap(async () => { ... });
+ *
+ * @module services/error-boundary
+ */
+
+// Import centralized HTML escape utility
+import { escapeHtml } from '../utils/html-escape.js';
+
 // ==========================================
 // Error Boundary Class
 // ==========================================
@@ -267,13 +289,12 @@ export class ErrorBoundary {
 
     /**
      * Escape HTML to prevent XSS
+     * NOTE: Now uses centralized utility from utils/html-escape.js
      * @param {string} text - Text to escape
      * @returns {string} Escaped text
      */
     escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        return escapeHtml(text);
     }
 }
 
@@ -315,6 +336,43 @@ export function createCardBoundary(options = {}) {
 // ==========================================
 
 /**
+ * Show a toast notification for errors
+ * @param {string} message - Error message to display
+ */
+function showErrorToast(message) {
+    // Try to use existing toast function if available
+    if (typeof window !== 'undefined' && window.showToast) {
+        window.showToast(message, 5000);
+        return;
+    }
+
+    // Fallback: create simple notification
+    if (typeof document !== 'undefined') {
+        const existing = document.getElementById('global-error-toast');
+        if (existing) existing.remove();
+
+        const toast = document.createElement('div');
+        toast.id = 'global-error-toast';
+        toast.className = 'toast-notification error';
+        toast.textContent = message;
+        toast.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--danger, #dc3545);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            z-index: 10000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 5000);
+    }
+}
+
+/**
  * Install global error handlers for uncaught errors
  * This provides a fallback for errors not caught by widget boundaries
  */
@@ -323,12 +381,32 @@ export function installGlobalErrorHandler() {
 
     window.addEventListener('error', (event) => {
         console.error('[GlobalErrorBoundary] Uncaught error:', event.error);
-        // Could show a toast notification here
+        // Show user-facing toast for non-developer errors
+        if (event.error && !event.error.message.includes('ResizeObserver')) {
+            // Skip ResizeObserver errors as they're often benign
+            showErrorToast('An unexpected error occurred. Some features may not work correctly.');
+        }
     });
 
     window.addEventListener('unhandledrejection', (event) => {
         console.error('[GlobalErrorBoundary] Unhandled promise rejection:', event.reason);
-        // Could show a toast notification here
+        // Prevent the default browser error logging
+        event.preventDefault();
+
+        // Show user-facing toast
+        const reason = event.reason;
+        let message = 'An operation failed. Please try again.';
+
+        // Provide context for common errors
+        if (reason?.message) {
+            if (reason.message.includes('network') || reason.message.includes('fetch')) {
+                message = 'Network error. Please check your connection.';
+            } else if (reason.message.includes('storage') || reason.message.includes('IndexedDB')) {
+                message = 'Storage error. Your data may not be saved correctly.';
+            }
+        }
+
+        showErrorToast(message);
     });
 
     console.log('[ErrorBoundary] Global error handlers installed');

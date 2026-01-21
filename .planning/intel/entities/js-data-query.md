@@ -1,5 +1,5 @@
 ---
-path: /Users/rhinesharar/rhythm-chamber/js/data-query.js
+path: js/data-query.js
 type: util
 updated: 2026-01-21
 status: active

@@ -17,6 +17,7 @@
 
 import { EventBus } from '../services/event-bus.js';
 import { BatteryAwareModeSelector } from '../services/battery-aware-mode-selector.js';
+import { escapeHtml } from '../utils/html-escape.js';
 
 // ==========================================
 // Modal HTML Template
@@ -326,6 +327,7 @@ function show() {
 
         // Create modal
         const container = document.createElement('div');
+        // SAFE: MODAL_HTML is a static template constant defined in this module
         container.innerHTML = MODAL_HTML;
         modal = container.firstElementChild;
         document.body.appendChild(modal);

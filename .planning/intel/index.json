@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": 1768988960115,
+  "updated": 1768999404558,
   "files": {
     "./js/app.js": {
       "exports": [
@@ -1737,9 +1737,10 @@
         "./chat-ui-controller.js",
         "../token-counter.js",
         "../state/app-state.js",
-        "../services/event-bus.js"
+        "../services/event-bus.js",
+        "../utils/html-escape.js"
       ],
-      "indexed": 1768984894463
+      "indexed": 1768999354754
     },
     "/Users/rhinesharar/rhythm-chamber/js/security/security-coordinator.js": {
       "exports": [
@@ -1811,9 +1812,10 @@
         "./device-detection.js",
         "../workers/shared-worker-coordinator.js",
         "../security/index.js",
-        "../state/app-state.js"
+        "../state/app-state.js",
+        "../utils/html-escape.js"
       ],
-      "indexed": 1768988581969
+      "indexed": 1768990818654
     },
     "/Users/rhinesharar/rhythm-chamber/js/storage/transaction.js": {
       "exports": [
@@ -1860,7 +1862,7 @@
         "./services/conversation-orchestrator.js",
         "./services/message-lifecycle-coordinator.js"
       ],
-      "indexed": 1768987173741
+      "indexed": 1768997873260
     },
     "/Users/rhinesharar/rhythm-chamber/js/functions/index.js": {
       "exports": [
@@ -1878,7 +1880,7 @@
         "./executors/template-executors.js",
         "./executors/analytics-executors.js"
       ],
-      "indexed": 1768986993493
+      "indexed": 1768997782323
     },
     "/Users/rhinesharar/rhythm-chamber/js/functions/executors/analytics-executors.js": {
       "exports": [
@@ -1944,6 +1946,7 @@
       "imports": [
         "./security/index.js",
         "./module-registry.js",
+        "./utils/html-escape.js",
         "./state/app-state.js",
         "./storage.js",
         "./patterns.js",
@@ -1976,7 +1979,7 @@
         "./template-profiles.js",
         "./profile-synthesizer.js"
       ],
-      "indexed": 1768988960115
+      "indexed": 1768999245006
     },
     "/Users/rhinesharar/rhythm-chamber/js/controllers/view-controller.js": {
       "exports": [
@@ -1988,7 +1991,7 @@
         "../state/app-state.js",
         "./sidebar-controller.js"
       ],
-      "indexed": 1768988707682
+      "indexed": 1768999229643
     },
     "/Users/rhinesharar/rhythm-chamber/js/controllers/observability-controller.js": {
       "exports": [
@@ -1999,9 +2002,10 @@
       "imports": [
         "../services/performance-profiler.js",
         "../observability/core-web-vitals.js",
-        "../observability/metrics-exporter.js"
+        "../observability/metrics-exporter.js",
+        "../utils/html-escape.js"
       ],
-      "indexed": 1768988792374
+      "indexed": 1768999197849
     },
     "/Users/rhinesharar/rhythm-chamber/js/storage/migration.js": {
       "exports": [
@@ -2035,9 +2039,10 @@
         "../storage.js",
         "../services/performance-profiler.js",
         "./core-web-vitals.js",
-        "./metrics-exporter.js"
+        "./metrics-exporter.js",
+        "../utils/html-escape.js"
       ],
-      "indexed": 1768988917956
+      "indexed": 1768991020149
     },
     "/Users/rhinesharar/rhythm-chamber/js/observability/metrics-exporter.js": {
       "exports": [
@@ -2054,6 +2059,291 @@
         "./core-web-vitals.js"
       ],
       "indexed": 1768988941240
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/services/tool-call-handling-service.js": {
+      "exports": [
+        "ToolCallHandlingService"
+      ],
+      "imports": [
+        "./tool-strategies/native-strategy.js",
+        "./tool-strategies/prompt-injection-strategy.js",
+        "./tool-strategies/intent-extraction-strategy.js",
+        "./timeout-budget-manager.js"
+      ],
+      "indexed": 1768997965511
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/utils/html-escape.js": {
+      "exports": [
+        "escapeHtml",
+        "escapeHtmlAttr",
+        "escapeJs",
+        "safeHtml",
+        "isPotentiallyDangerous",
+        "sanitizeHtml",
+        "default"
+      ],
+      "imports": [],
+      "indexed": 1768990668564
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/services/error-boundary.js": {
+      "exports": [
+        "ErrorBoundary",
+        "createChatBoundary",
+        "createCardBoundary",
+        "installGlobalErrorHandler",
+        "default"
+      ],
+      "imports": [
+        "../utils/html-escape.js"
+      ],
+      "indexed": 1768999344676
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/controllers/chat-ui-controller.js": {
+      "exports": [
+        "ChatUIController"
+      ],
+      "imports": [
+        "../chat.js",
+        "../utils/html-escape.js"
+      ],
+      "indexed": 1768999358017
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/main.js": {
+      "exports": [],
+      "imports": [
+        "./security/index.js",
+        "./window-globals-debug.js",
+        "./services/config-loader.js",
+        "./utils.js",
+        "./module-registry.js",
+        "./storage/keys.js",
+        "./storage/indexeddb.js",
+        "./storage/config-api.js",
+        "./storage/migration.js",
+        "./storage/sync-strategy.js",
+        "./storage/profiles.js",
+        "./storage.js",
+        "./state/app-state.js",
+        "./patterns.js",
+        "./personality.js",
+        "./data-query.js",
+        "./prompts.js",
+        "./parser.js",
+        "./genre-enrichment.js",
+        "./token-counter.js",
+        "./providers/provider-interface.js",
+        "./providers/openrouter.js",
+        "./providers/lmstudio.js",
+        "./providers/gemini.js",
+        "./spotify.js",
+        "./settings.js",
+        "./chat.js",
+        "./services/conversation-orchestrator.js",
+        "./services/message-lifecycle-coordinator.js",
+        "./cards.js",
+        "./functions/utils/retry.js",
+        "./functions/utils/validation.js",
+        "./functions/schemas/data-queries.js",
+        "./functions/schemas/template-queries.js",
+        "./functions/schemas/analytics-queries.js",
+        "./functions/executors/data-executors.js",
+        "./functions/executors/template-executors.js",
+        "./functions/executors/analytics-executors.js",
+        "./functions/index.js",
+        "./services/tab-coordination.js",
+        "./services/session-manager.js",
+        "./services/message-operations.js",
+        "./services/worker-coordinator.js",
+        "./services/event-bus.js",
+        "./storage/event-log-store.js",
+        "./controllers/chat-ui-controller.js",
+        "./controllers/sidebar-controller.js",
+        "./controllers/view-controller.js",
+        "./controllers/file-upload-controller.js",
+        "./controllers/spotify-controller.js",
+        "./controllers/demo-controller.js",
+        "./controllers/reset-controller.js",
+        "./demo-data.js",
+        "./template-profiles.js",
+        "./profile-synthesizer.js",
+        "./operation-lock.js",
+        "./payments.js",
+        "./pricing.js",
+        "./storage/quota-monitor.js",
+        "./services/circuit-breaker.js",
+        "./security/secure-token-store.js",
+        "./services/data-version.js",
+        "./services/function-calling-fallback.js",
+        "./services/profile-description-generator.js",
+        "./services/llm-provider-routing-service.js",
+        "./services/token-counting-service.js",
+        "./services/tool-call-handling-service.js",
+        "./services/fallback-response-service.js",
+        "./services/error-boundary.js"
+      ],
+      "indexed": 1768990872080
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/storage-breakdown-ui.js": {
+      "exports": [
+        "StorageBreakdownUI"
+      ],
+      "imports": [
+        "./services/event-bus.js",
+        "./utils/html-escape.js"
+      ],
+      "indexed": 1768990921524
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/controllers/demo-controller.js": {
+      "exports": [
+        "DemoController"
+      ],
+      "imports": [
+        "../patterns.js",
+        "../storage/indexeddb.js",
+        "../chat.js"
+      ],
+      "indexed": 1768991046806
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/storage/quota-monitor.js": {
+      "exports": [
+        "QuotaMonitor"
+      ],
+      "imports": [
+        "../utils/html-escape.js"
+      ],
+      "indexed": 1768991086563
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/embeddings/embeddings-progress.js": {
+      "exports": [
+        "EmbeddingsProgress"
+      ],
+      "imports": [
+        "../services/event-bus.js",
+        "../utils/html-escape.js"
+      ],
+      "indexed": 1768991099355
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/embeddings/embeddings-onboarding.js": {
+      "exports": [
+        "EmbeddingsOnboarding"
+      ],
+      "imports": [
+        "../services/event-bus.js",
+        "../services/battery-aware-mode-selector.js",
+        "../utils/html-escape.js"
+      ],
+      "indexed": 1768991118660
+    },
+    "/Users/rhinesharar/rhythm-chamber/tests/e2e/critical-path-upload-to-chat.test.js": {
+      "exports": [],
+      "imports": [
+        "vitest",
+        "../../js/patterns.js",
+        "../../js/personality.js"
+      ],
+      "indexed": 1768991463265
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/storage/fallback-backend.js": {
+      "exports": [
+        "FallbackBackend"
+      ],
+      "imports": [
+        "../services/event-bus.js"
+      ],
+      "indexed": 1768999170443
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/storage/indexeddb.js": {
+      "exports": [
+        "STORES",
+        "DB_NAME",
+        "DB_VERSION",
+        "IndexedDBCore"
+      ],
+      "imports": [
+        "../services/tab-coordination.js",
+        "../services/vector-clock.js",
+        "../services/event-bus.js",
+        "./fallback-backend.js"
+      ],
+      "indexed": 1768999352491
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/settings.js": {
+      "exports": [
+        "Settings"
+      ],
+      "imports": [
+        "./module-registry.js",
+        "./storage-breakdown-ui.js",
+        "./services/config-loader.js",
+        "./storage.js",
+        "./security/index.js",
+        "./functions/schemas/data-queries.js",
+        "./functions/index.js",
+        "./spotify.js",
+        "./functions/schemas/analytics-queries.js",
+        "./functions/schemas/template-queries.js"
+      ],
+      "indexed": 1768999224438
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/services/profile-description-generator.js": {
+      "exports": [
+        "ProfileDescriptionGenerator"
+      ],
+      "imports": [
+        "../services/config-loader.js",
+        "../settings.js",
+        "../providers/provider-interface.js"
+      ],
+      "indexed": 1768996826831
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/services/session-manager.js": {
+      "exports": [
+        "SessionManager"
+      ],
+      "imports": [
+        "./event-bus.js",
+        "../storage.js",
+        "./data-version.js"
+      ],
+      "indexed": 1768999292099
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/storage/write-ahead-log.js": {
+      "exports": [
+        "WalStatus",
+        "WalPriority",
+        "WriteAheadLog",
+        "default"
+      ],
+      "imports": [
+        "../services/tab-coordination.js",
+        "../services/device-detection.js",
+        "../security/safe-mode.js",
+        "../services/event-bus.js"
+      ],
+      "indexed": 1768999196191
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/data-query.js": {
+      "exports": [
+        "DataQuery"
+      ],
+      "imports": [],
+      "indexed": 1768999253446
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/providers/provider-interface.js": {
+      "exports": [
+        "ProviderInterface"
+      ],
+      "imports": [
+        "../module-registry.js",
+        "../utils/timeout-wrapper.js",
+        "../services/provider-circuit-breaker.js",
+        "../services/config-loader.js",
+        "../settings.js",
+        "./openrouter.js",
+        "./lmstudio.js",
+        "./gemini.js"
+      ],
+      "indexed": 1768999404558
     }
   }
 }

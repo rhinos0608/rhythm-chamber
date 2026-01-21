@@ -16,6 +16,7 @@
  */
 
 import { EventBus } from '../services/event-bus.js';
+import { escapeHtml } from '../utils/html-escape.js';
 
 // ==========================================
 // Stage Definitions
@@ -266,6 +267,7 @@ function show(parent = document.body, options = {}) {
     }
 
     const wrapper = document.createElement('div');
+    // SAFE: PROGRESS_HTML is a static template constant defined in this module
     wrapper.innerHTML = PROGRESS_HTML;
     container = wrapper.firstElementChild;
     parent.appendChild(container);

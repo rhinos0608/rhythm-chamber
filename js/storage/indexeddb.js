@@ -1,20 +1,28 @@
 /**
  * IndexedDB Core Module
- * 
+ *
  * Low-level IndexedDB operations for the Storage layer.
  * Provides primitive operations: put, get, getAll, clear, delete.
- * 
+ *
  * HNW Hierarchy: Respects TabCoordinator write authority for multi-tab safety.
- * 
+ *
+ * FALLBACK SUPPORT: When IndexedDB is unavailable (private browsing, etc.),
+ * automatically falls back to localStorage/memory-based storage.
+ *
  * @module storage/indexeddb
  */
 
 import { TabCoordinator } from '../services/tab-coordination.js';
 import { VectorClock } from '../services/vector-clock.js';
 import { EventBus } from '../services/event-bus.js';
+import { FallbackBackend } from './fallback-backend.js';
 
 // Module-level VectorClock for write tracking
 const writeVectorClock = new VectorClock();
+
+// Fallback backend state
+let usingFallback = false;
+let fallbackInitialized = false;
 
 // ==========================================
 // Database Configuration
@@ -182,26 +190,49 @@ async function initDatabase(options = {}) {
 /**
  * Initialize database with retry logic and exponential backoff
  * HNW Hierarchy: Provides resilient connection with graceful degradation
- * 
+ *
+ * FALLBACK: If IndexedDB fails after all retries, automatically falls back
+ * to FallbackBackend for private browsing compatibility.
+ *
  * @param {object} options - Options for handling version changes
  * @param {number} [options.maxAttempts=3] - Maximum retry attempts
  * @param {function} options.onVersionChange - Callback when another tab upgrades DB
  * @param {function} options.onBlocked - Callback when upgrade is blocked
  * @param {function} options.onRetry - Callback on retry attempt
- * @returns {Promise<IDBDatabase>} Database connection
- * @throws {Error} When all retry attempts exhausted
+ * @param {boolean} [options.enableFallback=true] - Whether to use fallback on failure
+ * @returns {Promise<IDBDatabase|object>} Database connection or fallback backend
  */
 async function initDatabaseWithRetry(options = {}) {
     const maxAttempts = options.maxAttempts ?? CONNECTION_CONFIG.maxRetries;
+    const enableFallback = options.enableFallback !== false;
+
+    // If already using fallback, return immediately
+    if (usingFallback) {
+        return { fallback: true, backend: FallbackBackend };
+    }
 
     // Return existing connection if available
     if (indexedDBConnection) {
         return indexedDBConnection;
     }
 
-    // If previously failed permanently, throw immediately
+    // If previously failed permanently and fallback is available, use it
+    if (isConnectionFailed && enableFallback) {
+        return await activateFallback();
+    }
+
+    // If previously failed permanently and no fallback, throw immediately
     if (isConnectionFailed) {
         throw new Error('IndexedDB connection permanently failed. Refresh the page to retry.');
+    }
+
+    // Check if IndexedDB is available at all
+    if (!window.indexedDB) {
+        console.warn('[IndexedDB] IndexedDB not available in this environment');
+        if (enableFallback) {
+            return await activateFallback();
+        }
+        throw new Error('IndexedDB is not available in this browser environment');
     }
 
     let lastError = null;
@@ -249,10 +280,15 @@ async function initDatabaseWithRetry(options = {}) {
         }
     }
 
-    // All attempts exhausted
+    // All attempts exhausted - try fallback if enabled
     isConnectionFailed = true;
 
-    // Emit connection failure event for StorageDegradationManager
+    if (enableFallback) {
+        console.warn('[IndexedDB] All connection attempts failed, activating fallback backend');
+        return await activateFallback();
+    }
+
+    // No fallback available - emit failure event
     EventBus.emit('storage:connection_failed', {
         attempts: connectionAttempts,
         error: lastError?.message || 'Unknown error',
@@ -261,6 +297,52 @@ async function initDatabaseWithRetry(options = {}) {
 
     console.error(`[IndexedDB] All ${maxAttempts} connection attempts failed`);
     throw new Error(`Failed to connect to IndexedDB after ${maxAttempts} attempts: ${lastError?.message}`);
+}
+
+/**
+ * Activate fallback storage backend
+ * @returns {Promise<object>} Fallback backend marker
+ */
+async function activateFallback() {
+    if (!fallbackInitialized) {
+        const fallbackInfo = await FallbackBackend.init();
+        fallbackInitialized = true;
+
+        console.log('[IndexedDB] Fallback backend activated:', fallbackInfo);
+    }
+
+    usingFallback = true;
+
+    // Emit fallback activation event
+    EventBus.emit('storage:fallback_activated', {
+        mode: FallbackBackend.getMode(),
+        stats: FallbackBackend.getStats()
+    });
+
+    return { fallback: true, backend: FallbackBackend };
+}
+
+/**
+ * Check if currently using fallback backend
+ * @returns {boolean}
+ */
+function isUsingFallback() {
+    return usingFallback;
+}
+
+/**
+ * Get current storage backend info
+ * @returns {{ type: 'indexeddb' | 'fallback', fallbackMode?: string }}
+ */
+function getStorageBackend() {
+    if (usingFallback) {
+        return {
+            type: 'fallback',
+            fallbackMode: FallbackBackend.getMode(),
+            stats: FallbackBackend.getStats()
+        };
+    }
+    return { type: 'indexeddb' };
 }
 
 /**
@@ -393,7 +475,72 @@ function getConnection() {
 // ==========================================
 
 /**
+ * Wrap an IndexedDB request with timeout and proper error handling
+ * CRITICAL FIX: Prevents hanging transactions and ensures proper cleanup
+ * @param {IDBRequest} request - The IndexedDB request
+ * @param {IDBTransaction} transaction - The parent transaction
+ * @param {number} [timeoutMs=5000] - Timeout in milliseconds
+ * @returns {Promise<any>} The request result
+ */
+function wrapRequest(request, transaction, timeoutMs = 5000) {
+    return new Promise((resolve, reject) => {
+        let timeoutHandle;
+        let completed = false;
+
+        const cleanup = () => {
+            if (timeoutHandle) {
+                clearTimeout(timeoutHandle);
+                timeoutHandle = null;
+            }
+            completed = true;
+        };
+
+        // Set timeout
+        timeoutHandle = setTimeout(() => {
+            if (!completed) {
+                cleanup();
+                transaction.abort();
+                reject(new Error(`IndexedDB request timeout after ${timeoutMs}ms`));
+            }
+        }, timeoutMs);
+
+        // Handle success
+        request.onsuccess = () => {
+            if (!completed) {
+                cleanup();
+                resolve(request.result);
+            }
+        };
+
+        // Handle error
+        request.onerror = () => {
+            if (!completed) {
+                cleanup();
+                reject(request.error || new Error('IndexedDB request failed'));
+            }
+        };
+
+        // CRITICAL: Handle transaction abort
+        transaction.onabort = () => {
+            if (!completed) {
+                cleanup();
+                reject(transaction.error || new Error('IndexedDB transaction aborted'));
+            }
+        };
+
+        // Handle transaction timeout (browser may abort for inactivity)
+        transaction.ontimeout = () => {
+            if (!completed) {
+                cleanup();
+                reject(new Error('IndexedDB transaction timed out'));
+            }
+        };
+    });
+}
+
+/**
  * Put (insert or update) a record
+ * FALLBACK: Uses FallbackBackend when IndexedDB is unavailable
  * @param {string} storeName - Store name
  * @param {object} data - Data to store
  * @param {Object} [options] - Options
@@ -401,6 +548,11 @@ function getConnection() {
  * @returns {Promise<IDBValidKey>} The key of the stored record
  */
 async function put(storeName, data, options = {}) {
+    // Use fallback if active
+    if (usingFallback) {
+        return FallbackBackend.put(storeName, data);
+    }
+
     // Check write authority unless bypassed
     if (!options.bypassAuthority && !checkWriteAuthority(storeName, 'put')) {
         if (AUTHORITY_CONFIG.strictMode) {
@@ -419,60 +571,98 @@ async function put(storeName, data, options = {}) {
         _writerId: writeVectorClock.processId
     };
 
-    const database = await initDatabase();
-    return new Promise((resolve, reject) => {
+    try {
+        const database = await initDatabase();
         const transaction = database.transaction(storeName, 'readwrite');
         const store = transaction.objectStore(storeName);
         const request = store.put(stampedData);
 
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-    });
+        // CRITICAL FIX: Use wrapRequest for timeout and abort handling
+        return wrapRequest(request, transaction);
+    } catch (error) {
+        // On error, try falling back if not already
+        if (!usingFallback) {
+            console.warn('[IndexedDB] Put failed, trying fallback:', error.message);
+            await activateFallback();
+            return FallbackBackend.put(storeName, data);
+        }
+        throw error;
+    }
 }
 
 /**
  * Get a single record by key
+ * FALLBACK: Uses FallbackBackend when IndexedDB is unavailable
  * @param {string} storeName - Store name
  * @param {IDBValidKey} key - Record key
  * @returns {Promise<any>} The record or undefined
  */
 async function get(storeName, key) {
-    const database = await initDatabase();
-    return new Promise((resolve, reject) => {
+    // Use fallback if active
+    if (usingFallback) {
+        return FallbackBackend.get(storeName, key);
+    }
+
+    try {
+        const database = await initDatabase();
         const transaction = database.transaction(storeName, 'readonly');
         const store = transaction.objectStore(storeName);
         const request = store.get(key);
 
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-    });
+        // CRITICAL FIX: Use wrapRequest for timeout and abort handling
+        return wrapRequest(request, transaction);
+    } catch (error) {
+        if (!usingFallback) {
+            await activateFallback();
+            return FallbackBackend.get(storeName, key);
+        }
+        throw error;
+    }
 }
 
 /**
  * Get all records from a store
+ * FALLBACK: Uses FallbackBackend when IndexedDB is unavailable
  * @param {string} storeName - Store name
  * @returns {Promise<Array>} All records
  */
 async function getAll(storeName) {
-    const database = await initDatabase();
-    return new Promise((resolve, reject) => {
+    // Use fallback if active
+    if (usingFallback) {
+        return FallbackBackend.getAll(storeName);
+    }
+
+    try {
+        const database = await initDatabase();
         const transaction = database.transaction(storeName, 'readonly');
         const store = transaction.objectStore(storeName);
         const request = store.getAll();
 
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-    });
+        // CRITICAL FIX: Use wrapRequest for timeout and abort handling
+        return wrapRequest(request, transaction);
+    } catch (error) {
+        if (!usingFallback) {
+            await activateFallback();
+            return FallbackBackend.getAll(storeName);
+        }
+        throw error;
+    }
 }
 
 /**
  * Clear all records from a store
+ * FALLBACK: Uses FallbackBackend when IndexedDB is unavailable
  * @param {string} storeName - Store name
  * @param {Object} [options] - Options
  * @param {boolean} [options.bypassAuthority] - Skip write authority check
  * @returns {Promise<void>}
  */
 async function clear(storeName, options = {}) {
+    // Use fallback if active
+    if (usingFallback) {
+        return FallbackBackend.clear(storeName);
+    }
+
     // Check write authority unless bypassed
     if (!options.bypassAuthority && !checkWriteAuthority(storeName, 'clear')) {
         if (AUTHORITY_CONFIG.strictMode) {
@@ -482,19 +672,26 @@ async function clear(storeName, options = {}) {
         }
     }
 
-    const database = await initDatabase();
-    return new Promise((resolve, reject) => {
+    try {
+        const database = await initDatabase();
         const transaction = database.transaction(storeName, 'readwrite');
         const store = transaction.objectStore(storeName);
         const request = store.clear();
 
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error);
-    });
+        // CRITICAL FIX: Use wrapRequest for timeout and abort handling
+        return wrapRequest(request, transaction);
+    } catch (error) {
+        if (!usingFallback) {
+            await activateFallback();
+            return FallbackBackend.clear(storeName);
+        }
+        throw error;
+    }
 }
 
 /**
  * Delete a single record by key
+ * FALLBACK: Uses FallbackBackend when IndexedDB is unavailable
  * @param {string} storeName - Store name
  * @param {IDBValidKey} key - Record key
  * @param {Object} [options] - Options
@@ -502,6 +699,11 @@ async function clear(storeName, options = {}) {
  * @returns {Promise<void>}
  */
 async function deleteRecord(storeName, key, options = {}) {
+    // Use fallback if active
+    if (usingFallback) {
+        return FallbackBackend.delete(storeName, key);
+    }
+
     // Check write authority unless bypassed
     if (!options.bypassAuthority && !checkWriteAuthority(storeName, 'delete')) {
         if (AUTHORITY_CONFIG.strictMode) {
@@ -511,81 +713,155 @@ async function deleteRecord(storeName, key, options = {}) {
         }
     }
 
-    const database = await initDatabase();
-    return new Promise((resolve, reject) => {
+    try {
+        const database = await initDatabase();
         const transaction = database.transaction(storeName, 'readwrite');
         const store = transaction.objectStore(storeName);
         const request = store.delete(key);
 
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error);
-    });
+        // CRITICAL FIX: Use wrapRequest for timeout and abort handling
+        return wrapRequest(request, transaction);
+    } catch (error) {
+        if (!usingFallback) {
+            await activateFallback();
+            return FallbackBackend.delete(storeName, key);
+        }
+        throw error;
+    }
 }
 
 /**
  * Count records in a store
+ * FALLBACK: Uses FallbackBackend when IndexedDB is unavailable
  * @param {string} storeName - Store name
  * @returns {Promise<number>} Record count
  */
 async function count(storeName) {
-    const database = await initDatabase();
-    return new Promise((resolve, reject) => {
+    // Use fallback if active
+    if (usingFallback) {
+        return FallbackBackend.count(storeName);
+    }
+
+    try {
+        const database = await initDatabase();
         const transaction = database.transaction(storeName, 'readonly');
         const store = transaction.objectStore(storeName);
         const request = store.count();
 
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-    });
+        // CRITICAL FIX: Use wrapRequest for timeout and abort handling
+        return wrapRequest(request, transaction);
+    } catch (error) {
+        if (!usingFallback) {
+            await activateFallback();
+            return FallbackBackend.count(storeName);
+        }
+        throw error;
+    }
 }
 
 /**
  * Execute a transaction with multiple operations
+ * FALLBACK: Uses FallbackBackend when IndexedDB is unavailable
  * @param {string} storeName - Store name
  * @param {string} mode - Transaction mode ('readonly' or 'readwrite')
  * @param {function} operations - Function receiving store, returns array of ops
  * @returns {Promise<void>}
  */
 async function transaction(storeName, mode, operations) {
-    const database = await initDatabase();
-    return new Promise((resolve, reject) => {
-        const tx = database.transaction(storeName, mode);
-        const store = tx.objectStore(storeName);
+    // Use fallback if active
+    if (usingFallback) {
+        // Fallback doesn't support transactions - execute operations directly
+        // This provides basic functionality but not atomicity
+        return new Promise((resolve) => {
+            try {
+                operations(FallbackBackend);
+            } catch (e) {
+                console.warn('[IndexedDB] Fallback transaction operation failed:', e);
+            }
+            resolve();
+        });
+    }
 
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
+    try {
+        const database = await initDatabase();
+        return new Promise((resolve, reject) => {
+            const tx = database.transaction(storeName, mode);
+            const store = tx.objectStore(storeName);
 
-        operations(store);
-    });
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+
+            operations(store);
+        });
+    } catch (error) {
+        if (!usingFallback) {
+            console.warn('[IndexedDB] Transaction failed, trying fallback:', error.message);
+            await activateFallback();
+            // Retry with fallback
+            return transaction(storeName, mode, operations);
+        }
+        throw error;
+    }
 }
 
 /**
  * Get records using an index with cursor (for sorted results)
+ * FALLBACK: Uses FallbackBackend when IndexedDB is unavailable
  * @param {string} storeName - Store name
  * @param {string} indexName - Index name
  * @param {string} direction - Cursor direction ('next', 'prev', etc.)
  * @returns {Promise<Array>} Sorted records
  */
 async function getAllByIndex(storeName, indexName, direction = 'next') {
-    const database = await initDatabase();
-    return new Promise((resolve, reject) => {
-        const transaction = database.transaction(storeName, 'readonly');
-        const store = transaction.objectStore(storeName);
-        const index = store.index(indexName);
-        const request = index.openCursor(null, direction);
+    // Use fallback if active - fallback doesn't support indexes, return all sorted manually
+    if (usingFallback) {
+        const allRecords = await FallbackBackend.getAll(storeName);
+        // Fallback: simple sort by updatedAt or timestamp if available
+        // This provides basic functionality without full index support
+        const sortBy = indexName === 'updatedAt' ? 'updatedAt' :
+                      indexName === 'timestamp' ? 'timestamp' :
+                      indexName === 'startDate' ? 'startDate' : null;
+        if (sortBy) {
+            const isReverse = direction === 'prev' || direction === 'prevunique';
+            allRecords.sort((a, b) => {
+                const aVal = a[sortBy] || '';
+                const bVal = b[sortBy] || '';
+                return isReverse
+                    ? String(bVal).localeCompare(String(aVal))
+                    : String(aVal).localeCompare(String(bVal));
+            });
+        }
+        return allRecords;
+    }
 
-        const results = [];
-        request.onsuccess = (event) => {
-            const cursor = event.target.result;
-            if (cursor) {
-                results.push(cursor.value);
-                cursor.continue();
-            } else {
-                resolve(results);
-            }
-        };
-        request.onerror = () => reject(request.error);
-    });
+    try {
+        const database = await initDatabase();
+        return new Promise((resolve, reject) => {
+            const transaction = database.transaction(storeName, 'readonly');
+            const store = transaction.objectStore(storeName);
+            const index = store.index(indexName);
+            const request = index.openCursor(null, direction);
+
+            const results = [];
+            request.onsuccess = (event) => {
+                const cursor = event.target.result;
+                if (cursor) {
+                    results.push(cursor.value);
+                    cursor.continue();
+                } else {
+                    resolve(results);
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    } catch (error) {
+        if (!usingFallback) {
+            console.warn('[IndexedDB] getAllByIndex failed, trying fallback:', error.message);
+            await activateFallback();
+            return getAllByIndex(storeName, indexName, direction);
+        }
+        throw error;
+    }
 }
 
 /**
@@ -715,6 +991,11 @@ export const IndexedDBCore = {
     getConnection,
     resetConnectionState,
     getConnectionStatus,
+
+    // Fallback management
+    isUsingFallback,
+    getStorageBackend,
+    activateFallback,
 
     // Store configuration
     STORES: INDEXEDDB_STORES,

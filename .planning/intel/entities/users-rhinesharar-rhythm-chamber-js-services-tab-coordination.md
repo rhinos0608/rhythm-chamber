@@ -9,20 +9,22 @@ status: active
 
 ## Purpose
 
-Cross-tab coordination service using BroadcastChannel with deterministic leader election to prevent data corruption from multiple tabs (HNW architecture).
+Cross-tab coordination service using BroadcastChannel with deterministic leader election to prevent data corruption from multiple tabs (part of HNW architecture).
 
 ## Exports
 
-- **TabCoordinator** - Main coordinator class managing cross-tab communication, leader election, and state synchronization
+- `TabCoordinator` - Main coordinator class handling cross-tab communication, leader election, and state synchronization
 
 ## Dependencies
 
-- [[vector-clock]]
-- [[wave-telemetry]]
-- [[event-bus]]
-- [[device-detection]]
-- [[shared-worker-coordinator]]
-- [[security]]
+- [[vector-clock.js]]
+- [[wave-telemetry.js]]
+- [[event-bus.js]]
+- [[device-detection.js]]
+- [[shared-worker-coordinator.js]]
+- [[security/index.js]]
+- [[app-state.js]]
+- [[html-escape.js]]
 
 ## Used By
 
@@ -30,6 +32,4 @@ TBD
 
 ## Notes
 
-- Implements adaptive election window based on device performance (300-600ms)
-- Uses VectorClock for deterministic ordering to eliminate clock skew
-- Part of HNW (Hardware Neural Wave) architecture for multi-tab safety
+Implements adaptive election window based on device performance (300-600ms range). Uses VectorClock for deterministic ordering to eliminate clock skew issues between tabs.

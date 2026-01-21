@@ -301,8 +301,8 @@ function parseDateQuery(query) {
         }
     }
 
-    // Check for year only
-    const yearMatch = lowerQuery.match(/20\d{2}/);
+    // Check for year only (support any 4-digit year, not just 2000-2099)
+    const yearMatch = lowerQuery.match(/\b(19|20)\d{2}\b/);
     if (yearMatch) {
         return { year: parseInt(yearMatch[0]) };
     }

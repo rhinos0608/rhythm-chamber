@@ -16,6 +16,7 @@ import { Security, SecurityChecklist } from './security/index.js';
 
 // Core utilities
 import { ModuleRegistry } from './module-registry.js';
+import { escapeHtml } from './utils/html-escape.js';
 
 // State management
 import { AppState } from './state/app-state.js';
@@ -191,12 +192,14 @@ function showLoadingError(missing, optional = []) {
     // Generate dependency status list
     const statusHtml = Object.entries(CRITICAL_DEPENDENCIES)
         .map(([name, { required }]) => {
+            // Escape dependency names to prevent XSS from manipulated constants
+            const escapedName = escapeHtml(name);
             if (missing.includes(name) || missing.some(m => m.startsWith(name))) {
-                return `<li class="dep-missing">❌ ${name} ${required ? '(required)' : '(optional)'}</li>`;
+                return `<li class="dep-missing">❌ ${escapedName} ${required ? '(required)' : '(optional)'}</li>`;
             } else if (optional.includes(name)) {
-                return `<li class="dep-optional">⚠️ ${name} (optional, not loaded)</li>`;
+                return `<li class="dep-optional">⚠️ ${escapedName} (optional, not loaded)</li>`;
             } else {
-                return `<li class="dep-loaded">✅ ${name}</li>`;
+                return `<li class="dep-loaded">✅ ${escapedName}</li>`;
             }
         })
         .join('');
@@ -281,6 +284,7 @@ function showSafeModeWarning() {
     const banner = document.createElement('div');
     banner.className = 'safe-mode-banner';
     banner.setAttribute('role', 'alert');
+    // SAFE: Static HTML with no user input - this is an internal system message
     banner.innerHTML = `
         <span class="icon">⚠️</span>
         <span class="text">
@@ -759,9 +763,9 @@ function setupEventListeners() {
         // Settings is accessed via window.Settings, delete chat functions via window.SidebarController
         const handlers = {
             // Header actions (Settings module - uses imported ES module)
-            'show-settings': () => {
+            'show-settings': async () => {
                 if (typeof Settings?.showSettingsModal === 'function') {
-                    Settings.showSettingsModal();
+                    await Settings.showSettingsModal();
                 } else {
                     console.error('[App] Settings.showSettingsModal not available');
                 }
@@ -967,7 +971,11 @@ async function processFile(file) {
 async function handleChatSend() {
     const input = document.getElementById('chat-input');
     const message = input.value.trim();
-    if (!message) return;
+    // Edge case: Provide feedback for empty/whitespace-only messages
+    if (!message) {
+        showToast('Please enter a message to send', 2000);
+        return;
+    }
 
     input.value = '';
 
