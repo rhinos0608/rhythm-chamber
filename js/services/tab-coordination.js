@@ -664,43 +664,90 @@ async function sendMessage(msg) {
 }
 
 /**
- * Create message handler for BroadcastChannel
+ * Create message handler for BroadcastChannel with message security verification
+ * Phase 14: All incoming messages are verified for signature, origin, timestamp, and nonce
  */
-function createMessageHandler() {
-    return (event) => {
-        const { type, tabId, vectorClock: remoteClock, seq, senderId } = event.data;
+async function createMessageHandler() {
+    return async (event) => {
+        try {
+            // Extract security fields from message
+            const { type, tabId, vectorClock: remoteClock, seq, senderId, signature, origin, timestamp, nonce } = event.data;
 
-        // Message sequence validation for ordering guarantees
-        // HNW Network: Detect out-of-order or duplicate BroadcastChannel messages
-        if (seq !== undefined && senderId && senderId !== TAB_ID) {
-            const lastSeq = remoteSequences.get(senderId) || 0;
+            // ==========================================
+            // MESSAGE VERIFICATION PIPELINE
+            // Phase 14: Verify all incoming messages before processing
+            // ==========================================
 
-            if (seq <= lastSeq) {
-                // Duplicate message - skip processing
-                if (debugMode) {
-                    console.warn(`[TabCoordination] Duplicate message: seq=${seq} from ${senderId} (last=${lastSeq})`);
+            // Step 0: Check for missing security fields
+            if (!signature || !origin || !timestamp || !nonce) {
+                console.warn('[TabCoordination] Rejecting unsigned message - missing security fields');
+                return;
+            }
+
+            // Step 1: Origin validation (XTAB-03) - Fast check
+            if (origin !== window.location.origin) {
+                console.warn(`[TabCoordination] Rejecting message from wrong origin: ${origin}`);
+                return;
+            }
+
+            // Step 2: Timestamp validation (XTAB-06) - Fast check
+            const isFresh = Security.MessageSecurity.validateTimestamp(event.data, 5);
+            if (!isFresh) {
+                console.warn(`[TabCoordination] Rejecting stale message: timestamp=${timestamp}`);
+                return;
+            }
+
+            // Step 3: Nonce replay check (XTAB-05) - Medium speed check
+            if (Security.MessageSecurity.isNonceUsed(nonce)) {
+                console.warn(`[TabCoordination] Rejecting replayed message: nonce=${nonce}`);
+                return;
+            }
+
+            // Step 4: Signature verification (XTAB-02) - Expensive crypto operation (last)
+            const signingKey = await Security.getSigningKey();
+            const isValid = await Security.MessageSecurity.verifyMessage(event.data, signature, signingKey);
+            if (!isValid) {
+                console.warn('[TabCoordination] Rejecting message with invalid signature');
+                return;
+            }
+
+            // Mark nonce as used after successful verification
+            Security.MessageSecurity.markNonceUsed(nonce);
+
+            // Message passed all verification checks - proceed with processing
+            console.log(`[TabCoordination] Message verified: type=${type}, from=${tabId}`);
+
+            // Message sequence validation for ordering guarantees
+            // HNW Network: Detect out-of-order or duplicate BroadcastChannel messages
+            if (seq !== undefined && senderId && senderId !== TAB_ID) {
+                const lastSeq = remoteSequences.get(senderId) || 0;
+
+                if (seq <= lastSeq) {
+                    // Duplicate message - skip processing
+                    if (debugMode) {
+                        console.warn(`[TabCoordination] Duplicate message: seq=${seq} from ${senderId} (last=${lastSeq})`);
+                    }
+                    return; // Skip duplicate
                 }
-                return; // Skip duplicate
+
+                if (seq > lastSeq + 1) {
+                    // Out-of-order message - log but continue processing
+                    outOfOrderCount++;
+                    console.warn(`[TabCoordination] Out-of-order message: expected seq=${lastSeq + 1}, got seq=${seq} from ${senderId} (total OOO: ${outOfOrderCount})`);
+                    // We still process it since the message is valid, just arrived out of order
+                }
+
+                remoteSequences.set(senderId, seq);
             }
 
-            if (seq > lastSeq + 1) {
-                // Out-of-order message - log but continue processing
-                outOfOrderCount++;
-                console.warn(`[TabCoordination] Out-of-order message: expected seq=${lastSeq + 1}, got seq=${seq} from ${senderId} (total OOO: ${outOfOrderCount})`);
-                // We still process it since the message is valid, just arrived out of order
+            // Sync Vector clock with received message
+            // This ensures logical ordering and conflict detection across all tabs
+            if (remoteClock && typeof remoteClock === 'object') {
+                vectorClock.merge(remoteClock);
             }
 
-            remoteSequences.set(senderId, seq);
-        }
-
-        // Sync Vector clock with received message
-        // This ensures logical ordering and conflict detection across all tabs
-        if (remoteClock && typeof remoteClock === 'object') {
-            vectorClock.merge(remoteClock);
-        }
-
-        switch (type) {
-            case MESSAGE_TYPES.CANDIDATE:
+            switch (type) {
+                case MESSAGE_TYPES.CANDIDATE:
                 // Another tab announced candidacy - collect it for election
                 // If we're already primary, assert dominance so new tab knows leader exists
                 if (isPrimaryTab && tabId !== TAB_ID) {
@@ -714,7 +761,7 @@ function createMessageHandler() {
                 electionCandidates.add(tabId);
                 break;
 
-            case MESSAGE_TYPES.CLAIM_PRIMARY:
+                case MESSAGE_TYPES.CLAIM_PRIMARY:
                 // Another tab claimed primary - we become secondary
                 if (tabId !== TAB_ID) {
                     // Update module-scoped state to prevent race condition
@@ -728,14 +775,14 @@ function createMessageHandler() {
                 }
                 break;
 
-            case MESSAGE_TYPES.RELEASE_PRIMARY:
+                case MESSAGE_TYPES.RELEASE_PRIMARY:
                 // Primary tab closed - initiate new election
                 if (!isPrimaryTab) {
                     initiateReElection();
                 }
                 break;
 
-            case MESSAGE_TYPES.HEARTBEAT:
+                case MESSAGE_TYPES.HEARTBEAT:
                 // Received heartbeat from leader
                 if (tabId !== TAB_ID && !isPrimaryTab) {
                     // Record clock skew from remote timestamp
@@ -752,7 +799,7 @@ function createMessageHandler() {
                 }
                 break;
 
-            case MESSAGE_TYPES.EVENT_WATERMARK:
+                case MESSAGE_TYPES.EVENT_WATERMARK:
                 // Received watermark broadcast from another tab
                 if (tabId !== TAB_ID && event.data.watermark !== undefined) {
                     knownWatermarks.set(tabId, event.data.watermark);
@@ -762,21 +809,21 @@ function createMessageHandler() {
                 }
                 break;
 
-            case MESSAGE_TYPES.REPLAY_REQUEST:
+                case MESSAGE_TYPES.REPLAY_REQUEST:
                 // Secondary tab requesting event replay
                 if (isPrimaryTab && tabId !== TAB_ID) {
                     handleReplayRequest(tabId, event.data.fromWatermark);
                 }
                 break;
 
-            case MESSAGE_TYPES.REPLAY_RESPONSE:
+                case MESSAGE_TYPES.REPLAY_RESPONSE:
                 // Primary tab responding with replay data
                 if (!isPrimaryTab && tabId !== TAB_ID) {
                     handleReplayResponse(event.data.events);
                 }
                 break;
 
-            case MESSAGE_TYPES.SAFE_MODE_CHANGED:
+                case MESSAGE_TYPES.SAFE_MODE_CHANGED:
                 // Cross-tab Safe Mode synchronization
                 // HNW Hierarchy: Safe Mode is an authority decision shared across all tabs
                 if (tabId !== TAB_ID) {
@@ -799,6 +846,11 @@ function createMessageHandler() {
                     }
                 }
                 break;
+        }
+        } catch (error) {
+            console.error('[TabCoordination] Message verification failed:', error);
+            // Don't process message if verification fails
+            return;
         }
     };
 }
