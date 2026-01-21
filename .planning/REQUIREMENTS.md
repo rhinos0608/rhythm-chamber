@@ -11,20 +11,20 @@ Requirements for security hardening before v1.0 launch.
 
 ### Session Key Management
 
-- [ ] **KEY-01**: All CryptoKey objects are created with `extractable: false` property
-- [ ] **KEY-02**: Session keys are derived using PBKDF2 with minimum 100,000 iterations
-- [ ] **KEY-03**: New session keys are generated for each browser session start
-- [ ] **KEY-04**: Raw key material is never persisted to localStorage, sessionStorage, or IndexedDB
-- [ ] **KEY-05**: Session keys are cleared from memory on user logout or session end
+- [x] **KEY-01**: All CryptoKey objects are created with `extractable: false` property
+- [x] **KEY-02**: Session keys are derived using PBKDF2 with minimum 100,000 iterations
+- [x] **KEY-03**: New session keys are generated for each browser session start
+- [x] **KEY-04**: Raw key material is never persisted to localStorage, sessionStorage, or IndexedDB
+- [x] **KEY-05**: Session keys are cleared from memory on user logout or session end
 
 ### Cross-Tab Security
 
-- [ ] **XTAB-01**: All BroadcastChannel messages include HMAC signature
-- [ ] **XTAB-02**: Received messages have HMAC signature verified before processing
-- [ ] **XTAB-03**: All BroadcastChannel messages validate origin matches `window.location.origin`
-- [ ] **XTAB-04**: Sensitive data (API keys, chat content) is removed from messages before broadcast
-- [ ] **XTAB-05**: BroadcastChannel messages include timestamp for replay attack prevention
-- [ ] **XTAB-06**: Messages older than 5 seconds are rejected as stale
+- [x] **XTAB-01**: All BroadcastChannel messages include HMAC signature
+- [x] **XTAB-02**: Received messages have HMAC signature verified before processing
+- [x] **XTAB-03**: All BroadcastChannel messages validate origin matches `window.location.origin`
+- [x] **XTAB-04**: Sensitive data (API keys, chat content) is removed from messages before broadcast
+- [x] **XTAB-05**: BroadcastChannel messages include timestamp for replay attack prevention
+- [x] **XTAB-06**: Messages older than 5 seconds are rejected as stale
 
 ### Storage Encryption
 
@@ -39,11 +39,11 @@ Requirements for security hardening before v1.0 launch.
 
 ### Security Infrastructure
 
-- [ ] **INFRA-01**: Application validates secure context (HTTPS) before crypto operations
-- [ ] **INFRA-02**: KeyManager module provides centralized key lifecycle management
-- [ ] **INFRA-03**: MessageSecurity module provides signing and verification utilities
-- [ ] **INFRA-04**: StorageEncryption module provides encrypt/decrypt wrapper for IndexedDB
-- [ ] **INFRA-05**: Crypto errors do not leak implementation details in messages
+- [x] **INFRA-01**: Application validates secure context (HTTPS) before crypto operations
+- [x] **INFRA-02**: KeyManager module provides centralized key lifecycle management
+- [x] **INFRA-03**: MessageSecurity module provides signing and verification utilities
+- [x] **INFRA-04**: StorageEncryption module provides encrypt/decrypt wrapper for IndexedDB
+- [x] **INFRA-05**: Crypto errors do not leak implementation details in messages
 
 ---
 
@@ -95,12 +95,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | KEY-03 | Phase 9 | Complete |
 | KEY-04 | Phase 9 | Complete |
 | KEY-05 | Phase 9 | Complete |
-| XTAB-01 | Phase 14 | Pending |
-| XTAB-02 | Phase 14 | Pending |
-| XTAB-03 | Phase 14 | Pending |
-| XTAB-04 | Phase 14 | Pending |
-| XTAB-05 | Phase 14 | Pending |
-| XTAB-06 | Phase 14 | Pending |
+| XTAB-01 | Phase 14 | Complete |
+| XTAB-02 | Phase 14 | Complete |
+| XTAB-03 | Phase 14 | Complete |
+| XTAB-04 | Phase 14 | Complete |
+| XTAB-05 | Phase 14 | Complete |
+| XTAB-06 | Phase 14 | Complete |
 | STORE-01 | Phase 13 | Complete |
 | STORE-02 | Phase 13 | Complete |
 | STORE-03 | Phase 13 | Complete |
@@ -111,7 +111,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STORE-08 | Phase 13 | Complete |
 | INFRA-01 | Phase 9 | Complete |
 | INFRA-02 | Phase 9 | Complete |
-| INFRA-03 | Phase 14 | Pending |
+| INFRA-03 | Phase 14 | Complete |
 | INFRA-04 | Phase 13 | Complete |
 | INFRA-05 | Phase 9 | Complete |
 
