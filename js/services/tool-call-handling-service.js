@@ -44,11 +44,29 @@ let toolStrategies = null;
 
 /**
  * Check if an error is retryable (transient)
+ * EDGE CASE FIX: AbortError is NOT retryable as it indicates intentional cancellation
+ * (budget exhausted, user stopped, or timeout). Retrying after abort causes
+ * duplicate actions on operations that succeeded server-side before timeout.
+ *
  * @param {Error} err - The error to check
+ * @param {AbortSignal} [signal] - Optional AbortSignal to check for aborted state
  * @returns {boolean} Whether the error is retryable
  */
-function isRetryableError(err) {
+function isRetryableError(err, signal = null) {
     if (!err) return false;
+
+    // EDGE CASE FIX: AbortError is NOT retryable
+    // An abort indicates intentional cancellation, not a transient failure.
+    // Retrying after abort causes duplicate tool executions.
+    if (err.name === 'AbortError') {
+        return false;
+    }
+
+    // EDGE CASE FIX: Check signal state even if error isn't AbortError
+    // This catches cases where timeout occurred but error type doesn't match
+    if (signal?.aborted) {
+        return false;
+    }
 
     const msg = (err.message || '').toLowerCase();
     return msg.includes('timeout') ||
@@ -57,8 +75,7 @@ function isRetryableError(err) {
         msg.includes('503') ||
         msg.includes('network') ||
         msg.includes('fetch') ||
-        msg.includes('temporary') ||
-        err.name === 'AbortError';
+        msg.includes('temporary');
 }
 
 /**
@@ -237,7 +254,7 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
 
                 // Check for function execution errors in result
                 if (result?.error) {
-                    if (attempt < MAX_FUNCTION_RETRIES && isRetryableError(new Error(result.error))) {
+                    if (attempt < MAX_FUNCTION_RETRIES && isRetryableError(new Error(result.error), abortController.signal)) {
                         console.warn(`[ToolCallHandlingService] Retryable error for ${functionName} (attempt ${attempt + 1}): ${result.error}`);
                         await retryDelay(attempt);
                         lastError = new Error(result.error);
@@ -252,7 +269,7 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
                 clearTimeout(timeoutId);
                 lastError = funcError;
 
-                if (attempt < MAX_FUNCTION_RETRIES && isRetryableError(funcError)) {
+                if (attempt < MAX_FUNCTION_RETRIES && isRetryableError(funcError, abortController.signal)) {
                     console.warn(`[ToolCallHandlingService] Retryable error for ${functionName} (attempt ${attempt + 1}): ${funcError.message}`);
                     await retryDelay(attempt);
                     continue;
@@ -300,10 +317,24 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
 
         // Add tool result to conversation
         if (_SessionManager?.addMessageToHistory) {
+            // EDGE CASE FIX: Handle circular references in tool result serialization
+            // JSON.stringify throws on circular references, causing tool results to be lost
+            let content;
+            try {
+                content = JSON.stringify(result);
+            } catch (stringifyError) {
+                // Fallback for circular references or unserializable data
+                console.warn(`[ToolCallHandlingService] Failed to stringify tool result for ${functionName}:`, stringifyError.message);
+                content = JSON.stringify({
+                    result: '(Result contains unserializable data)',
+                    _error: 'Unserializable result'
+                });
+            }
+
             _SessionManager.addMessageToHistory({
                 role: 'tool',
                 tool_call_id: toolCall.id,
-                content: JSON.stringify(result)
+                content: content
             });
         }
     }
