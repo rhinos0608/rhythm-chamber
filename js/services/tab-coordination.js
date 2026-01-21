@@ -117,8 +117,9 @@ const TimingConfig = {
 
     // Bootstrap window for unsigned message fallback (security measure)
     // Unsigned messages are only allowed during this window after module load
+    // SECURITY: Reduced to 5 seconds to minimize attack surface for unsigned messages
     bootstrap: {
-        windowMs: 30000  // 30 seconds - enough time for session initialization
+        windowMs: 5000  // 5 seconds - sufficient for session initialization, reduced from 30s for security
     }
 };
 
@@ -296,11 +297,40 @@ const SLEEP_DETECTION_THRESHOLD_MS = 30000; // 30 seconds gap indicates OS sleep
 // HNW Network: Detects out-of-order BroadcastChannel delivery
 let localSequence = 0; // Sequence number for outgoing messages
 const remoteSequences = new Map(); // Track last sequence per sender: senderId -> lastSeq
+const remoteSequenceTimestamps = new Map(); // Track last update time per sender: senderId -> timestamp
 let outOfOrderCount = 0; // Count of out-of-order messages detected
+const REMOTE_SEQUENCE_MAX_AGE_MS = 300000; // 5 minutes - prune stale sender data
 
 // ==========================================
 // Core Functions
 // ==========================================
+
+/**
+ * Prune stale remote sequence data to prevent memory leaks
+ * HNW Network: Cleanup for long-running tabs
+ * @returns {number} Number of entries pruned
+ */
+function pruneStaleRemoteSequences() {
+    const now = Date.now();
+    const pruned = [];
+
+    for (const [senderId, timestamp] of remoteSequenceTimestamps.entries()) {
+        if (now - timestamp > REMOTE_SEQUENCE_MAX_AGE_MS) {
+            pruned.push(senderId);
+        }
+    }
+
+    for (const senderId of pruned) {
+        remoteSequences.delete(senderId);
+        remoteSequenceTimestamps.delete(senderId);
+    }
+
+    if (pruned.length > 0 && debugMode) {
+        console.log(`[TabCoordination] Pruned ${pruned.length} stale remote sequence entries`);
+    }
+
+    return pruned.length;
+}
 
 /**
  * Initialize adaptive timing based on device and network conditions
@@ -847,6 +877,12 @@ function createMessageHandler() {
                 }
 
                 remoteSequences.set(senderId, seq);
+                remoteSequenceTimestamps.set(senderId, Date.now());
+
+                // Periodically prune stale remote sequence data
+                if (Math.random() < 0.05) { // 5% chance on each message
+                    pruneStaleRemoteSequences();
+                }
             }
 
             // Sync Vector clock with received message
@@ -1690,6 +1726,10 @@ function cleanup() {
     receivedPrimaryClaim = false;
     electionAborted = false;
 
+    // HNW Network: Clear remote sequence tracking
+    remoteSequences.clear();
+    remoteSequenceTimestamps.clear();
+
     console.log('[TabCoordination] Cleanup complete');
 }
 
@@ -1726,10 +1766,11 @@ function showSafeModeWarningFromRemote(reason) {
         banner = document.createElement('div');
         banner.id = 'safe-mode-remote-banner';
         banner.className = 'safe-mode-banner';
+        // SECURITY: Use data-action attribute instead of inline onclick for CSP compliance
         banner.innerHTML = `
             <span class="safe-mode-icon">⚠️</span>
             <span class="safe-mode-message">Safe Mode activated in another tab: <strong>${escapeHtml(reason || 'Unknown reason')}</strong></span>
-            <button class="safe-mode-dismiss" onclick="this.parentElement.remove()">×</button>
+            <button class="safe-mode-dismiss" data-action="dismiss-safe-mode-banner" aria-label="Dismiss warning">×</button>
         `;
         banner.style.cssText = `
             position: fixed;
@@ -1746,6 +1787,11 @@ function showSafeModeWarningFromRemote(reason) {
             font-family: system-ui, -apple-system, sans-serif;
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
         `;
+        // Add event listener for dismiss button instead of inline onclick
+        const dismissBtn = banner.querySelector('.safe-mode-dismiss');
+        if (dismissBtn) {
+            dismissBtn.addEventListener('click', () => banner.remove());
+        }
         document.body.prepend(banner);
     } else {
         // Update existing banner
@@ -1821,6 +1867,8 @@ const TabCoordinator = {
     // Message ordering diagnostics (HNW Network)
     getOutOfOrderCount: () => outOfOrderCount,
     resetOutOfOrderCount: () => { outOfOrderCount = 0; },
+    pruneStaleRemoteSequences, // NEW: Cleanup for long-running tabs
+    getRemoteSequenceCount: () => remoteSequences.size,
 
     // Transport info (diagnostics)
     getTransportType: () => sharedWorkerFallback ? 'SharedWorker' : 'BroadcastChannel',
