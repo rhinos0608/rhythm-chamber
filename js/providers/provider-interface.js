@@ -12,7 +12,7 @@
 
 import { ModuleRegistry } from '../module-registry.js';
 import { withTimeout, TimeoutError } from '../utils/timeout-wrapper.js';
-import { ProviderCircuitBreaker } from '../services/provider-circuit-breaker.js';
+import { ProviderHealthAuthority } from '../services/provider-health-authority.js';
 import { ConfigLoader } from '../services/config-loader.js';
 import { Settings } from '../settings.js';
 
@@ -29,6 +29,74 @@ const PROVIDER_TIMEOUTS = {
     cloud: 60000,    // 60s for cloud APIs (OpenRouter)
     local: 90000     // 90s for local LLMs (Ollama, LM Studio)
 };
+
+// ==========================================
+// Retry Configuration
+// ==========================================
+
+const RETRY_CONFIG = {
+    MAX_RETRIES: 3,           // Maximum number of retry attempts
+    BASE_DELAY_MS: 1000,      // Base delay for exponential backoff (1s)
+    MAX_DELAY_MS: 10000,      // Maximum delay between retries (10s)
+    JITTER_MS: 100            // Random jitter to avoid thundering herd
+};
+
+/**
+ * Check if an error is retryable
+ * @param {Error} error - The error to check
+ * @returns {boolean} Whether the error is retryable
+ */
+function isRetryableError(error) {
+    if (!error) return false;
+
+    const msg = (error.message || '').toLowerCase();
+    const name = error.name || '';
+
+    // Network errors
+    if (name === 'AbortError' || msg.includes('timeout') || msg.includes('fetch')) {
+        return true;
+    }
+
+    // HTTP errors
+    if (msg.includes('429') || msg.includes('rate limit')) {
+        return true;
+    }
+
+    // Server errors (5xx)
+    if (msg.includes('500') || msg.includes('502') || msg.includes('503') || msg.includes('504')) {
+        return true;
+    }
+
+    // Network errors
+    if (msg.includes('network') || msg.includes('econnrefused') || msg.includes('etimedout')) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Calculate delay with exponential backoff and jitter
+ * @param {number} attempt - Current attempt number (0-based)
+ * @returns {number} Delay in milliseconds
+ */
+function calculateRetryDelay(attempt) {
+    const exponentialDelay = Math.min(
+        RETRY_CONFIG.BASE_DELAY_MS * Math.pow(2, attempt),
+        RETRY_CONFIG.MAX_DELAY_MS
+    );
+    const jitter = Math.random() * RETRY_CONFIG.JITTER_MS;
+    return exponentialDelay + jitter;
+}
+
+/**
+ * Delay for a specified amount of time
+ * @param {number} ms - Milliseconds to delay
+ * @returns {Promise<void>}
+ */
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 // ==========================================
 // Provider Configuration
@@ -110,7 +178,7 @@ function buildProviderConfig(provider, settings, baseConfig) {
 // ==========================================
 
 /**
- * Route LLM calls to appropriate provider
+ * Route LLM calls to appropriate provider with retry logic and rate limit handling
  * @param {object} config - Provider config from buildProviderConfig
  * @param {string} apiKey - API key (for OpenRouter)
  * @param {Array} messages - Chat messages
@@ -126,7 +194,7 @@ async function callProvider(config, apiKey, messages, tools, onProgress = null) 
     }
 
     // HNW Network: Check circuit breaker before attempting call
-    const circuitCheck = ProviderCircuitBreaker.canExecute(config.provider);
+    const circuitCheck = ProviderHealthAuthority.canExecute(config.provider);
     if (!circuitCheck.allowed) {
         const error = new Error(circuitCheck.reason);
         error.type = 'circuit_open';
@@ -142,63 +210,123 @@ async function callProvider(config, apiKey, messages, tools, onProgress = null) 
 
     // Get appropriate timeout for provider type
     const timeoutMs = config.timeout || (config.isLocal ? PROVIDER_TIMEOUTS.local : PROVIDER_TIMEOUTS.cloud);
-    const startTime = Date.now();
 
-    // Route to appropriate provider with timeout protection
-    let response;
-    try {
-        response = await withTimeout(
-            async () => {
-                switch (config.provider) {
-                    case 'ollama':
-                        return await providerModule.call(config, messages, tools, onProgress);
+    // Execute with retry logic and exponential backoff
+    let lastError;
+    for (let attempt = 0; attempt <= RETRY_CONFIG.MAX_RETRIES; attempt++) {
+        const startTime = Date.now();
 
-                    case 'lmstudio':
-                        return await providerModule.call(config, messages, tools, onProgress);
+        try {
+            // Check circuit breaker before each attempt
+            const retryCheck = ProviderHealthAuthority.canExecute(config.provider);
+            if (!retryCheck.allowed) {
+                throw new Error(retryCheck.reason);
+            }
 
-                    case 'gemini':
-                        return await providerModule.call(apiKey, config, messages, tools, onProgress);
+            const response = await withTimeout(
+                async () => {
+                    switch (config.provider) {
+                        case 'ollama':
+                            return await providerModule.call(config, messages, tools, onProgress);
 
-                    case 'openrouter':
-                    default:
-                        return await providerModule.call(apiKey, config, messages, tools, onProgress);
+                        case 'lmstudio':
+                            return await providerModule.call(config, messages, tools, onProgress);
+
+                        case 'gemini':
+                            return await providerModule.call(apiKey, config, messages, tools, onProgress);
+
+                        case 'openrouter':
+                        default:
+                            return await providerModule.call(apiKey, config, messages, tools, onProgress);
+                    }
+                },
+                timeoutMs,
+                { operation: `${config.provider} LLM call` }
+            );
+
+            // Record success with duration
+            const durationMs = Date.now() - startTime;
+            ProviderHealthAuthority.recordSuccess(config.provider, durationMs);
+
+            // Validate response format from all providers
+            if (!response || typeof response !== 'object') {
+                throw new Error(`${config.provider} returned no response`);
+            }
+            if (!response.choices || !Array.isArray(response.choices)) {
+                throw new Error(`${config.provider} returned malformed response (missing choices array)`);
+            }
+
+            return response;
+
+        } catch (error) {
+            lastError = error;
+
+            // Check if this is a rate limit error with Retry-After header
+            if (error.message.includes('429') || error.message.includes('rate limit')) {
+                const retryAfterMs = extractRetryAfter(error);
+                if (retryAfterMs > 0) {
+                    console.warn(`[ProviderInterface] Rate limited by ${config.provider}, waiting ${retryAfterMs}ms`);
+                    await delay(retryAfterMs);
+                    continue; // Retry immediately after waiting
                 }
-            },
-            timeoutMs,
-            { operation: `${config.provider} LLM call` }
-        );
+            }
 
-        // Record success with duration
-        const durationMs = Date.now() - startTime;
-        ProviderCircuitBreaker.recordSuccess(config.provider, durationMs);
+            // Check if error is retryable and we have more attempts
+            if (attempt < RETRY_CONFIG.MAX_RETRIES && isRetryableError(error)) {
+                const retryDelay = calculateRetryDelay(attempt);
+                console.warn(`[ProviderInterface] Retryable error for ${config.provider} (attempt ${attempt + 1}/${RETRY_CONFIG.MAX_RETRIES + 1}): ${error.message}`);
+                console.log(`[ProviderInterface] Waiting ${retryDelay}ms before retry...`);
+                await delay(retryDelay);
+                continue;
+            }
 
-    } catch (error) {
-        // Record failure for circuit breaker
-        ProviderCircuitBreaker.recordFailure(config.provider, error.message);
+            // Record failure for circuit breaker
+            ProviderHealthAuthority.recordFailure(config.provider, error.message);
 
-        // Handle timeout with HNW-compliant recovery suggestion
-        if (error instanceof TimeoutError) {
-            const normalizedError = normalizeProviderError(error, config.provider);
-            normalizedError.suggestion = config.isLocal
-                ? 'Your local LLM is taking too long. Try a smaller model or check system resources.'
-                : 'The API request timed out. Try again or switch to a different model.';
-            throw normalizedError;
+            // Handle timeout with HNW-compliant recovery suggestion
+            if (error instanceof TimeoutError) {
+                const normalizedError = normalizeProviderError(error, config.provider);
+                normalizedError.suggestion = config.isLocal
+                    ? 'Your local LLM is taking too long. Try a smaller model or check system resources.'
+                    : 'The API request timed out. Try again or switch to a different model.';
+                throw normalizedError;
+            }
+
+            throw error;
         }
-        throw error;
     }
 
-    // Validate response format from all providers
-    if (!response || typeof response !== 'object') {
-        ProviderCircuitBreaker.recordFailure(config.provider, 'No response');
-        throw new Error(`${config.provider} returned no response`);
-    }
-    if (!response.choices || !Array.isArray(response.choices)) {
-        ProviderCircuitBreaker.recordFailure(config.provider, 'Malformed response');
-        console.warn('[ProviderInterface] Response missing choices array, will use fallback:', config.provider);
-        throw new Error(`${config.provider} returned malformed response (missing choices array)`);
+    // If we exhausted all retries, throw the last error
+    console.error(`[ProviderInterface] All ${RETRY_CONFIG.MAX_RETRIES + 1} attempts failed for ${config.provider}`);
+    throw lastError;
+}
+
+/**
+ * Extract Retry-After value from error if present
+ * @param {Error} error - The error object
+ * @returns {number} Milliseconds to wait, or 0 if no Retry-After
+ */
+function extractRetryAfter(error) {
+    // Check if error has a response with Retry-After header
+    if (error.response && error.response.headers) {
+        const retryAfter = error.response.headers.get('Retry-After');
+        if (retryAfter) {
+            // Retry-After can be seconds (number) or HTTP-date
+            const seconds = parseInt(retryAfter, 10);
+            if (!isNaN(seconds)) {
+                return seconds * 1000;
+            }
+            // Could parse HTTP-date here if needed
+            return 60000; // Default to 1 minute if date parsing fails
+        }
     }
 
-    return response;
+    // Check for rate limit in message and use default delay
+    if (error.message && (error.message.includes('429') || error.message.includes('rate limit'))) {
+        return 60000; // Default to 1 minute for rate limits
+    }
+
+    return 0;
 }
 
 /**
