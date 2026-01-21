@@ -194,6 +194,10 @@ function clearWal() {
  * - Re-query operation state after page reload using operation IDs
  * - Design for idempotency to safely retry operations
  *
+ * **REPLAY BLOCKING:**
+ * If WAL replay is in progress, new writes are blocked until replay completes.
+ * This prevents ordering conflicts between replayed and new writes.
+ *
  * See `createWalEntry`, `saveWal`, `walState.entries`, and `scheduleProcessing` for implementation details.
  *
  * @param {string} operation - Operation name
@@ -202,6 +206,13 @@ function clearWal() {
  * @returns {Promise<any>} Promise that resolves when operation is processed (only if page remains alive)
  */
 async function queueWrite(operation, args, priority = WalPriority.NORMAL) {
+    // Block writes during WAL replay to prevent ordering conflicts
+    if (walState.isReplaying) {
+        console.warn(`[WAL] Write blocked during replay, waiting: ${operation}`);
+        await waitForReplayComplete();
+        console.log(`[WAL] Replay complete, proceeding with write: ${operation}`);
+    }
+    
     // Check if encryption is available
     if (SafeMode.canEncrypt()) {
         // Process immediately if encryption is available
@@ -226,6 +237,40 @@ async function queueWrite(operation, args, priority = WalPriority.NORMAL) {
 
         console.log(`[WAL] Queued write operation: ${operation} (${priority})`);
     });
+}
+
+/**
+ * Wait for WAL replay to complete
+ * @param {number} [timeoutMs=30000] - Maximum time to wait
+ * @returns {Promise<void>} Resolves when replay is complete or timeout
+ */
+function waitForReplayComplete(timeoutMs = 30000) {
+    if (!walState.isReplaying) {
+        return Promise.resolve();
+    }
+    
+    return new Promise((resolve) => {
+        const startTime = Date.now();
+        
+        const checkInterval = setInterval(() => {
+            if (!walState.isReplaying) {
+                clearInterval(checkInterval);
+                resolve();
+            } else if (Date.now() - startTime > timeoutMs) {
+                console.warn('[WAL] Timeout waiting for replay to complete, proceeding anyway');
+                clearInterval(checkInterval);
+                resolve(); // Continue anyway after timeout to prevent deadlock
+            }
+        }, 100);
+    });
+}
+
+/**
+ * Check if WAL replay is in progress
+ * @returns {boolean} True if replay is in progress
+ */
+function isReplaying() {
+    return walState.isReplaying;
 }
 
 /**
@@ -478,6 +523,14 @@ async function replayWal() {
         console.error('[WAL] Error replaying WAL:', error);
     } finally {
         walState.isReplaying = false;
+        
+        // Emit event for any blocked writes waiting on replay
+        if (typeof window !== 'undefined' && window.EventBus?.emit) {
+            window.EventBus.emit('wal:replay_complete', {
+                timestamp: Date.now(),
+                entriesReplayed: pendingEntries?.length || 0
+            });
+        }
     }
 }
 
@@ -604,6 +657,10 @@ export const WriteAheadLog = {
     processWal,
     replayWal,
     stopProcessing,
+
+    // Replay blocking
+    isReplaying,
+    waitForReplayComplete,
 
     // Monitoring
     getWalStats,

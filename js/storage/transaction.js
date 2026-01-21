@@ -7,10 +7,19 @@
  * HNW Network: Provides transactional consistency for multi-backend operations,
  * preventing partial writes that could corrupt application state.
  *
+ * COMPENSATION LOG: If rollback fails, failed operations are logged to a
+ * compensation store for manual recovery. This prevents silent data corruption.
+ *
  * @module storage/transaction
  */
 
 import { IndexedDBCore } from './indexeddb.js';
+
+// ==========================================
+// Compensation Log Store Name
+// ==========================================
+
+const COMPENSATION_LOG_STORE = 'TRANSACTION_COMPENSATION';
 
 // ==========================================
 // Transaction State
@@ -560,6 +569,8 @@ async function revertIndexedDBOperation(op) {
 
 /**
  * Rollback all committed operations in the transaction
+ * If rollback fails for any operation, it is logged to the compensation log
+ * for manual recovery.
  * 
  * @param {TransactionContext} ctx - Transaction context
  */
@@ -570,6 +581,7 @@ async function rollback(ctx) {
 
     // Rollback in reverse order
     const toRollback = ctx.operations.filter(op => op.committed).reverse();
+    const compensationLog = [];
 
     for (const op of toRollback) {
         try {
@@ -594,12 +606,197 @@ async function rollback(ctx) {
             }
         } catch (rollbackError) {
             console.error('[StorageTransaction] Rollback failed for operation:', op, rollbackError);
+            
+            // Log to compensation log for manual recovery
+            compensationLog.push({
+                transactionId: ctx.id,
+                operation: {
+                    backend: op.backend,
+                    type: op.type,
+                    store: op.store,
+                    key: op.key
+                },
+                expectedState: op.previousValue,
+                actualState: 'unknown',
+                error: rollbackError.message || String(rollbackError),
+                timestamp: Date.now()
+            });
+            
             // Continue rolling back other operations
         }
     }
 
+    // If any rollback failures occurred, persist to compensation log
+    if (compensationLog.length > 0) {
+        try {
+            await persistCompensationLog(ctx.id, compensationLog);
+            console.warn(`[StorageTransaction] ${compensationLog.length} rollback failure(s) logged for manual recovery`);
+            
+            // Emit event for UI notification if EventBus is available
+            if (typeof window !== 'undefined' && window.EventBus?.emit) {
+                window.EventBus.emit('storage:compensation_needed', {
+                    transactionId: ctx.id,
+                    failedOperations: compensationLog.length,
+                    timestamp: Date.now()
+                });
+            }
+        } catch (logError) {
+            console.error('[StorageTransaction] Failed to persist compensation log:', logError);
+            // Log to console as last resort
+            console.error('[StorageTransaction] COMPENSATION LOG (not persisted):', JSON.stringify(compensationLog, null, 2));
+        }
+    }
+
     ctx.rolledBack = true;
-    console.log(`[StorageTransaction] Rolled back ${toRollback.length} operations`);
+    console.log(`[StorageTransaction] Rolled back ${toRollback.length} operations (${compensationLog.length} failures)`);
+}
+
+/**
+ * Persist compensation log entries to IndexedDB
+ * 
+ * @param {string} transactionId - Transaction ID
+ * @param {Array} entries - Compensation log entries
+ */
+async function persistCompensationLog(transactionId, entries) {
+    if (!IndexedDBCore) {
+        throw new Error('IndexedDBCore not available');
+    }
+    
+    const logEntry = {
+        id: transactionId,
+        entries,
+        timestamp: Date.now(),
+        resolved: false
+    };
+    
+    // Try to store in compensation log store
+    // If store doesn't exist, try creating it or fall back to localStorage
+    try {
+        await IndexedDBCore.put(COMPENSATION_LOG_STORE, logEntry);
+    } catch (storeError) {
+        // Fallback: store in localStorage
+        console.warn('[StorageTransaction] Compensation store not available, using localStorage fallback');
+        const existingLogs = JSON.parse(localStorage.getItem('_transaction_compensation_logs') || '[]');
+        existingLogs.push(logEntry);
+        localStorage.setItem('_transaction_compensation_logs', JSON.stringify(existingLogs));
+    }
+}
+
+/**
+ * Get all pending compensation log entries
+ * These are rollback failures that need manual review/recovery
+ * 
+ * @returns {Promise<Array>} Compensation log entries
+ */
+async function getCompensationLogs() {
+    const logs = [];
+    
+    // Try IndexedDB first
+    if (IndexedDBCore) {
+        try {
+            const dbLogs = await IndexedDBCore.getAll(COMPENSATION_LOG_STORE);
+            logs.push(...(dbLogs || []).filter(log => !log.resolved));
+        } catch (e) {
+            // Store might not exist
+        }
+    }
+    
+    // Also check localStorage fallback
+    try {
+        const lsLogs = JSON.parse(localStorage.getItem('_transaction_compensation_logs') || '[]');
+        logs.push(...lsLogs.filter(log => !log.resolved));
+    } catch (e) {
+        // Ignore parse errors
+    }
+    
+    return logs;
+}
+
+/**
+ * Mark a compensation log entry as resolved
+ * 
+ * @param {string} transactionId - Transaction ID to mark as resolved
+ * @returns {Promise<boolean>} True if entry was found and marked
+ */
+async function resolveCompensationLog(transactionId) {
+    let resolved = false;
+    
+    // Try IndexedDB first
+    if (IndexedDBCore) {
+        try {
+            const entry = await IndexedDBCore.get(COMPENSATION_LOG_STORE, transactionId);
+            if (entry) {
+                entry.resolved = true;
+                entry.resolvedAt = Date.now();
+                await IndexedDBCore.put(COMPENSATION_LOG_STORE, entry);
+                resolved = true;
+            }
+        } catch (e) {
+            // Store might not exist
+        }
+    }
+    
+    // Also check localStorage fallback
+    if (!resolved) {
+        try {
+            const lsLogs = JSON.parse(localStorage.getItem('_transaction_compensation_logs') || '[]');
+            const idx = lsLogs.findIndex(log => log.id === transactionId);
+            if (idx >= 0) {
+                lsLogs[idx].resolved = true;
+                lsLogs[idx].resolvedAt = Date.now();
+                localStorage.setItem('_transaction_compensation_logs', JSON.stringify(lsLogs));
+                resolved = true;
+            }
+        } catch (e) {
+            // Ignore errors
+        }
+    }
+    
+    if (resolved) {
+        console.log(`[StorageTransaction] Compensation log ${transactionId} marked as resolved`);
+    }
+    
+    return resolved;
+}
+
+/**
+ * Clear all resolved compensation logs
+ * 
+ * @returns {Promise<number>} Number of logs cleared
+ */
+async function clearResolvedCompensationLogs() {
+    let cleared = 0;
+    
+    // Clear from IndexedDB
+    if (IndexedDBCore) {
+        try {
+            const logs = await IndexedDBCore.getAll(COMPENSATION_LOG_STORE);
+            for (const log of (logs || [])) {
+                if (log.resolved) {
+                    await IndexedDBCore.delete(COMPENSATION_LOG_STORE, log.id);
+                    cleared++;
+                }
+            }
+        } catch (e) {
+            // Store might not exist
+        }
+    }
+    
+    // Clear from localStorage
+    try {
+        const lsLogs = JSON.parse(localStorage.getItem('_transaction_compensation_logs') || '[]');
+        const remaining = lsLogs.filter(log => !log.resolved);
+        const lsCleared = lsLogs.length - remaining.length;
+        if (lsCleared > 0) {
+            localStorage.setItem('_transaction_compensation_logs', JSON.stringify(remaining));
+            cleared += lsCleared;
+        }
+    } catch (e) {
+        // Ignore errors
+    }
+    
+    console.log(`[StorageTransaction] Cleared ${cleared} resolved compensation logs`);
+    return cleared;
 }
 
 /**
@@ -656,6 +853,12 @@ const StorageTransaction = {
 
     // 2PC recovery (call on startup)
     recoverFromJournal,
+
+    // Compensation log (for rollback failures)
+    getCompensationLogs,
+    resolveCompensationLog,
+    clearResolvedCompensationLogs,
+    COMPENSATION_LOG_STORE,
 
     // For advanced use
     TransactionContext,

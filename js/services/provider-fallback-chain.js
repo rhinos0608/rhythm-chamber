@@ -11,8 +11,12 @@
  */
 
 import { EventBus } from './event-bus.js';
-import { ProviderCircuitBreaker } from '../providers/provider-circuit-breaker.js';
+import { ProviderHealthAuthority, HealthStatus } from './provider-health-authority.js';
 import { ProviderInterface } from '../providers/provider-interface.js';
+
+// Note: ProviderCircuitBreaker is deprecated - use ProviderHealthAuthority instead
+// Legacy import kept for backwards compatibility during transition
+// import { ProviderCircuitBreaker } from '../providers/provider-circuit-breaker.js';
 
 /**
  * Provider priority order (tried in sequence)
@@ -28,16 +32,11 @@ export const ProviderPriority = Object.freeze({
 
 /**
  * Provider health status
+ * @deprecated Use HealthStatus from provider-health-authority.js instead
  * @readonly
  * @enum {string}
  */
-export const ProviderHealth = Object.freeze({
-    HEALTHY: 'healthy',        // Provider is working normally
-    DEGRADED: 'degraded',      // Provider is slow but functional
-    UNHEALTHY: 'unhealthy',    // Provider is failing
-    BLACKLISTED: 'blacklisted', // Provider is temporarily blacklisted
-    UNKNOWN: 'unknown'         // Provider status unknown
-});
+export const ProviderHealth = HealthStatus; // Re-export for backwards compatibility
 
 /**
  * Provider configuration
@@ -202,15 +201,20 @@ export class ProviderFallbackChain {
         const now = Date.now();
 
         for (const [name, config] of this._providerConfigs) {
+            // Get initial status from ProviderHealthAuthority if available
+            const authorityStatus = ProviderHealthAuthority.getStatus(name);
+            
             this._providerHealth.set(name, {
                 provider: name,
-                health: ProviderHealth.UNKNOWN,
-                successCount: 0,
-                failureCount: 0,
-                avgLatencyMs: 0,
-                lastSuccessTime: 0,
-                lastFailureTime: 0,
-                blacklistExpiry: null
+                health: authorityStatus.healthStatus || HealthStatus.UNKNOWN,
+                successCount: authorityStatus.totalSuccesses || 0,
+                failureCount: authorityStatus.totalFailures || 0,
+                avgLatencyMs: authorityStatus.avgLatencyMs || 0,
+                lastSuccessTime: authorityStatus.lastSuccessTime || 0,
+                lastFailureTime: authorityStatus.lastFailureTime || 0,
+                blacklistExpiry: authorityStatus.blacklistExpiry 
+                    ? new Date(authorityStatus.blacklistExpiry).toISOString() 
+                    : null
             });
         }
     }
@@ -286,42 +290,9 @@ export class ProviderFallbackChain {
      * @returns {Promise<ProviderHealth>} Provider health status
      */
     async _checkProviderHealth(providerName) {
-        // Check circuit breaker status first
-        const circuitStatus = ProviderCircuitBreaker.getStatus(providerName);
-        if (!circuitStatus.allowed) {
-            return ProviderHealth.BLACKLISTED;
-        }
-
-        // Check blacklist status
-        if (await this._isProviderBlacklisted(providerName)) {
-            return ProviderHealth.BLACKLISTED;
-        }
-
-        // Check provider health record
-        const healthRecord = this._providerHealth.get(providerName);
-        if (!healthRecord) {
-            return ProviderHealth.UNKNOWN;
-        }
-
-        // Determine health based on recent performance
-        const now = Date.now();
-        const recentFailures = healthRecord.failureCount;
-        const recentSuccesses = healthRecord.successCount;
-        const totalAttempts = recentFailures + recentSuccesses;
-
-        if (totalAttempts === 0) {
-            return ProviderHealth.UNKNOWN;
-        }
-
-        const successRate = recentSuccesses / totalAttempts;
-
-        if (successRate >= 0.8) {
-            return healthRecord.avgLatencyMs > 5000 ? ProviderHealth.DEGRADED : ProviderHealth.HEALTHY;
-        } else if (successRate >= 0.5) {
-            return ProviderHealth.DEGRADED;
-        } else {
-            return ProviderHealth.UNHEALTHY;
-        }
+        // Delegate to ProviderHealthAuthority - single source of truth
+        const status = ProviderHealthAuthority.getStatus(providerName);
+        return status.healthStatus;
     }
 
     /**
@@ -344,30 +315,21 @@ export class ProviderFallbackChain {
      * @param {number} latencyMs - Request latency in milliseconds
      */
     async _recordProviderSuccess(providerName, latencyMs) {
+        // Delegate to ProviderHealthAuthority - single source of truth
+        // This handles: metrics update, circuit breaker state, event emission
+        ProviderHealthAuthority.recordSuccess(providerName, latencyMs);
+        
+        // Update local cache for backwards compatibility
         const healthRecord = this._providerHealth.get(providerName);
-        if (!healthRecord) return;
-
-        healthRecord.successCount++;
-        healthRecord.lastSuccessTime = Date.now();
-
-        // Update average latency (exponential moving average)
-        if (healthRecord.avgLatencyMs === 0) {
-            healthRecord.avgLatencyMs = latencyMs;
-        } else {
-            healthRecord.avgLatencyMs = (healthRecord.avgLatencyMs * 0.9) + (latencyMs * 0.1);
+        if (healthRecord) {
+            healthRecord.successCount++;
+            healthRecord.lastSuccessTime = Date.now();
+            healthRecord.avgLatencyMs = healthRecord.avgLatencyMs === 0 
+                ? latencyMs 
+                : (healthRecord.avgLatencyMs * 0.9) + (latencyMs * 0.1);
+            healthRecord.failureCount = Math.max(0, healthRecord.failureCount - 1);
+            healthRecord.health = ProviderHealthAuthority.getStatus(providerName).healthStatus;
         }
-
-        // Reset failure count on success
-        healthRecord.failureCount = Math.max(0, healthRecord.failureCount - 1);
-
-        // Update circuit breaker
-        ProviderCircuitBreaker.recordSuccess(providerName, latencyMs);
-
-        // Emit health update event
-        this._eventBus.emit('PROVIDER:HEALTH_UPDATE', {
-            provider: providerName,
-            health: healthRecord.health
-        });
     }
 
     /**
@@ -377,26 +339,24 @@ export class ProviderFallbackChain {
      * @param {Error} error - Error that occurred
      */
     async _recordProviderFailure(providerName, error) {
+        // Delegate to ProviderHealthAuthority - single source of truth
+        // This handles: metrics update, circuit breaker state, event emission, blacklisting
+        ProviderHealthAuthority.recordFailure(providerName, error);
+        
+        // Update local cache for backwards compatibility
         const healthRecord = this._providerHealth.get(providerName);
-        if (!healthRecord) return;
-
-        healthRecord.failureCount++;
-        healthRecord.lastFailureTime = Date.now();
-
-        // Check if provider should be blacklisted
-        const consecutiveFailures = healthRecord.failureCount;
-        if (consecutiveFailures >= 3) {
-            await this._blacklistProvider(providerName, this._blacklistDurationMs);
+        if (healthRecord) {
+            healthRecord.failureCount++;
+            healthRecord.lastFailureTime = Date.now();
+            healthRecord.health = ProviderHealthAuthority.getStatus(providerName).healthStatus;
+            
+            // Sync blacklist state from authority
+            const status = ProviderHealthAuthority.getStatus(providerName);
+            if (status.isBlacklisted) {
+                this._providerBlacklist.set(providerName, status.blacklistExpiry);
+                healthRecord.blacklistExpiry = new Date(status.blacklistExpiry).toISOString();
+            }
         }
-
-        // Update circuit breaker
-        ProviderCircuitBreaker.recordFailure(providerName, error);
-
-        // Emit health update event
-        this._eventBus.emit('PROVIDER:HEALTH_UPDATE', {
-            provider: providerName,
-            health: healthRecord.health
-        });
     }
 
     /**
@@ -426,23 +386,20 @@ export class ProviderFallbackChain {
      * @param {number} durationMs - Blacklist duration in milliseconds
      */
     async _blacklistProvider(providerName, durationMs) {
+        // Delegate to ProviderHealthAuthority - single source of truth
+        ProviderHealthAuthority.blacklist(providerName, durationMs);
+        
+        // Update local cache for backwards compatibility
         const expiry = Date.now() + durationMs;
         this._providerBlacklist.set(providerName, expiry);
 
         const healthRecord = this._providerHealth.get(providerName);
         if (healthRecord) {
-            healthRecord.health = ProviderHealth.BLACKLISTED;
+            healthRecord.health = HealthStatus.BLACKLISTED;
             healthRecord.blacklistExpiry = new Date(expiry).toISOString();
         }
 
-        console.warn(`[ProviderFallbackChain] Blacklisted ${providerName} for ${durationMs}ms`);
-
-        // Emit blacklist event
-        this._eventBus.emit('PROVIDER:BLACKLISTED', {
-            provider: providerName,
-            expiry: new Date(expiry).toISOString(),
-            durationMs
-        });
+        console.warn(`[ProviderFallbackChain] Blacklisted ${providerName} for ${durationMs}ms (via ProviderHealthAuthority)`);
     }
 
     /**
@@ -451,20 +408,19 @@ export class ProviderFallbackChain {
      * @param {string} providerName - Provider name
      */
     async _removeProviderFromBlacklist(providerName) {
+        // Delegate to ProviderHealthAuthority - single source of truth
+        ProviderHealthAuthority.unblacklist(providerName);
+        
+        // Update local cache for backwards compatibility
         this._providerBlacklist.delete(providerName);
 
         const healthRecord = this._providerHealth.get(providerName);
         if (healthRecord) {
-            healthRecord.health = ProviderHealth.UNKNOWN;
+            healthRecord.health = ProviderHealthAuthority.getStatus(providerName).healthStatus;
             healthRecord.blacklistExpiry = null;
         }
 
-        console.log(`[ProviderFallbackChain] Removed ${providerName} from blacklist`);
-
-        // Emit unblacklist event
-        this._eventBus.emit('PROVIDER:UNBLACKLISTED', {
-            provider: providerName
-        });
+        console.log(`[ProviderFallbackChain] Removed ${providerName} from blacklist (via ProviderHealthAuthority)`);
     }
 
     /**
@@ -474,16 +430,8 @@ export class ProviderFallbackChain {
      * @returns {Promise<boolean>} True if provider is blacklisted
      */
     async _isProviderBlacklisted(providerName) {
-        const expiry = this._providerBlacklist.get(providerName);
-        if (!expiry) return false;
-
-        if (Date.now() > expiry) {
-            // Blacklist expired, remove it
-            await this._removeProviderFromBlacklist(providerName);
-            return false;
-        }
-
-        return true;
+        // Delegate to ProviderHealthAuthority - single source of truth
+        return ProviderHealthAuthority.isBlacklisted(providerName);
     }
 
     /**
@@ -590,24 +538,103 @@ export class ProviderFallbackChain {
     }
 
     /**
-     * Get provider priority order for fallback
+     * Get provider priority order for fallback (with dynamic health-based ordering)
+     * 
+     * Providers are scored based on:
+     * - Health status (healthy > degraded > unknown > unhealthy/blacklisted)
+     * - Circuit breaker state (closed > half_open > open)
+     * - Average latency (lower is better)
+     * - Success rate (higher is better)
+     * - Base priority (configured priority as tiebreaker)
+     * 
      * @private
-     * @param {string} primaryProvider - Primary provider to start with
-     * @returns {string[]} Ordered list of provider names
+     * @param {string} primaryProvider - Primary provider to start with (gets priority boost)
+     * @returns {string[]} Ordered list of provider names (best first)
      */
     _getProviderPriorityOrder(primaryProvider) {
-        const providers = Array.from(this._providerConfigs.values())
-            .sort((a, b) => a.priority - b.priority)
-            .map(config => config.name);
-
-        // Move primary provider to front
-        if (primaryProvider && providers.includes(primaryProvider)) {
-            const index = providers.indexOf(primaryProvider);
-            providers.splice(index, 1);
-            providers.unshift(primaryProvider);
+        const providers = Array.from(this._providerConfigs.values());
+        
+        // Score each provider based on health metrics
+        const scoredProviders = providers.map(config => {
+            const status = ProviderHealthAuthority.getStatus(config.name);
+            let score = 0;
+            
+            // Health status scoring (higher = better)
+            // Range: 0-100 for health status
+            switch (status.healthStatus) {
+                case HealthStatus.HEALTHY:
+                    score += 100;
+                    break;
+                case HealthStatus.DEGRADED:
+                    score += 60;
+                    break;
+                case HealthStatus.UNKNOWN:
+                    score += 40; // Unknown gets moderate score - worth trying
+                    break;
+                case HealthStatus.UNHEALTHY:
+                    score += 10;
+                    break;
+                case HealthStatus.BLACKLISTED:
+                    score += 0; // Blacklisted gets lowest score
+                    break;
+            }
+            
+            // Circuit breaker state scoring (additional 0-30 points)
+            if (status.isClosed) {
+                score += 30;
+            } else if (status.isHalfOpen) {
+                score += 15; // Half-open is worth testing
+            } else if (status.isOpen) {
+                score += 0;
+            }
+            
+            // Success rate scoring (0-20 points)
+            // successRate is 0-1, multiply by 20
+            score += (status.successRate || 0) * 20;
+            
+            // Latency penalty (0 to -10 points for high latency)
+            // Penalty kicks in above 2000ms, max penalty at 10000ms
+            const latencyPenalty = Math.min(10, Math.max(0, (status.avgLatencyMs - 2000) / 800));
+            score -= latencyPenalty;
+            
+            // Primary provider boost (+50 points)
+            if (config.name === primaryProvider) {
+                score += 50;
+            }
+            
+            // Local provider slight boost (+5 points) - more reliable
+            if (config.isLocal) {
+                score += 5;
+            }
+            
+            // Base priority as minor tiebreaker (0-4 points, inverted since lower priority = better)
+            // Priority 1 gets 4 points, priority 4 gets 1 point
+            score += Math.max(0, 5 - config.priority);
+            
+            return {
+                name: config.name,
+                score,
+                // Include for debugging
+                healthStatus: status.healthStatus,
+                circuitState: status.circuitState,
+                successRate: status.successRate,
+                avgLatencyMs: status.avgLatencyMs,
+                basePriority: config.priority
+            };
+        });
+        
+        // Sort by score (highest first)
+        scoredProviders.sort((a, b) => b.score - a.score);
+        
+        // Log the dynamic ordering in debug mode
+        if (this._eventBus && scoredProviders.length > 0) {
+            const orderSummary = scoredProviders
+                .map(p => `${p.name}(${p.score.toFixed(1)})`)
+                .join(' > ');
+            console.log(`[ProviderFallbackChain] Dynamic provider order: ${orderSummary}`);
         }
-
-        return providers;
+        
+        return scoredProviders.map(p => p.name);
     }
 
     /**
@@ -621,15 +648,21 @@ export class ProviderFallbackChain {
     async _executeProviderWithCircuitBreaker({ provider, apiKey, messages, tools, onProgress }) {
         const startTime = performance.now();
 
-        // Check circuit breaker status first
-        const circuitStatus = ProviderCircuitBreaker.canExecute(provider);
-        if (!circuitStatus.allowed) {
+        // Check circuit breaker status using ProviderHealthAuthority
+        const checkResult = ProviderHealthAuthority.canExecute(provider);
+        if (!checkResult.allowed) {
             return {
                 success: false,
                 latencyMs: 0,
-                error: new Error(circuitStatus.reason),
+                error: new Error(checkResult.reason),
                 response: null
             };
+        }
+
+        // Track half-open request if applicable
+        const status = ProviderHealthAuthority.getStatus(provider);
+        if (status.isHalfOpen) {
+            ProviderHealthAuthority.markHalfOpenRequestStarted(provider);
         }
 
         try {
@@ -666,6 +699,11 @@ export class ProviderFallbackChain {
                 error,
                 response: null
             };
+        } finally {
+            // Clean up half-open tracking
+            if (status.isHalfOpen) {
+                ProviderHealthAuthority.markHalfOpenRequestCompleted(provider);
+            }
         }
     }
 

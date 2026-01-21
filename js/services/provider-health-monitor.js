@@ -2,28 +2,31 @@
  * Provider Health Monitor Service
  *
  * Real-time provider health monitoring with UI integration.
- * Aggregates health data from ProviderFallbackChain and ProviderCircuitBreaker
- * and provides live updates to the settings UI.
+ * 
+ * REFACTORED: Now a thin adapter that delegates to ProviderHealthAuthority
+ * (the single source of truth for provider health).
+ *
+ * This module provides:
+ * - UI-friendly health data formatting
+ * - Periodic polling for UI updates
+ * - Recommended actions for degraded providers
  *
  * @module services/provider-health-monitor
  */
 
 import { EventBus } from './event-bus.js';
-import { ProviderFallbackChain } from './provider-fallback-chain.js';
-import { ProviderCircuitBreaker } from './provider-circuit-breaker.js';
+import { 
+    ProviderHealthAuthority, 
+    HealthStatus as AuthorityHealthStatus 
+} from './provider-health-authority.js';
 
 /**
  * Health status levels for UI display
+ * Re-exported from ProviderHealthAuthority for backwards compatibility
  * @readonly
  * @enum {string}
  */
-export const HealthStatus = Object.freeze({
-    HEALTHY: 'healthy',
-    DEGRADED: 'degraded',
-    UNHEALTHY: 'unhealthy',
-    BLACKLISTED: 'blacklisted',
-    UNKNOWN: 'unknown'
-});
+export const HealthStatus = AuthorityHealthStatus;
 
 /**
  * Provider health data structure
@@ -157,53 +160,42 @@ export class ProviderHealthMonitor {
     }
 
     /**
-     * Refresh health data from fallback chain and circuit breaker
+     * Refresh health data from ProviderHealthAuthority
      * @private
      */
     _refreshHealthData() {
         const providers = ['openrouter', 'ollama', 'lmstudio', 'fallback'];
 
         for (const provider of providers) {
-            const healthRecord = ProviderFallbackChain.getProviderHealthStatus(provider);
-            const circuitStatus = ProviderCircuitBreaker.getStatus(provider);
-
-            if (healthRecord) {
-                const healthData = this._healthData.get(provider);
-                if (healthData) {
-                    healthData.successCount = healthRecord.successCount;
-                    healthData.failureCount = healthRecord.failureCount;
-                    healthData.avgLatencyMs = healthRecord.avgLatencyMs;
-                    healthData.lastSuccessTime = healthRecord.lastSuccessTime;
-                    healthData.lastFailureTime = healthRecord.lastFailureTime;
-                    healthData.blacklistExpiry = healthRecord.blacklistExpiry;
-                    healthData.status = this._mapHealthStatus(healthRecord.health);
-                }
-            }
-
-            if (circuitStatus) {
-                const healthData = this._healthData.get(provider);
-                if (healthData) {
-                    healthData.circuitState = circuitStatus.state;
-                    healthData.cooldownRemaining = circuitStatus.cooldownRemaining || 0;
-                }
+            // Get snapshot from ProviderHealthAuthority - the single source of truth
+            const snapshot = ProviderHealthAuthority.getProviderSnapshot(provider);
+            
+            const healthData = this._healthData.get(provider);
+            if (healthData && snapshot) {
+                healthData.status = snapshot.status;
+                healthData.successCount = snapshot.successCount;
+                healthData.failureCount = snapshot.failureCount;
+                healthData.avgLatencyMs = snapshot.avgLatencyMs;
+                healthData.lastSuccessTime = snapshot.lastSuccessTime;
+                healthData.lastFailureTime = snapshot.lastFailureTime;
+                healthData.blacklistExpiry = snapshot.blacklistExpiry;
+                healthData.circuitState = snapshot.circuitState;
+                healthData.cooldownRemaining = snapshot.cooldownRemaining;
             }
         }
     }
 
     /**
      * Map provider health status to UI status
+     * @deprecated ProviderHealthAuthority now provides status directly
      * @private
      * @param {string} health - Provider health status
      * @returns {HealthStatus} UI health status
      */
     _mapHealthStatus(health) {
-        switch (health) {
-            case 'healthy': return HealthStatus.HEALTHY;
-            case 'degraded': return HealthStatus.DEGRADED;
-            case 'unhealthy': return HealthStatus.UNHEALTHY;
-            case 'blacklisted': return HealthStatus.BLACKLISTED;
-            default: return HealthStatus.UNKNOWN;
-        }
+        // ProviderHealthAuthority uses the same HealthStatus enum,
+        // so this is now just a passthrough for backwards compatibility
+        return health || HealthStatus.UNKNOWN;
     }
 
     /**
@@ -342,42 +334,8 @@ export class ProviderHealthMonitor {
      * @returns {Object} Health summary
      */
     getHealthSummary() {
-        let healthy = 0;
-        let degraded = 0;
-        let unhealthy = 0;
-        let blacklisted = 0;
-        let unknown = 0;
-
-        for (const data of this._healthData.values()) {
-            switch (data.status) {
-                case HealthStatus.HEALTHY: healthy++; break;
-                case HealthStatus.DEGRADED: degraded++; break;
-                case HealthStatus.UNHEALTHY: unhealthy++; break;
-                case HealthStatus.BLACKLISTED: blacklisted++; break;
-                case HealthStatus.UNKNOWN: unknown++; break;
-            }
-        }
-
-        const total = this._healthData.size;
-        let overallStatus = HealthStatus.UNKNOWN;
-
-        if (blacklisted > 0 || unhealthy > 0) {
-            overallStatus = HealthStatus.UNHEALTHY;
-        } else if (degraded > 0) {
-            overallStatus = HealthStatus.DEGRADED;
-        } else if (healthy === total) {
-            overallStatus = HealthStatus.HEALTHY;
-        }
-
-        return {
-            total,
-            healthy,
-            degraded,
-            unhealthy,
-            blacklisted,
-            unknown,
-            overallStatus
-        };
+        // Delegate to ProviderHealthAuthority
+        return ProviderHealthAuthority.getHealthSummary();
     }
 
     /**

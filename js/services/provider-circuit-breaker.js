@@ -1,6 +1,35 @@
 /**
  * Provider Circuit Breaker
  * 
+ * @deprecated This module is DEPRECATED. Use ProviderHealthAuthority instead.
+ * 
+ * ProviderHealthAuthority unifies:
+ * - Circuit breaker state (this module)
+ * - Blacklist management (from ProviderFallbackChain)
+ * - Health metrics (from ProviderFallbackChain._providerHealth)
+ * - Health status for UI (from ProviderHealthMonitor)
+ * 
+ * Migration:
+ *   // Before (deprecated):
+ *   import { ProviderCircuitBreaker } from './provider-circuit-breaker.js';
+ *   ProviderCircuitBreaker.canExecute(provider);
+ *   ProviderCircuitBreaker.recordSuccess(provider, latencyMs);
+ *   ProviderCircuitBreaker.recordFailure(provider, error);
+ * 
+ *   // After (use this):
+ *   import { ProviderHealthAuthority } from './provider-health-authority.js';
+ *   ProviderHealthAuthority.canExecute(provider);
+ *   ProviderHealthAuthority.recordSuccess(provider, latencyMs);
+ *   ProviderHealthAuthority.recordFailure(provider, error);
+ * 
+ * Key improvements in ProviderHealthAuthority:
+ * - Emits CIRCUIT_BREAKER:TRIPPED and CIRCUIT_BREAKER:RECOVERED events (this module didn't!)
+ * - Unified blacklist and circuit breaker state (no duplicate tracking)
+ * - Single source of truth for all health data
+ * 
+ * This module is kept for backwards compatibility during transition.
+ * It will be removed in a future version.
+ * 
  * Per-provider circuit breaker to prevent cascade failures when external
  * LLM services are degraded or unavailable.
  * 
@@ -394,4 +423,5 @@ export const ProviderCircuitBreaker = {
 };
 
 
-console.log('[ProviderCircuitBreaker] Module loaded');
+console.warn('[ProviderCircuitBreaker] DEPRECATED: This module is deprecated. Use ProviderHealthAuthority instead.');
+console.log('[ProviderCircuitBreaker] Module loaded (legacy - prefer ProviderHealthAuthority)');
