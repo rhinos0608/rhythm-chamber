@@ -42,6 +42,12 @@
   --transition-fast: 150ms ease;
   --transition-base: 250ms ease;
   --transition-slow: 400ms ease;
+
+  /* Safe Area Insets for iPhone X+ notch support */
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
 }
 
 /* Reset & Base */
@@ -65,6 +71,34 @@ body {
   line-height: 1.6;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Screen Reader Only Content (WCAG 2.1 AA Compliance) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.sr-only:focusable {
+  position: absolute;
+  width: auto;
+  height: auto;
+  padding: var(--space-md);
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+  background: var(--bg-secondary);
+  border: 2px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  z-index: 10000;
 }
 
 /* Typography */
@@ -139,6 +173,23 @@ a {
   transition: var(--transition-base);
 }
 
+/* Accessible Focus Styles (WCAG 2.1 AA - 2.4.7 Focus Visible) */
+.btn:focus-visible,
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.btn:focus:not(:focus-visible),
+button:focus:not(:focus-visible) {
+  outline: none;
+}
+
 .btn-primary {
   background: var(--accent-gradient);
   color: white;
@@ -160,6 +211,16 @@ a {
 .btn-secondary:hover {
   border-color: var(--border-accent);
   background: rgba(139, 92, 246, 0.1);
+}
+
+/* Destructive button variant */
+.btn-destructive {
+  background: #dc3545;
+  color: white;
+}
+
+.btn-destructive:hover {
+  background: #c82333;
 }
 
 /* Gradient Text */
@@ -337,6 +398,9 @@ a {
   align-items: center;
   justify-content: space-between;
   padding: var(--space-lg);
+  padding-top: calc(var(--space-lg) + var(--safe-area-top));
+  padding-left: calc(var(--space-lg) + var(--safe-area-left));
+  padding-right: calc(var(--space-lg) + var(--safe-area-right));
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -647,6 +711,9 @@ a {
   padding: var(--space-md) var(--space-lg);
   border-radius: var(--radius-md);
   line-height: 1.5;
+  /* Performance: Allow browser to skip rendering off-screen messages */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
 }
 
 .message.user {
@@ -663,6 +730,9 @@ a {
 
 .chat-input-container {
   padding: var(--space-lg);
+  padding-bottom: calc(var(--space-lg) + var(--safe-area-bottom));
+  padding-left: calc(var(--space-lg) + var(--safe-area-left));
+  padding-right: calc(var(--space-lg) + var(--safe-area-right));
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -696,8 +766,10 @@ a {
   background: var(--accent-gradient);
   border: none;
   border-radius: var(--radius-full);
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1829,6 +1901,8 @@ a {
   color: var(--text-secondary);
   padding: var(--space-xs) var(--space-sm);
   font-size: 1rem;
+  min-width: 44px;
+  min-height: 44px;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
@@ -2215,7 +2289,9 @@ a {
   color: var(--text-muted);
   cursor: pointer;
   font-size: 1.25rem;
-  padding: var(--space-sm);
+  padding: var(--space-md);
+  min-width: 44px;
+  min-height: 44px;
   border-radius: var(--radius-sm);
   transition: var(--transition-fast);
 }
@@ -2454,6 +2530,9 @@ a {
     transform: translateX(-100%);
     margin-left: 0;
     opacity: 1;
+    padding-top: calc(var(--space-lg) + var(--safe-area-top));
+    padding-left: calc(var(--space-lg) + var(--safe-area-left));
+    padding-right: calc(var(--space-lg) + var(--safe-area-right));
   }
 
   .chat-sidebar.open {
@@ -3268,6 +3347,8 @@ a {
   border-radius: var(--radius-md);
   padding: var(--space-sm) var(--space-md);
   font-size: 1.25rem;
+  min-width: 44px;
+  min-height: 44px;
   cursor: pointer;
   transition: var(--transition-base);
 }
@@ -4399,4 +4480,655 @@ body.read-only-mode .chat-input {
 
 .background-task-indicator:hover {
   border-color: var(--accent-primary);
+}
+
+/* ==========================================
+   UI/UX Polish Improvements
+   ========================================== */
+
+/* ------------------------------------------
+   1. Enhanced Focus States (Accessibility)
+   ------------------------------------------ */
+
+/* Consistent focus ring using focus-visible for keyboard-only */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent-primary);
+}
+
+/* Skip to content for accessibility (a11y) */
+.skip-to-content {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--accent-primary);
+  color: white;
+  padding: var(--space-sm) var(--space-md);
+  z-index: 10000;
+  transition: top var(--transition-fast);
+}
+
+.skip-to-content:focus {
+  top: 0;
+}
+
+/* ------------------------------------------
+   2. Skeleton Loading States
+   ------------------------------------------ */
+
+/* Skeleton animation */
+@keyframes skeleton-pulse {
+  0%, 100% {
+    background-position: -200% 0;
+  }
+  50% {
+    background-position: 200% 0;
+  }
+}
+
+/* Base skeleton styles */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-glass) 25%,
+    rgba(255, 255, 255, 0.08) 50%,
+    var(--bg-glass) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* Skeleton items for various contexts */
+.skeleton-text {
+  height: 0.9em;
+  margin-bottom: var(--space-sm);
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-text.sm {
+  height: 0.75em;
+  width: 60%;
+}
+
+.skeleton-text.md {
+  width: 80%;
+}
+
+.skeleton-text.lg {
+  width: 100%;
+}
+
+.skeleton-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.skeleton-session {
+  padding: var(--space-md);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-xs);
+}
+
+.skeleton-session .skeleton-title {
+  height: 14px;
+  width: 70%;
+  margin-bottom: var(--space-sm);
+}
+
+.skeleton-session .skeleton-meta {
+  height: 12px;
+  width: 40%;
+}
+
+/* ------------------------------------------
+   3. Enhanced Hover States & Micro-interactions
+   ------------------------------------------ */
+
+/* Subtle elevation on hover for interactive cards */
+.interactive-card {
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.interactive-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(139, 92, 246, 0.15);
+}
+
+/* Spotlight effect for sidebar items */
+.sidebar-sessions:hover .session-item:not(:hover) {
+  opacity: 0.5;
+  transition: opacity var(--transition-fast);
+}
+
+.session-item {
+  transition: background var(--transition-fast), opacity var(--transition-fast);
+}
+
+/* Enhanced button hover feedback */
+.btn {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Ripple effect placeholder (can be enhanced with JS) */
+.btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: width 0.4s ease, height 0.4s ease;
+}
+
+.btn:active::after {
+  width: 300px;
+  height: 300px;
+}
+
+/* ------------------------------------------
+   4. Staggered List Animations
+   ------------------------------------------ */
+
+@keyframes slide-in-stagger {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.session-item {
+  animation: slide-in-stagger 0.3s ease-out forwards;
+}
+
+.session-item:nth-child(1) { animation-delay: 0ms; }
+.session-item:nth-child(2) { animation-delay: 50ms; }
+.session-item:nth-child(3) { animation-delay: 100ms; }
+.session-item:nth-child(4) { animation-delay: 150ms; }
+.session-item:nth-child(5) { animation-delay: 200ms; }
+.session-item:nth-child(6) { animation-delay: 250ms; }
+.session-item:nth-child(7) { animation-delay: 300ms; }
+.session-item:nth-child(8) { animation-delay: 350ms; }
+.session-item:nth-child(n+9) { animation-delay: 400ms; }
+
+/* ------------------------------------------
+   5. Enhanced Empty States
+   ------------------------------------------ */
+
+.sidebar-empty {
+  padding: var(--space-2xl) var(--space-md);
+  text-align: center;
+}
+
+.sidebar-empty .emoji {
+  font-size: 2.5rem;
+  margin-bottom: var(--space-md);
+  opacity: 0.7;
+  display: block;
+}
+
+.sidebar-empty p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.sidebar-empty .empty-action {
+  margin-top: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--accent-primary);
+  color: white;
+  border-radius: var(--radius-full);
+  font-size: 0.85rem;
+  display: inline-block;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.sidebar-empty .empty-action:hover {
+  background: var(--accent-secondary);
+  transform: scale(1.05);
+}
+
+/* Enhanced chat suggestions when chat is empty */
+.chat-suggestions:empty::before {
+  content: 'Try asking about your music...';
+  display: block;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  padding: var(--space-md);
+}
+
+/* ------------------------------------------
+   6. Destructive Action Buttons
+   ------------------------------------------ */
+
+.btn-destructive {
+  background: transparent;
+  border: 1px solid var(--danger, #dc3545);
+  color: var(--danger, #dc3545);
+  transition: all var(--transition-fast);
+}
+
+.btn-destructive:hover {
+  background: var(--danger, #dc3545);
+  color: white;
+  transform: scale(1.02);
+}
+
+.btn-destructive:active {
+  transform: scale(0.98);
+}
+
+/* Enhanced delete button in session actions */
+.session-action-btn.delete {
+  transition: all var(--transition-fast);
+}
+
+.session-action-btn.delete:hover {
+  background: rgba(220, 53, 69, 0.1);
+  border-color: var(--danger, #dc3545);
+  color: var(--danger, #dc3545);
+  transform: scale(1.1);
+}
+
+/* ------------------------------------------
+   7. Enhanced Modal Animations
+   ------------------------------------------ */
+
+@keyframes modal-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-content-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.modal-overlay {
+  animation: modal-backdrop-in 0.2s ease;
+}
+
+.modal-content {
+  animation: modal-content-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Modal closing animation */
+.modal-overlay.closing .modal-content {
+  animation: modal-content-out 0.2s ease forwards;
+}
+
+@keyframes modal-content-out {
+  to {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+}
+
+/* ------------------------------------------
+   8. Enhanced Upload Zone Interactions
+   ------------------------------------------ */
+
+.upload-zone {
+  position: relative;
+  overflow: hidden;
+}
+
+.upload-zone::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--accent-gradient);
+  opacity: 0;
+  transition: opacity var(--transition-base);
+  pointer-events: none;
+}
+
+.upload-zone.drag-over::before {
+  opacity: 0.05;
+}
+
+.upload-zone.drag-over {
+  border-color: var(--accent-primary);
+  transform: scale(1.01);
+}
+
+/* Upload progress indicator styles */
+.upload-progress {
+  width: 100%;
+  max-width: 400px;
+  margin: var(--space-lg) auto;
+}
+
+.upload-progress-bar {
+  height: 6px;
+  background: var(--bg-glass);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-bottom: var(--space-sm);
+}
+
+.upload-progress-fill {
+  height: 100%;
+  background: var(--accent-gradient);
+  border-radius: var(--radius-full);
+  transition: width 0.3s ease;
+  position: relative;
+}
+
+.upload-progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.upload-progress-text {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------
+   9. Enhanced Loading States
+   ------------------------------------------ */
+
+/* Enhanced spinner with glow */
+.spinner {
+  border: 3px solid var(--border-subtle);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  width: 60px;
+  height: 60px;
+  animation: spin 1s linear infinite;
+  position: relative;
+}
+
+.spinner::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: var(--accent-secondary);
+  opacity: 0.5;
+  animation: spin 1.5s linear infinite reverse;
+}
+
+/* Pulse ring animation for processing */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+}
+
+.processing-pulse {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  animation: pulse-ring 2s ease-in-out infinite;
+}
+
+/* ------------------------------------------
+   10. Enhanced Toast Notifications
+   ------------------------------------------ */
+
+.toast {
+  position: fixed;
+  bottom: var(--space-xl);
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-accent);
+  color: var(--text-primary);
+  padding: var(--space-sm) var(--space-lg);
+  border-radius: var(--radius-full);
+  font-size: 0.9rem;
+  font-weight: 500;
+  opacity: 0;
+  transition: all var(--transition-base);
+  z-index: 2000;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), var(--accent-glow);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.toast.toast-success {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.toast.toast-error {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.toast.toast-warning {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.toast.toast-info {
+  border-color: var(--accent-primary);
+}
+
+/* ------------------------------------------
+   11. Enhanced Tool/Execution Status
+   ------------------------------------------ */
+
+/* Enhanced tool execution message */
+.message.tool-execution {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(139, 92, 246, 0.05) 100%);
+  border: 1px dashed var(--accent-secondary);
+  color: var(--accent-secondary);
+  align-self: center;
+  width: auto;
+  max-width: 90%;
+  padding: var(--space-sm) var(--space-md);
+  margin: var(--space-xs) 0;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  transition: all var(--transition-fast);
+}
+
+.message.tool-execution .icon {
+  animation: spin 2s linear infinite;
+  display: inline-block;
+  font-size: 1rem;
+}
+
+/* Tool status indicators */
+.tool-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.tool-status.success {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+.tool-status.error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.tool-status.running {
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--accent-primary);
+}
+
+/* ------------------------------------------
+   12. Enhanced Input States
+   ------------------------------------------ */
+
+/* Chat input enhancement */
+.chat-input-wrapper {
+  transition: box-shadow var(--transition-fast), border-color var(--transition-fast);
+}
+
+.chat-input-wrapper:focus-within {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15);
+}
+
+/* Settings input enhancement */
+.settings-field input:focus,
+.settings-field select:focus,
+.settings-field textarea:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+}
+
+/* ------------------------------------------
+   13. Scrollbar Polish
+   ------------------------------------------ */
+
+/* Custom scrollbar for webkit browsers */
+.chat-messages::-webkit-scrollbar,
+.sidebar-sessions::-webkit-scrollbar,
+.settings-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-track,
+.sidebar-sessions::-webkit-scrollbar-track,
+.settings-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-messages::-webkit-scrollbar-thumb,
+.sidebar-sessions::-webkit-scrollbar-thumb,
+.settings-body::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: var(--radius-full);
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover,
+.sidebar-sessions::-webkit-scrollbar-thumb:hover,
+.settings-body::-webkit-scrollbar-thumb:hover {
+  background: var(--border-accent);
+}
+
+/* ------------------------------------------
+   14. Message Action Enhancements
+   ------------------------------------------ */
+
+/* Fade in message actions smoothly */
+.message-actions {
+  transition: opacity 0.2s ease;
+}
+
+.message:hover .message-actions {
+  opacity: 1;
+}
+
+/* Make action buttons more touch-friendly (WCAG 2.1: 44x44px minimum) */
+.action-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--space-xs) var(--space-sm);
+  font-size: 0.85rem;
+}
+
+/* ------------------------------------------
+   15. Responsive Polish
+   ------------------------------------------ */
+
+@media (max-width: 768px) {
+  /* Reduce animation complexity on mobile for performance */
+  .interactive-card:hover {
+    transform: none;
+  }
+
+  .sidebar-sessions:hover .session-item:not(:hover) {
+    opacity: 1;
+  }
+
+  /* Touch-friendly targets */
+  .session-action-btn {
+    padding: var(--space-sm);
+    font-size: 0.85rem;
+  }
+
+  .action-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Respect user's motion preferences */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
