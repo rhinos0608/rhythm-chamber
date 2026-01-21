@@ -5,6 +5,7 @@
 
 import { Security } from './security/index.js';
 import { ConfigLoader } from './services/config-loader.js';
+import { SecureTokenStore } from './security/secure-token-store.js';
 
 const Spotify = (() => {
     // Storage keys
@@ -44,11 +45,11 @@ const Spotify = (() => {
             refreshTokenCache = data.refresh_token;
         }
 
-        if (!window.SecureTokenStore?.isAvailable?.()) {
+        if (!SecureTokenStore?.isAvailable?.()) {
             throw new Error('Secure token vault unavailable. Use HTTPS/localhost to continue.');
         }
 
-        const storedAccess = await window.SecureTokenStore.store('spotify_access_token', data.access_token, {
+        const storedAccess = await SecureTokenStore.store('spotify_access_token', data.access_token, {
             expiresIn: expiresInMs,
             metadata: { source: 'spotify_oauth' }
         });
@@ -57,7 +58,7 @@ const Spotify = (() => {
         }
 
         if (data.refresh_token) {
-            const storedRefresh = await window.SecureTokenStore.store('spotify_refresh_token', data.refresh_token, {
+            const storedRefresh = await SecureTokenStore.store('spotify_refresh_token', data.refresh_token, {
                 metadata: { source: 'spotify_oauth' }
             });
             if (!storedRefresh) {
@@ -78,13 +79,13 @@ const Spotify = (() => {
             return { token: accessTokenCache, expiry: accessTokenExpiry };
         }
 
-        if (!window.SecureTokenStore?.retrieveWithOptions) {
+        if (!SecureTokenStore?.retrieveWithOptions) {
             console.warn('[Spotify] Secure token store unavailable for retrieval');
             return { token: null, expiry: null };
         }
 
         try {
-            const stored = await window.SecureTokenStore.retrieveWithOptions('spotify_access_token');
+            const stored = await SecureTokenStore.retrieveWithOptions('spotify_access_token');
             if (stored?.value) {
                 accessTokenCache = stored.value;
                 accessTokenExpiry = stored.expiresIn ? Date.now() + stored.expiresIn : null;
@@ -103,13 +104,13 @@ const Spotify = (() => {
     async function loadRefreshToken() {
         if (refreshTokenCache) return refreshTokenCache;
 
-        if (!window.SecureTokenStore?.retrieve) {
+        if (!SecureTokenStore?.retrieve) {
             console.warn('[Spotify] Secure token store unavailable for refresh token retrieval');
             return null;
         }
 
         try {
-            const stored = await window.SecureTokenStore.retrieve('spotify_refresh_token');
+            const stored = await SecureTokenStore.retrieve('spotify_refresh_token');
             if (stored) {
                 refreshTokenCache = stored;
                 return refreshTokenCache;
@@ -323,10 +324,10 @@ const Spotify = (() => {
             localStorage.removeItem(key);
         });
 
-        if (window.SecureTokenStore?.invalidate) {
+        if (SecureTokenStore?.invalidate) {
             try {
-                await window.SecureTokenStore.invalidate('spotify_access_token');
-                await window.SecureTokenStore.invalidate('spotify_refresh_token');
+                await SecureTokenStore.invalidate('spotify_access_token');
+                await SecureTokenStore.invalidate('spotify_refresh_token');
             } catch (e) {
                 console.warn('[Spotify] Secure token invalidation failed:', e.message);
             }

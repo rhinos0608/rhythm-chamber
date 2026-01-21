@@ -33,6 +33,20 @@ import { TimeoutBudget } from './services/timeout-budget-manager.js';
 // Wave telemetry import for LLM call timing
 import { WaveTelemetry } from './services/wave-telemetry.js';
 
+// Services that were previously accessed via window - now imported directly
+import { LLMProviderRoutingService } from './services/llm-provider-routing-service.js';
+import { TokenCountingService } from './services/token-counting-service.js';
+import { ToolCallHandlingService } from './services/tool-call-handling-service.js';
+import { FallbackResponseService } from './services/fallback-response-service.js';
+import { CircuitBreaker } from './services/circuit-breaker.js';
+import { FunctionCallingFallback } from './services/function-calling-fallback.js';
+
+// Functions module
+import { Functions } from './functions/index.js';
+
+// Message operations for backward compatibility
+import { MessageOperations } from './services/message-operations.js';
+
 // Session Manager import
 import { SessionManager } from './services/session-manager.js';
 
@@ -119,8 +133,8 @@ async function initChat(personality, patterns, summary, streams = null) {
 
     // Initialize MessageOperations with dependencies (for backward compatibility)
     // Note: MessageOperations now delegates to ConversationOrchestrator for state access
-    if (window.MessageOperations?.init) {
-        window.MessageOperations.init({
+    if (MessageOperations?.init) {
+        MessageOperations.init({
             DataQuery: DataQuery,
             RAG: ModuleRegistry.getModuleSync('RAG'),
             TokenCounter: TokenCounter,
@@ -131,26 +145,26 @@ async function initChat(personality, patterns, summary, streams = null) {
     }
 
     // Initialize TokenCountingService with dependencies
-    if (window.TokenCountingService?.init) {
-        window.TokenCountingService.init({
+    if (TokenCountingService?.init) {
+        TokenCountingService.init({
             TokenCounter: TokenCounter
         });
     }
 
     // Initialize ToolCallHandlingService with dependencies
-    if (window.ToolCallHandlingService?.init) {
+    if (ToolCallHandlingService?.init) {
         const callLLMWrapper = (...args) => {
-            if (window.LLMProviderRoutingService?.callLLM) {
-                return window.LLMProviderRoutingService.callLLM(...args);
+            if (LLMProviderRoutingService?.callLLM) {
+                return LLMProviderRoutingService.callLLM(...args);
             }
             throw new Error('LLMProviderRoutingService not available');
         };
 
-        window.ToolCallHandlingService.init({
-            CircuitBreaker: window.CircuitBreaker,
-            Functions: window.Functions,
+        ToolCallHandlingService.init({
+            CircuitBreaker: CircuitBreaker,
+            Functions: Functions,
             SessionManager: SessionManager,
-            FunctionCallingFallback: window.FunctionCallingFallback,
+            FunctionCallingFallback: FunctionCallingFallback,
             buildSystemPrompt: (...args) => ConversationOrchestrator?.buildSystemPrompt(...args),
             callLLM: callLLMWrapper,
             streamsData: streams,
@@ -159,8 +173,8 @@ async function initChat(personality, patterns, summary, streams = null) {
     }
 
     // Initialize LLMProviderRoutingService with dependencies
-    if (window.LLMProviderRoutingService?.init) {
-        window.LLMProviderRoutingService.init({
+    if (LLMProviderRoutingService?.init) {
+        LLMProviderRoutingService.init({
             ProviderInterface: ProviderInterface,
             Settings: Settings,
             Config: ConfigLoader.getAll()
@@ -168,9 +182,9 @@ async function initChat(personality, patterns, summary, streams = null) {
     }
 
     // Initialize FallbackResponseService with dependencies
-    if (window.FallbackResponseService?.init) {
-        window.FallbackResponseService.init({
-            MessageOperations: window.MessageOperations,
+    if (FallbackResponseService?.init) {
+        FallbackResponseService.init({
+            MessageOperations: MessageOperations,
             userContext: userContext
         });
     }
@@ -180,16 +194,17 @@ async function initChat(personality, patterns, summary, streams = null) {
         MessageLifecycleCoordinator.init({
             SessionManager: SessionManager,
             ConversationOrchestrator: ConversationOrchestrator,
-            LLMProviderRoutingService: window.LLMProviderRoutingService,
-            ToolCallHandlingService: window.ToolCallHandlingService,
-            TokenCountingService: window.TokenCountingService,
-            FallbackResponseService: window.FallbackResponseService,
-            CircuitBreaker: window.CircuitBreaker,
+            LLMProviderRoutingService: LLMProviderRoutingService,
+            ToolCallHandlingService: ToolCallHandlingService,
+            TokenCountingService: TokenCountingService,
+            FallbackResponseService: FallbackResponseService,
+            CircuitBreaker: CircuitBreaker,
             ModuleRegistry: ModuleRegistry,
             Settings: Settings,
             Config: ConfigLoader.getAll(),
-            Functions: window.Functions,
-            WaveTelemetry: window.WaveTelemetry
+            Functions: Functions,
+            WaveTelemetry: WaveTelemetry,
+            MessageOperations: MessageOperations
         });
     }
 
@@ -212,8 +227,8 @@ async function handleStorageUpdate(event) {
 
         // ToolCallHandlingService still needs direct update for backward compatibility
         // TODO: Refactor ToolCallHandlingService to use ConversationOrchestrator in future
-        if (window.ToolCallHandlingService?.setStreamsData) {
-            window.ToolCallHandlingService.setStreamsData(streamsData);
+        if (ToolCallHandlingService?.setStreamsData) {
+            ToolCallHandlingService.setStreamsData(streamsData);
         }
 
         // MessageOperations now delegates to ConversationOrchestrator, no update needed

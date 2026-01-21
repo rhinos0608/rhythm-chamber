@@ -13,6 +13,7 @@ import { EventBus } from './event-bus.js';
 import { DeviceDetection } from './device-detection.js';
 import { SharedWorkerCoordinator } from '../workers/shared-worker-coordinator.js';
 import { Security } from '../security/index.js';
+import { AppState } from '../state/app-state.js';
 
 // ==========================================
 // Constants
@@ -111,8 +112,17 @@ const TimingConfig = {
     failover: {
         promotionDelayMs: 100,
         verificationMs: 500
+    },
+
+    // Bootstrap window for unsigned message fallback (security measure)
+    // Unsigned messages are only allowed during this window after module load
+    bootstrap: {
+        windowMs: 30000  // 30 seconds - enough time for session initialization
     }
 };
+
+// Track module initialization time for bootstrap window
+const MODULE_INIT_TIME = Date.now();
 
 /**
  * Runtime configuration override
@@ -531,7 +541,11 @@ async function initWithBroadcastChannel() {
                 waited += checkInterval;
             }
             if (!Security.isKeySessionActive()) {
-                console.error('[TabCoordination] Security session still not ready after waiting, periodic operations may fail');
+                // Only log once to avoid console spam
+                if (!initWithBroadcastChannel._sessionWarnLogged) {
+                    console.warn('[TabCoordination] Security session not ready after waiting - using unsigned messages (this is normal on first load)');
+                    initWithBroadcastChannel._sessionWarnLogged = true;
+                }
             } else {
                 console.log('[TabCoordination] Security session ready, starting periodic operations');
             }
@@ -634,7 +648,11 @@ async function initWithSharedWorker() {
                 waited += checkInterval;
             }
             if (!Security.isKeySessionActive()) {
-                console.error('[TabCoordination] Security session still not ready after waiting, periodic operations may fail');
+                // Only log once to avoid console spam (shared with BroadcastChannel path)
+                if (!initWithBroadcastChannel._sessionWarnLogged) {
+                    console.warn('[TabCoordination] Security session not ready after waiting - using unsigned messages (this is normal on first load)');
+                    initWithBroadcastChannel._sessionWarnLogged = true;
+                }
             } else {
                 console.log('[TabCoordination] Security session ready, starting periodic operations');
             }
@@ -688,26 +706,43 @@ async function sendMessage(msg) {
     } catch (error) {
         // Check if this is a session initialization error
         const isSessionError = error.message && error.message.includes('Session not initialized');
+
+        // Security: Only allow unsigned fallback during bootstrap window
+        const timeSinceInit = Date.now() - MODULE_INIT_TIME;
+        const inBootstrapWindow = timeSinceInit < TimingConfig.bootstrap.windowMs;
+
+        if (isSessionError && !inBootstrapWindow) {
+            // Session errors outside bootstrap window are critical - do not fall back to unsigned
+            console.error('[TabCoordination] Security session not ready outside bootstrap window - message dropped to prevent unsigned fallback');
+            return;  // Drop the message instead of sending unsigned
+        }
+
         if (isSessionError) {
             // Only log session errors once to avoid spam
             if (!sendMessage._sessionErrorLogged) {
-                console.warn('[TabCoordination] Security session not ready - using unsigned messages as fallback');
+                console.warn('[TabCoordination] Security session not ready - using unsigned messages as fallback (within bootstrap window)');
                 sendMessage._sessionErrorLogged = true;
             }
         } else {
             console.error('[TabCoordination] Message signing failed:', error);
         }
+
         // Fail-safe: Send unsigned message with origin, nonce, and unsigned flag if signing fails
-        const unsignedNonce = `${TAB_ID}_${localSequence}_${msg.timestamp || Date.now()}`;
-        coordinationTransport?.postMessage({
-            ...msg,
-            seq: localSequence,
-            senderId: TAB_ID,
-            origin: window.location.origin,
-            nonce: unsignedNonce,
-            timestamp: msg.timestamp || Date.now(),
-            unsigned: true
-        });
+        // Only allowed during bootstrap window (first 30 seconds after module load)
+        if (inBootstrapWindow) {
+            const unsignedNonce = `${TAB_ID}_${localSequence}_${msg.timestamp || Date.now()}`;
+            coordinationTransport?.postMessage({
+                ...msg,
+                seq: localSequence,
+                senderId: TAB_ID,
+                origin: window.location.origin,
+                nonce: unsignedNonce,
+                timestamp: msg.timestamp || Date.now(),
+                unsigned: true
+            });
+        } else {
+            console.error('[TabCoordination] Message signing failed outside bootstrap window - message dropped to prevent security downgrade');
+        }
     }
 }
 
@@ -821,105 +856,105 @@ function createMessageHandler() {
 
             switch (type) {
                 case MESSAGE_TYPES.CANDIDATE:
-                // Another tab announced candidacy - collect it for election
-                // If we're already primary, assert dominance so new tab knows leader exists
-                if (isPrimaryTab && tabId !== TAB_ID) {
-                    sendMessage({
-                        type: MESSAGE_TYPES.CLAIM_PRIMARY,
-                        tabId: TAB_ID,
-                        vectorClock: vectorClock.tick()
-                    });
-                }
-                // Collect candidate for election with its timestamp for deterministic ordering
-                electionCandidates.add(tabId);
-                break;
-
-                case MESSAGE_TYPES.CLAIM_PRIMARY:
-                // Another tab claimed primary - we become secondary
-                if (tabId !== TAB_ID) {
-                    // Update module-scoped state to prevent race condition
-                    receivedPrimaryClaim = true;
-                    electionAborted = true;
-
-                    if (isPrimaryTab) {
-                        isPrimaryTab = false;
-                        handleSecondaryMode();
-                    }
-                }
-                break;
-
-                case MESSAGE_TYPES.RELEASE_PRIMARY:
-                // Primary tab closed - initiate new election
-                if (!isPrimaryTab) {
-                    initiateReElection();
-                }
-                break;
-
-                case MESSAGE_TYPES.HEARTBEAT:
-                // Received heartbeat from leader
-                if (tabId !== TAB_ID && !isPrimaryTab) {
-                    // Record clock skew from remote timestamp
-                    if (event.data.timestamp) {
-                        const localNow = Date.now();
-                        clockSkewTracker.recordSkew(event.data.timestamp, localNow);
-                    }
-
-                    // Update both wall-clock and Lamport time tracking
-                    lastLeaderHeartbeat = clockSkewTracker.adjustTimestamp(Date.now());
-                    if (event.data.lamportTimestamp) {
-                        lastLeaderLamportTime = event.data.lamportTimestamp;
-                    }
-                }
-                break;
-
-                case MESSAGE_TYPES.EVENT_WATERMARK:
-                // Received watermark broadcast from another tab
-                if (tabId !== TAB_ID && event.data.watermark !== undefined) {
-                    knownWatermarks.set(tabId, event.data.watermark);
-                    if (debugMode) {
-                        console.log(`[TabCoordination] Received watermark ${event.data.watermark} from tab ${tabId}`);
-                    }
-                }
-                break;
-
-                case MESSAGE_TYPES.REPLAY_REQUEST:
-                // Secondary tab requesting event replay
-                if (isPrimaryTab && tabId !== TAB_ID) {
-                    handleReplayRequest(tabId, event.data.fromWatermark);
-                }
-                break;
-
-                case MESSAGE_TYPES.REPLAY_RESPONSE:
-                // Primary tab responding with replay data
-                if (!isPrimaryTab && tabId !== TAB_ID) {
-                    handleReplayResponse(event.data.events);
-                }
-                break;
-
-                case MESSAGE_TYPES.SAFE_MODE_CHANGED:
-                // Cross-tab Safe Mode synchronization
-                // HNW Hierarchy: Safe Mode is an authority decision shared across all tabs
-                if (tabId !== TAB_ID) {
-                    const { enabled, reason } = event.data;
-                    console.log(`[TabCoordination] Safe Mode changed in another tab: ${enabled ? 'ENABLED' : 'DISABLED'}`, reason);
-
-                    // Update local Safe Mode state via AppState if available
-                    if (window.AppState?.update) {
-                        window.AppState.update('app', {
-                            safeMode: enabled,
-                            safeModeReason: reason
+                    // Another tab announced candidacy - collect it for election
+                    // If we're already primary, assert dominance so new tab knows leader exists
+                    if (isPrimaryTab && tabId !== TAB_ID) {
+                        sendMessage({
+                            type: MESSAGE_TYPES.CLAIM_PRIMARY,
+                            tabId: TAB_ID,
+                            vectorClock: vectorClock.tick()
                         });
                     }
+                    // Collect candidate for election with its timestamp for deterministic ordering
+                    electionCandidates.add(tabId);
+                    break;
 
-                    // Show user-facing warning banner if entering safe mode
-                    if (enabled) {
-                        showSafeModeWarningFromRemote(reason);
-                    } else {
-                        hideSafeModeWarning();
+                case MESSAGE_TYPES.CLAIM_PRIMARY:
+                    // Another tab claimed primary - we become secondary
+                    if (tabId !== TAB_ID) {
+                        // Update module-scoped state to prevent race condition
+                        receivedPrimaryClaim = true;
+                        electionAborted = true;
+
+                        if (isPrimaryTab) {
+                            isPrimaryTab = false;
+                            handleSecondaryMode();
+                        }
                     }
-                }
-                break;
-        }
+                    break;
+
+                case MESSAGE_TYPES.RELEASE_PRIMARY:
+                    // Primary tab closed - initiate new election
+                    if (!isPrimaryTab) {
+                        initiateReElection();
+                    }
+                    break;
+
+                case MESSAGE_TYPES.HEARTBEAT:
+                    // Received heartbeat from leader
+                    if (tabId !== TAB_ID && !isPrimaryTab) {
+                        // Record clock skew from remote timestamp
+                        if (event.data.timestamp) {
+                            const localNow = Date.now();
+                            clockSkewTracker.recordSkew(event.data.timestamp, localNow);
+                        }
+
+                        // Update both wall-clock and Lamport time tracking
+                        lastLeaderHeartbeat = clockSkewTracker.adjustTimestamp(Date.now());
+                        if (event.data.lamportTimestamp) {
+                            lastLeaderLamportTime = event.data.lamportTimestamp;
+                        }
+                    }
+                    break;
+
+                case MESSAGE_TYPES.EVENT_WATERMARK:
+                    // Received watermark broadcast from another tab
+                    if (tabId !== TAB_ID && event.data.watermark !== undefined) {
+                        knownWatermarks.set(tabId, event.data.watermark);
+                        if (debugMode) {
+                            console.log(`[TabCoordination] Received watermark ${event.data.watermark} from tab ${tabId}`);
+                        }
+                    }
+                    break;
+
+                case MESSAGE_TYPES.REPLAY_REQUEST:
+                    // Secondary tab requesting event replay
+                    if (isPrimaryTab && tabId !== TAB_ID) {
+                        handleReplayRequest(tabId, event.data.fromWatermark);
+                    }
+                    break;
+
+                case MESSAGE_TYPES.REPLAY_RESPONSE:
+                    // Primary tab responding with replay data
+                    if (!isPrimaryTab && tabId !== TAB_ID) {
+                        handleReplayResponse(event.data.events);
+                    }
+                    break;
+
+                case MESSAGE_TYPES.SAFE_MODE_CHANGED:
+                    // Cross-tab Safe Mode synchronization
+                    // HNW Hierarchy: Safe Mode is an authority decision shared across all tabs
+                    if (tabId !== TAB_ID) {
+                        const { enabled, reason } = event.data;
+                        console.log(`[TabCoordination] Safe Mode changed in another tab: ${enabled ? 'ENABLED' : 'DISABLED'}`, reason);
+
+                        // Update local Safe Mode state via AppState if available
+                        if (AppState?.update) {
+                            AppState.update('app', {
+                                safeMode: enabled,
+                                safeModeReason: reason
+                            });
+                        }
+
+                        // Show user-facing warning banner if entering safe mode
+                        if (enabled) {
+                            showSafeModeWarningFromRemote(reason);
+                        } else {
+                            hideSafeModeWarning();
+                        }
+                    }
+                    break;
+            }
         } catch (error) {
             console.error('[TabCoordination] Message verification failed:', error);
             // Don't process message if verification fails

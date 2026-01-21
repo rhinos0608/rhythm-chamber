@@ -294,7 +294,7 @@ function showSafeModeWarning() {
     document.body.classList.add('has-safe-mode-banner');
 
     // Store in AppState for other modules to check
-    if (window.AppState?.update) {
+    if (AppState?.update) {
         AppState.update('app', { safeMode: true });
     }
 }
@@ -308,7 +308,7 @@ function showSafeModeWarning() {
  * @returns {boolean}
  */
 function isInSafeMode() {
-    return !!(window.AppState?.get?.('app')?.safeMode);
+    return !!(AppState?.get?.('app')?.safeMode);
 }
 
 // Make available globally for other modules
@@ -436,7 +436,8 @@ async function initializeControllers() {
         Chat,           // Now using imported module
         OperationLock,  // Now using imported module
         ViewController,
-        showToast
+        showToast,
+        FileUploadController
     });
 
     // Initialize MessageOperations WITHOUT heavy modules
@@ -869,6 +870,32 @@ function setupEventListeners() {
             showToast(`⚠️ ${patterns} unavailable - Try refreshing the page`, 6000);
         });
         console.log('[App] Subscribed to pattern:worker_failure events');
+
+        // Error Notification Bridge - Subscribe to all error events
+        EventBus.on('error:critical', (data) => {
+            console.error('[App] Critical error:', data);
+            showToast(`⚠️ ${data.message || 'Critical error occurred'}`, 5000);
+        });
+
+        EventBus.on('storage:error', (data) => {
+            console.error('[App] Storage error:', data);
+            showToast(`⚠️ Storage error: ${data.error || 'Unknown error'}`, 4000);
+        });
+
+        EventBus.on('chat:error', (data) => {
+            console.error('[App] Chat error:', data);
+            // Only show non-recoverable errors to users
+            if (!data.recoverable) {
+                showToast(`⚠️ Chat error: ${data.error || 'Unable to send message'}`, 4000);
+            }
+        });
+
+        EventBus.on('embedding:error', (data) => {
+            console.error('[App] Embedding error:', data);
+            showToast(`⚠️ Embedding error: ${data.error || 'Unknown error'}`, 4000);
+        });
+
+        console.log('[App] Error notification bridge initialized');
     }
 }
 

@@ -244,6 +244,171 @@ const CIRCUIT_BREAKER_CONFIG = {
 };
 
 // ==========================================
+// Circuit Breaker Helper
+// ==========================================
+
+/**
+ * Circuit breaker check helper - extracts duplicate logic from emit() and emitAndAwait()
+ * Handles storm detection, backpressure warnings, and queue overflow
+ *
+ * @param {string} eventType - Event type
+ * @param {number} priority - Event priority
+ * @param {number} timestamp - Event timestamp
+ * @returns {{ allowed: boolean, dropped?: boolean, cleanupFn?: Function }} Result object
+ */
+function runCircuitBreakerChecks(eventType, priority, timestamp) {
+    // Update storm window
+    if (timestamp - windowStart > CIRCUIT_BREAKER_CONFIG.stormWindowMs) {
+        // Check if storm threshold was exceeded
+        if (eventsThisWindow > CIRCUIT_BREAKER_CONFIG.stormThreshold && !stormActive) {
+            stormActive = true;
+            stormStartTime = timestamp;
+            stormDroppedAtStart = droppedCount;
+            stormCooldownUntil = timestamp + CIRCUIT_BREAKER_CONFIG.cooldownMs;
+            console.warn(`[EventBus] Event storm detected: ${eventsThisWindow} events in ${CIRCUIT_BREAKER_CONFIG.stormWindowMs}ms`);
+
+            // Emit storm START event (producer notification)
+            emit('eventbus:storm_start', {
+                eventsPerSecond: eventsThisWindow,
+                threshold: CIRCUIT_BREAKER_CONFIG.stormThreshold,
+                startTime: stormStartTime
+            }, { bypassCircuitBreaker: true, skipValidation: true });
+
+            // Legacy event for backwards compatibility
+            emit('eventbus:storm', {
+                eventsPerSecond: eventsThisWindow,
+                threshold: CIRCUIT_BREAKER_CONFIG.stormThreshold
+            }, { bypassCircuitBreaker: true, skipValidation: true });
+        }
+        // Reset window
+        windowStart = timestamp;
+        eventsThisWindow = 0;
+        backpressureWarningEmitted = false; // Reset backpressure warning each window
+
+        // Check cooldown - emit storm END event when storm ends
+        if (stormActive && timestamp > stormCooldownUntil) {
+            const stormDuration = timestamp - stormStartTime;
+            const totalDroppedDuringStorm = droppedCount - stormDroppedAtStart;
+
+            // Emit storm END event (producer notification)
+            emit('eventbus:storm_end', {
+                durationMs: stormDuration,
+                totalDropped: totalDroppedDuringStorm
+            }, { bypassCircuitBreaker: true, skipValidation: true });
+
+            stormActive = false;
+            console.log(`[EventBus] Event storm ended (duration: ${stormDuration}ms, dropped: ${totalDroppedDuringStorm})`);
+        }
+    }
+    eventsThisWindow++;
+
+    // Proactive backpressure warning at 80% queue capacity
+    const queuePercentFull = pendingEvents.length / CIRCUIT_BREAKER_CONFIG.maxQueueSize;
+    if (queuePercentFull >= CIRCUIT_BREAKER_CONFIG.backpressureWarningThreshold && !backpressureWarningEmitted) {
+        backpressureWarningEmitted = true;
+        emit('eventbus:backpressure_warning', {
+            queueSize: pendingEvents.length,
+            maxSize: CIRCUIT_BREAKER_CONFIG.maxQueueSize,
+            percentFull: queuePercentFull
+        }, { bypassCircuitBreaker: true, skipValidation: true });
+        console.warn(`[EventBus] Backpressure warning: queue at ${(queuePercentFull * 100).toFixed(1)}% capacity`);
+    }
+
+    // Queue overflow handling
+    if (pendingEvents.length >= CIRCUIT_BREAKER_CONFIG.maxQueueSize) {
+        const strategy = CIRCUIT_BREAKER_CONFIG.overflowStrategy;
+
+        if (strategy === 'reject_all') {
+            droppedCount++;
+            // Emit drop event for monitoring
+            emit('CIRCUIT_BREAKER:DROPPED', {
+                count: 1,
+                eventType,
+                reason: 'queue_full_reject_all',
+                totalDropped: droppedCount
+            }, { bypassCircuitBreaker: true, skipValidation: true });
+            if (debugMode) {
+                console.warn(`[EventBus] Event rejected (queue full): ${eventType}`);
+            }
+            return { allowed: false, dropped: true };
+        } else if (strategy === 'drop_low_priority') {
+            // Find lowest priority event to drop
+            const lowestPriorityIndex = pendingEvents.reduce((lowest, event, index) => {
+                if (pendingEvents[lowest].priority < event.priority) {
+                    return index;
+                }
+                return lowest;
+            }, 0);
+
+            // Only drop if new event has equal or lower priority
+            if (priority >= pendingEvents[lowestPriorityIndex].priority) {
+                droppedCount++;
+                // Emit drop event for monitoring
+                emit('CIRCUIT_BREAKER:DROPPED', {
+                    count: 1,
+                    eventType,
+                    reason: 'priority_too_low',
+                    totalDropped: droppedCount
+                }, { bypassCircuitBreaker: true, skipValidation: true });
+                if (debugMode) {
+                    console.warn(`[EventBus] Event rejected (equal or lower priority than queue): ${eventType}`);
+                }
+                return { allowed: false, dropped: true };
+            }
+
+            // Drop lowest priority event
+            const dropped = pendingEvents.splice(lowestPriorityIndex, 1)[0];
+            droppedCount++;
+            // Emit drop event for monitoring
+            emit('CIRCUIT_BREAKER:DROPPED', {
+                count: 1,
+                eventType: dropped.eventType,
+                reason: 'displaced_by_higher_priority',
+                totalDropped: droppedCount
+            }, { bypassCircuitBreaker: true, skipValidation: true });
+            if (debugMode) {
+                console.warn(`[EventBus] Dropped low-priority event: ${dropped.eventType}`);
+            }
+        } else if (strategy === 'drop_oldest') {
+            const dropped = pendingEvents.shift();
+            droppedCount++;
+            // Emit drop event for monitoring
+            emit('CIRCUIT_BREAKER:DROPPED', {
+                count: 1,
+                eventType: dropped?.eventType || 'unknown',
+                reason: 'oldest_dropped',
+                totalDropped: droppedCount
+            }, { bypassCircuitBreaker: true, skipValidation: true });
+            if (debugMode) {
+                console.warn(`[EventBus] Dropped oldest event: ${dropped?.eventType}`);
+            }
+        }
+    }
+
+    // Add to pending queue for tracking
+    const pendingEventEntry = { eventType, timestamp, priority };
+    pendingEvents.push(pendingEventEntry);
+
+    // Trim queue to max size
+    while (pendingEvents.length > CIRCUIT_BREAKER_CONFIG.maxQueueSize) {
+        pendingEvents.shift();
+    }
+
+    // Return cleanup function to remove this pending event after handlers complete
+    return {
+        allowed: true,
+        cleanupFn: () => {
+            const pendingIndex = pendingEvents.findIndex(
+                e => e.eventType === eventType && e.timestamp === timestamp && e.priority === priority
+            );
+            if (pendingIndex !== -1) {
+                pendingEvents.splice(pendingIndex, 1);
+            }
+        }
+    };
+}
+
+// ==========================================
 // Internal State
 // ==========================================
 
@@ -433,143 +598,12 @@ function emit(eventType, payload = {}, options = {}) {
     const priority = EVENT_PRIORITIES[eventType] ?? PRIORITY.NORMAL;
     const eventDomain = options.domain ?? 'global';
 
-    // Circuit breaker: Storm detection
+    // Circuit breaker: Storm detection and queue overflow
+    let circuitBreakerResult;
     if (!options.bypassCircuitBreaker) {
-        // Update storm window
-        if (timestamp - windowStart > CIRCUIT_BREAKER_CONFIG.stormWindowMs) {
-            // Check if storm threshold was exceeded
-            if (eventsThisWindow > CIRCUIT_BREAKER_CONFIG.stormThreshold && !stormActive) {
-                stormActive = true;
-                stormStartTime = timestamp;
-                stormDroppedAtStart = droppedCount;
-                stormCooldownUntil = timestamp + CIRCUIT_BREAKER_CONFIG.cooldownMs;
-                console.warn(`[EventBus] Event storm detected: ${eventsThisWindow} events in ${CIRCUIT_BREAKER_CONFIG.stormWindowMs}ms`);
-
-                // Emit storm START event (producer notification)
-                emit('eventbus:storm_start', {
-                    eventsPerSecond: eventsThisWindow,
-                    threshold: CIRCUIT_BREAKER_CONFIG.stormThreshold,
-                    startTime: stormStartTime
-                }, { bypassCircuitBreaker: true, skipValidation: true });
-
-                // Legacy event for backwards compatibility
-                emit('eventbus:storm', {
-                    eventsPerSecond: eventsThisWindow,
-                    threshold: CIRCUIT_BREAKER_CONFIG.stormThreshold
-                }, { bypassCircuitBreaker: true, skipValidation: true });
-            }
-            // Reset window
-            windowStart = timestamp;
-            eventsThisWindow = 0;
-            backpressureWarningEmitted = false; // Reset backpressure warning each window
-
-            // Check cooldown - emit storm END event when storm ends
-            if (stormActive && timestamp > stormCooldownUntil) {
-                const stormDuration = timestamp - stormStartTime;
-                const totalDroppedDuringStorm = droppedCount - stormDroppedAtStart;
-
-                // Emit storm END event (producer notification)
-                emit('eventbus:storm_end', {
-                    durationMs: stormDuration,
-                    totalDropped: totalDroppedDuringStorm
-                }, { bypassCircuitBreaker: true, skipValidation: true });
-
-                stormActive = false;
-                console.log(`[EventBus] Event storm ended (duration: ${stormDuration}ms, dropped: ${totalDroppedDuringStorm})`);
-            }
-        }
-        eventsThisWindow++;
-
-        // Proactive backpressure warning at 80% queue capacity
-        const queuePercentFull = pendingEvents.length / CIRCUIT_BREAKER_CONFIG.maxQueueSize;
-        if (queuePercentFull >= CIRCUIT_BREAKER_CONFIG.backpressureWarningThreshold && !backpressureWarningEmitted) {
-            backpressureWarningEmitted = true;
-            emit('eventbus:backpressure_warning', {
-                queueSize: pendingEvents.length,
-                maxSize: CIRCUIT_BREAKER_CONFIG.maxQueueSize,
-                percentFull: queuePercentFull
-            }, { bypassCircuitBreaker: true, skipValidation: true });
-            console.warn(`[EventBus] Backpressure warning: queue at ${(queuePercentFull * 100).toFixed(1)}% capacity`);
-        }
-
-        // Queue overflow handling
-        if (pendingEvents.length >= CIRCUIT_BREAKER_CONFIG.maxQueueSize) {
-            const strategy = CIRCUIT_BREAKER_CONFIG.overflowStrategy;
-
-            if (strategy === 'reject_all') {
-                droppedCount++;
-                // Emit drop event for monitoring
-                emit('CIRCUIT_BREAKER:DROPPED', {
-                    count: 1,
-                    eventType,
-                    reason: 'queue_full_reject_all',
-                    totalDropped: droppedCount
-                }, { bypassCircuitBreaker: true, skipValidation: true });
-                if (debugMode) {
-                    console.warn(`[EventBus] Event rejected (queue full): ${eventType}`);
-                }
-                return false;
-            } else if (strategy === 'drop_low_priority') {
-                // Find lowest priority event to drop
-                const lowestPriorityIndex = pendingEvents.reduce((lowest, event, index) => {
-                    if (pendingEvents[lowest].priority < event.priority) {
-                        return index;
-                    }
-                    return lowest;
-                }, 0);
-
-                // Only drop if new event has equal or lower priority
-                if (priority >= pendingEvents[lowestPriorityIndex].priority) {
-                    droppedCount++;
-                    // Emit drop event for monitoring
-                    emit('CIRCUIT_BREAKER:DROPPED', {
-                        count: 1,
-                        eventType,
-                        reason: 'priority_too_low',
-                        totalDropped: droppedCount
-                    }, { bypassCircuitBreaker: true, skipValidation: true });
-                    if (debugMode) {
-                        console.warn(`[EventBus] Event rejected (equal or lower priority than queue): ${eventType}`);
-                    }
-                    return false;
-                }
-
-                // Drop lowest priority event
-                const dropped = pendingEvents.splice(lowestPriorityIndex, 1)[0];
-                droppedCount++;
-                // Emit drop event for monitoring
-                emit('CIRCUIT_BREAKER:DROPPED', {
-                    count: 1,
-                    eventType: dropped.eventType,
-                    reason: 'displaced_by_higher_priority',
-                    totalDropped: droppedCount
-                }, { bypassCircuitBreaker: true, skipValidation: true });
-                if (debugMode) {
-                    console.warn(`[EventBus] Dropped low-priority event: ${dropped.eventType}`);
-                }
-            } else if (strategy === 'drop_oldest') {
-                const dropped = pendingEvents.shift();
-                droppedCount++;
-                // Emit drop event for monitoring
-                emit('CIRCUIT_BREAKER:DROPPED', {
-                    count: 1,
-                    eventType: dropped?.eventType || 'unknown',
-                    reason: 'oldest_dropped',
-                    totalDropped: droppedCount
-                }, { bypassCircuitBreaker: true, skipValidation: true });
-                if (debugMode) {
-                    console.warn(`[EventBus] Dropped oldest event: ${dropped?.eventType}`);
-                }
-            }
-        }
-
-        // Add to pending queue for tracking
-        const pendingEventEntry = { eventType, timestamp, priority };
-        pendingEvents.push(pendingEventEntry);
-
-        // Trim queue to max size
-        while (pendingEvents.length > CIRCUIT_BREAKER_CONFIG.maxQueueSize) {
-            pendingEvents.shift();
+        circuitBreakerResult = runCircuitBreakerChecks(eventType, priority, timestamp);
+        if (!circuitBreakerResult.allowed) {
+            return circuitBreakerResult.dropped ? false : true;
         }
     }
 
@@ -691,13 +725,8 @@ function emit(eventType, payload = {}, options = {}) {
     }
 
     // Remove the pending event entry after handlers complete
-    if (!options.bypassCircuitBreaker) {
-        const pendingIndex = pendingEvents.findIndex(
-            e => e.eventType === eventType && e.timestamp === timestamp && e.priority === priority
-        );
-        if (pendingIndex !== -1) {
-            pendingEvents.splice(pendingIndex, 1);
-        }
+    if (!options.bypassCircuitBreaker && circuitBreakerResult?.cleanupFn) {
+        circuitBreakerResult.cleanupFn();
     }
 
     return true;
@@ -744,160 +773,29 @@ async function emitAndAwait(eventType, payload = {}, options = {}) {
     const priority = EVENT_PRIORITIES[eventType] ?? PRIORITY.NORMAL;
     const eventDomain = options.domain ?? 'global';
     const stopOnError = options.stopOnError ?? false;
-    
+
     // Run circuit breaker checks (same as emit())
+    let circuitBreakerResult;
     if (!options.bypassCircuitBreaker) {
-        // Update storm window
-        if (timestamp - windowStart > CIRCUIT_BREAKER_CONFIG.stormWindowMs) {
-            // Check if storm threshold was exceeded
-            if (eventsThisWindow > CIRCUIT_BREAKER_CONFIG.stormThreshold && !stormActive) {
-                stormActive = true;
-                stormStartTime = timestamp;
-                stormDroppedAtStart = droppedCount;
-                stormCooldownUntil = timestamp + CIRCUIT_BREAKER_CONFIG.cooldownMs;
-                console.warn(`[EventBus] Event storm detected: ${eventsThisWindow} events in ${CIRCUIT_BREAKER_CONFIG.stormWindowMs}ms`);
-
-                // Emit storm START event (producer notification)
-                emit('eventbus:storm_start', {
-                    eventsPerSecond: eventsThisWindow,
-                    threshold: CIRCUIT_BREAKER_CONFIG.stormThreshold,
-                    startTime: stormStartTime
-                }, { bypassCircuitBreaker: true, skipValidation: true });
-
-                // Legacy event for backwards compatibility
-                emit('eventbus:storm', {
-                    eventsPerSecond: eventsThisWindow,
-                    threshold: CIRCUIT_BREAKER_CONFIG.stormThreshold
-                }, { bypassCircuitBreaker: true, skipValidation: true });
-            }
-            // Reset window
-            windowStart = timestamp;
-            eventsThisWindow = 0;
-            backpressureWarningEmitted = false;
-
-            // Check cooldown - emit storm END event when storm ends
-            if (stormActive && timestamp > stormCooldownUntil) {
-                const stormDuration = timestamp - stormStartTime;
-                const totalDroppedDuringStorm = droppedCount - stormDroppedAtStart;
-
-                // Emit storm END event (producer notification)
-                emit('eventbus:storm_end', {
-                    durationMs: stormDuration,
-                    totalDropped: totalDroppedDuringStorm
-                }, { bypassCircuitBreaker: true, skipValidation: true });
-
-                stormActive = false;
-                console.log(`[EventBus] Event storm ended (duration: ${stormDuration}ms, dropped: ${totalDroppedDuringStorm})`);
-            }
-        }
-        eventsThisWindow++;
-
-        // Proactive backpressure warning at 80% queue capacity
-        const queuePercentFull = pendingEvents.length / CIRCUIT_BREAKER_CONFIG.maxQueueSize;
-        if (queuePercentFull >= CIRCUIT_BREAKER_CONFIG.backpressureWarningThreshold && !backpressureWarningEmitted) {
-            backpressureWarningEmitted = true;
-            emit('eventbus:backpressure_warning', {
-                queueSize: pendingEvents.length,
-                maxSize: CIRCUIT_BREAKER_CONFIG.maxQueueSize,
-                percentFull: queuePercentFull
-            }, { bypassCircuitBreaker: true, skipValidation: true });
-            console.warn(`[EventBus] Backpressure warning: queue at ${(queuePercentFull * 100).toFixed(1)}% capacity`);
-        }
-
-        // Queue overflow handling
-        if (pendingEvents.length >= CIRCUIT_BREAKER_CONFIG.maxQueueSize) {
-            const strategy = CIRCUIT_BREAKER_CONFIG.overflowStrategy;
-
-            if (strategy === 'reject_all') {
-                droppedCount++;
-                // Emit drop event for monitoring
-                emit('CIRCUIT_BREAKER:DROPPED', {
-                    count: 1,
-                    eventType,
-                    reason: 'queue_full_reject_all',
-                    totalDropped: droppedCount
-                }, { bypassCircuitBreaker: true, skipValidation: true });
-                if (debugMode) {
-                    console.warn(`[EventBus] Event rejected (queue full): ${eventType}`);
-                }
-                return { handled: false, results: [], dropped: true };
-            } else if (strategy === 'drop_low_priority') {
-                // Find lowest priority event to drop
-                const lowestPriorityIndex = pendingEvents.reduce((lowest, event, index) => {
-                    if (pendingEvents[lowest].priority < event.priority) {
-                        return index;
-                    }
-                    return lowest;
-                }, 0);
-
-                // Only drop if new event has equal or lower priority
-                if (priority >= pendingEvents[lowestPriorityIndex].priority) {
-                    droppedCount++;
-                    // Emit drop event for monitoring
-                    emit('CIRCUIT_BREAKER:DROPPED', {
-                        count: 1,
-                        eventType,
-                        reason: 'priority_too_low',
-                        totalDropped: droppedCount
-                    }, { bypassCircuitBreaker: true, skipValidation: true });
-                    if (debugMode) {
-                        console.warn(`[EventBus] Event rejected (equal or lower priority than queue): ${eventType}`);
-                    }
-                    return { handled: false, results: [], dropped: true };
-                }
-
-                // Drop lowest priority event
-                const dropped = pendingEvents.splice(lowestPriorityIndex, 1)[0];
-                droppedCount++;
-                // Emit drop event for monitoring
-                emit('CIRCUIT_BREAKER:DROPPED', {
-                    count: 1,
-                    eventType: dropped.eventType,
-                    reason: 'displaced_by_higher_priority',
-                    totalDropped: droppedCount
-                }, { bypassCircuitBreaker: true, skipValidation: true });
-                if (debugMode) {
-                    console.warn(`[EventBus] Dropped low-priority event: ${dropped.eventType}`);
-                }
-            } else if (strategy === 'drop_oldest') {
-                const dropped = pendingEvents.shift();
-                droppedCount++;
-                // Emit drop event for monitoring
-                emit('CIRCUIT_BREAKER:DROPPED', {
-                    count: 1,
-                    eventType: dropped?.eventType || 'unknown',
-                    reason: 'oldest_dropped',
-                    totalDropped: droppedCount
-                }, { bypassCircuitBreaker: true, skipValidation: true });
-                if (debugMode) {
-                    console.warn(`[EventBus] Dropped oldest event: ${dropped?.eventType}`);
-                }
-            }
-        }
-
-        // Add to pending queue for tracking
-        const pendingEventEntry = { eventType, timestamp, priority };
-        pendingEvents.push(pendingEventEntry);
-
-        // Trim queue to max size
-        while (pendingEvents.length > CIRCUIT_BREAKER_CONFIG.maxQueueSize) {
-            pendingEvents.shift();
+        circuitBreakerResult = runCircuitBreakerChecks(eventType, priority, timestamp);
+        if (!circuitBreakerResult.allowed) {
+            return { handled: false, results: [], dropped: circuitBreakerResult.dropped ? true : false };
         }
     }
-    
+
     // Event versioning
     const currentVectorClock = eventVectorClock.tick();
     eventSequenceNumber++;
     const sequenceNumber = eventSequenceNumber;
-    
+
     // Store event in log if enabled
     if (eventLogEnabled && !eventReplayInProgress && !options.skipEventLog) {
         persistEvent(eventType, payload, currentVectorClock, sequenceNumber, options)
             .catch(err => console.warn('[EventBus] Failed to persist event:', err));
     }
-    
+
     lastEventWatermark = sequenceNumber;
-    
+
     // Validate payload
     if (!options.skipValidation && EVENT_SCHEMAS[eventType]) {
         const validationResult = validatePayload(eventType, payload);
@@ -905,7 +803,7 @@ async function emitAndAwait(eventType, payload = {}, options = {}) {
             console.warn(`[EventBus] Payload validation warning for "${eventType}":`, validationResult.errors);
         }
     }
-    
+
     // Add to trace
     if (debugMode || eventTrace.length < MAX_TRACE_SIZE) {
         eventTrace.push({
@@ -917,21 +815,25 @@ async function emitAndAwait(eventType, payload = {}, options = {}) {
             eventTrace.shift();
         }
     }
-    
+
     if (debugMode) {
         console.log(`[EventBus] EmitAndAwait "${eventType}"`, sanitizePayload(payload));
     }
-    
+
     // Get handlers
     const eventHandlers = subscribers.get(eventType) || [];
     const wildcardHandlers = subscribers.get('*') || [];
     const allHandlers = [...eventHandlers, ...wildcardHandlers]
         .sort((a, b) => a.priority - b.priority);
-    
+
     if (allHandlers.length === 0) {
+        // Clean up pending event entry even though no handlers ran
+        if (!options.bypassCircuitBreaker && circuitBreakerResult?.cleanupFn) {
+            circuitBreakerResult.cleanupFn();
+        }
         return { handled: false, results: [] };
     }
-    
+
     const eventMeta = {
         type: eventType,
         timestamp,
@@ -943,9 +845,9 @@ async function emitAndAwait(eventType, payload = {}, options = {}) {
         isReplay: eventReplayInProgress,
         isAsync: true
     };
-    
+
     const results = [];
-    
+
     // Execute handlers sequentially, awaiting each one
     for (const { handler, id, domain: handlerDomain } of allHandlers) {
         // Domain filtering
@@ -953,38 +855,38 @@ async function emitAndAwait(eventType, payload = {}, options = {}) {
         if (!domainMatches) {
             continue;
         }
-        
+
         // Get or initialize handler metrics
         let handlerHealthMetrics = handlerMetrics.get(id);
         if (!handlerHealthMetrics) {
             handlerHealthMetrics = initializeHandlerMetrics();
             handlerMetrics.set(id, handlerHealthMetrics);
         }
-        
+
         // Skip paused handlers
         if (handlerHealthMetrics.isPaused) {
             continue;
         }
-        
+
         // Per-handler circuit breaker check
         const circuitState = checkHandlerCircuitState(id, handlerHealthMetrics);
         if (circuitState === CIRCUIT_STATE.OPEN) {
             continue;
         }
-        
+
         const handlerStartTime = performance.now();
         markHandlerStarted(id);
-        
+
         try {
             // Await the handler if it returns a Promise
             const handlerResult = handler(payload, eventMeta);
             if (handlerResult && typeof handlerResult.then === 'function') {
                 await handlerResult;
             }
-            
+
             const durationMs = performance.now() - handlerStartTime;
             recordHandlerSuccess(id, durationMs);
-            
+
             results.push({
                 handlerId: id,
                 success: true,
@@ -993,22 +895,27 @@ async function emitAndAwait(eventType, payload = {}, options = {}) {
         } catch (error) {
             const durationMs = performance.now() - handlerStartTime;
             recordHandlerFailure(id, durationMs, error);
-            
+
             results.push({
                 handlerId: id,
                 success: false,
                 error,
                 durationMs
             });
-            
+
             console.error(`[EventBus] Async handler ${id} threw error for "${eventType}":`, error);
-            
+
             if (stopOnError) {
                 break;
             }
         }
     }
-    
+
+    // Clean up pending event entry after handlers complete (FIX: was missing this cleanup)
+    if (!options.bypassCircuitBreaker && circuitBreakerResult?.cleanupFn) {
+        circuitBreakerResult.cleanupFn();
+    }
+
     return {
         handled: results.length > 0,
         results

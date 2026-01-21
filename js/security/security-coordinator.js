@@ -393,15 +393,55 @@ class SecurityCoordinatorClass {
                 return;
             }
 
-            // Seal prototypes (less restrictive than freeze, prevents addition but allows property modification for existing properties)
+            // Strengthened prototype pollution protection
+            // 1. Seal prototypes (less restrictive than freeze, prevents addition but allows property modification for existing properties)
             Object.seal(Object.prototype);
             Object.seal(Array.prototype);
             Object.seal(Function.prototype);
+            Object.seal(String.prototype);
+            Object.seal(Number.prototype);
+            Object.seal(Boolean.prototype);
+            Object.seal(Symbol.prototype);
+            Object.seal(Date.prototype);
+            Object.seal(RegExp.prototype);
+            Object.seal(Error.prototype);
+            Object.seal(Promise.prototype);
+            Object.seal(Map.prototype);
+            Object.seal(Set.prototype);
+            Object.seal(WeakMap.prototype);
+            Object.seal(WeakSet.prototype);
+
+            // 2. Freeze critical prototypes to prevent property modification (more restrictive but more secure)
+            // Only freeze Object.prototype since it's the most critical for prototype pollution attacks
+            // Note: Re-sealing with freeze to override the previous seal
+            try {
+                Object.freeze(Object.prototype);
+            } catch (e) {
+                // If freeze fails (e.g., due to non-configurable properties), at least we have seal protection
+                console.warn('[SecurityCoordinator] Could not freeze Object.prototype, using seal protection only:', e.message);
+            }
+
+            // 3. Set up non-configurable, non-writable property to detect tampering attempts
+            if (!Object.prototype.hasOwnProperty('_PROTECTION_ACTIVE')) {
+                Object.defineProperty(Object.prototype, '_PROTECTION_ACTIVE', {
+                    configurable: false,
+                    enumerable: false,
+                    writable: false,
+                    value: true
+                });
+            }
+
+            // 4. Freeze the global Object constructor itself to prevent re-sealing attacks
+            try {
+                Object.freeze(Object);
+            } catch (e) {
+                console.warn('[SecurityCoordinator] Could not freeze Object constructor:', e.message);
+            }
 
             this._moduleStates.prototypePollution.state = InitState.READY;
             // Update SafeMode so other modules know prototype pollution protection is available
             await SafeMode.initModule('prototypePollution', async () => {});
-            console.log('[SecurityCoordinator] Prototype pollution protection enabled (sealed - less restrictive than freeze)');
+            console.log('[SecurityCoordinator] Enhanced prototype pollution protection enabled (frozen Object.prototype, sealed other built-in prototypes)');
         } catch (error) {
             this._moduleStates.prototypePollution.state = InitState.FAILED;
             this._moduleStates.prototypePollution.error = error;
@@ -416,7 +456,7 @@ class SecurityCoordinatorClass {
      * Enable prototype pollution protection (for deferred call at window.onload)
      * @returns {boolean} True if protection was enabled
      */
-    enablePrototypePollutionProtection() {
+    async enablePrototypePollutionProtection() {
         if (this._moduleStates.prototypePollution.state === InitState.READY) {
             console.log('[SecurityCoordinator] Prototype pollution protection already enabled');
             return true;
@@ -438,13 +478,52 @@ class SecurityCoordinatorClass {
                 return false;
             }
 
-            // Seal prototypes (less restrictive than freeze, prevents addition but allows property modification for existing properties)
+            // Strengthened prototype pollution protection (same as _initPrototypePollutionProtection)
+            // 1. Seal prototypes (less restrictive than freeze, prevents addition but allows property modification for existing properties)
             Object.seal(Object.prototype);
             Object.seal(Array.prototype);
             Object.seal(Function.prototype);
+            Object.seal(String.prototype);
+            Object.seal(Number.prototype);
+            Object.seal(Boolean.prototype);
+            Object.seal(Symbol.prototype);
+            Object.seal(Date.prototype);
+            Object.seal(RegExp.prototype);
+            Object.seal(Error.prototype);
+            Object.seal(Promise.prototype);
+            Object.seal(Map.prototype);
+            Object.seal(Set.prototype);
+            Object.seal(WeakMap.prototype);
+            Object.seal(WeakSet.prototype);
+
+            // 2. Freeze critical prototypes to prevent property modification (more restrictive but more secure)
+            try {
+                Object.freeze(Object.prototype);
+            } catch (e) {
+                console.warn('[SecurityCoordinator] Could not freeze Object.prototype (deferred), using seal protection only:', e.message);
+            }
+
+            // 3. Set up non-configurable, non-writable property to detect tampering attempts
+            if (!Object.prototype.hasOwnProperty('_PROTECTION_ACTIVE')) {
+                Object.defineProperty(Object.prototype, '_PROTECTION_ACTIVE', {
+                    configurable: false,
+                    enumerable: false,
+                    writable: false,
+                    value: true
+                });
+            }
+
+            // 4. Freeze the global Object constructor itself to prevent re-sealing attacks
+            try {
+                Object.freeze(Object);
+            } catch (e) {
+                console.warn('[SecurityCoordinator] Could not freeze Object constructor (deferred):', e.message);
+            }
 
             this._moduleStates.prototypePollution.state = InitState.READY;
-            console.log('[SecurityCoordinator] Prototype pollution protection enabled (deferred, sealed - less restrictive than freeze)');
+            // Fix: Notify SafeMode so other modules know prototype pollution protection is available
+            await SafeMode.initModule('prototypePollution', async () => {});
+            console.log('[SecurityCoordinator] Enhanced prototype pollution protection enabled (deferred, frozen Object.prototype, sealed other built-in prototypes)');
             return true;
         } catch (error) {
             this._moduleStates.prototypePollution.state = InitState.FAILED;

@@ -15,6 +15,14 @@ import { DataQuery } from '../data-query.js';
 import { DataQuerySchemas } from './schemas/data-queries.js';
 import { TemplateQuerySchemas } from './schemas/template-queries.js';
 import { AnalyticsQuerySchemas } from './schemas/analytics-queries.js';
+import { FunctionValidation } from './utils/validation.js';
+import { FunctionRetry } from './utils/retry.js';
+import { DataExecutors } from './executors/data-executors.js';
+import { TemplateExecutors } from './executors/template-executors.js';
+import { AnalyticsExecutors } from './executors/analytics-executors.js';
+
+// Template function names - functions that don't require user streams
+const TemplateFunctionNames = TemplateQuerySchemas.map(s => s.function.name);
 
 // ==========================================
 // Unified Execute Function
@@ -35,8 +43,8 @@ import { AnalyticsQuerySchemas } from './schemas/analytics-queries.js';
  */
 async function executeFunction(functionName, args, streams, options = {}) {
     const { signal } = options;
-    const validation = window.FunctionValidation;
-    const retry = window.FunctionRetry;
+    const validation = FunctionValidation;
+    const retry = FunctionRetry;
 
     // Check for abort before any processing
     if (signal?.aborted) {
@@ -60,10 +68,8 @@ async function executeFunction(functionName, args, streams, options = {}) {
     }
 
     // Template functions don't require user streams
-    const templateFunctionNames = window.TemplateFunctionNames || [];
-
-    if (templateFunctionNames.includes(functionName)) {
-        const executor = window.TemplateExecutors?.[functionName];
+    if (TemplateFunctionNames.includes(functionName)) {
+        const executor = TemplateExecutors?.[functionName];
         if (!executor) {
             return { error: `Unknown template function: ${functionName}` };
         }
@@ -89,8 +95,8 @@ async function executeFunction(functionName, args, streams, options = {}) {
 
     // Find executor
     const allExecutors = {
-        ...window.DataExecutors,
-        ...window.AnalyticsExecutors
+        ...DataExecutors,
+        ...AnalyticsExecutors
     };
 
     const executor = allExecutors[functionName];

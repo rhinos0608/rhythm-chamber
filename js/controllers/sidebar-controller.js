@@ -81,7 +81,7 @@ async function initSidebar() {
     }
 
     // Register for session updates from EventBus
-    EventBus.on('session:*', renderSessionList);
+    this._sessionHandler = EventBus.on('session:*', renderSessionList);
 
     // Subscribe to AppState for reactive view changes
     // If a previous subscription exists, unsubscribe first to avoid duplicates
@@ -477,10 +477,11 @@ SidebarController.destroy = function destroySidebarController() {
         _unsubscribe = null;
     }
 
-    // Unregister session update callback
-    if (Chat?.offSessionUpdate && typeof renderSessionList === 'function') {
+    // Unregister session update callback from EventBus
+    if (SidebarController._sessionHandler && typeof SidebarController._sessionHandler === 'function') {
         try {
-            Chat.offSessionUpdate(renderSessionList);
+            SidebarController._sessionHandler();
+            SidebarController._sessionHandler = null;
         } catch (e) {
             console.warn('[SidebarController] Failed to unregister session update callback:', e);
         }

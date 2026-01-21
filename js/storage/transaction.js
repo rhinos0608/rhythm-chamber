@@ -15,6 +15,7 @@
 
 import { IndexedDBCore } from './indexeddb.js';
 import { EventBus } from '../services/event-bus.js';
+import { SecureTokenStore } from '../security/secure-token-store.js';
 
 // ==========================================
 // Compensation Log Store Name
@@ -180,9 +181,9 @@ class TransactionContext {
 
         // Get previous value AND options from SecureTokenStore for complete rollback
         // HNW Network: Use retrieveWithOptions to preserve token options during rollback
-        if (window.SecureTokenStore?.retrieveWithOptions) {
+        if (SecureTokenStore?.retrieveWithOptions) {
             try {
-                const previousToken = await window.SecureTokenStore.retrieveWithOptions(tokenKey);
+                const previousToken = await SecureTokenStore.retrieveWithOptions(tokenKey);
                 if (previousToken) {
                     previousValue = previousToken.value;
                     previousOptions = {
@@ -196,9 +197,9 @@ class TransactionContext {
         }
 
         // FALLBACK: Direct storage access when retrieveWithOptions is unavailable
-        if (previousValue === null && window.SecureTokenStore?.retrieve) {
+        if (previousValue === null && SecureTokenStore?.retrieve) {
             try {
-                const tokenValue = await window.SecureTokenStore.retrieve(tokenKey);
+                const tokenValue = await SecureTokenStore.retrieve(tokenKey);
                 if (tokenValue) {
                     previousValue = tokenValue;
                     // Use empty options since retrieve doesn't return metadata/expiry
@@ -230,9 +231,9 @@ class TransactionContext {
 
         // Get previous value AND options from SecureTokenStore for complete rollback
         // HNW Network: Use retrieveWithOptions to preserve token options during rollback
-        if (window.SecureTokenStore?.retrieveWithOptions) {
+        if (SecureTokenStore?.retrieveWithOptions) {
             try {
-                const previousToken = await window.SecureTokenStore.retrieveWithOptions(tokenKey);
+                const previousToken = await SecureTokenStore.retrieveWithOptions(tokenKey);
                 if (previousToken) {
                     previousValue = previousToken.value;
                     previousOptions = {
@@ -246,9 +247,9 @@ class TransactionContext {
         }
 
         // FALLBACK: Direct storage access when retrieveWithOptions is unavailable
-        if (previousValue === null && window.SecureTokenStore?.retrieve) {
+        if (previousValue === null && SecureTokenStore?.retrieve) {
             try {
-                const tokenValue = await window.SecureTokenStore.retrieve(tokenKey);
+                const tokenValue = await SecureTokenStore.retrieve(tokenKey);
                 if (tokenValue) {
                     previousValue = tokenValue;
                     // Use empty options since retrieve doesn't return metadata/expiry
@@ -312,7 +313,7 @@ async function preparePhase(ctx) {
                 }
             } else if (op.backend === 'securetoken') {
                 // Check SecureTokenStore is available
-                if (!window.SecureTokenStore) {
+                if (!SecureTokenStore) {
                     validationErrors.push('SecureTokenStore not available');
                 }
             }
@@ -525,15 +526,15 @@ async function commit(ctx) {
                 }
             } else if (op.backend === 'securetoken') {
                 // HNW Network: SecureTokenStore integration
-                if (!window.SecureTokenStore) {
+                if (!SecureTokenStore) {
                     throw new Error('SecureTokenStore not available');
                 }
 
                 if (op.type === 'put') {
                     const { value, options } = op.value;
-                    await window.SecureTokenStore.store(op.key, value, options);
+                    await SecureTokenStore.store(op.key, value, options);
                 } else if (op.type === 'delete') {
-                    await window.SecureTokenStore.invalidate(op.key);
+                    await SecureTokenStore.invalidate(op.key);
                 }
             }
 
@@ -600,18 +601,27 @@ async function rollback(ctx) {
                 await revertIndexedDBOperation(op);
             } else if (op.backend === 'securetoken') {
                 // HNW Network: SecureTokenStore rollback with full options preservation
-                if (window.SecureTokenStore) {
+                if (SecureTokenStore) {
                     if (op.previousValue === null) {
-                        await window.SecureTokenStore.invalidate(op.key);
+                        await SecureTokenStore.invalidate(op.key);
                     } else {
                         // Restore previous value with original options
-                        await window.SecureTokenStore.store(op.key, op.previousValue, op.previousOptions);
+                        await SecureTokenStore.store(op.key, op.previousValue, op.previousOptions);
                     }
                 }
             }
         } catch (rollbackError) {
-            console.error('[StorageTransaction] Rollback failed for operation:', op, rollbackError);
-            
+            // Sanitize operation before logging to prevent secret leaks
+            const sanitizedOp = {
+                backend: op.backend,
+                type: op.type,
+                store: isSensitiveKey(op.store) ? '[REDACTED]' : op.store,
+                key: isSensitiveKey(op.key) ? '[REDACTED]' : op.key,
+                previousValue: isSensitiveKey(op.key) ? '[REDACTED]' : op.previousValue,
+                previousOptions: isSensitiveKey(op.key) ? '[REDACTED]' : op.previousOptions
+            };
+            console.error('[StorageTransaction] Rollback failed for operation:', sanitizedOp, rollbackError);
+
             // Log to compensation log for manual recovery (sanitized)
             compensationLog.push({
                 transactionId: ctx.id,

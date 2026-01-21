@@ -11,6 +11,9 @@
  */
 
 import { Storage } from '../storage.js';
+import { PerformanceProfiler } from '../services/performance-profiler.js';
+import { CoreWebVitalsTracker } from './core-web-vitals.js';
+import { MetricsExporter } from './metrics-exporter.js';
 
 /**
  * Initialize observability settings in the settings modal
@@ -122,12 +125,12 @@ export function initObservabilitySettings() {
  * Update observability metrics display
  */
 function updateObservabilityMetrics() {
-    if (!window.PerformanceProfiler || !window.CoreWebVitalsTracker) return;
+    if (!PerformanceProfiler || !CoreWebVitalsTracker) return;
 
     // Update Web Vitals status
     const vitalsStatus = document.getElementById('observability-vitals-status');
     if (vitalsStatus) {
-        const vitals = window.CoreWebVitalsTracker.getWebVitalsSummary();
+        const vitals = CoreWebVitalsTracker.getWebVitalsSummary();
         const vitalsCount = Object.values(vitals.vitals || {}).filter(v => v.latest).length;
         vitalsStatus.textContent = vitalsCount > 0 ? 'Active' : 'Loading...';
     }
@@ -135,7 +138,7 @@ function updateObservabilityMetrics() {
     // Update Memory usage
     const memoryStatus = document.getElementById('observability-memory-status');
     if (memoryStatus) {
-        const memoryStats = window.PerformanceProfiler.getMemoryStatistics();
+        const memoryStats = PerformanceProfiler.getMemoryStatistics();
         if (memoryStats.currentUsage !== null) {
             memoryStatus.textContent = `${memoryStats.currentUsage.toFixed(1)}%`;
             memoryStatus.style.color = memoryStats.currentUsage > 80 ? '#C00' : '#0C0';
@@ -147,7 +150,7 @@ function updateObservabilityMetrics() {
     // Update Performance score
     const perfScore = document.getElementById('observability-performance-score');
     if (perfScore) {
-        const stats = window.PerformanceProfiler.getStatistics();
+        const stats = PerformanceProfiler.getStatistics();
         const score = calculatePerformanceScore(stats);
         perfScore.textContent = score;
         perfScore.style.color = score > 80 ? '#0C0' : score > 50 ? '#CC0' : '#C00';
@@ -183,7 +186,7 @@ function showDashboard() {
  * Export observability metrics
  */
 async function exportMetrics() {
-    if (!window.MetricsExporter) {
+    if (!MetricsExporter) {
         console.error('[ObservabilitySettings] MetricsExporter not available');
         return;
     }
@@ -209,21 +212,21 @@ async function exportMetrics() {
  * @param {boolean} enabled - Whether monitoring is enabled
  */
 async function toggleMonitoring(enabled) {
-    if (window.PerformanceProfiler) {
+    if (PerformanceProfiler) {
         if (enabled) {
-            window.PerformanceProfiler.enable();
+            PerformanceProfiler.enable();
             console.log('[ObservabilitySettings] Performance monitoring enabled');
         } else {
-            window.PerformanceProfiler.disable();
+            PerformanceProfiler.disable();
             console.log('[ObservabilitySettings] Performance monitoring disabled (<5% CPU savings)');
         }
     }
 
-    if (window.CoreWebVitalsTracker) {
+    if (CoreWebVitalsTracker) {
         if (enabled) {
-            window.CoreWebVitalsTracker.enable();
+            CoreWebVitalsTracker.enable();
         } else {
-            window.CoreWebVitalsTracker.disable();
+            CoreWebVitalsTracker.disable();
         }
     }
 
@@ -241,11 +244,11 @@ async function toggleMonitoring(enabled) {
  * Toggle memory profiling
  */
 function toggleMemoryProfiling(enabled) {
-    if (window.PerformanceProfiler) {
+    if (PerformanceProfiler) {
         if (enabled) {
-            window.PerformanceProfiler.enableMemoryProfiling();
+            PerformanceProfiler.enableMemoryProfiling();
         } else {
-            window.PerformanceProfiler.disableMemoryProfiling();
+            PerformanceProfiler.disableMemoryProfiling();
         }
     }
 
@@ -290,11 +293,11 @@ async function loadObservabilitySettings() {
     // Apply the setting
     if (!enabled) {
         // Disable monitoring if user previously disabled
-        if (window.PerformanceProfiler) {
-            window.PerformanceProfiler.disable();
+        if (PerformanceProfiler) {
+            PerformanceProfiler.disable();
         }
-        if (window.CoreWebVitalsTracker) {
-            window.CoreWebVitalsTracker.disable();
+        if (CoreWebVitalsTracker) {
+            CoreWebVitalsTracker.disable();
         }
         console.log('[ObservabilitySettings] Monitoring disabled per user preference');
     }

@@ -1,22 +1,25 @@
 /**
  * Template Profile Executors
- * 
+ *
  * Execution logic for template profile functions.
  * These don't require user stream data.
  */
 
+import { TemplateProfileStore } from '../../template-profiles.js';
+import { ProfileSynthesizer } from '../../profile-synthesizer.js';
+
 function executeGetTemplatesByGenre(args) {
     const { genre, limit = 5 } = args;
 
-    if (!window.TemplateProfileStore) {
+    if (!TemplateProfileStore) {
         return { error: 'Template profiles not available' };
     }
 
-    const templates = window.TemplateProfileStore.searchByGenre(genre, limit);
+    const templates = TemplateProfileStore.searchByGenre(genre, limit);
 
     if (templates.length === 0) {
         return {
-            error: `No templates found for genre "${genre}". Try: ${window.TemplateProfileStore.getAllGenres().slice(0, 5).join(', ')}`
+            error: `No templates found for genre "${genre}". Try: ${TemplateProfileStore.getAllGenres().slice(0, 5).join(', ')}`
         };
     }
 
@@ -29,7 +32,7 @@ function executeGetTemplatesByGenre(args) {
             emoji: t.emoji,
             description: t.description,
             personality_type: t.metadata.personalityType,
-            has_data: window.TemplateProfileStore.hasData(t.id)
+            has_data: TemplateProfileStore.hasData(t.id)
         }))
     };
 }
@@ -37,15 +40,15 @@ function executeGetTemplatesByGenre(args) {
 function executeGetTemplatesWithPattern(args) {
     const { pattern_type } = args;
 
-    if (!window.TemplateProfileStore) {
+    if (!TemplateProfileStore) {
         return { error: 'Template profiles not available' };
     }
 
-    const templates = window.TemplateProfileStore.searchByPattern(pattern_type);
+    const templates = TemplateProfileStore.searchByPattern(pattern_type);
 
     if (templates.length === 0) {
         return {
-            error: `No templates found with pattern "${pattern_type}". Available patterns: ${window.TemplateProfileStore.getAllPatterns().join(', ')}`
+            error: `No templates found with pattern "${pattern_type}". Available patterns: ${TemplateProfileStore.getAllPatterns().join(', ')}`
         };
     }
 
@@ -65,11 +68,11 @@ function executeGetTemplatesWithPattern(args) {
 function executeGetTemplatesByPersonality(args) {
     const { personality_type } = args;
 
-    if (!window.TemplateProfileStore) {
+    if (!TemplateProfileStore) {
         return { error: 'Template profiles not available' };
     }
 
-    const templates = window.TemplateProfileStore.searchByPersonality(personality_type);
+    const templates = TemplateProfileStore.searchByPersonality(personality_type);
 
     if (templates.length === 0) {
         return {
@@ -86,7 +89,7 @@ function executeGetTemplatesByPersonality(args) {
             emoji: t.emoji,
             description: t.description,
             genres: t.metadata.genres,
-            has_data: window.TemplateProfileStore.hasData(t.id)
+            has_data: TemplateProfileStore.hasData(t.id)
         }))
     };
 }
@@ -94,12 +97,12 @@ function executeGetTemplatesByPersonality(args) {
 async function executeSynthesizeProfile(args) {
     const { description } = args;
 
-    if (!window.ProfileSynthesizer) {
+    if (!ProfileSynthesizer) {
         return { error: 'Profile synthesizer not available' };
     }
 
     try {
-        const profile = await window.ProfileSynthesizer.synthesizeFromDescription(description);
+        const profile = await ProfileSynthesizer.synthesizeFromDescription(description);
 
         return {
             success: true,

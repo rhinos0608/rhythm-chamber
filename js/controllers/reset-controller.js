@@ -20,6 +20,7 @@ let _Chat = null;
 let _OperationLock = null;
 let _ViewController = null;
 let _showToast = null;
+let _FileUploadController = null;
 
 // ==========================================
 // State Management
@@ -43,6 +44,7 @@ function init(dependencies) {
     _OperationLock = dependencies.OperationLock;
     _ViewController = dependencies.ViewController;
     _showToast = dependencies.showToast;
+    _FileUploadController = dependencies.FileUploadController;
 
     console.log('[ResetController] Initialized with dependencies');
 }
@@ -182,8 +184,8 @@ async function waitForWorkersAbort(abortController, timeoutMs) {
     const start = Date.now();
 
     // Get active worker from FileUploadController if available
-    const activeWorker = window.FileUploadController?.getProcessingState?.().workerActive
-        ? window.FileUploadController
+    const activeWorker = _FileUploadController?.getProcessingState?.().workerActive
+        ? _FileUploadController
         : null;
 
     // Send abort signal to worker
@@ -200,7 +202,7 @@ async function waitForWorkersAbort(abortController, timeoutMs) {
 
     // Wait for worker to acknowledge or timeout
     while (Date.now() - start < timeoutMs) {
-        const processingState = window.FileUploadController?.getProcessingState?.();
+        const processingState = _FileUploadController?.getProcessingState?.();
 
         if (!processingState || !processingState.isProcessing) {
             // Worker already terminated
@@ -213,13 +215,13 @@ async function waitForWorkersAbort(abortController, timeoutMs) {
             await new Promise(resolve => setTimeout(resolve, 100));
 
             // If still active, force terminate
-            const stillProcessing = window.FileUploadController?.getProcessingState?.();
+            const stillProcessing = _FileUploadController?.getProcessingState?.();
             if (stillProcessing && stillProcessing.isProcessing) {
                 console.log('[ResetController] Worker not responding to abort, forcing termination');
 
                 // Force cleanup
-                if (window.FileUploadController?.cleanupWorker) {
-                    window.FileUploadController.cleanupWorker();
+                if (_FileUploadController?.cleanupWorker) {
+                    _FileUploadController.cleanupWorker();
                 }
 
                 return true;
@@ -233,8 +235,8 @@ async function waitForWorkersAbort(abortController, timeoutMs) {
     console.warn('[ResetController] Worker abort timeout reached');
 
     // Force cleanup on timeout
-    if (window.FileUploadController?.cleanupWorker) {
-        window.FileUploadController.cleanupWorker();
+    if (_FileUploadController?.cleanupWorker) {
+        _FileUploadController.cleanupWorker();
     }
 
     return false;

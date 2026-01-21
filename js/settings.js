@@ -61,6 +61,10 @@ let currentEmbeddingAbortController = null;
 let settingsMigrationComplete = false;
 const SETTINGS_MIGRATED_KEY = 'rhythm_chamber_settings_migrated_to_idb';
 
+// HNW: Settings cache - populated by getSettingsAsync() for sync access
+// This allows getSettings() to return user's saved settings after initialization
+let _cachedSettings = null;
+
 /**
  * Migrate settings from localStorage to IndexedDB (one-time migration)
  * HNW Hierarchy: Simplifies to config.js → IndexedDB (removes localStorage as third authority)
@@ -170,8 +174,13 @@ function getSettings() {
         }
     };
 
-    // Post-migration: Skip localStorage reads entirely
-    // User overrides are only available via getSettingsAsync()
+    // Post-migration: Return cached settings if available
+    // The cache is populated by getSettingsAsync() on first call
+    if (settingsMigrationComplete && _cachedSettings) {
+        return _cachedSettings;
+    }
+
+    // Post-migration without cache: return defaults (cache will be populated by getSettingsAsync)
     if (settingsMigrationComplete) {
         return settings;
     }
@@ -259,6 +268,8 @@ async function getSettingsAsync() {
             if (storedConfig) {
                 applySettingsOverrides(settings, storedConfig);
             }
+            // Update cache for sync access
+            _cachedSettings = settings;
         } catch (e) {
             console.warn('[Settings] Failed to read from IndexedDB:', e);
         }
@@ -418,6 +429,9 @@ async function saveSettings(settings) {
     if (settings.spotify?.clientId) {
         ConfigLoader.set('spotify.clientId', settings.spotify.clientId);
     }
+
+    // HNW: Update cached settings for sync access via getSettings()
+    _cachedSettings = await getSettingsAsync();
 
     console.log('[Settings] Saved and applied to runtime Config');
 }
@@ -817,16 +831,16 @@ function showSettingsModal() {
                             </button>
                         ` : ''}
                         ${(() => {
-                            const RAG = ModuleRegistry.getModuleSync('RAG');
-                            if (RAG?.isConfigured?.()) {
-                                const chunksCount = RAG.getConfig?.()?.chunksCount || 0;
-                                return `<span class="settings-hint success">✓ ${chunksCount} chunks indexed</span>`;
-                            } else if (RAG?.getCheckpoint?.()) {
-                                return `<span class="settings-hint warning">⚠️ Interrupted - click Resume to continue</span>`;
-                            } else {
-                                return `<span class="settings-hint">Generate embeddings to enable semantic search</span>`;
-                            }
-                        })()}
+            const RAG = ModuleRegistry.getModuleSync('RAG');
+            if (RAG?.isConfigured?.()) {
+                const chunksCount = RAG.getConfig?.()?.chunksCount || 0;
+                return `<span class="settings-hint success">✓ ${chunksCount} chunks indexed</span>`;
+            } else if (RAG?.getCheckpoint?.()) {
+                return `<span class="settings-hint warning">⚠️ Interrupted - click Resume to continue</span>`;
+            } else {
+                return `<span class="settings-hint">Generate embeddings to enable semantic search</span>`;
+            }
+        })()}
                     </div>
                     
                     <div id="embedding-progress" class="embedding-progress" style="display: none;">
@@ -878,6 +892,9 @@ function showSettingsModal() {
     modal.addEventListener('click', (e) => {
         const actionElement = e.target.closest('[data-action]');
         if (!actionElement) return;
+
+        // HNW: Stop propagation to prevent app.js from seeing these settings-specific actions
+        e.stopPropagation();
 
         const action = actionElement.dataset.action;
         switch (action) {
@@ -1708,10 +1725,13 @@ function onProviderChange(provider) {
     const ollamaSection = document.getElementById('ollama-status');
     const lmstudioSection = document.getElementById('lmstudio-status');
     const openrouterSection = document.getElementById('openrouter-section');
+    const geminiSection = document.getElementById('gemini-section');
 
     if (ollamaSection) ollamaSection.style.display = provider === 'ollama' ? 'block' : 'none';
     if (lmstudioSection) lmstudioSection.style.display = provider === 'lmstudio' ? 'block' : 'none';
     if (openrouterSection) openrouterSection.style.display = provider === 'openrouter' ? 'block' : 'none';
+    if (geminiSection) geminiSection.style.display = provider === 'gemini' ? 'block' : 'none';
+
 
     // Check Ollama connection if selected
     if (provider === 'ollama') {

@@ -5,6 +5,8 @@
  *
  * Processes all JavaScript/TypeScript files to extract exports and imports
  * for codebase intelligence indexing.
+ *
+ * Updated to use @babel/parser for reliable AST-based extraction instead of fragile regex.
  */
 
 const fs = require('fs');
@@ -20,7 +22,7 @@ const FILES = [
   './js/context-aware-recovery.js',
   './js/controllers/chat-ui-controller.js',
   './js/controllers/demo-controller.js',
-  './js/controllers/file-upload-controller.js',
+  './controllers/file-upload-controller.js',
   './js/controllers/observability-controller.js',
   './js/controllers/reset-controller.js',
   './js/controllers/sidebar-controller.js',
@@ -209,49 +211,125 @@ const FILES = [
   './vitest.config.js'
 ];
 
-// Regex patterns for extraction
-const EXPORT_PATTERNS = [
-  // Named exports: export { foo, bar }
-  /export\s*\{([^}]+)\}/g,
-  // Declaration exports: export const foo = ..., export function bar() {}, export class Baz {}
-  /export\s+(?:const|let|var|function\*?|async\s+function|class)\s+(\w+)/g,
-  // Default exports: export default function foo() {}, export default class Bar {}, export default baz
-  /export\s+default\s+(?:function\s*\*?\s*|class\s+)?(\w+)?/g,
-  // CommonJS object: module.exports = { foo, bar }
-  /module\.exports\s*=\s*\{([^}]+)\}/g,
-  // CommonJS single: module.exports = foo
-  /module\.exports\s*=\s*(\w+)\s*[;\n]/g,
-  // TypeScript exports: export type Foo, export interface Bar
-  /export\s+(?:type|interface)\s+(\w+)/g
-];
+// Try to use @babel/parser for AST-based extraction; fall back to regex if unavailable
+let useParser = true;
+let parser;
 
-const IMPORT_PATTERNS = [
-  // ES6 imports: import { foo, bar } from 'baz', import foo from 'bar', import * as foo from 'bar'
-  /import\s+(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+['"]([^'"]+)['"]/g,
-  // Side-effect imports: import 'foo'
-  /import\s+['"]([^'"]+)['"]/g,
-  // CommonJS requires: require('foo')
-  /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g
-];
+try {
+  // eslint-disable-next-line global-require
+  parser = require('@babel/parser');
+} catch (e) {
+  console.warn('[build-index] @babel/parser not available, falling back to regex-based extraction');
+  useParser = false;
+}
 
 /**
- * Extract exports from file content
+ * Extract exports from file content using AST parser
+ * Falls back to regex if parser unavailable
  */
 function extractExports(content) {
   const exports = new Set();
+
+  if (useParser) {
+    try {
+      const ast = parser.parse(content, {
+        sourceType: 'module',
+        plugins: ['typescript'],
+        errorRecovery: true
+      });
+
+      // Traverse the AST to find all export declarations
+      for (const statement of ast.program.body) {
+        if (statement.type === 'ExportNamedDeclaration') {
+          // export { foo, bar as baz }
+          for (const specifier of statement.specifiers) {
+            exports.add(specifier.exported.name);
+          }
+        } else if (statement.type === 'ExportDefaultDeclaration') {
+          // export default ...
+          const decl = statement.declaration;
+          if (decl) {
+            if (decl.type === 'Identifier') {
+              exports.add(decl.name);
+            } else if (decl.type === 'FunctionDeclaration' && decl.id) {
+              exports.add(decl.id.name);
+            } else if (decl.type === 'ClassDeclaration' && decl.id) {
+              exports.add(decl.id.name);
+            }
+            // Anonymous default exports are skipped (not captured)
+          }
+        } else if (statement.type === 'ExportAllDeclaration') {
+          // export * from 'foo' - re-export, skip for now
+          continue;
+        }
+      }
+
+      // Also check for CommonJS module.exports
+      for (const statement of ast.program.body) {
+        if (statement.type === 'ExpressionStatement') {
+          const expr = statement.expression;
+          if (expr.type === 'AssignmentExpression' &&
+              expr.left.type === 'MemberExpression' &&
+              expr.left.object && expr.left.object.name === 'module' &&
+              expr.left.property && expr.left.property.name === 'exports') {
+            // module.exports = foo
+            if (expr.right && expr.right.type === 'Identifier') {
+              exports.add(expr.right.name);
+            } else if (expr.right && expr.right.type === 'ObjectExpression') {
+              // module.exports = { foo, bar }
+              for (const prop of expr.right.properties) {
+                if (prop.type === 'ObjectProperty' && prop.key.type === 'Identifier') {
+                  exports.add(prop.key.name);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      return Array.from(exports);
+    } catch (parseError) {
+      console.warn(`[build-index] AST parsing failed, falling back to regex: ${parseError.message}`);
+      // Fall through to regex-based extraction
+    }
+  }
+
+  // Regex-based fallback (original logic with fixes)
+  const EXPORT_PATTERNS = [
+    // Named exports: export { foo, bar }
+    /export\s*\{([^}]+)\}/g,
+    // Declaration exports: export const foo = ..., export function bar() {}, export class Baz {}
+    /export\s+(?:const|let|var|function\*?|async\s+function|class)\s+(\w+)/g,
+    // Default exports: export default function foo() {}, export default class Bar {}
+    // Updated: Only capture named exports, require the name to be present
+    /export\s+default\s+(?:function\s*\*?\s*|class\s+)(\w+)/g,
+    // CommonJS object: module.exports = { foo, bar }
+    /module\.exports\s*=\s*\{([^}]+)\}/g,
+    // CommonJS single: module.exports = foo
+    // Updated: Accept EOF without semicolon
+    /module\.exports\s*=\s*(\w+)(?:\s*[;\n]|$)/g,
+    // TypeScript exports: export type Foo, export interface Bar
+    /export\s+(?:type|interface)\s+(\w+)/g
+  ];
 
   for (const pattern of EXPORT_PATTERNS) {
     let match;
     const regex = new RegExp(pattern.source, pattern.flags);
     while ((match = regex.exec(content)) !== null) {
       if (match[1]) {
-        // Handle comma-separated exports
+        // Handle comma-separated exports with alias support
         const items = match[1].split(',').map(item => item.trim());
         items.forEach(item => {
           // Remove comments and default keywords
           const cleaned = item.replace(/\/\/.*$/, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
           if (cleaned && cleaned !== 'default') {
-            exports.add(cleaned);
+            // Handle "export as" aliasing
+            const aliasMatch = cleaned.match(/^(.+?)\s+as\s+(.+)$/i);
+            if (aliasMatch) {
+              exports.add(aliasMatch[2]);
+            } else {
+              exports.add(cleaned);
+            }
           }
         });
       } else if (match[0]) {
@@ -273,6 +351,57 @@ function extractExports(content) {
 function extractImports(content) {
   const imports = new Set();
 
+  // Try AST-based extraction first
+  if (useParser) {
+    try {
+      const ast = parser.parse(content, {
+        sourceType: 'module',
+        plugins: ['typescript'],
+        errorRecovery: true
+      });
+
+      for (const statement of ast.program.body) {
+        if (statement.type === 'ImportDeclaration') {
+          if (statement.source) {
+            // Remove any query parameters and get relative path
+            const sourceValue = statement.source.value;
+            imports.add(sourceValue);
+          }
+        }
+      }
+
+      // Also check for CommonJS require() calls
+      for (const statement of ast.program.body) {
+        if (statement.type === 'ExpressionStatement') {
+          const expr = statement.expression;
+          if (expr.type === 'CallExpression' &&
+              expr.callee && expr.callee.name === 'require' &&
+              expr.arguments.length > 0) {
+            const arg = expr.arguments[0];
+            if (arg.type === 'StringLiteral') {
+              imports.add(arg.value);
+            }
+          }
+        }
+      }
+
+      return Array.from(imports);
+    } catch (parseError) {
+      console.warn(`[build-index] AST import parsing failed, falling back to regex: ${parseError.message}`);
+      // Fall through to regex
+    }
+  }
+
+  // Regex-based fallback
+  const IMPORT_PATTERNS = [
+    // ES6 imports: import { foo, bar } from 'baz', import foo from 'bar', import * as foo from 'bar'
+    /import\s+(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+['"]([^'"]+)['"]/g,
+    // Side-effect imports: import 'foo'
+    /import\s+['"]([^'"]+)['"]/g,
+    // CommonJS requires: require('foo')
+    /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g
+  ];
+
   for (const pattern of IMPORT_PATTERNS) {
     let match;
     const regex = new RegExp(pattern.source, pattern.flags);
@@ -287,12 +416,28 @@ function extractImports(content) {
 }
 
 /**
+ * Get relative path from project root for a file
+ */
+function getRelativePath(absolutePath) {
+  const rootDir = process.cwd();
+  if (absolutePath.startsWith(rootDir)) {
+    return path.relative(rootDir, absolutePath);
+  }
+  return absolutePath;
+}
+
+/**
  * Process a single file
+ * @param {string} filePath - Absolute path to the file
  */
 function processFile(filePath) {
-  const absolutePath = path.resolve(process.cwd(), filePath);
+  const isAbsolute = path.isAbsolute(filePath);
 
-  if (!fs.existsSync(absolutePath)) {
+  if (!isAbsolute) {
+    filePath = path.resolve(process.cwd(), filePath);
+  }
+
+  if (!fs.existsSync(filePath)) {
     return {
       exports: [],
       imports: [],
@@ -302,9 +447,13 @@ function processFile(filePath) {
   }
 
   try {
-    const content = fs.readFileSync(absolutePath, 'utf-8');
+    const content = fs.readFileSync(filePath, 'utf-8');
     const exports = extractExports(content);
-    const imports = extractImports(content);
+    const imports = extractImports(content).filter(imp => {
+      // Filter out self-imports (imports that match the current file path)
+      const impPath = path.resolve(process.cwd(), imp);
+      return impPath !== filePath;
+    });
 
     return {
       exports,
@@ -337,11 +486,23 @@ function main() {
   for (const file of FILES) {
     const absolutePath = path.resolve(process.cwd(), file);
     console.log(`Processing: ${file}`);
-    result.files[absolutePath] = processFile(file);
+    // Use absolute path as key, pass absolute path to processFile
+    result.files[absolutePath] = processFile(absolutePath);
+  }
+
+  // Convert absolute path keys to relative paths
+  const relativeResult = {
+    ...result,
+    files: {}
+  };
+
+  for (const [absolutePath, data] of Object.entries(result.files)) {
+    const relativePath = getRelativePath(absolutePath);
+    relativeResult.files[relativePath] = data;
   }
 
   const outputPath = path.join(__dirname, 'codebase-index.json');
-  fs.writeFileSync(outputPath, JSON.stringify(result, null, 2));
+  fs.writeFileSync(outputPath, JSON.stringify(relativeResult, null, 2));
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(2);
   console.log(`\nComplete! Processed ${FILES.length} files in ${duration}s`);
@@ -352,7 +513,7 @@ function main() {
   let totalImports = 0;
   let errorCount = 0;
 
-  for (const [filePath, data] of Object.entries(result.files)) {
+  for (const [filePath, data] of Object.entries(relativeResult.files)) {
     totalExports += data.exports.length;
     totalImports += data.imports.length;
     if (data.error) errorCount++;
@@ -363,7 +524,7 @@ function main() {
   console.log(`- Total imports: ${totalImports}`);
   console.log(`- Files with errors: ${errorCount}`);
 
-  return result;
+  return relativeResult;
 }
 
 // Run if executed directly
