@@ -80,21 +80,20 @@ async function getConfig(key, defaultValue = null) {
                             // Parse JSON and return
                             return JSON.parse(decrypted);
                         } else {
-                            // Decryption failed - emit security event and propagate error
-                            const securityEvent = { key, timestamp: Date.now(), critical: true };
-                            EventBus.emit('security:decryption_failed', securityEvent);
+                            // Decryption failed - throw error (event emitted in catch block)
                             const error = new Error(`Decryption failed for sensitive key '${key}'`);
                             error.code = 'DECRYPTION_FAILED';
                             error.key = key;
-                            throw error;  // Propagate error instead of returning null
+                            throw error;
                         }
 
                     } catch (decryptError) {
                         // CRITICAL: Decryption failure - emit security event and propagate
+                        // Single point of emission for all decryption failures
                         const securityEvent = { key, timestamp: Date.now(), critical: true, error: decryptError.message };
                         EventBus.emit('security:decryption_failed', securityEvent);
                         console.error(`[ConfigAPI] CRITICAL: Decryption threw error for sensitive key '${key}':`, decryptError);
-                        throw decryptError;  // Propagate error instead of returning null
+                        throw decryptError;
                     }
                 }
 

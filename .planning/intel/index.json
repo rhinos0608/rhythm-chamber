@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": 1769005685415,
+  "updated": 1769050050016,
   "files": {
     "./js/app.js": {
       "exports": [
@@ -1770,7 +1770,7 @@
         "../storage/event-log-store.js",
         "./tab-coordination.js"
       ],
-      "indexed": 1768985146214
+      "indexed": 1769049866140
     },
     "/Users/rhinesharar/rhythm-chamber/js/services/provider-health-authority.js": {
       "exports": [
@@ -1818,7 +1818,7 @@
         "../state/app-state.js",
         "../utils/html-escape.js"
       ],
-      "indexed": 1769005303308
+      "indexed": 1769046344143
     },
     "/Users/rhinesharar/rhythm-chamber/js/storage/transaction.js": {
       "exports": [
@@ -1987,7 +1987,7 @@
         "./template-profiles.js",
         "./profile-synthesizer.js"
       ],
-      "indexed": 1769005337817
+      "indexed": 1769045848876
     },
     "/Users/rhinesharar/rhythm-chamber/js/controllers/view-controller.js": {
       "exports": [
@@ -2034,9 +2034,10 @@
         "./indexeddb.js",
         "../security/index.js",
         "../security/storage-encryption.js",
-        "../security/secure-token-store.js"
+        "../security/secure-token-store.js",
+        "../services/event-bus.js"
       ],
-      "indexed": 1768988900457
+      "indexed": 1769050050016
     },
     "/Users/rhinesharar/rhythm-chamber/js/observability/observability-settings.js": {
       "exports": [
@@ -2060,13 +2061,14 @@
         "MetricsExporter",
         "flatMetrics",
         "getMetricsExporter",
+        "resetMetricsExporter",
         "default"
       ],
       "imports": [
         "../services/performance-profiler.js",
         "./core-web-vitals.js"
       ],
-      "indexed": 1768988941240
+      "indexed": 1769049389971
     },
     "/Users/rhinesharar/rhythm-chamber/js/services/tool-call-handling-service.js": {
       "exports": [
@@ -2115,7 +2117,7 @@
         "../chat.js",
         "../utils/html-escape.js"
       ],
-      "indexed": 1769004675551
+      "indexed": 1769049358960
     },
     "/Users/rhinesharar/rhythm-chamber/js/main.js": {
       "exports": [],
@@ -2212,7 +2214,7 @@
         "../storage/indexeddb.js",
         "../chat.js"
       ],
-      "indexed": 1768991046806
+      "indexed": 1769049371324
     },
     "/Users/rhinesharar/rhythm-chamber/js/storage/quota-monitor.js": {
       "exports": [
@@ -2300,7 +2302,7 @@
         "./settings-schema.js",
         "./utils/focus-trap.js"
       ],
-      "indexed": 1769005670447
+      "indexed": 1769050029792
     },
     "/Users/rhinesharar/rhythm-chamber/js/services/profile-description-generator.js": {
       "exports": [
@@ -2311,7 +2313,7 @@
         "../settings.js",
         "../providers/provider-interface.js"
       ],
-      "indexed": 1768996826831
+      "indexed": 1769046280849
     },
     "/Users/rhinesharar/rhythm-chamber/js/services/session-manager.js": {
       "exports": [
@@ -2391,7 +2393,7 @@
       "imports": [
         "../utils/safe-json.js"
       ],
-      "indexed": 1769004964927
+      "indexed": 1769046389492
     },
     "/Users/rhinesharar/rhythm-chamber/js/ollama.js": {
       "exports": [
@@ -2520,7 +2522,7 @@
         "./operation-lock.js",
         "./utils/safe-json.js"
       ],
-      "indexed": 1769003814890
+      "indexed": 1769049516540
     },
     "/Users/rhinesharar/rhythm-chamber/js/pricing.js": {
       "exports": [
@@ -2625,6 +2627,112 @@
       ],
       "imports": [],
       "indexed": 1769005344152
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/services/provider-health-monitor.js": {
+      "exports": [
+        "HealthStatus",
+        "ProviderHealthMonitor",
+        "default",
+        "getProviderHealthMonitor"
+      ],
+      "imports": [
+        "./event-bus.js",
+        "./provider-health-authority.js"
+      ],
+      "indexed": 1769049961540
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/parser-worker.js": {
+      "exports": [],
+      "imports": [],
+      "indexed": 1769049493533
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/storage/event-log-store.js": {
+      "exports": [
+        "EventLogStore"
+      ],
+      "imports": [
+        "../services/vector-clock.js",
+        "../services/event-bus.js",
+        "./indexeddb.js"
+      ],
+      "indexed": 1769045923731
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/workers/pattern-worker-pool.js": {
+      "exports": [
+        "PatternWorkerPool"
+      ],
+      "imports": [
+        "../patterns.js",
+        "../services/event-bus.js"
+      ],
+      "indexed": 1769046275485
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/observability/init-observability.js": {
+      "exports": [
+        "initObservability",
+        "getObservability",
+        "isObservabilityInitialized",
+        "disableObservability"
+      ],
+      "imports": [
+        "../services/event-bus.js",
+        "./core-web-vitals.js",
+        "../services/performance-profiler.js",
+        "./metrics-exporter.js",
+        "../controllers/observability-controller.js"
+      ],
+      "indexed": 1769046289275
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/services/function-calling-fallback.js": {
+      "exports": [
+        "CAPABILITY_LEVELS",
+        "detectCapabilityLevel",
+        "supportsNativeFunctionCalling",
+        "buildFunctionDefinitionsText",
+        "buildPromptInjectionAddition",
+        "buildLevel2Request",
+        "parseFunctionCallsFromText",
+        "extractQueryIntent",
+        "executeFunctionCalls",
+        "buildFunctionResultsMessage",
+        "handleFunctionCallingWithFallback",
+        "FunctionCallingFallback"
+      ],
+      "imports": [
+        "../functions/index.js"
+      ],
+      "indexed": 1769046299396
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/local-vector-store.js": {
+      "exports": [
+        "LocalVectorStore"
+      ],
+      "imports": [
+        "./storage/lru-cache.js"
+      ],
+      "indexed": 1769046335276
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/operation-lock.js": {
+      "exports": [
+        "OperationLock"
+      ],
+      "imports": [
+        "./operation-lock-errors.js"
+      ],
+      "indexed": 1769049429692
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/operation-queue.js": {
+      "exports": [
+        "OperationQueue",
+        "QueuedOperation",
+        "QUEUE_PRIORITY",
+        "QUEUE_STATUS"
+      ],
+      "imports": [
+        "./operation-lock.js",
+        "./operation-lock-errors.js"
+      ],
+      "indexed": 1769049467226
     }
   }
 }

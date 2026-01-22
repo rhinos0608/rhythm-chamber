@@ -124,7 +124,7 @@ async function createChunksWithWorker(streams, onProgress = () => { }) {
         // Set up message handler ONCE at module initialization to prevent race conditions
         if (!worker._chunksHandlerSetup) {
             worker.onmessage = (event) => {
-                const { type, requestId: rid, current, total, message, chunks, message: errorMsg } = event.data;
+                const { type, requestId: rid, current, total, message, chunks } = event.data;
                 const pending = pendingWorkerRequests.get(rid);
                 if (!pending) return;
 
@@ -140,7 +140,7 @@ async function createChunksWithWorker(streams, onProgress = () => { }) {
                     case 'error':
                         clearTimeout(pending.timeoutId);
                         pendingWorkerRequests.delete(rid);
-                        pending.reject(new Error(errorMsg || 'Worker error'));
+                        pending.reject(new Error(message || 'Worker error'));
                         break;
                 }
             };

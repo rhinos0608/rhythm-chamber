@@ -2286,7 +2286,7 @@ function initCrossTabSync() {
                 EventBus.emit('settings:changed', settings);
             }).catch(err => {
                 console.error('[Settings] Failed to reload settings after cross-tab change:', err);
-                if (window.showToast) {
+                if (typeof showToast === 'function') {
                     showToast('Settings sync failed. Refresh page.', 5000);
                 }
                 EventBus.emit('settings:sync_failed', { error: err });

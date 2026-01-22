@@ -1,7 +1,7 @@
 ---
 path: /Users/rhinesharar/rhythm-chamber/js/storage/config-api.js
-type: api
-updated: 2026-01-21
+type: module
+updated: 2026-01-22
 status: active
 ---
 
@@ -9,22 +9,26 @@ status: active
 
 ## Purpose
 
-Unified configuration storage API providing key-value storage with IndexedDB backend and localStorage fallback, including automatic encryption support for sensitive data.
+Unified configuration storage API providing key-value storage with IndexedDB backend, localStorage fallback, and automatic encryption support for sensitive data.
 
 ## Exports
 
-- `getConfig` - Retrieves configuration values with automatic decryption support
-- `setConfig` - Stores configuration values with optional encryption
-- `deleteConfig` - Removes configuration values with secure deletion
-- `clearConfig` - Clears all configuration data
-- `ConfigAPI` - Main export object containing all config operations
+- `ConfigAPI` - Main API object with `get`, `set`, `delete`, `clear`, `keys`, `has`, `migrateToEncrypted` methods
+- `getConfig` - Get a config value from unified storage
+- `setConfig` - Store a config value with optional encryption
+- `deleteConfig` - Remove a config value
+- `clearConfig` - Clear all config values
+- `getConfigKeys` - Get all config keys
+- `hasConfig` - Check if a key exists
+- `migrateToEncrypted` - Migrate plaintext values to encrypted storage
 
 ## Dependencies
 
-- [[js-storage-indexeddb]] - IndexedDB core storage backend
-- [[js-security-index]] - Security coordinator and key management
-- [[js-security-storage-encryption]] - Encryption/decryption utilities
-- [[js-security-secure-token-store]] - Secure token storage
+- [[indexeddb]]
+- [[security-index]]
+- [[storage-encryption]]
+- [[secure-token-store]]
+- [[event-bus]]
 
 ## Used By
 
@@ -32,6 +36,6 @@ TBD
 
 ## Notes
 
-- Supports automatic encryption through `shouldEncrypt()` utility
-- Implements graceful degradation with fallback to defaultValue on decryption failure
-- Tracks migration version (v1) for future key rotation and data migration planning
+- Automatically decrypts encrypted data on retrieval via metadata wrapper
+- Mixed encrypted/plaintext database state supported with graceful degradation
+- Migration versioning embedded in encrypted data metadata for key rotation planning

@@ -90,7 +90,8 @@ export class ProviderHealthMonitor {
      * @public
      */
     async initialize() {
-        await this._refreshHealthData();
+        // _refreshHealthData is synchronous, no await needed
+        this._refreshHealthData();
         this._startMonitoring();
     }
 
@@ -417,4 +418,5 @@ function getProviderHealthMonitor() {
     return providerHealthMonitorInstance;
 }
 
-export default getProviderHealthMonitor();
+// Export the function, not the result, to avoid race conditions at module load time
+export default getProviderHealthMonitor;

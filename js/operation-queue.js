@@ -212,6 +212,8 @@ class OperationQueue {
                 await new Promise(resolve => setTimeout(resolve, waitTime));
                 // Re-sort queue after waiting - priorities may have changed or new ops added
                 this.queue.sort((a, b) => b.priority - a.priority);
+                // Reset retry counter since operation identity may have changed after re-sort
+                preCheckRetries = 0;
                 continue;
             }
 

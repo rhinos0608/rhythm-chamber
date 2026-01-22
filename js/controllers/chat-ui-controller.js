@@ -53,17 +53,11 @@ function processSequencedChunk(seq, data, handler) {
         // CRITICAL: Before dropping, check if we're about to drop expected data
         if (oldestSeq === nextExpectedSeq) {
             // We're about to drop the sequence we're waiting for - process all possible first
-            const toProcess = [];
-            for (const [bufSeq, bufData] of sequenceBuffer) {
-                if (bufSeq === nextExpectedSeq) {
-                    toProcess.push({ seq: bufSeq, data: bufData });
-                    nextExpectedSeq++;
-                    sequenceBuffer.delete(bufSeq);
-                }
-            }
-            // Process consecutive sequences
-            for (const item of toProcess) {
-                handler(item.data);
+            // Use while-loop to handle consecutive sequences correctly (matches pattern at lines 91-96)
+            while (sequenceBuffer.has(nextExpectedSeq)) {
+                handler(sequenceBuffer.get(nextExpectedSeq));
+                sequenceBuffer.delete(nextExpectedSeq);
+                nextExpectedSeq++;
             }
             // Now check if we still need to drop
             if (sequenceBuffer.size >= MAX_SEQUENCE_BUFFER_SIZE) {

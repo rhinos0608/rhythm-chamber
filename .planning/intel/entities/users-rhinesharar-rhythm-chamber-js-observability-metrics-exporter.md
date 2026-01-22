@@ -1,7 +1,7 @@
 ---
 path: /Users/rhinesharar/rhythm-chamber/js/observability/metrics-exporter.js
 type: service
-updated: 2026-01-21
+updated: 2026-01-22
 status: active
 ---
 
@@ -9,17 +9,17 @@ status: active
 
 ## Purpose
 
-Comprehensive metrics export and scheduling framework supporting multiple formats (JSON, CSV, Prometheus, InfluxDB) and external service integrations (Datadog, New Relic, Prometheus Pushgateway).
+Provides comprehensive metrics export and scheduling functionality with support for multiple export formats (JSON, CSV, Prometheus, InfluxDB) and external service integrations (Datadog, New Relic, Prometheus Pushgateway).
 
 ## Exports
 
-- **ExportFormat** - Enum of export format types (JSON, CSV, PROMETHEUS, INFLUXDB)
-- **ScheduleType** - Enum of export schedule types (IMMEDIATE, HOURLY, DAILY, WEEKLY, MONTHLY)
-- **ExternalService** - Enum of external service integration types (DATADOG, NEWRELIC, PROMETHEUS_PUSHGATEWAY, CUSTOM_ENDPOINT)
-- **MetricsExporter** - Main class for metrics export with scheduling and external service integration
-- **flatMetrics** - Utility function to flatten nested metric objects
-- **getMetricsExporter** - Factory function to retrieve or create MetricsExporter singleton instance
-- **default** - Default export (MetricsExporter class or getMetricsExporter)
+- **ExportFormat**: Enum of export format types (JSON, CSV, PROMETHEUS, INFLUXDB)
+- **ScheduleType**: Enum of export schedule types (IMMEDIATE, HOURLY, DAILY, WEEKLY, MONTHLY)
+- **ExternalService**: Enum of external service integration types (DATADOG, NEWRELIC, PROMETHEUS_PUSHGATEWAY, CUSTOM_ENDPOINT)
+- **MetricsExporter**: Main class for managing metrics export jobs, scheduling, and external service integrations
+- **flatMetrics**: Utility function to flatten nested metrics objects
+- **getMetricsExporter**: Singleton accessor function for the MetricsExporter instance
+- **resetMetricsExporter**: Function to reset the singleton instance (primarily for testing)
 
 ## Dependencies
 
@@ -32,4 +32,4 @@ TBD
 
 ## Notes
 
-Manages scheduled export jobs, external service credentials (encrypted), and supports aggregation windows for metrics data.
+Supports encrypted storage of external service credentials and provides aggregation windows for batched exports. Includes job scheduling with success/failure tracking.

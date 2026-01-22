@@ -52,46 +52,47 @@
 
 // Define fallback error classes inline if external module fails
 // This ensures instanceof checks work correctly
-class LockAcquisitionError extends Error {
+// Use let + class expression to allow reassignment from external module
+let LockAcquisitionError = class extends Error {
     constructor(operationName, blockedBy) {
         super(`Cannot acquire lock for '${operationName}'. Blocked by: ${blockedBy?.join(', ') || 'unknown'}`);
         this.name = 'LockAcquisitionError';
         this.code = 'LOCK_ACQUISITION_FAILED';
     }
-}
+};
 
-class LockTimeoutError extends Error {
+let LockTimeoutError = class extends Error {
     constructor(operationName, timeoutMs) {
         super(`Timeout acquiring lock for '${operationName}' after ${timeoutMs}ms`);
         this.name = 'LockTimeoutError';
         this.code = 'LOCK_TIMEOUT';
     }
-}
+};
 
-class LockReleaseError extends Error {
+let LockReleaseError = class extends Error {
     constructor(operationName, providedOwnerId, actualOwnerId) {
         super(`Cannot release lock for '${operationName}'. Provided owner: ${providedOwnerId}, Actual owner: ${actualOwnerId || 'none'}`);
         this.name = 'LockReleaseError';
         this.code = 'LOCK_RELEASE_FAILED';
     }
-}
+};
 
-class LockForceReleaseError extends Error {
+let LockForceReleaseError = class extends Error {
     constructor(operationName) {
         super(`Lock for '${operationName}' was force-released`);
         this.name = 'LockForceReleaseError';
         this.code = 'LOCK_FORCE_RELEASED';
     }
-}
+};
 
-class DeadlockError extends Error {
+let DeadlockError = class extends Error {
     constructor(operationName, cycle) {
         super(`Deadlock detected for '${operationName}': ${cycle.join(' -> ')}`);
         this.name = 'DeadlockError';
         this.code = 'DEADLOCK_DETECTED';
         this.cycle = cycle;
     }
-}
+};
 
 // Try to import error classes from external module (works in both Node and browser)
 // If import fails, the locally defined classes above will be used

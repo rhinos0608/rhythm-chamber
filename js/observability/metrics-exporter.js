@@ -1126,6 +1126,11 @@ export async function getMetricsExporter() {
  * @public
  */
 export function resetMetricsExporter() {
+    // Stop scheduler before resetting to prevent memory leaks
+    if (MetricsExporterSingleton?._schedulerInterval) {
+        clearInterval(MetricsExporterSingleton._schedulerInterval);
+        MetricsExporterSingleton._schedulerInterval = null;
+    }
     MetricsExporterSingleton = null;
     MetricsExporterInitPromise = null;
     initFailed = false;

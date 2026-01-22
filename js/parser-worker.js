@@ -368,6 +368,12 @@ self.onmessage = async (e) => {
         return;
     }
 
+    // Validate required type field
+    if (!e.data.type || typeof e.data.type !== 'string') {
+        console.error('[Parser] Invalid message type');
+        return;
+    }
+
     const { type, file, existingStreams } = e.data;
 
     if (type === 'parse') {
