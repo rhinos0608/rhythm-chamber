@@ -210,7 +210,13 @@ function isLocalMode() {
  * @returns {Promise<{supported: boolean, reason?: string}>}
  */
 async function checkLocalSupport() {
-    const LocalEmbeddings = ModuleRegistry.getModuleSync('LocalEmbeddings');
+    // Load on-demand if not available
+    let LocalEmbeddings = ModuleRegistry.getModuleSync('LocalEmbeddings');
+
+    if (!LocalEmbeddings) {
+        await ModuleRegistry.preloadModules(['LocalEmbeddings']);
+        LocalEmbeddings = await ModuleRegistry.getModule('LocalEmbeddings');
+    }
 
     if (!LocalEmbeddings?.isSupported) {
         return { supported: false, reason: 'LocalEmbeddings module not loaded' };
@@ -1066,12 +1072,20 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abo
     try {
         onProgress(0, 100, 'Initializing local embedding model (~22MB download on first use)...');
 
-        // Get modules from ModuleRegistry
-        const LocalEmbeddings = ModuleRegistry.getModuleSync('LocalEmbeddings');
-        const LocalVectorStore = ModuleRegistry.getModuleSync('LocalVectorStore');
+        // Get modules from ModuleRegistry - load on-demand if not available
+        let LocalEmbeddings = ModuleRegistry.getModuleSync('LocalEmbeddings');
+        let LocalVectorStore = ModuleRegistry.getModuleSync('LocalVectorStore');
 
         if (!LocalEmbeddings || !LocalVectorStore) {
-            throw new Error('Local embedding modules not loaded. Check browser compatibility.');
+            onProgress(0, 100, 'Loading embedding modules...');
+            // Preload dependencies
+            await ModuleRegistry.preloadModules(['LocalEmbeddings', 'LocalVectorStore']);
+            LocalEmbeddings = await ModuleRegistry.getModule('LocalEmbeddings');
+            LocalVectorStore = await ModuleRegistry.getModule('LocalVectorStore');
+
+            if (!LocalEmbeddings || !LocalVectorStore) {
+                throw new Error('Failed to load embedding modules. Check browser compatibility.');
+            }
         }
 
         // Initialize LocalEmbeddings (downloads model if needed)
@@ -1160,8 +1174,16 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abo
  * @returns {Promise<Array>} Search results with payloads
  */
 async function searchLocal(query, limit = 5) {
-    const LocalEmbeddings = ModuleRegistry.getModuleSync('LocalEmbeddings');
-    const LocalVectorStore = ModuleRegistry.getModuleSync('LocalVectorStore');
+    // Get modules - load on-demand if not available
+    let LocalEmbeddings = ModuleRegistry.getModuleSync('LocalEmbeddings');
+    let LocalVectorStore = ModuleRegistry.getModuleSync('LocalVectorStore');
+
+    if (!LocalEmbeddings || !LocalVectorStore) {
+        // Preload dependencies
+        await ModuleRegistry.preloadModules(['LocalEmbeddings', 'LocalVectorStore']);
+        LocalEmbeddings = await ModuleRegistry.getModule('LocalEmbeddings');
+        LocalVectorStore = await ModuleRegistry.getModule('LocalVectorStore');
+    }
 
     if (!LocalEmbeddings) {
         throw new Error('LocalEmbeddings module not loaded. Check browser compatibility.');

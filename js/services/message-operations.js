@@ -117,7 +117,7 @@ async function regenerateLastResponse(conversationHistory, sendMessageFn, option
     conversationHistory.pop();
 
     // Re-send
-    return sendMessageFn(message, options);
+    return sendMessageFn(message, { ...(options || {}), isRegeneration: true });
 }
 
 /**
@@ -156,7 +156,7 @@ async function editMessage(index, newText, conversationHistory, sendMessageFn, o
     conversationHistory.length = index;
 
     // Send new message (this will add it to history and generate response)
-    return sendMessageFn(newText, options);
+    return sendMessageFn(newText, { ...(options || {}), isRegeneration: true });
 }
 
 /**

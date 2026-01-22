@@ -125,10 +125,12 @@ async function initChat(personality, patterns, summary, streams = null) {
 
     // Initialize ConversationOrchestrator
     if (ConversationOrchestrator?.init) {
+        // RAG is optional - loads on-demand if not available (graceful degradation for semantic search)
+        const RAG = ModuleRegistry.getModuleSync('RAG') || null;
         ConversationOrchestrator.init({
             TokenCounter: TokenCounter,
             DataQuery: DataQuery,
-            RAG: ModuleRegistry.getModuleSync('RAG'),
+            RAG: RAG,
             Prompts: Prompts
         });
         ConversationOrchestrator.setUserContext(userContext);
@@ -138,9 +140,11 @@ async function initChat(personality, patterns, summary, streams = null) {
     // Initialize MessageOperations with dependencies (for backward compatibility)
     // Note: MessageOperations now delegates to ConversationOrchestrator for state access
     if (MessageOperations?.init) {
+        // RAG is optional - loads on-demand if not available (graceful degradation for semantic search)
+        const RAG = ModuleRegistry.getModuleSync('RAG') || null;
         MessageOperations.init({
             DataQuery: DataQuery,
-            RAG: ModuleRegistry.getModuleSync('RAG'),
+            RAG: RAG,
             TokenCounter: TokenCounter,
             ConversationOrchestrator: ConversationOrchestrator
         });

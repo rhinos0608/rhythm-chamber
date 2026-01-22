@@ -831,26 +831,27 @@ async function addMessageToHistory(message) {
 
     // Use updateSessionData for mutex protection
     await updateSessionData((currentData) => {
-        if (!currentData.messages) {
-            currentData.messages = [];
-        }
-
         // EDGE CASE FIX: Implement in-memory sliding window
         // Keep system messages and recent messages to prevent unbounded memory growth
         // Use a higher limit in memory than on disk (2x) for better UX
         const IN_MEMORY_MAX = MAX_SAVED_MESSAGES * 2;
-        const systemMessages = currentData.messages.filter(m => m.role === 'system');
-        const nonSystemMessages = currentData.messages.filter(m => m.role !== 'system');
+        const existingMessages = currentData.messages || [];
+        const systemMessages = existingMessages.filter(m => m.role === 'system');
+        const nonSystemMessages = existingMessages.filter(m => m.role !== 'system');
 
-        // Create new array reference instead of mutating (prevents race conditions)
+        // Create new object to return (cannot mutate frozen currentData)
+        let newMessages;
         if (nonSystemMessages.length >= IN_MEMORY_MAX - systemMessages.length) {
             // Drop oldest non-system message to make room
-            currentData.messages = [...systemMessages, ...nonSystemMessages.slice(-(IN_MEMORY_MAX - systemMessages.length - 1)), message];
+            newMessages = [...systemMessages, ...nonSystemMessages.slice(-(IN_MEMORY_MAX - systemMessages.length - 1)), message];
         } else {
-            currentData.messages = [...currentData.messages, message];
+            newMessages = [...existingMessages, message];
         }
 
-        return currentData;
+        return {
+            id: currentData.id,
+            messages: newMessages
+        };
     });
 }
 
@@ -874,31 +875,32 @@ async function addMessagesToHistory(messages) {
 
     // Use updateSessionData for mutex protection - adds all messages in one transaction
     await updateSessionData((currentData) => {
-        if (!currentData.messages) {
-            currentData.messages = [];
-        }
-
         // EDGE CASE FIX: Implement in-memory sliding window
         // Keep system messages and recent messages to prevent unbounded memory growth
         const IN_MEMORY_MAX = MAX_SAVED_MESSAGES * 2;
-        const systemMessages = currentData.messages.filter(m => m.role === 'system');
-        const nonSystemMessages = currentData.messages.filter(m => m.role !== 'system');
+        const existingMessages = currentData.messages || [];
+        const systemMessages = existingMessages.filter(m => m.role === 'system');
+        const nonSystemMessages = existingMessages.filter(m => m.role !== 'system');
 
         // Add all new messages at once
         const newNonSystemMessages = [...nonSystemMessages, ...messages.filter(m => m.role !== 'system')];
         const newSystemMessages = [...systemMessages, ...messages.filter(m => m.role === 'system')];
 
-        // Truncate if needed
+        // Truncate if needed - create new object (cannot mutate frozen currentData)
+        let newMessages;
         if (newNonSystemMessages.length >= IN_MEMORY_MAX - newSystemMessages.length) {
-            currentData.messages = [
+            newMessages = [
                 ...newSystemMessages,
                 ...newNonSystemMessages.slice(-(IN_MEMORY_MAX - newSystemMessages.length))
             ];
         } else {
-            currentData.messages = [...newSystemMessages, ...newNonSystemMessages];
+            newMessages = [...newSystemMessages, ...newNonSystemMessages];
         }
 
-        return currentData;
+        return {
+            id: currentData.id,
+            messages: newMessages
+        };
     });
 }
 
@@ -912,11 +914,14 @@ async function removeMessageFromHistory(index) {
     let success = false;
     await updateSessionData((currentData) => {
         if (currentData.messages && index >= 0 && index < currentData.messages.length) {
-            // Create new array without the removed item (prevents race conditions)
+            // Create new array without the removed item (cannot mutate frozen currentData)
             const newMessages = [...currentData.messages];
             newMessages.splice(index, 1);
-            currentData.messages = newMessages;
             success = true;
+            return {
+                id: currentData.id,
+                messages: newMessages
+            };
         }
         return currentData;
     });
@@ -931,8 +936,12 @@ async function removeMessageFromHistory(index) {
  */
 async function truncateHistory(length) {
     await updateSessionData((currentData) => {
+        // Create new object (cannot mutate frozen currentData)
         if (currentData.messages) {
-            currentData.messages = currentData.messages.slice(0, length);
+            return {
+                id: currentData.id,
+                messages: currentData.messages.slice(0, length)
+            };
         }
         return currentData;
     });
@@ -946,8 +955,11 @@ async function truncateHistory(length) {
  */
 async function replaceHistory(messages) {
     await updateSessionData((currentData) => {
-        currentData.messages = [...messages];
-        return currentData;
+        // Create new object (cannot mutate frozen currentData)
+        return {
+            id: currentData.id,
+            messages: [...messages]
+        };
     });
 }
 

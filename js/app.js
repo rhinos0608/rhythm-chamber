@@ -589,6 +589,8 @@ async function init(options = {}) {
 
     // Initialize cross-tab coordination AFTER AppState is ready
     // TabCoordinator depends on AppState for authority tracking
+    // Also wait for Security to be ready to prevent initialization race condition
+    await Security.waitForReady(10000);
     const isPrimary = await TabCoordinator.init();
     if (!isPrimary) {
         console.log('[App] Secondary tab detected - write operations disabled');

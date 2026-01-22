@@ -129,7 +129,7 @@ async function processNext() {
         const result = await Chat.sendMessage(
             currentTurn.message,
             options,
-            { bypassQueue: true }
+            { bypassQueue: true, allowBypass: true }
         );
 
         currentTurn.status = 'completed';
