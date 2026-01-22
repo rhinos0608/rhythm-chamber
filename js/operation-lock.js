@@ -50,32 +50,71 @@
  * ═══════════════════════════════════════════════════════════════
  */
 
-// Import error classes
-let LockAcquisitionError, LockTimeoutError, LockReleaseError, LockForceReleaseError, DeadlockError;
+// Define fallback error classes inline if external module fails
+// This ensures instanceof checks work correctly
+class LockAcquisitionError extends Error {
+    constructor(operationName, blockedBy) {
+        super(`Cannot acquire lock for '${operationName}'. Blocked by: ${blockedBy?.join(', ') || 'unknown'}`);
+        this.name = 'LockAcquisitionError';
+        this.code = 'LOCK_ACQUISITION_FAILED';
+    }
+}
 
-// Try to import error classes (works in both Node and browser)
+class LockTimeoutError extends Error {
+    constructor(operationName, timeoutMs) {
+        super(`Timeout acquiring lock for '${operationName}' after ${timeoutMs}ms`);
+        this.name = 'LockTimeoutError';
+        this.code = 'LOCK_TIMEOUT';
+    }
+}
+
+class LockReleaseError extends Error {
+    constructor(operationName, providedOwnerId, actualOwnerId) {
+        super(`Cannot release lock for '${operationName}'. Provided owner: ${providedOwnerId}, Actual owner: ${actualOwnerId || 'none'}`);
+        this.name = 'LockReleaseError';
+        this.code = 'LOCK_RELEASE_FAILED';
+    }
+}
+
+class LockForceReleaseError extends Error {
+    constructor(operationName) {
+        super(`Lock for '${operationName}' was force-released`);
+        this.name = 'LockForceReleaseError';
+        this.code = 'LOCK_FORCE_RELEASED';
+    }
+}
+
+class DeadlockError extends Error {
+    constructor(operationName, cycle) {
+        super(`Deadlock detected for '${operationName}': ${cycle.join(' -> ')}`);
+        this.name = 'DeadlockError';
+        this.code = 'DEADLOCK_DETECTED';
+        this.cycle = cycle;
+    }
+}
+
+// Try to import error classes from external module (works in both Node and browser)
+// If import fails, the locally defined classes above will be used
 if (typeof require !== 'undefined') {
     try {
         const errors = require('./operation-lock-errors.js');
-        LockAcquisitionError = errors.LockAcquisitionError;
-        LockTimeoutError = errors.LockTimeoutError;
-        LockReleaseError = errors.LockReleaseError;
-        LockForceReleaseError = errors.LockForceReleaseError;
-        DeadlockError = errors.DeadlockError;
+        // Use external error classes if available
+        LockAcquisitionError = errors.LockAcquisitionError || LockAcquisitionError;
+        LockTimeoutError = errors.LockTimeoutError || LockTimeoutError;
+        LockReleaseError = errors.LockReleaseError || LockReleaseError;
+        LockForceReleaseError = errors.LockForceReleaseError || LockForceReleaseError;
+        DeadlockError = errors.DeadlockError || DeadlockError;
     } catch (e) {
-        // Fallback: use global if available
-        LockAcquisitionError = window.LockAcquisitionError || Error;
-        LockTimeoutError = window.LockTimeoutError || Error;
-        LockReleaseError = window.LockReleaseError || Error;
-        LockForceReleaseError = window.LockForceReleaseError || Error;
-        DeadlockError = window.DeadlockError || Error;
+        // Use locally defined classes (defined above)
+        console.debug('[OperationLock] Using local error class definitions');
     }
 } else if (typeof window !== 'undefined') {
-    LockAcquisitionError = window.LockAcquisitionError || Error;
-    LockTimeoutError = window.LockTimeoutError || Error;
-    LockReleaseError = window.LockReleaseError || Error;
-    LockForceReleaseError = window.LockForceReleaseError || Error;
-    DeadlockError = window.DeadlockError || Error;
+    // In browser context, prefer global definitions if available
+    LockAcquisitionError = window.LockAcquisitionError || LockAcquisitionError;
+    LockTimeoutError = window.LockTimeoutError || LockTimeoutError;
+    LockReleaseError = window.LockReleaseError || LockReleaseError;
+    LockForceReleaseError = window.LockForceReleaseError || LockForceReleaseError;
+    DeadlockError = window.DeadlockError || DeadlockError;
 }
 
 // Named operations that can be locked
