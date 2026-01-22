@@ -188,8 +188,9 @@ async function generateDescription(personality, patterns, summary, onProgress = 
                 null // no streaming for this
             );
 
-            if (response?.choices?.[0]?.message?.content) {
-                let description = response.choices[0].message.content.trim();
+            const messageContent = response?.choices?.[0]?.message?.content;
+            if (messageContent) {
+                let description = messageContent.trim();
                 // Remove quotes if the LLM wrapped it
                 if (description.startsWith('"') && description.endsWith('"')) {
                     description = description.slice(1, -1);
