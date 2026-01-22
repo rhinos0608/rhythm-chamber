@@ -61,17 +61,24 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
 /**
  * Fetch with exponential backoff retry
  * @param {string} url - URL to fetch
- * @param {RequestInit} options - Fetch options
- * @param {object} retryConfig - Retry configuration
+ * @param {object} config - Combined configuration
+ * @param {RequestInit} config.options - Fetch options
+ * @param {number} config.maxRetries - Maximum retry attempts
+ * @param {number} config.baseDelayMs - Base delay for exponential backoff
+ * @param {number} config.maxDelayMs - Maximum delay between retries
+ * @param {number} config.timeoutMs - Timeout for each fetch attempt
+ * @param {number[]} config.retryOnStatus - HTTP status codes that trigger retry
  * @returns {Promise<Response>}
  */
-async function fetchWithRetry(url, options = {}, {
-    maxRetries = 3,
-    baseDelayMs = 1000,
-    maxDelayMs = 10000,
-    timeoutMs = 30000,
-    retryOnStatus = [429, 500, 502, 503, 504]
-} = {}) {
+async function fetchWithRetry(url, config = {}) {
+    const {
+        options = {},
+        maxRetries = 3,
+        baseDelayMs = 1000,
+        maxDelayMs = 10000,
+        timeoutMs = 30000,
+        retryOnStatus = [429, 500, 502, 503, 504]
+    } = config;
     let lastError;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -111,16 +118,22 @@ async function fetchWithRetry(url, options = {}, {
  * Fetch with authentication retry support
  * Automatically retries on 401 errors after calling token refresh callback
  * @param {string} url - URL to fetch
- * @param {RequestInit} options - Fetch options
- * @param {object} authConfig - Authentication configuration
+ * @param {object} config - Combined configuration
+ * @param {RequestInit} config.options - Fetch options
+ * @param {number} config.timeoutMs - Timeout for each fetch attempt
+ * @param {Function} config.onAuthError - Callback to refresh token on 401
+ * @param {number} config.maxAuthRetries - Maximum auth retry attempts
+ * @param {Function} config.getAuthHeader - Callback to get updated auth header after refresh
  * @returns {Promise<Response>}
  */
-async function fetchWithAuth(url, options = {}, {
-    timeoutMs = 30000,
-    onAuthError = null,     // Callback to refresh token on 401
-    maxAuthRetries = 1,
-    getAuthHeader = null    // Callback to get updated auth header after refresh
-} = {}) {
+async function fetchWithAuth(url, config = {}) {
+    const {
+        options = {},
+        timeoutMs = 30000,
+        onAuthError = null,     // Callback to refresh token on 401
+        maxAuthRetries = 1,
+        getAuthHeader = null    // Callback to get updated auth header after refresh
+    } = config;
     let authRetries = 0;
     let currentOptions = { ...options };
 
