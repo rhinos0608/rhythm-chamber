@@ -242,6 +242,15 @@ function scheduleNotification() {
 
 const AppState = {
     /**
+     * Check if state has been initialized
+     * HNW Hierarchy: Verification method for initialization status
+     * @returns {boolean} True if state is initialized and ready
+     */
+    isReady() {
+        return _state !== null;
+    },
+
+    /**
      * Initialize state with optional initial values
      * @param {Object} initialOverrides - Override default initial values
      * @returns {Object} Frozen initial state

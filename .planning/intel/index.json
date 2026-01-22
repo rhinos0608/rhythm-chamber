@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": 1769068753471,
+  "updated": 1769083030528,
   "files": {
     "./js/app.js": {
       "exports": [
@@ -1818,7 +1818,7 @@
         "../state/app-state.js",
         "../utils/html-escape.js"
       ],
-      "indexed": 1769046344143
+      "indexed": 1769080927481
     },
     "/Users/rhinesharar/rhythm-chamber/js/storage/transaction.js": {
       "exports": [
@@ -1866,7 +1866,7 @@
         "./services/conversation-orchestrator.js",
         "./services/message-lifecycle-coordinator.js"
       ],
-      "indexed": 1769003923586
+      "indexed": 1769082126342
     },
     "/Users/rhinesharar/rhythm-chamber/js/functions/index.js": {
       "exports": [
@@ -1913,7 +1913,7 @@
         "./turn-queue.js",
         "./timeout-budget-manager.js"
       ],
-      "indexed": 1769068753471
+      "indexed": 1769083004862
     },
     "/Users/rhinesharar/rhythm-chamber/js/functions/executors/template-executors.js": {
       "exports": [
@@ -1988,7 +1988,7 @@
         "./template-profiles.js",
         "./profile-synthesizer.js"
       ],
-      "indexed": 1769064738412
+      "indexed": 1769081893075
     },
     "/Users/rhinesharar/rhythm-chamber/js/controllers/view-controller.js": {
       "exports": [
@@ -2304,7 +2304,7 @@
         "./settings-schema.js",
         "./utils/focus-trap.js"
       ],
-      "indexed": 1769059849470
+      "indexed": 1769082205878
     },
     "/Users/rhinesharar/rhythm-chamber/js/services/profile-description-generator.js": {
       "exports": [
@@ -2329,7 +2329,7 @@
         "../storage/keys.js",
         "../state/app-state.js"
       ],
-      "indexed": 1769059839787
+      "indexed": 1769081371106
     },
     "/Users/rhinesharar/rhythm-chamber/js/storage/write-ahead-log.js": {
       "exports": [
@@ -2525,7 +2525,7 @@
         "./operation-lock.js",
         "./utils/safe-json.js"
       ],
-      "indexed": 1769049516540
+      "indexed": 1769082168401
     },
     "/Users/rhinesharar/rhythm-chamber/js/pricing.js": {
       "exports": [
@@ -2772,7 +2772,7 @@
       "imports": [
         "../chat.js"
       ],
-      "indexed": 1769059437462
+      "indexed": 1769081129324
     },
     "/Users/rhinesharar/rhythm-chamber/js/services/timeout-budget-manager.js": {
       "exports": [
@@ -2800,7 +2800,7 @@
         "VALID_DOMAINS"
       ],
       "imports": [],
-      "indexed": 1769064676995
+      "indexed": 1769068979551
     },
     "/Users/rhinesharar/rhythm-chamber/js/utils/timeout-wrapper.js": {
       "exports": [
@@ -2892,6 +2892,16 @@
       ],
       "imports": [],
       "indexed": 1769067272855
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/services/message-operations.js": {
+      "exports": [
+        "MessageOperations"
+      ],
+      "imports": [
+        "../settings.js",
+        "./data-version.js"
+      ],
+      "indexed": 1769083030528
     }
   }
 }

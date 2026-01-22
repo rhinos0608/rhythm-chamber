@@ -347,6 +347,13 @@ const remoteSequenceTimestamps = new Map(); // Track last update time per sender
 let outOfOrderCount = 0; // Count of out-of-order messages detected
 const REMOTE_SEQUENCE_MAX_AGE_MS = 300000; // 5 minutes - prune stale sender data
 
+// Message queue for security session initialization
+// HNW Fix: Queue messages when security session is not ready, process when ready
+const messageQueue = [];
+let isProcessingQueue = false;
+let securityReadyCheckInterval = null;
+let securityReadyNotified = false;
+
 // ==========================================
 // Core Functions
 // ==========================================
@@ -376,6 +383,139 @@ function pruneStaleRemoteSequences() {
     }
 
     return pruned.length;
+}
+
+/**
+ * Process queued messages when security session becomes ready
+ * HNW Fix: Ensures no coordination messages are lost during initialization
+ */
+async function processMessageQueue() {
+    if (isProcessingQueue || messageQueue.length === 0) return;
+
+    isProcessingQueue = true;
+
+    while (messageQueue.length > 0) {
+        const queued = messageQueue.shift();
+
+        // Verify security session is ready before processing
+        if (!Security.isKeySessionActive()) {
+            // Put message back and stop processing
+            messageQueue.unshift(queued);
+            break;
+        }
+
+        try {
+            // Send the message through the normal signing flow
+            await sendMessageInternal(queued.msg, queued.skipQueue);
+        } catch (error) {
+            // If signing still fails, re-queue for later retry
+            const isSessionError = error.message && error.message.includes('Session not initialized');
+            if (isSessionError && isInBootstrapWindow()) {
+                messageQueue.unshift(queued);
+            }
+            break;
+        }
+    }
+
+    isProcessingQueue = false;
+
+    // If queue is empty and we haven't notified security is ready, log it
+    if (messageQueue.length === 0 && !securityReadyNotified) {
+        securityReadyNotified = true;
+        stopSecurityReadyWatcher();
+        console.log('[TabCoordination] Security session ready, message queue processed');
+    }
+}
+
+/**
+ * Internal message sending function (bypasses queue)
+ * HNW Fix: Separates queue logic from actual sending logic
+ *
+ * @param {Object} msg - Message to send
+ * @param {boolean} skipQueue - If true, don't queue on session error
+ */
+async function sendMessageInternal(msg, skipQueue = false) {
+    localSequence++;
+
+    // Add timestamp if not present
+    if (!msg.timestamp) {
+        msg.timestamp = Date.now();
+    }
+
+    // Sanitize message to remove sensitive data
+    const sanitizedMsg = Security.MessageSecurity.sanitizeMessage(msg);
+
+    // Generate nonce for replay prevention
+    const nonce = `${TAB_ID}_${localSequence}_${msg.timestamp}`;
+
+    // Get signing key and sign message
+    const signingKey = await Security.getSigningKey();
+    const signature = await Security.MessageSecurity.signMessage(sanitizedMsg, signingKey);
+
+    // Add signature, origin, and nonce to message
+    const signedMessage = {
+        ...sanitizedMsg,
+        seq: localSequence,
+        senderId: TAB_ID,
+        signature,
+        origin: window.location.origin,
+        nonce
+    };
+
+    coordinationTransport?.postMessage(signedMessage);
+}
+
+/**
+ * Start watching for security session to become ready
+ * HNW Fix: Processes queued messages when security initialization completes
+ */
+function startSecurityReadyWatcher() {
+    if (securityReadyCheckInterval) return;
+
+    const CHECK_INTERVAL_MS = 100;
+    const MAX_WAIT_MS = 10000; // 10 seconds max wait
+    let waited = 0;
+
+    securityReadyCheckInterval = setInterval(() => {
+        waited += CHECK_INTERVAL_MS;
+
+        if (Security.isKeySessionActive()) {
+            stopSecurityReadyWatcher();
+            processMessageQueue();
+            return;
+        }
+
+        if (waited >= MAX_WAIT_MS) {
+            console.warn('[TabCoordination] Security session not ready after 10s, processing queued messages with unsigned fallback');
+            stopSecurityReadyWatcher();
+            // Process any remaining messages with unsigned fallback
+            while (messageQueue.length > 0) {
+                const queued = messageQueue.shift();
+                if (isInBootstrapWindow()) {
+                    const unsignedNonce = `${TAB_ID}_${++localSequence}_${queued.msg.timestamp || Date.now()}`;
+                    coordinationTransport?.postMessage({
+                        ...queued.msg,
+                        seq: localSequence,
+                        senderId: TAB_ID,
+                        origin: window.location.origin,
+                        nonce: unsignedNonce,
+                        timestamp: queued.msg.timestamp || Date.now(),
+                        unsigned: true
+                    });
+                }
+            }
+        }
+    }, CHECK_INTERVAL_MS);
+}
+
+/**
+ * Stop watching for security session readiness
+ */
+function stopSecurityReadyWatcher() {
+    if (securityReadyCheckInterval) {
+        clearInterval(securityReadyCheckInterval);
+        securityReadyCheckInterval = null;
+    }
 }
 
 /**
@@ -761,50 +901,43 @@ async function initWithSharedWorker() {
  * Send a message with sequence number for ordering validation and message security
  * HNW Network: All messages include sequence for duplicate/ordering detection
  * Phase 14: All messages are signed, sanitized, timestamped, and include nonce
+ * HNW Fix: Queues messages when security session is not ready, processes when ready
  *
  * @param {Object} msg - Message to send
+ * @param {boolean} skipQueue - If true, don't queue on session error (internal use)
  */
-async function sendMessage(msg) {
-    try {
-        localSequence++;
+async function sendMessage(msg, skipQueue = false) {
+    // Check if security session is ready before attempting to sign
+    const sessionReady = Security.isKeySessionActive();
+    const inBootstrapWindow = isInBootstrapWindow();
 
-        // Add timestamp if not present
-        if (!msg.timestamp) {
-            msg.timestamp = Date.now();
+    if (!sessionReady && !inBootstrapWindow && !skipQueue) {
+        // Queue message for later processing when session is ready
+        if (messageQueue.length < 100) { // Prevent unbounded queue growth
+            messageQueue.push({ msg, skipQueue: false, timestamp: Date.now() });
+            // Start watcher if not already running
+            startSecurityReadyWatcher();
+        } else {
+            console.error('[TabCoordination] Message queue full, dropping message:', msg.type);
         }
+        return;
+    }
 
-        // Sanitize message to remove sensitive data
-        const sanitizedMsg = Security.MessageSecurity.sanitizeMessage(msg);
-
-        // Generate nonce for replay prevention
-        const nonce = `${TAB_ID}_${localSequence}_${msg.timestamp}`;
-
-        // Get signing key and sign message
-        const signingKey = await Security.getSigningKey();
-        const signature = await Security.MessageSecurity.signMessage(sanitizedMsg, signingKey);
-
-        // Add signature, origin, and nonce to message
-        const signedMessage = {
-            ...sanitizedMsg,
-            seq: localSequence,
-            senderId: TAB_ID,
-            signature,
-            origin: window.location.origin,
-            nonce
-        };
-
-        coordinationTransport?.postMessage(signedMessage);
+    try {
+        await sendMessageInternal(msg, skipQueue);
     } catch (error) {
         // Check if this is a session initialization error
         const isSessionError = error.message && error.message.includes('Session not initialized');
 
-        // Security: Only allow unsigned fallback during bootstrap window
-        const inBootstrapWindow = isInBootstrapWindow();
-
-        if (isSessionError && !inBootstrapWindow) {
-            // Session errors outside bootstrap window are critical - do not fall back to unsigned
-            console.error('[TabCoordination] Security session not ready outside bootstrap window - message dropped to prevent unsigned fallback');
-            return;  // Drop the message instead of sending unsigned
+        if (isSessionError && !inBootstrapWindow && !skipQueue) {
+            // Queue message for later processing
+            if (messageQueue.length < 100) {
+                messageQueue.push({ msg, skipQueue: false, timestamp: Date.now() });
+                startSecurityReadyWatcher();
+            } else {
+                console.error('[TabCoordination] Message queue full, dropping message:', msg.type);
+            }
+            return;
         }
 
         if (isSessionError) {
@@ -818,8 +951,9 @@ async function sendMessage(msg) {
         }
 
         // Fail-safe: Send unsigned message with origin, nonce, and unsigned flag if signing fails
-        // Only allowed during bootstrap window (first 30 seconds after module load)
+        // Only allowed during bootstrap window
         if (inBootstrapWindow) {
+            localSequence++;
             const unsignedNonce = `${TAB_ID}_${localSequence}_${msg.timestamp || Date.now()}`;
             coordinationTransport?.postMessage({
                 ...msg,
@@ -1787,12 +1921,18 @@ function cleanup() {
     // Stop watermark broadcast
     stopWatermarkBroadcast();
 
+    // Stop security ready watcher
+    stopSecurityReadyWatcher();
+
+    // Clear message queue
+    messageQueue.length = 0;
+
     // Notify other tabs of release with message security
     if (isPrimaryTab && coordinationTransport) {
         sendMessage({
             type: MESSAGE_TYPES.RELEASE_PRIMARY,
             tabId: TAB_ID
-        });
+        }, true); // Skip queue during cleanup
     }
 
     // Close coordination transport (BroadcastChannel or SharedWorker)
@@ -1977,6 +2117,16 @@ const TabCoordinator = {
     resetOutOfOrderCount: () => { outOfOrderCount = 0; },
     pruneStaleRemoteSequences, // NEW: Cleanup for long-running tabs
     getRemoteSequenceCount: () => remoteSequences.size,
+
+    // Message queue diagnostics (HNW Fix)
+    getQueueSize: () => messageQueue.length,
+    getQueueInfo: () => ({
+        size: messageQueue.length,
+        isProcessing: isProcessingQueue,
+        isWatching: securityReadyCheckInterval !== null,
+        isReady: Security.isKeySessionActive()
+    }),
+    processQueue: processMessageQueue,
 
     // Transport info (diagnostics)
     getTransportType: () => sharedWorkerFallback ? 'SharedWorker' : 'BroadcastChannel',

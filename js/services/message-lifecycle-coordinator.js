@@ -59,9 +59,11 @@ function hashMessageContent(content) {
 /**
  * Validate message content before processing
  * @param {string} message - The message to validate
+ * @param {Object} options - Validation options
+ * @param {boolean} options.skipDuplicateCheck - Skip duplicate content check (for regeneration)
  * @returns {Object} Validation result with valid flag and error message
  */
-function validateMessage(message) {
+function validateMessage(message, { skipDuplicateCheck = false } = {}) {
     // Check for non-string input
     if (typeof message !== 'string') {
         return {
@@ -95,13 +97,15 @@ function validateMessage(message) {
         };
     }
 
-    // Check for duplicate content
-    const messageHash = hashMessageContent(message);
-    if (_processedMessageHashes.has(messageHash)) {
-        return {
-            valid: false,
-            error: 'Duplicate message detected - this message was already processed'
-        };
+    // Check for duplicate content (skip if regenerating)
+    if (!skipDuplicateCheck) {
+        const messageHash = hashMessageContent(message);
+        if (_processedMessageHashes.has(messageHash)) {
+            return {
+                valid: false,
+                error: 'Duplicate message detected - this message was already processed'
+            };
+        }
     }
 
     return { valid: true };
@@ -187,10 +191,14 @@ function validateLLMResponse(response, provider) {
     }
 
     // Check for common malformed structures
-    if (firstChoice.message.content !== undefined &&
-        typeof firstChoice.message.content !== 'string' &&
-        typeof firstChoice.message.content !== 'null') {
-        return { valid: false, error: `${provider} returned message with invalid content type` };
+    // Valid content types: undefined, null, string, Array (multimodal), Object (structured output)
+    // Invalid types: number, boolean, function, symbol, bigint
+    const content = firstChoice.message.content;
+    if (content !== undefined && content !== null) {
+        const type = typeof content;
+        if (type !== 'string' && type !== 'object') {
+            return { valid: false, error: `${provider} returned message with invalid content type: ${type}` };
+        }
     }
 
     // Validate tool_calls structure if present
@@ -252,7 +260,7 @@ async function sendMessage(message, optionsOrKey = null, options = {}) {
     }
 
     // ISSUE 2: Input validation at entry point
-    const validation = validateMessage(message);
+    const validation = validateMessage(message, { skipDuplicateCheck: options?.isRegeneration });
     if (!validation.valid) {
         console.warn('[MessageLifecycleCoordinator] Message validation failed:', validation.error);
         // Return error response instead of throwing to maintain graceful degradation
@@ -606,7 +614,7 @@ async function regenerateLastResponse(options = null) {
     // This prevents race condition where sendMessage starts before truncation completes
     await _SessionManager.truncateHistory(lastMsgIndex);
 
-    return sendMessage(message, options);
+    return sendMessage(message, { ...(options || {}), isRegeneration: true });
 }
 
 /**
@@ -653,7 +661,7 @@ async function editMessage(index, newText, options = null) {
     // HIGH PRIORITY FIX: Await truncateHistory since it's now async with mutex protection
     await _SessionManager.truncateHistory(index);
 
-    return sendMessage(newText, options);
+    return sendMessage(newText, { ...(options || {}), isRegeneration: true });
 }
 
 /**

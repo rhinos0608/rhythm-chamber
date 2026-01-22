@@ -1474,10 +1474,23 @@ function showToast(message, duration = UI_CONFIG.DEFAULT_TOAST_DURATION_MS) {
  * @param {boolean} resume - Whether to resume from checkpoint
  */
 async function generateEmbeddings(resume = false) {
-    const RAG = ModuleRegistry.getModuleSync('RAG');
+    // Load RAG module if not already loaded (on-demand loading)
+    let RAG = ModuleRegistry.getModuleSync('RAG');
     if (!RAG) {
-        showToast('RAG module not loaded');
-        return;
+        showToast('Loading embedding modules...', 2000);
+        try {
+            // Preload dependencies first
+            await ModuleRegistry.preloadModules(['LocalEmbeddings', 'LocalVectorStore']);
+            RAG = await ModuleRegistry.getModule('RAG');
+            if (!RAG) {
+                showToast('Failed to load RAG module');
+                return;
+            }
+        } catch (err) {
+            console.error('Failed to load RAG module:', err);
+            showToast('Error loading modules: ' + err.message);
+            return;
+        }
     }
 
     // Show progress UI
@@ -1797,13 +1810,17 @@ async function checkOllamaConnection() {
     `;
 
     try {
-        const Ollama = ModuleRegistry.getModuleSync('Ollama');
+        // Load Ollama module on-demand if not available
+        let Ollama = ModuleRegistry.getModuleSync('Ollama');
         if (!Ollama) {
-            statusEl.innerHTML = `
-                <span class="status-dot error"></span>
-                <span>Ollama module not loaded</span>
-            `;
-            return;
+            Ollama = await ModuleRegistry.getModule('Ollama');
+            if (!Ollama) {
+                statusEl.innerHTML = `
+                    <span class="status-dot error"></span>
+                    <span>Ollama module not available</span>
+                `;
+                return;
+            }
         }
 
         const result = await Ollama.detectServer();
@@ -1838,8 +1855,11 @@ async function checkOllamaConnection() {
 async function testOllamaConnection() {
     const endpointInput = document.getElementById('setting-ollama-endpoint');
     if (endpointInput) {
-        // Temporarily update the endpoint in Ollama module
-        const Ollama = ModuleRegistry.getModuleSync('Ollama');
+        // Load Ollama module on-demand if not available
+        let Ollama = ModuleRegistry.getModuleSync('Ollama');
+        if (!Ollama) {
+            Ollama = await ModuleRegistry.getModule('Ollama');
+        }
         const originalEndpoint = Ollama?.getEndpoint?.();
         // Note: The endpoint is read from settings, so we save first
         const tempSettings = getSettings();
@@ -1856,8 +1876,14 @@ async function testOllamaConnection() {
  */
 async function refreshOllamaModels() {
     const modelSelect = document.getElementById('setting-ollama-model');
-    const Ollama = ModuleRegistry.getModuleSync('Ollama');
-    if (!modelSelect || !Ollama) return;
+    if (!modelSelect) return;
+
+    // Load Ollama module on-demand if not available
+    let Ollama = ModuleRegistry.getModuleSync('Ollama');
+    if (!Ollama) {
+        Ollama = await ModuleRegistry.getModule('Ollama');
+        if (!Ollama) return;
+    }
 
     try {
         const models = await Ollama.listModels();
