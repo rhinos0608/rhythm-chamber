@@ -669,8 +669,19 @@ function emit(eventType, payload = {}, options = {}) {
         isReplay: eventReplayInProgress
     };
 
+    // Additional safeguard - take snapshot of handler IDs at start
+    const handlerSnapshot = allHandlers.map(h => ({ ...h }));
+
     // Call handlers in priority order, filtering by domain
-    for (const { handler, id, domain: handlerDomain } of allHandlers) {
+    for (const { handler, id, domain: handlerDomain } of handlerSnapshot) {
+        // Verify handler still exists and is active before execution
+        // A handler could have been removed during iteration
+        const currentHandler = subscribers.get(eventType)?.find(h => h.id === id) ||
+                              subscribers.get('*')?.find(h => h.id === id);
+        if (!currentHandler || currentHandler.handler !== handler) {
+            continue; // Handler was removed or replaced during iteration
+        }
+
         // Domain filtering: handler receives event if:
         // 1. Handler domain is 'global' (receives all events - catch-all handlers)
         // 2. Event domain matches handler domain (scoped delivery)
