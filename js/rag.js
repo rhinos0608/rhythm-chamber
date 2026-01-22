@@ -861,10 +861,10 @@ async function createChunks(streams, onProgress = () => { }) {
 /**
  * Create searchable chunks from detected patterns
  * Phase 5: RAG-Pattern Integration - enables semantic search over listening patterns
- * 
- * Note: Pattern detection is wrapped in setTimeout to yield to event loop,
- * preventing UI blocking for large streaming histories.
- * 
+ *
+ * Note: Pattern detection yields to event loop to prevent UI blocking for large
+ * streaming histories. Uses Promise wrapper for proper error handling.
+ *
  * @param {Array} streams - Streaming history data
  * @returns {Promise<Array>} Pattern chunks for embedding
  */
@@ -874,18 +874,15 @@ async function createPatternChunks(streams) {
     // Yield to event loop before heavy pattern detection
     await new Promise(resolve => setTimeout(resolve, 0));
 
-    // Run pattern detection (wrapped to prevent blocking)
-    const patterns = await new Promise((resolve) => {
-        // Use setTimeout to run pattern detection in a separate task
-        setTimeout(() => {
-            try {
-                resolve(Patterns.detectAllPatterns(streams, []));
-            } catch (e) {
-                console.warn('[RAG] Pattern detection failed:', e.message);
-                resolve({}); // Return empty patterns on failure
-            }
-        }, 0);
-    });
+    // Run pattern detection with proper error handling
+    // Note: Patterns.detectAllPatterns is synchronous - we wrap it for error handling
+    let patterns;
+    try {
+        patterns = Patterns.detectAllPatterns(streams, []);
+    } catch (e) {
+        console.warn('[RAG] Pattern detection failed:', e.message);
+        patterns = {}; // Return empty patterns on failure
+    }
 
     // Comfort/Discovery Pattern
     if (patterns.comfortDiscovery?.description) {
