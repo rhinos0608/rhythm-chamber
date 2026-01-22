@@ -139,7 +139,8 @@ export class StorageDegradationManager {
      * @param {boolean} options.autoCleanupEnabled - Enable automatic cleanup
      * @param {number} options.checkIntervalMs - Quota check interval in milliseconds
      */
-    constructor({ eventBus, autoCleanupEnabled = true, checkIntervalMs = 30000 } = {}) {
+    constructor(options = {}) {
+        const { eventBus = null, autoCleanupEnabled = true, checkIntervalMs = 30000 } = options;
         if (eventBus) this._eventBus = eventBus;
         this._autoCleanupEnabled = autoCleanupEnabled;
         this._checkIntervalMs = checkIntervalMs;
