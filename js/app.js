@@ -16,6 +16,7 @@ import { Security, SecurityChecklist } from './security/index.js';
 
 // Core utilities
 import { ModuleRegistry } from './module-registry.js';
+import { Container } from './ioc-container.js';
 import { escapeHtml } from './utils/html-escape.js';
 import { Utils } from './utils.js';
 
@@ -419,65 +420,107 @@ function updateAuthorityUI(authority) {
 // ==========================================
 
 /**
- * Initialize all controllers with their dependencies
- * Now uses imported ES modules instead of window.X references
+ * Register all services and controllers with the IoC container
+ * This centralizes dependency management and eliminates manual injection
+ */
+function registerContainerServices() {
+    console.log('[App] Registering services with IoC container...');
+
+    // Register core services as singletons (ES modules are already singletons)
+    Container.registerInstance('Storage', Storage);
+    Container.registerInstance('AppState', AppState);
+    Container.registerInstance('Spotify', Spotify);
+    Container.registerInstance('Chat', Chat);
+    Container.registerInstance('Patterns', Patterns);
+    Container.registerInstance('Personality', Personality);
+    Container.registerInstance('DataQuery', DataQuery);
+    Container.registerInstance('TokenCounter', TokenCounter);
+    Container.registerInstance('Functions', Functions);
+    Container.registerInstance('Prompts', Prompts);
+    Container.registerInstance('Cards', Cards);
+    Container.registerInstance('OperationLock', OperationLock);
+    Container.registerInstance('CircuitBreaker', CircuitBreaker);
+    Container.registerInstance('FunctionCallingFallback', FunctionCallingFallback);
+    Container.registerInstance('DataVersion', DataVersion);
+    Container.registerInstance('TabCoordinator', TabCoordinator);
+    Container.registerInstance('SessionManager', SessionManager);
+    Container.registerInstance('EventBus', EventBus);
+    Container.registerInstance('EventLogStore', EventLogStore);
+    Container.registerInstance('Utils', Utils);
+    Container.registerInstance('ViewController', ViewController);
+
+    // Register demo data
+    Container.registerInstance('DemoData', DemoData);
+    Container.registerInstance('TemplateProfileStore', TemplateProfileStore);
+    Container.registerInstance('ProfileSynthesizer', ProfileSynthesizer);
+
+    // Register controllers
+    Container.registerInstance('FileUploadController', FileUploadController);
+    Container.registerInstance('SpotifyController', SpotifyController);
+    Container.registerInstance('DemoController', DemoController);
+    Container.registerInstance('ResetController', ResetController);
+    Container.registerInstance('SidebarController', SidebarController);
+    Container.registerInstance('ChatUIController', ChatUIController);
+    Container.registerInstance('MessageOperations', MessageOperations);
+
+    // Register utility functions (wrapping in objects for container compatibility)
+    Container.registerInstance('showToast', showToast);
+
+    console.log('[App] Services registered with IoC container');
+}
+
+/**
+ * Initialize all controllers using the IoC container
+ * Dependencies are auto-wired based on declared requirements
  */
 async function initializeControllers() {
-    console.log('[App] Initializing controllers...');
+    console.log('[App] Initializing controllers via IoC container...');
 
-    // Initialize FileUploadController
-    FileUploadController.init({
-        Storage,
-        AppState,
-        OperationLock,  // Now using imported module
-        Patterns,
-        Personality,
-        ViewController,
-        showToast
-    });
+    // Ensure services are registered
+    if (!Container.has('Storage')) {
+        registerContainerServices();
+    }
 
-    // Initialize SpotifyController
-    SpotifyController.init({
-        Storage,
-        AppState,
-        Spotify,
-        Patterns,
-        Personality,
-        ViewController,
-        showToast
-    });
+    // Dependency mapping for each controller
+    // Centralized configuration makes it easy to see what each controller needs
+    const controllerDependencies = {
+        FileUploadController: [
+            'Storage', 'AppState', 'OperationLock', 'Patterns',
+            'Personality', 'ViewController', 'showToast'
+        ],
+        SpotifyController: [
+            'Storage', 'AppState', 'Spotify', 'Patterns',
+            'Personality', 'ViewController', 'showToast'
+        ],
+        DemoController: [
+            'AppState', 'DemoData', 'ViewController',
+            'Patterns', 'showToast'
+        ],
+        ResetController: [
+            'Storage', 'AppState', 'Spotify', 'Chat',
+            'OperationLock', 'ViewController', 'showToast',
+            'FileUploadController'
+        ],
+        // MessageOperations initialized WITHOUT heavy modules
+        // RAG will be loaded on-demand when Chat features are accessed
+        MessageOperations: [
+            'DataQuery', 'TokenCounter', 'Functions'
+        ]
+    };
 
-    // Initialize DemoController
-    DemoController.init({
-        AppState,
-        DemoData,
-        ViewController,
-        Patterns,
-        showToast
-    });
+    // Initialize each controller with its dependencies
+    for (const [controllerName, depNames] of Object.entries(controllerDependencies)) {
+        try {
+            Container.initController(controllerName, depNames);
+            console.log(`[App] Initialized ${controllerName}`);
+        } catch (error) {
+            console.error(`[App] Failed to initialize ${controllerName}:`, error);
+            // Re-throw to fail fast on critical initialization errors
+            throw error;
+        }
+    }
 
-    // Initialize ResetController
-    ResetController.init({
-        Storage,
-        AppState,
-        Spotify,
-        Chat,           // Now using imported module
-        OperationLock,  // Now using imported module
-        ViewController,
-        showToast,
-        FileUploadController
-    });
-
-    // Initialize MessageOperations WITHOUT heavy modules
-    // RAG will be loaded on-demand when Chat features are accessed
-    // This prevents aggressive preloading and improves startup performance
-    MessageOperations.init({
-        DataQuery,      // Now using imported module
-        TokenCounter,   // Now using imported module
-        Functions       // Now using imported module
-    });
-
-    console.log('[App] Controllers initialized');
+    console.log('[App] All controllers initialized via IoC container');
 }
 
 // ==========================================

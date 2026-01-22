@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": 1769059892962,
+  "updated": 1769064738412,
   "files": {
     "./js/app.js": {
       "exports": [
@@ -1953,6 +1953,7 @@
       "imports": [
         "./security/index.js",
         "./module-registry.js",
+        "./ioc-container.js",
         "./utils/html-escape.js",
         "./utils.js",
         "./state/app-state.js",
@@ -1987,7 +1988,7 @@
         "./template-profiles.js",
         "./profile-synthesizer.js"
       ],
-      "indexed": 1769059768909
+      "indexed": 1769064738412
     },
     "/Users/rhinesharar/rhythm-chamber/js/controllers/view-controller.js": {
       "exports": [
@@ -2124,7 +2125,6 @@
       "imports": [
         "./utils/logger.js",
         "./security/index.js",
-        "./window-globals-debug.js",
         "./services/config-loader.js",
         "./utils.js",
         "./module-registry.js",
@@ -2193,7 +2193,7 @@
         "./services/fallback-response-service.js",
         "./services/error-boundary.js"
       ],
-      "indexed": 1769005353428
+      "indexed": 1769064723123
     },
     "/Users/rhinesharar/rhythm-chamber/js/storage-breakdown-ui.js": {
       "exports": [
@@ -2799,7 +2799,7 @@
         "VALID_DOMAINS"
       ],
       "imports": [],
-      "indexed": 1769059717185
+      "indexed": 1769064676995
     },
     "/Users/rhinesharar/rhythm-chamber/js/utils/timeout-wrapper.js": {
       "exports": [
@@ -2837,6 +2837,26 @@
         "../providers/provider-circuit-breaker.js"
       ],
       "indexed": 1769059685591
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/ioc-container.js": {
+      "exports": [
+        "Container"
+      ],
+      "imports": [
+        "./ioc-container.js"
+      ],
+      "indexed": 1769064668385
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/window-globals-debug.js": {
+      "exports": [
+        "DEPRECATED_WINDOW_GLOBALS",
+        "setupDeprecatedWindowGlobals",
+        "getDeprecationStats",
+        "printDeprecationSummary",
+        "resetDeprecationStats"
+      ],
+      "imports": [],
+      "indexed": 1769064737986
     }
   }
 }

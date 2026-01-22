@@ -1,15 +1,17 @@
 /**
  * Development-only guards for legacy window globals.
  *
- * These globals exist solely for backwards compatibility and debugging.
- * In development, accessing them logs a deprecation warning so new code
- * moves toward module imports or ModuleRegistry access instead.
- * 
- * DEPRECATION PLAN:
- * - v1.0: Warnings introduced (current)
- * - v1.1: Console.error level warnings
- * - v1.2: Throw in strict mode (opt-in)
- * - v1.3: Remove window assignments from modules
+ * @deprecated This file is kept only for the lint-window-globals.mjs script.
+ * The ES Module migration is complete - setupDeprecatedWindowGlobals() is no
+ * longer called from main.js. This file can be removed once the lint script
+ * is updated or removed in v1.0.
+ *
+ * ORIGINAL PURPOSE:
+ * These globals existed solely for backwards compatibility and debugging.
+ * In development, accessing them logged a deprecation warning so new code
+ * moved toward module imports or ModuleRegistry access instead.
+ *
+ * MIGRATION STATUS: COMPLETE - All modules now use ES imports.
  */
 
 const DEPRECATED_WINDOW_GLOBALS = [
