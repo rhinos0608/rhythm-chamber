@@ -541,11 +541,12 @@ export async function handleFunctionCallingWithFallback({
     console.log(`[FunctionFallback] Capability level ${level}: ${reason}`);
 
     // Level 1: Check if we got native tool_calls in the response
-    if (level === CAPABILITY_LEVELS.NATIVE && response?.choices?.[0]?.message?.tool_calls) {
+    const toolCalls = response?.choices?.[0]?.message?.tool_calls;
+    if (level === CAPABILITY_LEVELS.NATIVE && toolCalls) {
         console.log('[FunctionFallback] Level 1: Native function calling succeeded');
         return {
             level: CAPABILITY_LEVELS.NATIVE,
-            calls: response.choices[0].message.tool_calls,
+            calls: toolCalls,
             results: null, // Let chat.js handle execution
             needsFollowup: true
         };
