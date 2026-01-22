@@ -76,6 +76,9 @@ const vectorClock = new VectorClock();
 // Use Vector clock for deterministic ordering instead of Date.now()
 // This eliminates clock skew issues between tabs and detects concurrent updates
 // EDGE CASE FIX: Add fallback TAB_ID generation in case vectorClock.tick() fails
+// Use module-level counter to ensure uniqueness across multiple fallback calls
+let fallbackCounter = 0;
+
 function generateTabId() {
     try {
         const tickResult = vectorClock.tick();
@@ -90,9 +93,13 @@ function generateTabId() {
         console.warn('[TabCoordination] Vector clock tick failed, using fallback TAB_ID:', e.message);
     }
 
-    // Fallback: Generate a deterministic ID without vector clock
-    // Using timestamp + random as fallback
-    const fallbackId = `tab_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Fallback: Generate a unique ID without vector clock
+    // Using high-resolution timestamp (if available) + counter + random for guaranteed uniqueness
+    const timestamp = typeof performance !== 'undefined' && performance.now
+        ? Math.floor(performance.now() * 1000) // Microsecond precision
+        : Date.now() * 1000;
+    const randomPart = Math.random().toString(36).substring(2, 11); // 9 chars
+    const fallbackId = `tab_${timestamp}_${++fallbackCounter}_${randomPart}`;
     console.warn('[TabCoordination] Using fallback TAB_ID:', fallbackId);
     return fallbackId;
 }
