@@ -197,7 +197,12 @@ async function appendEvent(eventType, payload, vectorClock, sourceTab, domain = 
         const request = store.add(event);
         request.onsuccess = () => {
             // Check if compaction needed
-            checkCompaction().catch(err => console.warn('[EventLogStore] Compaction check failed:', err));
+            checkCompaction().catch(err => {
+                console.error('[EventLogStore] Compaction check failed:', err);
+                if (err.name === 'QuotaExceededError') {
+                    EventBus.emit('storage:quota_exceeded', { error: err });
+                }
+            });
             resolve(event);
         };
         request.onerror = () => reject(request.error);
