@@ -142,7 +142,10 @@ async function getUserNamespace() {
         try {
             const profile = JSON.parse(spotifyProfile);
             identifier = profile.id || '';
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            console.error('[Security] Failed to parse spotify_user_profile:', e);
+            localStorage.removeItem('spotify_user_profile');
+        }
     }
 
     // Fallback to session-based identifier
