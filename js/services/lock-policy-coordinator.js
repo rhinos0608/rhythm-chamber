@@ -228,7 +228,7 @@ function getConflictMatrix() {
     return Object.fromEntries(
         Object.entries(CONFLICT_MATRIX).map(([operation, conflicts]) => ([
             operation,
-            Array.isArray(conflicts) ? [...conflicts] : { ...conflicts }
+            [...conflicts]  // All CONFLICT_MATRIX values are arrays
         ]))
     );
 }
