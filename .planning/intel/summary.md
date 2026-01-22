@@ -1,17 +1,17 @@
 # Codebase Intelligence Summary
 
-Last updated: 2026-01-22T02:47:30.019Z
-Indexed files: 273
+Last updated: 2026-01-22T05:31:32.965Z
+Indexed files: 283
 
 ## Key Directories
 
-- `controllers/`: Controllers (15 files)
-- `utils/`: Utility functions (8 files)
-- `services/`: Service layer (58 files)
+- `controllers/`: Controllers (16 files)
+- `utils/`: Utility functions (9 files)
+- `services/`: Service layer (65 files)
 - `tests/`: Test files (48 files)
 
 ## File Patterns
 
 - `*.test.js`: Test files (42 files)
 
-Total exports: 424
+Total exports: 448

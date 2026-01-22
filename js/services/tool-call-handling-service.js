@@ -39,6 +39,23 @@ const RETRY_BASE_DELAY_MS = 300;
 let toolStrategies = null;
 
 // ==========================================
+// Utility Functions
+// ==========================================
+
+/**
+ * Generate a unique ID for tool calls
+ * Used as fallback when toolCall.id is missing
+ * @returns {string} A unique identifier
+ */
+function generateToolCallId() {
+    // Use crypto.randomUUID if available, otherwise fall back to timestamp + random
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    return `tool_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+// ==========================================
 // Retry Helpers
 // ==========================================
 
@@ -151,7 +168,7 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
 
     // Add assistant's tool call message to conversation
     if (_SessionManager?.addMessageToHistory) {
-        _SessionManager.addMessageToHistory({
+        await _SessionManager.addMessageToHistory({
             role: 'assistant',
             content: responseMessage.content || null,
             tool_calls: responseMessage.tool_calls
@@ -177,8 +194,6 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
                     }
                 };
             }
-            // Record this call
-            _CircuitBreaker.recordCall();
         }
 
         const functionName = toolCall.function.name;
@@ -202,6 +217,13 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
             };
         }
 
+        // CRITICAL FIX: Record call AFTER successful argument parsing
+        // Previously, parse failures were counted against the circuit breaker,
+        // causing premature trips when LLMs return malformed JSON
+        if (_CircuitBreaker?.recordCall) {
+            _CircuitBreaker.recordCall();
+        }
+
         console.log(`[ToolCallHandlingService] Executing function: ${functionName}`, args);
 
         // Notify UI: Tool start
@@ -211,131 +233,133 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
         // This ensures we don't exceed the 50s total budget for 5 calls
         const functionBudget = TimeoutBudget.allocate(`function_${functionName}`, 10000);
 
-        // Execute with retry logic for transient errors and validation issues
-        let result;
-        let lastError;
-        let succeeded = false;
+        // MEMORY LEAK FIX: Ensure budget is always released, even on early return
+        try {
+            // Execute with retry logic for transient errors and validation issues
+            let result;
+            let lastError;
+            let succeeded = false;
 
-        for (let attempt = 0; attempt <= MAX_FUNCTION_RETRIES && !succeeded; attempt++) {
-            const abortController = new AbortController();
-            const timeoutId = setTimeout(() => {
-                abortController.abort();
-            }, _timeoutMs);
+            for (let attempt = 0; attempt <= MAX_FUNCTION_RETRIES && !succeeded; attempt++) {
+                try {
+                    // Guard: Check if Functions is available
+                    if (!_Functions || typeof _Functions.execute !== 'function') {
+                        throw new Error(`Functions service not available - cannot execute ${functionName}`);
+                    }
 
-            try {
-                // Guard: Check if Functions is available
-                if (!_Functions || typeof _Functions.execute !== 'function') {
-                    clearTimeout(timeoutId);
-                    throw new Error(`Functions service not available - cannot execute ${functionName}`);
-                }
+                    result = await _Functions.execute(functionName, args, getStreamsData(), {
+                        signal: functionBudget.signal
+                    });
 
-                result = await _Functions.execute(functionName, args, getStreamsData(), {
-                    signal: abortController.signal
-                });
-                clearTimeout(timeoutId);
+                    // Check if aborted while executing
+                    if (result?.aborted) {
+                        throw new Error(`Function ${functionName} timed out`);
+                    }
 
-                // Check if aborted while executing
-                if (result?.aborted) {
-                    throw new Error(`Function ${functionName} timed out after ${_timeoutMs}ms`);
-                }
-
-                // Check for validation errors - these might be fixed by retry with normalized args
-                if (hasValidationError(result)) {
-                    if (attempt < MAX_FUNCTION_RETRIES) {
-                        console.warn(`[ToolCallHandlingService] Validation error for ${functionName} (attempt ${attempt + 1}), retrying...`, result.validationErrors);
-                        await retryDelay(attempt);
+                    // MEDIUM PRIORITY FIX: Do NOT retry validation errors
+                    // Validation errors are caused by invalid input data - retrying with the same
+                    // arguments will always fail. This wastes retry attempts that could be used
+                    // for transient network/timeout errors instead.
+                    if (hasValidationError(result)) {
+                        console.error(`[ToolCallHandlingService] Validation error for ${functionName} (not retrying):`, result.validationErrors);
                         lastError = new Error(`Validation failed: ${result.validationErrors.join(', ')}`);
-                        continue;
+                        // Break immediately - don't waste retry attempts on permanent validation failures
+                        break;
                     }
-                    // Last attempt failed with validation error - return the error result
-                    console.error(`[ToolCallHandlingService] Validation failed after ${MAX_FUNCTION_RETRIES + 1} attempts`);
-                    break;
-                }
 
-                // Check for function execution errors in result
-                if (result?.error) {
-                    if (attempt < MAX_FUNCTION_RETRIES && isRetryableError(new Error(result.error), abortController.signal)) {
-                        console.warn(`[ToolCallHandlingService] Retryable error for ${functionName} (attempt ${attempt + 1}): ${result.error}`);
+                    // Check for function execution errors in result
+                    if (result?.error) {
+                        if (attempt < MAX_FUNCTION_RETRIES && isRetryableError(new Error(result.error), functionBudget.signal)) {
+                            console.warn(`[ToolCallHandlingService] Retryable error for ${functionName} (attempt ${attempt + 1}): ${result.error}`);
+                            await retryDelay(attempt);
+                            lastError = new Error(result.error);
+                            continue;
+                        }
+                        // Non-retryable error or last attempt - use this result
+                        break;
+                    }
+
+                    succeeded = true;
+                } catch (funcError) {
+                    lastError = funcError;
+
+                    if (attempt < MAX_FUNCTION_RETRIES && isRetryableError(funcError, functionBudget.signal)) {
+                        console.warn(`[ToolCallHandlingService] Retryable error for ${functionName} (attempt ${attempt + 1}): ${funcError.message}`);
                         await retryDelay(attempt);
-                        lastError = new Error(result.error);
                         continue;
                     }
-                    // Non-retryable error or last attempt - use this result
+                    // Non-retryable error or last attempt
+                    console.error(`[ToolCallHandlingService] Function execution failed after ${attempt + 1} attempts:`, funcError);
                     break;
                 }
-
-                succeeded = true;
-            } catch (funcError) {
-                clearTimeout(timeoutId);
-                lastError = funcError;
-
-                if (attempt < MAX_FUNCTION_RETRIES && isRetryableError(funcError, abortController.signal)) {
-                    console.warn(`[ToolCallHandlingService] Retryable error for ${functionName} (attempt ${attempt + 1}): ${funcError.message}`);
-                    await retryDelay(attempt);
-                    continue;
-                }
-                // Non-retryable error or last attempt
-                console.error(`[ToolCallHandlingService] Function execution failed after ${attempt + 1} attempts:`, funcError);
-                break;
             }
-        }
 
-        // Release the function budget
-        TimeoutBudget.release(functionBudget);
+            // If we never succeeded and have a last error, return error status
+            if (!succeeded && lastError && !result?.error) {
+                // Notify UI: Tool error
+                if (onProgress) onProgress({ type: 'tool_end', tool: functionName, error: true });
 
-        // If we never succeeded and have a last error, return error status
-        if (!succeeded && lastError && !result?.error) {
-            // Notify UI: Tool error
-            if (onProgress) onProgress({ type: 'tool_end', tool: functionName, error: true });
+                return {
+                    earlyReturn: {
+                        status: 'error',
+                        content: `Function call '${functionName}' failed after ${MAX_FUNCTION_RETRIES + 1} attempts: ${lastError.message}. Please try again.`,
+                        role: 'assistant',
+                        isFunctionError: true
+                    }
+                };
+            }
 
-            return {
-                earlyReturn: {
-                    status: 'error',
-                    content: `Function call '${functionName}' failed after ${MAX_FUNCTION_RETRIES + 1} attempts: ${lastError.message}. Please try again.`,
-                    role: 'assistant',
-                    isFunctionError: true
+            // Even if not fully successful, if we have a result, use it (e.g., validation error result)
+            console.log(`[ToolCallHandlingService] Function result:`, result);
+
+            // EDGE CASE FIX: Distinguish between "intentionally empty" and "unexpectedly empty" results
+            // Empty tool results can cause LLM parsing issues on follow-up call
+            // A result with { _empty: true } or { result: '' } is intentionally empty (e.g., no data found)
+            // A result that is null/undefined/0-length object is unexpectedly empty (likely an error)
+            const isIntentionallyEmpty = result &&
+                typeof result === 'object' &&
+                (result._empty === true || result._intentionallyEmpty === true);
+
+            const hasValidContent = result !== null && result !== undefined &&
+                !(typeof result === 'string' && result.trim() === '' && !isIntentionallyEmpty) &&
+                !(typeof result === 'object' && Object.keys(result).length === 0 && !isIntentionallyEmpty);
+
+            if (!hasValidContent) {
+                console.warn(`[ToolCallHandlingService] Tool ${functionName} returned empty result, using placeholder`);
+                result = { result: '(No output)', _empty: true };
+            }
+
+            // Notify UI: Tool end
+            if (onProgress) onProgress({ type: 'tool_end', tool: functionName, result });
+
+            // Add tool result to conversation
+            if (_SessionManager?.addMessageToHistory) {
+                // EDGE CASE FIX: Handle circular references in tool result serialization
+                // JSON.stringify throws on circular references, causing tool results to be lost
+                let content;
+                try {
+                    content = JSON.stringify(result);
+                } catch (stringifyError) {
+                    // Fallback for circular references or unserializable data
+                    console.warn(`[ToolCallHandlingService] Failed to stringify tool result for ${functionName}:`, stringifyError.message);
+                    content = JSON.stringify({
+                        result: '(Result contains unserializable data)',
+                        _error: 'Unserializable result'
+                    });
                 }
-            };
-        }
 
-        // Even if not fully successful, if we have a result, use it (e.g., validation error result)
-        console.log(`[ToolCallHandlingService] Function result:`, result);
-
-        // EDGE CASE: Validate result is not empty/null/undefined before adding to history
-        // Empty tool results can cause LLM parsing issues on follow-up call
-        const hasValidContent = result !== null && result !== undefined &&
-            !(typeof result === 'string' && result.trim() === '') &&
-            !(typeof result === 'object' && Object.keys(result).length === 0);
-
-        if (!hasValidContent) {
-            console.warn(`[ToolCallHandlingService] Tool ${functionName} returned empty result, using placeholder`);
-            result = { result: '(No output)', _empty: true };
-        }
-
-        // Notify UI: Tool end
-        if (onProgress) onProgress({ type: 'tool_end', tool: functionName, result });
-
-        // Add tool result to conversation
-        if (_SessionManager?.addMessageToHistory) {
-            // EDGE CASE FIX: Handle circular references in tool result serialization
-            // JSON.stringify throws on circular references, causing tool results to be lost
-            let content;
-            try {
-                content = JSON.stringify(result);
-            } catch (stringifyError) {
-                // Fallback for circular references or unserializable data
-                console.warn(`[ToolCallHandlingService] Failed to stringify tool result for ${functionName}:`, stringifyError.message);
-                content = JSON.stringify({
-                    result: '(Result contains unserializable data)',
-                    _error: 'Unserializable result'
+                await _SessionManager.addMessageToHistory({
+                    role: 'tool',
+                    tool_call_id: toolCall.id,
+                    content: content
                 });
             }
 
-            _SessionManager.addMessageToHistory({
-                role: 'tool',
-                tool_call_id: toolCall.id,
-                content: content
-            });
+            // Return undefined to continue processing (no early return)
+            return undefined;
+        } finally {
+            // MEMORY LEAK FIX: Always release budget, even on error or early return
+            TimeoutBudget.release(functionBudget);
         }
     }
 
@@ -572,8 +596,20 @@ async function handleToolCallsWithFallback(
 
         console.log(`[ToolCallHandlingService] Racing ${candidates.length} strategies with ${context.timeoutMs}ms budget`);
 
+        // Create shared AbortController for strategy cancellation
+        // When one strategy succeeds, others can be aborted to save resources
+        const raceAbortController = new AbortController();
+
+        // Add abort signal to context for all strategies
+        context.abortSignal = raceAbortController.signal;
+
         // Create race promises for each strategy - wrap to throw on failure so firstSuccess works
-        const racePromises = candidates.map(async (candidate) => {
+        const racePromises = candidates.map((candidate) => (async () => {
+            // Check if already aborted (another strategy won)
+            if (raceAbortController.signal.aborted) {
+                throw new Error(`${candidate.strategy.strategyName}: Cancelled - another strategy won`);
+            }
+
             try {
                 const result = await candidate.strategy.execute(context);
 
@@ -588,6 +624,8 @@ async function handleToolCallsWithFallback(
                     } else {
                         console.log(`[ToolCallHandlingService] Strategy ${candidate.strategy.strategyName} succeeded`);
                     }
+                    // Abort other strategies since we won
+                    raceAbortController.abort();
                     return result;
                 }
 
@@ -607,12 +645,17 @@ async function handleToolCallsWithFallback(
                 // Re-throw to let Promise.any try next strategy
                 throw new Error(`${candidate.strategy.strategyName}: ${strategyError.message}`);
             }
-        });
+        })());
 
         // Add timeout promise that rejects - used consistently for both Promise.any and polyfill
-        const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('All strategies timed out')), context.timeoutMs)
-        );
+        // When timeout occurs, abort all pending strategies
+        const timeoutPromise = new Promise((_, reject) => {
+            const timeoutId = setTimeout(() => {
+                raceAbortController.abort();
+                reject(new Error('All strategies timed out'));
+            }, context.timeoutMs);
+            // Store timeoutId for cleanup (not needed since abort is idempotent)
+        });
 
         try {
             // Use Promise.any for true first-success-wins (or polyfill if unavailable)
@@ -628,22 +671,27 @@ async function handleToolCallsWithFallback(
                 successfulResult = await new Promise((resolve, reject) => {
                     let pendingCount = racePromises.length;
                     const errors = [];
-                    let resolved = false;
+                    let settled = false;
 
                     // Wire up race promises
                     racePromises.forEach((promise, i) => {
                         promise.then(
                             (result) => {
-                                if (!resolved) {
-                                    resolved = true;
+                                // CRITICAL FIX: Atomic check-and-set to prevent race condition
+                                // Multiple promises could resolve in same microtask; only first should call resolve
+                                if (!settled) {
+                                    settled = true;
+                                    // Abort other strategies since we won
+                                    raceAbortController.abort();
                                     resolve(result);
                                 }
                             },
                             (error) => {
                                 errors[i] = error;
                                 pendingCount--;
-                                if (pendingCount === 0 && !resolved) {
+                                if (pendingCount === 0 && !settled) {
                                     // All strategies rejected - check if timeout wins
+                                    settled = true;
                                     reject(new AggregateError(errors, 'All strategies failed'));
                                 }
                             }
@@ -653,8 +701,9 @@ async function handleToolCallsWithFallback(
                     // Wire up timeout promise to compete with strategies
                     // If timeout resolves (rejects) first, it wins; otherwise strategies win
                     timeoutPromise.catch((timeoutError) => {
-                        if (!resolved) {
-                            resolved = true;
+                        // CRITICAL FIX: Atomic check-and-set to prevent race condition
+                        if (!settled) {
+                            settled = true;
                             reject(timeoutError);
                         }
                     });

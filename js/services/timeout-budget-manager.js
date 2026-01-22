@@ -475,7 +475,7 @@ function getBudget(operation) {
 
 /**
  * Release a budget (cleanup)
- * 
+ *
  * @param {string|TimeoutBudgetInstance} operationOrInstance - Operation name or budget instance
  */
 function release(operationOrInstance) {
@@ -496,6 +496,8 @@ function release(operationOrInstance) {
     const budget = budgetId ? activeBudgets.get(budgetId) : null;
     if (budget) {
         console.log(`[TimeoutBudget] Released ${budget.operation}: elapsed ${budget.elapsed()}ms of ${budget.budgetMs}ms (id: ${budget.id})`);
+        // CRITICAL: Call dispose to clean up AbortController resources and event listeners
+        budget.dispose();
         activeBudgets.delete(budgetId);
     }
 }

@@ -14,6 +14,7 @@ import { Storage } from '../storage.js';
 import { DataVersion } from './data-version.js';
 import { safeJsonParse } from '../utils/safe-json.js';
 import { STORAGE_KEYS } from '../storage/keys.js';
+import { AppState } from '../state/app-state.js';
 
 // ==========================================
 // Constants
@@ -43,33 +44,133 @@ let _eventListenersRegistered = false; // Track if event listeners are registere
 let _sessionData = { id: null, messages: [] };
 let _sessionDataLock = Promise.resolve(); // Async mutex: promises chain sequentially
 
+// Session lock for preventing session switches during message processing
+let _processingSessionId = null;  // Session ID currently being processed
+let _processingLock = Promise.resolve();  // Processing lock
+
 /**
- * Get session data safely (returns a snapshot)
- * @returns {Object} Copy of session data
+ * Acquire session processing lock to prevent session switches during message processing
+ * This prevents race conditions where a session switch happens mid-message processing
+ * @param {string} expectedSessionId - The session ID expected to be active
+ * @returns {Promise<{ locked: boolean, currentSessionId: string|null, release?: Function }>} Lock result
  */
-function getSessionData() {
-    // Return a copy to prevent external mutations
+async function acquireProcessingLock(expectedSessionId) {
+    const previousLock = _processingLock;
+    let releaseLock;
+
+    // Create new lock in the chain
+    _processingLock = new Promise(resolve => {
+        releaseLock = resolve;
+    });
+
+    // Wait for previous processing to complete
+    await previousLock;
+
+    // Check if session has switched
+    if (_processingSessionId !== null && _processingSessionId !== expectedSessionId) {
+        // Session changed during lock acquisition
+        releaseLock();
+        return {
+            locked: false,
+            currentSessionId: currentSessionId,
+            error: 'Session switched during lock acquisition'
+        };
+    }
+
+    // Acquire the lock
+    _processingSessionId = expectedSessionId || currentSessionId;
+
     return {
-        id: _sessionData.id,
-        messages: [..._sessionData.messages]
+        locked: true,
+        currentSessionId: currentSessionId,
+        release: () => {
+            _processingSessionId = null;
+            releaseLock();
+        }
     };
 }
 
 /**
+ * Validate session ID matches the current active session
+ * Used to prevent processing messages for a different session
+ * @param {string} sessionId - Session ID to validate
+ * @returns {boolean} True if session ID matches current session
+ */
+function isCurrentSession(sessionId) {
+    if (!sessionId || !currentSessionId) return false;
+    return sessionId === currentSessionId;
+}
+
+/**
+ * Deep clone a message object to prevent external mutations
+ * HNW: Ensures message objects cannot be modified from outside the session manager
+ * @param {Object} msg - Message object to clone
+ * @returns {Object} Deep cloned message
+ */
+function deepCloneMessage(msg) {
+    if (!msg) return msg;
+    // Shallow copy is sufficient for message objects (no nested objects)
+    // Messages have: role, content, timestamp, dataVersion, etc.
+    return { ...msg };
+}
+
+/**
+ * Deep clone messages array to prevent external mutations
+ * @param {Array} messages - Messages array to clone
+ * @returns {Array} Deep cloned messages array
+ */
+function deepCloneMessages(messages) {
+    if (!messages) return [];
+    return messages.map(deepCloneMessage);
+}
+
+/**
+ * Get session data safely (returns a deep copy snapshot)
+ * HNW: Returns frozen deep copy to prevent external mutations
+ * @returns {Object} Deep copy of session data
+ */
+function getSessionData() {
+    // Return a deep copy to prevent external mutations
+    const snapshot = {
+        id: _sessionData.id,
+        messages: deepCloneMessages(_sessionData.messages)
+    };
+    // Freeze the snapshot to prevent any mutations
+    return Object.freeze(snapshot);
+}
+
+/**
  * Set session data safely (no lock - use updateSessionData for concurrent updates)
+ * Creates deep copies of all message objects to prevent external mutations
  * @param {Object} data - New session data
  */
 function setSessionData(data) {
     _sessionData = {
         id: data.id || null,
-        messages: data.messages ? [...data.messages] : []
+        messages: deepCloneMessages(data.messages)
     };
+}
+
+/**
+ * Sync session ID to AppState for centralized state management
+ * This ensures components reading from AppState see consistent session state
+ * @param {string|null} sessionId - Session ID to sync
+ */
+function syncSessionIdToAppState(sessionId) {
+    if (AppState?.update && typeof AppState.update === 'function') {
+        try {
+            AppState.update('ui', { currentSessionId: sessionId });
+        } catch (e) {
+            console.warn('[SessionManager] Failed to sync session ID to AppState:', e);
+        }
+    }
 }
 
 /**
  * Update session data atomically with mutex protection.
  * This prevents lost update races when multiple async operations
  * try to modify session data concurrently within the same tab.
+ * HNW: Uses deep cloning to prevent external mutations
  *
  * @param {Function} updaterFn - Function that receives current data and returns new data
  * @returns {Promise<void>}
@@ -91,7 +192,7 @@ async function updateSessionData(updaterFn) {
         const newData = updaterFn(currentData);
         _sessionData = {
             id: newData.id || null,
-            messages: newData.messages ? [...newData.messages] : []
+            messages: deepCloneMessages(newData.messages)
         };
 
         // Sync to window for legacy compatibility (read-only)
@@ -120,9 +221,23 @@ function generateUUID() {
 }
 
 /**
+ * Validate UUID v4 format
+ * SECURITY FIX: Ensures sessionId parameter matches expected UUID format
+ * before being used in storage operations or logging
+ * @param {string} sessionId - Session ID to validate
+ * @returns {boolean} True if valid UUID v4 format
+ */
+function isValidUUID(sessionId) {
+    // UUID v4 regex: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+    // where x is any hex digit and y is 8, 9, a, or b
+    const uuidV4Regex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return uuidV4Regex.test(sessionId);
+}
+
+/**
  * Initialize session manager
  * Attempts to recover emergency backup and load current session
- * 
+ *
  * @returns {Promise<string|null>} Current session ID or null if none exists
  */
 async function init() {
@@ -200,10 +315,14 @@ async function createNewSession(initialMessages = []) {
     currentSessionId = generateUUID();
     currentSessionCreatedAt = new Date().toISOString();
 
+    // Sync to AppState for centralized state management
+    syncSessionIdToAppState(currentSessionId);
+
     // Store session data in module-local memory (protected from external mutations)
+    // Use deep cloning to prevent external mutations
     _sessionData = {
         id: currentSessionId,
-        messages: [...initialMessages]
+        messages: deepCloneMessages(initialMessages)
     };
     // Sync to window for legacy compatibility (read-only)
     if (typeof window !== 'undefined') {
@@ -242,12 +361,20 @@ async function createNewSession(initialMessages = []) {
 
 /**
  * Load a session by ID
+ * HIGH PRIORITY FIX: Now uses mutex protection via updateSessionData to prevent race conditions
+ * SECURITY FIX: Validates UUID format before using in storage operations
  * @param {string} sessionId - Session ID to load
  * @returns {Promise<Object|null>} Session object or null if not found/invalid
  */
 async function loadSession(sessionId) {
     if (!Storage.getSession) {
         console.warn('[SessionManager] Storage not available');
+        return null;
+    }
+
+    // SECURITY FIX: Validate UUID format before using in storage operations
+    if (!sessionId || typeof sessionId !== 'string' || !isValidUUID(sessionId)) {
+        console.warn('[SessionManager] Invalid session ID format:', sessionId);
         return null;
     }
 
@@ -265,22 +392,24 @@ async function loadSession(sessionId) {
             return null;
         }
 
+        // Update module-level state (outside mutex for simplicity - these are scalars)
         currentSessionId = session.id;
         currentSessionCreatedAt = session.createdAt;
 
-        // Store session data in module-local memory (protected from external mutations)
-        _sessionData = {
+        // Sync to AppState for centralized state management
+        syncSessionIdToAppState(currentSessionId);
+
+        // HIGH PRIORITY FIX: Use updateSessionData mutex to prevent race conditions
+        // with concurrent operations that may be modifying session data
+        await updateSessionData(() => ({
             id: session.id,
             messages: session.messages || []
-        };
-        // Sync to window for legacy compatibility (read-only)
-        if (typeof window !== 'undefined') {
-            window._sessionData = getSessionData();
-        }
+        }));
 
         // Save current session ID to unified storage and localStorage
+        let savePromise;
         if (Storage.setConfig) {
-            Storage.setConfig(SESSION_CURRENT_SESSION_KEY, currentSessionId).catch(e => {
+            savePromise = Storage.setConfig(SESSION_CURRENT_SESSION_KEY, currentSessionId).catch(e => {
                 console.error('[SessionManager] Failed to save session ID to unified storage:', e);
                 // Notify user if toast available - this is a critical data persistence issue
                 if (typeof window !== 'undefined' && window.showToast) {
@@ -300,7 +429,8 @@ async function loadSession(sessionId) {
 
         console.log('[SessionManager] Loaded session:', sessionId, 'with', (session.messages || []).length, 'messages');
         notifySessionUpdate('session:loaded', { sessionId, messageCount: (session.messages || []).length });
-        return session;
+        // Return promise for storage operation to allow caller to handle completion
+        return savePromise || Promise.resolve(session);
 
     } catch (e) {
         console.error('[SessionManager] Failed to load session:', e);
@@ -311,10 +441,12 @@ async function loadSession(sessionId) {
 /**
  * Save current session to IndexedDB immediately
  * EDGE CASE FIX: Preserves system prompts during truncation
+ * HIGH PRIORITY FIX: Returns boolean indicating success for caller error handling
+ * @returns {Promise<boolean>} True if save succeeded, false otherwise
  */
 async function saveCurrentSession() {
     if (!currentSessionId || !Storage.saveSession) {
-        return;
+        return false;
     }
 
     // Get messages from module-local memory (thread-safe access)
@@ -363,8 +495,14 @@ async function saveCurrentSession() {
         await Storage.saveSession(session);
         console.log('[SessionManager] Session saved:', currentSessionId);
         notifySessionUpdate('session:updated', { sessionId: currentSessionId, field: 'messages' });
+        return true;
     } catch (e) {
         console.error('[SessionManager] Failed to save session:', e);
+        // HIGH PRIORITY FIX: Notify user of save failure - this is a data loss risk
+        if (typeof window !== 'undefined' && window.showToast) {
+            window.showToast('Warning: Failed to save conversation. Data may be lost on refresh.', 5000);
+        }
+        return false;
     }
 }
 
@@ -514,13 +652,28 @@ let previousSessionId = null;
 
 /**
  * Switch to a different session
+ * SESSION LOCKING: Waits for any ongoing message processing to complete
  * @param {string} sessionId - Session ID to switch to
  * @returns {Promise<boolean>} Success status
  */
 async function switchSession(sessionId) {
-    // Save current session first
-    if (currentSessionId && autoSaveTimeoutId) {
-        clearTimeout(autoSaveTimeoutId);
+    // SESSION LOCKING: Wait for any ongoing message processing to complete
+    // This prevents race conditions where a session switch happens mid-message
+    if (_processingSessionId !== null) {
+        console.warn('[SessionManager] Waiting for message processing to complete before switching sessions...');
+        // Wait for the processing lock to be released
+        await _processingLock;
+        console.log('[SessionManager] Message processing completed, proceeding with session switch');
+    }
+
+    // CRITICAL FIX: Always save current session before switching
+    // Previous conditional (only if autoSaveTimeoutId) created data loss window
+    if (currentSessionId) {
+        // Cancel any pending save and save immediately
+        if (autoSaveTimeoutId) {
+            clearTimeout(autoSaveTimeoutId);
+            autoSaveTimeoutId = null;
+        }
         await saveCurrentSession();
     }
 
@@ -553,11 +706,18 @@ async function listSessions() {
 
 /**
  * Delete a session by ID
+ * SECURITY FIX: Validates UUID format before using in storage operations
  * @param {string} sessionId - Session ID to delete
  * @returns {Promise<boolean>} Success status
  */
 async function deleteSessionById(sessionId) {
     if (!Storage.deleteSession) {
+        return false;
+    }
+
+    // SECURITY FIX: Validate UUID format before using in storage operations
+    if (!sessionId || typeof sessionId !== 'string' || !isValidUUID(sessionId)) {
+        console.warn('[SessionManager] Invalid session ID format:', sessionId);
         return false;
     }
 
@@ -579,12 +739,19 @@ async function deleteSessionById(sessionId) {
 
 /**
  * Rename a session
+ * SECURITY FIX: Validates UUID format before using in storage operations
  * @param {string} sessionId - Session ID to rename
  * @param {string} newTitle - New title
  * @returns {Promise<boolean>} Success status
  */
 async function renameSession(sessionId, newTitle) {
     if (!Storage.getSession || !Storage.saveSession) {
+        return false;
+    }
+
+    // SECURITY FIX: Validate UUID format before using in storage operations
+    if (!sessionId || typeof sessionId !== 'string' || !isValidUUID(sessionId)) {
+        console.warn('[SessionManager] Invalid session ID format:', sessionId);
         return false;
     }
 
@@ -605,8 +772,19 @@ async function renameSession(sessionId, newTitle) {
 
 /**
  * Clear conversation history and create new session
+ * CRITICAL FIX: Save pending changes before clearing to prevent data loss
  */
 async function clearConversation() {
+    // CRITICAL FIX: Save current session before clearing to prevent data loss
+    if (currentSessionId) {
+        // Cancel any pending save and save immediately
+        if (autoSaveTimeoutId) {
+            clearTimeout(autoSaveTimeoutId);
+            autoSaveTimeoutId = null;
+        }
+        await saveCurrentSession();
+    }
+
     // Clear module-local state
     _sessionData = { id: null, messages: [] };
     // Sync to window for legacy compatibility (read-only)
@@ -626,12 +804,13 @@ function getCurrentSessionId() {
 
 /**
  * Get conversation history
- * @returns {Array} Copy of current conversation history
+ * HNW: Returns deep copy to prevent external mutations
+ * @returns {Array} Deep copy of current conversation history
  */
 function getHistory() {
-    // Return a copy from module-local memory (thread-safe access)
+    // Return a deep copy from module-local memory (thread-safe access)
     if (_sessionData.messages) {
-        return [..._sessionData.messages];
+        return deepCloneMessages(_sessionData.messages);
     }
     return [];
 }
@@ -640,87 +819,136 @@ function getHistory() {
  * Add message to current session
  * Automatically tags message with dataVersion for stale data detection
  * EDGE CASE FIX: Implements in-memory sliding window to prevent unbounded growth
+ * Now uses mutex protection via updateSessionData to prevent race conditions
  * @param {Object} message - Message object with role and content
+ * @returns {Promise<void>}
  */
-function addMessageToHistory(message) {
-    // Use module-local state with immutable update pattern (thread-safe)
-    if (_sessionData.messages) {
-        // Tag message with current data version for stale detection
-        if (DataVersion.tagMessage) {
-            DataVersion.tagMessage(message);
+async function addMessageToHistory(message) {
+    // Tag message with current data version for stale detection
+    if (DataVersion.tagMessage) {
+        DataVersion.tagMessage(message);
+    }
+
+    // Use updateSessionData for mutex protection
+    await updateSessionData((currentData) => {
+        if (!currentData.messages) {
+            currentData.messages = [];
         }
 
         // EDGE CASE FIX: Implement in-memory sliding window
         // Keep system messages and recent messages to prevent unbounded memory growth
         // Use a higher limit in memory than on disk (2x) for better UX
         const IN_MEMORY_MAX = MAX_SAVED_MESSAGES * 2;
-        const systemMessages = _sessionData.messages.filter(m => m.role === 'system');
-        const nonSystemMessages = _sessionData.messages.filter(m => m.role !== 'system');
+        const systemMessages = currentData.messages.filter(m => m.role === 'system');
+        const nonSystemMessages = currentData.messages.filter(m => m.role !== 'system');
 
         // Create new array reference instead of mutating (prevents race conditions)
         if (nonSystemMessages.length >= IN_MEMORY_MAX - systemMessages.length) {
             // Drop oldest non-system message to make room
-            _sessionData.messages = [...systemMessages, ...nonSystemMessages.slice(-(IN_MEMORY_MAX - systemMessages.length - 1)), message];
+            currentData.messages = [...systemMessages, ...nonSystemMessages.slice(-(IN_MEMORY_MAX - systemMessages.length - 1)), message];
         } else {
-            _sessionData.messages = [..._sessionData.messages, message];
+            currentData.messages = [...currentData.messages, message];
         }
 
-        // Sync to window for legacy compatibility (read-only)
-        if (typeof window !== 'undefined') {
-            window._sessionData = getSessionData();
-        }
+        return currentData;
+    });
+}
+
+/**
+ * Add multiple messages to current session atomically in a single transaction
+ * CRITICAL FIX: Prevents race conditions when adding message turns (user + assistant)
+ * Multiple sequential addMessageToHistory calls can be interleaved with other operations,
+ * but this function adds all messages within a single mutex lock for atomicity.
+ * @param {Array<Object>} messages - Array of message objects with role and content
+ * @returns {Promise<void>}
+ */
+async function addMessagesToHistory(messages) {
+    if (!messages || messages.length === 0) {
+        return;
     }
+
+    // Tag all messages with current data version for stale detection
+    if (DataVersion.tagMessage) {
+        messages.forEach(msg => DataVersion.tagMessage(msg));
+    }
+
+    // Use updateSessionData for mutex protection - adds all messages in one transaction
+    await updateSessionData((currentData) => {
+        if (!currentData.messages) {
+            currentData.messages = [];
+        }
+
+        // EDGE CASE FIX: Implement in-memory sliding window
+        // Keep system messages and recent messages to prevent unbounded memory growth
+        const IN_MEMORY_MAX = MAX_SAVED_MESSAGES * 2;
+        const systemMessages = currentData.messages.filter(m => m.role === 'system');
+        const nonSystemMessages = currentData.messages.filter(m => m.role !== 'system');
+
+        // Add all new messages at once
+        const newNonSystemMessages = [...nonSystemMessages, ...messages.filter(m => m.role !== 'system')];
+        const newSystemMessages = [...systemMessages, ...messages.filter(m => m.role === 'system')];
+
+        // Truncate if needed
+        if (newNonSystemMessages.length >= IN_MEMORY_MAX - newSystemMessages.length) {
+            currentData.messages = [
+                ...newSystemMessages,
+                ...newNonSystemMessages.slice(-(IN_MEMORY_MAX - newSystemMessages.length))
+            ];
+        } else {
+            currentData.messages = [...newSystemMessages, ...newNonSystemMessages];
+        }
+
+        return currentData;
+    });
 }
 
 /**
  * Remove message from history at index
+ * HIGH PRIORITY FIX: Now uses mutex protection via updateSessionData
  * @param {number} index - Index to remove
- * @returns {boolean} Success status
+ * @returns {Promise<boolean>} Success status
  */
-function removeMessageFromHistory(index) {
-    // Use module-local state with immutable update pattern (thread-safe)
-    if (_sessionData.messages && index >= 0 && index < _sessionData.messages.length) {
-        // Create new array without the removed item (prevents race conditions)
-        const newMessages = [..._sessionData.messages];
-        newMessages.splice(index, 1);
-        _sessionData.messages = newMessages;
-        // Sync to window for legacy compatibility (read-only)
-        if (typeof window !== 'undefined') {
-            window._sessionData = getSessionData();
+async function removeMessageFromHistory(index) {
+    let success = false;
+    await updateSessionData((currentData) => {
+        if (currentData.messages && index >= 0 && index < currentData.messages.length) {
+            // Create new array without the removed item (prevents race conditions)
+            const newMessages = [...currentData.messages];
+            newMessages.splice(index, 1);
+            currentData.messages = newMessages;
+            success = true;
         }
-        return true;
-    }
-    return false;
+        return currentData;
+    });
+    return success;
 }
 
 /**
  * Truncate history to specific length
+ * HIGH PRIORITY FIX: Now uses mutex protection via updateSessionData
  * @param {number} length - New length
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function truncateHistory(length) {
-    // Use module-local state with immutable update pattern (thread-safe)
-    if (_sessionData.messages) {
-        _sessionData.messages = _sessionData.messages.slice(0, length);
-        // Sync to window for legacy compatibility (read-only)
-        if (typeof window !== 'undefined') {
-            window._sessionData = getSessionData();
+async function truncateHistory(length) {
+    await updateSessionData((currentData) => {
+        if (currentData.messages) {
+            currentData.messages = currentData.messages.slice(0, length);
         }
-    }
+        return currentData;
+    });
 }
 
 /**
  * Replace entire history
+ * HIGH PRIORITY FIX: Now uses mutex protection via updateSessionData
  * @param {Array} messages - New message array
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function replaceHistory(messages) {
-    // Use module-local state with immutable update pattern (thread-safe)
-    _sessionData.messages = [...messages];
-    // Sync to window for legacy compatibility (read-only)
-    if (typeof window !== 'undefined') {
-        window._sessionData = getSessionData();
-    }
+async function replaceHistory(messages) {
+    await updateSessionData((currentData) => {
+        currentData.messages = [...messages];
+        return currentData;
+    });
 }
 
 // ==========================================
@@ -821,10 +1049,11 @@ const SessionManager = {
     getCurrentSessionId,
     getHistory,
     addMessageToHistory,
+    addMessagesToHistory, // NEW: Batch add with atomic transaction
     removeMessageFromHistory,
     truncateHistory,
     replaceHistory,
-    updateSessionData, // NEW: Atomic update with mutex protection
+    updateSessionData, // Atomic update with mutex protection
 
     // Persistence
     saveCurrentSession,
@@ -838,8 +1067,13 @@ const SessionManager = {
     setUserContext,
     // NOTE: onSessionUpdate removed - use EventBus.on('session:*') instead
 
+    // Session locking (prevents session switches during message processing)
+    acquireProcessingLock,
+    isCurrentSession,
+
     // Exposed for testing
     generateUUID,
+    isValidUUID,
     validateSession,
 
     // Internal state access (for chat.js to prevent duplicate event listeners)
@@ -848,5 +1082,25 @@ const SessionManager = {
 
 // ES Module export
 export { SessionManager };
+
+// Deprecation warning for window._sessionData legacy global
+// Warns when code reads from window._sessionData instead of using SessionManager
+if (typeof window !== 'undefined') {
+    let _hasWarnedAboutSessionData = false;
+    Object.defineProperty(window, '_sessionData', {
+        get() {
+            if (!_hasWarnedAboutSessionData) {
+                _hasWarnedAboutSessionData = true;
+                console.warn('[SessionManager] DEPRECATION: window._sessionData is deprecated. Use SessionManager.getSessionData() or AppState instead.');
+            }
+            return this.__sessionData__;
+        },
+        set(value) {
+            this.__sessionData__ = value;
+        },
+        enumerable: true,
+        configurable: true
+    });
+}
 
 console.log('[SessionManager] Service loaded');

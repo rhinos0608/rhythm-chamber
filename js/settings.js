@@ -19,6 +19,7 @@ import { AnalyticsQuerySchemas } from './functions/schemas/analytics-queries.js'
 import { TemplateQuerySchemas } from './functions/schemas/template-queries.js';
 import { InputValidation } from './utils/input-validation.js';
 import { safeJsonParse } from './utils/safe-json.js';
+import { escapeHtml } from './utils/html-escape.js';
 import { STORAGE_KEYS } from './storage/keys.js';
 import { EventBus } from './services/event-bus.js';
 import { SettingsSchema } from './settings-schema.js';
@@ -1808,22 +1809,25 @@ async function checkOllamaConnection() {
         const result = await Ollama.detectServer();
 
         if (result.available) {
+            // SECURITY FIX: Escape version string from external service
             statusEl.innerHTML = `
                 <span class="status-dot connected"></span>
-                <span>Connected to Ollama v${result.version}</span>
+                <span>Connected to Ollama v${escapeHtml(String(result.version))}</span>
             `;
             // Refresh model list
             await refreshOllamaModels();
         } else {
+            // SECURITY FIX: Escape error message from external service
             statusEl.innerHTML = `
                 <span class="status-dot error"></span>
-                <span>${result.error || 'Cannot connect to Ollama'}</span>
+                <span>${escapeHtml(String(result.error || 'Cannot connect to Ollama'))}</span>
             `;
         }
     } catch (error) {
+        // SECURITY FIX: Escape error message from external service
         statusEl.innerHTML = `
             <span class="status-dot error"></span>
-            <span>Error: ${error.message}</span>
+            <span>Error: ${escapeHtml(String(error.message || 'Unknown error'))}</span>
         `;
     }
 }

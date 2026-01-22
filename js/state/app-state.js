@@ -39,7 +39,9 @@ const INITIAL_STATE = {
     // UI state - visual/interaction state
     ui: {
         sidebarCollapsed: false,
-        currentSessionId: null
+        currentSessionId: null,
+        authorityLevel: 'primary',  // 'primary' | 'secondary' for multi-tab coordination
+        isReadOnlyMode: false
     },
 
     // Operations state - background processing
@@ -47,7 +49,8 @@ const INITIAL_STATE = {
         isProcessing: false,
         processingProgress: 0,
         processingMessage: '',
-        error: null
+        error: null,
+        safeMode: false  // Security modules in fallback mode
     },
 
     // Demo mode state - sandboxed sample data

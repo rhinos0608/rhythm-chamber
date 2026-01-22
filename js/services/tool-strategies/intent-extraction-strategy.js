@@ -88,24 +88,29 @@ export class IntentExtractionStrategy extends BaseToolStrategy {
         }
 
         // Execute the extracted function using the validated reference
+        // Use AbortSignal pattern to properly abort execution on timeout
         let results;
         try {
-            results = await Promise.race([
-                fc.executeFunctionCalls([intent], streamsData),
-                new Promise((_, reject) =>
-                    setTimeout(
-                        () => reject(new Error(`Fallback function calls timed out after ${this.TIMEOUT_MS}ms`)),
-                        this.TIMEOUT_MS
-                    )
-                )
-            ]);
-        } catch (timeoutError) {
-            console.error('[IntentExtractionStrategy] Execution failed:', timeoutError);
+            const abortController = new AbortController();
+            const timeoutId = setTimeout(() => abortController.abort(), this.TIMEOUT_MS);
+
+            results = await fc.executeFunctionCalls([intent], streamsData, {
+                signal: abortController.signal
+            });
+
+            clearTimeout(timeoutId);
+        } catch (execError) {
+            // Handle AbortError from timeout
+            if (execError.name === 'AbortError') {
+                execError.message = `Fallback function calls timed out after ${this.TIMEOUT_MS}ms`;
+            }
+
+            console.error('[IntentExtractionStrategy] Execution failed:', execError);
             if (onProgress) onProgress({ type: 'tool_end', tool: intent.function, error: true });
             return {
                 earlyReturn: {
                     status: 'error',
-                    content: `Function calls timed out: ${timeoutError.message}. Please try again or select a different model.`,
+                    content: `Function calls failed: ${execError.message}. Please try again or select a different model.`,
                     role: 'assistant',
                     isFunctionError: true
                 }

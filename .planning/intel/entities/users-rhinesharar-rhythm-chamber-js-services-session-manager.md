@@ -1,7 +1,7 @@
 ---
 path: /Users/rhinesharar/rhythm-chamber/js/services/session-manager.js
 type: service
-updated: 2026-01-21
+updated: 2026-01-22
 status: active
 ---
 
@@ -9,19 +9,20 @@ status: active
 
 ## Purpose
 
-Handles chat session lifecycle including creation, loading, saving, deletion, and switching. Extracted from chat.js to separate session concerns from chat orchestration.
+Manages chat session lifecycle including creation, loading, saving, deletion, and switching. Provides thread-safe session data management with mutex protection.
 
 ## Exports
 
-- **SessionManager** - Main session management service with methods for CRUD operations on chat sessions
+- **SessionManager** - Main service object with methods for session CRUD operations, auto-save, and message management
 
 ## Dependencies
 
-- [[event-bus]]
-- [[storage]]
-- [[data-version]]
-- [[utils/safe-json]]
-- [[storage/keys]]
+- [[event-bus.js]]
+- [[storage.js]]
+- [[data-version.js]]
+- [[safe-json.js]]
+- [[keys.js]]
+- [[app-state.js]]
 
 ## Used By
 
@@ -29,7 +30,7 @@ TBD
 
 ## Notes
 
-- Implements async mutex pattern via `_sessionDataLock` to prevent race conditions in concurrent updates
-- Enforces message limit of 100 per session with warning at 90 messages
-- Uses emergency backup mechanism on beforeunload for crash recovery
+- Implements async mutex pattern via `_sessionDataLock` for thread-safe concurrent updates
+- Enforces message limit of 100 messages per session with warning threshold at 90
+- Uses emergency backup mechanism with 1-hour max age for beforeunload events
 - Migrates legacy conversation storage format to new session structure

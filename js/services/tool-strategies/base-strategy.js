@@ -96,13 +96,13 @@ export class BaseToolStrategy {
                     reason: check.reason,
                     errorReturn: {
                         status: 'error',
-                        content: this.CircuitBreaker.getErrorMessage(check.reason),
+                        content: this.CircuitBreaker?.getErrorMessage?.(check.reason) ?? 'Circuit breaker is open',
                         role: 'assistant',
                         isCircuitBreakerError: true
                     }
                 };
             }
-            this.CircuitBreaker.recordCall();
+            this.CircuitBreaker?.recordCall?.();
         }
         return { blocked: false };
     }
@@ -112,19 +112,24 @@ export class BaseToolStrategy {
      * @param {string} functionName - Name of function to execute
      * @param {Object} args - Function arguments
      * @param {Array} streamsData - User's streaming data
+     * @param {Object} context - Execution context (optional)
+     * @param {number} context.timeoutMs - Context-specific timeout override
      * @returns {Promise<Object>} Function result
      */
-    async executeWithTimeout(functionName, args, streamsData) {
+    async executeWithTimeout(functionName, args, streamsData, context = {}) {
         // HNW Guard: Verify Functions dependency is initialized before execution
         if (!this.Functions || typeof this.Functions.execute !== 'function') {
             throw new Error('Functions dependency not initialized - cannot execute tool calls');
         }
 
+        // Use context timeout if provided, otherwise default to class TIMEOUT_MS
+        const timeoutMs = context.timeoutMs || this.TIMEOUT_MS;
+
         // Allocate timeout budget for this function call
-        const functionBudget = TimeoutBudget.allocate(`strategy_${functionName}`, this.TIMEOUT_MS);
+        const functionBudget = TimeoutBudget.allocate(`strategy_${functionName}`, timeoutMs);
 
         const abortController = new AbortController();
-        const timeoutId = setTimeout(() => abortController.abort(), this.TIMEOUT_MS);
+        const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
 
         try {
             const result = await this.Functions.execute(functionName, args, streamsData, {
@@ -135,7 +140,7 @@ export class BaseToolStrategy {
         } catch (error) {
             clearTimeout(timeoutId);
             if (error.name === 'AbortError') {
-                throw new Error(`Function ${functionName} timed out after ${this.TIMEOUT_MS}ms`);
+                throw new Error(`Function ${functionName} timed out after ${timeoutMs}ms`);
             }
             throw error;
         } finally {
@@ -147,10 +152,11 @@ export class BaseToolStrategy {
     /**
      * Add message to session history
      * @param {Object} message - Message to add
+     * @returns {Promise<void>}
      */
-    addToHistory(message) {
+    async addToHistory(message) {
         if (this.SessionManager?.addMessageToHistory) {
-            this.SessionManager.addMessageToHistory(message);
+            await this.SessionManager.addMessageToHistory(message);
         }
     }
 

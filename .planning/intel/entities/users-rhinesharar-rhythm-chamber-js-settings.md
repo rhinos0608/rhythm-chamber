@@ -1,7 +1,7 @@
 ---
 path: /Users/rhinesharar/rhythm-chamber/js/settings.js
 type: module
-updated: 2026-01-21
+updated: 2026-01-22
 status: active
 ---
 
@@ -13,7 +13,7 @@ Handles in-app configuration display and management for AI and Spotify settings,
 
 ## Exports
 
-- **Settings** - Main settings module class that manages configuration UI, provider selection, and user preferences
+- **Settings** - Main settings module class that manages UI display and user configuration overrides
 
 ## Dependencies
 
@@ -21,16 +21,17 @@ Handles in-app configuration display and management for AI and Spotify settings,
 - [[storage-breakdown-ui]]
 - [[config-loader]]
 - [[storage]]
-- [[security-index]]
+- [[security/index]]
 - [[secure-token-store]]
 - [[data-queries]]
-- [[functions-index]]
+- [[functions/index]]
 - [[spotify]]
 - [[analytics-queries]]
 - [[template-queries]]
 - [[input-validation]]
 - [[safe-json]]
-- [[storage-keys]]
+- [[html-escape]]
+- [[storage/keys]]
 - [[event-bus]]
 - [[settings-schema]]
 - [[focus-trap]]
@@ -41,7 +42,7 @@ TBD
 
 ## Notes
 
-- Source of truth is config.js - this module provides UI layer for viewing/overriding settings
-- Manages multiple LLM providers (Ollama, LM Studio, Gemini, OpenRouter)
-- Implements modal focus traps for accessibility
-- Uses localStorage for user setting overrides
+- Source of truth is config.js - this module provides UI layer for viewing and overriding settings
+- Manages modal focus traps for settings and tools modals
+- Defines provider configurations for Ollama, LM Studio, Gemini, and OpenRouter
+- Contains LLM parameter bounds and UI configuration constants

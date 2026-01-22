@@ -40,7 +40,7 @@ export class NativeToolStrategy extends BaseToolStrategy {
             responseMessage.tool_calls.map(tc => tc?.function?.name || tc?.id || '<missing>'));
 
         // Add assistant's tool call message to conversation
-        this.addToHistory({
+        await this.addToHistory({
             role: 'assistant',
             content: responseMessage.content || null,
             tool_calls: responseMessage.tool_calls
@@ -126,7 +126,7 @@ export class NativeToolStrategy extends BaseToolStrategy {
             if (onProgress) onProgress({ type: 'tool_end', tool: functionName, result });
 
             // Add tool result to conversation
-            this.addToHistory({
+            await this.addToHistory({
                 role: 'tool',
                 tool_call_id: toolCall.id,
                 content: JSON.stringify(result)

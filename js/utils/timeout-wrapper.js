@@ -73,17 +73,18 @@ export async function withTimeout(promiseOrFn, timeoutMs, options = {}) {
 
     try {
         const result = await Promise.race([promise, timeoutPromise]);
-        clearTimeout(timeoutId);
         return result;
     } catch (error) {
-        clearTimeout(timeoutId);
-
         if (error instanceof TimeoutError && fallback) {
             console.warn(`[TimeoutWrapper] ${error.message}, executing fallback`);
             return typeof fallback === 'function' ? await fallback() : fallback;
         }
 
         throw error;
+    } finally {
+        // CRITICAL: Always clear timeout to prevent memory leak
+        // Rejected promises in race hold reference to timeoutId
+        clearTimeout(timeoutId);
     }
 }
 

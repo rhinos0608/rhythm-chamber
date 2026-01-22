@@ -33,10 +33,109 @@ let _MessageOperations = null;
 // Track if we've already shown fallback notification this session
 let _hasShownFallbackNotification = false;
 
+// Track processed message hashes for deduplication
+const _processedMessageHashes = new Set();
+
+// Maximum number of hashes to keep (prevent unbounded growth)
+const MAX_HASH_CACHE_SIZE = 1000;
+
 // Timeout constants
 const CHAT_API_TIMEOUT_MS = 60000;
 const LOCAL_LLM_TIMEOUT_MS = 90000;
 const CHAT_FUNCTION_TIMEOUT_MS = 30000;
+
+/**
+ * Generate a simple hash for message content (FNV-1a inspired)
+ * Used for duplicate detection without requiring crypto APIs
+ * @param {string} content - The message content to hash
+ * @returns {string} Hex string hash
+ */
+function hashMessageContent(content) {
+    if (!content || typeof content !== 'string') return '';
+
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < content.length; i++) {
+        hash ^= content.charCodeAt(i);
+        hash = Math.imul(hash, 0x01000193);
+    }
+    return (hash >>> 0).toString(16);
+}
+
+/**
+ * Validate message content before processing
+ * @param {string} message - The message to validate
+ * @returns {Object} Validation result with valid flag and error message
+ */
+function validateMessage(message) {
+    // Check for non-string input
+    if (typeof message !== 'string') {
+        return {
+            valid: false,
+            error: 'Message must be a string'
+        };
+    }
+
+    // Check for empty string
+    if (message.length === 0) {
+        return {
+            valid: false,
+            error: 'Message cannot be empty'
+        };
+    }
+
+    // Check for whitespace-only content
+    if (message.trim().length === 0) {
+        return {
+            valid: false,
+            error: 'Message cannot contain only whitespace'
+        };
+    }
+
+    // Check for unreasonably long messages (prevent abuse/DoS)
+    const MAX_MESSAGE_LENGTH = 50000; // 50k characters
+    if (message.length > MAX_MESSAGE_LENGTH) {
+        return {
+            valid: false,
+            error: `Message too long (max ${MAX_MESSAGE_LENGTH} characters)`
+        };
+    }
+
+    // Check for duplicate content
+    const messageHash = hashMessageContent(message);
+    if (_processedMessageHashes.has(messageHash)) {
+        return {
+            valid: false,
+            error: 'Duplicate message detected - this message was already processed'
+        };
+    }
+
+    return { valid: true };
+}
+
+/**
+ * Add a message hash to the processed set
+ * Implements LRU-style eviction when cache is full
+ * @param {string} message - The message whose hash to add
+ */
+function trackProcessedMessage(message) {
+    const messageHash = hashMessageContent(message);
+    if (messageHash) {
+        // Evict oldest entry if cache is full
+        if (_processedMessageHashes.size >= MAX_HASH_CACHE_SIZE) {
+            const firstHash = _processedMessageHashes.values().next().value;
+            _processedMessageHashes.delete(firstHash);
+        }
+        _processedMessageHashes.add(messageHash);
+    }
+}
+
+/**
+ * Clear duplicate detection cache
+ * Useful for testing or when intentional re-submission is needed
+ */
+function clearDuplicateCache() {
+    _processedMessageHashes.clear();
+}
 
 /**
  * Build user-friendly error message with provider-specific hints
@@ -55,6 +154,68 @@ function buildUserErrorMessage(error, provider) {
     const hint = providerHints[provider] || 'Check your provider settings';
 
     return `**Connection Error**\n\n${error.message}\n\n💡 **Tip:** ${hint}\n\nClick "Try Again" after fixing the issue.`;
+}
+
+
+/**
+ * Validate LLM response structure
+ * EDGE CASE FIX: Comprehensive validation to catch malformed responses
+ * @param {object} response - The response from LLM provider
+ * @param {string} provider - Provider name for error messages
+ * @returns {{ valid: boolean, error?: string }} Validation result
+ */
+function validateLLMResponse(response, provider) {
+    // Check response exists
+    if (!response || typeof response !== 'object') {
+        return { valid: false, error: `No response received from ${provider}` };
+    }
+
+    // Check choices array exists and has items
+    if (!response.choices || !Array.isArray(response.choices)) {
+        return { valid: false, error: `${provider} returned response without choices array` };
+    }
+
+    if (response.choices.length === 0) {
+        return { valid: false, error: `${provider} returned empty choices array` };
+    }
+
+    const firstChoice = response.choices[0];
+
+    // Check first choice has message property
+    if (!firstChoice.message || typeof firstChoice.message !== 'object') {
+        return { valid: false, error: `${provider} returned choice without message object` };
+    }
+
+    // Check message has role (required field)
+    if (!firstChoice.message.role) {
+        return { valid: false, error: `${provider} returned message without role` };
+    }
+
+    // Check for common malformed structures
+    if (firstChoice.message.content !== undefined &&
+        typeof firstChoice.message.content !== 'string' &&
+        typeof firstChoice.message.content !== 'null') {
+        return { valid: false, error: `${provider} returned message with invalid content type` };
+    }
+
+    // Validate tool_calls structure if present
+    if (firstChoice.message.tool_calls) {
+        if (!Array.isArray(firstChoice.message.tool_calls)) {
+            return { valid: false, error: `${provider} returned non-array tool_calls` };
+        }
+        // Each tool call should have function.name at minimum
+        for (let i = 0; i < firstChoice.message.tool_calls.length; i++) {
+            const tc = firstChoice.message.tool_calls[i];
+            if (!tc.function || typeof tc.function !== 'object') {
+                return { valid: false, error: `${provider} returned tool_call without function object at index ${i}` };
+            }
+            if (!tc.function.name) {
+                return { valid: false, error: `${provider} returned tool_call without function.name at index ${i}` };
+            }
+        }
+    }
+
+    return { valid: true };
 }
 
 
@@ -86,7 +247,8 @@ function init(dependencies) {
  * @param {string} message - User message
  * @param {Object|string} optionsOrKey - Options object or API key string
  * @param {Object} [options] - Additional options
- * @param {boolean} [options.bypassQueue] - Bypass turn queue for internal operations
+ * @param {boolean} [options.bypassQueue] - Bypass turn queue for internal operations (restricted)
+ * @param {boolean} [options.allowBypass] - Explicit flag to allow bypassQueue (security measure)
  */
 async function sendMessage(message, optionsOrKey = null, options = {}) {
     const userContext = _ConversationOrchestrator?.getUserContext();
@@ -94,10 +256,30 @@ async function sendMessage(message, optionsOrKey = null, options = {}) {
         throw new Error('Chat not initialized. Call initChat first.');
     }
 
+    // ISSUE 2: Input validation at entry point
+    const validation = validateMessage(message);
+    if (!validation.valid) {
+        console.warn('[MessageLifecycleCoordinator] Message validation failed:', validation.error);
+        // Return error response instead of throwing to maintain graceful degradation
+        return {
+            content: validation.error,
+            status: 'error',
+            error: validation.error,
+            role: 'assistant'
+        };
+    }
+
     const bypassQueue = options?.bypassQueue === true;
 
+    // ISSUE 4: Validate bypassQueue usage - require explicit allowBypass flag
+    if (bypassQueue && !options?.allowBypass) {
+        console.warn('[MessageLifecycleCoordinator] bypassQueue requires allowBypass flag for security');
+        // Fall through to normal queue processing
+        return TurnQueue.push(message, optionsOrKey);
+    }
+
     if (bypassQueue) {
-        console.log('[MessageLifecycleCoordinator] Bypassing turn queue for internal operation');
+        console.log('[MessageLifecycleCoordinator] Bypassing turn queue for internal operation (with explicit allowBypass)');
         return processMessage(message, optionsOrKey);
     } else {
         return TurnQueue.push(message, optionsOrKey);
@@ -108,21 +290,25 @@ async function sendMessage(message, optionsOrKey = null, options = {}) {
  * Process a message (internal implementation)
  * This is the actual message processing logic that gets wrapped by TurnQueue
  *
+ * ISSUE 1: Implements staging pattern - user message is only committed on successful response
+ *
  * @param {string} message - User message
  * @param {Object|string} optionsOrKey - Options object or API key string
  */
 async function processMessage(message, optionsOrKey = null) {
     const turnBudget = TimeoutBudget.allocate('chat_turn', 60000);
 
+    // Flag to track if we've committed the user message to history
+    let userMessageCommitted = false;
+
     try {
         if (_CircuitBreaker?.resetTurn) {
             _CircuitBreaker.resetTurn();
         }
 
-        _SessionManager.addMessageToHistory({
-            role: 'user',
-            content: message
-        });
+        // ISSUE 1: Staging pattern - don't add user message yet
+        // Will only commit after successful response
+        console.log('[MessageLifecycleCoordinator] Staging user message (not committed until successful response)');
 
         let semanticContext = null;
         const RAG = _ModuleRegistry?.getModuleSync('RAG');
@@ -139,9 +325,11 @@ async function processMessage(message, optionsOrKey = null) {
 
         const conversationHistory = _SessionManager.getHistory();
 
+        // Build messages array with staged user message (not yet in history)
         const messages = [
             { role: 'system', content: _ConversationOrchestrator.buildSystemPrompt(null, semanticContext) },
-            ...conversationHistory
+            ...conversationHistory,
+            { role: 'user', content: message }  // Staged - not in history yet
         ];
 
         const options = (typeof optionsOrKey === 'string')
@@ -166,10 +354,17 @@ async function processMessage(message, optionsOrKey = null) {
         if (!isLocalProvider && !isValidKey) {
             const queryContext = _ConversationOrchestrator.generateQueryContext(message);
             const fallbackResponse = _FallbackResponseService.generateFallbackResponse(message, queryContext);
-            _SessionManager.addMessageToHistory({
-                role: 'assistant',
-                content: fallbackResponse
-            });
+
+            // CRITICAL FIX: Add user and assistant messages atomically in a single transaction
+            // This prevents race conditions where other operations could interleave between the two adds
+            const messagesToAdd = [
+                { role: 'user', content: message },
+                { role: 'assistant', content: fallbackResponse }
+            ];
+            await _SessionManager.addMessagesToHistory(messagesToAdd);
+            userMessageCommitted = true;
+            trackProcessedMessage(message);  // Track even fallback responses
+
             // Show subtle fallback notification once per session
             if (!_hasShownFallbackNotification && _Settings?.showToast) {
                 _Settings.showToast('Using offline response mode - add an API key for AI responses', 4000);
@@ -270,17 +465,28 @@ async function processMessage(message, optionsOrKey = null) {
             }
 
             const llmCallStart = Date.now();
-            let response = await _LLMProviderRoutingService.callLLM(providerConfig, key, apiMessages, apiTools, isLocalProvider ? onProgress : null);
+            // ISSUE 5: Pass timeout signal to callLLM
+            let response = await _LLMProviderRoutingService.callLLM(
+                providerConfig,
+                key,
+                apiMessages,
+                apiTools,
+                isLocalProvider ? onProgress : null,
+                turnBudget.signal  // Pass AbortSignal for timeout handling
+            );
             const llmCallDuration = Date.now() - llmCallStart;
 
             const telemetryMetric = isLocalProvider ? 'local_llm_call' : 'cloud_llm_call';
             _WaveTelemetry?.record(telemetryMetric, llmCallDuration);
             console.log(`[MessageLifecycleCoordinator] LLM call completed in ${llmCallDuration}ms`);
 
-            if (!response || !response.choices || response.choices.length === 0) {
-                const providerName = providerConfig.provider || 'LLM';
-                console.error('[MessageLifecycleCoordinator] Invalid response from provider:', providerName, response);
-                throw new Error(`${providerName} returned an invalid response. Check if the server is running and the model is loaded.`);
+            // EDGE CASE FIX: Comprehensive response validation
+            // Only validates response.choices, missing checks for malformed structure, missing fields
+            const providerName = providerConfig.provider || 'LLM';
+            const validation = validateLLMResponse(response, providerName);
+            if (!validation.valid) {
+                console.error('[MessageLifecycleCoordinator] Invalid response from provider:', providerName, validation.error, response);
+                throw new Error(`${providerName} returned an invalid response: ${validation.error}`);
             }
             let responseMessage = response.choices[0].message;
 
@@ -295,16 +501,40 @@ async function processMessage(message, optionsOrKey = null) {
                 message
             );
             if (toolHandlingResult?.earlyReturn) {
+                // Commit user message before early return
+                if (!userMessageCommitted) {
+                    await _SessionManager.addMessageToHistory({
+                        role: 'user',
+                        content: message
+                    });
+                    userMessageCommitted = true;
+                    trackProcessedMessage(message);  // ISSUE 3: Track successful message
+                }
                 return toolHandlingResult.earlyReturn;
             }
             responseMessage = toolHandlingResult.responseMessage || responseMessage;
 
             const assistantContent = responseMessage?.content || 'I couldn\'t generate a response.';
 
-            _SessionManager.addMessageToHistory({
-                role: 'assistant',
-                content: assistantContent
-            });
+            // CRITICAL FIX: Add user and assistant messages atomically in a single transaction
+            // This prevents race conditions where other operations could interleave between the two adds
+            if (!userMessageCommitted) {
+                // Batch add both messages at once for atomicity
+                const messagesToAdd = [
+                    { role: 'user', content: message },
+                    { role: 'assistant', content: assistantContent }
+                ];
+                await _SessionManager.addMessagesToHistory(messagesToAdd);
+                userMessageCommitted = true;
+                trackProcessedMessage(message);
+            } else {
+                // User message was already committed (e.g., during tool call handling)
+                // Only add the assistant response
+                await _SessionManager.addMessageToHistory({
+                    role: 'assistant',
+                    content: assistantContent
+                });
+            }
 
             _SessionManager.saveConversation();
 
@@ -321,10 +551,13 @@ async function processMessage(message, optionsOrKey = null) {
             const currentProvider = settings?.llm?.provider || 'unknown';
             const errorMessage = buildUserErrorMessage(error, currentProvider);
 
-            _SessionManager.addMessageToHistory({
+            // ISSUE 6: Mark error messages to exclude from LLM context
+            // The 'error' flag allows filtering when building context for future turns
+            await _SessionManager.addMessageToHistory({
                 role: 'assistant',
                 content: errorMessage,
-                error: true
+                error: true,
+                excludeFromContext: true  // Signal to exclude from LLM context
             });
             _SessionManager.saveConversation();
 
@@ -375,7 +608,9 @@ async function regenerateLastResponse(options = null) {
     const lastUserMsg = conversationHistory[lastMsgIndex];
     const message = lastUserMsg.content;
 
-    _SessionManager.truncateHistory(lastMsgIndex);
+    // HIGH PRIORITY FIX: Await truncateHistory since it's now async with mutex protection
+    // This prevents race condition where sendMessage starts before truncation completes
+    await _SessionManager.truncateHistory(lastMsgIndex);
 
     return sendMessage(message, options);
 }
@@ -383,7 +618,7 @@ async function regenerateLastResponse(options = null) {
 /**
  * Delete a specific message from history
  */
-function deleteMessage(index) {
+async function deleteMessage(index) {
     const conversationHistory = _SessionManager.getHistory();
 
     if (typeof _MessageOperations !== 'undefined') {
@@ -394,7 +629,8 @@ function deleteMessage(index) {
 
     if (index < 0 || index >= conversationHistory.length) return false;
 
-    _SessionManager.removeMessageFromHistory(index);
+    // HIGH PRIORITY FIX: Await removeMessageFromHistory since it's now async with mutex protection
+    await _SessionManager.removeMessageFromHistory(index);
     _SessionManager.saveConversation();
     return true;
 }
@@ -420,7 +656,8 @@ async function editMessage(index, newText, options = null) {
     const msg = conversationHistory[index];
     if (msg.role !== 'user') return { error: 'Can only edit user messages' };
 
-    _SessionManager.truncateHistory(index);
+    // HIGH PRIORITY FIX: Await truncateHistory since it's now async with mutex protection
+    await _SessionManager.truncateHistory(index);
 
     return sendMessage(newText, options);
 }
@@ -446,5 +683,6 @@ export const MessageLifecycleCoordinator = {
     deleteMessage,
     editMessage,
     clearHistory,
-    getHistory
+    getHistory,
+    clearDuplicateCache  // Expose for testing/intentional re-submission scenarios
 };

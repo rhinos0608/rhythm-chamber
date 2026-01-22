@@ -731,14 +731,22 @@ export class ProviderFallbackChain {
         );
 
         // Execute provider call with timeout
-        const response = await Promise.race([
-            ProviderInterface.callProvider(providerConfig, apiKey, messages, tools, onProgress),
-            new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Provider timeout')), config.timeoutMs)
-            )
-        ]);
-
-        return response;
+        let timeoutId = null;
+        try {
+            const response = await Promise.race([
+                ProviderInterface.callProvider(providerConfig, apiKey, messages, tools, onProgress),
+                new Promise((_, reject) => {
+                    timeoutId = setTimeout(() => reject(new Error('Provider timeout')), config.timeoutMs);
+                })
+            ]);
+            return response;
+        } finally {
+            // CRITICAL: Clear timeout to prevent memory leak
+            // Rejected promises in race hold reference to timeout
+            if (timeoutId !== null) {
+                clearTimeout(timeoutId);
+            }
+        }
     }
 
     /**
