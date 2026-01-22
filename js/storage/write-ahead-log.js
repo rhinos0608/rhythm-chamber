@@ -342,10 +342,11 @@ async function queueWrite(operation, args, priority = WalPriority.NORMAL) {
             }
         }).catch((error) => {
             // CRITICAL FIX: Use entryId from closure, not error
-            // Save error result
+            // Save error result with preserved stack trace
             const operationResult = {
                 success: false,
                 error: error.message,
+                stack: error.stack,
                 completedAt: Date.now()
             };
             walState.operationResults.set(entryId, operationResult);
