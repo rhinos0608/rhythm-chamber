@@ -11,6 +11,7 @@ import { IndexedDBCore } from './indexeddb.js';
 import { Security } from '../security/index.js';
 import { shouldEncrypt, secureDelete } from '../security/storage-encryption.js';
 import { SecureTokenStore } from '../security/secure-token-store.js';
+import { EventBus } from '../services/event-bus.js';
 
 // ==========================================
 // Migration Constants
@@ -79,15 +80,19 @@ async function getConfig(key, defaultValue = null) {
                             // Parse JSON and return
                             return JSON.parse(decrypted);
                         } else {
-                            // Decryption failed - return defaultValue
-                            console.warn(`[ConfigAPI] Decryption returned null for key '${key}', returning default value`);
-                            return defaultValue;
+                            // Decryption failed - emit security event and return null (not defaultValue)
+                            const securityEvent = { key, timestamp: Date.now(), critical: true };
+                            EventBus.emit('security:decryption_failed', securityEvent);
+                            console.error(`[ConfigAPI] CRITICAL: Decryption failed for sensitive key '${key}'`);
+                            return null;
                         }
 
                     } catch (decryptError) {
-                        // Fall back to defaultValue on decryption failure
-                        console.warn(`[ConfigAPI] Decryption failed for '${key}', returning default value:`, decryptError);
-                        return defaultValue;
+                        // CRITICAL: Decryption failure - emit security event
+                        const securityEvent = { key, timestamp: Date.now(), critical: true, error: decryptError.message };
+                        EventBus.emit('security:decryption_failed', securityEvent);
+                        console.error(`[ConfigAPI] CRITICAL: Decryption threw error for sensitive key '${key}':`, decryptError);
+                        return null;
                     }
                 }
 
