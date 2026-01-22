@@ -316,6 +316,7 @@ let electionCandidates = new Set();
 let receivedPrimaryClaim = false;
 let electionAborted = false;
 let lastHeartbeatSentTime = 0; // Track for WaveTelemetry
+let heartbeatInProgress = false; // Track if heartbeat is currently being sent
 
 // Event replay watermark tracking
 let lastEventWatermark = -1; // Last event sequence number processed
@@ -1192,11 +1193,28 @@ function startHeartbeat() {
     // Set expected heartbeat interval for WaveTelemetry
     WaveTelemetry.setExpected('heartbeat_interval', HEARTBEAT_INTERVAL_MS);
 
-    // Send initial heartbeat
-    sendHeartbeat();
+    // Send initial heartbeat with error handling
+    sendHeartbeat().catch(error => {
+        console.error('[TabCoordination] Initial heartbeat failed:', error);
+    });
 
-    // Start interval
-    heartbeatInterval = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
+    // Start interval with in-progress tracking to prevent overlapping heartbeats
+    heartbeatInterval = setInterval(async () => {
+        if (heartbeatInProgress) {
+            console.warn('[TabCoordination] Previous heartbeat still in progress, skipping');
+            return;
+        }
+
+        heartbeatInProgress = true;
+        try {
+            await sendHeartbeat();
+        } catch (error) {
+            console.error('[TabCoordination] Heartbeat error:', error);
+        } finally {
+            heartbeatInProgress = false;
+        }
+    }, HEARTBEAT_INTERVAL_MS);
+
     console.log('[TabCoordination] Started heartbeat as leader');
 }
 
@@ -1252,6 +1270,8 @@ function stopHeartbeat() {
         clearInterval(heartbeatInterval);
         heartbeatInterval = null;
     }
+    // Reset in-progress flag to allow future heartbeats to start cleanly
+    heartbeatInProgress = false;
 }
 
 /**
