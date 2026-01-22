@@ -301,7 +301,7 @@ function handleWorkerMessage(event) {
 /**
  * Handle worker error
  * HNW Wave: Emits pattern:worker_failure event for UI notification
- * 
+ *
  * @param {ErrorEvent} error - Worker error event
  */
 function handleWorkerError(error) {
@@ -326,7 +326,19 @@ function handleWorkerError(error) {
     });
     console.log('[PatternWorkerPool] Emitted pattern:worker_failure event');
 
-    for (const [reqId, request] of pendingRequests.entries()) {
+    // Create a snapshot of pending request IDs to avoid modification during iteration
+    // This prevents the memory leak where requests are deleted while iterating
+    const pendingRequestIds = Array.from(pendingRequests.keys());
+
+    for (const reqId of pendingRequestIds) {
+        const request = pendingRequests.get(reqId);
+
+        // Request may have been deleted by a previous iteration (worker error handling)
+        if (!request) {
+            continue;
+        }
+
+        // Skip already completed requests
         if (request.completedWorkers >= request.totalWorkers) {
             continue;
         }
@@ -335,11 +347,16 @@ function handleWorkerError(error) {
         request.completedWorkers++;
 
         if (request.completedWorkers >= request.totalWorkers) {
+            // Delete before resolving to prevent potential re-entry issues
             pendingRequests.delete(reqId);
 
             if (request.results.length > 0) {
                 const aggregated = aggregateResults(request.results);
                 request.resolve(aggregated);
+            } else if (request.partialResults && Object.keys(request.partialResults).length > 0) {
+                // Use partial results if available (HNW Wave: recovery from partial work)
+                console.log('[PatternWorkerPool] Using partial results due to worker error');
+                request.resolve(request.partialResults);
             } else {
                 request.reject(new Error('All workers failed'));
             }
