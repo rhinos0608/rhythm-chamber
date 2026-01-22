@@ -131,6 +131,13 @@ async function checkMemoryAndPause() {
  * HNW Wave: Post message with backpressure control
  * Waits for ACK slot to be available before sending
  * Prevents message queue overflow when main thread is slow to process
+ *
+ * Returns a promise that resolves when the message is ACKed by the main thread.
+ * This provides true backpressure - the worker waits for the main thread to
+ * signal it's ready for more messages.
+ *
+ * @param {Object} message - Message to post
+ * @returns {Promise<{ackId: number}>} Resolves when ACK is received
  */
 async function postWithBackpressure(message) {
     // Wait if we have too many pending ACKs
@@ -150,8 +157,10 @@ async function postWithBackpressure(message) {
     // Send message with ACK ID
     self.postMessage({ ...message, ackId: currentAckId });
 
-    // Return the promise for callers who want to wait for ACK
-    return { ackId: currentAckId, ackPromise };
+    // Wait for ACK before returning (true backpressure)
+    await ackPromise;
+
+    return { ackId: currentAckId };
 }
 
 /**
