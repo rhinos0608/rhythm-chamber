@@ -455,13 +455,13 @@ function generatePatternSummary(streams, patterns) {
 /**
  * Run all pattern detection with partial result emission
  * HNW Wave: Emits partial results after each pattern, allowing recovery if worker hangs
- * 
+ *
  * @param {Array} streams - Stream data
  * @param {Array} chunks - Chunk data
  * @param {Function} onProgress - Progress callback
  * @param {Function} onPartial - Partial result callback (pattern name, result, progress %)
  */
-function detectAllPatterns(streams, chunks, onProgress, onPartial = null) {
+function detectAllPatterns(streams, chunks, onProgress = null, onPartial = null) {
     const patternNames = [
         'ratio',
         'eras',
@@ -487,34 +487,34 @@ function detectAllPatterns(streams, chunks, onProgress, onPartial = null) {
         }
     };
 
-    onProgress(current, total, 'Analyzing listening ratio...');
+    if (onProgress) onProgress(current, total, 'Analyzing listening ratio...');
     emitPartial('ratio', detectComfortDiscoveryRatio(streams));
 
-    onProgress(current, total, 'Detecting listening eras...');
+    if (onProgress) onProgress(current, total, 'Detecting listening eras...');
     emitPartial('eras', detectEras(streams, chunks));
 
-    onProgress(current, total, 'Analyzing time patterns...');
+    if (onProgress) onProgress(current, total, 'Analyzing time patterns...');
     emitPartial('timePatterns', detectTimePatterns(streams));
 
-    onProgress(current, total, 'Detecting social patterns...');
+    if (onProgress) onProgress(current, total, 'Detecting social patterns...');
     emitPartial('socialPatterns', detectSocialPatterns(streams));
 
-    onProgress(current, total, 'Finding ghosted artists...');
+    if (onProgress) onProgress(current, total, 'Finding ghosted artists...');
     emitPartial('ghosted', detectGhostedArtists(streams));
 
-    onProgress(current, total, 'Detecting discovery explosions...');
+    if (onProgress) onProgress(current, total, 'Detecting discovery explosions...');
     emitPartial('discoveryExplosions', detectDiscoveryExplosions(streams, chunks));
 
-    onProgress(current, total, 'Analyzing mood searching...');
+    if (onProgress) onProgress(current, total, 'Analyzing mood searching...');
     emitPartial('moodSearching', detectMoodSearching(streams));
 
-    onProgress(current, total, 'Finding true favorites...');
+    if (onProgress) onProgress(current, total, 'Finding true favorites...');
     emitPartial('trueFavorites', detectTrueFavorites(streams));
 
-    onProgress(current, total, 'Generating insights...');
+    if (onProgress) onProgress(current, total, 'Generating insights...');
     emitPartial('insights', generateDataInsights(streams));
 
-    onProgress(current, total, 'Generating summary...');
+    if (onProgress) onProgress(current, total, 'Generating summary...');
     emitPartial('summary', generatePatternSummary(streams, patterns));
 
     return patterns;
@@ -555,7 +555,8 @@ self.onmessage = function (e) {
         return;
     }
 
-    if (type === 'detect') {
+    // Handle both 'detect' (legacy) and 'DETECT_PATTERNS' (pool) message types
+    if (type === 'detect' || type === 'DETECT_PATTERNS') {
         try {
             // Progress callback
             const onProgress = (current, total, message) => {
