@@ -207,6 +207,10 @@ const EVENT_SCHEMAS = {
     'eventbus:health_degraded': {
         description: 'EventBus health degraded',
         payload: { status: 'string', failureRate: 'number', stuckHandlers: 'number', pausedHandlers: 'number', avgLatencyMs: 'number' }
+    },
+    'event:persistence_failed': {
+        description: 'Event persistence to storage failed',
+        payload: { eventType: 'string', error: 'string' }
     }
 };
 
@@ -617,8 +621,11 @@ function emit(eventType, payload = {}, options = {}) {
         const persistPromise = persistEvent(eventType, payload, currentVectorClock, sequenceNumber, options)
             .catch(err => {
                 console.error('[EventBus] Failed to persist event:', err);
-                EventBus.emit('event:persistence_failed', { eventType, error: err });
+                // Skip event log for persistence_failed events to prevent recursive logging
+                EventBus.emit('event:persistence_failed', { eventType, error: err }, { skipEventLog: true });
                 totalEventsFailed++;
+                // Rethrow to allow caller to handle the error
+                throw err;
             });
     }
 
@@ -808,7 +815,8 @@ async function emitAndAwait(eventType, payload = {}, options = {}) {
         const persistPromise = persistEvent(eventType, payload, currentVectorClock, sequenceNumber, options)
             .catch(err => {
                 console.error('[EventBus] Failed to persist event:', err);
-                EventBus.emit('event:persistence_failed', { eventType, error: err });
+                // Skip event log for persistence_failed events to prevent recursive logging
+                EventBus.emit('event:persistence_failed', { eventType, error: err }, { skipEventLog: true });
                 totalEventsFailed++;
             });
     }
@@ -990,13 +998,16 @@ async function emitParallel(eventType, payload = {}, options = {}) {
         const persistPromise = persistEvent(eventType, payload, currentVectorClock, sequenceNumber, options)
             .catch(err => {
                 console.error('[EventBus] Failed to persist event:', err);
-                EventBus.emit('event:persistence_failed', { eventType, error: err });
+                // Skip event log for persistence_failed events to prevent recursive logging
+                EventBus.emit('event:persistence_failed', { eventType, error: err }, { skipEventLog: true });
                 totalEventsFailed++;
+                // Rethrow to allow caller to handle the error
+                throw err;
             });
     }
-    
+
     lastEventWatermark = sequenceNumber;
-    
+
     // Validate payload
     if (!options.skipValidation && EVENT_SCHEMAS[eventType]) {
         const validationResult = validatePayload(eventType, payload);

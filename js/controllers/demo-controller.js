@@ -393,11 +393,14 @@ async function flushPendingOperations() {
         if (conn) {
             // IndexedDB doesn't have a flush, but we can ensure transactions complete
             // by doing a small read operation
-            promises.push(
-                IndexedDBCore.count?.('config').catch(e => {
-                    console.warn('[DemoController] IndexedDB flush check failed:', e);
-                })
-            );
+            const countResult = IndexedDBCore.count?.('config');
+            if (countResult) {
+                promises.push(
+                    countResult.catch(e => {
+                        console.warn('[DemoController] IndexedDB flush check failed:', e);
+                    })
+                );
+            }
         }
     }
 

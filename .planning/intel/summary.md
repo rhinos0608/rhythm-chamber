@@ -1,26 +1,17 @@
-# Codebase Intelligence
+# Codebase Intelligence Summary
 
-**Indexed entities:** 83
-**Last updated:** 2026-01-21
+Last updated: 2026-01-22T02:47:30.019Z
+Indexed files: 273
 
-## Dependency Hotspots
+## Key Directories
 
-Files with most dependents (change carefully):
-1. `storage` (8 dependents)
-1. `module-registry` (7 dependents)
-1. `data-query` (5 dependents)
-1. `event-bus` (5 dependents)
-1. `js-settings` (5 dependents)
+- `controllers/`: Controllers (15 files)
+- `utils/`: Utility functions (8 files)
+- `services/`: Service layer (58 files)
+- `tests/`: Test files (48 files)
 
-## Module Types
+## File Patterns
 
-- **Service**: 35 files
-- **Module**: 18 files
-- **Util**: 14 files
-- **Controller**: 7 files
-- **Test**: 4 files
-- **Config**: 2 files
-- **Component**: 2 files
-- **Api**: 1 files
+- `*.test.js`: Test files (42 files)
 
-**Relationships tracked:** 358
+Total exports: 424
