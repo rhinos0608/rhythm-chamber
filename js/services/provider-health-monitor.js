@@ -81,6 +81,16 @@ export class ProviderHealthMonitor {
     constructor() {
         this._initializeHealthData();
         this._subscribeToEvents();
+        // Don't start monitoring in constructor - make it explicit
+    }
+
+    /**
+     * Async initialization - starts monitoring after health data is ready
+     * Call this after creating an instance to start periodic health updates
+     * @public
+     */
+    async initialize() {
+        await this._refreshHealthData();
         this._startMonitoring();
     }
 
@@ -393,5 +403,18 @@ export class ProviderHealthMonitor {
     }
 }
 
-// Export singleton instance
-export default new ProviderHealthMonitor();
+// Singleton instance with lazy initialization and auto-start for backward compatibility
+let providerHealthMonitorInstance = null;
+
+function getProviderHealthMonitor() {
+    if (!providerHealthMonitorInstance) {
+        providerHealthMonitorInstance = new ProviderHealthMonitor();
+        // Auto-start monitoring for backward compatibility
+        providerHealthMonitorInstance.initialize().catch(err => {
+            console.error('[ProviderHealthMonitor] Initialization failed:', err);
+        });
+    }
+    return providerHealthMonitorInstance;
+}
+
+export default getProviderHealthMonitor();

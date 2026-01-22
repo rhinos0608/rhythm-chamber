@@ -353,6 +353,12 @@ function detectTemporalOverlap(newStreams, existingStreams) {
 
 
 self.onmessage = async (e) => {
+    // Validate message format before processing
+    if (!e.data || typeof e.data !== 'object') {
+        console.error('[Parser] Invalid message format');
+        return;
+    }
+
     const { type, file, existingStreams } = e.data;
 
     if (type === 'parse') {
