@@ -618,7 +618,16 @@ export class MetricsExporter {
      * @returns {Array} Datadog series format
      */
     _formatAsDatadogSeries(data) {
-        const metrics = typeof data === 'string' ? JSON.parse(data) : data;
+        let metrics;
+        if (typeof data === 'string') {
+            try {
+                metrics = JSON.parse(data);
+            } catch (e) {
+                throw new Error(`Failed to parse metrics data for Datadog series formatting: ${e.message}`);
+            }
+        } else {
+            metrics = data;
+        }
         const series = [];
 
         // Convert metrics to Datadog series format
@@ -642,7 +651,16 @@ export class MetricsExporter {
      * @returns {Array} New Relic metrics format
      */
     _formatAsNewRelicMetrics(data) {
-        const metrics = typeof data === 'string' ? JSON.parse(data) : data;
+        let metrics;
+        if (typeof data === 'string') {
+            try {
+                metrics = JSON.parse(data);
+            } catch (e) {
+                throw new Error(`Failed to parse metrics data for New Relic formatting: ${e.message}`);
+            }
+        } else {
+            metrics = data;
+        }
         const nrMetrics = [];
 
         for (const [key, value] of Object.entries(metrics)) {
@@ -1064,6 +1082,7 @@ export class MetricsExporter {
 // Lazy singleton initialization with promise caching to prevent race conditions
 let MetricsExporterSingleton = null;
 let MetricsExporterInitPromise = null;
+let initFailed = false; // Track failure state
 
 /**
  * Get or create the MetricsExporter singleton instance
@@ -1078,6 +1097,11 @@ export async function getMetricsExporter() {
         return MetricsExporterSingleton;
     }
 
+    // If initialization previously failed, throw immediately
+    if (initFailed) {
+        throw new Error('MetricsExporter initialization previously failed. Call resetMetricsExporter() to retry.');
+    }
+
     // If initialization is in progress, wait for it
     if (MetricsExporterInitPromise) {
         return MetricsExporterInitPromise;
@@ -1086,14 +1110,25 @@ export async function getMetricsExporter() {
     // Start initialization and cache the promise
     MetricsExporterInitPromise = MetricsExporter.create().then(instance => {
         MetricsExporterSingleton = instance;
-        MetricsExporterInitPromise = null; // Clear promise cache after success
+        // DON'T clear the promise - keep it to prevent duplicate inits
         return instance;
     }).catch(error => {
-        MetricsExporterInitPromise = null; // Clear promise cache on failure to allow retry
+        initFailed = true;
         throw error;
     });
 
     return MetricsExporterInitPromise;
+}
+
+/**
+ * Reset the MetricsExporter singleton state
+ * Allows retrying initialization after a previous failure
+ * @public
+ */
+export function resetMetricsExporter() {
+    MetricsExporterSingleton = null;
+    MetricsExporterInitPromise = null;
+    initFailed = false;
 }
 
 // Export the getter function
