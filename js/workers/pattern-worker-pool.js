@@ -102,6 +102,7 @@ const HEARTBEAT_INTERVAL_MS = 5000; // 5 seconds
 const STALE_WORKER_TIMEOUT_MS = 15000; // 15 seconds
 const workerLastHeartbeat = new Map(); // Track last heartbeat response from each worker
 const workerHeartbeatChannels = new Map(); // Track dedicated heartbeat MessageChannel per worker
+const HEARTBEAT_DEBUG_LOGS = false; // Reduce console spam and GC pressure in production
 
 // Backpressure state (HNW Wave)
 let pendingResultCount = 0;
@@ -195,7 +196,9 @@ function handleWorkerMessage(event) {
     if (type === 'HEARTBEAT_RESPONSE') {
         if (workerInfo) {
             workerLastHeartbeat.set(workerInfo.worker, timestamp);
-            console.log(`[PatternWorkerPool] Worker heartbeat received at ${new Date(timestamp).toISOString()}`);
+            if (HEARTBEAT_DEBUG_LOGS) {
+                console.log(`[PatternWorkerPool] Worker heartbeat received at ${new Date(timestamp).toISOString()}`);
+            }
         }
         return;
     }
@@ -476,7 +479,10 @@ function checkStaleWorkers() {
             if (oldChannel && oldChannel.port) {
                 try {
                     oldChannel.port.close();
-                } catch (e) { /* ignore */ }
+                } catch (e) {
+                    console.error('[PatternWorkerPool] Failed to close heartbeat channel:', e);
+                    EventBus.emit('worker:cleanup_failed', { error: e.message, workerIndex: index });
+                }
             }
             workerHeartbeatChannels.delete(workerInfo.worker);
             workerLastHeartbeat.delete(workerInfo.worker);
@@ -786,7 +792,10 @@ function terminate() {
             if (channelInfo && channelInfo.port) {
                 channelInfo.port.close();
             }
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            console.error('[PatternWorkerPool] Failed to close heartbeat channel during termination:', e);
+            EventBus.emit('worker:cleanup_failed', { error: e.message, workerIndex: workers.findIndex(w => w.worker === worker) });
+        }
     }
     workerHeartbeatChannels.clear();
 
