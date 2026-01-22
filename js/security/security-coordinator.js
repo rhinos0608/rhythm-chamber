@@ -109,32 +109,37 @@ class SecurityCoordinatorClass {
      * @returns {Promise<InitializationReport>} Initialization report
      */
     async init(options = {}) {
-        // Prevent double initialization
-        if (this._state === InitState.IN_PROGRESS) {
+        // Atomic check-and-set using existing promise
+        // This prevents race condition where multiple calls pass the state check
+        // before IN_PROGRESS is set
+        if (this._initPromise) {
             console.warn('[SecurityCoordinator] Initialization already in progress');
             return this._initPromise;
         }
-        
+
         if (this._state === InitState.READY || this._state === InitState.DEGRADED) {
             console.log('[SecurityCoordinator] Already initialized');
             return this.getInitializationReport();
         }
-        
-        this._state = InitState.IN_PROGRESS;
-        this._initStartTime = performance.now();
-        this._warnings = [];
-        this._errors = [];
-        
-        console.log('[SecurityCoordinator] Beginning security initialization...');
-        
-        this._initPromise = this._runInitSequence(options);
-        
-        try {
-            const report = await this._initPromise;
-            return report;
-        } finally {
-            this._initPromise = null;
-        }
+
+        // Create promise FIRST, then set state - this ensures atomicity
+        this._initPromise = (async () => {
+            this._state = InitState.IN_PROGRESS;
+            this._initStartTime = performance.now();
+            this._warnings = [];
+            this._errors = [];
+
+            console.log('[SecurityCoordinator] Beginning security initialization...');
+
+            try {
+                const report = await this._runInitSequence(options);
+                return report;
+            } finally {
+                this._initPromise = null;
+            }
+        })();
+
+        return this._initPromise;
     }
     
     /**
@@ -379,11 +384,12 @@ class SecurityCoordinatorClass {
 
         try {
             // Detect common third-party libraries/polyfills that may be incompatible with sealing
+            const root = typeof globalThis !== 'undefined' ? globalThis : {};
             const hasIncompatibleLibs = (
-                typeof window.React !== 'undefined' ||
-                typeof window.jQuery !== 'undefined' ||
-                typeof window.$ !== 'undefined' ||
-                typeof window.angular !== 'undefined'
+                typeof root.React !== 'undefined' ||
+                typeof root.jQuery !== 'undefined' ||
+                typeof root.$ !== 'undefined' ||
+                typeof root.angular !== 'undefined'
             );
 
             if (hasIncompatibleLibs) {
@@ -464,11 +470,12 @@ class SecurityCoordinatorClass {
 
         try {
             // Detect common third-party libraries/polyfills that may be incompatible with sealing
+            const root = typeof globalThis !== 'undefined' ? globalThis : {};
             const hasIncompatibleLibs = (
-                typeof window.React !== 'undefined' ||
-                typeof window.jQuery !== 'undefined' ||
-                typeof window.$ !== 'undefined' ||
-                typeof window.angular !== 'undefined'
+                typeof root.React !== 'undefined' ||
+                typeof root.jQuery !== 'undefined' ||
+                typeof root.$ !== 'undefined' ||
+                typeof root.angular !== 'undefined'
             );
 
             if (hasIncompatibleLibs) {
