@@ -42,7 +42,14 @@ const MAX_SEQUENCE_BUFFER_SIZE = 100;
 function processSequencedChunk(seq, data, handler) {
     // Edge case: Prevent unbounded buffer growth - but be careful not to drop expected data
     if (sequenceBuffer.size >= MAX_SEQUENCE_BUFFER_SIZE) {
-        const oldestSeq = Math.min(...sequenceBuffer.keys());
+        // EFFICIENCY: Iterate to find oldest key instead of spreading (O(n) vs O(n) + memory)
+        let oldestSeq = null;
+        for (const key of sequenceBuffer.keys()) {
+            if (oldestSeq === null || key < oldestSeq) {
+                oldestSeq = key;
+            }
+        }
+        // oldestSeq will always be non-null here since size > 0
         // CRITICAL: Before dropping, check if we're about to drop expected data
         if (oldestSeq === nextExpectedSeq) {
             // We're about to drop the sequence we're waiting for - process all possible first
@@ -60,7 +67,13 @@ function processSequencedChunk(seq, data, handler) {
             }
             // Now check if we still need to drop
             if (sequenceBuffer.size >= MAX_SEQUENCE_BUFFER_SIZE) {
-                const newOldest = Math.min(...sequenceBuffer.keys());
+                // EFFICIENCY: Iterate to find oldest key instead of spreading
+                let newOldest = null;
+                for (const key of sequenceBuffer.keys()) {
+                    if (newOldest === null || key < newOldest) {
+                        newOldest = key;
+                    }
+                }
                 sequenceBuffer.delete(newOldest);
                 console.warn(`[ChatUI] Sequence buffer full (${MAX_SEQUENCE_BUFFER_SIZE}), dropped seq ${newOldest}`);
             }

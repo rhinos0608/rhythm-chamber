@@ -1650,7 +1650,13 @@ async function autoReplayIfNeeded() {
     if (!needsReplay()) return false;
 
     try {
-        const highestWatermark = Math.max(...knownWatermarks.values(), lastEventWatermark);
+        // EFFICIENCY: Iterate to find max instead of spreading Map.values()
+        let highestWatermark = lastEventWatermark;
+        for (const watermark of knownWatermarks.values()) {
+            if (watermark > highestWatermark) {
+                highestWatermark = watermark;
+            }
+        }
         console.log(`[TabCoordination] Auto-replaying events from ${lastEventWatermark} to ${highestWatermark}`);
 
         await requestEventReplay(lastEventWatermark);
