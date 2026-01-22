@@ -2285,7 +2285,11 @@ function initCrossTabSync() {
                 // Emit event for UI to update
                 EventBus.emit('settings:changed', settings);
             }).catch(err => {
-                console.warn('[Settings] Failed to reload settings after cross-tab change:', err);
+                console.error('[Settings] Failed to reload settings after cross-tab change:', err);
+                if (window.showToast) {
+                    showToast('Settings sync failed. Refresh page.', 5000);
+                }
+                EventBus.emit('settings:sync_failed', { error: err });
             });
         }
     });
