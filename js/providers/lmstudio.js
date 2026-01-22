@@ -94,6 +94,9 @@ async function call(config, messages, tools, onProgress = null) {
                 // Streaming returned empty response - fallback to non-streaming
                 console.warn('[LMStudio] Streaming returned empty response, retrying non-streaming');
 
+                // Clear the original timeout before starting fallback to prevent cascading aborts
+                clearTimeout(timeoutId);
+
                 // Make a new non-streaming request
                 const fallbackController = new AbortController();
                 const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), timeout);
