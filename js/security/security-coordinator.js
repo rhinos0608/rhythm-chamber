@@ -602,7 +602,10 @@ class SecurityCoordinatorClass {
      * @private
      */
     _notifyReady(report) {
-        for (const callback of this._readyCallbacks) {
+        // Create snapshot before iteration to prevent mutation during iteration
+        // A callback could call onReady() again, modifying the array
+        const callbacks = [...this._readyCallbacks];
+        for (const callback of callbacks) {
             try {
                 callback(report);
             } catch (error) {
@@ -616,7 +619,9 @@ class SecurityCoordinatorClass {
      * @private
      */
     _notifyFailure(error) {
-        for (const callback of this._failureCallbacks) {
+        // Create snapshot before iteration to prevent mutation during iteration
+        const callbacks = [...this._failureCallbacks];
+        for (const callback of callbacks) {
             try {
                 callback(error, this.getInitializationReport());
             } catch (callbackError) {
