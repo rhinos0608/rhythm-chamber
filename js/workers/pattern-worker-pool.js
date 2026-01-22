@@ -25,6 +25,7 @@
 
 import { Patterns } from '../patterns.js';
 import { EventBus } from '../services/event-bus.js';
+import { WORKER_TIMEOUTS } from '../config/timeouts.js';
 
 // ==========================================
 // Configuration
@@ -98,8 +99,6 @@ const pendingRequests = new Map();
 
 // Heartbeat state - using dedicated MessageChannel for isolation
 let heartbeatInterval = null;
-const HEARTBEAT_INTERVAL_MS = 5000; // 5 seconds
-const STALE_WORKER_TIMEOUT_MS = 15000; // 15 seconds
 const workerLastHeartbeat = new Map(); // Track last heartbeat response from each worker
 const workerHeartbeatChannels = new Map(); // Track dedicated heartbeat MessageChannel per worker
 const HEARTBEAT_DEBUG_LOGS = false; // Reduce console spam and GC pressure in production
@@ -481,7 +480,7 @@ function checkStaleWorkers() {
         const lastHeartbeat = workerLastHeartbeat.get(workerInfo.worker);
 
         // If no heartbeat received or heartbeat is too old, mark as stale
-        if (!lastHeartbeat || (now - lastHeartbeat) > STALE_WORKER_TIMEOUT_MS) {
+        if (!lastHeartbeat || (now - lastHeartbeat) > WORKER_TIMEOUTS.STALE_WORKER_TIMEOUT_MS) {
             staleWorkers.push({ workerInfo, index });
         }
     });
@@ -542,12 +541,12 @@ function startHeartbeat() {
         return;
     }
 
-    console.log(`[PatternWorkerPool] Starting heartbeat (interval: ${HEARTBEAT_INTERVAL_MS}ms)`);
+    console.log(`[PatternWorkerPool] Starting heartbeat (interval: ${WORKER_TIMEOUTS.HEARTBEAT_INTERVAL_MS}ms)`);
 
     heartbeatInterval = setInterval(() => {
         sendHeartbeat();
         checkStaleWorkers();
-    }, HEARTBEAT_INTERVAL_MS);
+    }, WORKER_TIMEOUTS.HEARTBEAT_INTERVAL_MS);
 }
 
 /**

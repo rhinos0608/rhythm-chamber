@@ -24,69 +24,115 @@ import { SecureTokenStore } from '../security/secure-token-store.js';
 const COMPENSATION_LOG_STORE = 'TRANSACTION_COMPENSATION';
 
 // ==========================================
-// In-Memory Compensation Log Fallback
+// SessionStorage Compensation Log Fallback
 // ==========================================
 
 /**
- * CRITICAL FIX: In-memory compensation log fallback for quota exhaustion
+ * CRITICAL FIX: SessionStorage-based compensation log fallback for quota exhaustion
  *
  * When both IndexedDB and localStorage fail (typically due to quota exhaustion),
- * compensation logs are stored in memory. This ensures rollback failures are
- * never lost, even if all persistent storage backends fail.
+ * compensation logs are stored in sessionStorage. This ensures rollback failures
+ * survive page refreshes while still being scoped to the session.
  *
- * The in-memory log survives during the session and can be retrieved via
- * getCompensationLogs(). Logs are not persisted across page reloads.
+ * sessionStorage is used instead of in-memory Map because:
+ * 1. Survives page refreshes (critical for recovery scenarios)
+ * 2. Automatically cleared when session ends (browser close)
+ * 3. Has higher quota limits (typically 5-10MB)
+ *
+ * The sessionStorage-based log survives page refreshes and can be retrieved via
+ * getCompensationLogs(). Logs are persisted across page reloads within the session.
  */
-const inMemoryCompensationLogs = new Map();
-const MAX_IN_MEMORY_LOGS = 100; // Prevent unbounded growth
+const SESSION_COMPENSATION_KEY = '_tx_compensation_session';
+const MAX_SESSION_LOGS = 100; // Prevent unbounded growth
 
 /**
- * Add a compensation log entry to in-memory storage
+ * Add a compensation log entry to sessionStorage
  * @param {string} transactionId - Transaction ID
  * @param {Array} entries - Compensation log entries
  */
 function addInMemoryCompensationLog(transactionId, entries) {
-    // Prevent unbounded growth - evict oldest if at limit
-    if (inMemoryCompensationLogs.size >= MAX_IN_MEMORY_LOGS) {
-        const oldestKey = inMemoryCompensationLogs.keys().next().value;
-        inMemoryCompensationLogs.delete(oldestKey);
+    try {
+        const existingData = sessionStorage.getItem(SESSION_COMPENSATION_KEY);
+        const logs = existingData ? JSON.parse(existingData) : [];
+
+        // Prevent unbounded growth - evict oldest if at limit
+        if (logs.length >= MAX_SESSION_LOGS) {
+            logs.shift(); // Remove oldest entry
+        }
+
+        logs.push({
+            id: transactionId,
+            entries,
+            timestamp: Date.now(),
+            resolved: false,
+            storage: 'session' // Flag to indicate sessionStorage storage
+        });
+
+        sessionStorage.setItem(SESSION_COMPENSATION_KEY, JSON.stringify(logs));
+        console.warn(`[StorageTransaction] Compensation log stored in sessionStorage (fallback): ${transactionId}`);
+    } catch (sessionError) {
+        // If sessionStorage also fails, we've exhausted all options
+        console.error('[StorageTransaction] All storage backends failed for compensation log:', sessionError);
     }
-
-    inMemoryCompensationLogs.set(transactionId, {
-        id: transactionId,
-        entries,
-        timestamp: Date.now(),
-        resolved: false,
-        storage: 'memory' // Flag to indicate in-memory storage
-    });
-
-    console.warn(`[StorageTransaction] Compensation log stored in memory (fallback): ${transactionId}`);
 }
 
 /**
- * Get an in-memory compensation log entry
+ * Get an in-memory (sessionStorage) compensation log entry
  * @param {string} transactionId - Transaction ID
- * @returns {Object|null} In-memory log entry or null
+ * @returns {Object|null} SessionStorage log entry or null
  */
 function getInMemoryCompensationLog(transactionId) {
-    return inMemoryCompensationLogs.get(transactionId) || null;
+    try {
+        const existingData = sessionStorage.getItem(SESSION_COMPENSATION_KEY);
+        if (!existingData) return null;
+
+        const logs = JSON.parse(existingData);
+        return logs.find(log => log.id === transactionId) || null;
+    } catch (parseError) {
+        console.error('[StorageTransaction] Failed to parse sessionStorage compensation log:', parseError);
+        return null;
+    }
 }
 
 /**
- * Get all in-memory compensation log entries
- * @returns {Array} Array of in-memory log entries
+ * Get all in-memory (sessionStorage) compensation log entries
+ * @returns {Array} Array of sessionStorage log entries
  */
 function getAllInMemoryCompensationLogs() {
-    return Array.from(inMemoryCompensationLogs.values());
+    try {
+        const existingData = sessionStorage.getItem(SESSION_COMPENSATION_KEY);
+        if (!existingData) return [];
+
+        return JSON.parse(existingData);
+    } catch (parseError) {
+        console.error('[StorageTransaction] Failed to parse sessionStorage compensation logs:', parseError);
+        return [];
+    }
 }
 
 /**
- * Clear an in-memory compensation log entry
+ * Clear an in-memory (sessionStorage) compensation log entry
  * @param {string} transactionId - Transaction ID
  * @returns {boolean} True if entry was found and cleared
  */
 function clearInMemoryCompensationLog(transactionId) {
-    return inMemoryCompensationLogs.delete(transactionId);
+    try {
+        const existingData = sessionStorage.getItem(SESSION_COMPENSATION_KEY);
+        if (!existingData) return false;
+
+        const logs = JSON.parse(existingData);
+        const initialLength = logs.length;
+        const filteredLogs = logs.filter(log => log.id !== transactionId);
+
+        if (filteredLogs.length < initialLength) {
+            sessionStorage.setItem(SESSION_COMPENSATION_KEY, JSON.stringify(filteredLogs));
+            return true;
+        }
+        return false;
+    } catch (parseError) {
+        console.error('[StorageTransaction] Failed to clear sessionStorage compensation log:', parseError);
+        return false;
+    }
 }
 
 // ==========================================
@@ -878,14 +924,26 @@ async function resolveCompensationLog(transactionId) {
         // Ignore errors
     }
 
-    // CRITICAL FIX: Also check in-memory logs
+    // CRITICAL FIX: Also check sessionStorage logs
     const memoryEntry = getInMemoryCompensationLog(transactionId);
     if (memoryEntry) {
-        memoryEntry.resolved = true;
-        memoryEntry.resolvedAt = Date.now();
-        inMemoryCompensationLogs.set(transactionId, memoryEntry);
-        resolved = true;
-        console.log(`[StorageTransaction] In-memory compensation log ${transactionId} marked as resolved`);
+        // Update the sessionStorage entry directly
+        try {
+            const existingData = sessionStorage.getItem(SESSION_COMPENSATION_KEY);
+            if (existingData) {
+                const logs = JSON.parse(existingData);
+                const idx = logs.findIndex(log => log.id === transactionId);
+                if (idx >= 0) {
+                    logs[idx].resolved = true;
+                    logs[idx].resolvedAt = Date.now();
+                    sessionStorage.setItem(SESSION_COMPENSATION_KEY, JSON.stringify(logs));
+                    resolved = true;
+                    console.log(`[StorageTransaction] SessionStorage compensation log ${transactionId} marked as resolved`);
+                }
+            }
+        } catch (e) {
+            console.error('[StorageTransaction] Failed to update sessionStorage compensation log:', e);
+        }
     }
 
     if (resolved) {
@@ -933,18 +991,23 @@ async function clearResolvedCompensationLogs() {
         // Ignore errors
     }
 
-    // CRITICAL FIX: Clear resolved in-memory logs
-    const memoryLogsBefore = inMemoryCompensationLogs.size;
-    for (const [id, log] of inMemoryCompensationLogs.entries()) {
-        if (log.resolved) {
-            inMemoryCompensationLogs.delete(id);
-            cleared++;
-        }
-    }
-    const memoryCleared = memoryLogsBefore - inMemoryCompensationLogs.size;
+    // CRITICAL FIX: Clear resolved sessionStorage logs
+    try {
+        const existingData = sessionStorage.getItem(SESSION_COMPENSATION_KEY);
+        if (existingData) {
+            const logs = JSON.parse(existingData);
+            const memoryCleared = logs.filter(log => log.resolved).length;
+            const remaining = logs.filter(log => !log.resolved);
 
-    if (memoryCleared > 0) {
-        console.log(`[StorageTransaction] Cleared ${memoryCleared} in-memory compensation logs`);
+            sessionStorage.setItem(SESSION_COMPENSATION_KEY, JSON.stringify(remaining));
+            cleared += memoryCleared;
+
+            if (memoryCleared > 0) {
+                console.log(`[StorageTransaction] Cleared ${memoryCleared} sessionStorage compensation logs`);
+            }
+        }
+    } catch (e) {
+        console.error('[StorageTransaction] Failed to clear sessionStorage compensation logs:', e);
     }
 
     console.log(`[StorageTransaction] Cleared ${cleared} resolved compensation logs`);

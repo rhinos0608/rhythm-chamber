@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": 1769064738413,
+  "updated": 1769068753472,
   "naming": {},
   "directories": {
     "controllers": {
@@ -18,6 +18,10 @@
     "tests": {
       "purpose": "Test files",
       "files": 48
+    },
+    "config": {
+      "purpose": "Configuration",
+      "files": 1
     }
   },
   "suffixes": {

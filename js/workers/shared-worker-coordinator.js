@@ -18,10 +18,9 @@
 // Configuration
 // ==========================================
 
+import { WORKER_TIMEOUTS } from '../config/timeouts.js';
+
 const WORKER_URL = './js/workers/shared-worker.js';
-const HEARTBEAT_INTERVAL_MS = 5000;
-const RECONNECT_DELAY_MS = 1000;
-const MAX_RECONNECT_ATTEMPTS = 3;
 
 // ==========================================
 // State
@@ -53,6 +52,12 @@ let isConnected = false;
 
 /** @type {string|null} */
 let tabId = null;
+
+/** @type {Map<string, {resolve: Function, reject: Function, timestamp: number}>} */
+const pendingClaims = new Map();
+
+/** @type {number} */
+let claimIdCounter = 0;
 
 // ==========================================
 // Public API
@@ -144,7 +149,7 @@ async function connect() {
             const timeout = setTimeout(() => {
                 workerPort.removeEventListener('message', connectionHandler);
                 reject(new Error('Connection timeout'));
-            }, 5000);
+            }, WORKER_TIMEOUTS.CLAIM_ACK_TIMEOUT_MS); // Reuse 3s timeout for connection
 
             workerPort.addEventListener('message', connectionHandler);
 
@@ -242,6 +247,78 @@ function getStatus() {
     };
 }
 
+/**
+ * Claim primary (leader) role with ACK mechanism
+ * Prevents multi-writer race conditions by waiting for acknowledgment
+ *
+ * @returns {Promise<{granted: boolean, leaderId: string|null, reason: string|null}>}
+ */
+async function claimPrimary() {
+    if (!workerPort || !isConnected) {
+        console.warn('[SharedWorkerCoordinator] Cannot claim primary - not connected');
+        return { granted: false, leaderId: null, reason: 'not_connected' };
+    }
+
+    // Generate unique claim ID
+    const claimId = `claim_${Date.now()}_${++claimIdCounter}`;
+
+    return new Promise((resolve, reject) => {
+        // Set up timeout for claim response
+        const timeout = setTimeout(() => {
+            pendingClaims.delete(claimId);
+            reject(new Error('Leader claim timeout - no acknowledgment received'));
+        }, WORKER_TIMEOUTS.CLAIM_ACK_TIMEOUT_MS);
+
+        // Store pending claim
+        pendingClaims.set(claimId, {
+            resolve: (result) => {
+                clearTimeout(timeout);
+                resolve(result);
+            },
+            reject: (error) => {
+                clearTimeout(timeout);
+                reject(error);
+            },
+            timestamp: Date.now()
+        });
+
+        // Send claim request
+        try {
+            workerPort.postMessage({
+                type: 'CLAIM_PRIMARY',
+                tabId,
+                claimId
+            });
+        } catch (error) {
+            clearTimeout(timeout);
+            pendingClaims.delete(claimId);
+            reject(error);
+        }
+    });
+}
+
+/**
+ * Release primary (leader) role
+ * @returns {boolean} True if release message was sent
+ */
+function releasePrimary() {
+    if (!workerPort || !isConnected) {
+        console.warn('[SharedWorkerCoordinator] Cannot release primary - not connected');
+        return false;
+    }
+
+    try {
+        workerPort.postMessage({
+            type: 'RELEASE_PRIMARY',
+            tabId
+        });
+        return true;
+    } catch (error) {
+        console.error('[SharedWorkerCoordinator] Failed to release primary:', error);
+        return false;
+    }
+}
+
 // ==========================================
 // Internal Functions
 // ==========================================
@@ -255,6 +332,35 @@ function handleWorkerMessage(event) {
 
     if (!message || typeof message !== 'object') {
         return;
+    }
+
+    // Handle ACK messages for leadership claims
+    if (message.type === 'LEADER_GRANTED' || message.type === 'CLAIM_REJECTED') {
+        const claimId = message.claimId;
+        const pendingClaim = pendingClaims.get(claimId);
+
+        if (pendingClaim) {
+            pendingClaims.delete(claimId);
+
+            if (message.type === 'LEADER_GRANTED') {
+                console.log(`[SharedWorkerCoordinator] Leadership granted (claimId: ${claimId})`);
+                pendingClaim.resolve({
+                    granted: true,
+                    leaderId: message.leaderId,
+                    reason: null
+                });
+            } else {
+                console.log(`[SharedWorkerCoordinator] Leadership rejected - ${message.reason} (claimId: ${claimId})`);
+                pendingClaim.resolve({
+                    granted: false,
+                    leaderId: message.currentLeader,
+                    reason: message.reason
+                });
+            }
+        } else {
+            console.warn(`[SharedWorkerCoordinator] Received ${message.type} for unknown claim: ${claimId}`);
+        }
+        return;  // Don't forward ACK messages to listeners
     }
 
     // Create a BroadcastChannel-like event object
@@ -298,15 +404,15 @@ function handleWorkerError(error) {
  * Attempt to reconnect to the worker
  */
 async function attemptReconnect() {
-    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    if (reconnectAttempts >= WORKER_TIMEOUTS.MAX_RECONNECT_ATTEMPTS) {
         console.error('[SharedWorkerCoordinator] Max reconnection attempts reached');
         return;
     }
 
     reconnectAttempts++;
-    console.log(`[SharedWorkerCoordinator] Reconnection attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}`);
+    console.log(`[SharedWorkerCoordinator] Reconnection attempt ${reconnectAttempts}/${WORKER_TIMEOUTS.MAX_RECONNECT_ATTEMPTS}`);
 
-    await new Promise(resolve => setTimeout(resolve, RECONNECT_DELAY_MS));
+    await new Promise(resolve => setTimeout(resolve, WORKER_TIMEOUTS.RECONNECT_DELAY_MS));
 
     try {
         await connect();
@@ -334,7 +440,7 @@ function startHeartbeat() {
                 handleWorkerError(error);
             }
         }
-    }, HEARTBEAT_INTERVAL_MS);
+    }, WORKER_TIMEOUTS.HEARTBEAT_INTERVAL_MS);
 }
 
 /**
@@ -358,7 +464,9 @@ const SharedWorkerCoordinator = {
     addEventListener,
     removeEventListener,
     close,
-    getStatus
+    getStatus,
+    claimPrimary,  // NEW: ACK-based leadership claim
+    releasePrimary  // NEW: Leadership release
 };
 
 export { SharedWorkerCoordinator };
