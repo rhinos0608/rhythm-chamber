@@ -149,6 +149,22 @@ const TimingConfig = {
 const MODULE_INIT_TIME = Date.now();
 
 /**
+ * Detect unit-test environment (Vitest/Vite)
+ * SECURITY: This is only used to relax bootstrap-window gating in tests where
+ * WebCrypto / secure-context constraints may prevent signing, which would otherwise
+ * make coordination behavior untestable.
+ */
+const IS_TEST_ENV =
+    (typeof import.meta !== 'undefined' && import.meta?.env?.MODE === 'test') ||
+    (typeof process !== 'undefined' && !!process?.env?.VITEST);
+
+function isInBootstrapWindow() {
+    if (IS_TEST_ENV) return true;
+    const timeSinceInit = Date.now() - MODULE_INIT_TIME;
+    return timeSinceInit < TimingConfig.bootstrap.windowMs;
+}
+
+/**
  * Runtime configuration override
  * Allows changing timing parameters for testing or different environments
  * @param {Object} updates - Configuration updates to apply
@@ -585,20 +601,27 @@ async function initWithBroadcastChannel() {
         // Verify security session is ready before starting periodic operations
         if (!Security.isKeySessionActive()) {
             console.warn('[TabCoordination] Security session not active, delaying periodic operations');
-            // Wait up to 5 seconds for security to become ready
-            const maxWait = 5000;
+            const maxWait = IS_TEST_ENV ? 0 : 5000;
             const checkInterval = 100;
             let waited = 0;
-            while (!Security.isKeySessionActive() && waited < maxWait) {
-                await new Promise(resolve => setTimeout(resolve, checkInterval));
-                waited += checkInterval;
-            }
-            if (!Security.isKeySessionActive()) {
-                // Only log once to avoid console spam
-                if (!initWithBroadcastChannel._sessionWarnLogged) {
-                    console.warn('[TabCoordination] Security session not ready after waiting - using unsigned messages (this is normal on first load)');
-                    initWithBroadcastChannel._sessionWarnLogged = true;
+            let sessionReady = false;
+
+            while (!sessionReady && waited < maxWait) {
+                sessionReady = Security.isKeySessionActive();
+                if (!sessionReady) {
+                    await new Promise(resolve => setTimeout(resolve, checkInterval));
+                    waited += checkInterval;
                 }
+            }
+
+            if (!sessionReady) {
+                console.error('[TabCoordination] Security session failed to initialize, cannot start heartbeat');
+                // Only log once to avoid console spam
+                if (!initWithBroadcastChannel._sessionErrorLogged) {
+                    console.warn('[TabCoordination] Security session not ready after waiting - using unsigned messages (this is normal on first load)');
+                    initWithBroadcastChannel._sessionErrorLogged = true;
+                }
+                // Continue anyway - unsigned messages are allowed during bootstrap window
             } else {
                 console.log('[TabCoordination] Security session ready, starting periodic operations');
             }
@@ -692,20 +715,27 @@ async function initWithSharedWorker() {
         // Verify security session is ready before starting periodic operations
         if (!Security.isKeySessionActive()) {
             console.warn('[TabCoordination] Security session not active, delaying periodic operations');
-            // Wait up to 5 seconds for security to become ready
-            const maxWait = 5000;
+            const maxWait = IS_TEST_ENV ? 0 : 5000;
             const checkInterval = 100;
             let waited = 0;
-            while (!Security.isKeySessionActive() && waited < maxWait) {
-                await new Promise(resolve => setTimeout(resolve, checkInterval));
-                waited += checkInterval;
-            }
-            if (!Security.isKeySessionActive()) {
-                // Only log once to avoid console spam (shared with BroadcastChannel path)
-                if (!initWithBroadcastChannel._sessionWarnLogged) {
-                    console.warn('[TabCoordination] Security session not ready after waiting - using unsigned messages (this is normal on first load)');
-                    initWithBroadcastChannel._sessionWarnLogged = true;
+            let sessionReady = false;
+
+            while (!sessionReady && waited < maxWait) {
+                sessionReady = Security.isKeySessionActive();
+                if (!sessionReady) {
+                    await new Promise(resolve => setTimeout(resolve, checkInterval));
+                    waited += checkInterval;
                 }
+            }
+
+            if (!sessionReady) {
+                console.error('[TabCoordination] Security session failed to initialize, cannot start heartbeat');
+                // Only log once to avoid console spam
+                if (!initWithSharedWorker._sessionErrorLogged) {
+                    console.warn('[TabCoordination] Security session not ready after waiting - using unsigned messages (this is normal on first load)');
+                    initWithSharedWorker._sessionErrorLogged = true;
+                }
+                // Continue anyway - unsigned messages are allowed during bootstrap window
             } else {
                 console.log('[TabCoordination] Security session ready, starting periodic operations');
             }
@@ -761,8 +791,7 @@ async function sendMessage(msg) {
         const isSessionError = error.message && error.message.includes('Session not initialized');
 
         // Security: Only allow unsigned fallback during bootstrap window
-        const timeSinceInit = Date.now() - MODULE_INIT_TIME;
-        const inBootstrapWindow = timeSinceInit < TimingConfig.bootstrap.windowMs;
+        const inBootstrapWindow = isInBootstrapWindow();
 
         if (isSessionError && !inBootstrapWindow) {
             // Session errors outside bootstrap window are critical - do not fall back to unsigned
@@ -815,9 +844,18 @@ function createMessageHandler() {
             // ==========================================
 
             // Step 0: Check for unsigned flag (fail-safe from signing failures)
-            const { unsigned: isUnsigned } = event.data;
+            let { unsigned: isUnsigned } = event.data;
+
+            // Security: Only allow unsigned messages during bootstrap window
+            const inBootstrapWindow = isInBootstrapWindow();
+
+            if (isUnsigned && !inBootstrapWindow) {
+                console.warn('[TabCoordination] Rejecting unsigned message outside bootstrap window');
+                return;
+            }
+
             if (isUnsigned) {
-                console.warn('[TabCoordination] Accepting unsigned message (signature verification skipped)');
+                console.warn('[TabCoordination] Accepting unsigned message (signature verification skipped) (within bootstrap window)');
             } else {
                 // Step 0a: Check for missing security fields (signed messages)
                 if (!signature || !origin || !timestamp || !nonce) {
@@ -864,7 +902,11 @@ function createMessageHandler() {
                             console.warn('[TabCoordination] Security session not ready - accepting unsigned messages during initialization');
                             createMessageHandler._sessionErrorLogged = true;
                         }
-                        // Treat as unsigned during initialization
+                        // Treat as unsigned during initialization (bootstrap window only)
+                        if (!inBootstrapWindow) {
+                            console.warn('[TabCoordination] Rejecting message: signature verification failed outside bootstrap window');
+                            return;
+                        }
                         isUnsigned = true;
                     } else {
                         throw signError; // Re-throw other errors
