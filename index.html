@@ -8,7 +8,7 @@
   <meta name="description"
     content="Understand why your music matters. Chat with your complete Spotify history. Runs privately in your browser. BYOI for power users.">
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';">
+    content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self';">
 
   <!-- Open Graph -->
   <meta property="og:title" content="Rhythm Chamber — Chat With Your Spotify Data">
@@ -239,7 +239,7 @@
     <footer class="footer">
       <p><strong>Zero-backend architecture.</strong> No servers. No data collection. Free forever.</p>
       <p>Local AI = maximum privacy. Cloud AI = optional convenience.</p>
-      <button class="settings-btn" onclick="Settings.showSettingsModal()" title="Settings"
+      <button class="settings-btn" id="landing-settings-btn" data-action="show-settings-modal" title="Settings"
         style="margin-top: var(--space-md);">⚙️ Settings</button>
     </footer>
   </div>
@@ -253,15 +253,25 @@
     import { Settings } from './js/settings.js';
     import { ConfigLoader } from './js/services/config-loader.js';
 
-    // Load config first, then expose Settings
+    // Load config first, then setup event delegation
     try {
       await ConfigLoader.load();
     } catch (error) {
       console.error('ConfigLoader.load failed:', error);
     } finally {
       ConfigLoader.installWindowProxy();
-      // Expose to window for inline onclick handler in footer
-      window.Settings = Settings;
+
+      // Setup event delegation for data-action pattern (replaces inline onclick)
+      document.addEventListener('click', (e) => {
+        const button = e.target.closest('[data-action]');
+        if (button) {
+          const action = button.dataset.action;
+          if (action === 'show-settings-modal') {
+            e.preventDefault();
+            Settings.showSettingsModal();
+          }
+        }
+      });
     }
   </script>
 </body>

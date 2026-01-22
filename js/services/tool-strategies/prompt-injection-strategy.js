@@ -10,6 +10,29 @@ import { BaseToolStrategy } from './base-strategy.js';
 export class PromptInjectionStrategy extends BaseToolStrategy {
     get level() { return 2; }
 
+    /**
+     * Persist partial results to conversation history
+     * Extracted to eliminate duplication between circuit breaker and error handling
+     * @param {string} content - Original assistant content
+     * @param {Array} results - Accumulated results so far
+     * @param {string} reason - Reason for partial persistence (for logging)
+     */
+    async _persistPartialResults(content, results, reason) {
+        if (results.length === 0) return;
+
+        await this.addToHistory({
+            role: 'assistant',
+            content: content
+        });
+        const partialResultsMessage = this.FunctionCallingFallback?.buildFunctionResultsMessage?.(results) ||
+            `Partial results (${reason}): ${JSON.stringify(results, null, 2)}`;
+        await this.addToHistory({
+            role: 'user',
+            content: partialResultsMessage,
+            isSystem: true
+        });
+    }
+
     canHandle(responseMessage, capabilityLevel) {
         // Requires capability level 2 or higher
         if (capabilityLevel < 2) {
@@ -66,54 +89,36 @@ export class PromptInjectionStrategy extends BaseToolStrategy {
             const breakerCheck = this.checkCircuitBreaker(onProgress);
             if (breakerCheck.blocked) {
                 // Persist any partial successes before returning error
-                if (results.length > 0) {
-                    this.addToHistory({
-                        role: 'assistant',
-                        content: content
-                    });
-                    const partialResultsMessage = this.FunctionCallingFallback?.buildFunctionResultsMessage?.(results) ||
-                        `Partial results before circuit breaker: ${JSON.stringify(results, null, 2)}`;
-                    this.addToHistory({
-                        role: 'user',
-                        content: partialResultsMessage,
-                        isSystem: true
-                    });
-                }
+                await this._persistPartialResults(content, results, 'circuit breaker tripped');
                 return { earlyReturn: breakerCheck.errorReturn };
             }
 
             if (onProgress) onProgress({ type: 'tool_start', tool: call.name });
 
-            // Execute with timeout
+            // Execute with timeout using AbortSignal pattern to properly abort execution
             let result;
             try {
-                result = await Promise.race([
-                    this.Functions?.execute?.(call.name, call.arguments, streamsData) ??
-                    Promise.resolve({ error: 'Functions module not available' }),
-                    new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error(`Function ${call.name} timed out after ${this.TIMEOUT_MS}ms`)), this.TIMEOUT_MS)
-                    )
-                ]);
+                const abortController = new AbortController();
+                const timeoutId = setTimeout(() => abortController.abort(), this.TIMEOUT_MS);
+
+                result = await this.Functions?.execute?.(call.name, call.arguments, streamsData, {
+                    signal: abortController.signal
+                }) ?? { error: 'Functions module not available' };
+
+                clearTimeout(timeoutId);
             } catch (execError) {
+                // Handle AbortError from timeout
+                if (execError.name === 'AbortError') {
+                    execError.message = `Function ${call.name} timed out after ${this.TIMEOUT_MS}ms`;
+                }
+
                 console.error(`[PromptInjectionStrategy] Execution failed for ${call.name}:`, execError);
                 if (onProgress) onProgress({ type: 'tool_end', tool: call.name, error: true });
 
                 // HNW Fix: Persist any partial successes to history before returning error
-                if (results.length > 0) {
-                    this.addToHistory({
-                        role: 'assistant',
-                        content: content
-                    });
-                    const partialResultsMessage = this.FunctionCallingFallback?.buildFunctionResultsMessage?.(results) ||
-                        `Partial results before error: ${JSON.stringify(results, null, 2)}`;
-                    this.addToHistory({
-                        role: 'user',
-                        content: partialResultsMessage,
-                        isSystem: true
-                    });
-                    // Note: tool_end events for successful calls were already emitted during the loop
-                    // so we don't re-emit them here to avoid duplicate progress events
-                }
+                // Note: tool_end events for successful calls were already emitted during the loop
+                // so we don't re-emit them here to avoid duplicate progress events
+                await this._persistPartialResults(content, results, `execution failed: ${execError.message}`);
 
                 return {
                     earlyReturn: {
@@ -134,11 +139,11 @@ export class PromptInjectionStrategy extends BaseToolStrategy {
             `Function results: ${JSON.stringify(results, null, 2)}`;
 
         // Add responses to conversation history
-        this.addToHistory({
+        await this.addToHistory({
             role: 'assistant',
             content: content
         });
-        this.addToHistory({
+        await this.addToHistory({
             role: 'user',
             content: resultsMessage,
             isSystem: true

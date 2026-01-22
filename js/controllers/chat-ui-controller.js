@@ -655,11 +655,12 @@ function showTokenWarning(message, tokenInfo, truncated) {
 
     // SAFE: message and tokenInfo values are from internal token counting system
     // I18N FIX: Add dir="auto" to support bidirectional text (RTL/LTR)
+    // SECURITY FIX: Escape all interpolated values including tokenInfo properties
     warningDiv.innerHTML = `
         <div class="message-content" dir="auto">
-            <strong>${icon} ${title}</strong><br>
+            <strong>${escapeHtml(icon)} ${escapeHtml(title)}</strong><br>
             ${escapeHtml(message)}<br>
-            <small>Usage: ${tokenInfo.total}/${tokenInfo.contextWindow} tokens (${Math.round(tokenInfo.usagePercent)}%)</small>
+            <small>Usage: ${escapeHtml(String(tokenInfo.total))}/${escapeHtml(String(tokenInfo.contextWindow))} tokens (${escapeHtml(String(Math.round(tokenInfo.usagePercent)))}%)</small>
         </div>
     `;
 

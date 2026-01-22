@@ -1,19 +1,19 @@
 {
   "version": 1,
-  "updated": 1769050050017,
+  "updated": 1769059892962,
   "naming": {},
   "directories": {
     "controllers": {
       "purpose": "Controllers",
-      "files": 15
+      "files": 16
     },
     "utils": {
       "purpose": "Utility functions",
-      "files": 8
+      "files": 9
     },
     "services": {
       "purpose": "Service layer",
-      "files": 58
+      "files": 65
     },
     "tests": {
       "purpose": "Test files",

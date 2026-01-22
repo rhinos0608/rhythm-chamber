@@ -357,7 +357,9 @@ function recordTurnMetrics(turn, success) {
                     queueDepth: queue.length,
                     threshold: METRICS_CONFIG.warningThresholdMs
                 });
-            }).catch(() => { });
+            }).catch((err) => {
+                console.warn('[TurnQueue] Failed to emit performance warning event:', err);
+            });
         } catch (e) {
             // Ignore
         }

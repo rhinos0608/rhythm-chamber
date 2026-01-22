@@ -107,7 +107,8 @@ async function getConfig(key, defaultValue = null) {
         if (stored !== null) {
             try {
                 return JSON.parse(stored);
-            } catch {
+            } catch (parseErr) {
+                console.debug(`[ConfigAPI] Using stored value as non-JSON for key '${key}'`);
                 return stored;
             }
         }

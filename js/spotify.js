@@ -635,8 +635,46 @@ const Spotify = (() => {
             throw new Error('Session expired. Please reconnect to Spotify.');
         }
 
+        if (response.status === 429) {
+            // Rate limit exceeded - parse Retry-After header
+            const retryAfter = response.headers.get('Retry-After');
+            let waitSeconds = 60; // Default to 60 seconds
+
+            if (retryAfter) {
+                const parsed = parseInt(retryAfter, 10);
+                if (!isNaN(parsed)) {
+                    waitSeconds = parsed;
+                }
+            }
+
+            logger.warn(`Rate limited (429). Waiting ${waitSeconds} seconds before retry...`);
+
+            // Wait for the specified duration
+            await new Promise(resolve => setTimeout(resolve, waitSeconds * 1000));
+
+            // Retry the request after backoff
+            logger.debug('Retrying request after rate limit backoff...');
+            const retryResponse = await fetch(url, {
+                ...options,
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    ...options.headers
+                }
+            });
+
+            if (!retryResponse.ok) {
+                const error = await retryResponse.json().catch(() => ({}));
+                throw new Error(error.error?.message || `API request failed after retry: ${retryResponse.status}`);
+            }
+
+            return retryResponse.json();
+        }
+
         if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
+            const error = await response.json().catch((err) => {
+                console.warn('[Spotify] Failed to parse error response:', err);
+                return {};
+            });
             throw new Error(error.error?.message || `API request failed: ${response.status}`);
         }
 
@@ -740,6 +778,21 @@ const Spotify = (() => {
      * @returns {object} Transformed data for analysis
      */
     function transformForAnalysis(spotifyData) {
+        // EDGE CASE FIX: Validate input structure before transformation
+        // Missing validation could cause runtime errors when accessing nested properties
+        if (!spotifyData || typeof spotifyData !== 'object') {
+            logger.warn('[Spotify] transformForAnalysis received invalid input, returning empty structure');
+            return {
+                recentStreams: [],
+                topArtists: { shortTerm: [], mediumTerm: [], longTerm: [] },
+                topTracks: { shortTerm: [], mediumTerm: [], longTerm: [] },
+                profile: { displayName: 'Music Lover', id: null },
+                isLiteData: true,
+                fetchedAt: new Date().toISOString(),
+                _inputError: 'Invalid input structure'
+            };
+        }
+
         // Extract recently played as pseudo-streams
         const recentStreams = (spotifyData.recentlyPlayed?.items || []).map((item, index) => ({
             trackName: item.track?.name || 'Unknown',
@@ -891,6 +944,25 @@ const Spotify = (() => {
         return tokenRefreshInterval !== null;
     }
 
+    /**
+     * Check if token refresh is needed
+     * Used by SpotifyController for background token monitoring
+     * @returns {Promise<boolean>} True if token should be refreshed
+     */
+    async function checkTokenRefreshNeeded() {
+        const { expiry } = await loadAccessToken();
+        if (!expiry) return false;
+
+        const now = Date.now();
+        const timeUntilExpiry = expiry - now;
+
+        // Use 10 minute buffer for background refresh (slightly more aggressive than Security module)
+        const buffer = 10 * 60 * 1000;
+
+        // Refresh if expiring within buffer or already expired
+        return timeUntilExpiry <= buffer;
+    }
+
     // ==========================================
     // VISIBILITY-BASED STALENESS CHECK
     // Proactively refreshes token when tab becomes visible
@@ -964,6 +1036,7 @@ const Spotify = (() => {
         getAccessToken,
         clearTokens,
         refreshToken,
+        ensureValidToken,
 
         // API
         getRecentlyPlayed,
@@ -978,7 +1051,8 @@ const Spotify = (() => {
         // Background Refresh (NEW)
         startBackgroundRefresh,
         stopBackgroundRefresh,
-        isBackgroundRefreshActive
+        isBackgroundRefreshActive,
+        checkTokenRefreshNeeded
     };
 })();
 

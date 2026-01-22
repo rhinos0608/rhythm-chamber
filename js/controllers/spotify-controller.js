@@ -76,7 +76,7 @@ async function handleSpotifyCallback(code) {
     }
 
     _ViewController.showProcessing();
-    _ViewController.updateProgress('Connecting to _Spotify...');
+    _ViewController.updateProgress('Connecting to Spotify...');
 
     try {
         // Exchange code for token
@@ -90,7 +90,7 @@ async function handleSpotifyCallback(code) {
             if (_showToast) _showToast('Session expired. Reconnecting...');
             const refreshed = await _Spotify.refreshToken();
             if (!refreshed) {
-                throw new Error('Session expired. Please reconnect to _Spotify.');
+                throw new Error('Session expired. Please reconnect to Spotify.');
             }
         }
 
@@ -136,7 +136,7 @@ async function handleSpotifyCallback(code) {
         await new Promise(r => setTimeout(r, 10));
 
         const personality = _Personality.classifyLitePersonality(litePatterns);
-        personality.summary = lite_Patterns.summary;
+        personality.summary = litePatterns.summary;
 
         if (_AppState) {
             _AppState.setPersonality(personality);
@@ -146,8 +146,14 @@ async function handleSpotifyCallback(code) {
         // Show lite reveal
         _ViewController.showLiteReveal();
 
+        // MEMORY LEAK FIX: Stop background refresh after successful callback
+        // The interval is only needed during long-running operations
+        stopBackgroundRefresh();
+
     } catch (error) {
         console.error('[SpotifyController] Callback error:', error);
+        // Stop background refresh on error to prevent lingering intervals
+        stopBackgroundRefresh();
         if (_ViewController) {
             _ViewController.updateProgress(`Error: ${error.message}`);
             setTimeout(() => _ViewController.showUpload(), 3000);
@@ -175,6 +181,14 @@ function startBackgroundRefresh() {
             }
         } catch (error) {
             console.warn('[SpotifyController] Background refresh failed:', error);
+            // Notify user of background refresh failure
+            if (_showToast) {
+                _showToast('Background token refresh failed. You may need to reconnect to Spotify.');
+            } else {
+                console.warn('[SpotifyController] Background refresh failed - user may need to reconnect');
+            }
+            // Stop the interval to prevent repeated failures
+            stopBackgroundRefresh();
         }
     }, 5 * 60 * 1000); // 5 minutes
 
@@ -213,12 +227,16 @@ async function validateSession() {
 
 /**
  * Clear Spotify tokens (for reset operations)
+ * MEMORY LEAK FIX: Also stops background refresh interval
  */
 function clearTokens() {
     if (_Spotify) {
         _Spotify.clearTokens();
         console.log('[SpotifyController] Tokens cleared');
     }
+    // MEMORY LEAK FIX: Stop background refresh when clearing tokens
+    // This prevents lingering intervals after reset/logout
+    stopBackgroundRefresh();
 }
 
 /**

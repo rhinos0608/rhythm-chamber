@@ -10,6 +10,11 @@
  * - IndexedDB (for local storage)
  * - Promise (for async operations)
  * - async/await syntax support
+ * - TextEncoder/TextDecoder (for encoding operations)
+ * - crypto.randomUUID() (for unique ID generation)
+ * - crypto.getRandomValues() (for random number generation)
+ * - localStorage/sessionStorage (for client-side storage)
+ * - Secure Context (HTTPS or localhost) for crypto APIs
  * - ES Modules (type="module" - handled by browser script loading)
  *
  * Target browsers: Chrome 90+, Edge 90+, Firefox 90+, Safari 14.5+, iOS 14.5+
@@ -22,20 +27,33 @@
     window.__COMPATIBILITY_PASSED__ = false;
 
     /**
-     * Safely test async/await support without causing parse errors
-     * Uses new Function() to isolate the syntax test
+     * Safely test async/await support without using eval/Function
+     * Checks for async constructor existence without executing code
      */
     function hasAsyncAwaitSupport() {
         try {
-            // Create an async function dynamically - if the browser doesn't support
-            // async/await, this will throw a SyntaxError
-            var asyncTest = new Function(
-                'return (async function() { return await Promise.resolve(true); })()'
-            );
-            return asyncTest() instanceof Promise;
+            // Check if async functions are supported by checking the constructor
+            // This doesn't execute code, just checks if the browser recognizes async syntax
+            return typeof Promise !== 'undefined' &&
+                   typeof Object.getPrototypeOf(async function(){}).constructor === 'function';
         } catch (e) {
             return false;
         }
+    }
+
+    /**
+     * Escape HTML to prevent XSS when displaying user/feature data
+     */
+    function escapeHtml(unsafe) {
+        if (typeof unsafe !== 'string') {
+            return String(unsafe);
+        }
+        return unsafe
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 
     /**
@@ -46,7 +64,12 @@
             'Web Crypto API': !!(window.crypto && window.crypto.subtle),
             'IndexedDB': !!window.indexedDB,
             'Promise': typeof Promise !== 'undefined',
-            'async/await': hasAsyncAwaitSupport()
+            'async/await': hasAsyncAwaitSupport(),
+            'TextEncoder/TextDecoder': !!(typeof TextEncoder !== 'undefined' && typeof TextDecoder !== 'undefined'),
+            'crypto.randomUUID()': !!(window.crypto && typeof window.crypto.randomUUID === 'function'),
+            'crypto.getRandomValues()': !!(window.crypto && typeof window.crypto.getRandomValues === 'function'),
+            'localStorage/sessionStorage': !!(typeof window.localStorage !== 'undefined' && typeof window.sessionStorage !== 'undefined'),
+            'Secure Context (HTTPS)': window.isSecureContext !== false
         };
 
         var missing = [];
@@ -64,83 +87,50 @@
 
     /**
      * Display browser upgrade message with app-consistent styling
+     * This function blocks further script execution when compatibility fails.
      */
     function showBrowserUpgradeMessage(missing) {
+        // Escape missing features to prevent XSS
+        var escapedMissing = missing.map(function(feature) {
+            return escapeHtml(feature);
+        });
+
         // Create overlay div
         var overlay = document.createElement('div');
         overlay.id = 'compatibility-overlay';
-        overlay.style.cssText = [
-            'position: fixed',
-            'top: 0',
-            'left: 0',
-            'width: 100%',
-            'height: 100%',
-            'z-index: 999999',
-            'display: flex',
-            'align-items: center',
-            'justify-content: center',
-            'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-        ].join(';');
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:999999;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif';
 
         // Create content card
         var card = document.createElement('div');
-        card.style.cssText = [
-            'max-width: 500px',
-            'padding: 2rem',
-            'margin: 1rem',
-            'background: #0a0a0f',
-            'color: #ffffff',
-            'border-radius: 12px',
-            'border: 1px solid rgba(255, 255, 255, 0.1)',
-            'text-align: center',
-            'box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5)'
-        ].join(';');
+        card.style.cssText = 'max-width:500px;padding:2rem;margin:1rem;background:#0a0a0f;color:#ffffff;border-radius:12px;border:1px solid rgba(255,255,255,0.1);text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.5)';
 
         // Icon
         var icon = document.createElement('div');
-        icon.textContent = '🎵';
-        icon.style.cssText = 'font-size: 3rem; margin-bottom: 1rem;';
+        icon.textContent = 'Music';
+        icon.style.cssText = 'font-size:3rem;margin-bottom:1rem;color:#ef4444;';
 
         // Heading
         var heading = document.createElement('h1');
         heading.textContent = 'Browser Not Supported';
-        heading.style.cssText = [
-            'font-size: 1.5rem',
-            'font-weight: 600',
-            'margin-bottom: 1rem',
-            'color: #ffffff'
-        ].join(';');
+        heading.style.cssText = 'font-size:1.5rem;font-weight:600;margin-bottom:1rem;color:#ffffff;';
 
-        // Message
+        // Message with escaped content
         var message = document.createElement('p');
+        var missingText = escapedMissing.join(', ');
         message.innerHTML = 'Rhythm Chamber requires a modern browser with the following features:<br><br>' +
-            '<strong style="color: #ef4444;">Missing: ' + missing.join(', ') + '</strong>';
-        message.style.cssText = [
-            'color: rgba(255, 255, 255, 0.7)',
-            'line-height: 1.6',
-            'margin-bottom: 1.5rem'
-        ].join(';');
+            '<strong style="color: #ef4444;">Missing: ' + missingText + '</strong>';
+        message.style.cssText = 'color:rgba(255,255,255,0.7);line-height:1.6;margin-bottom:1.5rem;';
 
         // Browser list
         var browserList = document.createElement('div');
         browserList.innerHTML = '<strong style="color: #ffffff;">Supported browsers:</strong><br>' +
             '<span style="color: rgba(255, 255, 255, 0.7);">Chrome 90+, Edge 90+, Firefox 90+,<br>Safari 14.5+, iOS Safari 14.5+</span>';
-        browserList.style.cssText = [
-            'background: rgba(255, 255, 255, 0.05)',
-            'padding: 1rem',
-            'border-radius: 8px',
-            'margin-bottom: 1.5rem',
-            'font-size: 0.9rem'
-        ].join(';');
+        browserList.style.cssText = 'background:rgba(255,255,255,0.05);padding:1rem;border-radius:8px;margin-bottom:1.5rem;font-size:0.9rem;';
 
         // Action text
         var actionText = document.createElement('p');
         actionText.textContent = 'Please update your browser or try a different one to continue.';
-        actionText.style.cssText = [
-            'color: rgba(255, 255, 255, 0.5)',
-            'font-size: 0.85rem',
-            'margin-bottom: 0'
-        ].join(';');
+        actionText.style.cssText = 'color:rgba(255,255,255,0.5);font-size:0.85rem;margin-bottom:0;';
 
         // Assemble card
         card.appendChild(icon);
@@ -154,15 +144,48 @@
         if (document.body) {
             document.body.innerHTML = '';
             document.body.appendChild(overlay);
-            // Prevent any script execution after this point
+            // Immediately throw to prevent any further script execution
             throw new Error('Browser compatibility check failed: ' + missing.join(', '));
         } else {
-            // If body doesn't exist yet, wait for DOMContentLoaded
-            document.addEventListener('DOMContentLoaded', function() {
-                document.body.innerHTML = '';
-                document.body.appendChild(overlay);
-                throw new Error('Browser compatibility check failed: ' + missing.join(', '));
-            });
+            // If body doesn't exist yet, we need to block document parsing
+            // Use document.write to synchronously inject the error message
+            // This prevents any subsequent scripts from executing
+            var html = [
+                '<!DOCTYPE html>',
+                '<html>',
+                '<head>',
+                '<meta charset="UTF-8">',
+                '<title>Browser Not Supported - Rhythm Chamber</title>',
+                '<style>',
+                'body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0a0a0f;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh}',
+                '.card{max-width:500px;padding:2rem;margin:1rem;background:#0a0a0f;border-radius:12px;border:1px solid rgba(255,255,255,0.1);text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.5)}',
+                '.icon{font-size:3rem;margin-bottom:1rem;color:#ef4444}',
+                'h1{font-size:1.5rem;font-weight:600;margin-bottom:1rem;color:#fff}',
+                '.message{color:rgba(255,255,255,0.7);line-height:1.6;margin-bottom:1.5rem}',
+                '.missing{color:#ef4444;font-weight:bold}',
+                '.browser-list{background:rgba(255,255,255,0.05);padding:1rem;border-radius:8px;margin-bottom:1.5rem;font-size:0.9rem}',
+                '.action{color:rgba(255,255,255,0.5);font-size:0.85rem;margin-bottom:0}',
+                '</style>',
+                '</head>',
+                '<body>',
+                '<div class="card">',
+                '<div class="icon">Music</div>',
+                '<h1>Browser Not Supported</h1>',
+                '<p class="message">Rhythm Chamber requires a modern browser with the following features:<br><br>',
+                '<span class="missing">Missing: ' + escapeHtml(missing.join(', ')) + '</span></p>',
+                '<div class="browser-list"><strong>Supported browsers:</strong><br>',
+                '<span>Chrome 90+, Edge 90+, Firefox 90+<br>Safari 14.5+, iOS Safari 14.5+</span></div>',
+                '<p class="action">Please update your browser or try a different one to continue.</p>',
+                '</div>',
+                '</body>',
+                '</html>'
+            ].join('\n');
+
+            document.write(html);
+            document.close();
+
+            // Throw to ensure execution stops even if document.write is blocked
+            throw new Error('Browser compatibility check failed: ' + missing.join(', '));
         }
     }
 

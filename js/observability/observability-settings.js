@@ -33,6 +33,7 @@ export function initObservabilitySettings() {
     observabilitySection.id = 'observability-section';
 
     // SAFE: Static HTML template with no user input
+    // SECURITY FIX: Replaced inline onclick/onchange with data-action/data-change pattern
     observabilitySection.innerHTML = `
         <h3>🔍 Observability & Performance</h3>
         <p class="settings-description">
@@ -42,7 +43,7 @@ export function initObservabilitySettings() {
 
         <!-- Observability Dashboard Button -->
         <div class="settings-field">
-            <button class="btn btn-primary" onclick="ObservabilitySettings.showDashboard()">
+            <button class="btn btn-primary" data-action="observability-show-dashboard">
                 📊 Open Observability Dashboard
             </button>
             <span class="settings-hint">Real-time performance monitoring and metrics</span>
@@ -72,7 +73,7 @@ export function initObservabilitySettings() {
                 <option value="csv">CSV (Spreadsheet)</option>
                 <option value="prometheus">Prometheus (Monitoring)</option>
             </select>
-            <button class="btn btn-secondary" onclick="ObservabilitySettings.exportMetrics()">
+            <button class="btn btn-secondary" data-action="observability-export-metrics">
                 Export Now
             </button>
             <span class="settings-hint">Download current metrics snapshot</span>
@@ -84,7 +85,7 @@ export function initObservabilitySettings() {
 
             <div class="settings-field">
                 <label>
-                    <input type="checkbox" id="observability-enabled" checked onchange="ObservabilitySettings.toggleMonitoring(this.checked)">
+                    <input type="checkbox" id="observability-enabled" checked data-change="observability-toggle-monitoring">
                     Enable Performance Monitoring
                 </label>
                 <span class="settings-hint">Track performance metrics with < 5% overhead</span>
@@ -92,7 +93,7 @@ export function initObservabilitySettings() {
 
             <div class="settings-field">
                 <label>
-                    <input type="checkbox" id="observability-memory" checked onchange="ObservabilitySettings.toggleMemoryProfiling(this.checked)">
+                    <input type="checkbox" id="observability-memory" checked data-change="observability-toggle-memory">
                     Enable Memory Profiling
                 </label>
                 <span class="settings-hint">Track memory usage trends (Chrome only)</span>
@@ -100,7 +101,7 @@ export function initObservabilitySettings() {
 
             <div class="settings-field">
                 <label for="observability-interval">Update Interval</label>
-                <select id="observability-interval" onchange="ObservabilitySettings.setUpdateInterval(this.value)">
+                <select id="observability-interval" data-change="observability-set-interval">
                     <option value="1000">1 second (Real-time)</option>
                     <option value="5000" selected>5 seconds (Standard)</option>
                     <option value="10000">10 seconds (Low overhead)</option>
@@ -119,8 +120,56 @@ export function initObservabilitySettings() {
         settingsBody.appendChild(observabilitySection);
     }
 
+    // SECURITY FIX: Setup event delegation for data-action pattern (replaces inline onclick)
+    setupEventDelegation(observabilitySection);
+
     // Initialize observability metrics
     updateObservabilityMetrics();
+}
+
+/**
+ * Setup event delegation for observability settings
+ * SECURITY FIX: Replaces inline onclick/onchange handlers with event delegation
+ * @param {HTMLElement} container - Container element for delegation
+ */
+function setupEventDelegation(container) {
+    // Handle click events for data-action
+    container.addEventListener('click', (e) => {
+        const button = e.target.closest('[data-action]');
+        if (button) {
+            const action = button.dataset.action;
+            e.preventDefault();
+
+            switch (action) {
+                case 'observability-show-dashboard':
+                    showDashboard();
+                    break;
+                case 'observability-export-metrics':
+                    exportMetrics();
+                    break;
+            }
+        }
+    });
+
+    // Handle change events for data-change
+    container.addEventListener('change', (e) => {
+        const element = e.target.closest('[data-change]');
+        if (element) {
+            const action = element.dataset.change;
+
+            switch (action) {
+                case 'observability-toggle-monitoring':
+                    toggleMonitoring(element.checked);
+                    break;
+                case 'observability-toggle-memory':
+                    toggleMemoryProfiling(element.checked);
+                    break;
+                case 'observability-set-interval':
+                    setUpdateInterval(element.value);
+                    break;
+            }
+        }
+    });
 }
 
 /**

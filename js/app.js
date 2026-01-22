@@ -262,8 +262,9 @@ function showLoadingError(missing, optional = []) {
         const reportText = JSON.stringify(errorReport, null, 2);
         navigator.clipboard.writeText(reportText).then(() => {
             showToast('Error report copied to clipboard');
-        }).catch(() => {
+        }).catch((err) => {
             // Fallback: show in alert
+            console.warn('[App] Failed to copy to clipboard:', err);
             alert('Copy this error report:\n\n' + reportText);
         });
     };
@@ -290,7 +291,7 @@ function showSafeModeWarning() {
     banner.innerHTML = `
         <span class="icon">⚠️</span>
         <span class="text">
-            <strong>Safe Mode:</strong> Security modules failed to load. 
+            <strong>Safe Mode:</strong> Security modules failed to load.
             Data will not be encrypted. Sensitive features are disabled.
         </span>
         <button data-action="refresh-page">Retry</button>
@@ -299,9 +300,10 @@ function showSafeModeWarning() {
     document.body.prepend(banner);
     document.body.classList.add('has-safe-mode-banner');
 
-    // Store in AppState for other modules to check
+    // Store in AppState for other modules to check - use 'operations' domain for safe mode
+    // This consolidates safe mode state management in a single location
     if (AppState?.update) {
-        AppState.update('app', { safeMode: true });
+        AppState.update('operations', { safeMode: true });
     }
 }
 
@@ -311,15 +313,22 @@ function showSafeModeWarning() {
 
 /**
  * Check if app is in Safe Mode (security modules failed)
+ * Reads from AppState operations domain as single source of truth
  * @returns {boolean}
  */
 function isInSafeMode() {
-    return !!(AppState?.get?.('app')?.safeMode);
+    return !!(AppState?.get?.('operations')?.safeMode);
 }
 
-// Make available globally for other modules
-if (typeof window !== 'undefined') {
-    window.isInSafeMode = isInSafeMode;
+/**
+ * Set safe mode state explicitly
+ * Used by external security checks to signal safe mode activation
+ * @param {boolean} safeMode - Whether safe mode is active
+ */
+function setSafeMode(safeMode) {
+    if (AppState?.update) {
+        AppState.update('operations', { safeMode: !!safeMode });
+    }
 }
 
 // ==========================================
@@ -329,7 +338,8 @@ if (typeof window !== 'undefined') {
 /**
  * Update UI to reflect current tab authority status
  * HNW Hierarchy: Visual feedback for read-only mode
- * 
+ * Coordinates with AppState for single source of truth
+ *
  * @param {Object} authority - Authority status from TabCoordinator
  */
 function updateAuthorityUI(authority) {
@@ -348,9 +358,21 @@ function updateAuthorityUI(authority) {
         return;
     }
 
+    const isPrimary = authority.level === 'primary';
+    const isReadOnly = !isPrimary;
+
+    // Update AppState for consistency with other components
+    // This ensures any component can check authority via AppState
+    if (AppState?.update) {
+        AppState.update('ui', {
+            authorityLevel: authority.level,
+            isReadOnlyMode: isReadOnly
+        });
+    }
+
     // Update indicator
     const statusText = indicator.querySelector('.status-text');
-    if (authority.level === 'primary') {
+    if (isPrimary) {
         indicator.classList.remove('secondary');
         indicator.classList.add('primary');
         if (statusText) statusText.textContent = 'Primary';
@@ -493,9 +515,17 @@ async function init(options = {}) {
         });
     }
 
-    // Initialize centralized state AFTER security check
-    // This prevents storage access before Safe Mode determination
+    // CRITICAL: Initialize AppState IMMEDIATELY after security check
+    // BEFORE any other initialization to ensure state is available to all modules
+    // This prevents race conditions where modules try to access state before it's ready
     AppState.init();
+
+    // Verify AppState is ready before proceeding
+    if (!AppState.isReady()) {
+        console.error('[App] AppState failed to initialize properly');
+        showLoadingError(['AppState initialization failed'], []);
+        return;
+    }
 
     // HNW Hierarchy: Early-fail if critical dependencies are missing
     // This catches script loading failures on spotty mobile networks
@@ -514,7 +544,8 @@ async function init(options = {}) {
         showSafeModeWarning();
     }
 
-    // Initialize cross-tab coordination first (prevents race conditions)
+    // Initialize cross-tab coordination AFTER AppState is ready
+    // TabCoordinator depends on AppState for authority tracking
     const isPrimary = await TabCoordinator.init();
     if (!isPrimary) {
         console.log('[App] Secondary tab detected - write operations disabled');
@@ -536,6 +567,8 @@ async function init(options = {}) {
         console.log('[App] Event Log Store initialized');
     } catch (error) {
         console.error('[App] Failed to initialize Event Log Store:', error);
+        // HIGH: Notify user of event replay system failure (may affect multi-tab sync)
+        showToast('Event replay unavailable. Some features may be limited.', 'warning', 4000);
         // Continue without event replay - non-critical feature
     }
 
@@ -545,6 +578,8 @@ async function init(options = {}) {
         console.log('[App] Event logging enabled');
     } catch (error) {
         console.error('[App] Failed to enable event logging:', error);
+        // HIGH: Notify user of EventBus logging failure (affects debugging/coordination)
+        showToast('Event logging unavailable. Session coordination may be affected.', 'warning', 4000);
         // Continue without event logging - non-critical feature
     }
 
@@ -601,6 +636,8 @@ async function init(options = {}) {
         if (Spotify.isConfigured()) {
             setupEventListeners();
             setupSpotifyButton();
+            // MEDIUM FIX: Ensure SidebarController is initialized before returning
+            await SidebarController.init();
             await SpotifyController.handleSpotifyConnect();
             return;
         }
@@ -683,10 +720,24 @@ async function init(options = {}) {
 
     // Show security checklist on first run (after other UI is ready)
     // Use imported SecurityChecklist symbol for consistency
+    // TIMING FIX: Use requestIdleCallback instead of arbitrary setTimeout
+    // Falls back to setTimeout if requestIdleCallback is not available
     if (SecurityChecklist && typeof SecurityChecklist.init === 'function') {
-        setTimeout(() => {
-            SecurityChecklist.init();
-        }, 1000);
+        const initSecurityChecklist = () => {
+            try {
+                SecurityChecklist.init();
+            } catch (e) {
+                console.error('[App] SecurityChecklist init failed:', e);
+            }
+        };
+
+        if (typeof requestIdleCallback !== 'undefined') {
+            // Use requestIdleCallback for non-blocking initialization
+            requestIdleCallback(initSecurityChecklist, { timeout: 2000 });
+        } else {
+            // Fallback for browsers without requestIdleCallback
+            setTimeout(initSecurityChecklist, 100);
+        }
     }
 
     // NOTE: Prototype pollution protection moved to window.onload handler
@@ -713,63 +764,99 @@ function setupSpotifyButton() {
 
 /**
  * Setup event listeners
+ * Note: Idempotent - safe to call multiple times, will only register listeners once
+ * MEMORY LEAK FIX: Tracks all listeners for proper cleanup via teardownEventListeners()
  */
+// Guard flag to prevent duplicate event listener registration
+let eventListenersSetup = false;
+// Track cleanup functions for all registered event listeners
+let _eventListenerCleanup = [];
+
 function setupEventListeners() {
+    // Prevent duplicate event listener registration
+    if (eventListenersSetup) {
+        console.warn('[App] Event listeners already registered, skipping setupEventListeners()');
+        return;
+    }
+    eventListenersSetup = true;
     const uploadZone = document.getElementById('upload-zone');
     const fileInput = document.getElementById('file-input');
     const resetBtn = document.getElementById('reset-btn');
     const spotifyConnectBtn = document.getElementById('spotify-connect-btn');
 
+    // Helper to track event listener for cleanup
+    const trackListener = (element, event, handler, options) => {
+        if (element) {
+            element.addEventListener(event, handler, options);
+            _eventListenerCleanup.push(() => element.removeEventListener(event, handler, options));
+        }
+    };
+
     // File upload
     if (uploadZone && fileInput) {
-        uploadZone.addEventListener('click', (e) => {
+        const uploadZoneClickHandler = (e) => {
             if (e.target.closest('button') || e.target.closest('a') || e.target.closest('.upload-alternatives')) {
                 return;
             }
             fileInput.click();
-        });
-        // Throttle drag-over events to prevent excessive DOM updates (fires at ~60fps during drag)
-        uploadZone.addEventListener('dragover', Utils.throttle(handleDragOver, 50));
-        uploadZone.addEventListener('dragleave', Utils.throttle(handleDragLeave, 50));
-        uploadZone.addEventListener('drop', handleDrop);
-        fileInput.addEventListener('change', handleFileSelect);
+        };
+        trackListener(uploadZone, 'click', uploadZoneClickHandler);
+
+        const throttledDragOver = Utils.throttle(handleDragOver, 50);
+        trackListener(uploadZone, 'dragover', throttledDragOver);
+
+        const throttledDragLeave = Utils.throttle(handleDragLeave, 50);
+        trackListener(uploadZone, 'dragleave', throttledDragLeave);
+
+        trackListener(uploadZone, 'drop', handleDrop);
+        trackListener(fileInput, 'change', handleFileSelect);
     }
 
     // Spotify connect
     if (spotifyConnectBtn) {
-        spotifyConnectBtn.addEventListener('click', (e) => {
+        const spotifyClickHandler = (e) => {
             e.stopPropagation();
             handleSpotifyConnect();
-        });
+        };
+        trackListener(spotifyConnectBtn, 'click', spotifyClickHandler);
     }
 
     // Reset
     if (resetBtn) {
-        resetBtn.addEventListener('click', handleReset);
+        trackListener(resetBtn, 'click', handleReset);
     }
 
     // Reveal actions
-    document.getElementById('explore-chat-btn')?.addEventListener('click', showChat);
-    document.getElementById('share-card-btn')?.addEventListener('click', handleShare);
-    document.getElementById('lite-explore-chat-btn')?.addEventListener('click', showChat);
-    document.getElementById('lite-share-card-btn')?.addEventListener('click', handleShare);
-    document.getElementById('lite-upload-full-btn')?.addEventListener('click', showUpload);
+    trackListener(document.getElementById('explore-chat-btn'), 'click', showChat);
+    trackListener(document.getElementById('share-card-btn'), 'click', handleShare);
+    trackListener(document.getElementById('lite-explore-chat-btn'), 'click', showChat);
+    trackListener(document.getElementById('lite-share-card-btn'), 'click', handleShare);
+    trackListener(document.getElementById('lite-upload-full-btn'), 'click', showUpload);
 
     // Chat
-    document.getElementById('chat-send')?.addEventListener('click', handleChatSend);
-    document.getElementById('chat-input')?.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') handleChatSend();
-    });
+    trackListener(document.getElementById('chat-send'), 'click', handleChatSend);
+
+    const chatInput = document.getElementById('chat-input');
+    if (chatInput) {
+        const chatInputKeypressHandler = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleChatSend();
+            }
+        };
+        trackListener(chatInput, 'keypress', chatInputKeypressHandler);
+    }
 
     // Suggestion chips (exclude demo chips which have their own handlers)
     document.querySelectorAll('.suggestion-chip:not(.demo-chip)').forEach(chip => {
-        chip.addEventListener('click', () => {
+        const chipClickHandler = () => {
             const input = document.getElementById('chat-input');
             if (input) {
                 input.value = chip.dataset.question;
                 handleChatSend();
             }
-        });
+        };
+        trackListener(chip, 'click', chipClickHandler);
     });
 
     // ==========================================
@@ -946,6 +1033,27 @@ function setupEventListeners() {
     }
 }
 
+/**
+ * Teardown event listeners
+ * MEMORY LEAK FIX: Removes all tracked event listeners to prevent memory leaks
+ * Call this before page unload or when resetting the application state
+ */
+function teardownEventListeners() {
+    // Execute all cleanup functions
+    for (const cleanup of _eventListenerCleanup) {
+        try {
+            cleanup();
+        } catch (e) {
+            console.warn('[App] Error during event listener cleanup:', e);
+        }
+    }
+    // Clear the cleanup array
+    _eventListenerCleanup = [];
+    // Reset the setup flag so listeners can be registered again if needed
+    eventListenersSetup = false;
+    console.log('[App] Event listeners torn down');
+}
+
 // ==========================================
 // Drag and Drop Handlers
 // ==========================================
@@ -1011,26 +1119,56 @@ async function processFile(file) {
 // Chat Handler
 // ==========================================
 
+// Guard flag to prevent duplicate submissions
+let isSending = false;
+
 async function handleChatSend() {
     const input = document.getElementById('chat-input');
-    const message = input.value.trim();
-    // Edge case: Provide feedback for empty/whitespace-only messages
-    if (!message) {
-        showToast('Please enter a message to send', 2000);
+    const sendBtn = document.getElementById('chat-send');
+
+    // Prevent concurrent submissions - CRITICAL: Set flag immediately after check
+    // BEFORE any async operations or DOM queries to prevent race condition
+    if (isSending) {
+        console.warn('[App] Message already sending, ignoring duplicate submission');
         return;
     }
 
+    // Set sending flag IMMEDIATELY to prevent race condition
+    // This must happen before any async operations or message validation
+    isSending = true;
+
+    const message = input.value.trim();
+
+    // Edge case: Provide feedback for empty/whitespace-only messages
+    if (!message) {
+        showToast('Please enter a message to send', 2000);
+        isSending = false;
+        return;
+    }
     input.value = '';
+    if (sendBtn) sendBtn.disabled = true;
+    if (input) input.disabled = true;
 
-    // Add user message via ChatUIController
-    ChatUIController.addMessage(message, 'user');
+    try {
+        // Add user message via ChatUIController
+        ChatUIController.addMessage(message, 'user');
 
-    // Hide suggestions
-    const suggestions = document.getElementById('chat-suggestions');
-    if (suggestions) suggestions.style.display = 'none';
+        // Hide suggestions
+        const suggestions = document.getElementById('chat-suggestions');
+        if (suggestions) suggestions.style.display = 'none';
 
-    // Get response
-    await processMessageResponse((options) => Chat.sendMessage(message, options));
+        // Get response
+        await processMessageResponse((options) => Chat.sendMessage(message, options));
+    } finally {
+        // Always restore UI state, even on error
+        isSending = false;
+        if (sendBtn) sendBtn.disabled = false;
+        if (input) input.disabled = false;
+        // Refocus input for next message
+        if (input && document.activeElement !== input) {
+            input.focus();
+        }
+    }
 }
 
 /**
@@ -1211,15 +1349,19 @@ function showChat() {
 // Global Exports
 // ==========================================
 
-// Make modal functions available globally for onclick handlers
+// HIGH FIX: Minimize window global pollution - event delegation handles most actions
+// Only export functions that are required by external modules or demo functionality
 // processMessageResponse is required by ChatUIController for regenerate/edit flows
+// showToast is required by session-manager, sidebar-controller, chat-ui-controller, error-boundary
+// handleChatSend is required by demo-controller for programmatic chat sends
+// copyErrorReport is required for the error page's copy button
 if (typeof window !== 'undefined') {
-    window.executeReset = executeReset;
-    window.hideResetConfirmModal = hideResetConfirmModal;
-    window.showPrivacyDashboard = showPrivacyDashboard;
-    window.clearSensitiveData = clearSensitiveData;
+    // Note: executeReset, hideResetConfirmModal, showPrivacyDashboard, clearSensitiveData
+    // are handled by event delegation via data-action attributes - no window export needed
     window.processMessageResponse = processMessageResponse;
-    window.showToast = showToast; // Export showToast for use in other modules
+    window.handleChatSend = handleChatSend;
+    window.showToast = showToast;
+    // copyErrorReport is already defined in showLoadingError() for error page use
 }
 
 // ==========================================
