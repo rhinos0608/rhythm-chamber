@@ -168,7 +168,8 @@ async function initWorkerAsync() {
             // Check if we're in a context where workers can be created
             if (typeof Worker === 'undefined') {
                 console.warn('[LocalVectorStore] Web Workers not supported, using sync fallback');
-                workerInitPromise = null;
+                // Don't set workerInitPromise = null here - it causes a race condition
+                // The promise will resolve with null and callers can handle it
                 resolve(null);
                 return;
             }
@@ -475,9 +476,11 @@ const LocalVectorStore = {
         }
 
         // Pre-initialize worker to avoid user-facing delays during first search
-        await initWorkerAsync().catch(e => {
-            console.warn('[LocalVectorStore] Worker pre-init failed, will use sync fallback:', e);
-        });
+        // Note: initWorkerAsync() never rejects - it resolves with the worker or null
+        const worker = await initWorkerAsync();
+        if (!worker) {
+            console.warn('[LocalVectorStore] Worker pre-init failed, will use sync fallback');
+        }
 
         return this.count();
     },
