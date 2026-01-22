@@ -201,10 +201,10 @@ async function callProvider(config, apiKey, messages, tools, onProgress = null) 
         error.provider = config.provider;
         error.recoverable = true;
         error.cooldownRemaining = circuitCheck.cooldownRemaining;
-        error.suggestion = `${config.provider} is temporarily unavailable. ${circuitCheck.cooldownRemaining
-                ? `Try again in ${Math.ceil(circuitCheck.cooldownRemaining / 1000)}s.`
-                : 'Try a different provider.'
-            }`;
+        const timeMessage = circuitCheck.cooldownRemaining
+            ? `Try again in ${Math.ceil(circuitCheck.cooldownRemaining / 1000)}s.`
+            : 'Try a different provider.';
+        error.suggestion = `${config.provider} is temporarily unavailable. ${timeMessage}`;
         throw error;
     }
 
