@@ -42,7 +42,6 @@ const logger = createLogger('Main');
 // ==========================================
 
 import { Security, SecurityCoordinator } from './security/index.js';
-import { DEPRECATED_WINDOW_GLOBALS, setupDeprecatedWindowGlobals } from './window-globals-debug.js';
 import { ConfigLoader } from './services/config-loader.js';
 
 // Validate secure context immediately before ANY other imports
@@ -59,12 +58,6 @@ if (!securityCheck.secure) {
 if (safeModeReason === null) {
     logger.debug('Security context validated');
 }
-
-// ==========================================
-// Setup Deprecation Warnings for Window Globals
-// ==========================================
-setupDeprecatedWindowGlobals();
-logger.debug('Window globals deprecation warnings enabled');
 
 // ==========================================
 // Import ALL Modules (Dependency Order)
@@ -175,13 +168,14 @@ import { FallbackResponseService } from './services/fallback-response-service.js
 import { ErrorBoundary, installGlobalErrorHandler } from './services/error-boundary.js';
 
 // ==========================================
-// ES Module Architecture (No more window.X pollution!)
+// ES Module Architecture (Migration Complete)
 // ==========================================
-// Breaking change: window.X globals have been removed.
-// All modules should now be accessed via ES imports.
-// ModuleRegistry is used for lazy-loaded modules (Ollama, RAG, LocalVectorStore, LocalEmbeddings)
+// All modules are accessed via ES imports. ModuleRegistry is used for
+// lazy-loaded modules (Ollama, RAG, LocalVectorStore, LocalEmbeddings).
+// Note: window.Config is still set by ConfigLoader for backward compatibility.
+// window.SidebarController is exposed for inline onclick handlers.
 
-logger.debug('All modules imported via ES modules - no window globals');
+logger.debug('All modules imported via ES modules');
 
 
 // ==========================================

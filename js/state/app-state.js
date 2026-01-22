@@ -77,15 +77,89 @@ let _pendingNotification = false;
 let _debugMode = false;
 let _changedDomains = new Set();
 
+// ==========================================
+// Freeze Configuration
+// ==========================================
+
+/**
+ * Development detection - checks if we're in development mode
+ * Uses multiple heuristics for reliability across different environments
+ */
+const isDevelopment = (() => {
+    // Check for explicit NODE_ENV (most reliable in build systems)
+    if (typeof process !== 'undefined' && process.env) {
+        return process.env.NODE_ENV === 'development';
+    }
+    // Check for build-time global (common pattern)
+    if (typeof __DEV__ !== 'undefined') {
+        return __DEV__;
+    }
+    // Check for common development indicators
+    if (typeof window !== 'undefined') {
+        // Check localhost URL
+        if (window.location.hostname === 'localhost' ||
+            window.location.hostname === '127.0.0.1' ||
+            window.location.hostname === '') {
+            return true;
+        }
+        // Check for devtools
+        if (window.__DEVTOOLS__ || window.devTools) {
+            return true;
+        }
+    }
+    // Default to production for safety (better to miss dev optimizations than miss prod optimizations)
+    return false;
+})();
+
+/**
+ * Configuration flag controlling deep freeze behavior
+ * - Development: Full deep freeze to catch mutations
+ * - Production: Selective freeze for performance
+ */
+const ENABLE_DEEP_FREEZE = isDevelopment;
+
+/**
+ * Domains that contain large data structures and should use shallow freeze in production
+ */
+const LARGE_DATA_DOMAINS = ['data', 'demo'];
+
+/**
+ * Shallow freeze - only freezes the top level of an object
+ * Much faster than deepFreeze for large structures (arrays with 100k+ items)
+ * Still prevents direct property assignment/deletion on the frozen object
+ *
+ * @param {*} obj - Object to freeze
+ * @returns {*} The frozen object (or primitive as-is)
+ */
+function shallowFreeze(obj) {
+    if (obj === null || typeof obj !== 'object') {
+        return obj;
+    }
+    return Object.freeze(obj);
+}
+
 /**
  * Deep freeze an object to prevent mutations
  * HNW Hierarchy: Enforces immutability at runtime
+ *
+ * In production: Uses selective strategy - shallow freeze for large data domains
+ * In development: Full deep freeze to catch mutations everywhere
+ *
+ * @param {*} obj - Object to freeze
+ * @param {string} [domain] - Optional domain name for selective freezing
+ * @returns {*} The frozen object
  */
-function deepFreeze(obj) {
+function deepFreeze(obj, domain = null) {
     if (obj === null || typeof obj !== 'object') {
         return obj;
     }
 
+    // In production, use shallow freeze for large data domains
+    if (!ENABLE_DEEP_FREEZE && domain && LARGE_DATA_DOMAINS.includes(domain)) {
+        return shallowFreeze(obj);
+    }
+
+    // Recursively freeze all nested objects
     Object.keys(obj).forEach(key => {
         const value = obj[key];
         if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
@@ -138,8 +212,20 @@ function scheduleNotification() {
         const changedArray = Array.from(_changedDomains);
         _changedDomains.clear();
 
-        // Notify all subscribers with frozen state and changed domains
-        const frozenState = deepFreeze(deepClone(_state));
+        // Clone state, then apply selective freezing based on domain
+        const clonedState = deepClone(_state);
+
+        // Freeze each domain with appropriate strategy
+        VALID_DOMAINS.forEach(domain => {
+            if (clonedState[domain] && typeof clonedState[domain] === 'object') {
+                // Pass domain for selective freeze strategy in production
+                clonedState[domain] = deepFreeze(clonedState[domain], domain);
+            }
+        });
+
+        // Freeze the root state object
+        const frozenState = Object.freeze(clonedState);
+
         _subscribers.forEach(callback => {
             try {
                 callback(frozenState, changedArray);
@@ -187,7 +273,14 @@ const AppState = {
     get(domain = null) {
         if (!_state) {
             console.warn('[AppState] State not initialized, returning defaults');
-            return deepFreeze(deepClone(INITIAL_STATE));
+            const cloned = deepClone(INITIAL_STATE);
+            // Freeze each domain selectively
+            VALID_DOMAINS.forEach(d => {
+                if (cloned[d] && typeof cloned[d] === 'object') {
+                    cloned[d] = deepFreeze(cloned[d], d);
+                }
+            });
+            return Object.freeze(cloned);
         }
 
         if (domain) {
@@ -195,10 +288,18 @@ const AppState = {
                 console.error(`[AppState] Unknown domain: ${domain}`);
                 return null;
             }
-            return deepFreeze(deepClone(_state[domain]));
+            // Pass domain for selective freeze strategy
+            return deepFreeze(deepClone(_state[domain]), domain);
         }
 
-        return deepFreeze(deepClone(_state));
+        // Clone state, then apply selective freezing based on domain
+        const clonedState = deepClone(_state);
+        VALID_DOMAINS.forEach(d => {
+            if (clonedState[d] && typeof clonedState[d] === 'object') {
+                clonedState[d] = deepFreeze(clonedState[d], d);
+            }
+        });
+        return Object.freeze(clonedState);
     },
 
     /**
@@ -436,6 +537,18 @@ const AppState = {
      */
     getSubscriberCount() {
         return _subscribers.size;
+    },
+
+    /**
+     * Get freeze configuration (for debugging/monitoring)
+     * @returns {{ isDevelopment: boolean, deepFreezeEnabled: boolean, largeDataDomains: string[] }}
+     */
+    getFreezeConfig() {
+        return {
+            isDevelopment,
+            deepFreezeEnabled: ENABLE_DEEP_FREEZE,
+            largeDataDomains: [...LARGE_DATA_DOMAINS]
+        };
     }
 };
 
