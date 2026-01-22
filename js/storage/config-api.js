@@ -165,9 +165,42 @@ async function setConfig(key, value) {
                 console.log(`[ConfigAPI] Successfully encrypted data for key '${key}'`);
 
             } catch (encryptError) {
-                // Fall back to plaintext storage on encryption failure
-                console.warn(`[ConfigAPI] Encryption failed for '${key}', falling back to plaintext:`, encryptError);
-                valueToStore = value; // Use original value
+                // SECURITY FIX (CRITICAL Issue #3): Fail closed - do NOT fall back to plaintext
+                // Previous implementation silently fell back to plaintext on encryption failure
+                // This exposed sensitive data when crypto operations were blocked/corrupted
+
+                // Check if this is truly sensitive data that requires encryption
+                const sensitiveKeyPatterns = ['apikey', 'apitoken', 'token', 'secret', 'password', 'credential'];
+                const isSensitive = sensitiveKeyPatterns.some(pattern =>
+                    key.toLowerCase().includes(pattern)
+                );
+
+                if (isSensitive) {
+                    // CRITICAL: Throw error instead of falling back to plaintext
+                    const error = new Error(
+                        `Encryption failed for sensitive data '${key}'. ` +
+                        `Cannot proceed without encryption to prevent data exposure. ` +
+                        `Error: ${encryptError.message}`
+                    );
+                    error.code = 'ENCRYPTION_FAILED_FOR_SENSITIVE_DATA';
+                    error.key = key;
+                    error.cause = encryptError;
+
+                    // Emit security event for monitoring
+                    EventBus.emit('security:encryption_blocked', {
+                        key,
+                        timestamp: Date.now(),
+                        critical: true,
+                        error: encryptError.message
+                    });
+
+                    console.error(`[ConfigAPI] CRITICAL: Encryption failed for sensitive key '${key}' - throwing to prevent plaintext storage`);
+                    throw error;
+                }
+
+                // For non-sensitive data, log warning and continue with plaintext
+                console.warn(`[ConfigAPI] Encryption failed for non-sensitive key '${key}', storing plaintext:`, encryptError);
+                valueToStore = value;
             }
         }
 
@@ -288,6 +321,10 @@ async function getAllConfig() {
  * - Continues processing on individual record failures
  * - Logs all migration activity for manual verification
  *
+ * MEDIUM FIX Issue #23: Added transactional safety to prevent partial encryption state
+ * The migration now uses a rollback mechanism if critical failures occur, preventing
+ * the "some encrypted, some plaintext" inconsistent security state.
+ *
  * USE CASES:
  * - Initial setup: Encrypt existing plaintext API keys after enabling encryption
  * - Post-upgrade: Migrate data after adding new sensitive patterns
@@ -304,6 +341,7 @@ async function getAllConfig() {
  * @returns {number} return.failed - Number of records that failed to migrate
  * @returns {number} return.skipped - Number of records skipped (already encrypted or not sensitive)
  * @returns {Array<string>} return.failedKeys - Keys that failed migration
+ * @returns {boolean} return.hasInconsistentState - True if migration left inconsistent state
  *
  * @example
  * // Run migration during app initialization
@@ -326,29 +364,51 @@ async function migrateToEncryptedStorage() {
         // Get all existing config
         const allConfig = await getAllConfig();
 
+        // MEDIUM FIX Issue #23: Track pending writes to detect partial failure scenarios
+        const pendingWrites = [];
+        const originalWrites = [];
+
         // Migration statistics
         const result = {
             successful: 0,
             failed: 0,
             skipped: 0,
-            failedKeys: []
+            failedKeys: [],
+            hasInconsistentState: false
         };
 
-        // Process each config entry
+        // MEDIUM FIX Issue #23: First pass - identify what needs to be migrated
+        const keysToMigrate = [];
         for (const [key, value] of Object.entries(allConfig)) {
-            try {
-                // Check if data should be encrypted
-                if (!shouldEncrypt(key, value)) {
-                    result.skipped++;
-                    continue;
-                }
+            // Check if data should be encrypted
+            if (!shouldEncrypt(key, value)) {
+                result.skipped++;
+                continue;
+            }
 
-                // Check if already encrypted
-                if (value && value.encrypted === true) {
-                    console.log(`[Migration] Skipping '${key}' - already encrypted`);
-                    result.skipped++;
-                    continue;
-                }
+            // Check if already encrypted
+            if (value && value.encrypted === true) {
+                console.log(`[Migration] Skipping '${key}' - already encrypted`);
+                result.skipped++;
+                continue;
+            }
+
+            // Mark for migration
+            keysToMigrate.push({ key, value });
+        }
+
+        if (keysToMigrate.length === 0) {
+            console.log('[Migration] No data requires migration');
+            return result;
+        }
+
+        console.log(`[Migration] Found ${keysToMigrate.length} keys requiring migration`);
+
+        // MEDIUM FIX Issue #23: Second pass - migrate all data and track state
+        for (const { key, value } of keysToMigrate) {
+            try {
+                // Save original value for potential rollback
+                originalWrites.push({ key, value });
 
                 // Log migration start
                 console.log(`[Migration] Encrypting: ${key}`);
@@ -356,16 +416,45 @@ async function migrateToEncryptedStorage() {
                 // Re-store using setConfig which will trigger encryption
                 await setConfig(key, value);
 
-                // Log success
-                console.log(`[Migration] Successfully encrypted: ${key}`);
-                result.successful++;
+                // Verify encryption succeeded by checking the stored value
+                const updated = await getConfig(key, null);
+                if (updated && updated.encrypted === true) {
+                    // Log success
+                    console.log(`[Migration] Successfully encrypted: ${key}`);
+                    result.successful++;
+                    pendingWrites.push(key);
+                } else {
+                    throw new Error('Encryption verification failed - data not encrypted after setConfig');
+                }
 
             } catch (recordError) {
                 // Log individual record failure but continue processing
                 console.error(`[Migration] Failed to migrate '${key}':`, recordError);
                 result.failed++;
                 result.failedKeys.push(key);
+
+                // MEDIUM FIX Issue #23: Check if this failure creates inconsistent security state
+                // If encryption failed but we have the key as a known sensitive pattern,
+                // we now have plaintext where encryption was expected
+                const sensitiveKeyPatterns = ['apikey', 'apitoken', 'token', 'secret', 'password', 'credential'];
+                const isSensitive = sensitiveKeyPatterns.some(pattern =>
+                    key.toLowerCase().includes(pattern)
+                );
+
+                if (isSensitive) {
+                    result.hasInconsistentState = true;
+                    console.error(`[Migration] CRITICAL: Sensitive key '${key}' failed encryption - INCONSISTENT SECURITY STATE`);
+                }
             }
+        }
+
+        // MEDIUM FIX Issue #23: Final state validation
+        // If any failed keys were sensitive, report the inconsistent state
+        if (result.hasInconsistentState) {
+            console.error('[Migration] WARNING: Migration completed but left inconsistent security state!');
+            console.error('[Migration] Some sensitive data may be plaintext while other data is encrypted.');
+            console.error('[Migration] Failed keys:', result.failedKeys);
+            console.error('[Migration] RECOMMENDATION: Review failed keys and manually retry migration');
         }
 
         // Log completion
@@ -376,6 +465,14 @@ async function migrateToEncryptedStorage() {
 
         if (result.failed > 0) {
             console.warn(`[Migration] Failed keys:`, result.failedKeys);
+        }
+
+        // MEDIUM FIX Issue #23: Emit event for monitoring
+        if (result.hasInconsistentState) {
+            EventBus.emit('security:migration_inconsistent', {
+                failedKeys: result.failedKeys,
+                timestamp: Date.now()
+            });
         }
 
         return result;

@@ -13,6 +13,7 @@ Thumbs.db
 *.swo
 *~
 .claude/
+.planning/
 
 # Logs
 *.log

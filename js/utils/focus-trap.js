@@ -96,9 +96,27 @@ const globalFocusHistory = new FocusHistory();
  * @returns {Object} Focus trap control object
  */
 export function createFocusTrap(container, options = {}) {
+    // Edge case: Throw error instead of returning null to force caller handling (FOCUS TRAP FIX)
+    // Returning null silently allows focus traps to fail without callers noticing,
+    // leading to accessibility violations where users can tab outside modals
     if (!container) {
-        console.error('[FocusTrap] Container element is required');
-        return null;
+        const error = new Error('[FocusTrap] Container element is required');
+        error.code = 'FOCUS_TRAP_NO_CONTAINER';
+        throw error;
+    }
+
+    // Edge case: Validate container is actually an HTMLElement (FOCUS TRAP FIX)
+    if (!(container instanceof HTMLElement)) {
+        const error = new Error(`[FocusTrap] Container must be an HTMLElement, got ${typeof container}`);
+        error.code = 'FOCUS_TRAP_INVALID_CONTAINER';
+        throw error;
+    }
+
+    // Edge case: Validate container is in DOM (FOCUS TRAP FIX)
+    if (!document.contains(container)) {
+        const error = new Error('[FocusTrap] Container element is not in the DOM');
+        error.code = 'FOCUS_TRAP_CONTAINER_NOT_IN_DOM';
+        throw error;
     }
 
     const {
@@ -351,8 +369,17 @@ export function createModalFocusTrap(modalElement, options = {}) {
 export function setupModalFocusTrap(modalId, onClose) {
     const modal = document.getElementById(modalId);
     if (!modal) {
-        console.warn(`[FocusTrap] Modal with id "${modalId}" not found`);
-        return () => {};
+        // Edge case: Throw error instead of silent failure (FOCUS TRAP FIX)
+        const error = new Error(`[FocusTrap] Modal with id "${modalId}" not found`);
+        error.code = 'FOCUS_TRAP_MODAL_NOT_FOUND';
+        throw error;
+    }
+
+    // Edge case: Validate modal is in DOM (FOCUS TRAP FIX)
+    if (!document.contains(modal)) {
+        const error = new Error(`[FocusTrap] Modal with id "${modalId}" is not in the DOM`);
+        error.code = 'FOCUS_TRAP_MODAL_NOT_IN_DOM';
+        throw error;
     }
 
     const modalContent = modal.querySelector('.modal-content, .settings-content, .tools-content') || modal;

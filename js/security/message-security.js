@@ -72,6 +72,42 @@ function deepSortObject(obj) {
     return sorted;
 }
 
+/**
+ * Constant-time string comparison to prevent timing attacks
+ *
+ * SECURITY FIX (MEDIUM Issue #13): Adds timing-safe comparison for HMAC signatures
+ *
+ * Standard string comparison (===) returns early on first mismatch, leaking
+ * information about mismatch position through timing side channels.
+ *
+ * This function is used for comparing HMAC signatures as an additional layer
+ * of protection beyond crypto.subtle.verify(), which also provides timing safety
+ * but we add defense-in-depth.
+ *
+ * NOTE: crypto.subtle.verify() already provides timing-safe comparison for HMAC.
+ * This constant-time compare is used when manual string comparison is needed,
+ * such as comparing pre-computed signature strings or hash values.
+ *
+ * @param {string} a - First string to compare
+ * @param {string} b - Second string to compare
+ * @returns {boolean} True if strings are identical, false otherwise
+ */
+function constantTimeCompare(a, b) {
+    if (typeof a !== 'string' || typeof b !== 'string') {
+        return false;
+    }
+
+    const maxLen = Math.max(a.length, b.length);
+    let result = a.length ^ b.length;
+    for (let i = 0; i < maxLen; i++) {
+        const charA = i < a.length ? a.charCodeAt(i) : 0;
+        const charB = i < b.length ? b.charCodeAt(i) : 0;
+        result |= charA ^ charB;
+    }
+
+    return result === 0;
+}
+
 const MessageSecurity = {
     /**
      * Sign message using HMAC-SHA256
@@ -469,7 +505,24 @@ const MessageSecurity = {
         } catch (error) {
             console.error('[MessageSecurity] Failed to mark nonce as used:', error);
         }
-    }
+    },
+
+    /**
+     * Constant-time string comparison for security-critical comparisons
+     *
+     * SECURITY FIX (MEDIUM Issue #13): Exported for use in signature/token comparisons
+     *
+     * Use this for comparing:
+     * - HMAC signatures (as additional layer beyond crypto.subtle.verify)
+     * - API keys/tokens when validating user input
+     * - Cryptographic hashes
+     * - Any secret values where timing leakage matters
+     *
+     * @param {string} a - First string
+     * @param {string} b - Second string
+     * @returns {boolean} True if strings match
+     */
+    constantTimeCompare
 };
 
 export { MessageSecurity };

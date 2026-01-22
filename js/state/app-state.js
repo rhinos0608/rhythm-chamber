@@ -478,6 +478,12 @@ const AppState = {
     /**
      * Get active data (demo or real) transparently
      * HNW: Components use this to access data without knowing if demo mode is active
+     * CRITICAL FIX for High Issue #11: Returns deep cloned data to prevent state mutation
+     *
+     * Previous implementation returned direct references to state objects, allowing
+     * callers to mutate state through getters. This version deep clones all returned
+     * data to ensure immutability.
+     *
      * @returns {{ streams: Array, patterns: Object, personality: Object, isDemoMode: boolean }}
      */
     getActiveData() {
@@ -486,18 +492,20 @@ const AppState = {
         const isDemoMode = _state.demo?.isDemoMode || false;
 
         if (isDemoMode) {
+            // CRITICAL FIX: Deep clone to prevent mutation through getter
             return {
-                streams: _state.demo.streams,
-                patterns: _state.demo.patterns,
-                personality: _state.demo.personality,
+                streams: deepClone(_state.demo.streams),
+                patterns: deepClone(_state.demo.patterns),
+                personality: deepClone(_state.demo.personality),
                 isDemoMode: true
             };
         }
 
+        // CRITICAL FIX: Deep clone to prevent mutation through getter
         return {
-            streams: _state.data.streams,
-            patterns: _state.data.patterns,
-            personality: _state.data.personality,
+            streams: deepClone(_state.data.streams),
+            patterns: deepClone(_state.data.patterns),
+            personality: deepClone(_state.data.personality),
             isDemoMode: false
         };
     },

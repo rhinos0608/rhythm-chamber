@@ -94,24 +94,37 @@ async function init(options = {}) {
 
 /**
  * Check quota immediately and update status
+ * CRITICAL FIX for High Issue #12: Accounts for pending writes in quota estimation
+ *
+ * Previous implementation only checked current usage, missing writes that are pending
+ * in the WAL or operation queue. This version accepts pendingWriteSizeBytes parameter
+ * to provide accurate quota estimation before large writes.
+ *
+ * @param {number} [pendingWriteSizeBytes=0] - Size of pending writes not yet committed
  * @returns {Promise<QuotaStatus>} Current quota status
  */
-async function checkNow() {
+async function checkNow(pendingWriteSizeBytes = 0) {
     try {
         const estimate = await getStorageEstimate();
         const previousTier = currentStatus.tier;
 
+        // CRITICAL FIX for High Issue #12: Include pending writes in effective usage
+        // This prevents scenarios where a check passes but actual write exceeds quota
+        const effectiveUsage = estimate.usage + (pendingWriteSizeBytes || 0);
+        const effectivePercentage = (effectiveUsage / estimate.quota) * 100;
+        const effectiveAvailable = estimate.quota - effectiveUsage;
+
         currentStatus = {
-            usageBytes: estimate.usage,
+            usageBytes: effectiveUsage,
             quotaBytes: estimate.quota,
-            percentage: (estimate.usage / estimate.quota) * 100,
-            availableBytes: estimate.quota - estimate.usage,
+            percentage: effectivePercentage,
+            availableBytes: effectiveAvailable,
             isBlocked: false,
             tier: 'normal'
         };
 
-        // Determine tier and emit events
-        if (currentStatus.percentage >= QUOTA_CONFIG.criticalThreshold * 100) {
+        // Determine tier and emit events based on effective percentage
+        if (effectivePercentage >= QUOTA_CONFIG.criticalThreshold * 100) {
             currentStatus.tier = 'critical';
             currentStatus.isBlocked = true;
 
@@ -119,10 +132,11 @@ async function checkNow() {
                 EventBus.emit('storage:quota_critical', {
                     usageBytes: currentStatus.usageBytes,
                     quotaBytes: currentStatus.quotaBytes,
-                    percentage: currentStatus.percentage
+                    percentage: currentStatus.percentage,
+                    pendingWriteSizeBytes: pendingWriteSizeBytes
                 });
             }
-        } else if (currentStatus.percentage >= QUOTA_CONFIG.warningThreshold * 100) {
+        } else if (effectivePercentage >= QUOTA_CONFIG.warningThreshold * 100) {
             currentStatus.tier = 'warning';
 
             // Emit warning on any transition INTO warning tier (from normal or critical)
@@ -130,7 +144,8 @@ async function checkNow() {
                 EventBus.emit('storage:quota_warning', {
                     usageBytes: currentStatus.usageBytes,
                     quotaBytes: currentStatus.quotaBytes,
-                    percentage: currentStatus.percentage
+                    percentage: currentStatus.percentage,
+                    pendingWriteSizeBytes: pendingWriteSizeBytes
                 });
             }
         } else if (previousTier !== 'normal') {
@@ -144,12 +159,14 @@ async function checkNow() {
         }
 
         // Emit threshold_exceeded when crossing cleanup threshold (90%)
-        if (currentStatus.percentage >= CLEANUP_THRESHOLD_PERCENT) {
+        // Use effective percentage for this check
+        if (effectivePercentage >= CLEANUP_THRESHOLD_PERCENT) {
             const thresholdPayload = {
                 percent: currentStatus.percentage,
                 usageBytes: currentStatus.usageBytes,
                 quotaBytes: currentStatus.quotaBytes,
-                availableBytes: currentStatus.availableBytes
+                availableBytes: currentStatus.availableBytes,
+                pendingWriteSizeBytes: pendingWriteSizeBytes
             };
             emitLocalEvent('threshold_exceeded', thresholdPayload);
             EventBus.emit('storage:threshold_exceeded', thresholdPayload);
@@ -227,13 +244,33 @@ function isWriteBlocked() {
 /**
  * Notify QuotaManager of a large write for immediate quota check
  * Should be called after writes larger than largeWriteThresholdBytes
+ * CRITICAL FIX for High Issue #12: Pre-flight quota check before large writes
+ *
  * @param {number} bytesWritten - Number of bytes written
+ * @param {number} [pendingBytes=0] - Additional pending bytes to account for
  */
-async function notifyLargeWrite(bytesWritten) {
+async function notifyLargeWrite(bytesWritten, pendingBytes = 0) {
     if (bytesWritten >= QUOTA_CONFIG.largeWriteThresholdBytes) {
         console.log('[QuotaManager] Large write detected, checking quota');
-        await checkNow();
+        // Include any pending bytes in the quota check
+        await checkNow(pendingBytes);
     }
+}
+
+/**
+ * Check if a write of given size would fit within quota limits
+ * CRITICAL FIX for High Issue #12: Pre-flight quota estimation
+ *
+ * @param {number} writeSizeBytes - Size of write to check
+ * @returns {Promise<{ fits: boolean, currentStatus: QuotaStatus }>}
+ */
+async function checkWriteFits(writeSizeBytes) {
+    const status = await checkNow(writeSizeBytes);
+
+    return {
+        fits: !status.isBlocked && status.availableBytes >= 0,
+        currentStatus: status
+    };
 }
 
 /**
@@ -374,6 +411,7 @@ export const QuotaManager = {
     getStatus,
     isWriteBlocked,
     notifyLargeWrite,
+    checkWriteFits,  // CRITICAL FIX for High Issue #12: Pre-flight quota estimation
     setWarningThreshold,
     setCriticalThreshold,
     stopPolling,

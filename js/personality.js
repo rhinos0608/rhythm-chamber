@@ -65,7 +65,9 @@ function scorePersonality(patterns) {
     const breakdown = [];
 
     // Comfort vs Discovery ratio
-    if (patterns.comfortDiscovery) {
+    // EDGE CASE FIX: Validate that pattern is an object before accessing properties
+    // If patterns.comfortDiscovery is null (truthy but not an object), accessing .ratio throws
+    if (patterns.comfortDiscovery && typeof patterns.comfortDiscovery === 'object') {
         const ratio = patterns.comfortDiscovery.ratio || 0;
         if (ratio > 50) {
             scores.comfort_curator += 3;
@@ -81,7 +83,7 @@ function scorePersonality(patterns) {
     }
 
     // Era detection
-    if (patterns.eras && patterns.eras.hasEras) {
+    if (patterns.eras && typeof patterns.eras === 'object' && patterns.eras.hasEras) {
         scores.emotional_archaeologist += 3;
         evidence.emotional_archaeologist.push(patterns.eras.description);
         breakdown.push({ label: `Eras: ${patterns.eras.count || 0} distinct periods detected`, points: 3 });
@@ -90,7 +92,7 @@ function scorePersonality(patterns) {
     }
 
     // Time patterns
-    if (patterns.timePatterns && patterns.timePatterns.isMoodEngineer) {
+    if (patterns.timePatterns && typeof patterns.timePatterns === 'object' && patterns.timePatterns.isMoodEngineer) {
         scores.mood_engineer += 3;
         evidence.mood_engineer.push(patterns.timePatterns.description);
         breakdown.push({ label: 'Time patterns: Morning ≠ Evening', points: 3 });
@@ -99,7 +101,7 @@ function scorePersonality(patterns) {
     }
 
     // Social patterns
-    if (patterns.socialPatterns && patterns.socialPatterns.isSocialChameleon) {
+    if (patterns.socialPatterns && typeof patterns.socialPatterns === 'object' && patterns.socialPatterns.isSocialChameleon) {
         scores.social_chameleon += 2;
         evidence.social_chameleon.push(patterns.socialPatterns.description);
         breakdown.push({ label: 'Social patterns: Weekday ≠ Weekend', points: 2 });
@@ -108,19 +110,22 @@ function scorePersonality(patterns) {
     }
 
     // Ghosted artists (indicates emotional processing)
-    if (patterns.ghostedArtists && patterns.ghostedArtists.hasGhosted) {
+    if (patterns.ghostedArtists && typeof patterns.ghostedArtists === 'object' && patterns.ghostedArtists.hasGhosted) {
         scores.emotional_archaeologist += 2;
-        const ghosted = patterns.ghostedArtists.ghosted[0];
-        evidence.emotional_archaeologist.push(
-            `You used to play ${ghosted.artist} constantly (${ghosted.totalPlays} times), then stopped ${ghosted.daysSince} days ago`
-        );
-        breakdown.push({ label: `Ghosted artists: ${patterns.ghostedArtists.ghosted.length} detected`, points: 2 });
+        // EDGE CASE FIX: Add safety check for ghosted array access
+        const ghosted = Array.isArray(patterns.ghostedArtists.ghosted) && patterns.ghostedArtists.ghosted[0];
+        if (ghosted) {
+            evidence.emotional_archaeologist.push(
+                `You used to play ${ghosted.artist} constantly (${ghosted.totalPlays} times), then stopped ${ghosted.daysSince} days ago`
+            );
+        }
+        breakdown.push({ label: `Ghosted artists: ${patterns.ghostedArtists.ghosted?.length || 0} detected`, points: 2 });
     } else {
         breakdown.push({ label: 'Ghosted artists: None detected', points: 0 });
     }
 
     // Discovery explosions
-    if (patterns.discoveryExplosions && patterns.discoveryExplosions.hasExplosions) {
+    if (patterns.discoveryExplosions && typeof patterns.discoveryExplosions === 'object' && patterns.discoveryExplosions.hasExplosions) {
         scores.discovery_junkie += 2;
         scores.emotional_archaeologist += 1;
         evidence.discovery_junkie.push(patterns.discoveryExplosions.description);
@@ -130,7 +135,7 @@ function scorePersonality(patterns) {
     }
 
     // Mood searching
-    if (patterns.moodSearching && patterns.moodSearching.hasMoodSearching) {
+    if (patterns.moodSearching && typeof patterns.moodSearching === 'object' && patterns.moodSearching.hasMoodSearching) {
         scores.mood_engineer += 2;
         evidence.mood_engineer.push(patterns.moodSearching.description);
         breakdown.push({ label: `Mood searching: ${patterns.moodSearching.count || 0} rapid-skip moments`, points: 2 });
@@ -139,7 +144,7 @@ function scorePersonality(patterns) {
     }
 
     // True favorites mismatch (indicates engagement over habit)
-    if (patterns.trueFavorites && patterns.trueFavorites.hasMismatch) {
+    if (patterns.trueFavorites && typeof patterns.trueFavorites === 'object' && patterns.trueFavorites.hasMismatch) {
         scores.mood_engineer += 1;
         evidence.mood_engineer.push(patterns.trueFavorites.description);
         breakdown.push({ label: 'True favorites: Engagement differs from habit', points: 1 });

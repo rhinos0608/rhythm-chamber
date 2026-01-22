@@ -534,7 +534,8 @@ async function clearSettings() {
     if (Storage.removeConfig) {
         try {
             await Storage.removeConfig(STORAGE_KEYS.SETTINGS);
-            console.log('[Settings] Cleared from IndexedDB');
+            _cachedSettings = null; // Clear in-memory cache so subsequent getSettings() fetches fresh defaults
+            console.log('[Settings] Cleared from IndexedDB and cache');
         } catch (e) {
             console.warn('[Settings] Failed to clear from IndexedDB:', e);
         }

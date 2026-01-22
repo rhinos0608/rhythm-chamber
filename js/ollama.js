@@ -92,8 +92,13 @@ async function ollamaFetch(path, options = {}, timeout = CONNECTION_TIMEOUT_MS) 
     const endpoint = getEndpoint();
     const url = `${endpoint}${path}`;
 
+    // CRITICAL FIX #3: Fix AbortController timeout race condition
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    let timeoutFired = false;
+    const timeoutId = setTimeout(() => {
+        timeoutFired = true;
+        controller.abort();
+    }, timeout);
 
     try {
         const response = await fetch(url, {
@@ -104,11 +109,20 @@ async function ollamaFetch(path, options = {}, timeout = CONNECTION_TIMEOUT_MS) 
                 ...options.headers
             }
         });
-        clearTimeout(timeoutId);
+
+        // Only clear timeout if it hasn't fired yet
+        if (!timeoutFired) {
+            clearTimeout(timeoutId);
+        }
         return response;
     } catch (error) {
-        clearTimeout(timeoutId);
-        if (error.name === 'AbortError') {
+        // Clear timeout in error case too
+        if (!timeoutFired) {
+            clearTimeout(timeoutId);
+        }
+
+        // Check if this was a timeout
+        if (timeoutFired || error.name === 'AbortError') {
             throw new Error(`Ollama request timed out after ${timeout}ms`);
         }
         throw error;
@@ -341,9 +355,13 @@ async function chat(messages, model, options = {}) {
     if (stream && onToken) {
         const result = await handleStreamingResponse(response, onToken);
 
-        // Check if streaming returned empty content - fallback to non-streaming
-        if (!result.content && !result.toolCalls) {
-            console.warn('[Ollama] Streaming returned empty response, retrying non-streaming');
+        // HIGH FIX #10: Only fallback to non-streaming if there was a stream error
+        // If streaming completed successfully but returned empty content, that's valid
+        // (some prompts legitimately produce no output). Distinguish between:
+        // - Stream error (network/parsing issue) -> retry with non-streaming
+        // - Empty but valid response -> return as-is, don't retry
+        if (!result.content && !result.toolCalls && result.streamError) {
+            console.warn('[Ollama] Streaming failed with error, retrying non-streaming');
 
             // Make a new non-streaming request
             const fallbackRequestBody = { ...requestBody, stream: false };
@@ -403,39 +421,46 @@ async function handleStreamingResponse(response, onToken) {
     let fullContent = '';
     let lastData = null;
     let buffer = '';  // Buffer for incomplete chunks
+    let streamError = false;  // HIGH FIX #10: Track if stream had an error
 
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-        // Append to buffer and process complete lines
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
+            // Append to buffer and process complete lines
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
 
-        // Keep last incomplete line in buffer
-        buffer = lines.pop() || '';
+            // Keep last incomplete line in buffer
+            buffer = lines.pop() || '';
 
-        for (const line of lines) {
-            const trimmedLine = line.trim();
-            if (!trimmedLine) continue;
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (!trimmedLine) continue;
 
-            const data = safeJsonParse(trimmedLine, null);
+                const data = safeJsonParse(trimmedLine, null);
+                if (data && data.message?.content) {
+                    fullContent += data.message.content;
+                    onToken(data.message.content);
+                }
+                if (data) lastData = data;
+            }
+        }
+
+        // Process any remaining buffer content
+        if (buffer.trim()) {
+            const data = safeJsonParse(buffer.trim(), null);
             if (data && data.message?.content) {
                 fullContent += data.message.content;
                 onToken(data.message.content);
             }
             if (data) lastData = data;
         }
-    }
-
-    // Process any remaining buffer content
-    if (buffer.trim()) {
-        const data = safeJsonParse(buffer.trim(), null);
-        if (data && data.message?.content) {
-            fullContent += data.message.content;
-            onToken(data.message.content);
-        }
-        if (data) lastData = data;
+    } catch (streamErr) {
+        console.error('[Ollama] Streaming error:', streamErr);
+        streamError = true;
+        throw streamErr;
     }
 
     console.log('[Ollama] Streaming complete - content length:', fullContent.length);
@@ -444,7 +469,8 @@ async function handleStreamingResponse(response, onToken) {
         content: fullContent,
         model: lastData?.model,
         done: true,
-        toolCalls: lastData?.message?.tool_calls || null
+        toolCalls: lastData?.message?.tool_calls || null,
+        streamError  // HIGH FIX #10: Indicate if there was a stream error
     };
 }
 
@@ -642,7 +668,10 @@ async function chatCompletion(messages, config, tools = null) {
             type: 'function',
             function: {
                 name: tc.function.name,
-                arguments: JSON.stringify(tc.function.arguments)
+                // CRITICAL FIX #4: Use safeJsonStringify for tool arguments
+                arguments: typeof tc.function.arguments === 'string'
+                    ? tc.function.arguments  // Already a string, use as-is
+                    : JSON.stringify(tc.function.arguments || {})  // Convert object to JSON string
             }
         }));
     }

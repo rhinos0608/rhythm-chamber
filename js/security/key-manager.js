@@ -221,8 +221,14 @@ const KeyManager = {
     /**
      * Derive data encryption key for storage operations
      *
-     * Uses separate key derivation path with modified password and salt
-     * to provide key separation for different purposes (security best practice).
+     * SECURITY FIX (HIGH Issue #4): Uses HKDF for proper key separation
+     * PREVIOUS: Used string concatenation (`password + ':data'`) - cryptographically weak
+     * NEW: Uses HKDF with proper info binding for each key type
+     *
+     * HKDF (HMAC-based Key Derivation Function) provides:
+     * - Proper key separation between different key purposes
+     * - Context binding via info parameter
+     * - Cryptographically sound key derivation from a master secret
      *
      * @private
      * @param {string} password - Password or token to derive from
@@ -232,24 +238,26 @@ const KeyManager = {
     async _deriveDataEncryptionKey(password, salt) {
         const encoder = new TextEncoder();
 
-        // Separate key material with purpose modifier
-        const keyMaterial = await crypto.subtle.importKey(
+        // Import password as HKDF key material
+        const baseKey = await crypto.subtle.importKey(
             'raw',
-            encoder.encode(password + ':data'), // Purpose modifier for key separation
-            'PBKDF2',
+            encoder.encode(password),
+            'HKDF',
             false, // KEY-01: Not extractable
-            ['deriveKey']
+            ['deriveBits', 'deriveKey']
         );
 
-        // Derive with modified salt for additional separation
+        // Use HKDF for proper key separation with explicit context binding
+        // INFO string binds this key to its specific purpose (data encryption)
         return crypto.subtle.deriveKey(
             {
-                name: 'PBKDF2',
-                salt: encoder.encode(salt + ':storage'), // Salt modifier
-                iterations: 600000,
-                hash: 'SHA-256'
+                name: 'HKDF',
+                hash: 'SHA-256',
+                salt: encoder.encode(salt),
+                // INFO binds this key to its purpose - prevents key reuse
+                info: encoder.encode('rhythm-chamber-v1-data-encryption')
             },
-            keyMaterial,
+            baseKey,
             { name: 'AES-GCM', length: 256 },
             false, // KEY-01: Not extractable
             ['encrypt', 'decrypt']
@@ -258,6 +266,10 @@ const KeyManager = {
 
     /**
      * Derive signing key for HMAC operations
+     *
+     * SECURITY FIX (HIGH Issue #4): Uses HKDF for proper key separation
+     * PREVIOUS: Used string concatenation (`password + ':sign'`) - cryptographically weak
+     * NEW: Uses HKDF with proper info binding
      *
      * Uses HMAC-SHA-256 for message signing and verification.
      * Separate key path provides cryptographic separation between encryption and signing.
@@ -270,24 +282,26 @@ const KeyManager = {
     async _deriveSigningKey(password, salt) {
         const encoder = new TextEncoder();
 
-        // Separate key material for signing operations
-        const keyMaterial = await crypto.subtle.importKey(
+        // Import password as HKDF key material
+        const baseKey = await crypto.subtle.importKey(
             'raw',
-            encoder.encode(password + ':sign'), // Purpose modifier
-            'PBKDF2',
+            encoder.encode(password),
+            'HKDF',
             false, // KEY-01: Not extractable
-            ['deriveKey']
+            ['deriveBits', 'deriveKey']
         );
 
-        // Derive HMAC key
+        // Use HKDF for proper key separation with explicit context binding
+        // INFO string binds this key to its specific purpose (message signing)
         return crypto.subtle.deriveKey(
             {
-                name: 'PBKDF2',
-                salt: encoder.encode(salt + ':hmac'), // Salt modifier
-                iterations: 600000,
-                hash: 'SHA-256'
+                name: 'HKDF',
+                hash: 'SHA-256',
+                salt: encoder.encode(salt),
+                // INFO binds this key to its purpose - prevents key reuse
+                info: encoder.encode('rhythm-chamber-v1-message-signing')
             },
-            keyMaterial,
+            baseKey,
             { name: 'HMAC', hash: 'SHA-256' },
             false, // KEY-01: Not extractable
             ['sign', 'verify']

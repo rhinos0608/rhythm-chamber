@@ -99,17 +99,8 @@ async function call(config, messages, tools, onProgress = null) {
                     return result;
                 }
 
-                // HIGH FIX #10: Check if there was a stream error before falling back
-                // If streaming succeeded but produced no output, that's a valid response
-                // Only fallback if there was an actual error during streaming
-                if (!result.streamError) {
-                    // Valid empty response - return as-is
-                    console.warn('[LMStudio] Streaming succeeded but returned no content (valid for some prompts)');
-                    return result;
-                }
-
-                // Streaming had an error - fallback to non-streaming
-                console.warn('[LMStudio] Streaming failed with error, retrying non-streaming');
+                // Streaming returned empty response - fallback to non-streaming
+                console.warn('[LMStudio] Streaming returned empty response, retrying non-streaming');
 
                 // Make a new non-streaming request
                 // CRITICAL FIX #3: Use same race-condition-safe timeout pattern for fallback
@@ -184,37 +175,6 @@ async function call(config, messages, tools, onProgress = null) {
 // ==========================================
 
 /**
-/**
- * CRITICAL FIX #4: Normalize tool call arguments
- * Prevents string/object type confusion that can cause tool calls
- * to be invoked with malformed arguments like "[object Object]"
- *
- * @param {*} args - Tool arguments (string, object, or other)
- * @returns {string} Normalized JSON string of arguments
- */
-function normalizeToolArguments(args) {
-    // If already a string, validate it's valid JSON
-    if (typeof args === 'string') {
-        try {
-            // Validate by parsing - if it succeeds, it's valid JSON
-            JSON.parse(args);
-            return args;
-        } catch (e) {
-            console.error('[LMStudio] Invalid tool arguments JSON string:', args.substring(0, 100));
-            return '{}'; // Return empty object rather than crashing
-        }
-    }
-
-    // If it's an object, stringify it
-    if (typeof args === 'object' && args !== null) {
-        return JSON.stringify(args);
-    }
-
-    // Fallback for undefined/null/other types
-    console.warn('[LMStudio] Unexpected tool arguments type:', typeof args);
-    return '{}';
-}
-
  * Handle SSE streaming response from LM Studio
  * Supports <think>...</think> blocks for reasoning models
  * @param {Response} response - Fetch response
@@ -232,39 +192,27 @@ async function handleStreamingResponse(response, onProgress) {
     let toolCallsAccumulator = [];  // Collect tool calls from streaming
     let toolCallsById = {};  // Track tool calls by id for proper assembly
     let buffer = '';  // Buffer for incomplete chunks
-    let streamError = false;  // HIGH FIX #10: Track if stream had an error
 
-    try {
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-            // Append to buffer and process complete lines
-            buffer += decoder.decode(value, { stream: true });
+        // Append to buffer and process complete lines
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
 
-            // HIGH FIX #7: Buffer overflow protection
-            // Prevent unbounded buffer growth if API never sends newline
-            const MAX_BUFFER_SIZE = 1024 * 1024; // 1MB limit
-            if (buffer.length > MAX_BUFFER_SIZE) {
-                console.error('[LMStudio] Buffer overflow detected, closing stream');
-                reader.cancel();
-                throw new Error('Stream buffer overflow - malformed response');
-            }
+        // Keep last incomplete line in buffer
+        buffer = lines.pop() || '';
 
-            const lines = buffer.split('\n');
+        for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine === '' || trimmedLine === '[DONE]') continue;
 
-            // Keep last incomplete line in buffer
-            buffer = lines.pop() || '';
+            // Try to parse the line - support both SSE format and NDJSON
+            let data = trimmedLine;
 
-            for (const line of lines) {
-                const trimmedLine = line.trim();
-                if (trimmedLine === '' || trimmedLine === '[DONE]') continue;
-
-                // Try to parse the line - support both SSE format and NDJSON
-                let data = trimmedLine;
-
-                // Handle SSE data: prefix
-                if (trimmedLine.startsWith('data: ')) {
+            // Handle SSE data: prefix
+            if (trimmedLine.startsWith('data: ')) {
                 data = trimmedLine.slice(6);
                 if (data === '[DONE]') continue;
             }
@@ -289,8 +237,9 @@ async function handleStreamingResponse(response, onProgress) {
                             type: 'function',
                             function: {
                                 name: tc.function?.name || '',
-                                // CRITICAL FIX #4: Use normalizeToolArguments to handle type confusion
-                                arguments: normalizeToolArguments(tc.function?.arguments)
+                                arguments: typeof tc.function?.arguments === 'string'
+                                    ? tc.function.arguments
+                                    : JSON.stringify(tc.function?.arguments || {})
                             }
                         };
                     }
@@ -386,8 +335,9 @@ async function handleStreamingResponse(response, onProgress) {
                             type: 'function',
                             function: {
                                 name: tc.function?.name || '',
-                                // CRITICAL FIX #4: Use normalizeToolArguments to handle type confusion
-                                arguments: normalizeToolArguments(tc.function?.arguments)
+                                arguments: typeof tc.function?.arguments === 'string'
+                                    ? tc.function.arguments
+                                    : JSON.stringify(tc.function?.arguments || {})
                             }
                         };
                     }
@@ -419,14 +369,8 @@ async function handleStreamingResponse(response, onProgress) {
             finish_reason: toolCallsAccumulator.length > 0 ? 'tool_calls' : 'stop'
         }],
         model: lastMessage?.model,
-        thinking: thinkingContent || undefined,
-        streamError  // HIGH FIX #10: Indicate if there was a stream error
+        thinking: thinkingContent || undefined
     };
-    } catch (streamErr) {
-        console.error('[LMStudio] Streaming error:', streamErr);
-        streamError = true;
-        throw streamErr;
-    }
 }
 
 // ==========================================
@@ -477,17 +421,8 @@ async function isAvailable(endpoint = LMSTUDIO_DEFAULT_ENDPOINT) {
  * @returns {Promise<Array>} List of models
  */
 async function listModels(endpoint = LMSTUDIO_DEFAULT_ENDPOINT) {
-    // HIGH FIX #8: Add timeout to listModels() call
-    // Prevents indefinite hang when LM Studio server is frozen
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
     try {
-        const response = await fetch(`${endpoint}/models`, {
-            signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
+        const response = await fetch(`${endpoint}/models`);
 
         if (!response.ok) {
             throw new Error(`Failed to list models: ${response.status}`);
@@ -496,12 +431,6 @@ async function listModels(endpoint = LMSTUDIO_DEFAULT_ENDPOINT) {
         const data = await response.json();
         return data.data || [];
     } catch (error) {
-        clearTimeout(timeoutId);
-
-        // Check if this was a timeout
-        if (error.name === 'AbortError') {
-            throw new Error('Models request timed out after 10 seconds - server may be frozen');
-        }
         console.error('[LMStudio] Failed to list models:', error.message);
         throw error;
     }

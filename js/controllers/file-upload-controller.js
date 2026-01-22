@@ -60,6 +60,16 @@ async function handleFileUpload(file) {
         return;
     }
 
+    // EDGE CASE FIX: Add file size validation to prevent browser crash
+    // Spotify history files can be hundreds of MB or even GB
+    // Attempting to parse these in the browser can cause the tab to crash or freeze
+    const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB limit
+    if (file.size > MAX_FILE_SIZE) {
+        const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+        _showToast(`File too large (${sizeMB}MB). Maximum is 500MB.`);
+        return;
+    }
+
     // Determine expected file type from extension
     const fileType = file.name.toLowerCase().endsWith('.zip') ? 'zip' : 'json';
 
@@ -360,9 +370,17 @@ function handleWorkerAbort() {
  */
 function cleanupWorker() {
     if (activeWorker) {
-        activeWorker.onmessage = null;
-        activeWorker.onerror = null;
-        activeWorker.terminate();
+        // EDGE CASE FIX: Wrap terminate in try-catch to handle browser edge cases
+        // Worker.terminate() can throw in certain browser states (e.g., tab closing, worker already terminated)
+        try {
+            activeWorker.onmessage = null;
+            activeWorker.onerror = null;
+            activeWorker.terminate();
+        } catch (e) {
+            console.warn('[FileUploadController] Worker terminate failed:', e);
+            // Continue with cleanup even if terminate throws
+        }
+        // Always clear reference to prevent stale worker references
         activeWorker = null;
         // Force garbage collection hint
         if (typeof window !== 'undefined' && window.gc) {

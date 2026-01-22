@@ -7,6 +7,14 @@ async function generateCard(personality) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
 
+    // Edge case: Validate canvas context availability (CANVAS TAINT FIX)
+    // Some browsers/environments may not support 2D context (e.g., headless browsers,
+    // certain extensions, or when hardware acceleration is disabled)
+    if (!ctx) {
+        throw new Error('Canvas 2D context not available - card generation failed. ' +
+            'This may occur in headless browsers or with certain browser extensions.');
+    }
+
     const width = 600, height = 400;
     canvas.width = width;
     canvas.height = height;
@@ -88,19 +96,66 @@ async function shareCard(personality, options = {}) {
     } = options;
 
     // Generate the card image
-    const canvas = await generateCard(personality);
-    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    let canvas;
+    try {
+        canvas = await generateCard(personality);
+    } catch (canvasError) {
+        // Handle canvas generation errors (CANVAS TAINT FIX)
+        console.error('[Cards] Canvas generation failed:', canvasError);
+        if (fallbackToDownload) {
+            // Show user-friendly error
+            if (window.showToast) {
+                window.showToast('Card generation is not available in this browser.', 4000);
+            }
+        }
+        throw canvasError;
+    }
 
-    // Handle null blob (can occur with tainted canvas due to CORS or other canvas security issues)
+    let blob;
+    try {
+        blob = await new Promise((resolve, reject) => {
+            // Add timeout to prevent infinite hang on tainted canvas (CANVAS TAINT FIX)
+            const timeoutId = setTimeout(() => {
+                reject(new Error('Canvas toBlob timeout - canvas may be tainted'));
+            }, 5000);
+
+            canvas.toBlob((result) => {
+                clearTimeout(timeoutId);
+                if (result) {
+                    resolve(result);
+                } else {
+                    reject(new Error('Canvas toBlob returned null - canvas may be tainted'));
+                }
+            }, 'image/png');
+        });
+    } catch (blobError) {
+        // Handle toBlob errors (CANVAS TAINT FIX)
+        console.error('[Cards] Failed to generate blob from canvas:', blobError);
+
+        // Fall back to download if sharing fails due to blob issue
+        if (fallbackToDownload) {
+            console.log('[Cards] Attempting fallback download due to blob generation failure');
+            try {
+                await downloadCard(personality);
+                return 'downloaded';
+            } catch (downloadError) {
+                console.error('[Cards] Fallback download also failed:', downloadError);
+                return 'failed';
+            }
+        }
+        throw new Error(`Failed to generate shareable image for personality "${personality?.name || 'unknown'}". The canvas may be tainted by cross-origin content.`);
+    }
+
+    // Verify blob was created successfully
     if (!blob) {
-        console.error('[Cards] Failed to generate blob from canvas - canvas may be tainted or corrupted', {
+        console.error('[Cards] toBlob returned null - canvas may be tainted or corrupted', {
             personality: personality?.name,
             canvasWidth: canvas?.width,
             canvasHeight: canvas?.height
         });
         // Fall back to download if sharing fails due to blob issue
         if (fallbackToDownload) {
-            console.log('[Cards] Attempting fallback download due to blob generation failure');
+            console.log('[Cards] Attempting fallback download due to null blob');
             try {
                 await downloadCard(personality);
                 return 'downloaded';

@@ -561,7 +561,8 @@ async function init(options = {}) {
     // CRITICAL: Initialize AppState IMMEDIATELY after security check
     // BEFORE any other initialization to ensure state is available to all modules
     // This prevents race conditions where modules try to access state before it's ready
-    AppState.init();
+    // EDGE CASE FIX: Await init() to ensure async initialization completes
+    await AppState.init();
 
     // Verify AppState is ready before proceeding
     if (!AppState.isReady()) {

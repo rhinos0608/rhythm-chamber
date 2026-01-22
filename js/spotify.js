@@ -44,7 +44,40 @@ const Spotify = (() => {
         const expiresInMs = data.expires_in ? data.expires_in * 1000 : null;
 
         accessTokenCache = data.access_token;
-        accessTokenExpiry = expiresInMs ? Date.now() + expiresInMs : null;
+
+        // HIGH FIX #9: Use JWT exp claim for more reliable expiry time
+        // This mitigates clock skew issues when system clock changes
+        // The JWT exp claim is set by Spotify and represents the absolute expiry time
+        let calculatedExpiry = expiresInMs ? Date.now() + expiresInMs : null;
+
+        // Try to extract exp claim from JWT for more reliable expiry
+        if (data.access_token && typeof data.access_token === 'string') {
+            try {
+                const parts = data.access_token.split('.');
+                if (parts.length === 3) {
+                    // JWT format: header.payload.signature (payload is base64url encoded)
+                    // Convert base64url to standard base64 by replacing - with + and _ with /, then add padding
+                    let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+                    // Add padding if needed
+                    const padding = 4 - (base64.length % 4);
+                    if (padding !== 4) {
+                        base64 += '='.repeat(padding);
+                    }
+                    const payload = JSON.parse(atob(base64));
+                    if (payload.exp && typeof payload.exp === 'number') {
+                        // Use JWT exp as source of truth (in seconds since epoch)
+                        calculatedExpiry = payload.exp * 1000;
+                        logger.debug('[Spotify] Using JWT exp claim for token expiry:', new Date(calculatedExpiry).toISOString());
+                    }
+                }
+            } catch (e) {
+                // JWT parsing failed, fall back to calculated expiry
+                logger.debug('[Spotify] Could not parse JWT exp claim, using calculated expiry:', e.message);
+            }
+        }
+
+        accessTokenExpiry = calculatedExpiry;
+
         if (data.refresh_token) {
             refreshTokenCache = data.refresh_token;
         }
@@ -222,14 +255,39 @@ const Spotify = (() => {
         const codeVerifier = generateCodeVerifier();
         const codeChallenge = await generateCodeChallenge(codeVerifier);
 
-        // Store verifier for token exchange (use sessionStorage for security - clears on tab close)
-        // SECURITY: sessionStorage prevents XSS access across tabs/sessions
+        // Store verifier in sessionStorage (secure - cleared on tab close)
+        // SECURITY: sessionStorage is required for PKCE security because:
+        // - Cleared when tab closes (ephemeral)
+        // - Not accessible to other tabs/windows (same-origin isolation)
+        // - Prevents XSS code injection attacks during token exchange
+        //
+        // SECURITY FIX (HIGH Issue #7): Removed localStorage fallback per security audit
+        // Previous implementation fell back to localStorage which persists PKCE verifier
+        // across sessions, defeating the security purpose of PKCE.
+        //
+        // Note: In rare cases where sessionStorage is cleared during OAuth redirect
+        // (browser privacy settings, some browser behaviors), users may need to
+        // retry the OAuth flow. This is a security/usability tradeoff.
         try {
             sessionStorage.setItem(STORAGE_KEYS.CODE_VERIFIER, codeVerifier);
         } catch (e) {
-            // Fallback to localStorage if sessionStorage unavailable (e.g., cookies disabled)
-            logger.warn('sessionStorage unavailable, using localStorage for PKCE verifier');
-            localStorage.setItem(STORAGE_KEYS.CODE_VERIFIER, codeVerifier);
+            // FAIL CLOSED - sessionStorage is required for secure OAuth flow
+            logger.error('sessionStorage required for secure OAuth flow. Please enable cookies/storage in your browser.', e);
+
+            // Dispatch event for UI to show error
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('spotify:auth-error', {
+                    detail: {
+                        reason: 'session_storage_unavailable',
+                        message: 'Secure OAuth requires sessionStorage. Please enable cookies/storage in your browser settings.'
+                    }
+                }));
+            }
+
+            throw new Error(
+                'sessionStorage required for secure OAuth flow. ' +
+                'Please enable cookies/storage in your browser settings.'
+            );
         }
 
         const redirectUri = ConfigLoader.get('spotify.redirectUri');
@@ -255,19 +313,20 @@ const Spotify = (() => {
      * @returns {Promise<boolean>} Success status
      */
     async function handleCallback(code) {
-        // Try sessionStorage first (security), fall back to localStorage
-        let codeVerifier = null;
-        try {
-            codeVerifier = sessionStorage.getItem(STORAGE_KEYS.CODE_VERIFIER);
-        } catch (e) {
-            // sessionStorage unavailable
-        }
-        if (!codeVerifier) {
-            codeVerifier = localStorage.getItem(STORAGE_KEYS.CODE_VERIFIER);
-        }
+        // SECURITY FIX (HIGH Issue #7): Only check sessionStorage for PKCE verifier
+        // Previous implementation fell back to localStorage which is insecure
+        const codeVerifier = sessionStorage.getItem(STORAGE_KEYS.CODE_VERIFIER);
 
         if (!codeVerifier) {
-            throw new Error('No code verifier found. Please try connecting again.');
+            // This can happen if:
+            // - User navigated away and session was cleared
+            // - Browser privacy settings cleared sessionStorage
+            // - OAuth flow took too long and session expired
+            //
+            // SECURITY: Do NOT fall back to localStorage as it defeats PKCE security
+            throw new Error(
+                'No code verifier found. This may happen if your browser cleared session storage during the OAuth flow. Please try connecting again.'
+            );
         }
 
         try {
@@ -411,12 +470,21 @@ const Spotify = (() => {
     /**
      * localStorage-based mutex for browsers without Web Locks API
      * Uses a polling loop with timeout to prevent deadlocks and improve reliability
+     *
+     * MEDIUM FIX #14: Use UUID as lock value to verify ownership
+     * This prevents race condition where multiple tabs could acquire the lock simultaneously
      */
     async function performTokenRefreshWithFallbackLock() {
         const LOCK_KEY = 'spotify_refresh_lock';
         const LOCK_TIMEOUT_MS = 10000; // 10 second timeout
         const POLL_INTERVAL_MS = 100; // Check every 100ms
         const MAX_WAIT_TIME_MS = 5000; // Maximum wait time for another tab
+
+        // Generate a unique identifier for this lock attempt
+        // Using crypto.getRandomValues for better uniqueness than Math.random()
+        const lockId = Array.from(crypto.getRandomValues(new Uint8Array(8)))
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('');
 
         const startTime = Date.now();
 
@@ -429,7 +497,9 @@ const Spotify = (() => {
                 break;
             }
 
-            const lockTime = parseInt(existingLock, 10);
+            // Parse existing lock: format is "timestamp:uuid"
+            const [lockTimeStr, existingLockId] = existingLock.split(':');
+            const lockTime = parseInt(lockTimeStr, 10);
             const now = Date.now();
 
             // Check if lock is stale (older than timeout)
@@ -450,11 +520,20 @@ const Spotify = (() => {
             return true;
         }
 
-        // Try to acquire lock
+        // Try to acquire lock with our unique ID
         const now = Date.now();
-        localStorage.setItem(LOCK_KEY, String(now));
+        localStorage.setItem(LOCK_KEY, `${now}:${lockId}`);
 
         try {
+            // Verify we still own the lock (another tab may have stolen it)
+            const currentLock = localStorage.getItem(LOCK_KEY);
+            if (!currentLock || !currentLock.endsWith(lockId)) {
+                logger.debug('Lock stolen by another tab, deferring refresh');
+                // Wait a bit and check if token is now valid
+                await new Promise(resolve => setTimeout(resolve, 500));
+                return await hasValidToken();
+            }
+
             // Double-check token validity (another tab may have just refreshed)
             if (await hasValidToken()) {
                 logger.debug('Token already valid');
@@ -463,8 +542,11 @@ const Spotify = (() => {
 
             return await performTokenRefresh();
         } finally {
-            // Release lock
-            localStorage.removeItem(LOCK_KEY);
+            // Only release lock if we still own it
+            const currentLock = localStorage.getItem(LOCK_KEY);
+            if (currentLock && currentLock.endsWith(lockId)) {
+                localStorage.removeItem(LOCK_KEY);
+            }
         }
     }
 

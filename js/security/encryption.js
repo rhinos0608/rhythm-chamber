@@ -248,16 +248,58 @@ async function decryptData(encryptedData, keyOrPassword) {
 
 /**
  * Get a session-bound encryption key
- * Derived from: session salt + Spotify refresh token (if available) + session version
- * Key changes when sessions are invalidated
- * 
+ *
+ * SECURITY FIX (CRITICAL Issue #2):
+ * PREVIOUS: Used Spotify refresh token as key material - zero-trust violation
+ * NEW: Uses device-specific session secret only - no third-party tokens
+ *
+ * Key derivation path:
+ * - Session salt (stored in sessionStorage, cleared on tab close)
+ * - Session version (for invalidation support)
+ * - Application identifier
+ *
+ * Key changes when:
+ * - Sessions are invalidated (version increment)
+ * - SessionStorage is cleared (browser close/tab close)
+ *
  * @returns {Promise<CryptoKey>}
  */
 async function getSessionKey() {
     const sessionSalt = getSessionSalt();
-    const refreshToken = localStorage.getItem('spotify_refresh_token') || '';
     const version = getSessionVersion();
-    const combinedSecret = `${sessionSalt}:${refreshToken}:rhythm-chamber:v${version}`;
+
+    // SECURITY: Do NOT use Spotify tokens or any third-party credentials as key material
+    // Previous implementation violated zero-trust by using refresh tokens
+    // New: Use only application/session-specific values
+
+    // Generate a device-specific secret that persists across sessions
+    // This ensures data can be decrypted after browser restart (if sessionStorage cleared)
+    // while still being device-bound
+
+    // VERIFICATION FIX: Use compare-and-set pattern to prevent race condition
+    // when multiple tabs initialize simultaneously
+    const SECRET_KEY = 'rhythm_chamber_device_secret';
+    let deviceSecret = localStorage.getItem(SECRET_KEY);
+
+    if (!deviceSecret) {
+        // Generate a random device secret - stored long-term
+        const randomBytes = crypto.getRandomValues(new Uint8Array(32));
+        const newSecret = Array.from(randomBytes, b => b.toString(16).padStart(2, '0')).join('');
+
+        // Compare-and-set: only write if no other tab has written yet
+        // This prevents race condition where multiple tabs generate different secrets
+        const currentValue = localStorage.getItem(SECRET_KEY);
+        if (!currentValue) {
+            localStorage.setItem(SECRET_KEY, newSecret);
+            deviceSecret = newSecret;
+        } else {
+            // Another tab won the race, use their secret
+            deviceSecret = currentValue;
+        }
+    }
+
+    // Combined secret uses only app-controlled values
+    const combinedSecret = `${sessionSalt}:${deviceSecret}:rhythm-chamber:v${version}`;
 
     return deriveKey(combinedSecret);
 }
@@ -330,13 +372,21 @@ function clearEncryptedCredentials() {
 }
 
 /**
- * Full session cleanup - call after password changes
+ * Full session cleanup - call after password changes or security incidents
  * Invalidates sessions and clears all sensitive data
+ *
+ * SECURITY: Clears the device secret, which will re-encrypt all data
+ * with a new key on next session initialization
  */
 function clearSessionData() {
     invalidateSessions();
     clearEncryptedCredentials();
     sessionStorage.clear();
+
+    // SECURITY: Clear device secret to force re-encryption with new key
+    // This ensures all encrypted data becomes inaccessible after cleanup
+    localStorage.removeItem('rhythm_chamber_device_secret');
+
     console.warn('[Security] Full session cleanup completed - re-authentication required');
 }
 

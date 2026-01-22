@@ -189,12 +189,24 @@ function updateTransparency(data) {
  * Calculate ETA based on progress
  */
 function calculateETA(processed, total) {
-    if (!startTime || processed === 0) return 'Calculating...';
+    // Edge case: Validate inputs to prevent NaN/Infinity (DIVISION BY ZERO FIX)
+    if (!startTime || processed === 0 || total <= 0) return 'Calculating...';
 
     const elapsed = Date.now() - startTime;
+    // Edge case: Check for invalid elapsed time
+    if (elapsed <= 0) return 'Calculating...';
+
     const rate = processed / elapsed;
+    // Edge case: Check for invalid rate (could be 0, Infinity, or NaN)
+    if (!isFinite(rate) || rate <= 0) return 'Calculating...';
+
     const remaining = total - processed;
+    // Edge case: Check if remaining is valid
+    if (remaining < 0) return 'Calculating...';
+
     const etaMs = remaining / rate;
+    // Edge case: Check if ETA is finite
+    if (!isFinite(etaMs) || etaMs < 0) return 'Calculating...';
 
     if (etaMs < 60000) {
         return `~${Math.ceil(etaMs / 1000)}s remaining`;

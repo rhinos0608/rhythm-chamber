@@ -237,6 +237,14 @@ async function render(container) {
         // Get storage degradation manager
         const manager = _storageDegradationManager || await getStorageDegradationManager();
 
+        // EDGE CASE FIX: Validate manager availability before using
+        // If getStorageDegradationManager() throws or returns null, we need to handle gracefully
+        if (!manager || typeof manager.getStorageBreakdown !== 'function') {
+            console.error('[StorageBreakdownUI] Manager not available or invalid');
+            showErrorState(containerEl, 'Storage manager unavailable');
+            return;
+        }
+
         // Get breakdown and metrics
         const breakdown = await manager.getStorageBreakdown();
         const metrics = manager.getCurrentMetrics();
@@ -290,6 +298,13 @@ async function cleanup(category) {
     try {
         const manager = _storageDegradationManager || await getStorageDegradationManager();
 
+        // EDGE CASE FIX: Validate manager before using
+        if (!manager || typeof manager.triggerCleanup !== 'function') {
+            console.error('[StorageBreakdownUI] Manager not available for cleanup');
+            showToast('Storage manager unavailable. Please refresh the page.');
+            return;
+        }
+
         // Handle specific categories with appropriate cleanup strategies
         if (category === 'embeddings') {
             // Import and clear LRU cache
@@ -330,7 +345,22 @@ async function showCleanupModal() {
     }
 
     const manager = _storageDegradationManager || await getStorageDegradationManager();
-    const breakdown = await manager.getStorageBreakdown();
+
+    // EDGE CASE FIX: Validate manager before using
+    if (!manager || typeof manager.getStorageBreakdown !== 'function') {
+        console.error('[StorageBreakdownUI] Manager not available for cleanup modal');
+        showToast('Storage manager unavailable. Please refresh the page.');
+        return;
+    }
+
+    let breakdown;
+    try {
+        breakdown = await manager.getStorageBreakdown();
+    } catch (err) {
+        console.error('[StorageBreakdownUI] getStorageBreakdown failed', err);
+        showToast('Failed to load storage breakdown. Please try again.');
+        return;
+    }
 
     const modal = document.createElement('div');
     modal.className = 'storage-cleanup-modal';
@@ -400,6 +430,14 @@ async function runSelectedCleanup() {
 
     try {
         const manager = _storageDegradationManager || await getStorageDegradationManager();
+
+        // EDGE CASE FIX: Validate manager before using
+        if (!manager || typeof manager.triggerCleanup !== 'function') {
+            console.error('[StorageBreakdownUI] Manager not available for cleanup');
+            showToast('Storage manager unavailable. Cleanup failed.');
+            return;
+        }
+
         let totalFreed = 0;
         let totalDeleted = 0;
 
@@ -440,6 +478,36 @@ async function runSelectedCleanup() {
 async function getStorageDegradationManager() {
     const { default: manager } = await import('./services/storage-degradation-manager.js');
     return manager;
+}
+
+/**
+ * Show error state in container
+ * EDGE CASE FIX: Helper function to show error when manager is unavailable
+ * @param {HTMLElement} container - Container element
+ * @param {string} message - Error message to display
+ */
+function showErrorState(container, message) {
+    // Use DOM APIs to prevent XSS
+    const errorPanel = document.createElement('div');
+    errorPanel.className = 'storage-breakdown-panel error';
+
+    const errorIcon = document.createElement('div');
+    errorIcon.className = 'error-icon';
+    errorIcon.textContent = '⚠️';
+    errorPanel.appendChild(errorIcon);
+
+    const errorMessage = document.createElement('p');
+    errorMessage.textContent = message || 'Failed to load storage breakdown';
+    errorPanel.appendChild(errorMessage);
+
+    const retryButton = document.createElement('button');
+    retryButton.className = 'btn btn-small';
+    retryButton.textContent = 'Retry';
+    retryButton.onclick = () => StorageBreakdownUI.refresh();
+    errorPanel.appendChild(retryButton);
+
+    container.innerHTML = '';
+    container.appendChild(errorPanel);
 }
 
 /**

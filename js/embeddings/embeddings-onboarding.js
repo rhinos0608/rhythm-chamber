@@ -20,6 +20,80 @@ import { BatteryAwareModeSelector } from '../services/battery-aware-mode-selecto
 import { escapeHtml } from '../utils/html-escape.js';
 
 // ==========================================
+// Global Modal Manager (Z-INDEX FIX)
+// ==========================================
+
+/**
+ * Global modal manager to prevent z-index conflicts
+ * Ensures only one modal is active at a time
+ */
+const ModalManager = {
+    activeModals: new Set(),
+    baseZIndex: 10000,
+
+    /**
+     * Show a modal - closes all other modals first
+     * @param {string} modalId - Unique ID for the modal
+     * @param {Function} createFn - Function that creates and returns the modal element
+     * @returns {HTMLElement} The created modal element
+     */
+    showModal(modalId, createFn) {
+        // Close all other modals first to prevent z-index stacking issues
+        for (const id of this.activeModals) {
+            if (id !== modalId) {
+                this.closeModal(id);
+            }
+        }
+
+        // Check if this modal already exists
+        const existingModal = document.getElementById(modalId);
+        if (existingModal) {
+            this.activeModals.add(modalId);
+            existingModal.style.zIndex = this.baseZIndex;
+            return existingModal;
+        }
+
+        // Create the modal
+        const modal = createFn();
+        modal.id = modalId;
+        modal.style.zIndex = this.baseZIndex;
+
+        this.activeModals.add(modalId);
+        return modal;
+    },
+
+    /**
+     * Close a specific modal
+     * @param {string} modalId - ID of the modal to close
+     */
+    closeModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.remove();
+        }
+        this.activeModals.delete(modalId);
+    },
+
+    /**
+     * Close all modals
+     */
+    closeAll() {
+        for (const id of this.activeModals) {
+            this.closeModal(id);
+        }
+    },
+
+    /**
+     * Check if a specific modal is active
+     * @param {string} modalId - ID of the modal to check
+     * @returns {boolean}
+     */
+    isActive(modalId) {
+        return this.activeModals.has(modalId);
+    }
+};
+
+// ==========================================
 // Modal HTML Template
 // ==========================================
 
@@ -321,15 +395,24 @@ function show() {
         return currentShowPromise;
     }
 
+    // Use ModalManager to prevent z-index conflicts (Z-INDEX FIX)
+    const modalId = 'embedding-onboarding-modal';
+    if (ModalManager.isActive(modalId)) {
+        console.log('[EmbeddingsOnboarding] Modal already active via ModalManager');
+        return Promise.resolve(false);
+    }
+
     currentShowPromise = new Promise((resolve) => {
         // Reset settled flag
         isSettled = false;
 
-        // Create modal
-        const container = document.createElement('div');
-        // SAFE: MODAL_HTML is a static template constant defined in this module
-        container.innerHTML = MODAL_HTML;
-        modal = container.firstElementChild;
+        // Create modal using ModalManager (Z-INDEX FIX)
+        modal = ModalManager.showModal(modalId, () => {
+            const container = document.createElement('div');
+            // SAFE: MODAL_HTML is a static template constant defined in this module
+            container.innerHTML = MODAL_HTML;
+            return container.firstElementChild;
+        });
         document.body.appendChild(modal);
 
         // Run compatibility checks
@@ -353,6 +436,9 @@ function show() {
             hide();
             currentShowPromise = null;
 
+            // Notify ModalManager that modal is closed (Z-INDEX FIX)
+            ModalManager.closeModal(modalId);
+
             resolve(result);
         };
 
@@ -371,8 +457,17 @@ function show() {
             }
         };
         const handleEscape = (e) => {
-            if (e.key === 'Escape') {
-                cleanup(false);
+            // Edge case: Only handle Escape if modal is visible and focused (ESCAPE CONFLICT FIX)
+            // Prevents closing modal when user is typing elsewhere on the page
+            if (e.key === 'Escape' && modal?.parentNode === document.body) {
+                // Robust check: determine if this modal is topmost using elementsFromPoint
+                const rect = modal.getBoundingClientRect();
+                const topElement = document.elementsFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)[0];
+                const isTopmost = topElement === modal || modal.contains(topElement);
+
+                if (isTopmost) {
+                    cleanup(false);
+                }
             }
         };
 
@@ -421,7 +516,12 @@ export const EmbeddingsOnboarding = {
     /**
      * Re-run compatibility checks
      */
-    runCompatibilityChecks
+    runCompatibilityChecks,
+
+    /**
+     * Access to ModalManager for other modules
+     */
+    ModalManager
 };
 
 console.log('[EmbeddingsOnboarding] Module loaded');

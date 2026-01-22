@@ -37,24 +37,27 @@ const rateLimitBuckets = {};
 /**
  * Client-side rate limiting check
  * Tracks requests in memory (resets on page reload)
- * 
- * ⚠️ SECURITY NOTE - DEFENSE IN DEPTH ONLY ⚠️
- * 
- * This client-side rate limiting can be bypassed by:
- * 1. Opening DevTools and overriding: Security.isRateLimited = () => false
- * 2. Clearing the in-memory buckets
- * 3. Refreshing the page (buckets reset)
- * 
- * REAL protection MUST come from server-side rate limits on:
- * - OpenRouter API (per-key limits configured in their dashboard)
- * - Qdrant Cloud (per-collection limits)
- * - Spotify API (enforced by Spotify)
- * 
+ *
+ * SECURITY LIMITATIONS (HIGH Issue #6):
+ *
+ * This client-side rate limiting provides ONLY UX improvements, NOT real security:
+ *
+ * 1. **Bypassable by page refresh** - Reset by reloading the page
+ * 2. **Bypassable by DevTools** - Can override: Security.isRateLimited = () => false
+ * 3. **Bypassable by opening new tab** - Each tab has independent tracking
+ * 4. **No server-side enforcement** - API calls still go through without server checks
+ *
+ * REAL protection MUST come from:
+ * - OpenRouter API per-key limits (configured in their dashboard)
+ * - Spotify API rate limits (enforced by Spotify)
+ * - Qdrant Cloud per-collection limits
+ * - Backend rate limiting for any server-side endpoints
+ *
  * This exists to:
- * 1. Prevent accidental API exhaustion by normal users
- * 2. Provide helpful UX messaging ("slow down, you're being rate limited")
- * 3. Slow down casual inspection (not determined attackers)
- * 
+ * - Prevent accidental API exhaustion by normal users
+ * - Provide helpful UX messaging ("slow down, you're being rate limited")
+ * - Slow down casual inspection (not determined attackers)
+ *
  * @param {string} key - Rate limit bucket key
  * @param {number} maxPerMinute - Maximum requests per minute
  * @returns {boolean} True if rate limited (should block)
