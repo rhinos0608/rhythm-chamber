@@ -614,8 +614,12 @@ function emit(eventType, payload = {}, options = {}) {
 
     // Store event in log if enabled
     if (eventLogEnabled && !eventReplayInProgress && !options.skipEventLog) {
-        persistEvent(eventType, payload, currentVectorClock, sequenceNumber, options)
-            .catch(err => console.warn('[EventBus] Failed to persist event:', err));
+        const persistPromise = persistEvent(eventType, payload, currentVectorClock, sequenceNumber, options)
+            .catch(err => {
+                console.error('[EventBus] Failed to persist event:', err);
+                EventBus.emit('event:persistence_failed', { eventType, error: err });
+                totalEventsFailed++;
+            });
     }
 
     // Update watermark
@@ -801,8 +805,12 @@ async function emitAndAwait(eventType, payload = {}, options = {}) {
 
     // Store event in log if enabled
     if (eventLogEnabled && !eventReplayInProgress && !options.skipEventLog) {
-        persistEvent(eventType, payload, currentVectorClock, sequenceNumber, options)
-            .catch(err => console.warn('[EventBus] Failed to persist event:', err));
+        const persistPromise = persistEvent(eventType, payload, currentVectorClock, sequenceNumber, options)
+            .catch(err => {
+                console.error('[EventBus] Failed to persist event:', err);
+                EventBus.emit('event:persistence_failed', { eventType, error: err });
+                totalEventsFailed++;
+            });
     }
 
     lastEventWatermark = sequenceNumber;
@@ -979,8 +987,12 @@ async function emitParallel(eventType, payload = {}, options = {}) {
     
     // Store event in log if enabled
     if (eventLogEnabled && !eventReplayInProgress && !options.skipEventLog) {
-        persistEvent(eventType, payload, currentVectorClock, sequenceNumber, options)
-            .catch(err => console.warn('[EventBus] Failed to persist event:', err));
+        const persistPromise = persistEvent(eventType, payload, currentVectorClock, sequenceNumber, options)
+            .catch(err => {
+                console.error('[EventBus] Failed to persist event:', err);
+                EventBus.emit('event:persistence_failed', { eventType, error: err });
+                totalEventsFailed++;
+            });
     }
     
     lastEventWatermark = sequenceNumber;
