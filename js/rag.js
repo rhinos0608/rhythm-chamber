@@ -265,16 +265,22 @@ async function saveConfig(config) {
         updatedAt: new Date().toISOString()
     };
 
-    // Store in unified storage (IndexedDB)
+    // Store in unified storage (IndexedDB) FIRST - wait for completion
     if (Storage.setConfig) {
         try {
             await Storage.setConfig(RAG_STORAGE_KEY, nonSensitive);
         } catch (e) {
             console.warn('[RAG] Failed to save to unified storage:', e);
+            // Continue to localStorage fallback on error
         }
     }
-    // Also save to localStorage as sync fallback
-    localStorage.setItem(RAG_STORAGE_KEY, JSON.stringify(nonSensitive));
+    // Then save to localStorage as sync fallback - AFTER IndexedDB completes
+    // This ensures no race condition between the two storage operations
+    try {
+        localStorage.setItem(RAG_STORAGE_KEY, JSON.stringify(nonSensitive));
+    } catch (e) {
+        console.warn('[RAG] Failed to save to localStorage fallback:', e);
+    }
 }
 
 
