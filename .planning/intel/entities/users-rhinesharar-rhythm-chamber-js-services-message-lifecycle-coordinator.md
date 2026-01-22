@@ -1,7 +1,7 @@
 ---
 path: /Users/rhinesharar/rhythm-chamber/js/services/message-lifecycle-coordinator.js
 type: service
-updated: 2026-01-21
+updated: 2026-01-22
 status: active
 ---
 
@@ -9,28 +9,30 @@ status: active
 
 ## Purpose
 
-Manages the complete message lifecycle including creation, mutation, and deletion. Coordinates with ConversationOrchestrator for context management and provides message processing with timeout budgeting.
+Manages message lifecycle operations including creation, mutation, and deletion while coordinating with ConversationOrchestrator for context management and ensuring deterministic turn ordering via TurnQueue serialization.
 
 ## Exports
 
-- `MessageLifecycleCoordinator` - Main coordinator object with `init()` and `sendMessage()` functions
+- **MessageLifecycleCoordinator** - Main service class for coordinating message lifecycle operations
 
 ## Dependencies
 
 - [[turn-queue]]
 - [[timeout-budget-manager]]
-- [[session-manager]]
-- [[conversation-orchestrator]]
-- [[llm-provider-routing-service]]
-- [[tool-call-handling-service]]
-- [[token-counting-service]]
-- [[fallback-response-service]]
-- [[circuit-breaker]]
-- [[module-registry]]
-- [[settings]]
-- [[config]]
-- [[functions]]
-- [[wave-telemetry]]
+- [[timeouts-config]]
+- SessionManager (injected)
+- ConversationOrchestrator (injected)
+- LLMProviderRoutingService (injected)
+- ToolCallHandlingService (injected)
+- TokenCountingService (injected)
+- FallbackResponseService (injected)
+- CircuitBreaker (injected)
+- ModuleRegistry (injected)
+- Settings (injected)
+- Config (injected)
+- Functions (injected)
+- WaveTelemetry (injected)
+- MessageOperations (injected)
 
 ## Used By
 
@@ -38,8 +40,4 @@ TBD
 
 ## Notes
 
-- HNW compliant with TurnQueue serialization for deterministic ordering
-- Dependency injection via init() pattern
-- Supports bypassQueue option for internal operations
-- Client-side token counting to prevent context window limits
-- Constants: CHAT_API_TIMEOUT_MS (60000), LOCAL_LLM_TIMEOUT_MS (90000), CHAT_FUNCTION_TIMEOUT_MS (30000)
+Implements HNW compliance with write operations and TurnQueue serialization. Uses dependency injection via init() pattern. Includes message deduplication through content hashing (FNV-1a inspired) and validation with size limits (50k char max). Tracks fallback notification state to prevent duplicate user notifications.

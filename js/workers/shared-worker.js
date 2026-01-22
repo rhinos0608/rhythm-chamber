@@ -13,6 +13,8 @@
  * @module workers/shared-worker
  */
 
+import { WORKER_TIMEOUTS } from '../config/timeouts.js';
+
 'use strict';
 
 // ==========================================
@@ -98,7 +100,7 @@ function handleMessage(portId, senderPort, message) {
         return;
     }
 
-    const { type, tabId, payload } = message;
+    const { type, tabId, payload, claimId } = message;
 
     switch (type) {
         case 'REGISTER':
@@ -114,7 +116,7 @@ function handleMessage(portId, senderPort, message) {
             break;
 
         case 'CLAIM_PRIMARY':
-            handleClaimPrimary(portId, tabId);
+            handleClaimPrimary(portId, tabId, claimId);
             break;
 
         case 'RELEASE_PRIMARY':
@@ -187,29 +189,45 @@ function handleBroadcast(senderPortId, message) {
  * Handle primary claim
  * @param {string} portId - Port ID
  * @param {string} tabId - Tab claiming primary
+ * @param {string} [claimId] - Unique claim ID for ACK matching
  */
-function handleClaimPrimary(portId, tabId) {
-    console.log(`[SharedWorker] Tab ${tabId} claiming primary`);
+function handleClaimPrimary(portId, tabId, claimId) {
+    console.log(`[SharedWorker] Tab ${tabId} claiming primary${claimId ? ` (claimId: ${claimId})` : ''}`);
+
+    const port = connectedPorts.get(portId);
+    if (!port) {
+        console.warn(`[SharedWorker] Port ${portId} not found for claim from ${tabId}`);
+        return;
+    }
 
     // If no leader or same leader, accept
     if (!currentLeader || currentLeader === tabId) {
         currentLeader = tabId;
 
-        // Broadcast leadership change
+        // Send acknowledgment to claimer FIRST (before broadcasting)
+        // This ensures claimer knows they are leader before others are notified
+        port.postMessage({
+            type: 'LEADER_GRANTED',
+            leaderId: tabId,
+            claimId,
+            timestamp: Date.now()
+        });
+
+        // Then broadcast leadership change to all other tabs
         broadcastToAll({
             type: 'LEADER_ELECTED',
-            leaderId: tabId
-        });
+            leaderId: tabId,
+            claimId
+        }, portId);  // Exclude the claimer from this broadcast
     } else {
-        // Conflict - notify claimer of current leader
-        const port = connectedPorts.get(portId);
-        if (port) {
-            port.postMessage({
-                type: 'CLAIM_REJECTED',
-                currentLeader,
-                reason: 'leader_exists'
-            });
-        }
+        // Conflict - notify claimer of current leader with ACK
+        port.postMessage({
+            type: 'CLAIM_REJECTED',
+            currentLeader,
+            reason: 'leader_exists',
+            claimId,
+            timestamp: Date.now()
+        });
     }
 }
 
@@ -293,13 +311,12 @@ function broadcastToAll(message, excludePortId = null) {
  * Periodic cleanup of stale connections
  */
 function cleanupStaleConnections() {
-    const staleThreshold = 30000; // 30 seconds without heartbeat
     const now = Date.now();
 
     // Collect stale entries first to avoid mutating during iteration
     const staleEntries = [];
     for (const [portId, metadata] of tabMetadata) {
-        if (now - metadata.lastHeartbeat > staleThreshold) {
+        if (now - metadata.lastHeartbeat > WORKER_TIMEOUTS.STALE_CONNECTION_THRESHOLD_MS) {
             staleEntries.push([portId, metadata.tabId]);
         }
     }
@@ -311,7 +328,7 @@ function cleanupStaleConnections() {
     }
 }
 
-// Run cleanup every 10 seconds
-setInterval(cleanupStaleConnections, 10000);
+// Run cleanup every 10 seconds (2x heartbeat interval)
+setInterval(cleanupStaleConnections, WORKER_TIMEOUTS.HEARTBEAT_INTERVAL_MS * 2);
 
 console.log('[SharedWorker] Cross-tab coordination worker initialized');

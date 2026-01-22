@@ -9,16 +9,17 @@ status: active
 
 ## Purpose
 
-Manages a pool of Web Workers for parallel pattern detection, achieving 3x speedup on multi-core devices through distributed processing and automatic worker health monitoring.
+Spawns multiple Web Workers for parallel pattern detection with 3x speedup on multi-core devices. Distributes work across workers, aggregates results, and implements bidirectional liveness checks with automatic worker restart.
 
 ## Exports
 
-- **PatternWorkerPool** - Main class managing worker lifecycle, work distribution, and result aggregation
+- `PatternWorkerPool` - Manages pool of Web Workers for parallel pattern detection with automatic health monitoring and restart
 
 ## Dependencies
 
 - [[patterns]]
 - [[event-bus]]
+- [[timeouts]]
 
 ## Used By
 
@@ -26,4 +27,6 @@ TBD
 
 ## Notes
 
-Requires COOP/COEP headers for SharedArrayBuffer support; falls back to data partitioning when unavailable. Adapts worker count based on device memory.
+- Uses SharedArrayBuffer when COOP/COEP headers present, falls back to data partitioning
+- Adapts worker count based on navigator.deviceMemory
+- Requires server headers: Cross-Origin-Opener-Policy: same-origin, Cross-Origin-Embedder-Policy: require-corp

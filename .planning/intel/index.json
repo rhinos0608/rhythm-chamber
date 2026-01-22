@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": 1769064738412,
+  "updated": 1769068753471,
   "files": {
     "./js/app.js": {
       "exports": [
@@ -1829,7 +1829,7 @@
         "../services/event-bus.js",
         "../security/secure-token-store.js"
       ],
-      "indexed": 1769005407381
+      "indexed": 1769067183427
     },
     "/Users/rhinesharar/rhythm-chamber/js/chat.js": {
       "exports": [
@@ -1913,7 +1913,7 @@
         "./turn-queue.js",
         "./timeout-budget-manager.js"
       ],
-      "indexed": 1769059861896
+      "indexed": 1769068753471
     },
     "/Users/rhinesharar/rhythm-chamber/js/functions/executors/template-executors.js": {
       "exports": [
@@ -2666,9 +2666,10 @@
       ],
       "imports": [
         "../patterns.js",
-        "../services/event-bus.js"
+        "../services/event-bus.js",
+        "../config/timeouts.js"
       ],
-      "indexed": 1769046275485
+      "indexed": 1769067515041
     },
     "/Users/rhinesharar/rhythm-chamber/js/observability/init-observability.js": {
       "exports": [
@@ -2857,6 +2858,40 @@
       ],
       "imports": [],
       "indexed": 1769064737986
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/workers/shared-worker.js": {
+      "exports": [],
+      "imports": [
+        "../config/timeouts.js"
+      ],
+      "indexed": 1769067433715
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/workers/shared-worker-coordinator.js": {
+      "exports": [
+        "SharedWorkerCoordinator"
+      ],
+      "imports": [
+        "../config/timeouts.js"
+      ],
+      "indexed": 1769067399119
+    },
+    "/Users/rhinesharar/rhythm-chamber/js/config/timeouts.js": {
+      "exports": [
+        "LLM_TIMEOUTS",
+        "NETWORK_TIMEOUTS",
+        "WORKER_TIMEOUTS",
+        "OPERATION_TIMEOUTS",
+        "RETRY_TIMEOUTS",
+        "STORAGE_TIMEOUTS",
+        "COORDINATION_TIMEOUTS",
+        "OBSERVABILITY_TIMEOUTS",
+        "CIRCUIT_BREAKER_TIMEOUTS",
+        "PATTERN_TIMEOUTS",
+        "default",
+        "Timeouts"
+      ],
+      "imports": [],
+      "indexed": 1769067272855
     }
   }
 }

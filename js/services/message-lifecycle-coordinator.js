@@ -39,11 +39,6 @@ const _processedMessageHashes = new Set();
 // Maximum number of hashes to keep (prevent unbounded growth)
 const MAX_HASH_CACHE_SIZE = 1000;
 
-// Timeout constants
-const CHAT_API_TIMEOUT_MS = 60000;
-const LOCAL_LLM_TIMEOUT_MS = 90000;
-const CHAT_FUNCTION_TIMEOUT_MS = 30000;
-
 /**
  * Generate a simple hash for message content (FNV-1a inspired)
  * Used for duplicate detection without requiring crypto APIs
@@ -271,11 +266,10 @@ async function sendMessage(message, optionsOrKey = null, options = {}) {
 
     const bypassQueue = options?.bypassQueue === true;
 
-    // ISSUE 4: Validate bypassQueue usage - require explicit allowBypass flag
+    // SECURITY: Validate bypassQueue usage - require explicit allowBypass flag
+    // Hardened security: throw error instead of warning to prevent silent bypass
     if (bypassQueue && !options?.allowBypass) {
-        console.warn('[MessageLifecycleCoordinator] bypassQueue requires allowBypass flag for security');
-        // Fall through to normal queue processing
-        return TurnQueue.push(message, optionsOrKey);
+        throw new Error('[MessageLifecycleCoordinator] Security violation: bypassQueue requires explicit allowBypass flag. Queue bypass is restricted to authorized internal operations only.');
     }
 
     if (bypassQueue) {
