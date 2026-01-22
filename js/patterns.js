@@ -814,6 +814,12 @@ function initPatternWorkerHandlers() {
         patternWorkerInitialized = true;
 
         patternWorker.onmessage = (e) => {
+            // Validate message format before destructuring
+            if (!e.data || typeof e.data !== 'object') {
+                console.warn('[Patterns] Received invalid message format');
+                return;
+            }
+
             const { type, requestId, patterns, current, total, message, error } = e.data;
 
             const pending = pendingPatternRequests.get(requestId);
