@@ -145,10 +145,11 @@ function setupEventBusIntegration() {
     // Subscribe to existing application events for tracking
     // Store unsubscribe functions for cleanup
     eventBusUnsubscribers = [
-        EventBus.on('DATA_STREAMS_LOADED', handleDataStreamsLoaded),
-        EventBus.on('CHAT_MESSAGE_SENT', handleChatMessageSent),
-        EventBus.on('PATTERN_DETECTION_COMPLETE', handlePatternDetectionComplete),
-        EventBus.on('EMBEDDING_GENERATED', handleEmbeddingGenerated)
+        EventBus.on('data:streams_loaded', handleDataStreamsLoaded),
+        // Note: chat:message_sent is defined in schema but not currently emitted
+        // EventBus.on('chat:message_sent', handleChatMessageSent),
+        EventBus.on('pattern:all_complete', handlePatternDetectionComplete),
+        EventBus.on('embedding:generation_complete', handleEmbeddingGenerated)
     ];
 
     console.log('[ObservabilityInit] EventBus integration setup complete');
