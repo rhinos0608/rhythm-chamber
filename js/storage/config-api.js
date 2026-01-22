@@ -80,19 +80,21 @@ async function getConfig(key, defaultValue = null) {
                             // Parse JSON and return
                             return JSON.parse(decrypted);
                         } else {
-                            // Decryption failed - emit security event and return null (not defaultValue)
+                            // Decryption failed - emit security event and propagate error
                             const securityEvent = { key, timestamp: Date.now(), critical: true };
                             EventBus.emit('security:decryption_failed', securityEvent);
-                            console.error(`[ConfigAPI] CRITICAL: Decryption failed for sensitive key '${key}'`);
-                            return null;
+                            const error = new Error(`Decryption failed for sensitive key '${key}'`);
+                            error.code = 'DECRYPTION_FAILED';
+                            error.key = key;
+                            throw error;  // Propagate error instead of returning null
                         }
 
                     } catch (decryptError) {
-                        // CRITICAL: Decryption failure - emit security event
+                        // CRITICAL: Decryption failure - emit security event and propagate
                         const securityEvent = { key, timestamp: Date.now(), critical: true, error: decryptError.message };
                         EventBus.emit('security:decryption_failed', securityEvent);
                         console.error(`[ConfigAPI] CRITICAL: Decryption threw error for sensitive key '${key}':`, decryptError);
-                        return null;
+                        throw decryptError;  // Propagate error instead of returning null
                     }
                 }
 
@@ -113,6 +115,11 @@ async function getConfig(key, defaultValue = null) {
 
         return defaultValue;
     } catch (err) {
+        // Re-throw decryption errors so caller can handle them
+        if (err?.code === 'DECRYPTION_FAILED' || err?.message?.includes('Decryption failed')) {
+            throw err;
+        }
+        // For other errors, log and return default
         console.warn(`[ConfigAPI] Error getting config '${key}':`, err);
         return defaultValue;
     }
