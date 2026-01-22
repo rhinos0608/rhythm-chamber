@@ -376,9 +376,13 @@ async function flushPendingOperations() {
     // Flush pending chat saves
     if (Chat?.flushPendingSaveAsync) {
         promises.push(
-            Chat.flushPendingSaveAsync().catch(e =>
-                console.warn('[DemoController] Chat flush failed:', e)
-            )
+            Chat.flushPendingSaveAsync().catch(e => {
+                console.warn('[DemoController] Chat flush failed:', e);
+                // Emit event for observability
+                if (typeof EventBus !== 'undefined' && EventBus.emit) {
+                    EventBus.emit('error:handler', { source: 'DemoController', error: e, context: 'flushPendingSaveAsync' });
+                }
+            })
         );
     }
 
@@ -390,7 +394,9 @@ async function flushPendingOperations() {
             // IndexedDB doesn't have a flush, but we can ensure transactions complete
             // by doing a small read operation
             promises.push(
-                IndexedDBCore.count?.('config').catch(() => { })
+                IndexedDBCore.count?.('config').catch(e => {
+                    console.warn('[DemoController] IndexedDB flush check failed:', e);
+                })
             );
         }
     }
