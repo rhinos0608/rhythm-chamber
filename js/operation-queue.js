@@ -210,6 +210,8 @@ class OperationQueue {
 
                 // Wait before retry
                 await new Promise(resolve => setTimeout(resolve, waitTime));
+                // Re-sort queue after waiting - priorities may have changed or new ops added
+                this.queue.sort((a, b) => b.priority - a.priority);
                 continue;
             }
 
