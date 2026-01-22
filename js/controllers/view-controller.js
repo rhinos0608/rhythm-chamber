@@ -20,6 +20,8 @@ let _elements = null;
 
 // AbortController for cancelling pending AI description requests (RACE CONDITION FIX)
 let descriptionAbortController = null;
+// Edge case: Pending request flag to prevent concurrent AI description requests (RACE CONDITION FIX)
+let descriptionRequestPending = false;
 
 /**
  * Initialize DOM element references
@@ -247,6 +249,15 @@ function showReveal() {
  * @param {HTMLElement} descriptionEl - Element to update
  */
 async function generateAIDescription(personality, patterns, summary, descriptionEl) {
+    // Edge case: Guard against concurrent requests (RACE CONDITION FIX)
+    // Between abort() and creating a new AbortController, there's a microtask window.
+    // This flag ensures we never have two requests in flight simultaneously.
+    if (descriptionRequestPending) {
+        console.log('[ViewController] AI description request already in flight, ignoring duplicate call');
+        return;
+    }
+    descriptionRequestPending = true;
+
     // Cancel any pending description request (RACE CONDITION FIX with AbortController)
     if (descriptionAbortController) {
         descriptionAbortController.abort();
@@ -309,6 +320,8 @@ async function generateAIDescription(personality, patterns, summary, description
         if (descriptionEl._generationId === currentGenerationId) {
             descriptionAbortController = null;
         }
+        // Always reset the pending flag to allow new requests (RACE CONDITION FIX)
+        descriptionRequestPending = false;
     }
 }
 
@@ -459,6 +472,8 @@ function destroy() {
         descriptionAbortController.abort();
         descriptionAbortController = null;
     }
+    // Reset pending request flag (RACE CONDITION FIX)
+    descriptionRequestPending = false;
     // Clear element cache
     _elements = null;
 }

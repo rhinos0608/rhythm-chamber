@@ -250,6 +250,7 @@ function getStatus() {
 /**
  * Claim primary (leader) role with ACK mechanism
  * Prevents multi-writer race conditions by waiting for acknowledgment
+ * MEDIUM FIX Issue #14: Added disconnect handler cleanup for pending claims
  *
  * @returns {Promise<{granted: boolean, leaderId: string|null, reason: string|null}>}
  */
@@ -265,6 +266,7 @@ async function claimPrimary() {
     return new Promise((resolve, reject) => {
         // Set up timeout for claim response
         const timeout = setTimeout(() => {
+            // MEDIUM FIX Issue #14: Clean up claim on timeout
             pendingClaims.delete(claimId);
             reject(new Error('Leader claim timeout - no acknowledgment received'));
         }, WORKER_TIMEOUTS.CLAIM_ACK_TIMEOUT_MS);
@@ -282,6 +284,19 @@ async function claimPrimary() {
             timestamp: Date.now()
         });
 
+        // MEDIUM FIX Issue #14: Add disconnect handler to clean up pending claim
+        // This prevents memory leaks if the worker disconnects unexpectedly
+        const disconnectHandler = () => {
+            if (pendingClaims.has(claimId)) {
+                clearTimeout(timeout);
+                pendingClaims.delete(claimId);
+                reject(new Error('Worker disconnected during primary claim'));
+            }
+        };
+
+        // Listen for worker disconnect
+        workerPort.addEventListener('disconnect', disconnectHandler, { once: true });
+
         // Send claim request
         try {
             workerPort.postMessage({
@@ -291,7 +306,10 @@ async function claimPrimary() {
             });
         } catch (error) {
             clearTimeout(timeout);
+            // MEDIUM FIX Issue #14: Clean up on postMessage error
             pendingClaims.delete(claimId);
+            // Remove disconnect handler since we're rejecting anyway
+            workerPort.removeEventListener('disconnect', disconnectHandler);
             reject(error);
         }
     });

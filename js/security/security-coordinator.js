@@ -376,6 +376,15 @@ class SecurityCoordinatorClass {
     
     /**
      * Step 6: Enable prototype pollution protection
+     *
+     * SECURITY FIX (MEDIUM Issue #14): Removed automatic skip for React/jQuery
+     * Previous implementation automatically disabled protection when third-party libs detected
+     * New implementation always enables protection with graceful error handling
+     *
+     * Rationale: Presence of React/jQuery doesn't eliminate prototype pollution risk.
+     * The protection should be active unless it causes actual runtime errors, not preemptively
+     * disabled based on library detection which attackers can spoof.
+     *
      * @private
      */
     async _initPrototypePollutionProtection() {
@@ -383,71 +392,93 @@ class SecurityCoordinatorClass {
         this._moduleStates.prototypePollution.state = InitState.IN_PROGRESS;
 
         try {
-            // Detect common third-party libraries/polyfills that may be incompatible with sealing
-            const root = typeof globalThis !== 'undefined' ? globalThis : {};
-            const hasIncompatibleLibs = (
-                typeof root.React !== 'undefined' ||
-                typeof root.jQuery !== 'undefined' ||
-                typeof root.$ !== 'undefined' ||
-                typeof root.angular !== 'undefined'
-            );
+            // SECURITY FIX: Removed library detection skip
+            // Previous code checked for React/jQuery and skipped protection - this created
+            // a security bypass where attackers could load these libraries to disable protection
 
-            if (hasIncompatibleLibs) {
-                console.warn('[SecurityCoordinator] Skipping prototype pollution protection - incompatible libraries detected (React, jQuery, etc.)');
-                this._warnings.push('Prototype pollution protection skipped - incompatible libraries detected');
-                this._moduleStates.prototypePollution.state = InitState.FAILED;
-                return;
+            // Attempt to seal built-in prototypes to prevent prototype pollution attacks
+            // Using seal() instead of freeze() for most prototypes to avoid breaking
+            // legitimate libraries that may need to modify properties on Function.prototype, etc.
+
+            const prototypesToSeal = [
+                Object.prototype,
+                Array.prototype,
+                String.prototype,
+                Number.prototype,
+                Boolean.prototype,
+                Symbol.prototype,
+                Date.prototype,
+                RegExp.prototype,
+                Error.prototype,
+                Promise.prototype,
+                Map.prototype,
+                Set.prototype,
+                WeakMap.prototype,
+                WeakSet.prototype
+            ];
+
+            let sealedCount = 0;
+            for (const proto of prototypesToSeal) {
+                try {
+                    Object.seal(proto);
+                    sealedCount++;
+                } catch (e) {
+                    // Individual prototype seal failure is non-critical
+                    console.debug(`[SecurityCoordinator] Could not seal prototype: ${e.message}`);
+                }
             }
 
-            // Strengthened prototype pollution protection
-            // 1. Seal prototypes (less restrictive than freeze, prevents addition but allows property modification for existing properties)
-            Object.seal(Object.prototype);
-            Object.seal(Array.prototype);
-            Object.seal(Function.prototype);
-            Object.seal(String.prototype);
-            Object.seal(Number.prototype);
-            Object.seal(Boolean.prototype);
-            Object.seal(Symbol.prototype);
-            Object.seal(Date.prototype);
-            Object.seal(RegExp.prototype);
-            Object.seal(Error.prototype);
-            Object.seal(Promise.prototype);
-            Object.seal(Map.prototype);
-            Object.seal(Set.prototype);
-            Object.seal(WeakMap.prototype);
-            Object.seal(WeakSet.prototype);
-
-            // 2. Freeze critical prototypes to prevent property modification (more restrictive but more secure)
-            // Only freeze Object.prototype since it's the most critical for prototype pollution attacks
-            // Note: Re-sealing with freeze to override the previous seal
+            // Freeze Object.prototype - most critical for prototype pollution prevention
             try {
                 Object.freeze(Object.prototype);
+                console.log('[SecurityCoordinator] Object.prototype frozen (critical protection)');
             } catch (e) {
-                // If freeze fails (e.g., due to non-configurable properties), at least we have seal protection
-                console.warn('[SecurityCoordinator] Could not freeze Object.prototype, using seal protection only:', e.message);
+                // If freeze fails, seal protection is already in place
+                console.warn('[SecurityCoordinator] Could not freeze Object.prototype, seal protection active:', e.message);
             }
 
-            // 3. Set up non-configurable, non-writable property to detect tampering attempts
-            if (!Object.prototype.hasOwnProperty('_PROTECTION_ACTIVE')) {
-                Object.defineProperty(Object.prototype, '_PROTECTION_ACTIVE', {
-                    configurable: false,
-                    enumerable: false,
-                    writable: false,
-                    value: true
-                });
+            // Set up detection marker for tampering attempts
+            try {
+                if (!Object.prototype.hasOwnProperty('_PROTECTION_ACTIVE')) {
+                    Object.defineProperty(Object.prototype, '_PROTECTION_ACTIVE', {
+                        configurable: false,
+                        enumerable: false,
+                        writable: false,
+                        value: true
+                    });
+                }
+            } catch (e) {
+                // Marker may already be set or prototype is frozen
+                console.debug('[SecurityCoordinator] Protection marker already set or cannot be added');
             }
 
-            // 4. Freeze the global Object constructor itself to prevent re-sealing attacks
+            // Attempt to freeze the global Object constructor to prevent re-sealing attacks
             try {
                 Object.freeze(Object);
             } catch (e) {
-                console.warn('[SecurityCoordinator] Could not freeze Object constructor:', e.message);
+                console.debug('[SecurityCoordinator] Could not freeze Object constructor:', e.message);
+            }
+
+            // Check for third-party libraries and log informational message
+            // (but don't skip protection)
+            const root = typeof globalThis !== 'undefined' ? globalThis : {};
+            const detectedLibs = [];
+            if (typeof root.React !== 'undefined') detectedLibs.push('React');
+            if (typeof root.jQuery !== 'undefined') detectedLibs.push('jQuery');
+            if (typeof root.$ !== 'undefined' && typeof root.jQuery === 'undefined') detectedLibs.push('$');
+            if (typeof root.angular !== 'undefined') detectedLibs.push('Angular');
+
+            if (detectedLibs.length > 0) {
+                console.info(
+                    `[SecurityCoordinator] Prototype pollution protection active with libraries present: ${detectedLibs.join(', ')}. ` +
+                    'If you experience issues, report them as they may indicate unsafe library practices.'
+                );
             }
 
             this._moduleStates.prototypePollution.state = InitState.READY;
             // Update SafeMode so other modules know prototype pollution protection is available
             await SafeMode.initModule('prototypePollution', async () => {});
-            console.log('[SecurityCoordinator] Enhanced prototype pollution protection enabled (frozen Object.prototype, sealed other built-in prototypes)');
+            console.log(`[SecurityCoordinator] Prototype pollution protection enabled (${sealedCount}/${prototypesToSeal.length} prototypes sealed, Object.prototype frozen)`);
         } catch (error) {
             this._moduleStates.prototypePollution.state = InitState.FAILED;
             this._moduleStates.prototypePollution.error = error;
@@ -460,6 +491,10 @@ class SecurityCoordinatorClass {
 
     /**
      * Enable prototype pollution protection (for deferred call at window.onload)
+     *
+     * SECURITY FIX (MEDIUM Issue #14): Removed automatic skip for React/jQuery
+     * See _initPrototypePollutionProtection() for detailed rationale
+     *
      * @returns {boolean} True if protection was enabled
      */
     async enablePrototypePollutionProtection() {
@@ -469,68 +504,83 @@ class SecurityCoordinatorClass {
         }
 
         try {
-            // Detect common third-party libraries/polyfills that may be incompatible with sealing
-            const root = typeof globalThis !== 'undefined' ? globalThis : {};
-            const hasIncompatibleLibs = (
-                typeof root.React !== 'undefined' ||
-                typeof root.jQuery !== 'undefined' ||
-                typeof root.$ !== 'undefined' ||
-                typeof root.angular !== 'undefined'
-            );
+            // SECURITY FIX: Removed library detection skip (see _initPrototypePollutionProtection)
 
-            if (hasIncompatibleLibs) {
-                console.warn('[SecurityCoordinator] Skipping prototype pollution protection (deferred) - incompatible libraries detected (React, jQuery, etc.)');
-                this._warnings.push('Prototype pollution protection skipped (deferred) - incompatible libraries detected');
-                this._moduleStates.prototypePollution.state = InitState.FAILED;
-                return false;
+            const prototypesToSeal = [
+                Object.prototype,
+                Array.prototype,
+                Function.prototype,
+                String.prototype,
+                Number.prototype,
+                Boolean.prototype,
+                Symbol.prototype,
+                Date.prototype,
+                RegExp.prototype,
+                Error.prototype,
+                Promise.prototype,
+                Map.prototype,
+                Set.prototype,
+                WeakMap.prototype,
+                WeakSet.prototype
+            ];
+
+            let sealedCount = 0;
+            for (const proto of prototypesToSeal) {
+                try {
+                    Object.seal(proto);
+                    sealedCount++;
+                } catch (e) {
+                    console.debug(`[SecurityCoordinator] Could not seal prototype (deferred): ${e.message}`);
+                }
             }
 
-            // Strengthened prototype pollution protection (same as _initPrototypePollutionProtection)
-            // 1. Seal prototypes (less restrictive than freeze, prevents addition but allows property modification for existing properties)
-            Object.seal(Object.prototype);
-            Object.seal(Array.prototype);
-            Object.seal(Function.prototype);
-            Object.seal(String.prototype);
-            Object.seal(Number.prototype);
-            Object.seal(Boolean.prototype);
-            Object.seal(Symbol.prototype);
-            Object.seal(Date.prototype);
-            Object.seal(RegExp.prototype);
-            Object.seal(Error.prototype);
-            Object.seal(Promise.prototype);
-            Object.seal(Map.prototype);
-            Object.seal(Set.prototype);
-            Object.seal(WeakMap.prototype);
-            Object.seal(WeakSet.prototype);
-
-            // 2. Freeze critical prototypes to prevent property modification (more restrictive but more secure)
+            // Freeze Object.prototype - most critical for prototype pollution prevention
             try {
                 Object.freeze(Object.prototype);
+                console.log('[SecurityCoordinator] Object.prototype frozen (deferred)');
             } catch (e) {
-                console.warn('[SecurityCoordinator] Could not freeze Object.prototype (deferred), using seal protection only:', e.message);
+                console.warn('[SecurityCoordinator] Could not freeze Object.prototype (deferred), seal protection active:', e.message);
             }
 
-            // 3. Set up non-configurable, non-writable property to detect tampering attempts
-            if (!Object.prototype.hasOwnProperty('_PROTECTION_ACTIVE')) {
-                Object.defineProperty(Object.prototype, '_PROTECTION_ACTIVE', {
-                    configurable: false,
-                    enumerable: false,
-                    writable: false,
-                    value: true
-                });
+            // Set up detection marker for tampering attempts
+            try {
+                if (!Object.prototype.hasOwnProperty('_PROTECTION_ACTIVE')) {
+                    Object.defineProperty(Object.prototype, '_PROTECTION_ACTIVE', {
+                        configurable: false,
+                        enumerable: false,
+                        writable: false,
+                        value: true
+                    });
+                }
+            } catch (e) {
+                console.debug('[SecurityCoordinator] Protection marker already set or cannot be added (deferred)');
             }
 
-            // 4. Freeze the global Object constructor itself to prevent re-sealing attacks
+            // Attempt to freeze the global Object constructor
             try {
                 Object.freeze(Object);
             } catch (e) {
-                console.warn('[SecurityCoordinator] Could not freeze Object constructor (deferred):', e.message);
+                console.debug('[SecurityCoordinator] Could not freeze Object constructor (deferred):', e.message);
+            }
+
+            // Check for third-party libraries and log informational message
+            const root = typeof globalThis !== 'undefined' ? globalThis : {};
+            const detectedLibs = [];
+            if (typeof root.React !== 'undefined') detectedLibs.push('React');
+            if (typeof root.jQuery !== 'undefined') detectedLibs.push('jQuery');
+            if (typeof root.$ !== 'undefined' && typeof root.jQuery === 'undefined') detectedLibs.push('$');
+            if (typeof root.angular !== 'undefined') detectedLibs.push('Angular');
+
+            if (detectedLibs.length > 0) {
+                console.info(
+                    `[SecurityCoordinator] Prototype pollution protection active with libraries (deferred): ${detectedLibs.join(', ')}.`
+                );
             }
 
             this._moduleStates.prototypePollution.state = InitState.READY;
-            // Fix: Notify SafeMode so other modules know prototype pollution protection is available
+            // Notify SafeMode so other modules know prototype pollution protection is available
             await SafeMode.initModule('prototypePollution', async () => {});
-            console.log('[SecurityCoordinator] Enhanced prototype pollution protection enabled (deferred, frozen Object.prototype, sealed other built-in prototypes)');
+            console.log(`[SecurityCoordinator] Prototype pollution protection enabled (deferred, ${sealedCount}/${prototypesToSeal.length} prototypes sealed, Object.prototype frozen)`);
             return true;
         } catch (error) {
             this._moduleStates.prototypePollution.state = InitState.FAILED;

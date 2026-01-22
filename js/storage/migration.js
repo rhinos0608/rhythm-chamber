@@ -10,6 +10,7 @@
 import { IndexedDBCore } from './indexeddb.js';
 import { ConfigAPI } from './config-api.js';
 import { SecureTokenStore } from '../security/secure-token-store.js';
+import { EventBus } from '../services/event-bus.js';
 
 // ==========================================
 // Migration Configuration
@@ -327,6 +328,14 @@ async function backupLocalStorage() {
 
 /**
  * Rollback migration - restore localStorage from backup
+ * CRITICAL FIX for Issue #3: Add backup integrity verification before restoration
+ *
+ * Previous implementation had a race condition where the backup itself could be
+ * corrupted, leading to data loss during rollback. This version:
+ * 1. Verifies backup structure integrity before making any changes
+ * 2. Validates each value can be parsed before restoring
+ * 3. Uses a restore checkpoint for crash recovery during rollback
+ *
  * @returns {Promise<boolean>} True if rollback succeeded
  */
 async function rollbackMigration() {
@@ -346,21 +355,92 @@ async function rollbackMigration() {
             return false;
         }
 
-        // Restore localStorage
-        for (const [key, value] of Object.entries(backup.backup)) {
-            localStorage.setItem(key, value);
+        // CRITICAL FIX: Verify backup integrity before deleting anything
+        // Check that backup.backup is a valid object with stringifiable values
+        if (typeof backup.backup !== 'object' || backup.backup === null) {
+            console.error('[Migration] Backup data is corrupted: not an object');
+            EventBus.emit('migration:rollback_failed', { reason: 'corrupted_backup' });
+            return false;
         }
 
-        // Clear migration state (allows re-migration)
+        // Verify backup can be serialized (sanity check for corruption)
+        try {
+            JSON.stringify(backup.backup);
+        } catch (e) {
+            console.error('[Migration] Backup is corrupted, cannot rollback:', e);
+            EventBus.emit('migration:rollback_failed', { reason: 'corrupted_backup', error: e.message });
+            return false;
+        }
+
+        // Get backup keys for restoration
+        const backupKeys = Object.keys(backup.backup);
+        if (backupKeys.length === 0) {
+            console.log('[Migration] Backup is empty, nothing to restore');
+            EventBus.emit('migration:rollback_failed', { reason: 'empty_backup' });
+            return false;
+        }
+
+        // Create restore checkpoint before making changes (for crash recovery)
+        await saveCheckpoint({
+            intent: 'restore',
+            key: 'all',
+            index: 0,
+            lastProcessedIndex: -1,
+            keysProcessed: 0,
+            totalKeys: backupKeys.length,
+            status: 'pending'
+        });
+
+        // Restore localStorage with per-key validation
+        let restoredCount = 0;
+        const failedKeys = [];
+
+        for (const [key, value] of Object.entries(backup.backup)) {
+            try {
+                // Validate value type before setting
+                if (value === null || value === undefined) {
+                    // Valid - just remove the key if it exists
+                    localStorage.removeItem(key);
+                    restoredCount++;
+                    continue;
+                }
+
+                // For strings, set directly
+                if (typeof value === 'string') {
+                    localStorage.setItem(key, value);
+                    restoredCount++;
+                    continue;
+                }
+
+                // For objects, stringify first
+                const stringified = JSON.stringify(value);
+                localStorage.setItem(key, stringified);
+                restoredCount++;
+            } catch (setItemError) {
+                console.error(`[Migration] Failed to restore key '${key}':`, setItemError);
+                failedKeys.push(key);
+                // Continue with other keys instead of failing entire rollback
+            }
+        }
+
+        // Mark checkpoint complete after successful restore
+        await markCheckpointComplete('restore', 'all', 0, restoredCount, backupKeys.length);
+
+        // Only clear migration state after successful restore
         await IndexedDBCore.delete(
             IndexedDBCore.STORES.MIGRATION,
             'migration_state'
         );
 
-        console.log('[Migration] Migration rolled back successfully');
+        if (failedKeys.length > 0) {
+            console.warn(`[Migration] Rollback completed with ${failedKeys.length} failed keys:`, failedKeys);
+        }
+
+        console.log(`[Migration] Migration rolled back successfully (${restoredCount}/${backupKeys.length} keys restored)`);
         return true;
     } catch (err) {
         console.error('[Migration] Rollback failed:', err);
+        EventBus.emit('migration:rollback_failed', { reason: 'unknown', error: err.message });
         return false;
     }
 }
@@ -538,7 +618,7 @@ async function migrateFromLocalStorage(onProgress = null) {
                     } else if (key === 'spotify_token_expiry') {
                         migrated = migratedTokenKeys.has('spotify_access_token');
                     }
-                } else if (!SecureTokenStore && ConfigAPI?.setToken) {
+                } else if (!secureStoreAvailable && ConfigAPI?.setToken) {
                     await ConfigAPI.setToken(key, value);
                     migrated = true;
                 }

@@ -239,8 +239,16 @@ class OperationQueue {
                     // Wait before retry
                     await new Promise(resolve => setTimeout(resolve, operation.retryDelay));
 
-                    // Re-sort queue in case priorities changed
-                    this.queue.sort((a, b) => b.priority - a.priority);
+                    // MEDIUM FIX Issue #21: Avoid priority inversion by NOT re-sorting queue on retry
+                    // The original code re-sorted the entire queue after each retry, which could
+                    // cause a high-priority operation that just failed to jump behind newly added
+                    // lower-priority operations. This violates priority semantics.
+                    //
+                    // Instead, only sort when new operations are added (in enqueue()),
+                    // or explicitly trigger a re-sort if priority was intentionally changed.
+                    //
+                    // The failed operation remains at its current position (front of queue),
+                    // which is correct since it has been waiting the longest and deserves another chance.
                 } else {
                     // Final failure
                     this.queue.shift();

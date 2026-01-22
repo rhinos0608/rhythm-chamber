@@ -17,6 +17,7 @@ import { SecurityCoordinator } from './security-coordinator.js';
 import { SafeMode } from './safe-mode.js';
 import './recovery-handlers.js'; // Side-effect import - sets up window.RecoveryHandlers
 import { SecurityChecklist } from './checklist.js';
+import { ApiKeyManager } from './api-key-manager.js';
 
 /**
  * Unified error context system
@@ -280,6 +281,75 @@ function isPrototypeFreezeEnabled() {
     return prototypeFreezeEnabled;
 }
 
+// ==========================================
+// Constant-Time Comparison (Timing Attack Prevention)
+// ==========================================
+
+/**
+ * Constant-time string comparison to prevent timing attacks
+ *
+ * SECURITY FIX (MEDIUM Issue #13): Adds timing-safe comparison for secrets
+ *
+ * Timing attacks allow attackers to infer secret values by measuring how long
+ * comparison operations take. Standard string comparison (===) returns early
+ * on first mismatch, leaking information about mismatch position.
+ *
+ * This function always compares all characters regardless of mismatches,
+ * preventing timing-based information leakage.
+ *
+ * USE CASES:
+ * - API keys / tokens
+ * - HMAC signatures
+ * - Passwords / secrets
+ * - Cryptographic hashes
+ *
+ * NOT NEEDED FOR:
+ * - Device fingerprints (not secrets)
+ * - Non-sensitive identifiers
+ * - UI display strings
+ *
+ * @param {string} a - First string to compare
+ * @param {string} b - Second string to compare
+ * @returns {boolean} True if strings are identical, false otherwise
+ *
+ * @example
+ * // Secure token comparison
+ * const storedToken = 'sk-or-v1-secret';
+ * const providedToken = userInput;
+ * if (constantTimeCompare(storedToken, providedToken)) {
+ *   // Token valid
+ * }
+ *
+ * @example
+ * // HMAC signature verification (in addition to crypto.subtle.verify)
+ * const expectedSig = 'abc123';
+ * const providedSig = message.signature;
+ * if (constantTimeCompare(expectedSig, providedSig)) {
+ *   // Signatures match
+ * }
+ */
+function constantTimeCompare(a, b) {
+    // Handle non-string inputs
+    if (typeof a !== 'string' || typeof b !== 'string') {
+        return false;
+    }
+
+    // Different lengths cannot match
+    if (a.length !== b.length) {
+        return false;
+    }
+
+    // XOR all characters and accumulate result
+    // This ensures all characters are compared regardless of mismatches
+    let result = 0;
+    for (let i = 0; i < a.length; i++) {
+        result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+
+    // Result is 0 only if all characters matched
+    return result === 0;
+}
+
 // Aggregate all modules into unified API
 const Security = {
     // Fallback detection flags (real module = not in fallback)
@@ -415,6 +485,9 @@ const Security = {
     enablePrototypePollutionProtection,
     isPrototypeFreezeEnabled,
 
+    // Timing-Safe Comparison (NEW - MEDIUM Issue #13)
+    constantTimeCompare,
+
     /**
      * KeyManager Exports
      *
@@ -519,7 +592,41 @@ const Security = {
      * Integration with Tab Coordination (Phase 14-02):
      * Tab coordination will use MessageSecurity to secure BroadcastChannel communications.
      */
-    MessageSecurity
+    MessageSecurity,
+
+    /**
+     * ApiKeyManager Module (NEW - Security Fix)
+     *
+     * Manages user-provided OpenRouter API keys with localStorage persistence.
+     *
+     * SECURITY FIX: Addresses CRITICAL issue #1 - Hard-coded API key in source code
+     *
+     * Methods:
+     * - getApiKey(): Get the current API key from localStorage or config
+     * - saveApiKey(key): Save an API key to localStorage
+     * - clearApiKey(): Remove the stored API key
+     * - hasValidKey(): Check if a valid API key is available
+     * - getMaskedKey(): Get a masked version for UI display (shows last 8 chars)
+     * - validateKeyFormat(key): Validate key format with helpful error messages
+     *
+     * Usage Pattern:
+     * const apiKey = Security.ApiKeyManager.getApiKey();
+     * if (!apiKey) {
+     *     showApiKeyPrompt();
+     *     return;
+     * }
+     *
+     * // Save user-provided key
+     * Security.ApiKeyManager.saveApiKey(userInputKey);
+     *
+     * Security Features:
+     * - Keys stored in localStorage (browser-local, not sent to servers)
+     * - Rejects placeholder values (e.g., 'your-api-key-here')
+     * - Basic format validation for OpenRouter keys
+     * - Graceful migration from legacy config-based keys
+     * - Masked display for UI (shows only last 8 characters)
+     */
+    ApiKeyManager
 };
 
 // Export for ES6 modules
@@ -536,7 +643,8 @@ export {
     Anomaly,
     KeyManager,
     StorageEncryption,
-    MessageSecurity
+    MessageSecurity,
+    ApiKeyManager
 };
 
 console.log('[Security] Client-side security module loaded (SecurityCoordinator + AES-GCM + XSS Token Protection + Recovery Handlers enabled)');

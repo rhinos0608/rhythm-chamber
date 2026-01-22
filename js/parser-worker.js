@@ -40,6 +40,11 @@ const CHUNK_SIZE_MB = 10;              // NEW: Process in 10MB chunks
 const MB = 1024 * 1024;                // Bytes in 1MB
 const MEMORY_THRESHOLD = 0.75;         // NEW: 75% RAM usage threshold
 
+// MEDIUM FIX Issue #22: Validate JSON string size before parsing
+// JSON.parse() can crash the worker if given a very large string
+const MAX_JSON_STRING_SIZE_BYTES = 100 * 1024 * 1024; // 100MB max JSON string
+const MAX_JSON_PARSE_TIME_MS = 30000; // 30 second timeout for JSON parsing
+
 // NEW: State for pause/resume
 let isPaused = false;
 let pauseResolve = null;
@@ -76,9 +81,83 @@ function sanitizeObject(obj) {
 }
 
 function safeJsonParse(json) {
+    // MEDIUM FIX Issue #22: Validate JSON string size before parsing
+    // This prevents worker crash from excessively large JSON strings
+    if (typeof json !== 'string') {
+        throw new Error('safeJsonParse requires a string input');
+    }
+
+    if (json.length > MAX_JSON_STRING_SIZE_BYTES) {
+        throw new Error(
+            `JSON string too large: ${(json.length / 1024 / 1024).toFixed(1)}MB ` +
+            `exceeds ${MAX_JSON_STRING_SIZE_BYTES / 1024 / 1024}MB limit. ` +
+            `Please use a smaller data export.`
+        );
+    }
+
+    // MEDIUM FIX Issue #22: Wrap JSON.parse in timeout to prevent worker hang
+    const parseWithTimeout = () => {
+        const startTime = Date.now();
+        const parsed = JSON.parse(json);
+
+        // Warn if parsing took too long (but don't fail)
+        const elapsed = Date.now() - startTime;
+        if (elapsed > 5000) {
+            console.warn(`[Worker] JSON parsing took ${elapsed}ms, consider smaller exports`);
+        }
+
+        return parsed;
+    };
+
+    try {
+        // Simple timeout wrapper using Promise.race
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error(`JSON parsing timeout after ${MAX_JSON_PARSE_TIME_MS}ms`)), MAX_JSON_PARSE_TIME_MS);
+        });
+
+        const parsePromise = new Promise((resolve) => {
+            // Use setTimeout to allow the event loop to process the timeout
+            setTimeout(() => {
+                try {
+                    resolve(parseWithTimeout());
+                } catch (e) {
+                    reject(e);
+                }
+            }, 0);
+        });
+
+        const result = Promise.race([parsePromise, timeoutPromise]);
+        const parsed = await result;
+
+        return sanitizeObject(parsed);
+    } catch (error) {
+        if (error.message?.includes('timeout')) {
+            throw new Error(
+                `JSON parsing exceeded ${MAX_JSON_PARSE_TIME_MS}ms timeout. ` +
+                `File may be too large or malformed.`
+            );
+        }
+        throw error;
+    }
+}
+
+// Make safeJsonParse async-safe for the worker context
+const safeJsonParseSync = (json) => {
+    // Synchronous version for use in non-async contexts
+    if (typeof json !== 'string') {
+        throw new Error('safeJsonParseSync requires a string input');
+    }
+
+    if (json.length > MAX_JSON_STRING_SIZE_BYTES) {
+        throw new Error(
+            `JSON string too large: ${(json.length / 1024 / 1024).toFixed(1)}MB ` +
+            `exceeds ${MAX_JSON_STRING_SIZE_BYTES / 1024 / 1024}MB limit.`
+        );
+    }
+
     const parsed = JSON.parse(json);
     return sanitizeObject(parsed);
-}
+};
 
 /**
  * Pause processing for memory pressure relief
@@ -395,12 +474,34 @@ self.onmessage = async (e) => {
 
 /**
  * Parse a direct JSON file (streaming history array)
+ * MEDIUM FIX Issue #22: Added size validation before JSON parsing
  */
 async function parseJsonFile(file, existingStreams = null) {
     postProgress('Reading JSON file...');
 
+    // MEDIUM FIX Issue #22: Validate file size before reading
+    // This prevents loading extremely large files into memory
+    if (file.size > MAX_JSON_STRING_SIZE_BYTES) {
+        throw new Error(
+            `JSON file too large: ${(file.size / 1024 / 1024).toFixed(1)}MB ` +
+            `exceeds ${MAX_JSON_STRING_SIZE_BYTES / 1024 / 1024}MB limit. ` +
+            `Please use a smaller data export.`
+        );
+    }
+
     const text = await file.text();
-    const data = safeJsonParse(text);
+
+    // MEDIUM FIX Issue #22: Validate text size before parsing
+    if (text.length > MAX_JSON_STRING_SIZE_BYTES) {
+        throw new Error(
+            `JSON content too large: ${(text.length / 1024 / 1024).toFixed(1)}MB ` +
+            `exceeds ${MAX_JSON_STRING_SIZE_BYTES / 1024 / 1024}MB limit. ` +
+            `Please use a smaller data export.`
+        );
+    }
+
+    // Use synchronous parsing for better error messages (async version adds complexity)
+    const data = safeJsonParseSync(text);
 
     if (!Array.isArray(data)) {
         throw new Error('JSON file must contain an array of streams.');
@@ -510,7 +611,19 @@ async function parseZipFile(file, existingStreams = null) {
         postProgress(`Parsing file ${i + 1}/${streamingFiles.length}...`);
 
         const content = await entry.async('text');
-        const data = safeJsonParse(content);
+
+        // MEDIUM FIX Issue #22: Validate JSON content size before parsing
+        // Each file in the zip should be reasonably sized
+        if (content.length > MAX_JSON_STRING_SIZE_BYTES) {
+            throw new Error(
+                `JSON file in archive too large: ${(content.length / 1024 / 1024).toFixed(1)}MB ` +
+                `File: ${path}. ` +
+                `Exceeds ${MAX_JSON_STRING_SIZE_BYTES / 1024 / 1024}MB limit. ` +
+                `Please use a smaller data export.`
+            );
+        }
+
+        const data = safeJsonParseSync(content);
 
         // NEW: Process in chunks if data is large
         if (data.length > 10000) {

@@ -117,7 +117,13 @@ async function generateDeviceFingerprint() {
 
 /**
  * Get or create session salt for additional binding
- * @returns {string}
+ *
+ * SECURITY FIX (MEDIUM Issue #15): Removed weak Math.random() fallback
+ * Previous implementation used predictable fallback: Date.now() + Math.random()
+ * New implementation fails closed if CSPRNG unavailable
+ *
+ * @returns {string} Cryptographically random salt
+ * @throws {Error} If secure context unavailable or CSPRNG unavailable
  */
 function getSessionSalt() {
     if (!_secureContextAvailable) {
@@ -126,7 +132,24 @@ function getSessionSalt() {
 
     let salt = sessionStorage.getItem(SALT_KEY);
     if (!salt) {
-        salt = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36);
+        // SECURITY: Require cryptographically secure random number generator
+        // Fail closed instead of using weak Math.random() fallback
+        if (typeof crypto?.getRandomValues !== 'function') {
+            throw new Error(
+                '[SecureTokenStore] Cryptographically secure random number generator required. ' +
+                'Please use a modern browser with crypto.getRandomValues support.'
+            );
+        }
+
+        // Use crypto.randomUUID if available (most browsers), otherwise use getRandomValues
+        if (crypto.randomUUID) {
+            salt = crypto.randomUUID();
+        } else {
+            // Fallback: Generate 16 random bytes and format as hex (equivalent entropy)
+            const randomBytes = new Uint8Array(16);
+            crypto.getRandomValues(randomBytes);
+            salt = Array.from(randomBytes, b => b.toString(16).padStart(2, '0')).join('');
+        }
         sessionStorage.setItem(SALT_KEY, salt);
     }
     return salt;
@@ -207,11 +230,58 @@ async function verifyBinding() {
 
 /**
  * Verify device binding (READ-ONLY mode for diagnostics)
- * Same checks as verifyBinding() but does NOT invalidate tokens on mismatch.
+ *
+ * SECURITY FIX (HIGH Issue #9): Added rate limiting and audit logging
+ *
+ * Previous implementation allowed unlimited read-only checks which could be abused:
+ * - Attacker could probe binding without triggering lockdown
+ * - No audit trail of diagnostic checks
+ * - No rate limiting on status queries
+ *
+ * New implementation:
+ * - Rate limits read-only checks (max 10 per minute)
+ * - Audits all read-only checks for security monitoring
+ * - Returns binding status without invalidating tokens
+ *
  * Use this for status checks and diagnostics that should not mutate state.
+ *
  * @returns {Promise<{ valid: boolean, reason?: string }>}
  */
+const readOnlyCheckLog = [];
+const MAX_READ_ONLY_CHECKS_PER_MINUTE = 10;
+
 async function verifyBindingReadOnly() {
+    // SECURITY: Rate limit read-only checks to prevent probing attacks
+    const now = Date.now();
+    const oneMinuteAgo = now - 60000;
+
+    // Clean old log entries
+    while (readOnlyCheckLog.length > 0 && readOnlyCheckLog[0] < oneMinuteAgo) {
+        readOnlyCheckLog.shift();
+    }
+
+    // Check if rate limit exceeded
+    if (readOnlyCheckLog.length >= MAX_READ_ONLY_CHECKS_PER_MINUTE) {
+        // Audit the rate limit violation
+        audit('readonly_rate_limit_exceeded', {
+            count: readOnlyCheckLog.length,
+            window: '1 minute'
+        });
+
+        console.warn('[SecureTokenStore] Read-only binding check rate limit exceeded');
+
+        // Return error instead of allowing probe
+        return {
+            valid: false,
+            reason: 'rate_limited',
+            message: 'Too many status checks. Please wait before trying again.'
+        };
+    }
+
+    // Log this check
+    readOnlyCheckLog.push(now);
+
+    // Perform the actual binding check (without side effects)
     if (!_secureContextAvailable) {
         return { valid: false, reason: 'insecure_context' };
     }
@@ -225,6 +295,10 @@ async function verifyBindingReadOnly() {
 
     if (!bindingJson) {
         // No binding exists yet
+        // Audit the first check (useful for detecting initialization)
+        audit('readonly_check_no_binding', {
+            fingerprint: currentFingerprint?.substring(0, 8) + '...'
+        });
         return { valid: true, reason: 'no_binding_yet' };
     }
 
@@ -232,13 +306,34 @@ async function verifyBindingReadOnly() {
         const binding = JSON.parse(bindingJson);
 
         if (binding.fingerprint !== currentFingerprint) {
-            // Return mismatch status WITHOUT invalidating tokens
-            return { valid: false, reason: 'fingerprint_mismatch' };
+            // SECURITY: Audit the mismatch detection
+            // This is important for detecting potential attacks
+            audit('readonly_binding_mismatch_detected', {
+                expected: binding.fingerprint.substring(0, 8) + '...',
+                actual: currentFingerprint.substring(0, 8) + '...',
+                timestamp: now
+            });
+
+            // Return mismatch status WITHOUT invalidating tokens (read-only)
+            // But log it so security monitoring can detect patterns
+            return {
+                valid: false,
+                reason: 'fingerprint_mismatch',
+                warning: 'Binding mismatch detected in read-only mode. Full verification will invalidate tokens.'
+            };
+        }
+
+        // Audit successful checks periodically (not every time to reduce noise)
+        if (readOnlyCheckLog.length % 5 === 0) {
+            audit('readonly_binding_ok', {
+                fingerprint: currentFingerprint.substring(0, 8) + '...'
+            });
         }
 
         return { valid: true };
     } catch (error) {
         console.error('[SecureTokenStore] Binding verification error:', error);
+        audit('readonly_check_error', { error: error.message });
         return { valid: false, reason: 'binding_corrupted' };
     }
 }
@@ -286,17 +381,27 @@ async function store(tokenKey, value, options = {}) {
     };
 
     try {
-        // Store in IndexedDB if available, fall back to localStorage
-        if (IndexedDBCore) {
-            await IndexedDBCore.put(
-                IndexedDBCore.STORES.TOKENS,
-                { key: storageKey, ...tokenData }
+        // SECURITY FIX (MEDIUM Issue #12): Eliminated localStorage fallback for tokens
+        // Previous implementation silently fell back to localStorage, exposing tokens to XSS
+        // New implementation fails closed if IndexedDB unavailable
+
+        if (!IndexedDBCore) {
+            const error = new Error(
+                '[SecureTokenStore] IndexedDB is required for secure token storage. ' +
+                'localStorage fallback has been removed for security reasons. ' +
+                'Please use a modern browser with IndexedDB support.'
             );
-        } else {
-            localStorage.setItem(storageKey, JSON.stringify(tokenData));
+            console.error(error.message);
+            audit('token_store_blocked', { tokenKey, reason: 'indexeddb_unavailable' });
+            return false;
         }
 
-        audit('token_stored', { tokenKey, hasExpiry: !!options.expiresIn });
+        await IndexedDBCore.put(
+            IndexedDBCore.STORES.TOKENS,
+            { key: storageKey, ...tokenData }
+        );
+
+        audit('token_stored', { tokenKey, hasExpiry: !!options.expiresIn, storage: 'indexeddb' });
         return true;
     } catch (error) {
         console.error('[SecureTokenStore] Store failed:', error);
@@ -331,19 +436,20 @@ async function retrieve(tokenKey) {
     try {
         let tokenData = null;
 
-        // Try IndexedDB first
-        if (IndexedDBCore) {
-            const record = await IndexedDBCore.get(
-                IndexedDBCore.STORES.TOKENS,
-                storageKey
-            );
-            tokenData = record;
-        } else {
-            const stored = localStorage.getItem(storageKey);
-            if (stored) {
-                tokenData = JSON.parse(stored);
-            }
+        // SECURITY FIX (MEDIUM Issue #12): Eliminated localStorage fallback for tokens
+        // Only use IndexedDB for secure token storage
+
+        if (!IndexedDBCore) {
+            console.warn('[SecureTokenStore] IndexedDB unavailable - cannot retrieve token securely');
+            audit('token_retrieve_blocked', { tokenKey, reason: 'indexeddb_unavailable' });
+            return null;
         }
+
+        const record = await IndexedDBCore.get(
+            IndexedDBCore.STORES.TOKENS,
+            storageKey
+        );
+        tokenData = record;
 
         if (!tokenData) {
             return null;
@@ -390,18 +496,18 @@ async function retrieveWithOptions(tokenKey) {
     try {
         let tokenData = null;
 
-        if (IndexedDBCore) {
-            const record = await IndexedDBCore.get(
-                IndexedDBCore.STORES.TOKENS,
-                storageKey
-            );
-            tokenData = record;
-        } else {
-            const stored = localStorage.getItem(storageKey);
-            if (stored) {
-                tokenData = JSON.parse(stored);
-            }
+        // SECURITY FIX (MEDIUM Issue #12): Eliminated localStorage fallback for tokens
+        if (!IndexedDBCore) {
+            console.warn('[SecureTokenStore] IndexedDB unavailable - cannot retrieve token securely');
+            audit('token_retrieve_blocked', { tokenKey, reason: 'indexeddb_unavailable' });
+            return null;
         }
+
+        const record = await IndexedDBCore.get(
+            IndexedDBCore.STORES.TOKENS,
+            storageKey
+        );
+        tokenData = record;
 
         if (!tokenData) {
             return null;

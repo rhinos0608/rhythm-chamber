@@ -234,6 +234,17 @@ const EVENT_PRIORITIES = {
     // All other events default to NORMAL
 };
 
+// Edge case: Critical events that should never be dropped (EVENT BUS FIX)
+// These events are essential for application stability and user experience
+const CRITICAL_EVENTS = [
+    'error:critical',
+    'chat:error',
+    'session:switched',
+    'storage:quota_critical',
+    'storage:error',
+    'eventbus:handler_circuit_open'
+];
+
 // ==========================================
 // Circuit Breaker Configuration
 // ==========================================
@@ -261,6 +272,33 @@ const CIRCUIT_BREAKER_CONFIG = {
  * @returns {{ allowed: boolean, dropped?: boolean, cleanupFn?: Function }} Result object
  */
 function runCircuitBreakerChecks(eventType, priority, timestamp) {
+    // Edge case: Never drop critical events regardless of circuit breaker state (EVENT BUS FIX)
+    const isCritical = CRITICAL_EVENTS.includes(eventType);
+    if (isCritical) {
+        // Make room for critical events by dropping low-priority ones if needed
+        while (pendingEvents.length >= CIRCUIT_BREAKER_CONFIG.maxQueueSize) {
+            // Find and drop the lowest priority non-critical event
+            let lowestIdx = -1;
+            let lowestPriority = -1;
+            for (let i = 0; i < pendingEvents.length; i++) {
+                const ev = pendingEvents[i];
+                if (!CRITICAL_EVENTS.includes(ev.eventType) && ev.priority > lowestPriority) {
+                    lowestPriority = ev.priority;
+                    lowestIdx = i;
+                }
+            }
+            if (lowestIdx >= 0) {
+                const dropped = pendingEvents.splice(lowestIdx, 1)[0];
+                droppedCount++;
+                console.warn(`[EventBus] Dropped event to make room for critical event: ${dropped.eventType}`);
+            } else {
+                // All events in queue are critical - can't make room
+                console.error(`[EventBus] Cannot queue critical event ${eventType} - queue full of critical events`);
+                return { allowed: false, dropped: true };
+            }
+        }
+    }
+
     // Update storm window
     if (timestamp - windowStart > CIRCUIT_BREAKER_CONFIG.stormWindowMs) {
         // Check if storm threshold was exceeded
@@ -323,68 +361,118 @@ function runCircuitBreakerChecks(eventType, priority, timestamp) {
         const strategy = CIRCUIT_BREAKER_CONFIG.overflowStrategy;
 
         if (strategy === 'reject_all') {
-            droppedCount++;
-            // Emit drop event for monitoring
-            emit('CIRCUIT_BREAKER:DROPPED', {
-                count: 1,
-                eventType,
-                reason: 'queue_full_reject_all',
-                totalDropped: droppedCount
-            }, { bypassCircuitBreaker: true, skipValidation: true });
-            if (debugMode) {
-                console.warn(`[EventBus] Event rejected (queue full): ${eventType}`);
-            }
-            return { allowed: false, dropped: true };
-        } else if (strategy === 'drop_low_priority') {
-            // Find lowest priority event to drop
-            const lowestPriorityIndex = pendingEvents.reduce((lowest, event, index) => {
-                if (pendingEvents[lowest].priority < event.priority) {
-                    return index;
-                }
-                return lowest;
-            }, 0);
-
-            // Only drop if new event has equal or lower priority
-            if (priority >= pendingEvents[lowestPriorityIndex].priority) {
+            // Edge case: Never reject critical events (EVENT BUS FIX)
+            if (isCritical) {
+                // Already handled above - make room and continue
+            } else {
                 droppedCount++;
                 // Emit drop event for monitoring
                 emit('CIRCUIT_BREAKER:DROPPED', {
                     count: 1,
                     eventType,
-                    reason: 'priority_too_low',
+                    reason: 'queue_full_reject_all',
                     totalDropped: droppedCount
                 }, { bypassCircuitBreaker: true, skipValidation: true });
                 if (debugMode) {
-                    console.warn(`[EventBus] Event rejected (equal or lower priority than queue): ${eventType}`);
+                    console.warn(`[EventBus] Event rejected (queue full): ${eventType}`);
                 }
                 return { allowed: false, dropped: true };
             }
+        }
 
-            // Drop lowest priority event
-            const dropped = pendingEvents.splice(lowestPriorityIndex, 1)[0];
-            droppedCount++;
-            // Emit drop event for monitoring
-            emit('CIRCUIT_BREAKER:DROPPED', {
-                count: 1,
-                eventType: dropped.eventType,
-                reason: 'displaced_by_higher_priority',
-                totalDropped: droppedCount
-            }, { bypassCircuitBreaker: true, skipValidation: true });
-            if (debugMode) {
-                console.warn(`[EventBus] Dropped low-priority event: ${dropped.eventType}`);
+        if (strategy === 'drop_low_priority') {
+            // Find lowest priority event to drop (excluding critical events)
+            let lowestPriorityIndex = -1;
+            for (let i = 0; i < pendingEvents.length; i++) {
+                // Edge case: Never drop critical events (EVENT BUS FIX)
+                if (CRITICAL_EVENTS.includes(pendingEvents[i].eventType)) {
+                    continue;
+                }
+                if (lowestPriorityIndex === -1 ||
+                    pendingEvents[i].priority > pendingEvents[lowestPriorityIndex].priority) {
+                    lowestPriorityIndex = i;
+                }
+            }
+
+            // If no non-critical event found to drop, queue is full of critical events
+            if (lowestPriorityIndex === -1) {
+                console.error(`[EventBus] Cannot drop events - queue full of critical events`);
+                // Edge case: Still allow critical events through, reject non-critical
+                if (!isCritical) {
+                    droppedCount++;
+                    emit('CIRCUIT_BREAKER:DROPPED', {
+                        count: 1,
+                        eventType,
+                        reason: 'queue_full_critical_only',
+                        totalDropped: droppedCount
+                    }, { bypassCircuitBreaker: true, skipValidation: true });
+                    return { allowed: false, dropped: true };
+                }
+            } else {
+                // Only drop if new event has equal or lower priority (and is not critical)
+                if (!isCritical && priority >= pendingEvents[lowestPriorityIndex].priority) {
+                    droppedCount++;
+                    // Emit drop event for monitoring
+                    emit('CIRCUIT_BREAKER:DROPPED', {
+                        count: 1,
+                        eventType,
+                        reason: 'priority_too_low',
+                        totalDropped: droppedCount
+                    }, { bypassCircuitBreaker: true, skipValidation: true });
+                    if (debugMode) {
+                        console.warn(`[EventBus] Event rejected (equal or lower priority than queue): ${eventType}`);
+                    }
+                    return { allowed: false, dropped: true };
+                }
+
+                // Drop lowest priority non-critical event
+                const dropped = pendingEvents.splice(lowestPriorityIndex, 1)[0];
+                droppedCount++;
+                // Emit drop event for monitoring
+                emit('CIRCUIT_BREAKER:DROPPED', {
+                    count: 1,
+                    eventType: dropped.eventType,
+                    reason: 'displaced_by_higher_priority',
+                    totalDropped: droppedCount
+                }, { bypassCircuitBreaker: true, skipValidation: true });
+                if (debugMode) {
+                    console.warn(`[EventBus] Dropped low-priority event: ${dropped.eventType}`);
+                }
             }
         } else if (strategy === 'drop_oldest') {
-            const dropped = pendingEvents.shift();
-            droppedCount++;
-            // Emit drop event for monitoring
-            emit('CIRCUIT_BREAKER:DROPPED', {
-                count: 1,
-                eventType: dropped?.eventType || 'unknown',
-                reason: 'oldest_dropped',
-                totalDropped: droppedCount
-            }, { bypassCircuitBreaker: true, skipValidation: true });
-            if (debugMode) {
-                console.warn(`[EventBus] Dropped oldest event: ${dropped?.eventType}`);
+            // Edge case: Never drop critical events (EVENT BUS FIX)
+            let oldestIndex = -1;
+            let oldestTime = Infinity;
+            for (let i = 0; i < pendingEvents.length; i++) {
+                if (!CRITICAL_EVENTS.includes(pendingEvents[i].eventType) &&
+                    pendingEvents[i].timestamp < oldestTime) {
+                    oldestTime = pendingEvents[i].timestamp;
+                    oldestIndex = i;
+                }
+            }
+
+            if (oldestIndex >= 0) {
+                const dropped = pendingEvents.splice(oldestIndex, 1)[0];
+                droppedCount++;
+                emit('CIRCUIT_BREAKER:DROPPED', {
+                    count: 1,
+                    eventType: dropped?.eventType || 'unknown',
+                    reason: 'oldest_dropped',
+                    totalDropped: droppedCount
+                }, { bypassCircuitBreaker: true, skipValidation: true });
+                if (debugMode) {
+                    console.warn(`[EventBus] Dropped oldest non-critical event: ${dropped?.eventType}`);
+                }
+            } else if (!isCritical) {
+                // No non-critical events to drop
+                droppedCount++;
+                emit('CIRCUIT_BREAKER:DROPPED', {
+                    count: 1,
+                    eventType,
+                    reason: 'queue_full_critical_only',
+                    totalDropped: droppedCount
+                }, { bypassCircuitBreaker: true, skipValidation: true });
+                return { allowed: false, dropped: true };
             }
         }
     }

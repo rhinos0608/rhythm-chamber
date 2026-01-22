@@ -29,6 +29,8 @@ let nextExpectedSeq = 0;
 let gapDetected = false;
 // Edge case: Maximum buffer size to prevent unbounded memory growth
 const MAX_SEQUENCE_BUFFER_SIZE = 100;
+// Edge case: Maximum sequence gap to prevent malicious/buggy servers from causing memory issues
+const MAX_SEQUENCE_GAP = 1000;
 
 /**
  * Process a chunk with sequence validation
@@ -40,6 +42,20 @@ const MAX_SEQUENCE_BUFFER_SIZE = 100;
  * @returns {boolean} True if processed immediately, false if buffered
  */
 function processSequencedChunk(seq, data, handler) {
+    // Edge case: Reject sequence numbers that are unreasonably far ahead (MEMORY LEAK FIX)
+    // This prevents malicious or buggy servers from sending extremely high sequence numbers
+    // that would bypass the buffer size check while still causing memory issues
+    if (seq > nextExpectedSeq + MAX_SEQUENCE_GAP) {
+        console.warn(`[ChatUI] Rejecting sequence ${seq} - too far ahead of expected ${nextExpectedSeq} (gap: ${seq - nextExpectedSeq})`);
+        return false;
+    }
+
+    // Edge case: Reject duplicate or old sequence numbers
+    if (seq < nextExpectedSeq) {
+        console.warn(`[ChatUI] Rejecting stale sequence ${seq} - already processed (expecting ${nextExpectedSeq})`);
+        return false;
+    }
+
     // Edge case: Prevent unbounded buffer growth - but be careful not to drop expected data
     if (sequenceBuffer.size >= MAX_SEQUENCE_BUFFER_SIZE) {
         // EFFICIENCY: Iterate to find oldest key instead of spreading (O(n) vs O(n) + memory)
@@ -143,30 +159,42 @@ function getSequenceBufferStatus() {
 function parseMarkdown(text) {
     if (!text) return '';
 
+    // REDOS FIX: Limit input length to prevent catastrophic backtracking
+    // Very long inputs can cause regex to hang the browser
+    const MAX_MARKDOWN_LENGTH = 100000; // 100KB limit
+    if (text.length > MAX_MARKDOWN_LENGTH) {
+        // Truncate safely using Array.from to handle surrogate pairs, then escape
+        const truncated = escapeHtml(Array.from(text).slice(0, MAX_MARKDOWN_LENGTH).join('')) +
+            '<span class="truncated-indicator">... (content truncated)</span>';
+        return `<p>${truncated}</p>`;
+    }
+
     const escaped = escapeHtml(text);
 
     // Use a more robust approach that handles nesting better
     // Process in order: code blocks, bold, italic, line breaks
 
     // First, protect code blocks (inline code)
+    // REDOS FIX: Use non-greedy quantifier with explicit character limit to prevent backtracking
     const codeBlocks = [];
-    let processedText = escaped.replace(/`([^`]+)`/g, (match, code) => {
+    let processedText = escaped.replace(/`([^`]{0,100})`/g, (match, code) => {
         const placeholder = `__CODE_${codeBlocks.length}__`;
         codeBlocks.push(`<code>${code}</code>`);
         return placeholder;
     });
 
     // Process bold: **text** or __text__
-    // Use a more specific pattern to avoid matching within words
+    // REDOS FIX: Use character class limits to prevent catastrophic backtracking
+    // Instead of [\s\S]+? which can backtrack on complex patterns, use {0,5000} limit
     processedText = processedText
-        .replace(/\*\*([\s\S]+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/__([\s\S]+?)__/g, '<strong>$1</strong>');
+        .replace(/\*\*([^\*]{1,5000})\*\*/g, '<strong>$1</strong>')
+        .replace(/__([^_]{1,5000})__/g, '<strong>$1</strong>');
 
     // Process italic: *text* or _text_
-    // Use negative lookahead/lookbehind to avoid matching within bold
+    // REDOS FIX: Use character class limits and avoid complex lookbehind/lookahead patterns
     processedText = processedText
-        .replace(/(?<!\*)\*(?!\*)([^\*]+)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
-        .replace(/(?<!_)_(?!_)([^_]+)(?<!_)_(?!_)/g, '<em>$1</em>');
+        .replace(/(?<!\*)\*([^\*]{1,500})\*(?!\*)/g, '<em>$1</em>')
+        .replace(/(?<!_)_([^_]{1,500})_(?!_)/g, '<em>$1</em>');
 
     // Restore code blocks
     codeBlocks.forEach((code, i) => {

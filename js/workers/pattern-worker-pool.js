@@ -268,6 +268,9 @@ function handleWorkerMessage(event) {
         if (request.completedWorkers >= request.totalWorkers) {
             pendingRequests.delete(reqId);
 
+            // MEDIUM FIX Issue #18: Clean up result consumption tracking when request completes
+            resultConsumptionCalls.delete(reqId);
+
             // Aggregate results
             const aggregated = aggregateResults(request.results);
             request.resolve(aggregated);
@@ -280,6 +283,9 @@ function handleWorkerMessage(event) {
         // Still check for completion
         if (request.completedWorkers >= request.totalWorkers) {
             pendingRequests.delete(reqId);
+
+            // MEDIUM FIX Issue #18: Clean up result consumption tracking when request completes
+            resultConsumptionCalls.delete(reqId);
 
             // Use partial results if available
             if (request.partialResults && Object.keys(request.partialResults).length > 0) {
@@ -348,6 +354,9 @@ function handleWorkerError(error) {
         if (request.completedWorkers >= request.totalWorkers) {
             // Delete before resolving to prevent potential re-entry issues
             pendingRequests.delete(reqId);
+
+            // MEDIUM FIX Issue #18: Clean up result consumption tracking on worker error
+            resultConsumptionCalls.delete(reqId);
 
             if (request.results.length > 0) {
                 const aggregated = aggregateResults(request.results);
@@ -465,6 +474,13 @@ function handleHeartbeatResponse(event) {
 
 /**
  * Check for stale workers and restart them
+ * CRITICAL FIX for Issue #4: Preserve pending requests during worker restart
+ *
+ * Previous implementation silently discarded in-flight requests when a stale worker
+ * was terminated, causing callers to hang indefinitely. This version:
+ * 1. Identifies all pending requests before restarting
+ * 2. Fails requests with appropriate error message
+ * 3. Uses partial results if available for graceful degradation
  *
  * @returns {void}
  */
@@ -485,6 +501,78 @@ function checkStaleWorkers() {
         }
     });
 
+    // CRITICAL FIX: Handle pending requests before restarting stale workers
+    // This prevents callers from hanging when their worker is restarted
+    if (staleWorkers.length > 0) {
+        // Create a snapshot of pending request IDs to avoid modification during iteration
+        const pendingRequestIds = Array.from(pendingRequests.keys());
+
+        for (const reqId of pendingRequestIds) {
+            const request = pendingRequests.get(reqId);
+
+            if (!request) {
+                continue;
+            }
+
+            // Skip already completed requests
+            if (request.completedWorkers >= request.totalWorkers) {
+                continue;
+            }
+
+            // For multi-worker requests, we need to determine if this request
+            // was affected by the stale worker. Since we can't definitively know
+            // which worker was handling which request, we take a conservative approach:
+            // - If single-worker request: definitely affected, mark as failed
+            // - If multi-worker request: check if we can still succeed with remaining workers
+
+            if (request.totalWorkers === 1) {
+                // Single-worker request - worker was definitely stale
+                request.errors.push('Worker became stale and was restarted');
+                request.completedWorkers++;
+
+                if (request.completedWorkers >= request.totalWorkers) {
+                    pendingRequests.delete(reqId);
+
+                    // Try to use partial results if available
+                    if (request.partialResults && Object.keys(request.partialResults).length > 0) {
+                        console.log('[PatternWorkerPool] Using partial results due to stale worker');
+                        request.resolve(request.partialResults);
+                    } else if (request.results.length > 0) {
+                        const aggregated = aggregateResults(request.results);
+                        request.resolve(aggregated);
+                    } else {
+                        request.reject(new Error('Worker restarted during processing'));
+                    }
+                }
+            } else {
+                // Multi-worker request - check if we can still succeed
+                const remainingWorkers = request.totalWorkers - request.completedWorkers;
+                const activeWorkers = workers.length - staleWorkers.length;
+
+                if (activeWorkers === 0 || remainingWorkers <= 0) {
+                    // No active workers left, fail the request
+                    request.errors.push('All workers became stale');
+                    request.completedWorkers = request.totalWorkers;
+                    pendingRequests.delete(reqId);
+
+                    if (request.results.length > 0) {
+                        const aggregated = aggregateResults(request.results);
+                        request.resolve(aggregated);
+                    } else if (request.partialResults && Object.keys(request.partialResults).length > 0) {
+                        console.log('[PatternWorkerPool] Using partial results due to stale workers');
+                        request.resolve(request.partialResults);
+                    } else {
+                        request.reject(new Error('All workers restarted during processing'));
+                    }
+                } else {
+                    // Some workers still active - the request might still complete
+                    // Log a warning but don't fail the request yet
+                    console.warn(`[PatternWorkerPool] Request ${reqId} affected by stale worker restart, waiting for remaining workers`);
+                }
+            }
+        }
+    }
+
     // Restart stale workers
     staleWorkers.forEach(({ workerInfo, index }) => {
         console.warn(`[PatternWorkerPool] Worker ${index} is stale, restarting...`);
@@ -502,7 +590,7 @@ function checkStaleWorkers() {
             }
             workerHeartbeatChannels.delete(workerInfo.worker);
             workerLastHeartbeat.delete(workerInfo.worker);
-            
+
             // Terminate the stale worker
             workerInfo.worker.terminate();
 
@@ -519,7 +607,7 @@ function checkStaleWorkers() {
 
             // Reset heartbeat tracking
             workerLastHeartbeat.set(newWorker, Date.now());
-            
+
             // Setup new heartbeat channel
             setupHeartbeatChannel(newWorker, index);
 
@@ -746,12 +834,35 @@ function checkBackpressure() {
 
 /**
  * Mark a result as consumed, potentially resuming production
+ * MEDIUM FIX Issue #18: Added guard to prevent counter underflow and track consumptions
  */
-function onResultConsumed() {
+const resultConsumptionCalls = new Map(); // Track consumption calls per request
+
+function onResultConsumed(requestId) {
+    // MEDIUM FIX Issue #18: Track per-request consumption to prevent underflow
+    // The previous implementation could cause underflow if called more times than results produced
+    if (requestId) {
+        const previousCalls = resultConsumptionCalls.get(requestId) || 0;
+        resultConsumptionCalls.set(requestId, previousCalls + 1);
+    }
+
+    // Clamp to prevent underflow (should never go below 0, but defensive programming)
+    const beforeCount = pendingResultCount;
     pendingResultCount = Math.max(0, pendingResultCount - 1);
+
+    // MEDIUM FIX Issue #18: Log suspicious decrements (potential bug in caller code)
+    if (beforeCount === 0 && requestId) {
+        console.warn(`[PatternWorkerPool] onResultConsumed called with pendingResultCount=0 for request ${requestId}. This may indicate a bug in caller code.`);
+    }
 
     // Check if we should resume (now handled by checkBackpressure)
     checkBackpressure();
+
+    // MEDIUM FIX Issue #18: Clean up tracking when backpressure is clear
+    if (pendingResultCount === 0 && resultConsumptionCalls.size > 100) {
+        // Prevent unbounded growth of the tracking map
+        resultConsumptionCalls.clear();
+    }
 }
 
 /**
@@ -798,6 +909,9 @@ function terminate() {
         request.reject(terminationError);
     }
     pendingRequests.clear();
+
+    // MEDIUM FIX Issue #18: Clean up result consumption tracking on terminate
+    resultConsumptionCalls.clear();
 
     // Stop heartbeat monitoring
     stopHeartbeat();

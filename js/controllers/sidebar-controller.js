@@ -29,6 +29,8 @@ let _unsubscribe = null; // AppState subscription cleanup
 let currentRenameInput = null;
 let currentRenameBlurHandler = null;
 let currentRenameKeydownHandler = null;
+// Render guard flag to prevent race conditions during re-render (MEMORY LEAK FIX)
+let renameInProgress = false;
 
 // Focus trap cleanup for delete chat modal
 let deleteChatModalFocusTrapCleanup = null;
@@ -246,14 +248,20 @@ function closeSidebar() {
  */
 async function renderSessionList() {
     // Clean up rename input listeners before re-rendering (MEMORY LEAK FIX)
-    cleanupRenameInput();
+    // Only cleanup if not actively renaming (RENDER GUARD FIX)
+    if (!renameInProgress) {
+        cleanupRenameInput();
+    }
 
     if (!sidebarSessions) return;
 
     const sessions = await Chat.listSessions();
     const currentId = Chat.getCurrentSessionId();
 
-    if (sessions.length === 0) {
+    // Use the session list as the single source-of-truth
+    const sessionsToRender = sessions;
+
+    if (sessionsToRender.length === 0) {
         sidebarSessions.innerHTML = `
             <div class="sidebar-empty" role="status">
                 <span class="emoji" aria-hidden="true">💬</span>
@@ -264,7 +272,7 @@ async function renderSessionList() {
         return;
     }
 
-    sidebarSessions.innerHTML = sessions.map(session => {
+    sidebarSessions.innerHTML = sessionsToRender.map(session => {
         const isActive = session.id === currentId;
         const date = new Date(session.updatedAt || session.createdAt);
         const dateStr = formatRelativeDate(date);
@@ -490,11 +498,22 @@ async function confirmDeleteChat() {
  * Handle session rename
  */
 async function handleSessionRename(sessionId) {
+    // Guard against concurrent rename operations (RENDER GUARD FIX)
+    if (renameInProgress) {
+        console.warn('[SidebarController] Rename already in progress, ignoring duplicate request');
+        return;
+    }
+    renameInProgress = true;
+
     // Clean up any existing rename input listeners first (MEMORY LEAK FIX)
     cleanupRenameInput();
 
     const sessionEl = document.querySelector(`[data-session-id="${sessionId}"]`);
-    if (!sessionEl) return;
+    if (!sessionEl) {
+        // Reset flag if session not found (RENDER GUARD FIX)
+        renameInProgress = false;
+        return;
+    }
 
     const titleEl = sessionEl.querySelector('.session-title');
     const currentTitle = titleEl.textContent;
@@ -516,6 +535,15 @@ async function handleSessionRename(sessionId) {
         const newTitle = input.value.trim() || 'New Chat';
         try {
             await Chat.renameSession(sessionId, newTitle);
+
+            // A11Y FIX: Update the session element's aria-label after successful rename
+            // This ensures screen readers announce the new name
+            const sessionEl = document.querySelector(`[data-session-id="${sessionId}"]`);
+            if (sessionEl) {
+                const currentId = Chat.getCurrentSessionId();
+                const activeLabel = sessionId === currentId ? ' (current)' : '';
+                sessionEl.setAttribute('aria-label', `${newTitle}${activeLabel}`);
+            }
         } catch (error) {
             console.error('[SidebarController] Failed to rename session:', error);
             // Revert to original title on error
@@ -526,6 +554,8 @@ async function handleSessionRename(sessionId) {
         }
         // Clean up listeners after save completes (MEMORY LEAK FIX)
         cleanupRenameInput();
+        // Reset render guard flag (RENDER GUARD FIX)
+        renameInProgress = false;
     };
 
     currentRenameKeydownHandler = (e) => {
@@ -533,7 +563,9 @@ async function handleSessionRename(sessionId) {
             input.blur();
         } else if (e.key === 'Escape') {
             input.value = currentTitle;
-            input.blur();
+            // Reset flag on cancel since blur won't fire (RENDER GUARD FIX)
+            renameInProgress = false;
+            cleanupRenameInput();
         }
     };
 

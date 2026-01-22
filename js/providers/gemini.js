@@ -69,9 +69,14 @@ async function call(apiKey, config, messages, tools, onProgress = null) {
         body.tool_choice = 'auto';
     }
 
+    // CRITICAL FIX #3: Fix AbortController timeout race condition
     const timeout = config.timeout || GEMINI_TIMEOUT_MS;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    let timeoutFired = false;
+    const timeoutId = setTimeout(() => {
+        timeoutFired = true;
+        controller.abort();
+    }, timeout);
 
     try {
         // Build URL using URL API to handle existing query params correctly
@@ -88,17 +93,36 @@ async function call(apiKey, config, messages, tools, onProgress = null) {
             signal: controller.signal
         });
 
-        clearTimeout(timeoutId);
+        // Only clear timeout if it hasn't fired yet
+        if (!timeoutFired) {
+            clearTimeout(timeoutId);
+        }
 
         if (!response.ok) {
             const errorText = await response.text();
             console.error('[Gemini] API error:', response.status, errorText);
 
-            // Parse error for better messages
+            // MEDIUM FIX #11, #12: Improved error response parsing with Content-Type validation
+            // Distinguishes between JSON and plain text errors for better error messages
             let errorMessage = `API error: ${response.status}`;
-            const errorJson = safeJsonParse(errorText, null);
-            if (errorJson?.error?.message) {
-                errorMessage = errorJson.error.message;
+            const contentType = response.headers.get('content-type');
+
+            // Attempt to parse as JSON only if Content-Type indicates JSON response
+            if (contentType && contentType.includes('application/json')) {
+                const errorJson = safeJsonParse(errorText, null);
+                if (errorJson?.error?.message) {
+                    errorMessage = errorJson.error.message;
+                } else if (errorJson?.message) {
+                    // Some APIs use flat error structure with top-level message
+                    errorMessage = errorJson.message;
+                } else {
+                    // JSON parsing failed or structure unexpected, show raw text
+                    errorMessage = `API error: ${response.status}: ${errorText.substring(0, 200)}`;
+                }
+            } else {
+                // Non-JSON response (HTML, plain text), show raw content
+                const preview = errorText.substring(0, 150);
+                errorMessage = `API error: ${response.status}${preview ? ': ' + preview : ''}`;
             }
 
             throw new Error(errorMessage);
@@ -106,8 +130,13 @@ async function call(apiKey, config, messages, tools, onProgress = null) {
 
         return response.json();
     } catch (err) {
-        clearTimeout(timeoutId);
-        if (err.name === 'AbortError') {
+        // Clear timeout in error case too
+        if (!timeoutFired) {
+            clearTimeout(timeoutId);
+        }
+
+        // Check if this was a timeout
+        if (timeoutFired || err.name === 'AbortError') {
             throw new Error(`Gemini request timed out after ${timeout / 1000} seconds`);
         }
         throw err;
@@ -155,9 +184,14 @@ async function callStreaming(apiKey, config, messages, tools, onToken) {
         body.tool_choice = 'auto';
     }
 
+    // CRITICAL FIX #3: Fix AbortController timeout race condition
     const timeout = config.timeout || GEMINI_TIMEOUT_MS;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    let timeoutFired = false;
+    const timeoutId = setTimeout(() => {
+        timeoutFired = true;
+        controller.abort();
+    }, timeout);
 
     try {
         // Build URL using URL API to handle existing query params correctly
@@ -174,17 +208,36 @@ async function callStreaming(apiKey, config, messages, tools, onToken) {
             signal: controller.signal
         });
 
-        clearTimeout(timeoutId);
+        // Only clear timeout if it hasn't fired yet
+        if (!timeoutFired) {
+            clearTimeout(timeoutId);
+        }
 
         if (!response.ok) {
             const errorText = await response.text();
             console.error('[Gemini] API error:', response.status, errorText);
 
-            // Parse error for better messages
+            // MEDIUM FIX #11, #12: Improved error response parsing with Content-Type validation
+            // Distinguishes between JSON and plain text errors for better error messages
             let errorMessage = `API error: ${response.status}`;
-            const errorJson = safeJsonParse(errorText, null);
-            if (errorJson?.error?.message) {
-                errorMessage = errorJson.error.message;
+            const contentType = response.headers.get('content-type');
+
+            // Attempt to parse as JSON only if Content-Type indicates JSON response
+            if (contentType && contentType.includes('application/json')) {
+                const errorJson = safeJsonParse(errorText, null);
+                if (errorJson?.error?.message) {
+                    errorMessage = errorJson.error.message;
+                } else if (errorJson?.message) {
+                    // Some APIs use flat error structure with top-level message
+                    errorMessage = errorJson.message;
+                } else {
+                    // JSON parsing failed or structure unexpected, show raw text
+                    errorMessage = `API error: ${response.status}: ${errorText.substring(0, 200)}`;
+                }
+            } else {
+                // Non-JSON response (HTML, plain text), show raw content
+                const preview = errorText.substring(0, 150);
+                errorMessage = `API error: ${response.status}${preview ? ': ' + preview : ''}`;
             }
 
             throw new Error(errorMessage);
@@ -193,8 +246,13 @@ async function callStreaming(apiKey, config, messages, tools, onToken) {
         // Handle streaming response
         return await handleStreamingResponse(response, onToken);
     } catch (err) {
-        clearTimeout(timeoutId);
-        if (err.name === 'AbortError') {
+        // Clear timeout in error case too
+        if (!timeoutFired) {
+            clearTimeout(timeoutId);
+        }
+
+        // Check if this was a timeout
+        if (timeoutFired || err.name === 'AbortError') {
             throw new Error(`Gemini request timed out after ${timeout / 1000} seconds`);
         }
         throw err;
@@ -208,6 +266,37 @@ async function callStreaming(apiKey, config, messages, tools, onToken) {
  * @param {function} onProgress - Progress callback
  * @returns {Promise<object>} OpenAI-compatible response
  */
+/**
+ * CRITICAL FIX #4: Normalize tool call arguments
+ * Prevents string/object type confusion that can cause tool calls
+ * to be invoked with malformed arguments like "[object Object]"
+ *
+ * @param {*} args - Tool arguments (string, object, or other)
+ * @returns {string} Normalized JSON string of arguments
+ */
+function normalizeToolArguments(args) {
+    // If already a string, validate it's valid JSON
+    if (typeof args === 'string') {
+        try {
+            // Validate by parsing - if it succeeds, it's valid JSON
+            JSON.parse(args);
+            return args;
+        } catch (e) {
+            console.error('[Gemini] Invalid tool arguments JSON string:', args.substring(0, 100));
+            return '{}'; // Return empty object rather than crashing
+        }
+    }
+
+    // If it's an object, stringify it
+    if (typeof args === 'object' && args !== null) {
+        return JSON.stringify(args);
+    }
+
+    // Fallback for undefined/null/other types
+    console.warn('[Gemini] Unexpected tool arguments type:', typeof args);
+    return '{}';
+}
+
 async function handleStreamingResponse(response, onProgress) {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -220,12 +309,25 @@ async function handleStreamingResponse(response, onProgress) {
     let toolCallsById = {};
     let buffer = '';
 
+    // MEDIUM FIX #18: Wrap stream processing in try-finally to ensure cleanup
+    // If an error occurs mid-stream, reader.cancel() is called to release resources
+    try {
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
         // Append to buffer and process complete lines
         buffer += decoder.decode(value, { stream: true });
+
+        // HIGH FIX #7: Buffer overflow protection
+        // Prevent unbounded buffer growth if API never sends newline
+        const MAX_BUFFER_SIZE = 1024 * 1024; // 1MB limit
+        if (buffer.length > MAX_BUFFER_SIZE) {
+            console.error('[Gemini] Buffer overflow detected, closing stream');
+            reader.cancel();
+            throw new Error('Stream buffer overflow - malformed response');
+        }
+
         const lines = buffer.split('\n');
 
         // Keep last incomplete line in buffer
@@ -245,8 +347,16 @@ async function handleStreamingResponse(response, onProgress) {
             // Skip non-JSON lines
             if (!data.startsWith('{')) continue;
 
+            // CRITICAL FIX #1: Use safeJsonParse to prevent crash on malformed JSON
+            // If API returns malformed JSON due to network corruption or API bugs,
+            // we skip the chunk instead of crashing the entire stream
+            const parsed = safeJsonParse(data, null);
+            if (!parsed) {
+                console.debug('[Gemini] Failed to parse chunk, skipping:', data.substring(0, 100));
+                continue;
+            }
+
             try {
-                const parsed = JSON.parse(data);
 
                 // Handle both streaming delta format AND complete message format
                 const delta = parsed.choices?.[0]?.delta;
@@ -262,9 +372,8 @@ async function handleStreamingResponse(response, onProgress) {
                                 type: 'function',
                                 function: {
                                     name: tc.function?.name || '',
-                                    arguments: typeof tc.function?.arguments === 'string'
-                                        ? tc.function.arguments
-                                        : JSON.stringify(tc.function?.arguments || {})
+                                    // CRITICAL FIX #4: Use normalizeToolArguments to handle type confusion
+                                    arguments: normalizeToolArguments(tc.function?.arguments)
                                 }
                             };
                         }
@@ -276,24 +385,44 @@ async function handleStreamingResponse(response, onProgress) {
                 if (delta?.content) {
                     const token = delta.content;
 
-                    // Detect thinking blocks (extended thinking)
-                    if (token.includes('extended_thinking')) {
+                    // MEDIUM FIX #17: Detect thinking blocks using proper tag boundary matching
+                    // Use regex to match actual XML-like tags instead of substring search
+                    // This prevents false positives when model outputs "extended_thinking" as normal text
+                    const THINKING_START_TAG = '<extended_thinking>';
+                    const THINKING_END_TAG = '</extended_thinking>';
+
+                    // Check if token contains the start tag
+                    if (token.includes(THINKING_START_TAG)) {
                         inThinking = true;
-                        const parts = token.split('extended_thinking');
+                        const parts = token.split(THINKING_START_TAG);
                         if (parts[0]) {
                             fullContent += parts[0];
                             if (onProgress) onProgress({ type: 'token', token: parts[0] });
                         }
-                        thinkingContent += parts[1] || '';
+                        // Check if end tag is in the same token
+                        if (token.includes(THINKING_END_TAG)) {
+                            const afterStart = parts[1] || '';
+                            const endParts = afterStart.split(THINKING_END_TAG);
+                            thinkingContent += endParts[0] || '';
+                            inThinking = false;
+                            if (onProgress) onProgress({ type: 'thinking', content: thinkingContent });
+                            thinkingContent = '';
+                            if (endParts[1]) {
+                                fullContent += endParts[1];
+                                if (onProgress) onProgress({ type: 'token', token: endParts[1] });
+                            }
+                        } else {
+                            thinkingContent += parts[1] || '';
+                        }
                         continue;
                     }
 
                     if (inThinking) {
                         thinkingContent += token;
                         // Check for end tag in thinking content
-                        if (thinkingContent.includes('')) {
+                        if (thinkingContent.includes(THINKING_END_TAG)) {
                             inThinking = false;
-                            const parts = thinkingContent.split('');
+                            const parts = thinkingContent.split(THINKING_END_TAG);
                             thinkingContent = parts[0] || '';
                             if (onProgress) onProgress({ type: 'thinking', content: thinkingContent });
                             thinkingContent = '';
@@ -337,10 +466,9 @@ async function handleStreamingResponse(response, onProgress) {
 
                 lastMessage = parsed;
             } catch (e) {
-                // Log parse errors for debugging (only in dev)
-                if (data.length > 0 && data.startsWith('{')) {
-                    console.debug('[Gemini] Failed to parse chunk:', data.substring(0, 100));
-                }
+                // Catch non-parsing errors in message processing logic
+                // Note: JSON parse errors are now handled by safeJsonParse above
+                console.debug('[Gemini] Error processing chunk:', e.message);
             }
         }
     }
@@ -352,8 +480,9 @@ async function handleStreamingResponse(response, onProgress) {
             data = data.slice(6);
         }
         if (data.startsWith('{')) {
-            try {
-                const parsed = JSON.parse(data);
+            // CRITICAL FIX #1: Use safeJsonParse for final buffer too
+            const parsed = safeJsonParse(data, null);
+            if (parsed) {
                 const message = parsed.choices?.[0]?.message;
                 if (message?.content) {
                     fullContent = message.content;
@@ -365,17 +494,15 @@ async function handleStreamingResponse(response, onProgress) {
                             type: 'function',
                             function: {
                                 name: tc.function?.name || '',
-                                arguments: typeof tc.function?.arguments === 'string'
-                                    ? tc.function.arguments
-                                    : JSON.stringify(tc.function?.arguments || {})
+                                // CRITICAL FIX #4: Use normalizeToolArguments to handle type confusion
+                                arguments: normalizeToolArguments(tc.function?.arguments)
                             }
                         };
                     }
                 }
                 lastMessage = parsed;
-            } catch (e) {
-                console.debug('[Gemini] Failed to parse final buffer');
             }
+            // Note: safeJsonParse handles parse errors - no catch needed here
         }
     }
 
@@ -404,6 +531,18 @@ async function handleStreamingResponse(response, onProgress) {
         thinking: thinkingContent || undefined,
         usage: lastMessage?.usage
     };
+    } finally {
+        // MEDIUM FIX #18: Ensure reader is closed even if an error occurs
+        // This prevents resource leaks and hanging connections
+        try {
+            if (reader) {
+                reader.releaseLock();
+            }
+        } catch (e) {
+            // Reader may already be closed or stream may have ended
+            // This is safe to ignore
+        }
+    }
 }
 
 // ==========================================

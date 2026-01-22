@@ -145,15 +145,33 @@ const TimingConfig = {
     },
 
     // Bootstrap window for unsigned message fallback (security measure)
+    // SECURITY FIX (HIGH Issue #10): Strengthened bootstrap window restrictions
+    //
     // Unsigned messages are only allowed during this window after module load
-    // SECURITY: Reduced to 5 seconds to minimize attack surface for unsigned messages
+    // to handle the edge case where security session isn't ready yet.
+    //
+    // Changes to improve security:
+    // - Reduced window to 2 seconds (from 5 seconds)
+    // - Rate limited unsigned messages (max 3 during bootstrap)
+    // - User notification when accepting unsigned messages
+    //
+    // The bootstrap window is a necessary evil because:
+    // - Security session initialization is async
+    // - Tab coordination starts immediately on module load
+    // - Race condition exists between session init and first message
+    //
+    // Future improvement: Eliminate this window by making session init synchronous
     bootstrap: {
-        windowMs: 5000  // 5 seconds - sufficient for session initialization, reduced from 30s for security
+        windowMs: 2000  // 2 seconds - minimal window for session initialization
     }
 };
 
 // Track module initialization time for bootstrap window
 const MODULE_INIT_TIME = Date.now();
+
+// Track unsigned message count during bootstrap window
+let unsignedMessageCount = 0;
+const MAX_UNSIGNED_MESSAGES = 3;
 
 /**
  * Detect unit-test environment (Vitest/Vite)
@@ -169,6 +187,39 @@ function isInBootstrapWindow() {
     if (IS_TEST_ENV) return true;
     const timeSinceInit = Date.now() - MODULE_INIT_TIME;
     return timeSinceInit < TimingConfig.bootstrap.windowMs;
+}
+
+/**
+ * Check and track unsigned message during bootstrap window
+ * SECURITY FIX (HIGH Issue #10): Rate limit unsigned messages
+ *
+ * @returns {boolean} True if unsigned message should be allowed
+ */
+function allowUnsignedMessage() {
+    if (!isInBootstrapWindow()) {
+        return false;
+    }
+
+    // Rate limit unsigned messages during bootstrap
+    if (unsignedMessageCount >= MAX_UNSIGNED_MESSAGES) {
+        console.warn('[TabCoordination] Bootstrap window unsigned message limit exceeded');
+        return false;
+    }
+
+    unsignedMessageCount++;
+
+    // Notify user about unsigned message (only once)
+    if (unsignedMessageCount === 1 && typeof document !== 'undefined') {
+        // Dispatch event for UI to show warning
+        window.dispatchEvent(new CustomEvent('security:unsigned-message', {
+            detail: {
+                message: 'Tab coordination is initializing. Some messages may not be fully verified.',
+                severity: 'warning'
+            }
+        }));
+    }
+
+    return true;
 }
 
 /**
@@ -992,16 +1043,14 @@ function createMessageHandler() {
             // Step 0: Check for unsigned flag (fail-safe from signing failures)
             let { unsigned: isUnsigned } = event.data;
 
-            // Security: Only allow unsigned messages during bootstrap window
-            const inBootstrapWindow = isInBootstrapWindow();
-
-            if (isUnsigned && !inBootstrapWindow) {
-                console.warn('[TabCoordination] Rejecting unsigned message outside bootstrap window');
+            // SECURITY FIX (HIGH Issue #10): Check unsigned message allowance with rate limiting
+            if (isUnsigned && !allowUnsignedMessage()) {
+                console.warn('[TabCoordination] Rejecting unsigned message - outside bootstrap window or rate limit exceeded');
                 return;
             }
 
             if (isUnsigned) {
-                console.warn('[TabCoordination] Accepting unsigned message (signature verification skipped) (within bootstrap window)');
+                console.warn('[TabCoordination] Accepting unsigned message (signature verification skipped) (within bootstrap window, limited to 3 messages)');
             } else {
                 // Step 0a: Check for missing security fields (signed messages)
                 if (!signature || !origin || !timestamp || !nonce) {

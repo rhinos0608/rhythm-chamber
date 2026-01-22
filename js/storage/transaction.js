@@ -24,6 +24,96 @@ import { SecureTokenStore } from '../security/secure-token-store.js';
 const COMPENSATION_LOG_STORE = 'TRANSACTION_COMPENSATION';
 
 // ==========================================
+// Fatal Error State (CRITICAL FIX for Issue #2)
+// ==========================================
+
+/**
+ * CRITICAL FIX: Fatal error state to prevent cascade failures
+ *
+ * When transaction rollback fails and all compensation logging fails, the system
+ * enters a fatal state where data integrity cannot be guaranteed. All new
+ * transactions are blocked until the fatal state is cleared (requires user action).
+ *
+ * This prevents compounding data corruption in unrecoverable failure scenarios.
+ */
+let FATAL_STATE = {
+    isFatal: false,
+    reason: null,
+    timestamp: null,
+    transactionId: null,
+    compensationLogCount: 0
+};
+
+// ==========================================
+// Nested Transaction Detection (MEDIUM FIX for Issue #15)
+// ==========================================
+
+/**
+ * MEDIUM FIX Issue #15: Track active transaction depth to detect and prevent nested transactions
+ *
+ * Nested transactions can cause deadlocks and unexpected behavior because:
+ * 1. Operations queued during a transaction may commit after the outer transaction completes
+ * 2. Rollback behavior is undefined when transactions are nested
+ * 3. The 2PC protocol doesn't account for nested transaction scenarios
+ */
+let transactionDepth = 0;
+const NESTED_TRANSACTION_STACK = []; // Track transaction context IDs for debugging
+
+/**
+ * Check if currently inside a transaction
+ * @returns {boolean} True if a transaction is active
+ */
+function isInTransaction() {
+    return transactionDepth > 0;
+}
+
+/**
+ * Get current transaction depth
+ * @returns {number} Current nesting depth
+ */
+function getTransactionDepth() {
+    return transactionDepth;
+}
+
+/**
+ * Check if system is in fatal error state
+ * @returns {boolean} True if in fatal state
+ */
+function isFatalState() {
+    return FATAL_STATE.isFatal;
+}
+
+/**
+ * Get fatal error state details
+ * @returns {Object|null} Fatal state or null if not fatal
+ */
+function getFatalState() {
+    if (!FATAL_STATE.isFatal) {
+        return null;
+    }
+    return { ...FATAL_STATE };
+}
+
+/**
+ * Clear fatal error state (requires explicit user action)
+ * This should only be called after manual recovery/verification
+ * @param {string} [reason] - Reason for clearing
+ */
+function clearFatalState(reason = 'Manual recovery') {
+    if (FATAL_STATE.isFatal) {
+        console.warn('[StorageTransaction] Fatal state cleared:', reason);
+        FATAL_STATE = {
+            isFatal: false,
+            reason: null,
+            timestamp: null,
+            transactionId: null,
+            compensationLogCount: 0
+        };
+        EventBus.emit('transaction:fatal_cleared', { reason, timestamp: Date.now() });
+    }
+}
+
+// ==========================================
 // SessionStorage Compensation Log Fallback
 // ==========================================
 
@@ -547,12 +637,45 @@ async function recoverFromJournal() {
  * 2. Journal phase: Write transaction intent for crash recovery
  * 3. Commit phase: Execute all operations
  * 4. Cleanup phase: Clear journal on success
- * 
+ *
+ * CRITICAL FIX for Issue #2: Checks fatal state before starting transaction
+ * MEDIUM FIX for Issue #15: Detects and prevents nested transactions
+ *
  * @param {function(TransactionContext): Promise<void>} callback - Transaction callback
  * @returns {Promise<{success: boolean, operationsCommitted: number, transactionId: string, durationMs: number}>}
  */
 async function transaction(callback) {
+    // CRITICAL FIX: Block new transactions when in fatal state
+    if (FATAL_STATE.isFatal) {
+        const error = new Error(
+            `System in fatal error state: ${FATAL_STATE.reason}. ` +
+            `Transaction ID: ${FATAL_STATE.transactionId}. ` +
+            `Please refresh the page and contact support if the issue persists.`
+        );
+        error.code = 'TRANSACTION_FATAL_STATE';
+        error.fatalState = getFatalState();
+        throw error;
+    }
+
+    // MEDIUM FIX Issue #15: Detect and prevent nested transactions
+    // Nested transactions can cause deadlocks and undefined rollback behavior
+    if (isInTransaction()) {
+        const error = new Error(
+            `Nested transaction detected (current depth: ${transactionDepth}). ` +
+            `Nested transactions are not supported. ` +
+            `Please move this operation outside the current transaction context.`
+        );
+        error.code = 'NESTED_TRANSACTION_NOT_SUPPORTED';
+        error.transactionDepth = transactionDepth;
+        error.currentStack = [...NESTED_TRANSACTION_STACK];
+        throw error;
+    }
+
+    // Increment transaction depth (track for nested detection)
+    transactionDepth++;
+
     const ctx = new TransactionContext();
+    NESTED_TRANSACTION_STACK.push(ctx.id);
 
     try {
         // Phase 0: Execute the transaction callback (collect operations)
@@ -601,6 +724,14 @@ async function transaction(callback) {
         }
 
         throw error;
+    } finally {
+        // MEDIUM FIX Issue #15: Always decrement transaction depth and clean up stack
+        // This ensures proper tracking even when errors occur
+        transactionDepth = Math.max(0, transactionDepth - 1);
+        const stackIndex = NESTED_TRANSACTION_STACK.indexOf(ctx.id);
+        if (stackIndex !== -1) {
+            NESTED_TRANSACTION_STACK.splice(stackIndex, 1);
+        }
     }
 }
 
@@ -755,10 +886,13 @@ async function rollback(ctx) {
 
     // If any rollback failures occurred, persist to compensation log
     if (compensationLog.length > 0) {
+        let storageSuccess = false;
+
         try {
             await persistCompensationLog(ctx.id, compensationLog);
+            storageSuccess = true;
             console.warn(`[StorageTransaction] ${compensationLog.length} rollback failure(s) logged for manual recovery`);
-            
+
             // Emit event for UI notification if EventBus is available
             EventBus.emit('storage:compensation_needed', {
                 transactionId: ctx.id,
@@ -770,6 +904,24 @@ async function rollback(ctx) {
             // Log to console as last resort (already sanitized)
             console.error('[StorageTransaction] COMPENSATION LOG (not persisted):', JSON.stringify(compensationLog, null, 2));
             console.error(`[StorageTransaction] Rollback failures count: ${compensationLog.length}`);
+
+            // CRITICAL FIX for Issue #2: Enter fatal state when ALL storage backends fail
+            // This prevents cascade corruption by blocking new transactions
+            if (!storageSuccess) {
+                FATAL_STATE = {
+                    isFatal: true,
+                    reason: 'CRITICAL: Transaction rollback failed and all compensation log storage backends exhausted',
+                    timestamp: Date.now(),
+                    transactionId: ctx.id,
+                    compensationLogCount: compensationLog.length
+                };
+
+                // Emit fatal error event for UI notification
+                EventBus.emit('transaction:fatal_error', getFatalState());
+
+                console.error('[StorageTransaction] FATAL STATE ENTERED:', getFatalState());
+                console.error('[StorageTransaction] All future transactions will be blocked until manual recovery');
+            }
         }
     }
 
@@ -1079,6 +1231,15 @@ const StorageTransaction = {
     getInMemoryCompensationLog,
     getAllInMemoryCompensationLogs,
     clearInMemoryCompensationLog,
+
+    // CRITICAL FIX for Issue #2: Fatal error state management
+    isFatalState,
+    getFatalState,
+    clearFatalState,
+
+    // MEDIUM FIX for Issue #15: Nested transaction detection
+    isInTransaction,
+    getTransactionDepth,
 
     // For advanced use
     TransactionContext,

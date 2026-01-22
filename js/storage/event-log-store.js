@@ -341,13 +341,22 @@ async function getEventsSinceCheckpoint(fromSequenceNumber) {
 /**
  * Compact event log
  * Removes old events while preserving recent history and checkpoints
+ * MEDIUM FIX Issue #16: Explicitly handles empty database edge case and validates compaction parameters
+ *
  * @returns {Promise<{deleted: number, kept: number}>}
  */
 async function compactEventLog() {
-    // Get total event count first (before creating transaction)
+    // MEDIUM FIX Issue #16: Explicitly handle empty database case first
+    // This prevents issues when compacting an empty or newly created database
     const totalCount = await countEvents();
 
+    if (totalCount === 0) {
+        console.log('[EventLogStore] Database is empty, nothing to compact');
+        return { deleted: 0, kept: 0 };
+    }
+
     if (totalCount < COMPACTION_CONFIG.maxEvents) {
+        console.log(`[EventLogStore] Only ${totalCount} events, below compaction threshold of ${COMPACTION_CONFIG.maxEvents}`);
         return { deleted: 0, kept: totalCount };
     }
 
@@ -365,11 +374,8 @@ async function compactEventLog() {
     } else {
         // No checkpoint: get highest sequence number and derive cutoff
         // Keep the most recent maxEvents worth of events
-        const events = await getEvents(-1, 1); // Get first event to check
-        if (events.length === 0) {
-            return { deleted: 0, kept: 0 };
-        }
-        // Get the last event (highest sequence)
+
+        // MEDIUM FIX Issue #16: Get last event in safer way with explicit empty check
         const db = await initEventLogStores();
         const tx = db.transaction([EVENT_LOG_STORE], 'readonly');
         const store = tx.objectStore(EVENT_LOG_STORE);
@@ -384,7 +390,9 @@ async function compactEventLog() {
             request.onerror = () => reject(request.error);
         });
 
-        if (!lastEvent) {
+        // MEDIUM FIX Issue #16: Validate lastEvent before accessing properties
+        if (!lastEvent || typeof lastEvent.sequenceNumber !== 'number') {
+            console.warn('[EventLogStore] Invalid last event during compaction, aborting');
             return { deleted: 0, kept: totalCount };
         }
 
@@ -392,8 +400,24 @@ async function compactEventLog() {
         cutoffSequence = lastEvent.sequenceNumber - COMPACTION_CONFIG.maxEvents;
     }
 
+    // MEDIUM FIX Issue #16: Clamp cutoff to valid range and validate
+    // Ensure cutoffSequence is a valid number and not negative
+    if (typeof cutoffSequence !== 'number' || isNaN(cutoffSequence)) {
+        console.warn('[EventLogStore] Invalid cutoff sequence calculated, aborting compaction');
+        return { deleted: 0, kept: totalCount };
+    }
+
     // Clamp cutoff to >= 0 to avoid negative sequence numbers
     cutoffSequence = Math.max(0, cutoffSequence);
+
+    // MEDIUM FIX Issue #16: Validate cutoff won't delete all events
+    // Ensure we keep at least minEventsAfterCheckpoint events
+    const minToKeep = COMPACTION_CONFIG.minEventsAfterCheckpoint || 50;
+    const maxDeletable = totalCount - minToKeep;
+    if (maxDeletable <= 0) {
+        console.log('[EventLogStore] Would delete too many events, skipping compaction');
+        return { deleted: 0, kept: totalCount };
+    }
 
     // Now create the transaction
     const db = await initEventLogStores();
@@ -414,7 +438,18 @@ async function compactEventLog() {
                 deleted++;
                 cursor.continue();
             } else {
-                resolve({ deleted, kept: totalCount - deleted });
+                // MEDIUM FIX Issue #16: Use accurate kept count from database
+                // The kept count should reflect actual events remaining, not just calculated
+                const finalCountReq = store.count();
+                finalCountReq.onsuccess = () => {
+                    const finalCount = finalCountReq.result;
+                    console.log(`[EventLogStore] Compaction complete: deleted ${deleted}, kept ${finalCount}`);
+                    resolve({ deleted, kept: finalCount });
+                };
+                finalCountReq.onerror = () => {
+                    // Fallback to calculated count if count() fails
+                    resolve({ deleted, kept: totalCount - deleted });
+                };
             }
         };
 

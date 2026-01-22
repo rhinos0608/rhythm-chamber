@@ -202,6 +202,8 @@ function parseStreamDate(ts) {
 
 /**
  * Restore archived streams back to main storage
+ * MEDIUM FIX Issue #17: Added validation of archive data integrity before restoration
+ *
  * @param {Object} [options] - Restore options
  * @param {Date|number} [options.afterDate] - Only restore streams after this date
  * @param {boolean} [options.clearArchive=true] - Clear archive after restoration
@@ -225,17 +227,37 @@ async function restoreFromArchive(options = {}) {
             return { restored: 0, remaining: 0 };
         }
 
+        // MEDIUM FIX Issue #17: Validate archive data integrity before restoration
+        // This prevents corrupted or malformed data from polluting the main store
+        const validationResult = validateArchiveData(archivedStreams);
+        if (!validationResult.valid) {
+            const error = new Error(
+                `Archive data integrity check failed: ${validationResult.reason}. ` +
+                `Restore aborted to prevent data pollution.`
+            );
+            error.code = 'ARCHIVE_INTEGRITY_FAILED';
+            error.validationResult = validationResult;
+            throw error;
+        }
+
+        if (validationResult.invalidCount > 0) {
+            console.warn(`[ArchiveService] Found ${validationResult.invalidCount} invalid entries in archive, filtering them out`);
+        }
+
+        // Use only validated streams
+        const validStreams = validationResult.validStreams;
+
         // Filter by date if specified
-        let toRestore = archivedStreams;
+        let toRestore = validStreams;
         let remaining = [];
 
         if (afterDate) {
             const afterTimestamp = afterDate.getTime();
-            toRestore = archivedStreams.filter(s => {
+            toRestore = validStreams.filter(s => {
                 const streamDate = parseStreamDate(s.ts);
                 return streamDate && streamDate.getTime() >= afterTimestamp;
             });
-            remaining = archivedStreams.filter(s => {
+            remaining = validStreams.filter(s => {
                 const streamDate = parseStreamDate(s.ts);
                 return !streamDate || streamDate.getTime() < afterTimestamp;
             });
@@ -243,7 +265,7 @@ async function restoreFromArchive(options = {}) {
 
         if (toRestore.length === 0) {
             console.log('[ArchiveService] No streams match restore criteria');
-            return { restored: 0, remaining: archivedStreams.length };
+            return { restored: 0, remaining: validStreams.length };
         }
 
         // Get current streams and merge
@@ -282,7 +304,9 @@ async function restoreFromArchive(options = {}) {
         // Emit restore event
         EventBus.emit('storage:archive_restored', {
             restoredCount: toRestore.length,
-            remainingCount: remaining.length
+            remainingCount: remaining.length,
+            validated: true,
+            filteredCount: validationResult.invalidCount
         });
 
         return { restored: toRestore.length, remaining: remaining.length };
@@ -290,6 +314,84 @@ async function restoreFromArchive(options = {}) {
         console.error('[ArchiveService] Restore failed:', error);
         throw error;
     }
+}
+
+/**
+ * MEDIUM FIX Issue #17: Validate archive data integrity before restoration
+ * Checks that archived streams match expected schema and are not corrupted
+ *
+ * @param {Array} archivedStreams - Archived streams to validate
+ * @returns {{valid: boolean, validStreams: Array, invalidCount: number, reason: string|null}}
+ */
+function validateArchiveData(archivedStreams) {
+    if (!Array.isArray(archivedStreams)) {
+        return { valid: false, validStreams: [], invalidCount: 0, reason: 'Archive data is not an array' };
+    }
+
+    if (archivedStreams.length === 0) {
+        return { valid: true, validStreams: [], invalidCount: 0, reason: null };
+    }
+
+    const validStreams = [];
+    let invalidCount = 0;
+
+    for (let i = 0; i < archivedStreams.length; i++) {
+        const stream = archivedStreams[i];
+
+        // Skip if not an object
+        if (!stream || typeof stream !== 'object') {
+            invalidCount++;
+            console.warn(`[ArchiveService] Invalid stream at index ${i}: not an object`);
+            continue;
+        }
+
+        // Check for required timestamp field
+        if (!stream.ts && !stream.endTime && !stream.playedAt) {
+            invalidCount++;
+            console.warn(`[ArchiveService] Invalid stream at index ${i}: missing timestamp`);
+            continue;
+        }
+
+        // Validate timestamp can be parsed
+        const streamDate = parseStreamDate(stream.ts || stream.endTime || stream.playedAt);
+        if (!streamDate) {
+            invalidCount++;
+            console.warn(`[ArchiveService] Invalid stream at index ${i}: invalid timestamp`);
+            continue;
+        }
+
+        // Validate timestamp is reasonable (between 2000 and current year + 1)
+        const year = streamDate.getFullYear();
+        const currentYear = new Date().getFullYear();
+        if (year < 2000 || year > currentYear + 1) {
+            invalidCount++;
+            console.warn(`[ArchiveService] Invalid stream at index ${i}: timestamp out of reasonable range (${year})`);
+            continue;
+        }
+
+        // Check for at least track or artist name (basic sanity check)
+        const hasTrack = stream.trackName || stream.master_metadata_track_name;
+        const hasArtist = stream.artistName || stream.master_metadata_album_artist_name;
+        if (!hasTrack && !hasArtist) {
+            // Some entries might not have these, log but don't fail
+            console.warn(`[ArchiveService] Stream at index ${i} missing track/artist info, but allowing through`);
+        }
+
+        validStreams.push(stream);
+    }
+
+    // Consider valid if at least 90% of entries passed validation
+    const validityThreshold = Math.max(1, Math.floor(archivedStreams.length * 0.9));
+    if (validStreams.length < validityThreshold) {
+        return {
+            valid: false,
+            validStreams,
+            invalidCount,
+            reason: `Too many invalid entries (${invalidCount}/${archivedStreams.length})`
+        };
+    }
+
+    return { valid: true, validStreams, invalidCount, reason: null };
 }
 
 /**

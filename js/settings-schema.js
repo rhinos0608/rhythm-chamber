@@ -340,7 +340,10 @@ function validateValue(key, value, schemaDef) {
             if (actualType !== 'number') {
                 // Try to convert
                 const num = Number(value);
-                if (isNaN(num)) {
+                // EDGE CASE FIX: Reject boolean values which coerce to 0 or 1
+                // Number(true) = 1, Number(false) = 0
+                // These are not valid number settings and should use defaults
+                if (isNaN(num) || actualType === 'boolean') {
                     errors.push(`${key}: expected number, got ${actualType}`);
                     sanitized = schemaDef.default;
                 } else {

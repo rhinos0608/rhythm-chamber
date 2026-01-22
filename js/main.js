@@ -188,9 +188,19 @@ logger.debug('All modules imported via ES modules');
  * @param {string} reason - Why security check failed
  */
 function showSecurityError(reason) {
-    // Wait for DOM to be ready
+    // EDGE CASE FIX: Prevent race condition with DOM ready state
+    // If DOM is already loaded and content exists, we need to be more careful
+    // about clearing content to avoid removing valid content in Safe Mode
+
     const showError = () => {
         const container = document.querySelector('.app-main') || document.body;
+        const existingSecurityError = container.querySelector('.security-error');
+
+        // Return early if security error already exists to prevent duplicates
+        if (existingSecurityError) {
+            return;
+        }
+
         container.innerHTML = ''; // Clear existing content
 
         // Create container div
@@ -269,10 +279,17 @@ function showSecurityError(reason) {
         container.appendChild(errorDiv);
     };
 
+    // EDGE CASE FIX: Use requestAnimationFrame to ensure DOM is fully ready
+    // This prevents a flash of incorrect content when security check fails
+    // after DOM is loaded but before styles are applied
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', showError);
+        document.addEventListener('DOMContentLoaded', () => {
+            requestAnimationFrame(showError);
+        });
     } else {
-        showError();
+        // DOM is ready, but use requestAnimationFrame to ensure
+        // we're rendering at the right time in the frame cycle
+        requestAnimationFrame(showError);
     }
 }
 
@@ -388,7 +405,7 @@ let heavyModulesLoading = null;
  * Load heavy RAG/Vector modules on user intent
  * Called when user clicks "Start Analysis" or enters Chat tab
  * This defers expensive module loading until actually needed
- * 
+ *
  * @returns {Promise<boolean>} True if modules loaded successfully
  */
 async function loadHeavyModulesOnIntent() {
@@ -410,23 +427,41 @@ async function loadHeavyModulesOnIntent() {
 
     logger.debug('Loading heavy modules on user intent...');
 
+    // EDGE CASE FIX: Add timeout to prevent indefinite hanging
+    // If module loading takes too long, we should fail gracefully
+    const MODULE_LOAD_TIMEOUT = 30000; // 30 seconds
+
     heavyModulesLoading = (async () => {
         try {
-            // Load all heavy modules via ModuleRegistry
-            await ModuleRegistry.preloadModules([
-                'Ollama',
-                'OllamaProvider',
-                'RAG',
-                'LocalVectorStore',
-                'LocalEmbeddings'
+            // Create a timeout promise for ModuleRegistry preload
+            const preloadTimeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Module loading timeout')), MODULE_LOAD_TIMEOUT)
+            );
+
+            // Load all heavy modules via ModuleRegistry with timeout
+            await Promise.race([
+                ModuleRegistry.preloadModules([
+                    'Ollama',
+                    'OllamaProvider',
+                    'RAG',
+                    'LocalVectorStore',
+                    'LocalEmbeddings'
+                ]),
+                preloadTimeoutPromise
             ]);
 
             logger.debug('Heavy modules loaded via ModuleRegistry');
 
-            // Initialize LocalVectorStore worker
+            // Initialize LocalVectorStore worker with a fresh timeout promise
             const lvsModule = ModuleRegistry.getModuleSync('LocalVectorStore');
             if (lvsModule?.LocalVectorStore) {
-                await lvsModule.LocalVectorStore.init();
+                const initTimeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Module loading timeout')), MODULE_LOAD_TIMEOUT)
+                );
+                await Promise.race([
+                    lvsModule.LocalVectorStore.init(),
+                    initTimeoutPromise
+                ]);
                 logger.debug('LocalVectorStore worker initialized');
             }
 
@@ -435,6 +470,13 @@ async function loadHeavyModulesOnIntent() {
         } catch (error) {
             logger.error('Failed to load heavy modules:', error);
             heavyModulesLoading = null; // Allow retry
+
+            // Show user-friendly error message for timeout
+            if (error.message === 'Module loading timeout') {
+                logger.warn('[Main] Module loading timed out after 30 seconds');
+                // Could show a toast here if needed
+            }
+
             return false;
         }
     })();

@@ -44,6 +44,10 @@ export class LRUCache {
         // Internal storage - Map maintains insertion order
         this._cache = new Map();
 
+        // CRITICAL FIX for High Issue #6: Track pinned items to prevent eviction
+        // of items currently being processed by workers
+        this._pinnedItems = new Set();
+
         // Statistics
         this._evictionCount = 0;
         this._hitCount = 0;
@@ -55,7 +59,8 @@ export class LRUCache {
 
     /**
      * Get an item from the cache
-     * Updates access recency (moves to most recent)
+     * Updates access recency (moves to most recent) unless pinned
+     * CRITICAL FIX for High Issue #6: Pinned items don't update recency
      * @param {string|number} key - Cache key
      * @returns {any} The cached value or undefined
      */
@@ -67,16 +72,24 @@ export class LRUCache {
 
         this._hitCount++;
 
-        // Move to end (most recently used) by delete + re-insert
-        const value = this._cache.get(key);
-        this._cache.delete(key);
-        this._cache.set(key, value);
+        // CRITICAL FIX for High Issue #6: Don't update recency if pinned
+        // This prevents premature eviction of items being actively processed
+        if (!this._pinnedItems.has(key)) {
+            // Move to end (most recently used) by delete + re-insert
+            const value = this._cache.get(key);
+            this._cache.delete(key);
+            this._cache.set(key, value);
+        } else {
+            // Just get value without moving (pinned items stay in place)
+            return this._cache.get(key);
+        }
 
-        return value;
+        return this._cache.get(key);
     }
 
     /**
      * Set an item in the cache
+     * CRITICAL FIX for High Issue #6: Skips pinned items when selecting eviction candidate
      * May trigger eviction if at capacity
      * @param {string|number} key - Cache key
      * @param {any} value - Value to cache
@@ -89,8 +102,33 @@ export class LRUCache {
         if (this._cache.has(key)) {
             this._cache.delete(key);
         } else if (this._cache.size >= this.maxSize) {
-            // At capacity - evict oldest (first item in Map)
-            evicted = this._evictOldest();
+            // CRITICAL FIX for High Issue #6: Skip pinned items when selecting eviction candidate
+            // Get oldest unpinned item for eviction
+            const unpinnedEntries = [...this._cache.entries()]
+                .filter(([k]) => !this._pinnedItems.has(k));
+
+            if (unpinnedEntries.length === 0) {
+                console.warn('[LRUCache] All items pinned, cannot evict. Cache will exceed maxSize.');
+                // Still set the value, but allow overflow
+                this._cache.set(key, value);
+                return false;
+            }
+
+            // Evict the oldest unpinned item
+            const [evictKey] = unpinnedEntries[0];
+            this._cache.delete(evictKey);
+
+            // Call eviction callback if set
+            if (this.onEvict) {
+                try {
+                    this.onEvict(evictKey);
+                } catch (e) {
+                    console.error('[LRUCache] onEvict callback error:', e);
+                }
+            }
+
+            this._evictionCount++;
+            evicted = true;
         }
 
         // Insert at end (most recent)
@@ -110,10 +148,13 @@ export class LRUCache {
 
     /**
      * Delete an item from the cache
+     * Also unpins the item if it was pinned
      * @param {string|number} key - Cache key
      * @returns {boolean} True if item existed
      */
     delete(key) {
+        // Also unpin if pinned
+        this._pinnedItems.delete(key);
         return this._cache.delete(key);
     }
 
@@ -122,6 +163,7 @@ export class LRUCache {
      */
     clear() {
         this._cache.clear();
+        this._pinnedItems.clear();
         this._pendingEvictions = [];
     }
 
@@ -158,7 +200,45 @@ export class LRUCache {
     }
 
     /**
+     * Pin an item to prevent eviction during active processing
+     * CRITICAL FIX for High Issue #6: Prevents eviction of items being actively used
+     * @param {string|number} key - Cache key to pin
+     */
+    pin(key) {
+        if (this._cache.has(key)) {
+            this._pinnedItems.add(key);
+        }
+    }
+
+    /**
+     * Unpin an item to allow normal eviction
+     * CRITICAL FIX for High Issue #6: Releases pin after processing completes
+     * @param {string|number} key - Cache key to unpin
+     */
+    unpin(key) {
+        this._pinnedItems.delete(key);
+    }
+
+    /**
+     * Check if an item is pinned
+     * @param {string|number} key - Cache key to check
+     * @returns {boolean} True if item is pinned
+     */
+    isPinned(key) {
+        return this._pinnedItems.has(key);
+    }
+
+    /**
+     * Get count of pinned items
+     * @returns {number}
+     */
+    get pinnedCount() {
+        return this._pinnedItems.size;
+    }
+
+    /**
      * Evict oldest item(s) from cache
+     * CRITICAL FIX for High Issue #6: Skips pinned items when selecting eviction candidate
      * @param {number} count - Number of items to evict (default 1)
      * @returns {boolean} True if any items were evicted
      */
@@ -166,17 +246,33 @@ export class LRUCache {
         if (this._cache.size === 0) return false;
 
         let evicted = 0;
+        const evictedKeys = [];
+
+        // CRITICAL FIX for High Issue #6: Only evict unpinned items
         for (const key of this._cache.keys()) {
             if (evicted >= count) break;
 
-            // Call eviction callback if set (for IndexedDB cleanup)
-            if (this.onEvict) {
-                this._pendingEvictions.push(key);
+            // Skip pinned items
+            if (this._pinnedItems.has(key)) {
+                continue;
             }
 
+            evictedKeys.push(key);
             this._cache.delete(key);
             this._evictionCount++;
             evicted++;
+        }
+
+        // CRITICAL FIX for High Issue #20: Call onEvict callback for each evicted key
+        // This was previously missing in setMaxSize, causing resource leaks
+        if (this.onEvict && evictedKeys.length > 0) {
+            for (const key of evictedKeys) {
+                try {
+                    this.onEvict(key);
+                } catch (e) {
+                    console.error('[LRUCache] onEvict callback error:', e);
+                }
+            }
         }
 
         return evicted > 0;
@@ -195,14 +291,43 @@ export class LRUCache {
 
     /**
      * Update max size (triggers eviction if new size is smaller)
+     * CRITICAL FIX for High Issue #20: Now calls onEvict callback for each evicted item
+     * Previously items were evicted silently, causing resource leaks
      * @param {number} newMaxSize - New maximum size
      */
     setMaxSize(newMaxSize) {
         this.maxSize = Math.max(1, newMaxSize);
 
         // Evict if we're now over capacity
+        // CRITICAL FIX for High Issue #20: Each eviction now calls onEvict callback
         while (this._cache.size > this.maxSize) {
-            this._evictOldest();
+            // Find and evict the oldest unpinned item
+            let evicted = false;
+            for (const key of this._cache.keys()) {
+                if (this._pinnedItems.has(key)) {
+                    continue; // Skip pinned items
+                }
+
+                // Call eviction callback before deleting
+                if (this.onEvict) {
+                    try {
+                        this.onEvict(key);
+                    } catch (e) {
+                        console.error('[LRUCache] onEvict callback error during setMaxSize:', e);
+                    }
+                }
+
+                this._cache.delete(key);
+                this._evictionCount++;
+                evicted = true;
+                break; // Only evict one per loop iteration
+            }
+
+            // If all items are pinned, break to avoid infinite loop
+            if (!evicted) {
+                console.warn('[LRUCache] Cannot reduce cache size: all items are pinned');
+                break;
+            }
         }
     }
 

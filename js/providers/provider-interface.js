@@ -193,18 +193,26 @@ async function callProvider(config, apiKey, messages, tools, onProgress = null) 
         throw new Error(`Provider module '${config.provider}' not loaded`);
     }
 
+    // MEDIUM FIX #16: Use endpoint-specific circuit breaker key
+    // Previously circuit breaker was per-provider, which meant if one endpoint
+    // (e.g., chat completions) was failing but others (e.g., models list) worked,
+    // all requests would be blocked. Now we use endpoint-specific keys.
+    // For chat completions, we use 'chat_completions:provider' format
+    const circuitKey = `chat_completions:${config.provider}`;
+
     // HNW Network: Check circuit breaker before attempting call
-    const circuitCheck = ProviderHealthAuthority.canExecute(config.provider);
+    const circuitCheck = ProviderHealthAuthority.canExecute(circuitKey);
     if (!circuitCheck.allowed) {
         const error = new Error(circuitCheck.reason);
         error.type = 'circuit_open';
         error.provider = config.provider;
+        error.endpoint = 'chat_completions';
         error.recoverable = true;
         error.cooldownRemaining = circuitCheck.cooldownRemaining;
         const timeMessage = circuitCheck.cooldownRemaining
             ? `Try again in ${Math.ceil(circuitCheck.cooldownRemaining / 1000)}s.`
             : 'Try a different provider.';
-        error.suggestion = `${config.provider} is temporarily unavailable. ${timeMessage}`;
+        error.suggestion = `${config.provider} chat completions is temporarily unavailable. ${timeMessage}`;
         throw error;
     }
 
@@ -217,8 +225,8 @@ async function callProvider(config, apiKey, messages, tools, onProgress = null) 
         const startTime = Date.now();
 
         try {
-            // Check circuit breaker before each attempt
-            const retryCheck = ProviderHealthAuthority.canExecute(config.provider);
+            // Check circuit breaker before each attempt (using endpoint-specific key)
+            const retryCheck = ProviderHealthAuthority.canExecute(circuitKey);
             if (!retryCheck.allowed) {
                 throw new Error(retryCheck.reason);
             }
@@ -244,16 +252,31 @@ async function callProvider(config, apiKey, messages, tools, onProgress = null) 
                 { operation: `${config.provider} LLM call` }
             );
 
-            // Record success with duration
+            // Record success with duration (using endpoint-specific circuit key)
             const durationMs = Date.now() - startTime;
-            ProviderHealthAuthority.recordSuccess(config.provider, durationMs);
+            ProviderHealthAuthority.recordSuccess(circuitKey, durationMs);
 
-            // Validate response format from all providers
+            // CRITICAL FIX #2: Validate full response structure
+            // Prevents crashes when API returns empty or malformed responses
             if (!response || typeof response !== 'object') {
                 throw new Error(`${config.provider} returned no response`);
             }
             if (!response.choices || !Array.isArray(response.choices)) {
                 throw new Error(`${config.provider} returned malformed response (missing choices array)`);
+            }
+            // Validate choices array is not empty
+            if (response.choices.length === 0) {
+                throw new Error(`${config.provider} returned empty choices array`);
+            }
+            // Validate first choice has message structure
+            if (!response.choices[0]?.message) {
+                throw new Error(`${config.provider} returned malformed response (missing message in first choice)`);
+            }
+            // Validate message has content or tool_calls (at least one should be present)
+            const message = response.choices[0].message;
+            if (!message.content && !message.tool_calls) {
+                // Empty response is valid for some models, but log it
+                console.warn(`[ProviderInterface] ${config.provider} returned response with no content or tool_calls`);
             }
 
             return response;
@@ -280,8 +303,8 @@ async function callProvider(config, apiKey, messages, tools, onProgress = null) 
                 continue;
             }
 
-            // Record failure for circuit breaker
-            ProviderHealthAuthority.recordFailure(config.provider, error.message);
+            // Record failure for circuit breaker (using endpoint-specific circuit key)
+            ProviderHealthAuthority.recordFailure(circuitKey, error.message);
 
             // Handle timeout with HNW-compliant recovery suggestion
             if (error instanceof TimeoutError) {
@@ -311,13 +334,25 @@ function extractRetryAfter(error) {
     if (error.response && error.response.headers) {
         const retryAfter = error.response.headers.get('Retry-After');
         if (retryAfter) {
-            // Retry-After can be seconds (number) or HTTP-date
+            // HIGH FIX #6: Parse both seconds and HTTP-date formats
+            // RFC 7231 specifies Retry-After can be:
+            // - Delay-seconds: decimal integer (e.g., "120")
+            // - HTTP-date: RFC 1123 date (e.g., "Wed, 21 Oct 2015 07:28:00 GMT")
             const seconds = parseInt(retryAfter, 10);
             if (!isNaN(seconds)) {
                 return seconds * 1000;
             }
-            // Could parse HTTP-date here if needed
-            return 60000; // Default to 1 minute if date parsing fails
+
+            // Try parsing as HTTP-date
+            const date = new Date(retryAfter);
+            if (!isNaN(date.getTime())) {
+                const delayMs = Math.max(0, date.getTime() - Date.now());
+                // Cap at 1 hour to prevent excessive waits
+                return Math.min(delayMs, 3600000);
+            }
+
+            // If parsing fails, use default
+            return 60000;
         }
     }
 
@@ -376,16 +411,51 @@ async function isProviderAvailable(provider) {
             }
 
         case 'gemini':
-            // Gemini is available if we have an API key
+            // MEDIUM FIX #15: Verify Gemini API key AND connectivity
+            // Previously only checked for API key existence, which could lead to
+            // users waiting for timeout before discovering the API is unreachable
             const geminiApiKey = Settings?.get?.()?.gemini?.apiKey;
-            return !!geminiApiKey && geminiApiKey !== 'your-api-key-here';
+            if (!geminiApiKey || geminiApiKey === 'your-api-key-here') {
+                return false;
+            }
+            // Quick health check with short timeout
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/models', {
+                    headers: { 'Authorization': `Bearer ${geminiApiKey}` },
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                return response.ok;
+            } catch {
+                // Network error or timeout - API key exists but service unreachable
+                return false;
+            }
 
         case 'openrouter':
         default:
-            // OpenRouter is always "available" if we have an API key
+            // MEDIUM FIX #15: Verify OpenRouter API key AND connectivity
+            // Previously only checked for API key existence
             const apiKey = Settings?.get?.()?.openrouter?.apiKey ||
                 ConfigLoader.get('openrouter.apiKey');
-            return !!apiKey;
+            if (!apiKey) {
+                return false;
+            }
+            // Quick health check with short timeout
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                const response = await fetch('https://openrouter.ai/api/v1/models', {
+                    headers: { 'Authorization': `Bearer ${apiKey}` },
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                return response.ok;
+            } catch {
+                // Network error or timeout - API key exists but service unreachable
+                return false;
+            }
     }
 }
 
