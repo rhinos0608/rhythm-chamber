@@ -29,6 +29,9 @@ import { safeJsonParse } from './utils/safe-json.js';
 // EmbeddingWorker instance (lazy-loaded)
 let embeddingWorker = null;
 
+// Track pending worker requests to prevent race conditions from multiple concurrent calls
+const pendingWorkerRequests = new Map();
+
 /**
  * Get or create the EmbeddingWorker instance
  * Lazy-loads the worker to avoid blocking page load
@@ -70,6 +73,13 @@ function cleanupEmbeddingWorker() {
     }
 
     try {
+        // Reject all pending requests before cleanup
+        for (const [requestId, pending] of pendingWorkerRequests.entries()) {
+            clearTimeout(pending.timeoutId);
+            pending.reject(new Error('Worker cleaned up before completion'));
+        }
+        pendingWorkerRequests.clear();
+
         embeddingWorker.onmessage = null;
         embeddingWorker.onerror = null;
         embeddingWorker.terminate();
@@ -99,28 +109,43 @@ async function createChunksWithWorker(streams, onProgress = () => { }) {
         return await createChunks(streams, onProgress);
     }
 
+    // Generate unique request ID for this call
+    const requestId = `chunks_${Date.now()}_${Math.random().toString(36)}`;
+
     return new Promise((resolve, reject) => {
         const timeoutId = setTimeout(() => {
+            pendingWorkerRequests.delete(requestId);
             reject(new Error('Worker timed out after 120 seconds'));
         }, 120000);
 
-        worker.onmessage = (event) => {
-            const { type, current, total, message, chunks, message: errorMsg } = event.data;
+        // Store the request's resolve/reject handlers
+        pendingWorkerRequests.set(requestId, { resolve, reject, onProgress, timeoutId });
 
-            switch (type) {
-                case 'progress':
-                    onProgress(current, total, message);
-                    break;
-                case 'complete':
-                    clearTimeout(timeoutId);
-                    resolve(chunks);
-                    break;
-                case 'error':
-                    clearTimeout(timeoutId);
-                    reject(new Error(errorMsg || 'Worker error'));
-                    break;
-            }
-        };
+        // Set up message handler ONCE at module initialization to prevent race conditions
+        if (!worker._chunksHandlerSetup) {
+            worker.onmessage = (event) => {
+                const { type, requestId: rid, current, total, message, chunks, message: errorMsg } = event.data;
+                const pending = pendingWorkerRequests.get(rid);
+                if (!pending) return;
+
+                switch (type) {
+                    case 'progress':
+                        pending.onProgress(current, total, message);
+                        break;
+                    case 'complete':
+                        clearTimeout(pending.timeoutId);
+                        pendingWorkerRequests.delete(rid);
+                        pending.resolve(chunks);
+                        break;
+                    case 'error':
+                        clearTimeout(pending.timeoutId);
+                        pendingWorkerRequests.delete(rid);
+                        pending.reject(new Error(errorMsg || 'Worker error'));
+                        break;
+                }
+            };
+            worker._chunksHandlerSetup = true;
+        }
 
         // Capture the original error handler before assigning new one
         const originalOnError = worker.onerror;
@@ -128,6 +153,9 @@ async function createChunksWithWorker(streams, onProgress = () => { }) {
         worker.onerror = async (error) => {
             clearTimeout(timeoutId);
             console.warn('[RAG] Worker error, falling back to async main thread:', error.message);
+
+            // CRITICAL: Disable the onmessage handler to prevent duplicate resolution
+            worker.onmessage = null;
 
             // Fallback to async main thread version
             try {
@@ -151,8 +179,8 @@ async function createChunksWithWorker(streams, onProgress = () => { }) {
             }
         };
 
-        // Send streams to worker
-        worker.postMessage({ type: 'createChunks', streams });
+        // Send streams to worker with requestId
+        worker.postMessage({ type: 'createChunks', streams, requestId });
     });
 }
 
