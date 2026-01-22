@@ -839,6 +839,10 @@ async function sendMessage(msg) {
 /**
  * Create message handler for BroadcastChannel with message security verification
  * Phase 14: All incoming messages are verified for signature, origin, timestamp, and nonce
+ *
+ * NOTE: Returns an async function - errors are logged and swallowed because
+ * BroadcastChannel message handlers cannot propagate errors to callers.
+ * All errors must be handled within this function.
  */
 function createMessageHandler() {
     return async (event) => {
@@ -1065,8 +1069,15 @@ function createMessageHandler() {
                     break;
             }
         } catch (error) {
-            console.error('[TabCoordination] Message verification failed:', error);
-            // Don't process message if verification fails
+            // BroadcastChannel message handlers cannot propagate errors to callers
+            // All errors must be handled here to prevent unhandled promise rejections
+            console.error('[TabCoordination] Message handler error:', {
+                message: error.message,
+                stack: error.stack,
+                messageType: event.data?.type,
+                fromTab: event.data?.tabId
+            });
+            // Return without processing - message is rejected
             return;
         }
     };
