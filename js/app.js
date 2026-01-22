@@ -899,6 +899,7 @@ function setupEventListeners() {
             // Some handlers like 'confirm-delete-chat' are async
             Promise.resolve(handler()).catch(err => {
                 console.error(`[App] Handler '${action}' failed:`, err);
+                EventBus.emit('handler:failed', { action, error: err });
             });
         } else {
             console.warn(`[App] Unknown action: ${action}`);
