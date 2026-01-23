@@ -20,8 +20,16 @@
 
 import { TabCoordinator } from '../services/tab-coordination.js';
 import { DeviceDetection } from '../services/device-detection.js';
-import { SafeMode } from '../security/safe-mode.js';
+import { Crypto } from '../security/crypto.js';
 import { EventBus } from '../services/event-bus.js';
+
+/**
+ * Check if encryption is available (secure context)
+ * @returns {boolean} True if in secure context
+ */
+function canEncrypt() {
+    return Crypto.isSecureContext();
+}
 
 // ==========================================
 // Constants
@@ -334,7 +342,7 @@ async function queueWrite(operation, args, priority = WalPriority.NORMAL) {
     }
 
     // Check if encryption is available
-    if (SafeMode.canEncrypt()) {
+    if (canEncrypt()) {
         // Process immediately if encryption is available
         const result = await executeOperation(operation, args);
         // Return in same format for consistency
@@ -587,7 +595,7 @@ async function processWal() {
 
                 try {
                     // Check if encryption is now available
-                    if (SafeMode.canEncrypt()) {
+                    if (canEncrypt()) {
                         // CRITICAL FIX: Use executeOperationForReplay for idempotency
                         // This converts 'add' to 'put' during WAL replay to prevent ConstraintError
                         const result = await executeOperationForReplay(entry.operation, entry.args, walState.isReplaying);
@@ -654,7 +662,7 @@ async function processWal() {
             saveWal();
 
             // Check if encryption became available mid-batch
-            if (SafeMode.canEncrypt()) {
+            if (canEncrypt()) {
                 console.log('[WAL] Encryption now available, processing remaining entries immediately');
             }
         }
@@ -673,7 +681,7 @@ async function processWal() {
             entry => entry.status === WalStatus.PENDING || entry.status === WalStatus.FAILED
         );
 
-        if (hasPending && !SafeMode.canEncrypt()) {
+        if (hasPending && !canEncrypt()) {
             scheduleProcessing();
         }
     }

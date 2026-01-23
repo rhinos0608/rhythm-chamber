@@ -22,7 +22,7 @@ const LOCAL_EMBEDDING_DIMENSIONS = 384; // all-MiniLM-L6-v2 output dimension
 import { ModuleRegistry } from './module-registry.js';
 import { Patterns } from './patterns.js';
 import { Storage } from './storage.js';
-import { Security } from './security/index.js';
+import { Crypto } from './security/crypto.js';
 import { OperationLock } from './operation-lock.js';
 import { safeJsonParse } from './utils/safe-json.js';
 
@@ -347,12 +347,10 @@ async function getCheckpoint() {
         // Try unified storage first (IndexedDB)
         if (Storage.getConfig) {
             const cipher = await Storage.getConfig(RAG_CHECKPOINT_CIPHER_KEY);
-            if (cipher && Security.decryptData) {
+            if (cipher && Crypto.decryptData) {
                 try {
-                    // Note: Uses Security.getSessionKey (legacy Encryption.getSessionKey)
-                    // For new code, use Security.getSessionKeyKM for KeyManager's non-extractable key
-                    const sessionKey = await Security.getSessionKey();
-                    const decrypted = await Security.decryptData(cipher, sessionKey);
+                    const sessionKey = await Crypto.getSessionKey();
+                    const decrypted = await Crypto.decryptData(cipher, sessionKey);
                     if (decrypted) {
                         return JSON.parse(decrypted);
                     }
@@ -370,10 +368,10 @@ async function getCheckpoint() {
 
         // Fallback to localStorage
         const cipher = localStorage.getItem(RAG_CHECKPOINT_CIPHER_KEY);
-        if (cipher && Security.decryptData) {
+        if (cipher && Crypto.decryptData) {
             try {
-                const sessionKey = await Security.getSessionKey();
-                const decrypted = await Security.decryptData(cipher, sessionKey);
+                const sessionKey = await Crypto.getSessionKey();
+                const decrypted = await Crypto.decryptData(cipher, sessionKey);
                 if (decrypted) {
                     return JSON.parse(decrypted);
                 }
@@ -402,12 +400,10 @@ async function saveCheckpoint(data) {
     };
 
     // Try to encrypt checkpoint
-    if (Security.encryptData && Security.getSessionKey) {
+    if (Crypto.encryptData && Crypto.getSessionKey) {
         try {
-            // Note: Uses Security.getSessionKey (legacy Encryption.getSessionKey)
-            // For new code, use Security.getSessionKeyKM for KeyManager's non-extractable key
-            const sessionKey = await Security.getSessionKey();
-            const encrypted = await Security.encryptData(
+            const sessionKey = await Crypto.getSessionKey();
+            const encrypted = await Crypto.encryptData(
                 JSON.stringify(checkpoint),
                 sessionKey
             );

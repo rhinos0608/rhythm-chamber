@@ -98,6 +98,12 @@ Mostly client-side: Static HTML/CSS/ES6 Modules + IndexedDB + Web Workers + Open
 │   │   ├── pattern-worker-pool.js
 │   │   └── pattern-worker.js
 │   │
+│   ├── artifacts/          # Inline Visualizations
+│   │   ├── index.js        # Facade (validate, render, utilities)
+│   │   ├── artifact-spec.js # Schema builders
+│   │   ├── validation.js   # Allowlist + sanitization
+│   │   └── renderer.js     # Custom SVG renderer
+│   │
 │   ├── functions/          # Function Calling
 │   ├── providers/          # LLM Providers
 │   └── observability/      # Performance monitoring
@@ -319,12 +325,25 @@ const INITIAL_STATE = {
 | **Full** | .zip/.json upload | Complete eras, ghosted artists, all patterns |
 | **Lite** | Spotify OAuth | Last 50 tracks, top artists/tracks, limited patterns |
 
-### AI Function Calling (22 Functions)
+### AI Function Calling (27 Functions)
 **Core Data Queries:** `get_top_artists`, `get_top_tracks`, `get_artist_history`, `get_listening_stats`, `compare_periods`, `search_tracks`
 
 **Analytics:** `get_bottom_tracks`, `get_listening_clock`, `get_listening_streaks`, `get_discovery_stats`, `get_skip_patterns`, `get_completion_rate`
 
 **Templates:** `get_templates_by_genre`, `synthesize_profile`
+
+**Artifacts (Visualizations):** `visualize_trend`, `visualize_comparison`, `show_listening_timeline`, `show_listening_heatmap`, `show_data_table`
+
+### Conversational Artifacts
+**Claude-style inline visualizations** that the AI can generate via function calls:
+
+| Type | Use Case |
+|------|---------|
+| Line Chart | Trends over time (plays, hours, unique artists) |
+| Bar Chart | Top artists/tracks, period comparisons |
+| Timeline | Artist discovery, milestones |
+| Heatmap | Calendar view of listening activity |
+| Table | Detailed data with columns |
 
 ### Semantic Search (100% Local)
 - WASM-only via Transformers.js (INT8 quantization, ~6MB)

@@ -13,42 +13,32 @@ import { StorageTransaction } from './storage/transaction.js';
 import { StorageMigration } from './storage/migration.js';
 import { ModuleRegistry } from './module-registry.js';
 import { EventBus } from './services/event-bus.js';
-import { SafeMode } from './security/safe-mode.js';
 import { WriteAheadLog, WalPriority } from './storage/write-ahead-log.js';
 import { ArchiveService } from './storage/archive-service.js';
 import { QuotaManager } from './storage/quota-manager.js';
-import { IndexedDBCore } from './storage/indexeddb.js';
+import { IndexedDBCore, STORES as INDEXEDDB_STORES } from './storage/indexeddb.js';
 import { OperationLock } from './operation-lock.js';
 import { ProfileStorage } from './storage/profiles.js';
 import { ConfigAPI } from './storage/config-api.js';
 import { SyncManager } from './storage/sync-strategy.js';
+import { Crypto } from './security/crypto.js';
 
 // ==========================================
-// HNW Hierarchy: Safe Mode Enforcement
+// Security Enforcement
 // ==========================================
 
 /**
- * Check if writes are blocked by Safe Mode
+ * Check if writes are allowed (secure context required)
  * @param {string} operation - Operation name for error message
- * @throws {Error} If Safe Mode is active and encryption is unavailable
+ * @throws {Error} If not in secure context
  */
 function assertWriteAllowed(operation) {
-  // Only block if encryption is required but unavailable
-  // This implements fail-closed behavior for security-sensitive operations
-  if (!SafeMode.canEncrypt()) {
-    const status = SafeMode.getSafeModeStatus();
-    if (status.isSafeMode) {
-      // Defensively handle failedModules to prevent errors if undefined or not an array
-      const failedModules = Array.isArray(status.failedModules)
-        ? status.failedModules.map(m => m?.name || 'unknown').join(', ')
-        : 'unknown';
-
-      throw new Error(
-        `[Storage] Write blocked: Safe Mode active. ` +
-        `Operation '${operation}' requires security capabilities. ` +
-        `Failed modules: ${failedModules}`
-      );
-    }
+  // Check if running in secure context
+  if (!Crypto.isSecureContext()) {
+    throw new Error(
+      `[Storage] Write blocked: not in secure context. ` +
+      `Operation '${operation}' requires HTTPS or localhost.`
+    );
   }
 }
 
@@ -108,7 +98,7 @@ async function processQueue() {
 // Store Constants (for backward compatibility)
 // ==========================================
 
-const STORES = IndexedDBCore?.STORES || {
+const STORES = INDEXEDDB_STORES || {
   STREAMS: 'streams',
   CHUNKS: 'chunks',
   EMBEDDINGS: 'embeddings',

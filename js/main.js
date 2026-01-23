@@ -41,18 +41,18 @@ const logger = createLogger('Main');
 // Security Check (MUST run first, synchronously)
 // ==========================================
 
-import { Security, SecurityCoordinator } from './security/index.js';
+import { Crypto } from './security/crypto.js';
 import { ConfigLoader } from './services/config-loader.js';
 
 // Validate secure context immediately before ANY other imports
-const securityCheck = Security.checkSecureContext();
+const isSecure = Crypto.checkSecureContext();
 let safeModeReason = null;
 
-if (!securityCheck.secure) {
+if (!isSecure) {
     // Don't throw - instead flag for Safe Mode and continue
     // This allows the "Safe Mode" UI in app.js to render
-    logger.warn('Security check failed, entering Safe Mode:', securityCheck.reason);
-    safeModeReason = securityCheck.reason;
+    logger.warn('Security check failed, entering Safe Mode: not running in secure context');
+    safeModeReason = 'not-secure-context';
 }
 
 if (safeModeReason === null) {
@@ -507,54 +507,22 @@ async function bootstrap() {
         }
 
         // ==========================================
-        // Use SecurityCoordinator for unified security initialization
+        // Security initialization
         // ==========================================
-        // SecurityCoordinator is the single authority for security module initialization.
-        // It orchestrates: secure context check, KeyManager, Encryption, TokenBinding,
-        // Anomaly detection in the correct order with proper error handling.
-        
+        // Crypto module is self-initializing - no explicit init needed.
+        // Session keys are derived on-demand using Web Crypto API.
+
         let securityReport = null;
-        
+
         if (!safeModeReason) {
-            // Generate or retrieve session password for KeyManager
-            let keySessionPassword = localStorage.getItem('spotify_refresh_token') ||
-                                     sessionStorage.getItem('rhythm_chamber_session_salt');
-
-            if (!keySessionPassword) {
-                // Generate a cryptographically secure random secret if none exists
-                const array = new Uint8Array(32);
-                window.crypto.getRandomValues(array);
-                keySessionPassword = Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('');
-                sessionStorage.setItem('rhythm_chamber_session_salt', keySessionPassword);
-            }
-
-            try {
-                // Initialize all security modules via SecurityCoordinator
-                securityReport = await SecurityCoordinator.init({
-                    password: keySessionPassword,
-                    enablePrototypePollution: false  // Deferred to window.onload
-                });
-                
-                logger.debug('SecurityCoordinator initialization complete:', securityReport.overallState);
-
-                if (securityReport.warnings.length > 0) {
-                    logger.warn('Security warnings:', securityReport.warnings);
-                }
-
-                // Check if we should enter safe mode due to security failures
-                if (securityReport.overallState === 'failed') {
-                    safeModeReason = 'Security initialization failed';
-                    logger.warn('Entering Safe Mode due to security failure');
-                } else if (securityReport.overallState === 'degraded') {
-                    logger.warn('Security running in degraded mode - some features may be limited');
-                }
-
-            } catch (error) {
-                logger.warn('SecurityCoordinator initialization failed:', error?.message || error);
-                safeModeReason = 'Security initialization error: ' + (error?.message || 'Unknown error');
-            }
+            // Security is ready - Crypto module doesn't need explicit initialization
+            logger.debug('Crypto module ready (self-initializing)');
+            securityReport = {
+                overallState: 'ready',
+                warnings: []
+            };
         } else {
-            logger.debug('Skipping SecurityCoordinator init due to Safe Mode:', safeModeReason);
+            logger.debug('Security check bypassed due to Safe Mode:', safeModeReason);
         }
 
         // Install global error handlers for fallback error handling

@@ -219,7 +219,7 @@ const FILE_TYPE_RULES = {
         extensions: ['.json'],
         mimeTypes: ['application/json'],
         magicBytes: [{ offset: 0, bytes: [0x7B] }, { offset: 0, bytes: [0x5B] }], // { or [
-        maxSize: 10 * 1024 * 1024 // 10MB
+        maxSize: 500 * 1024 * 1024 // 500MB - matches FileUploadController limit
     },
     zip: {
         extensions: ['.zip'],

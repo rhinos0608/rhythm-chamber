@@ -5132,3 +5132,215 @@ body.read-only-mode .chat-input {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ------------------------------------------
+   16. Artifact Cards (Inline Chat Visualizations)
+   ------------------------------------------ */
+
+/* Artifact Card Container */
+.artifact-card {
+  background: var(--bg-glass);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  margin: var(--space-md) 0;
+  overflow: hidden;
+  animation: fade-in 0.3s ease;
+  max-width: 100%;
+}
+
+.artifact-card.collapsed .artifact-content,
+.artifact-card.collapsed .artifact-explanation {
+  display: none;
+}
+
+/* Artifact Header */
+.artifact-header {
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(139, 92, 246, 0.05);
+}
+
+.artifact-title {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.artifact-title::before {
+  content: '📊';
+  font-size: 1rem;
+}
+
+.artifact-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: var(--space-xs);
+}
+
+/* Artifact Content */
+.artifact-content {
+  padding: var(--space-md);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100px;
+  overflow-x: auto;
+}
+
+/* SVG Charts */
+.artifact-svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.artifact-svg text {
+  font-family: var(--font-body);
+}
+
+/* Artifact Tables */
+.artifact-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.artifact-table th,
+.artifact-table td {
+  padding: var(--space-sm) var(--space-md);
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.artifact-table th {
+  background: rgba(139, 92, 246, 0.1);
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.artifact-table td {
+  color: var(--text-secondary);
+}
+
+.artifact-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.artifact-table-footer {
+  text-align: center;
+  font-style: italic;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  padding: var(--space-md) !important;
+}
+
+/* Artifact Explanation */
+.artifact-explanation {
+  padding: var(--space-md) var(--space-lg);
+  background: rgba(0, 0, 0, 0.1);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.artifact-explanation p {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.artifact-explanation p + p {
+  margin-top: var(--space-sm);
+}
+
+/* Artifact Actions */
+.artifact-actions {
+  position: absolute;
+  top: var(--space-sm);
+  right: var(--space-sm);
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.artifact-header {
+  position: relative;
+}
+
+.artifact-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: var(--radius-sm);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  transition: var(--transition-fast);
+}
+
+.artifact-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--text-primary);
+}
+
+.artifact-collapse-btn {
+  transform: rotate(0deg);
+  transition: transform var(--transition-fast);
+}
+
+.artifact-card.collapsed .artifact-collapse-btn {
+  transform: rotate(-90deg);
+}
+
+/* Heatmap styling */
+.artifact-svg rect {
+  transition: opacity var(--transition-fast);
+}
+
+.artifact-svg rect:hover {
+  opacity: 0.8;
+  stroke: var(--text-primary);
+  stroke-width: 1px;
+}
+
+/* Timeline dots */
+.artifact-svg circle {
+  transition: r var(--transition-fast);
+}
+
+.artifact-svg circle:hover {
+  r: 8;
+}
+
+/* Responsive artifact */
+@media (max-width: 640px) {
+  .artifact-content {
+    padding: var(--space-sm);
+    overflow-x: auto;
+  }
+  
+  .artifact-table {
+    font-size: 0.75rem;
+  }
+  
+  .artifact-table th,
+  .artifact-table td {
+    padding: var(--space-xs) var(--space-sm);
+  }
+  
+  .artifact-header {
+    padding: var(--space-sm) var(--space-md);
+  }
+  
+  .artifact-title {
+    font-size: 0.85rem;
+  }
+}

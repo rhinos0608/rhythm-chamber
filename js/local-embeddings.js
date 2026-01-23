@@ -86,19 +86,30 @@ async function loadTransformersJS() {
     }
 
     // Access the vendored Transformers.js from window
-    // The script tag in app.html loads it as window.transformers
+    // The module script in app.html loads it and creates transformersReady promise
     try {
-        const transformers = window.transformers;
+        // Wait for transformers.js to be fully initialized via the ready promise
+        // This handles the timing between ES module loading and usage
+        if (window.transformersReady) {
+            const transformers = await window.transformersReady;
+            if (!transformers || typeof transformers.pipeline !== 'function') {
+                throw new Error('Transformers.js loaded but pipeline function not available');
+            }
+            cachedTransformers = transformers;
+            return transformers;
+        }
 
+        // Fallback: direct access for legacy scenarios
+        const transformers = window.transformers;
         if (!transformers || typeof transformers.pipeline !== 'function') {
-            throw new Error('Transformers.js not loaded. Ensure js/vendor/transformers.min.js is included in app.html');
+            throw new Error('Transformers.js not loaded. Ensure js/vendor/transformers.min.js is included in app.html as a module');
         }
 
         cachedTransformers = transformers;
         return transformers;
     } catch (e) {
         console.error('[LocalEmbeddings] Failed to load Transformers.js:', e);
-        throw new Error('Failed to load Transformers.js. Ensure js/vendor/transformers.min.js is loaded.');
+        throw new Error('Failed to load Transformers.js: ' + e.message);
     }
 }
 

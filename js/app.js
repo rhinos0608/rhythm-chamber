@@ -12,11 +12,10 @@
 // ==========================================
 
 // Security (must be first for fail-fast behavior)
-import { Security, SecurityChecklist } from './security/index.js';
+import { Crypto } from './security/crypto.js';
 
 // Core utilities
 import { ModuleRegistry } from './module-registry.js';
-import { Container } from './ioc-container.js';
 import { escapeHtml } from './utils/html-escape.js';
 import { Utils } from './utils.js';
 
@@ -116,16 +115,13 @@ const CRITICAL_DEPENDENCIES = {
     'SidebarController': { check: () => SidebarController && typeof SidebarController.init === 'function', required: true },
     'ChatUIController': { check: () => ChatUIController && typeof ChatUIController.addMessage === 'function', required: true },
 
-    // Security (required for token binding) - using imported module
-    'Security': { check: () => Security && typeof Security.checkSecureContext === 'function', required: true },
+    // Security (required for encryption) - using imported Crypto module
+    'Crypto': { check: () => Crypto && typeof Crypto.checkSecureContext === 'function', required: true },
 
     // Optional modules (not required but useful) - use ModuleRegistry for dynamically loaded modules
     'RAG': { check: () => ModuleRegistry.isLoaded('RAG'), required: false },
     'LocalVectorStore': { check: () => ModuleRegistry.isLoaded('LocalVectorStore'), required: false },
     'LocalEmbeddings': { check: () => ModuleRegistry.isLoaded('LocalEmbeddings'), required: false },
-
-    // Security checklist (optional - only shows on first run)
-    'SecurityChecklist': { check: () => SecurityChecklist && typeof SecurityChecklist.init === 'function', required: false },
 
     // Settings module lazy-loaded on first use (84KB savings)
     // 'Settings': { check: () => Settings && typeof Settings.showSettingsModal === 'function', required: true }
@@ -164,12 +160,8 @@ function checkDependencies() {
         }
     }
 
-    // HNW Security: Detect Security fallback mode (fail-closed architecture)
-    // If Security is using fallback stubs, data encryption is NOT available
-    if (Security._isFallback || Security.isFallbackMode()) {
-        console.warn('[App] Security module in FALLBACK mode - Safe Mode activated');
-        safeMode = true;
-    }
+    // Crypto module doesn't have a fallback mode - it uses Web Crypto API directly
+    // If not in secure context, Crypto.checkSecureContext() returns false
 
     const valid = missing.length === 0;
 
@@ -590,8 +582,8 @@ async function init(options = {}) {
 
     // Initialize cross-tab coordination AFTER AppState is ready
     // TabCoordinator depends on AppState for authority tracking
-    // Also wait for Security to be ready to prevent initialization race condition
-    await Security.waitForReady(10000);
+    // Crypto module is self-initializing - no waitForReady needed
+    await Crypto.waitForReady(5000);
     const isPrimary = await TabCoordinator.init();
     if (!isPrimary) {
         console.log('[App] Secondary tab detected - write operations disabled');
@@ -764,27 +756,7 @@ async function init(options = {}) {
     // Initialize sidebar controller
     await SidebarController.init();
 
-    // Show security checklist on first run (after other UI is ready)
-    // Use imported SecurityChecklist symbol for consistency
-    // TIMING FIX: Use requestIdleCallback instead of arbitrary setTimeout
-    // Falls back to setTimeout if requestIdleCallback is not available
-    if (SecurityChecklist && typeof SecurityChecklist.init === 'function') {
-        const initSecurityChecklist = () => {
-            try {
-                SecurityChecklist.init();
-            } catch (e) {
-                console.error('[App] SecurityChecklist init failed:', e);
-            }
-        };
-
-        if (typeof requestIdleCallback !== 'undefined') {
-            // Use requestIdleCallback for non-blocking initialization
-            requestIdleCallback(initSecurityChecklist, { timeout: 2000 });
-        } else {
-            // Fallback for browsers without requestIdleCallback
-            setTimeout(initSecurityChecklist, 100);
-        }
-    }
+    // Security checklist removed - simplified security model doesn't require user setup
 
     // NOTE: Prototype pollution protection moved to window.onload handler
     // to ensure all scripts (including async/deferred) have finished loading
@@ -1428,9 +1400,6 @@ export { init };
 // - Analytics scripts
 // Using window.onload ensures all resources are finished before freezing prototypes
 
-window.addEventListener('load', () => {
-    if (Security.enablePrototypePollutionProtection) {
-        Security.enablePrototypePollutionProtection();
-        console.log('[App] Prototype pollution protection enabled (window.onload - after all resources loaded)');
-    }
-});
+// Prototype pollution protection removed - simplified security model
+// This feature was over-engineering for the application's threat model
+
