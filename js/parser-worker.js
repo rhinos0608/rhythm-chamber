@@ -80,7 +80,7 @@ function sanitizeObject(obj) {
     return sanitized;
 }
 
-function safeJsonParse(json) {
+async function safeJsonParse(json) {
     // MEDIUM FIX Issue #22: Validate JSON string size before parsing
     // This prevents worker crash from excessively large JSON strings
     if (typeof json !== 'string') {

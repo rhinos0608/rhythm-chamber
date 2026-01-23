@@ -478,7 +478,20 @@ async function confirmDeleteChat() {
     hideDeleteChatModal();
 
     try {
-        await Chat.deleteSessionById(sessionId);
+        const success = await Chat.deleteSessionById(sessionId);
+        if (!success) {
+            console.error('[SidebarController] Failed to delete session (returned false)');
+            if (window.showToast) {
+                window.showToast('Failed to delete chat. Please try again.', 4000);
+            }
+            return;
+        }
+
+        // Remove session from sidebar
+        const sessionEl = document.querySelector(`[data-session-id="${sessionId}"]`);
+        if (sessionEl) {
+            sessionEl.remove();
+        }
     } catch (error) {
         console.error('[SidebarController] Failed to delete session:', error);
         if (window.showToast) {

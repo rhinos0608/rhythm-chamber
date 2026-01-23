@@ -184,7 +184,6 @@ async function call(config, messages, tools, onProgress = null) {
 // ==========================================
 
 /**
-/**
  * CRITICAL FIX #4: Normalize tool call arguments
  * Prevents string/object type confusion that can cause tool calls
  * to be invoked with malformed arguments like "[object Object]"
@@ -215,8 +214,9 @@ function normalizeToolArguments(args) {
     return '{}';
 }
 
+/**
  * Handle SSE streaming response from LM Studio
- * Supports <think>...</think> blocks for reasoning models
+ * Supports <thinking> blocks for reasoning models
  * @param {Response} response - Fetch response
  * @param {function} onProgress - Progress callback
  * @returns {Promise<object>} OpenAI-compatible response
