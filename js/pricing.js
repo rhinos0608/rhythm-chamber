@@ -1,10 +1,15 @@
 /**
  * Pricing Tier Management
  *
- * Three-Pillar Model:
- * - Pillar 1: The Sovereign (Free) - Privacy & Viral Growth
- * - Pillar 2: The Curator ($19.99 one-time) - Data Power-User
- * - Pillar 3: The Chamber ($4.99/mo or $39/yr) - Convenience & Seamlessness
+ * Two-Tier Model:
+ * - Tier 1: The Sovereign (Free) - Core features with 1 free playlist
+ * - Tier 2: The Chamber (Premium) - Unlimited playlists, metadata enrichment, semantic search
+ *
+ * Premium Features:
+ * - Unlimited playlist generation
+ * - Metadata enrichment (genres, audio features, BPM/key)
+ * - Semantic embeddings pipeline for "vibe-based" search
+ * - Monthly AI music insights (post-MVP)
  */
 
 import { createLogger } from './utils/logger.js';
@@ -25,31 +30,20 @@ const TIERS = {
             'byoi_chat',
             'basic_cards',
             'personality_reveal',
-            'demo_mode'
-        ]
-    },
-    curator: {
-        name: 'The Curator',
-        level: 2,
-        price: '$19.99 one-time',
-        features: [
-            'pkm_export',
-            'relationship_resonance',
-            'deep_enrichment',
-            'metadata_fixer',
-            'verified_badge'
+            'demo_mode',
+            'playlist_generation_trial' // 1 free playlist
         ]
     },
     chamber: {
         name: 'The Chamber',
-        level: 3,
+        level: 2,
         price: '$4.99/mo or $39/yr',
         features: [
-            'e2ee_sync',
-            'chamber_portal',
-            'managed_ai',
-            'weekly_insights',
-            'priority_support'
+            'unlimited_playlists',
+            'metadata_enrichment',
+            'semantic_embeddings',
+            'ai_playlist_curator',
+            'monthly_insights' // Coming post-MVP
         ]
     }
 };
@@ -59,6 +53,7 @@ const TIERS = {
 // ==========================================
 
 const FEATURES = {
+    // Free tier features
     full_local_analysis: {
         name: 'Full Local Analysis',
         description: 'Complete pattern detection and personality classification',
@@ -84,55 +79,37 @@ const FEATURES = {
         description: 'Try the app with pre-loaded sample data',
         tier: 'sovereign'
     },
-    pkm_export: {
-        name: 'PKM Export',
-        description: 'Export to Obsidian, Notion, or Roam Research with bi-directional linking',
-        tier: 'curator'
+    playlist_generation_trial: {
+        name: 'Playlist Generation (Trial)',
+        description: 'Create 1 playlist to experience the magic',
+        tier: 'sovereign'
     },
-    relationship_resonance: {
-        name: 'Relationship Resonance Reports',
-        description: 'Deep compatibility reports via private JSON exchange',
-        tier: 'curator'
-    },
-    deep_enrichment: {
-        name: 'Deep Enrichment',
-        description: 'Fetch BPM, Key, Producer Credits from MusicBrainz/AcoustID',
-        tier: 'curator'
-    },
-    metadata_fixer: {
-        name: 'Metadata Fixer',
-        description: 'Bulk editing interface for cleaning listening history',
-        tier: 'curator'
-    },
-    verified_badge: {
-        name: 'Verified Badge',
-        description: 'Premium status indicator on shared cards',
-        tier: 'curator'
-    },
-    e2ee_sync: {
-        name: 'E2EE Sync',
-        description: 'End-to-end encrypted multi-device sync',
+    // Premium tier features
+    unlimited_playlists: {
+        name: 'Unlimited Playlists',
+        description: 'Create as many AI-curated playlists as you want — era-based, mood-based, time machine, and more',
         tier: 'chamber'
     },
-    chamber_portal: {
-        name: 'Chamber Portal',
-        description: 'Private, password-protected web hosting for music identity cards',
+    metadata_enrichment: {
+        name: 'Metadata Enrichment',
+        description: 'Enrich your listening history with genres, audio features, BPM, key, and producer credits',
         tier: 'chamber'
     },
-    managed_ai: {
-        name: 'Managed AI',
-        description: 'Bundled cloud LLM tokens (no API key management)',
+    semantic_embeddings: {
+        name: 'Semantic Search',
+        description: 'Ask questions like "songs that feel like 3 AM existential crisis" — powered by local AI embeddings',
         tier: 'chamber'
     },
-    weekly_insights: {
-        name: 'Weekly Insight Emails',
-        description: 'Proactive AI-generated digests of listening patterns',
+    ai_playlist_curator: {
+        name: 'AI Playlist Curator',
+        description: 'Describe any mood or moment, and AI creates the perfect playlist from your history',
         tier: 'chamber'
     },
-    priority_support: {
-        name: 'Priority Support',
-        description: 'Faster response times for issues',
-        tier: 'chamber'
+    monthly_insights: {
+        name: 'Monthly AI Insights',
+        description: 'Get a monthly email digest with new discoveries about your music evolution',
+        tier: 'chamber',
+        coming_soon: true
     }
 };
 
@@ -142,7 +119,7 @@ const FEATURES = {
 
 /**
  * Get current user tier
- * @returns {string} Tier name ('sovereign', 'curator', 'chamber')
+ * @returns {string} Tier name ('sovereign', 'chamber')
  */
 function getCurrentTier() {
     if (typeof window === 'undefined') {
@@ -154,13 +131,10 @@ function getCurrentTier() {
         if (licenseData) {
             const license = JSON.parse(licenseData);
 
-            if (license.tier && TIERS[license.tier]) {
-                if (license.validUntil && new Date(license.validUntil) > new Date()) {
-                    return license.tier;
-                }
-
-                if (!license.validUntil && license.tier === 'curator') {
-                    return 'curator';
+            if (license.tier === 'chamber' && license.validUntil) {
+                // Check if chamber subscription is still valid
+                if (new Date(license.validUntil) > new Date()) {
+                    return 'chamber';
                 }
             }
         }
@@ -285,12 +259,13 @@ function requiresSubscription(feature) {
 }
 
 /**
- * Check if feature requires Curator tier one-time purchase
+ * Check if feature requires subscription (all premium features are subscription now)
  * @param {string} feature - Feature key
- * @returns {boolean} True if feature requires Curator tier
+ * @returns {boolean} True if feature requires Chamber tier
  */
 function requiresOneTimePurchase(feature) {
-    return getRequiredTier(feature) === 'curator';
+    // All premium features are now subscription-based
+    return false;
 }
 
 // ==========================================
@@ -345,4 +320,4 @@ export const Pricing = {
 };
 
 
-logger.info('Module loaded - Three-Pillar Model initialized');
+logger.info('Module loaded - Two-Tier Model initialized');

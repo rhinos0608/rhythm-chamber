@@ -26,21 +26,28 @@ Mostly client-side: Static HTML/CSS/ES6 Modules + IndexedDB + Web Workers + Open
 
 ## Monetization Strategy
 
-**Philosophy:** Community-first growth with zero monetization entry. Build a base of enthusiasts, then scale to premium managed services.
+**Philosophy:** Zero-friction overlay checkout with community-first growth. Build a base of enthusiasts, then scale to premium managed features.
 
-### Phase 1: Sovereign Community (Zero Cost to User)
+### Two-Tier Premium Model
 
-| Tier | Cost | Features | Purpose |
+| Tier | Price | Features | Purpose |
 |------|------|----------|---------|
-| **The Sovereign (Free)** | **$0** | Full local analysis, BYOI chat, basic cards, 100% Client-side | Build community, validate product |
-| **The Curator** | **$19.99 one-time** | PKM Export, Relationship Reports, Deep Enrichment, Metadata Fixer | Data power-user tier |
-| **The Chamber** | **$4.99/mo or $39/yr** | E2EE Sync, Chamber Portal, Managed AI, Weekly Emails | Convenience tier |
+| **The Sovereign (Free)** | **$0** | Full local analysis, BYOI chat, basic cards, 100% Client-side, 1 free playlist | Build community, validate product |
+| **The Chamber** | **$4.99/mo or $39/yr** | Unlimited playlists, metadata enrichment, semantic embeddings, AI playlist curator | Recurring revenue, sustainable operations |
 
-### Phase 2: Managed Cloud & AI (Trust-First Launch)
+### Payment Integration: Lemon Squeezy
 
-| Tier | Cost | Features |
-|------|------|----------|
-| **Cloud Backup** | **$50 Lifetime + $10/mo** or **$15/mo** | Multi-device access, encrypted backup, managed embeddings |
+**Why Lemon Squeezy?**
+- **Overlay checkout** - Stays IN your app (no page redirects)
+- **Built-in license keys** - Automatic generation and validation API
+- **No backend required** - Can validate client-side with crypto fallback
+- **Merchant of Record** - Handles global tax/VAT automatically
+
+**Implementation:**
+- **Lemon.js Script:** `https://app.lemonsqueezy.com/js/lemon.js`
+- **Service:** `js/services/lemon-squeezy-service.js`
+- **Worker:** `workers/license-validator/index.js` (Cloudflare Worker for secure validation)
+- **Setup Guide:** `docs/LEMON_SQUEEZY_SETUP.md`
 
 ---
 

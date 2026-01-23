@@ -267,6 +267,22 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
                         break;
                     }
 
+                    // PREMIUM GATE: Check if function requires premium
+                    // Do NOT retry premium requirement - show upgrade modal instead
+                    if (result?.premium_required) {
+                        console.log(`[ToolCallHandlingService] Premium required for ${functionName}:`, result.error);
+                        // PremiumController already showed the modal from within the function
+                        // Return early with the error so the LLM can explain to the user
+                        return {
+                            earlyReturn: {
+                                status: 'premium_required',
+                                content: result.error || 'This feature requires Premium.',
+                                functionName,
+                                premiumFeatures: result.premiumFeatures
+                            }
+                        };
+                    }
+
                     // Check for function execution errors in result
                     if (result?.error) {
                         if (attempt < MAX_FUNCTION_RETRIES && isRetryableError(new Error(result.error), functionBudget.signal)) {

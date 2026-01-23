@@ -154,6 +154,8 @@ import { OperationLock } from './operation-lock.js';
 import { Payments } from './payments.js';
 import { Pricing } from './pricing.js';
 
+// Premium controller (lazy import - only loaded when needed for upgrade modals)
+
 // New feature modules (robustness and security enhancements)
 import { QuotaMonitor } from './storage/quota-monitor.js';
 import { CircuitBreaker } from './services/circuit-breaker.js';

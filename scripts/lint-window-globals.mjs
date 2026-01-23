@@ -14,7 +14,8 @@ const IGNORE_DIRS = new Set([
     '.git',
     '.vscode',
     '.roo',
-    'docs'
+    'docs',
+    'tests'  // Test files use window globals for mocking
 ]);
 
 const WATCHED_LOWERCASE = new Set(['transformers']);

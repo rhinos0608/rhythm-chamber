@@ -17,6 +17,11 @@
 const DEPRECATED_WINDOW_GLOBALS = [
     'AnalyticsExecutors',
     'AnalyticsQuerySchemas',
+    // Third-party payment checkout globals (Lemon Squeezy)
+    'LemonSqueezy',
+    // Dev/debug globals (double-underscore prefixed)
+    '__COMPATIBILITY_PASSED__',
+    '__DEVTOOLS__',
     'AppState',
     'Cards',
     'Chat',
@@ -105,6 +110,7 @@ const DEPRECATED_WINDOW_GLOBALS = [
     'CoreWebVitalsTracker',
     'EventBus',
     'MetricsExporter',
+    'ModuleRegistry',
     'ObservabilityController',
     'ObservabilityInit',
     'ObservabilitySettings',

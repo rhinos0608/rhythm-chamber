@@ -26,6 +26,42 @@ import { Crypto } from './security/crypto.js';
 import { OperationLock } from './operation-lock.js';
 import { safeJsonParse } from './utils/safe-json.js';
 
+// Premium feature flag for semantic search
+const PREMIUM_RAG_ENABLED = false; // Set to true to enforce premium gate
+const RAG_PREMIUM_FEATURE = 'semantic_embeddings';
+
+/**
+ * Check if user has access to semantic search (premium feature)
+ * @returns {Promise<{allowed: boolean, isPremium: boolean}>}
+ */
+async function checkSemanticAccess() {
+    if (!PREMIUM_RAG_ENABLED) {
+        return { allowed: true, isPremium: false }; // MVP: Allow all access
+    }
+
+    try {
+        // Dynamic import to avoid circular dependency
+        const { Pricing } = await import('./pricing.js');
+        const hasAccess = Pricing.hasFeatureAccess(RAG_PREMIUM_FEATURE);
+        return { allowed: hasAccess, isPremium: hasAccess };
+    } catch (e) {
+        console.warn('[RAG] Failed to check premium access, allowing:', e);
+        return { allowed: true, isPremium: false };
+    }
+}
+
+/**
+ * Show upgrade modal for semantic search
+ */
+async function showSemanticUpgradeModal() {
+    try {
+        const { PremiumController } = await import('./controllers/premium-controller.js');
+        PremiumController.showUpgradeModal(RAG_PREMIUM_FEATURE);
+    } catch (e) {
+        console.warn('[RAG] Failed to show upgrade modal:', e);
+    }
+}
+
 // EmbeddingWorker instance (lazy-loaded)
 let embeddingWorker = null;
 
@@ -1053,6 +1089,13 @@ async function clearEmbeddings() {
  * @returns {Promise<{success: boolean, chunksProcessed: number, mode: string}>}
  */
 async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abortSignal = null) {
+    // PREMIUM GATE: Check semantic search access
+    const { allowed } = await checkSemanticAccess();
+    if (!allowed) {
+        showSemanticUpgradeModal();
+        throw new Error('SEMANTIC_SEARCH_REQUIRED');
+    }
+
     // Check for cancellation at start
     if (abortSignal?.aborted) {
         throw new Error('Embedding generation cancelled');
@@ -1178,6 +1221,13 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abo
  * @returns {Promise<Array>} Search results with payloads
  */
 async function searchLocal(query, limit = 5) {
+    // PREMIUM GATE: Check semantic search access
+    const { allowed } = await checkSemanticAccess();
+    if (!allowed) {
+        showSemanticUpgradeModal();
+        throw new Error('SEMANTIC_SEARCH_REQUIRED');
+    }
+
     // Get modules - load on-demand if not available
     let LocalEmbeddings = ModuleRegistry.getModuleSync('LocalEmbeddings');
     let LocalVectorStore = ModuleRegistry.getModuleSync('LocalVectorStore');
@@ -1253,6 +1303,12 @@ async function clearLocalEmbeddings() {
 async function getSemanticContext(query, limit = 3) {
     if (!isConfigured()) {
         return null;
+    }
+
+    // PREMIUM GATE: Check semantic search access
+    const { allowed } = await checkSemanticAccess();
+    if (!allowed) {
+        return null; // Silently skip semantic context for non-premium users
     }
 
     try {

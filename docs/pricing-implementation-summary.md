@@ -1,286 +1,336 @@
-# Pricing Model Implementation Summary
+# Premium Model Implementation Summary
 
 ## Overview
 
-This document summarizes the implementation of the **Three-Pillar Pricing Model** for Rhythm Chamber, replacing the previous "Supporter/Patron" tier system with a more market-aligned and user-friendly approach.
+This document summarizes the implementation of the **Two-Tier Premium Model** for Rhythm Chamber, using **Lemon Squeezy** for overlay checkout and license key management.
 
-## Changes Made
+## Pricing Model: Two Tiers
 
-### 1. Updated Documentation
-
-#### `docs/01-product-vision.md`
-**Before:** Complex pricing with $39 one-time OR $19 first year, then $9/year Supporter tier + $7/month Patron tier.
-
-**After:** Clear three-pillar model:
-- **The Sovereign (Free)**: Privacy & Viral Growth
-- **The Curator ($19.99 one-time)**: Data Power-User features
-- **The Chamber ($4.99/mo or $39/yr)**: Convenience features
-
-**Key Changes:**
-- Removed confusing "first year, then $9/year" pricing
-- Reduced Curator tier from $39 to $19.99 (market-aligned with stats.fm $5-10, but justifies with deeper features)
-- Replaced Patron ($7/mo) with Chamber ($4.99/mo or $39/yr) - lower entry price, aligned with Obsidian Sync ($4/mo)
-- Updated security audit goal from $10,000 to $5,000 (more achievable: ~250 Curator users)
-
-#### `docs/05-roadmap-and-risks.md`
-**Before:** References to "Supporter" tier, $39 pricing, Patron tier.
-
-**After:** References to three pillars:
-- Sovereign (free tier)
-- Curator (data power-user, $19.99)
-- Chamber (convenience, $4.99/mo or $39/yr)
-
-**Key Changes:**
-- Updated monetization strategy section
-- Updated security audit KPI from 250-1,000 Supporters to 250-500 Curator users
-- Updated pricing strategy analysis with three-pillar breakdown
-- Updated user acquisition strategy
-- Updated mitigation scenarios for new pricing model
-
-#### `AGENT_CONTEXT.md`
-**Before:** Old pricing table with Supporter/Patron tiers.
-
-**After:** Updated monetization section with three-pillar model.
-
-**Key Changes:**
-- Updated pricing table
-- Updated key strategy description
-- Updated "Why it works" section to reflect new model
-
-#### New File: `docs/pricing-three-pillar-model.md`
-**Purpose:** Comprehensive documentation of the three-pillar pricing model.
-
-**Contents:**
-- Overview and rationale
-- Detailed breakdown of each pillar
-- Market benchmarking (stats.fm, Obsidian, Last.fm, BYOK apps)
-- Pricing justification ($19.99 vs $4.99/mo)
-- Revenue projections (seed capital, recurring revenue)
-- Implementation guide (Phase 1-3)
-- Anti-piracy philosophy
-- Future considerations (family plans, enterprise, developer API)
-- Success metrics
-
-### 2. Updated Code
-
-#### `js/pricing.js` (New File)
-**Purpose:** Centralized tier and feature management system.
-
-**Key Functions:**
-- `getCurrentTier()`: Returns user's current tier (sovereign/curator/chamber)
-- `hasFeatureAccess(feature)`: Check if user has access to a specific feature
-- `getAvailableFeatures()`: Get all features available to current user
-- `getCurrentTierInfo()`: Get detailed tier information
-- `getFeatureDefinition(feature)`: Get feature details (name, description, tier)
-- `requiresUpgrade(feature)`: Check if feature requires upgrade
-- `getRequiredTier(feature)`: Get the tier required for a feature
-- `showUpgradeUI(feature)`: Trigger upgrade modal for specific feature
-- `requiresSubscription(feature)`: Check if feature requires Chamber tier (subscription)
-- `requiresOneTimePurchase(feature)`: Check if feature requires Curator tier (one-time)
-- `migrateLegacyLicense(license)`: Migrate old license format to new tier system
-
-**Data Structures:**
-- `TIERS`: Tier definitions (sovereign, curator, chamber) with levels and features
-- `FEATURES`: Detailed feature definitions with names, descriptions, and required tiers
-
-#### `js/payments.js` (Updated)
-**Before:** References to "Supporter" tier, $39 pricing.
-
-**After:** Updated to reflect three-pillar model.
-
-**Key Changes:**
-- Updated `PLANS` object to use three-tier structure (sovereign, curator, chamber)
-- Updated pricing in plans ($19.99 one-time, $4.99/mo or $39/yr)
-- Updated `getPremiumStatus()` to return tier name and plan details
-- Updated production build detection to support 'curator' and 'chamber' payment modes
-- Updated `isProductionBuild()` to check for new payment modes
-- Updated comments to reflect three-pillar strategy
-
-#### `js/main.js` (Updated)
-**Before:** Only imported `Payments` module.
-
-**After:** Added import for `Pricing` module.
-
-**Key Changes:**
-- Added: `import { Pricing } from './pricing.js';`
-- Both `Payments` and `Pricing` are now available via ES modules and window globals
-
-## Feature Mapping
-
-### The Sovereign (Free)
-- `full_local_analysis`: Complete pattern detection and personality classification
-- `byoi_chat`: Bring Your Own Intelligence - use local models or your own API keys
-- `basic_cards`: Generate and share personality cards
-- `personality_reveal`: Discover your music personality type
-- `demo_mode`: Try app with pre-loaded sample data
-
-### The Curator ($19.99 one-time)
-- `pkm_export`: Export to Obsidian, Notion, or Roam Research with bi-directional linking
-- `relationship_resonance`: Deep compatibility reports via private JSON exchange
-- `deep_enrichment`: Fetch BPM, Key, Producer Credits from MusicBrainz/AcoustID
-- `metadata_fixer`: Bulk editing interface for cleaning listening history
-- `verified_badge`: Premium status indicator on shared cards
-
-### The Chamber ($4.99/mo or $39/yr)
-- `e2ee_sync`: End-to-end encrypted multi-device sync
-- `chamber_portal`: Private, password-protected web hosting for music identity cards
-- `managed_ai`: Bundled cloud LLM tokens (no API key management)
-- `weekly_insights`: Proactive AI-generated digests of listening patterns
-- `priority_support`: Faster response times for issues
-
-## Implementation Guide
-
-### Step 1: Feature Gate Implementation
-When implementing new features, use the `Pricing` module to check access:
-
-```javascript
-import { Pricing } from './pricing.js';
-
-if (Pricing.hasFeatureAccess('pkm_export')) {
-    // Show PKM export button
-} else {
-    // Show upgrade button
-    Pricing.showUpgradeUI('pkm_export');
-}
-```
-
-### Step 2: UI Integration
-Add event listeners in `app.js` or relevant controllers to handle upgrade modal:
-
-```javascript
-window.addEventListener('showUpgradeModal', (event) => {
-    const { feature, requiredTier, tierName, tierPrice } = event.detail;
-    // Show pricing modal with specific feature and tier details
-});
-```
-
-### Step 3: Feature Rollout
-Implement features per pillar in this order:
-
-1. **Sovereign tier** (already implemented)
-   - Full local analysis ✅
-   - BYOI chat ✅
-   - Basic cards ✅
-   - Personality reveal ✅
-   - Demo mode ✅
-
-2. **Curator tier** (future implementation)
-   - PKM Export (Obsidian/Notion/Roam)
-   - Relationship Resonance Reports
-   - Deep Enrichment (BPM/Key/Producer)
-   - Metadata Fixer
-   - Verified Badge
-
-3. **Chamber tier** (future implementation)
-   - E2EE Sync (requires backend)
-   - Chamber Portal (requires backend)
-   - Managed AI (requires backend + billing)
-   - Weekly Insight Emails (requires backend + email service)
-   - Priority Support
-
-## Backward Compatibility
-
-### License Migration
-The `Pricing.migrateLegacyLicense()` function handles migration from old license formats:
-
-**Old Format:**
-```javascript
-{
-    isPremium: true,
-    activatedAt: '2026-01-21',
-    validUntil: '2027-01-21'
-}
-```
-
-**New Format:**
-```javascript
-{
-    tier: 'curator', // or 'chamber'
-    activatedAt: '2026-01-21',
-    validUntil: null, // or date for Chamber tier
-    migrated: true
-}
-```
-
-### Payments Module
-The existing `Payments` module continues to work with:
-- `Payments.isPremium()` → Returns true for Curator/Chamber tiers
-- `Payments.getPremiumStatus()` → Returns tier details
-- `Payments.PLANS` → Updated with three-pillar structure
-
-## Testing Checklist
-
-### Unit Tests
-- [ ] `Pricing.getCurrentTier()` returns correct tier based on localStorage
-- [ ] `Pricing.hasFeatureAccess()` allows Sovereign features for all users
-- [ ] `Pricing.hasFeatureAccess()` requires Curator tier for advanced features
-- [ ] `Pricing.hasFeatureAccess()` requires Chamber tier for cloud features
-- [ ] `Pricing.getRequiredTier()` returns correct tier for each feature
-- [ ] `Pricing.migrateLegacyLicense()` converts old formats correctly
-
-### Integration Tests
-- [ ] Upgrade modal displays when user tries Curator feature without license
-- [ ] Upgrade modal displays when user tries Chamber feature without subscription
-- [ ] Curator features work correctly after license activation
-- [ ] Chamber features work correctly after subscription activation
-- [ ] License expiry prevents Chamber tier access after subscription ends
-
-### E2E Tests
-- [ ] User can navigate from Sovereign to Curator tier
-- [ ] User can navigate from Sovereign to Chamber tier
-- [ ] User can upgrade from Curator to Chamber tier
-- [ ] PKM export works for Curator tier users
-- [ ] E2EE sync works for Chamber tier users
-
-## Success Metrics
-
-### Curator Tier (Phase 1)
-- **Conversion rate:** 5-10% of free users upgrade within 90 days
-- **Revenue velocity:** $5k within 3-6 months of launch
-- **Feature usage:** PKM Export used by 60%+ of Curator users
-- **NPS score:** 50+ (net promoter score)
-
-### Chamber Tier (Phase 2)
-- **Conversion rate:** 5-10% of free users upgrade within 180 days
-- **Churn rate:** <5% monthly
-- **Feature usage:** E2EE Sync used by 80%+ of Chamber users
-- **NPS score:** 40+
-
-### Overall
-- **Free tier growth:** 1,000+ users within 6 months of public launch
-- **Viral coefficient:** >1.0
-- **Security audit:** Commissioned within 6-9 months of launch
-- **Sustainable operations:** Chamber tier revenue covers infrastructure costs within 12 months
-
-## Next Steps
-
-1. **UI Implementation:** Create pricing modal with three-pillar comparison table
-2. **Feature Development:** Implement Curator tier features (PKM Export, Relationship Resonance, Deep Enrichment, Metadata Fixer)
-3. **Payment Integration:** Integrate with payment processor (Gumroad/Lemon/Stripe) for license key distribution
-4. **Backend Setup:** Prepare infrastructure for Chamber tier (E2EE Sync, Chamber Portal, Managed AI)
-5. **Marketing Launch:** Create landing page copy explaining three-pillar model
-6. **User Testing:** Beta test with small group before public launch
-7. **Security Audit:** Commission audit after reaching 250-500 Curator users
-8. **Chamber Launch:** Launch Chamber tier after security audit complete
-
-## Anti-Piracy Strategy
-
-**Philosophy:** Accept bypassing, target users who want to pay for value.
-
-**Implementation:**
-- Client-side license validation (not secure, but sufficient for MVP)
-- No DRM or intrusive anti-piracy measures
-- Transparent communication about how revenue is used (security audit, infrastructure)
-- Community building (treat paying users as partners)
-
-**Rationale:**
-- DRM adds complexity and bugs
-- Code complexity vs. value trade-off is unfavorable
-- Supporter psychology: Users who value product will pay regardless of piracy
-- Network effects: Even pirated users generate organic growth
+| Tier | Price | Focus | Features |
+|------|-------|-------|----------|
+| **Sovereign** | **$0** | Privacy & Viral Growth | Full local analysis, BYOI chat, basic cards, 1 free playlist |
+| **Chamber** | **$4.99/mo or $39/yr** | Advanced Analytics | Unlimited playlists, metadata enrichment, semantic search, AI curator |
 
 ---
 
-**Document Version:** 1.0
-**Last Updated:** 2026-01-21
-**Author:** AI Assistant (Rhythm Chamber Pricing Review)
+## Payment Provider: Lemon Squeezy
+
+### Why Lemon Squeezy?
+
+| Feature | Description |
+|---------|-------------|
+| **Overlay Checkout** | Payment modal stays IN your app (no page redirect) |
+| **License Keys** | Built-in generation and validation API |
+| **No Backend Required** | Client-side validation with crypto fallback |
+| **Merchant of Record** | Handles global tax/VAT automatically |
+| **Simple Pricing** | 5% + $0.50 per transaction |
+
+### User Experience
+
+```
+Click "Upgrade to Premium"
+  → Lemon Squeezy overlay appears (IN YOUR APP)
+  → Enter payment info (~60 seconds)
+  → License key delivered instantly
+  → Features auto-unlock
+  → Overlay closes
+
+Total time: ~60 seconds
+User never leaves your app
+```
+
+---
+
+## Implementation Files
+
+### Created Files
+
+| File | Purpose |
+|------|---------|
+| `js/services/lemon-squeezy-service.js` | Checkout, validation, crypto fallback |
+| `workers/license-validator/index.js` | Cloudflare Worker for secure API proxy |
+| `workers/license-validator/wrangler.jsonc` | Worker deployment config |
+| `upgrade.html` | Premium pricing page with overlay checkout |
+| `docs/pricing-two-tier-model.md` | Updated pricing model documentation |
+| `docs/LEMON_SQUEEZY_SETUP.md` | Configuration and setup guide |
+
+### Modified Files
+
+| File | Changes |
+|------|--------|
+| `js/pricing.js` | Updated to 2-tier model (Sovereign, Chamber) |
+| `js/payments.js` | Integrated LemonSqueezy checkout methods |
+| `js/services/premium-quota.js` | Playlist quota tracking (1 free for Sovereign) |
+| `js/controllers/premium-controller.js` | Upgrade modal with premium feature gates |
+| `js/rag.js` | Premium gates for semantic search |
+| `js/genre-enrichment.js` | Premium gates for metadata enrichment, audio features |
+
+---
+
+## Feature Mapping
+
+### Sovereign (Free Tier)
+
+| Feature | Access |
+|---------|--------|
+| Full local analysis | ✅ |
+| BYOI chat (local/cloud) | ✅ |
+| Basic personality cards | ✅ |
+| Pattern detection | ✅ |
+| Demo mode | ✅ |
+| **Playlist generation** | 1 free trial |
+| Metadata enrichment | Static map only (~80% coverage) |
+
+### Chamber (Premium Tier)
+
+| Feature | Access |
+|---------|--------|
+| **Playlist generation** | Unlimited |
+| **Metadata enrichment** | Full + Audio features (BPM, key) |
+| **Semantic search** | Full (local embeddings) |
+| AI playlist curator | ✅ |
+| Monthly insights | Coming soon |
+
+---
+
+## Premium Feature Gates
+
+### 1. Playlist Generation (`js/functions/executors/playlist-executors.js`)
+
+**Gate:** `PremiumQuota.canCreatePlaylist()`
+
+**Sovereign:** Returns `{ allowed: true, remaining: 0 }` after 1 playlist used
+**Chamber:** Returns `{ allowed: true, remaining: Infinity }`
+
+```javascript
+// In playlist executor
+const { allowed, remaining, reason } = await PremiumQuota.canCreatePlaylist();
+if (!allowed) {
+    return { premium_required: true, error: reason };
+}
+```
+
+### 2. Metadata Enrichment (`js/genre-enrichment.js`)
+
+**Gate:** `checkEnrichmentAccess()`
+
+**Sovereign:** Static genre map only (~80% coverage)
+**Chamber:** Full API enrichment + Audio features
+
+```javascript
+// Feature flag: ENRICHMENT_PREMIUM_ENABLED
+const ENRICHMENT_PREMIUM_ENABLED = false; // MVP: allow all
+
+async function checkEnrichmentAccess() {
+    if (!ENRICHMENT_PREMIUM_ENABLED) return true;
+    return Pricing.hasFeatureAccess('metadata_enrichment');
+}
+```
+
+### 3. Semantic Search (`js/rag.js`)
+
+**Gate:** `checkSemanticAccess()`
+
+**Sovereign:** Returns silently (no context)
+**Chamber:** Full embeddings + search
+
+```javascript
+// Feature flag: PREMIUM_RAG_ENABLED
+const PREMIUM_RAG_ENABLED = false; // MVP: allow all
+
+async function checkSemanticAccess() {
+    if (!PREMIUM_RAG_ENABLED) return { allowed: true };
+    return { allowed: Pricing.hasFeatureAccess('semantic_embeddings') };
+}
+```
+
+---
+
+## License Validation System
+
+### Validation Methods
+
+#### Method 1: Cloudflare Worker (Recommended - Production)
+
+**File:** `workers/license-validator/index.js`
+
+**Benefits:**
+- Hides Lemon Squeezy API key
+- CORS-enabled
+- Free tier (100k requests/day)
+
+**Request:**
+```json
+POST /validate
+{
+  "licenseKey": "38b1460a-5104-4067-a91d-77b872934d51",
+  "instanceId": "optional"
+}
+```
+
+**Response:**
+```json
+{
+  "valid": true,
+  "tier": "chamber",
+  "instanceId": "f90ec370-fd83-46a5-8bbd-44a241e78665",
+  "activatedAt": "2025-01-23T00:00:00Z",
+  "expiresAt": null,
+  "cacheFor": 2592000
+}
+```
+
+#### Method 2: Direct API (Not Recommended)
+
+**Benefits:**
+- No worker deployment needed
+- Simpler setup for testing
+
+**Drawbacks:**
+- API key exposed in client code
+- Can be bypassed
+
+#### Method 3: Crypto Fallback (Offline)
+
+**Benefits:**
+- Works offline
+- Zero infrastructure
+- Good enough for $20 product
+
+**Drawbacks:**
+- Secret obfuscated in code (determined hackers can bypass)
+- Cannot revoke licenses remotely
+
+---
+
+## Configuration
+
+### Environment Variables
+
+```javascript
+// Store URL (from Lemon Squeezy dashboard)
+ConfigLoader.set('LEMONSQUEEZY_STORE_URL', 'https://yourstore.lemonsqueezy.com');
+
+// Variant IDs (from Lemon Squeezy products)
+ConfigLoader.set('LEMON_VARIANT_CHAMBER_MONTHLY', 'xxx');
+ConfigLoader.set('LEMON_VARIANT_CHAMBER_YEARLY', 'xxx');
+ConfigLoader.set('LEMON_VARIANT_CHAMBER_LIFETIME', 'xxx');
+
+// Cloudflare Worker (optional, for secure validation)
+ConfigLoader.set('LEMON_VALIDATION_ENDPOINT', 'https://your-worker.workers.dev/validate');
+```
+
+### Deployment Steps
+
+1. **Create Lemon Squeezy Store**
+   - Sign up at lemonsqueezy.com
+   - Create products with variant IDs
+   - Enable license key generation
+   - Set activation limit (3 devices)
+
+2. **Deploy Cloudflare Worker**
+   ```bash
+   cd workers/license-validator
+   wrangler secret put LEMONSQUEEZY_API_KEY
+   wrangler deploy
+   ```
+
+3. **Update App Configuration**
+   - Set variant IDs in config
+   - Update store URL
+   - Enable feature flags when ready
+
+---
+
+## Feature Flags
+
+All premium gates use feature flags for MVP testing:
+
+| Flag | File | Default | Purpose |
+|------|------|---------|---------|
+| `PREMIUM_RAG_ENABLED` | `js/rag.js` | `false` | Semantic search gate |
+| `ENRICHMENT_PREMIUM_ENABLED` | `js/genre-enrichment.js` | `false` | Metadata enrichment gate |
+| `PLAYLIST_PREMIUM_ENABLED` | `js/services/premium-quota.js` | `false` | Playlist quota enforcement |
+
+**To enable premium gates:** Set flags to `true` when ready to monetize.
+
+---
+
+## Test Coverage
+
+| Test File | Tests | Status |
+|-----------|-------|--------|
+| `tests/unit/pricing.test.js` | 36 | ✅ Passing |
+| `tests/unit/license-service.test.js` | 25 | ✅ Passing |
+| `tests/unit/premium-quota.test.js` | 12 | ✅ Passing |
+| `tests/unit/premium-gating.test.js` | 22 | ✅ Passing |
+
+**Total:** 95 tests passing
+
+---
+
+## Setup Checklist
+
+### Pre-Launch (MVP)
+- [ ] Lemon Squeezy store created
+- [ ] Products created with variant IDs
+- [ ] License key generation enabled
+- [ ] Feature flags set to `false` (all features free)
+
+### Production Launch
+- [ ] Cloudflare Worker deployed
+- [ ] LEMONSQUEEZY_API_KEY secret added
+- [ ] Variant IDs configured in app
+- [ ] Feature flags set to `true` (enable premium gates)
+- [ ] Test purchase flow end-to-end
+- [ ] Verify license activation works
+
+### Post-Launch
+- [ ] Monitor conversion rate
+- [ ] Track license validation success rate
+- [ ] Plan for security audit funding
+
+---
+
+## Migration from Old Pricing
+
+### From Three-Pillar to Two-Tier
+
+**Removed:** The Curator tier ($19.99 one-time)
+
+**Rationale:**
+- Simplified pricing (2 tiers vs 3)
+- Focus on recurring revenue over one-time purchases
+- Streamlined user experience
+- Reduced feature complexity
+
+**Legacy Migration:**
+- Old Curator licenses will be honored as Chamber tier
+- `Pricing.migrateLegacyLicense()` handles conversion
+- Users keep access to purchased features
+
+---
+
+## Documentation References
+
+| Document | Purpose |
+|----------|---------|
+| [Pricing Two-Tier Model](pricing-two-tier-model.md) | Detailed pricing strategy |
+| [Lemon Squeezy Setup](LEMON_SQUEEZY_SETUP.md) | Payment provider setup |
+| [AGENT_CONTEXT.md](../AGENT_CONTEXT.md) | AI agent reference |
+| [Upgrade Page](../upgrade.html) | Premium pricing UI |
+
+---
+
+## Next Steps
+
+1. **Testing** - Complete end-to-end purchase flow testing
+2. **Cloudflare Worker** - Deploy worker for production validation
+3. **Feature Flags** - Set flags to `true` when ready to monetize
+4. **Security Audit** - Fund audit when premium revenue target reached
+
+---
+
+**Document Version:** 2.0
+**Last Updated:** 2025-01-23
+**Changes:** Migrated to two-tier model, Lemon Squeezy integration, removed Stripe
