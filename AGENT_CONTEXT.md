@@ -335,6 +335,7 @@ const INITIAL_STATE = {
 **Artifacts (Visualizations):** `visualize_trend`, `visualize_comparison`, `show_listening_timeline`, `show_listening_heatmap`, `show_data_table`
 
 ### Conversational Artifacts
+
 **Claude-style inline visualizations** that the AI can generate via function calls:
 
 | Type | Use Case |
@@ -344,6 +345,124 @@ const INITIAL_STATE = {
 | Timeline | Artist discovery, milestones |
 | Heatmap | Calendar view of listening activity |
 | Table | Detailed data with columns |
+
+#### Artifact Module Structure (`js/artifacts/`)
+
+```
+js/artifacts/
+├── index.js              # Facade: validate, render, utilities
+├── artifact-spec.js      # Schema builders for each type
+├── validation.js         # Allowlist + sanitization
+└── renderer.js           # Custom SVG renderer
+```
+
+#### Artifact Function Schemas
+
+**`visualize_trend(title, data, options)`** — Line chart for temporal trends
+```javascript
+{
+  title: string,           // Chart title
+  subtitle?: string,       // Optional subtitle
+  data: Array<{            // Time-series data points
+    [xField]: string | Date,  // X value (date/time)
+    [yField]: number          // Y value (metric)
+  }>,
+  view: {
+    kind: "line_chart",
+    x: { field: string, type?: "temporal" },
+    y: { field: string, domain?: [number, number] }
+  },
+  annotations?: Array<{    // Optional data point annotations
+    x: string | Date,
+    label: string
+  }>,
+  explanation?: string[]   // AI commentary (displayed below chart)
+}
+```
+
+**`visualize_comparison(title, data, options)`** — Bar chart for categorical comparison
+```javascript
+{
+  title: string,
+  subtitle?: string,
+  data: Array<{
+    [categoryField]: string,  // Category label
+    [valueField]: number      // Numeric value
+  }>,
+  view: {
+    kind: "bar_chart",
+    horizontal?: boolean,     // Default: true
+    x: { field: string },     // Value field
+    y: { field: string }      // Category field
+  }
+}
+```
+
+**`show_data_table(title, data, columns)`** — Table for detailed data
+```javascript
+{
+  title: string,
+  data: Array<Object>,        // Row data (max 50 displayed)
+  view: {
+    kind: "table",
+    columns: Array<{
+      field: string,          // Data object key
+      label: string           // Column header
+    }>
+  }
+}
+```
+
+**`show_listening_timeline(title, events, options)`** — Timeline of events
+```javascript
+{
+  title: string,
+  data: Array<{
+    date: string | Date,      // Event date
+    label: string             // Event label
+  }>,
+  view: {
+    kind: "timeline",
+    dateField: string,        // Default: "date"
+    labelField: string        // Default: "label"
+  }
+}
+```
+
+**`show_listening_heatmap(title, data, options)`** — Calendar heatmap
+```javascript
+{
+  title: string,
+  data: Array<{
+    date: string | Date,      // Day key
+    value: number             // Intensity value
+  }>,
+  view: {
+    kind: "heatmap",
+    x: { field: string },     // Date field
+    y: { field: string }      // Value field
+  }
+}
+```
+
+#### Security & Performance
+
+| Threat | Mitigation |
+|--------|------------|
+| Malicious SVG | Allowlist rendering, no arbitrary elements |
+| XSS injection | Text content only, no `innerHTML` |
+| DoS via data | `MAX_DATA_ROWS = 1000` limit |
+| Reuse attacks | Unique `artifactId` per instance |
+
+#### Renderer Capabilities
+
+- **Zero dependencies** — Pure SVG, ~8KB vs 200KB+ chart libraries
+- **Deterministic rendering** — Same input → same output
+- **CSP-compliant** — No `eval()`, no `innerHTML`
+- **Responsive** — Adapts to container width
+- **Collapse/expand** — Users can minimize artifacts
+
+See [docs/artifact-visualization-guide.md](docs/artifact-visualization-guide.md) for complete documentation.
 
 ### Semantic Search (100% Local)
 - WASM-only via Transformers.js (INT8 quantization, ~6MB)

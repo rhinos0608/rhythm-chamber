@@ -5286,6 +5286,16 @@ body.read-only-mode .chat-input {
   transition: var(--transition-fast);
 }
 
+/* Touch-friendly target size (WCAG 2.5.5: 44x44px minimum) */
+@media (hover: none) and (pointer: coarse) {
+  .artifact-btn {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+  }
+}
+
 .artifact-btn:hover {
   background: rgba(255, 255, 255, 0.15);
   color: var(--text-primary);

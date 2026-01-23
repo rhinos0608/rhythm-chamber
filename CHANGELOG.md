@@ -8,9 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Artifact Visualization System** (`js/artifacts/`) - Claude-style inline visualizations in chat
+  - Line charts for temporal trends with annotations
+  - Bar charts for categorical comparisons (horizontal/vertical)
+  - Tables for detailed data presentation
+  - Timelines for event sequences and milestones
+  - Heatmaps for calendar-style activity patterns
+  - Zero-dependency SVG renderer (~8KB)
+  - Allowlist validation and XSS prevention
+  - Collapse/expand UI for space management
+- **Artifact Visualization Guide** (`docs/artifact-visualization-guide.md`) - Complete system documentation
 - TROUBLESHOOTING.md - Common error patterns and solutions
 - API_REFERENCE.md - Core module API documentation
 - CODE_OF_CONDUCT.md - Community guidelines
+
+### Changed
+- Enhanced intelligence engine documentation with artifact generation capabilities
+- Updated user experience documentation with inline visualization examples
+- Expanded AGENT_CONTEXT.md with artifact function schemas
 
 ---
 

@@ -65,6 +65,16 @@ export function renderArtifact(spec, container, options = {}) {
         return null;
     }
 
+    // Defensive check: spec.view must exist before destructuring
+    if (!spec.view || typeof spec.view !== 'object') {
+        logger.error('Invalid spec: view property is missing or invalid', { artifactId: spec.artifactId });
+        const errorMsg = document.createElement('div');
+        errorMsg.className = 'artifact-error';
+        errorMsg.textContent = 'Invalid artifact specification';
+        container.appendChild(errorMsg);
+        return null;
+    }
+
     const { kind } = spec.view;
 
     logger.debug('Rendering artifact', { artifactId: spec.artifactId, kind });
@@ -330,12 +340,15 @@ function renderBarChart(spec, options = {}) {
     const values = data.map(d => parseFloat(d[valueField]) || 0);
     const maxValue = Math.max(...values);
 
+    // Guard against divide-by-zero when maxValue === 0
+    const getMaxScale = (val) => maxValue > 0 ? val / maxValue : 0;
+
     if (horizontal) {
         const barHeight = Math.min(25, (plotHeight - (data.length - 1) * 4) / data.length);
         const barSpacing = barHeight + 4;
 
         data.forEach((d, i) => {
-            const barWidth = (values[i] / maxValue) * plotWidth;
+            const barWidth = getMaxScale(values[i]) * plotWidth;
             const y = padding.top + i * barSpacing;
 
             // Bar
@@ -362,6 +375,46 @@ function renderBarChart(spec, options = {}) {
             const valueLabel = document.createElementNS(SVG_NS, 'text');
             valueLabel.setAttribute('x', padding.left + barWidth + 6);
             valueLabel.setAttribute('y', y + barHeight / 2 + 4);
+            valueLabel.setAttribute('fill', CHART_DEFAULTS.colors.text);
+            valueLabel.setAttribute('font-size', CHART_DEFAULTS.fontSize.value);
+            valueLabel.textContent = formatNumber(values[i]);
+            svg.appendChild(valueLabel);
+        });
+    } else {
+        // Vertical bar chart rendering
+        const barWidth = Math.min(50, (plotWidth - (data.length - 1) * 8) / data.length);
+        const barSpacing = barWidth + 8;
+
+        data.forEach((d, i) => {
+            const barHeight = getMaxScale(values[i]) * plotHeight;
+            const x = padding.left + i * barSpacing;
+            const y = padding.top + plotHeight - barHeight;
+
+            // Bar
+            const rect = document.createElementNS(SVG_NS, 'rect');
+            rect.setAttribute('x', x);
+            rect.setAttribute('y', y);
+            rect.setAttribute('width', barWidth);
+            rect.setAttribute('height', Math.max(2, barHeight));
+            rect.setAttribute('fill', CHART_DEFAULTS.colors.primary);
+            rect.setAttribute('rx', '3');
+            svg.appendChild(rect);
+
+            // Category label (under the bar)
+            const label = document.createElementNS(SVG_NS, 'text');
+            label.setAttribute('x', x + barWidth / 2);
+            label.setAttribute('y', padding.top + plotHeight + 15);
+            label.setAttribute('text-anchor', 'middle');
+            label.setAttribute('fill', CHART_DEFAULTS.colors.text);
+            label.setAttribute('font-size', CHART_DEFAULTS.fontSize.label);
+            label.textContent = truncate(categories[i], 10);
+            svg.appendChild(label);
+
+            // Value label (above the bar)
+            const valueLabel = document.createElementNS(SVG_NS, 'text');
+            valueLabel.setAttribute('x', x + barWidth / 2);
+            valueLabel.setAttribute('y', y - 5);
+            valueLabel.setAttribute('text-anchor', 'middle');
             valueLabel.setAttribute('fill', CHART_DEFAULTS.colors.text);
             valueLabel.setAttribute('font-size', CHART_DEFAULTS.fontSize.value);
             valueLabel.textContent = formatNumber(values[i]);

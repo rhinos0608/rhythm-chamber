@@ -172,6 +172,52 @@ You mark time through sound.
 
 **Chat = active exploration. Feed = ambient awareness.**
 
+### Inline Visualizations
+
+The AI can generate charts and tables **directly in the chat**—no separate dashboard needed.
+
+```
+┌─────────────────────────────────────────────┐
+│  You: "When did I stop listening to         │
+│        Arctic Monkeys?"                      │
+│                                             │
+│  ┌─────────────────────────────────────┐   │
+│  │  Your Arctic Monkeys Listening       │   │
+│  │  Monthly plays, 2019-2020            │   │
+│  │                                      │   │
+│  │  127│         ●                      │   │
+│  │   98│     ●                          │   │
+│  │   45│   ●                            │   │
+│  │   12│ ●                              │   │
+│  │    0│────────────────────            │   │
+│  │     Jan  Mar  May  Jul  Sep          │   │
+│  │                                      │   │
+│  │     ▼ Collapse    ○ Copy             │   │
+│  └─────────────────────────────────────┘   │
+│                                             │
+│  AI: "You can see the cliff edge in June    │
+│       2019. You went from playing them 127  │
+│       times that month to absolutely zero   │
+│       the next month. That's a pretty clean │
+│       break—what happened?"                 │
+└─────────────────────────────────────────────┘
+```
+
+**Visualization Types:**
+- 📈 **Line Charts** — Trends over time (plays, discovery, mood)
+- 📊 **Bar Charts** — Top artists/tracks, comparisons
+- 📋 **Tables** — Detailed lists (ghosted favorites, eras)
+- 📅 **Timelines** — Event sequences (discoveries, milestones)
+- 🔥 **Heatmaps** — Calendar-style activity patterns
+
+**Key Behaviors:**
+- Charts are **ephemeral**—they exist only in the current conversation
+- **Collapse/expand** to manage screen space
+- **Contextual**—the AI explains both the visual AND its meaning
+- **No dashboard required**—the right visualization appears when needed
+
+---
+
 ## Profile Synthesizer UX
 
 - Users can ask, "Create a profile for my marathon training friend" → LLM calls `synthesize_profile` to build synthetic streams/patterns/personality.
