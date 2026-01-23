@@ -75,6 +75,7 @@ function copyStaticFiles() {
     'app.html',
     'css/styles.css',
     'js/vendor/jszip.min.js',
+    'js/vendor/transformers.min.js',
     'js/config.example.js',
     'netlify.toml',
     'vercel.json',

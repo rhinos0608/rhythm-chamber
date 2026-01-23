@@ -29,7 +29,10 @@ import PerformanceProfiler, { PerformanceCategory } from './services/performance
 // ==========================================
 
 const MODEL_NAME = 'Xenova/all-MiniLM-L6-v2';
-const CDN_URL = 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+
+// Transformers.js is now vendored locally for CSP compliance
+// The library is loaded via script tag in app.html and accessed via window.transformers
+// This avoids dynamic imports from CDN which violate CSP policies
 
 // ==========================================
 // Quantization Configuration
@@ -66,8 +69,15 @@ let cachedTransformers = null;
 // ==========================================
 
 /**
- * Dynamically import Transformers.js from CDN
- * This avoids bundling the large library
+ * Load Transformers.js from vendored local copy
+ *
+ * Transformers.js is loaded via <script> tag in app.html for CSP compliance.
+ * The library exposes itself on the global window.transformers object.
+ *
+ * This approach is necessary because:
+ * 1. Dynamic imports from CDN violate strict CSP policies
+ * 2. Transformers.js uses WebAssembly which requires 'unsafe-eval' in CSP
+ * 3. Vendoring the library keeps everything self-contained and CSP-compliant
  */
 async function loadTransformersJS() {
     // Return cached version if available
@@ -75,14 +85,20 @@ async function loadTransformersJS() {
         return cachedTransformers;
     }
 
-    // Dynamic import from CDN
+    // Access the vendored Transformers.js from window
+    // The script tag in app.html loads it as window.transformers
     try {
-        const transformers = await import(CDN_URL);
+        const transformers = window.transformers;
+
+        if (!transformers || typeof transformers.pipeline !== 'function') {
+            throw new Error('Transformers.js not loaded. Ensure js/vendor/transformers.min.js is included in app.html');
+        }
+
         cachedTransformers = transformers;
         return transformers;
     } catch (e) {
         console.error('[LocalEmbeddings] Failed to load Transformers.js:', e);
-        throw new Error('Failed to load Transformers.js. Check your internet connection.');
+        throw new Error('Failed to load Transformers.js. Ensure js/vendor/transformers.min.js is loaded.');
     }
 }
 
