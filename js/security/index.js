@@ -18,6 +18,7 @@ import { SafeMode } from './safe-mode.js';
 import './recovery-handlers.js'; // Side-effect import - sets up window.RecoveryHandlers
 import { SecurityChecklist } from './checklist.js';
 import { ApiKeyManager } from './api-key-manager.js';
+import { HybridEncryption } from './hybrid-encryption.js';
 
 /**
  * Unified error context system
@@ -626,7 +627,50 @@ const Security = {
      * - Graceful migration from legacy config-based keys
      * - Masked display for UI (shows only last 8 characters)
      */
-    ApiKeyManager
+    ApiKeyManager,
+
+    /**
+     * HybridEncryption Module (NEW - Advanced Encryption Feature)
+     *
+     * Provides hybrid encryption combining RSA-OAEP-2048 (asymmetric) with AES-GCM-256 (symmetric).
+     *
+     * Use Cases:
+     * - Encrypting data for multiple recipients without re-encrypting
+     * - Secure key exchange between parties
+     * - Forward secrecy through ephemeral key generation
+     * - Backup encryption where recovery keys differ from session keys
+     *
+     * Methods:
+     * - generateKeyPair(extractable): Generate RSA-OAEP key pair
+     * - exportPublicKey(publicKey): Export public key to base64 SPKI format
+     * - importPublicKey(exportedKey): Import public key from base64
+     * - exportPrivateKey(privateKey): Export private key (use carefully)
+     * - importPrivateKey(exportedKey, extractable): Import private key from base64
+     * - encrypt(plaintext, recipientPublicKey): Encrypt for single recipient
+     * - decrypt(encryptedData, privateKey): Decrypt with private key
+     * - encryptForMultiple(plaintext, recipientKeys): Encrypt for multiple recipients
+     * - decryptMultiple(encryptedData, recipientId, privateKey): Decrypt multi-recipient data
+     *
+     * Usage Pattern:
+     * // Generate key pair
+     * const keyPair = await Security.HybridEncryption.generateKeyPair();
+     * const exportedPublicKey = await Security.HybridEncryption.exportPublicKey(keyPair.publicKey);
+     *
+     * // Encrypt for recipient
+     * const encrypted = await Security.HybridEncryption.encrypt('sensitive data', recipientPublicKey);
+     *
+     * // Decrypt
+     * const decrypted = await Security.HybridEncryption.decrypt(encrypted, keyPair.privateKey);
+     *
+     * Security Features:
+     * - RSA-OAEP-2048 for key encryption (asymmetric)
+     * - AES-GCM-256 for data encryption (symmetric)
+     * - Ephemeral symmetric key per encryption operation
+     * - PKCS#1 v2.2 (OAEP) padding with SHA-256
+     * - Unique IV per AES-GCM operation (never reused)
+     * - Non-extractable private keys by default
+     */
+    HybridEncryption
 };
 
 // Export for ES6 modules
@@ -644,7 +688,8 @@ export {
     KeyManager,
     StorageEncryption,
     MessageSecurity,
-    ApiKeyManager
+    ApiKeyManager,
+    HybridEncryption
 };
 
 console.log('[Security] Client-side security module loaded (SecurityCoordinator + AES-GCM + XSS Token Protection + Recovery Handlers enabled)');

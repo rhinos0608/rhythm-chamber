@@ -8,6 +8,9 @@ This document provides API documentation for core modules in Rhythm Chamber. It 
 - [EventBus](#eventbus---event-driven-communication)
 - [Storage](#storage---data-persistence-layer)
 - [Security](#security---cryptography--threat-protection)
+  - [Hybrid Encryption](#hybrid-encryption---multi-recipient-encryption)
+  - [Recovery Handlers](#recovery-handlers---error-recovery)
+- [IoC Container](#ioc-container---dependency-management)
 - [Providers](#providers---ai-provider-interface)
 
 ---
@@ -481,6 +484,20 @@ Get total session count.
 #### `Storage.clearAllSessions()`
 Delete all sessions.
 
+#### `Storage.clearExpiredSessions(maxAgeMs)`
+Delete sessions older than specified age.
+
+```javascript
+const result = await Storage.clearExpiredSessions(30 * 24 * 60 * 60 * 1000);
+// Deletes sessions not updated in 30 days
+// Returns: { deleted: 5 }
+```
+
+**Parameters:**
+- `maxAgeMs` (Number, optional): Maximum age in milliseconds (default: 30 days)
+
+**Returns:** Object with `deleted` count
+
 ---
 
 ### Profiles API
@@ -612,6 +629,64 @@ const validation = await Storage.validateConsistency();
 
 ---
 
+### Transactions
+
+#### `Storage.beginTransaction(callback)`
+
+Begin an atomic transaction across storage backends.
+
+```javascript
+const result = await Storage.beginTransaction(async (tx) => {
+    await tx.put(STORES.STREAMS, data);
+    await tx.put(STORES.CHUNKS, chunks);
+});
+// Returns: { success: boolean, operationsCommitted: number }
+```
+
+---
+
+### Migration
+
+#### `Storage.migrateFromLocalStorage()`
+
+Run localStorage to IndexedDB migration.
+
+#### `Storage.rollbackMigration()`
+
+Rollback migration to localStorage.
+
+#### `Storage.getMigrationState()`
+
+Get migration state and status.
+
+---
+
+### Sync Strategy (Phase 2)
+
+#### `Storage.getSyncManager()`
+
+Get the sync manager instance.
+
+#### `Storage.getSyncStrategy()`
+
+Get current sync strategy (LocalOnlySync or future strategies).
+
+```javascript
+const strategy = Storage.getSyncStrategy();
+// Returns: SyncStrategy or null
+```
+
+#### `Storage.getSyncStatus()`
+
+Get current sync status.
+
+```javascript
+const status = await Storage.getSyncStatus();
+// Returns: { mode, lastSync, pending, message }
+```
+
+---
+
 ## Security - Cryptography & Threat Protection
 
 **Module:** `js/security/index.js`
@@ -646,6 +721,37 @@ Check if encryption operations are available.
 
 #### `Security.waitForReady(timeoutMs)`
 Wait for security to be ready.
+
+---
+
+#### `Security.getInitializationReport()`
+
+Get detailed initialization report.
+
+```javascript
+const report = Security.getInitializationReport();
+// Returns: { ready, available, canEncrypt, modules: {...} }
+```
+
+---
+
+#### `Security.onReady(callback)`
+
+Register callback for when security is ready.
+
+```javascript
+const unsubscribe = Security.onReady((report) => {
+    console.log('Security ready:', report);
+});
+```
+
+**Returns:** Unsubscribe function
+
+---
+
+#### `Security.Coordinator`
+
+Direct access to SecurityCoordinator for advanced usage.
 
 ---
 
@@ -846,6 +952,235 @@ Safe JSON parse with prototype pollution protection.
 
 #### `Security.enablePrototypePollutionProtection()`
 Enable prototype pollution protection (freezes prototypes).
+
+#### `Security.constantTimeCompare(a, b)`
+Constant-time string comparison to prevent timing attacks.
+
+```javascript
+const isValid = Security.constantTimeCompare(storedToken, providedToken);
+// Always compares all characters, preventing timing-based information leakage
+```
+
+---
+
+### Hybrid Encryption {#hybrid-encryption---multi-recipient-encryption}
+
+Advanced encryption combining RSA-OAEP-2048 (asymmetric) with AES-GCM-256 (symmetric) for multi-recipient scenarios.
+
+#### `Security.HybridEncryption.generateKeyPair(extractable)`
+
+Generate RSA-OAEP key pair for asymmetric encryption.
+
+```javascript
+const keyPair = await Security.HybridEncryption.generateKeyPair(false);
+// Private key is non-extractable by default for security
+```
+
+**Parameters:**
+- `extractable` (Boolean, optional): Whether private key should be extractable (default: false)
+
+**Returns:** CryptoKeyPair with public and private keys
+
+---
+
+#### `Security.HybridEncryption.exportPublicKey(publicKey)`
+
+Export public key to base64 SPKI format for sharing.
+
+```javascript
+const exportedKey = await Security.HybridEncryption.exportPublicKey(keyPair.publicKey);
+// Returns: Base64-encoded public key safe to share
+```
+
+---
+
+#### `Security.HybridEncryption.importPublicKey(exportedKey)`
+
+Import a previously exported public key.
+
+```javascript
+const publicKey = await Security.HybridEncryption.importPublicKey(exportedKey);
+```
+
+---
+
+#### `Security.HybridEncryption.encrypt(plaintext, recipientPublicKey)`
+
+Encrypt data using hybrid encryption (RSA-OAEP + AES-GCM).
+
+```javascript
+const encrypted = await Security.HybridEncryption.encrypt('sensitive data', recipientPublicKey);
+// Returns: { encryptedKey, iv, ciphertext, algorithm, timestamp }
+```
+
+**Process:**
+1. Generate ephemeral AES-256 key
+2. Encrypt plaintext with AES-GCM
+3. Encrypt ephemeral key with RSA-OAEP
+4. Return bundled result
+
+---
+
+#### `Security.HybridEncryption.decrypt(encryptedData, privateKey)`
+
+Decrypt hybrid-encrypted data.
+
+```javascript
+const decrypted = await Security.HybridEncryption.decrypt(encrypted, privateKey);
+// Returns: Decrypted plaintext or null if decryption fails
+```
+
+---
+
+#### `Security.HybridEncryption.encryptForMultiple(plaintext, recipientKeys)`
+
+Encrypt for multiple recipients without re-encrypting.
+
+```javascript
+const encrypted = await Security.HybridEncryption.encryptForMultiple(
+    'secret message',
+    {
+        'user1': user1PublicKey,
+        'user2': user2PublicKey
+    }
+);
+// Returns: { encryptedKeys: {user1, user2}, iv, ciphertext, recipientIds, ... }
+```
+
+---
+
+#### `Security.HybridEncryption.decryptMultiple(encryptedData, recipientId, privateKey)`
+
+Decrypt multi-recipient data using your private key.
+
+```javascript
+const decrypted = await Security.HybridEncryption.decryptMultiple(
+    encrypted,
+    'user1',
+    privateKey
+);
+```
+
+---
+
+### Recovery Handlers {#recovery-handlers---error-recovery}
+
+Execute recovery paths for security errors.
+
+#### `Security.executeRecovery(path, details)`
+
+Execute a recovery handler for a given error code.
+
+```javascript
+Security.executeRecovery('reconnect_spotify', { reason: 'TOKEN_BINDING_FAIL' });
+```
+
+#### `Security.hasRecoveryHandler(path)`
+
+Check if a recovery handler exists for a given path.
+
+---
+
+## IoC Container - Dependency Management {#ioc-container---dependency-management}
+
+**Module:** `js/ioc-container.js`
+
+Lightweight Inversion of Control container for dependency injection.
+
+### Registration
+
+#### `Container.register(name, dependencies, factory, lifecycle)`
+
+Register a service with the container.
+
+```javascript
+Container.register('Storage', [], () => Storage);
+Container.register('Chat', ['Storage', 'AppState'], (deps) => ({
+    ...Chat,
+    init: () => Chat.init(deps.Storage, deps.AppState)
+}), 'singleton');
+```
+
+**Parameters:**
+- `name` (String): Service name
+- `dependencies` (Array, optional): Dependency names
+- `factory` (Function): Factory function receiving resolved dependencies
+- `lifecycle` (String): 'singleton' (default) or 'transient'
+
+---
+
+#### `Container.registerInstance(name, instance)`
+
+Register an existing instance (useful for ES modules).
+
+```javascript
+Container.registerInstance('ModuleName', moduleObject);
+```
+
+---
+
+### Resolution
+
+#### `Container.resolve(name)`
+
+Resolve a service by name.
+
+```javascript
+const chat = Container.resolve('Chat');
+```
+
+---
+
+#### `Container.resolveAsync(name)`
+
+Resolve a service asynchronously (for async factories).
+
+```javascript
+const service = await Container.resolveAsync('ServiceName');
+```
+
+---
+
+#### `Container.resolveDependencies(names)`
+
+Resolve multiple dependencies and return as object.
+
+```javascript
+const deps = Container.resolveDependencies(['Storage', 'AppState', 'Chat']);
+// Returns: { Storage: ..., AppState: ..., Chat: ... }
+```
+
+---
+
+#### `Container.initController(controllerName, depNames)`
+
+Initialize a controller with dependencies.
+
+```javascript
+Container.initController('FileUploadController', [
+    'Storage', 'AppState', 'OperationLock', 'Patterns', 'Personality'
+]);
+```
+
+---
+
+### Utility Methods
+
+#### `Container.has(name)`
+
+Check if service is registered.
+
+#### `Container.getRegisteredServices()`
+
+Get all registered service names.
+
+#### `Container.clear()`
+
+Clear all registrations (useful for testing).
+
+#### `Container.createChild()`
+
+Create isolated child container for testing.
 
 ---
 
@@ -1130,5 +1465,5 @@ interface StorageOptions {
 
 ---
 
-**Last Updated:** 2026-01-22
-**API Version:** v0.9
+**Last Updated:** 2026-01-23
+**API Version:** v1.0
