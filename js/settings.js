@@ -10,7 +10,7 @@ import { ModuleRegistry } from './module-registry.js';
 import { StorageBreakdownUI } from './storage-breakdown-ui.js';
 import { ConfigLoader } from './services/config-loader.js';
 import { Storage } from './storage.js';
-import { Security } from './security/index.js';
+import { Crypto } from './security/crypto.js';
 import { SecureTokenStore } from './security/secure-token-store.js';
 import { DataQuerySchemas } from './functions/schemas/data-queries.js';
 import { Functions } from './functions/index.js';
@@ -1117,7 +1117,8 @@ function refreshTravelStatusUI() {
 
     if (!statusEl || !travelBtn) return;
 
-    const travelStatus = Security.getTravelOverrideStatus() || { active: false };
+    // Travel mode removed - simplified security model
+    const travelStatus = { active: false };
 
     if (travelStatus.active && travelStatus.expiresAt) {
         const expires = new Date(travelStatus.expiresAt);
@@ -1137,21 +1138,8 @@ function refreshTravelStatusUI() {
  * Toggle travel override to reduce false positives for VPN/travel
  */
 function toggleTravelMode() {
-    if (!Security.setTravelOverride || !Security.getTravelOverrideStatus) {
-        showToast('Security module not loaded');
-        return;
-    }
-
-    const travelStatus = Security.getTravelOverrideStatus();
-
-    if (travelStatus.active) {
-        Security.clearTravelOverride();
-        showToast('Travel mode disabled. Geographic anomaly detection is back to normal.');
-    } else {
-        Security.setTravelOverride(12, 'user_travel_override');
-        Security.clearSecurityLockout();
-        showToast('Travel mode enabled for 12 hours. Geo anomaly checks are relaxed for VPN/travel.');
-    }
+    // Travel mode removed - simplified security model
+    showToast('Travel mode feature removed in simplified security model.');
 
     refreshTravelStatusUI();
 }
@@ -1194,9 +1182,7 @@ async function verifyIdentity() {
     }
 
     try {
-        Security.clearSecurityLockout();
-        Security.setTravelOverride(12, 'verified_travel');
-        Security.clearTokenBinding();
+        // Travel mode and token binding removed - simplified security model
         Spotify.clearTokens();
 
         showToast('Redirecting to Spotify to verify identity...');
@@ -1594,7 +1580,7 @@ async function showSessionResetModal() {
     if (existing) existing.remove();
 
     // Get current session version for display
-    const currentVersion = Security.getSessionVersion() || 1;
+    const currentVersion = Crypto.getSessionVersion() || 1;
     const newVersion = currentVersion + 1;
 
     // Generate a proof hash that will change after reset
@@ -1715,17 +1701,11 @@ async function confirmSessionReset() {
     }
 
     try {
-        // Perform session invalidation
-        if (Security.clearSessionData) {
-            await Security.clearSessionData();
-        } else if (Security.invalidateSessions) {
-            Security.invalidateSessions();
-        }
-
-        // Clear KeyManager session keys from memory (KEY-05)
-        if (Security.clearKeySession) {
-            Security.clearKeySession();
-            console.log('[Settings] KeyManager session cleared');
+        // Perform session invalidation using Crypto
+        if (Crypto.clearSessionData) {
+            await Crypto.clearSessionData();
+        } else if (Crypto.invalidateSessions) {
+            Crypto.invalidateSessions();
         }
 
         // Clear RAG config from unified storage and localStorage
@@ -1741,7 +1721,7 @@ async function confirmSessionReset() {
 
 
         // Get new version for display
-        const newVersion = Security.getSessionVersion() || 'new';
+        const newVersion = Crypto.getSessionVersion() || 'new';
 
         // Show success message
         hideSessionResetModal();

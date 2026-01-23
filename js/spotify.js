@@ -3,7 +3,7 @@
  * Handles PKCE OAuth flow and Spotify Web API calls for Quick Snapshot feature
  */
 
-import { Security } from './security/index.js';
+import { Crypto } from './security/crypto.js';
 import { ConfigLoader } from './services/config-loader.js';
 import { SecureTokenStore } from './security/secure-token-store.js';
 import { createLogger } from './utils/logger.js';
@@ -355,17 +355,8 @@ const Spotify = (() => {
             // This ensures atomicity - if persist fails, we don't create a stale binding
             await persistTokens(data, true);
 
-            // Create binding AFTER successful persistence
-            if (Security.createTokenBinding) {
-                const bindingSuccess = await Security.createTokenBinding(data.access_token);
-                if (!bindingSuccess) {
-                    const bindingFailure = Security.getTokenBindingFailure();
-                    const failureMessage = bindingFailure?.userMessage || bindingFailure?.reason || 'Failed to create security binding.';
-                    // Rollback: clear tokens that were just persisted since binding failed
-                    await clearTokens();
-                    throw new Error(failureMessage);
-                }
-            }
+            // Token binding removed - simplified security model
+            // This feature was over-engineering for a client-side music app
 
             return true;
         } catch (error) {
@@ -420,10 +411,7 @@ const Spotify = (() => {
             }
         }
 
-        // SECURITY: Clear token binding on logout
-        if (Security.clearTokenBinding) {
-            Security.clearTokenBinding();
-        }
+        // Token binding cleared - simplified security model
     }
 
     /**
@@ -586,9 +574,9 @@ const Spotify = (() => {
 
                 // SECURITY: Invalidate all sessions when refresh fails
                 // This prevents stale sessions from persisting after auth issues
-                if (Security.invalidateSessions) {
+                if (Crypto.invalidateSessions) {
                     logger.warn('Invalidating sessions due to refresh failure');
-                    Security.invalidateSessions();
+                    Crypto.invalidateSessions();
                 }
 
                 return false;
@@ -601,17 +589,7 @@ const Spotify = (() => {
             // If binding fails, we haven't yet persisted the new token
             await persistTokens(data);
 
-            // Create binding AFTER successful persistence
-            if (Security.createTokenBinding) {
-                const bindingSuccess = await Security.createTokenBinding(data.access_token);
-                if (!bindingSuccess) {
-                    const bindingFailure = Security.getTokenBindingFailure();
-                    const failureMessage = bindingFailure?.userMessage || bindingFailure?.reason || 'Failed to update security binding during refresh.';
-                    // Rollback: clear tokens that were just persisted since binding failed
-                    await clearTokens();
-                    throw new Error(failureMessage);
-                }
-            }
+            // Token binding removed - simplified security model
 
             logger.info('Token refreshed successfully');
             return true;
@@ -619,8 +597,8 @@ const Spotify = (() => {
             logger.error('Token refresh error:', error);
 
             // SECURITY: Invalidate sessions on network/auth errors
-            if (Security.invalidateSessions) {
-                Security.invalidateSessions();
+            if (Crypto.invalidateSessions) {
+                Crypto.invalidateSessions();
             }
 
             return false;
@@ -672,16 +650,8 @@ const Spotify = (() => {
 
         const token = await getAccessToken();
 
-        // SECURITY: Verify token binding before each API call
-        if (Security.verifyTokenBinding) {
-            try {
-                await Security.verifyTokenBinding(token);
-            } catch (bindingError) {
-                // Token binding failed - possible theft
-                await clearTokens();
-                throw bindingError;
-            }
-        }
+        // Token binding verification removed - simplified security model
+
 
         const response = await fetch(url, {
             ...options,
@@ -975,29 +945,14 @@ const Spotify = (() => {
             const { expiry } = await loadAccessToken();
             if (!expiry) return;
 
-            // Use Security module for smart refresh check
-            if (Security.checkTokenRefreshNeeded) {
-                const { shouldRefresh, urgency } = Security.checkTokenRefreshNeeded(expiry, true);
-
-                if (shouldRefresh) {
-                    logger.debug(`Proactive token refresh (urgency: ${urgency})...`);
-                    try {
-                        await refreshToken();
-                    } catch (error) {
-                        logger.error('Background refresh failed:', error);
-                        // Don't stop the interval - let the main flow handle auth errors
-                    }
-                }
-            } else {
-                // Fallback: refresh if expiring within 10 minutes
-                const timeUntilExpiry = expiry - Date.now();
-                if (timeUntilExpiry < 10 * 60 * 1000 && timeUntilExpiry > 0) {
-                    logger.debug('Proactive token refresh (legacy check)...');
-                    try {
-                        await refreshToken();
-                    } catch (error) {
-                        logger.error('Background refresh failed:', error);
-                    }
+            // Simplified refresh check: refresh if expiring within 10 minutes
+            const timeUntilExpiry = expiry - Date.now();
+            if (timeUntilExpiry < 10 * 60 * 1000 && timeUntilExpiry > 0) {
+                logger.debug('Proactive token refresh...');
+                try {
+                    await refreshToken();
+                } catch (error) {
+                    logger.error('Background refresh failed:', error);
                 }
             }
         }, 5 * 60 * 1000); // 5 minutes

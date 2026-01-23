@@ -19,8 +19,18 @@
 
     <!-- Vendored marked.js (35KB) - loaded locally for privacy and offline support -->
     <script src="js/vendor/marked.min.js"></script>
-    <!-- Vendored Transformers.js (~877KB) - loaded locally for CSP compliance and WASM support -->
-    <script src="js/vendor/transformers.min.js"></script>
+    <!-- Vendored Transformers.js (~877KB) - loaded as ES module for CSP compliance and WASM support -->
+    <script type="module">
+        // Import the vendored transformers bundle and expose it globally
+        // This is necessary because transformers.js is an ES module library
+        import * as transformers from './js/vendor/transformers.min.js';
+
+        // Expose to window for non-module code that expects it
+        window.transformers = transformers;
+        window.transformersReady = Promise.resolve(transformers);
+
+        console.log('[Transformers] Loaded and exported to window.transformers');
+    </script>
     <link rel="stylesheet" href="css/styles.css">
 </head>
 
