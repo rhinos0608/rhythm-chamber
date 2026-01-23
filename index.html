@@ -45,6 +45,9 @@
         <a href="app.html?mode=demo" class="btn btn-secondary" id="demo-btn">
           <span>🎭</span> Try Demo Mode
         </a>
+        <a href="#" class="btn btn-accent" id="custom-profile-btn" data-action="show-custom-profile-modal">
+          <span>✨</span> Create a Custom Profile
+        </a>
       </div>
 
       <div class="usp-grid">
@@ -262,13 +265,24 @@
       ConfigLoader.installWindowProxy();
 
       // Setup event delegation for data-action pattern (replaces inline onclick)
-      document.addEventListener('click', (e) => {
+      document.addEventListener('click', async (e) => {
         const button = e.target.closest('[data-action]');
         if (button) {
           const action = button.dataset.action;
           if (action === 'show-settings-modal') {
             e.preventDefault();
             Settings.showSettingsModal();
+          }
+
+          // Custom profile modal handler
+          if (action === 'show-custom-profile-modal') {
+            e.preventDefault();
+            try {
+              const { CustomProfileController } = await import('./js/controllers/custom-profile-controller.js');
+              CustomProfileController.showModal();
+            } catch (err) {
+              console.error('[Landing] Failed to load custom profile controller:', err);
+            }
           }
         }
       });

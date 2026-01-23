@@ -74,6 +74,7 @@ import { DataVersion } from './services/data-version.js';
 import { DemoData } from './demo-data.js';
 import { TemplateProfileStore } from './template-profiles.js';
 import { ProfileSynthesizer } from './profile-synthesizer.js';
+import { ProfileStorage } from './storage/profiles.js';
 
 // ==========================================
 // State Management
@@ -685,6 +686,9 @@ async function init(options = {}) {
     // Initialize unified storage
     await Storage.init();
 
+    // Initialize ProfileStorage with storage reference
+    ProfileStorage.init(Storage);
+
     // Initialize Event Log Store for event replay system
     try {
         await EventLogStore.initEventLogStores();
@@ -728,7 +732,7 @@ async function init(options = {}) {
 
     // VALIDATION: Validate URL parameters before processing
     // Whitelist of allowed modes
-    const allowedModes = ['demo', 'spotify'];
+    const allowedModes = ['demo', 'spotify', 'custom'];
 
     // Spotify OAuth callback - validate code format
     if (urlParams.has('code')) {
@@ -773,6 +777,94 @@ async function init(options = {}) {
         window.history.replaceState({}, document.title, window.location.pathname);
 
         await DemoController.loadDemoMode();
+
+        setupEventListeners();
+        setupSpotifyButton();
+        await SidebarController.init();
+        return;
+    }
+
+    // Custom profile mode - load synthesized profile from sessionStorage
+    if (mode === 'custom' && allowedModes.includes(mode)) {
+        console.log('[App] Custom profile mode activated');
+        window.history.replaceState({}, document.title, window.location.pathname);
+
+        const pendingProfileId = sessionStorage.getItem('pendingCustomProfile');
+        if (pendingProfileId) {
+            try {
+                // Ensure ProfileSynthesizer is initialized for ProfileStorage
+                if (!ProfileSynthesizer._templateStore) {
+                    ProfileSynthesizer.init();
+                }
+
+                const profile = await ProfileStorage.getProfile(pendingProfileId);
+
+                if (profile) {
+                    console.log('[App] Loading custom profile:', profile.name);
+
+                    // Build patterns from synthetic streams if not already present
+                    let patterns = profile.patterns;
+                    if (!patterns && profile.streams) {
+                        patterns = Patterns.detectAllPatterns(profile.streams, []);
+                    }
+
+                    // Update AppState with profile data
+                    AppState.update('data', {
+                        personality: profile.personality,
+                        streams: profile.streams || [],
+                        patterns: patterns,
+                        isSynthetic: true,
+                        sourceDescription: profile.description
+                    });
+
+                    // Build summary for Chat.initChat
+                    const streams = profile.streams || [];
+                    const validArtistNames = streams
+                        .map(s => s.master_metadata_album_artist_name || s.artistName)
+                        .filter(Boolean);
+                    const summary = {
+                        dateRange: {
+                            start: streams[0]?.ts?.split('T')[0] || 'Unknown',
+                            end: streams[streams.length - 1]?.ts?.split('T')[0] || 'Unknown'
+                        },
+                        totalHours: Math.round(streams.reduce((acc, s) => acc + (s.ms_played || 0), 0) / 3600000),
+                        uniqueArtists: new Set(validArtistNames).size
+                    };
+
+                    // Initialize chat with the profile
+                    await Chat.initChat(
+                        profile.personality,
+                        patterns,
+                        summary,
+                        streams
+                    );
+
+                    ViewController.showChat();
+
+                    // Add initial message explaining this is a synthetic profile
+                    ChatUIController.addMessage(
+                        `You're now chatting as **${profile.name}** — a synthetic profile ` +
+                        `created from "${profile.description}". This profile has ${profile.metadata?.streamCount || 0} ` +
+                        `synthesized streams and a ${profile.personality?.type?.replace(/_/g, ' ') || 'custom'} personality type. ` +
+                        `Ask me anything about this music personality!`,
+                        'assistant'
+                    );
+                } else {
+                    console.warn('[App] Custom profile not found, falling back to upload');
+                    ViewController.showUpload();
+                }
+            } catch (err) {
+                console.error('[App] Failed to load custom profile:', err);
+                ViewController.showUpload();
+            }
+        } else {
+            // mode=custom but no profile - show upload
+            console.warn('[App] Custom mode requested but no pending profile found');
+            ViewController.showUpload();
+        }
+
+        // Clear the pending profile ID
+        sessionStorage.removeItem('pendingCustomProfile');
 
         setupEventListeners();
         setupSpotifyButton();

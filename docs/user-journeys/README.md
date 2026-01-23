@@ -12,6 +12,7 @@ Instead of abstract "User Stories" (e.g., "As a user, I want to..."), these are 
 | `02` | **The Music Nerd** | Validation & Depth | Obtaining the API Key | "Why I stopped listening to [Band]" (Contextual insight). |
 | `03` | **The Stats.fm Refugee** | Cost (Free vs Paid) | "Bring Your Own Key" setup | Getting "Premium" insights for $0. |
 | `04` | **The Non-Technical User** | Social/Viral Trends | The "Scary" Developer Console | The AI calling out a "Guilty Pleasure" accurately. |
+| `05` | **The Explorer** | Curiosity & Experimentation | No Spotify data handy / Privacy concerns | Creating a synthetic profile that "feels true" without uploading real data. |
 
 ## How to Use These
 
