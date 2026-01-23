@@ -15,11 +15,13 @@ import { DataQuery } from '../data-query.js';
 import { DataQuerySchemas } from './schemas/data-queries.js';
 import { TemplateQuerySchemas } from './schemas/template-queries.js';
 import { AnalyticsQuerySchemas } from './schemas/analytics-queries.js';
+import { ArtifactQuerySchemas } from './schemas/artifact-queries.js';
 import { FunctionValidation } from './utils/validation.js';
 import { FunctionRetry } from './utils/retry.js';
 import { DataExecutors } from './executors/data-executors.js';
 import { TemplateExecutors } from './executors/template-executors.js';
 import { AnalyticsExecutors } from './executors/analytics-executors.js';
+import { ArtifactExecutors } from './executors/artifact-executors.js';
 
 // Template function names - functions that don't require user streams
 const TemplateFunctionNames = TemplateQuerySchemas.map(s => s.function.name);
@@ -96,10 +98,11 @@ async function executeFunction(functionName, args, streams, options = {}) {
         return { error: dataQueryValidation.error || "DataQuery module not loaded." };
     }
 
-    // Find executor
+    // Find executor (includes artifact executors)
     const allExecutors = {
         ...DataExecutors,
-        ...AnalyticsExecutors
+        ...AnalyticsExecutors,
+        ...ArtifactExecutors
     };
 
     const executor = allExecutors[functionName];
@@ -230,8 +233,16 @@ function getAllSchemas() {
     return [
         ...(DataQuerySchemas || []),
         ...(TemplateQuerySchemas || []),
-        ...(AnalyticsQuerySchemas || [])
+        ...(AnalyticsQuerySchemas || []),
+        ...(ArtifactQuerySchemas || [])
     ];
+}
+
+/**
+ * Get artifact schemas only (visualization-producing functions)
+ */
+function getArtifactSchemas() {
+    return ArtifactQuerySchemas || [];
 }
 
 /**
@@ -329,6 +340,7 @@ export const Functions = {
     getDataSchemas,
     getTemplateSchemas,
     getAnalyticsSchemas,
+    getArtifactSchemas,
 
     // Discovery
     getAvailableFunctions,
@@ -339,7 +351,7 @@ export const Functions = {
 
 // Populate static schema arrays after all modules load
 document.addEventListener('DOMContentLoaded', () => {
-    Functions.schemas = getDataSchemas();
+    Functions.schemas = getAllSchemas();
     Functions.templateSchemas = getTemplateSchemas();
     Functions.allSchemas = getAllSchemas();
 
@@ -349,7 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Also try to populate immediately if DOM is already loaded
 if (document.readyState !== 'loading') {
     setTimeout(() => {
-        Functions.schemas = getDataSchemas();
+        Functions.schemas = getAllSchemas();
         Functions.templateSchemas = getTemplateSchemas();
         Functions.allSchemas = getAllSchemas();
 

@@ -8,10 +8,47 @@
  */
 
 import { IndexedDBCore } from './indexeddb.js';
-import { Security } from '../security/index.js';
-import { shouldEncrypt, secureDelete } from '../security/storage-encryption.js';
+import { Crypto } from '../security/crypto.js';
 import { SecureTokenStore } from '../security/secure-token-store.js';
 import { EventBus } from '../services/event-bus.js';
+
+// ==========================================
+// Data Classification Helper
+// ==========================================
+
+/**
+ * Check if data should be encrypted based on key name and value patterns
+ * @param {string} key - The config key
+ * @param {*} value - The value to check
+ * @returns {boolean} True if data should be encrypted
+ */
+function shouldEncrypt(key, value) {
+    if (!key) return false;
+
+    // Check for sensitive key patterns
+    const sensitivePatterns = [
+        'apikey', 'apitoken', 'token', 'secret', 'password',
+        'credential', 'refresh', 'access', 'auth',
+        'chat_',           // Chat history - restored from old pattern
+        'conversation.'    // Conversation data
+    ];
+
+    const keyLower = key.toLowerCase();
+    if (sensitivePatterns.some(pattern => keyLower.includes(pattern))) {
+        return true;
+    }
+
+    // Check for sensitive value patterns (object with token/apikey properties)
+    if (value && typeof value === 'object') {
+        const valueKeys = Object.keys(value);
+        const hasSensitiveKeys = sensitivePatterns.some(pattern =>
+            valueKeys.some(k => k.toLowerCase().includes(pattern))
+        );
+        if (hasSensitiveKeys) return true;
+    }
+
+    return false;
+}
 
 // ==========================================
 // Migration Constants
@@ -65,11 +102,11 @@ async function getConfig(key, defaultValue = null) {
                     console.log(`[ConfigAPI] Decrypting sensitive data for key '${key}'`);
 
                     try {
-                        // Get encryption key from KeyManager
-                        const encKey = await Security.getDataEncryptionKey();
+                        // Get encryption key
+                        const encKey = await Crypto.getDataEncryptionKey();
 
                         // Decrypt the value
-                        const decrypted = await Security.StorageEncryption.decrypt(
+                        const decrypted = await Crypto.StorageEncryption.decrypt(
                             result.value.value,
                             encKey
                         );
@@ -147,12 +184,12 @@ async function setConfig(key, value) {
             console.log(`[ConfigAPI] Encrypting sensitive data for key '${key}'`);
 
             try {
-                // Get encryption key from KeyManager
-                const encKey = await Security.getDataEncryptionKey();
+                // Get encryption key
+                const encKey = await Crypto.getDataEncryptionKey();
 
                 // Encrypt the value (convert to JSON string first)
                 const valueToEncrypt = JSON.stringify(value);
-                const encrypted = await Security.StorageEncryption.encrypt(valueToEncrypt, encKey);
+                const encrypted = await Crypto.StorageEncryption.encrypt(valueToEncrypt, encKey);
 
                 // Wrap encrypted data in metadata object
                 valueToStore = {
@@ -258,16 +295,10 @@ async function removeConfig(key) {
 
             // Check if record exists and is encrypted
             if (record && record.value?.encrypted === true) {
-                console.log(`[ConfigAPI] Using secure deletion for encrypted key '${key}'`);
-
-                try {
-                    // Use secure deletion for encrypted data (overwrites with random data)
-                    await secureDelete(IndexedDBCore.STORES.CONFIG, key);
-                } catch (secureDeleteError) {
-                    // Fall back to standard deletion if secure deletion fails
-                    console.warn(`[ConfigAPI] Secure deletion failed for '${key}', falling back to standard delete:`, secureDeleteError);
-                    await IndexedDBCore.delete(IndexedDBCore.STORES.CONFIG, key);
-                }
+                console.log(`[ConfigAPI] Deleting encrypted key '${key}'`);
+                // Standard deletion for encrypted data
+                // Note: secure deletion (overwriting) has limited effectiveness in browser storage
+                await IndexedDBCore.delete(IndexedDBCore.STORES.CONFIG, key);
             } else {
                 // Not encrypted - use standard deletion
                 console.log(`[ConfigAPI] Using standard deletion for key '${key}'`);
