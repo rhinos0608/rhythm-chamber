@@ -82,6 +82,92 @@ import { ProfileSynthesizer } from './profile-synthesizer.js';
 // NOTE: AppState initialization moved into init() function to prevent race conditions
 // This ensures Safe Mode check completes before any storage operations
 
+// ==========================================
+// IoC Container (Inversion of Control)
+// ==========================================
+
+/**
+ * Simple IoC Container for dependency injection
+ * Provides service registration and controller initialization with auto-wired dependencies
+ */
+const Container = {
+    /** @type {Map<string, any>} Registered service instances */
+    _services: new Map(),
+
+    /** @type {Map<string, any>} Registered controller classes */
+    _controllers: new Map(),
+
+    /**
+     * Register a service instance
+     * @param {string} name - Service name
+     * @param {any} instance - Service instance
+     */
+    registerInstance(name, instance) {
+        this._services.set(name, instance);
+    },
+
+    /**
+     * Check if a service is registered
+     * @param {string} name - Service name
+     * @returns {boolean}
+     */
+    has(name) {
+        return this._services.has(name);
+    },
+
+    /**
+     * Get a registered service
+     * @param {string} name - Service name
+     * @returns {any|null}
+     */
+    get(name) {
+        return this._services.get(name) || null;
+    },
+
+    /**
+     * Initialize a controller with its dependencies
+     * @param {string} controllerName - Name of the controller (must be registered)
+     * @param {string[]} depNames - Array of dependency names to inject
+     */
+    initController(controllerName, depNames) {
+        const controller = this._controllers.get(controllerName);
+        if (!controller) {
+            throw new Error(`Controller '${controllerName}' is not registered with Container`);
+        }
+
+        // Resolve dependencies as an object with named properties
+        // Controllers expect: function init(dependencies) { dependencies.Storage, dependencies.showToast, etc. }
+        const dependencies = {};
+        for (const name of depNames) {
+            // First check services, then controllers
+            let dep = this._services.get(name);
+            if (!dep) {
+                dep = this._controllers.get(name);
+            }
+            if (!dep) {
+                throw new Error(`Dependency '${name}' not found for controller '${controllerName}'`);
+            }
+            dependencies[name] = dep;
+        }
+
+        // Initialize controller with dependencies object (not spread as args)
+        if (typeof controller.init === 'function') {
+            controller.init(dependencies);
+        } else {
+            throw new Error(`Controller '${controllerName}' does not have an init method`);
+        }
+    },
+
+    /**
+     * Register a controller class
+     * @param {string} name - Controller name
+     * @param {any} controller - Controller object/class
+     */
+    registerController(name, controller) {
+        this._controllers.set(name, controller);
+    }
+};
+
 
 // ==========================================
 // Dependency Checking (HNW Hierarchy: Early-fail pattern)
@@ -446,14 +532,14 @@ function registerContainerServices() {
     Container.registerInstance('TemplateProfileStore', TemplateProfileStore);
     Container.registerInstance('ProfileSynthesizer', ProfileSynthesizer);
 
-    // Register controllers
-    Container.registerInstance('FileUploadController', FileUploadController);
-    Container.registerInstance('SpotifyController', SpotifyController);
-    Container.registerInstance('DemoController', DemoController);
-    Container.registerInstance('ResetController', ResetController);
-    Container.registerInstance('SidebarController', SidebarController);
-    Container.registerInstance('ChatUIController', ChatUIController);
-    Container.registerInstance('MessageOperations', MessageOperations);
+    // Register controllers (as controllers, not services)
+    Container.registerController('FileUploadController', FileUploadController);
+    Container.registerController('SpotifyController', SpotifyController);
+    Container.registerController('DemoController', DemoController);
+    Container.registerController('ResetController', ResetController);
+    Container.registerController('SidebarController', SidebarController);
+    Container.registerController('ChatUIController', ChatUIController);
+    Container.registerController('MessageOperations', MessageOperations);
 
     // Register utility functions (wrapping in objects for container compatibility)
     Container.registerInstance('showToast', showToast);

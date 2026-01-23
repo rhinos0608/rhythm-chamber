@@ -240,6 +240,65 @@ What opened you up during that time?"
 
 ---
 
+## Inline Visualization: Artifact Generation
+
+### The Concept
+
+The AI can generate custom visualizations **directly in the chat**—no separate dashboard needed. Inspired by Claude Artifacts, these inline charts appear alongside the narrative to provide visual context for the insights being discussed.
+
+### How It Works
+
+1. **AI detects visualization opportunity** — Pattern that benefits from visual representation
+2. **Function call to artifact system** — `visualize_trend()`, `visualize_comparison()`, etc.
+3. **SVG rendering** — Zero-dependency renderer creates chart from validated spec
+4. **Inline display** — Artifact appears in chat flow, collapsible for focus
+5. **Coordinated response** — AI explains both the visual AND its meaning
+
+### Visualization Types
+
+| Type | Function | Use Case |
+|------|----------|----------|
+| **Line Chart** | `visualize_trend` | Trends over time (plays, discovery, mood) |
+| **Bar Chart** | `visualize_comparison` | Top artists/tracks, era comparisons |
+| **Table** | `show_data_table` | Detailed lists, ghosted favorites |
+| **Timeline** | `show_listening_timeline` | Discovery events, milestones |
+| **Heatmap** | `show_listening_heatmap` | Calendar-style activity patterns |
+
+### Example Interaction
+
+```
+You: "When did I stop listening to Arctic Monkeys?"
+
+AI: [Generates line chart showing decline from 127 plays/month → 0]
+
+    "You can see the cliff edge in June 2019. You went from playing
+     them 127 times that month to absolutely zero the next month.
+     That's a pretty clean break—what happened?"
+
+    [Chart shows annotated drop point]
+```
+
+The artifact doesn't replace the conversation—it **enhances** it. The AI still tells the story; the chart provides visual evidence.
+
+### Why This Matters
+
+**Stats.fm:** You navigate to a dashboard, find the right chart, interpret it yourself.
+
+**Rhythm Chamber:** The AI creates the exact visualization you need, when you need it, and explains what it means.
+
+The artifact system turns "here's your data" into "look at this pattern—and here's what it says about you."
+
+### Technical Details
+
+- **Zero external dependencies** — Pure SVG rendering, ~8KB vs 200KB+ chart libraries
+- **Secure by design** — Allowlist validation, XSS prevention, row limits (1000 max)
+- **Ephemeral** — Artifacts are conversation-scoped, not persisted
+- **CSP-compliant** — No eval(), no innerHTML, safe for strict content policies
+
+See [Artifact Visualization Guide](artifact-visualization-guide.md) for complete documentation.
+
+---
+
 ## Template Profiles & Profile Synthesizer
 
 - **TemplateProfileStore** ships with 8 curated placeholders for grounding comparisons and chat suggestions.
@@ -283,5 +342,6 @@ What opened you up during that time?"
 3. **Chat-first interface** — Natural language > clicking charts
 4. **Semantic search** — Deep data queries vs surface stats
 5. **Personality types** — Identity badges vs generic charts
+6. **Inline artifacts** — AI-generated visualizations vs static dashboards
 
 **We're not building a better stats.fm. We're building the next evolution of music self-discovery.**

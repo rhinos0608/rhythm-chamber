@@ -1,6 +1,6 @@
 # Rhythm Chamber Documentation Index
 
-**Last Updated:** 2026-01-22
+**Last Updated:** 2026-01-23
 
 ---
 
@@ -21,7 +21,8 @@
 ### Product & Vision
 - [Product Vision](01-product-vision.md) - Emotional witness positioning, competitive moat
 - [User Experience](02-user-experience.md) - Natural language queries, semantic search
-- [Intelligence Engine](04-intelligence-engine.md) - Personality types, data depth
+- [Intelligence Engine](04-intelligence-engine.md) - Personality types, data depth, artifact generation
+- [Artifact Visualization Guide](artifact-visualization-guide.md) - Inline charts and tables in chat
 - [Roadmap & Risks](05-roadmap-and-risks.md) - 6-week timeline, competitive positioning
 - [Advanced Features](06-advanced-features.md) - Local models, transparency
 
@@ -163,6 +164,12 @@ rhythm-chamber/
 ---
 
 ## Recent Updates
+
+### 2026-01-23
+- ✅ **Artifact Visualization System Complete** - Claude-style inline charts in chat
+- ✅ **Artifact Visualization Guide Added** - Comprehensive system documentation
+- ✅ **Intelligence Engine Updated** - Added artifact generation capabilities
+- ✅ **User Experience Documentation Enhanced** - Inline visualization examples
 
 ### 2026-01-21
 - ✅ **v0.9 Security Hardening Complete** - All 23 requirements satisfied
