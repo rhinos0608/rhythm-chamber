@@ -189,8 +189,9 @@ function findPeakListeningPeriod(streams, artistName) {
         totalPlays: artistStreams.length,
         peakPeriod: `${getMonthName(parseInt(peakMonth))} ${peakYear}`,
         peakPlays: peak[1],
-        firstListen: artistStreams[0].date,
-        lastListen: artistStreams[artistStreams.length - 1].date,
+        // Guard against empty array access
+        firstListen: artistStreams.length > 0 ? artistStreams[0].date : null,
+        lastListen: artistStreams.length > 0 ? artistStreams[artistStreams.length - 1].date : null,
         monthlyBreakdown: Object.entries(byMonth)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 5)
@@ -221,8 +222,9 @@ function summarizeStreams(streams) {
         topArtists,
         topTracks,
         dateRange: {
-            start: dates[0],
-            end: dates[dates.length - 1]
+            // Guard against empty array access
+            start: dates.length > 0 ? dates[0] : null,
+            end: dates.length > 0 ? dates[dates.length - 1] : null
         }
     };
 }

@@ -58,6 +58,20 @@ let cachedDbPromise = null;
 let cachedDb = null;
 
 /**
+ * Safer fallback for cloning objects when structuredClone is unavailable
+ * Handles circular references gracefully
+ */
+function safeClone(obj) {
+    if (obj === null || typeof obj !== 'object') return obj;
+    try {
+        return JSON.parse(JSON.stringify(obj));
+    } catch (e) {
+        // Fallback for circular references - return shallow copy
+        return Array.isArray(obj) ? [...obj] : { ...obj };
+    }
+}
+
+/**
  * Close the cached event log store connection
  * Call this when you need to force a new connection
  */
@@ -185,8 +199,9 @@ async function appendEvent(eventType, payload, vectorClock, sourceTab, domain = 
     const event = {
         id: `${eventType}_${sequenceNumber}_${Date.now()}`,
         type: eventType,
-        payload: structuredClone ? structuredClone(payload) : JSON.parse(JSON.stringify(payload)),
-        vectorClock: structuredClone ? structuredClone(vectorClock) : JSON.parse(JSON.stringify(vectorClock)),
+        // Safer fallback for JSON.stringify - use try/catch for circular refs
+        payload: structuredClone ? structuredClone(payload) : safeClone(payload),
+        vectorClock: structuredClone ? structuredClone(vectorClock) : safeClone(vectorClock),
         timestamp: Date.now(),
         sequenceNumber,
         sourceTab,
@@ -493,13 +508,18 @@ async function checkCompaction() {
 
 /**
  * Get event log statistics
+ * Use Promise.allSettled for better error handling
  * @returns {Promise<object>}
  */
 async function getEventLogStats() {
-    const [totalCount, latestCheckpoint] = await Promise.all([
+    // Use Promise.allSettled for better error handling - both operations complete even if one fails
+    const results = await Promise.allSettled([
         countEvents(),
         getLatestCheckpoint()
     ]);
+
+    const totalCount = results[0].status === 'fulfilled' ? results[0].value : 0;
+    const latestCheckpoint = results[1].status === 'fulfilled' ? results[1].value : null;
 
     return {
         totalEvents: totalCount,

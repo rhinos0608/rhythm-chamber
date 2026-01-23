@@ -126,6 +126,11 @@ function calculateMetric(streams, metric) {
  * Format metric value for display
  */
 function formatMetricValue(value, metric) {
+    // Guard against NaN values
+    if (typeof value !== 'number' || isNaN(value)) {
+        return '0';
+    }
+
     switch (metric) {
         case 'hours':
             return `${value.toFixed(1)} hrs`;
@@ -223,12 +228,12 @@ function visualize_trend(args, streams) {
     });
     artifact.subtitle = subtitle;
 
-    // Calculate summary stats
-    const values = data.map(d => d.value);
-    const avg = values.reduce((a, b) => a + b, 0) / values.length;
-    const max = Math.max(...values);
-    const min = Math.min(...values);
-    const peakPeriod = data.find(d => d.value === max)?.period;
+    // Calculate summary stats (guard against empty arrays and NaN values)
+    const values = data.map(d => d.value).filter(v => typeof v === 'number' && !isNaN(v));
+    const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+    const max = values.length > 0 ? Math.max(...values) : 0;
+    const min = values.length > 0 ? Math.min(...values) : 0;
+    const peakPeriod = values.length > 0 ? data.find(d => d.value === max)?.period : null;
 
     return {
         message: `Here's your ${getMetricLabel(metric).toLowerCase()} trend from ${time_range.start_year} to ${time_range.end_year}. Your peak was in ${peakPeriod} with ${formatMetricValue(max, metric)}, and your average was ${formatMetricValue(avg, metric)}.`,
@@ -268,9 +273,18 @@ function visualize_comparison(args, streams) {
 
     switch (comparison_type) {
         case 'top_artists': {
-            const yearStreams = year
+            let yearStreams = year
                 ? streams.filter(s => new Date(s.ts || s.endTime).getFullYear() === year)
                 : streams;
+
+            // Filter by artist_name if specified
+            if (artist_name) {
+                const artistLower = artist_name.toLowerCase();
+                yearStreams = yearStreams.filter(s => {
+                    const artist = (s.artistName || s.master_metadata_album_artist_name || '').toLowerCase();
+                    return artist.includes(artistLower);
+                });
+            }
 
             const artistCounts = new Map();
             for (const s of yearStreams) {
@@ -288,7 +302,9 @@ function visualize_comparison(args, streams) {
                 .sort((a, b) => b.value - a.value)
                 .slice(0, safeLimit);
 
-            title = year ? `Top Artists in ${year}` : 'All-Time Top Artists';
+            title = artist_name
+                ? `${artist_name} - Top Artists`
+                : (year ? `Top Artists in ${year}` : 'All-Time Top Artists');
             explanation = [
                 `Your top ${data.length} artists by ${getMetricLabel(metric).toLowerCase()}.`,
                 year ? `Based on your listening data from ${year}.` : 'Based on all available listening data.'
@@ -569,7 +585,12 @@ function show_listening_timeline(args, streams) {
             const transitions = [];
             let prevTopArtist = null;
 
-            for (const [month, monthStreams] of Array.from(monthStats.entries()).sort()) {
+            // Sort by date (not lexicographically) to ensure chronological order
+            for (const [month, monthStreams] of Array.from(monthStats.entries()).sort((a, b) => {
+                const dateA = new Date(a[0] + '-01');
+                const dateB = new Date(b[0] + '-01');
+                return dateA - dateB;
+            })) {
                 const artistCounts = new Map();
                 for (const s of monthStreams) {
                     const artist = s.artistName || s.master_metadata_album_artist_name || 'Unknown';
@@ -663,10 +684,11 @@ function show_listening_heatmap(args, streams) {
         };
     }
 
-    // Group by day
+    // Group by day (skip invalid dates)
     const dailyData = new Map();
     for (const s of yearStreams) {
         const date = new Date(s.ts || s.endTime);
+        if (isNaN(date.getTime())) continue; // Skip invalid dates
         const dayKey = date.toISOString().split('T')[0];
 
         if (!dailyData.has(dayKey)) {

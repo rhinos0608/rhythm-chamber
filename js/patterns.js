@@ -782,7 +782,10 @@ function detectImmediateVibe(liteData) {
     }
 
     // Engagement insight
-    const avgCompletion = first5MinStreams.reduce((sum, s) => sum + (s.completionRate || 0), 0) / first5MinStreams.length;
+    // Guard against division by zero
+    const avgCompletion = first5MinStreams.length > 0
+        ? first5MinStreams.reduce((sum, s) => sum + (s.completionRate || 0), 0) / first5MinStreams.length
+        : 0;
     if (avgCompletion > 0.8) {
         insight += "You're fully engaged with your music! ";
     } else if (avgCompletion < 0.5) {

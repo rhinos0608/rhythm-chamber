@@ -96,9 +96,15 @@ async function safeJsonParse(json) {
     }
 
     // MEDIUM FIX Issue #22: Wrap JSON.parse in timeout to prevent worker hang
+    // Add try/catch around JSON.parse for safety
     const parseWithTimeout = () => {
         const startTime = Date.now();
-        const parsed = JSON.parse(json);
+        let parsed;
+        try {
+            parsed = JSON.parse(json);
+        } catch (e) {
+            throw new Error(`JSON.parse failed: ${e.message}`);
+        }
 
         // Warn if parsing took too long (but don't fail)
         const elapsed = Date.now() - startTime;
@@ -155,7 +161,13 @@ const safeJsonParseSync = (json) => {
         );
     }
 
-    const parsed = JSON.parse(json);
+    // Wrap JSON.parse in try/catch for safety
+    let parsed;
+    try {
+        parsed = JSON.parse(json);
+    } catch (e) {
+        throw new Error(`JSON.parse failed: ${e.message}`);
+    }
     return sanitizeObject(parsed);
 };
 

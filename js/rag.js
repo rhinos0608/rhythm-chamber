@@ -295,11 +295,19 @@ async function saveConfig(config) {
  * Get RAG configuration synchronously (for UI checks)
  * Uses localStorage directly - doesn't include encrypted credentials
  * For full config with credentials, use async getConfig()
+ * Wrap JSON.parse in try/catch for safety
  */
 function getConfigSync() {
     try {
         const stored = localStorage.getItem(RAG_STORAGE_KEY);
-        return stored ? JSON.parse(stored) : null;
+        if (!stored) return null;
+        // Wrap JSON.parse in try/catch for safety
+        try {
+            return JSON.parse(stored);
+        } catch (parseError) {
+            console.warn('[RAG] Failed to parse stored config:', parseError);
+            return null;
+        }
     } catch (e) {
         return null;
     }

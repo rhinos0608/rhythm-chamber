@@ -408,7 +408,11 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
             }
         };
     }
-    return { responseMessage: response.choices?.[0]?.message };
+    // HNW Guard: response.choices may be undefined or empty
+    const choices = Array.isArray(response?.choices) ? response.choices : [];
+    const message = choices[0]?.message;
+
+    return { responseMessage: message || responseMessage };
 }
 
 /**

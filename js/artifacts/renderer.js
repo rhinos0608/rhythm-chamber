@@ -259,10 +259,14 @@ function renderLineChart(spec, options = {}) {
     path.setAttribute('stroke-linejoin', 'round');
     svg.appendChild(path);
 
-    // Draw area fill
+    // Draw area fill (guard against empty xValues array)
     const areaPath = document.createElementNS(SVG_NS, 'path');
-    const areaPoints = [...points, `${xScale(xValues[xValues.length - 1])},${yScale(yDomain[0])}`, `${xScale(xValues[0])},${yScale(yDomain[0])}`];
-    areaPath.setAttribute('d', `M ${areaPoints.join(' L ')} Z`);
+    const lastXIndex = xValues.length > 0 ? xValues.length - 1 : 0;
+    const firstXIndex = 0;
+    const areaPoints = xValues.length > 0
+        ? [...points, `${xScale(xValues[lastXIndex])},${yScale(yDomain[0])}`, `${xScale(xValues[firstXIndex])},${yScale(yDomain[0])}`]
+        : [];
+    areaPath.setAttribute('d', xValues.length > 0 ? `M ${areaPoints.join(' L ')} Z` : '');
     areaPath.setAttribute('fill', `url(#gradient-${spec.artifactId})`);
     areaPath.setAttribute('opacity', '0.3');
 
@@ -338,7 +342,7 @@ function renderBarChart(spec, options = {}) {
     // Extract values
     const categories = data.map(d => d[categoryField] || '');
     const values = data.map(d => parseFloat(d[valueField]) || 0);
-    const maxValue = Math.max(...values);
+    const maxValue = values.length > 0 ? Math.max(...values) : 1; // Default to 1 to avoid divide-by-zero
 
     // Guard against divide-by-zero when maxValue === 0
     const getMaxScale = (val) => maxValue > 0 ? val / maxValue : 0;
@@ -449,7 +453,14 @@ function renderTable(spec) {
 
     // Body
     const tbody = document.createElement('tbody');
-    for (const row of data.slice(0, 50)) { // Limit displayed rows
+    const displayLimit = 50;
+    const displayedRows = data.slice(0, displayLimit);
+
+    if (data.length > displayLimit) {
+        logger.debug(`Table truncated: showing ${displayLimit} of ${data.length} rows`);
+    }
+
+    for (const row of displayedRows) {
         const tr = document.createElement('tr');
         for (const col of columns) {
             const td = document.createElement('td');
@@ -460,12 +471,12 @@ function renderTable(spec) {
     }
     table.appendChild(tbody);
 
-    if (data.length > 50) {
+    if (data.length > displayLimit) {
         const tfoot = document.createElement('tfoot');
         const footRow = document.createElement('tr');
         const footCell = document.createElement('td');
         footCell.colSpan = columns.length;
-        footCell.textContent = `Showing 50 of ${data.length} rows`;
+        footCell.textContent = `Showing ${displayLimit} of ${data.length} rows`;
         footCell.className = 'artifact-table-footer';
         footRow.appendChild(footCell);
         tfoot.appendChild(footRow);
@@ -505,7 +516,11 @@ function renderTimeline(spec, options = {}) {
     const plotWidth = width - padding.left - padding.right;
     const minDate = events[0]?.date.getTime() || 0;
     const maxDate = events[events.length - 1]?.date.getTime() || 0;
-    const xScale = (d) => padding.left + ((d - minDate) / (maxDate - minDate || 1)) * plotWidth;
+    // Handle single event case: center the event on the timeline
+    const dateRange = maxDate - minDate;
+    const xScale = events.length === 1
+        ? (d) => padding.left + plotWidth / 2  // Center single event
+        : (d) => padding.left + ((d - minDate) / (dateRange || 1)) * plotWidth;
 
     // Draw timeline axis
     const axisY = height / 2;
@@ -596,8 +611,10 @@ function renderHeatmap(spec, options = {}) {
     let maxValue = 0;
     for (const d of data) {
         const date = new Date(d[dateField]);
+        if (isNaN(date.getTime())) continue; // Skip invalid dates
         const value = parseFloat(d[valueField]) || 0;
-        const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+        // Use ISO format for consistency: YYYY-MM-DD
+        const key = date.toISOString().split('T')[0];
         intensityMap.set(key, (intensityMap.get(key) || 0) + value);
         maxValue = Math.max(maxValue, intensityMap.get(key));
     }
@@ -619,9 +636,14 @@ function renderHeatmap(spec, options = {}) {
     let week = 0;
     const current = new Date(startDate);
 
-    while (current <= today) {
+    // Guard against infinite loop with iteration limit
+    const maxIterations = 400; // Should cover ~365 days
+    let iterations = 0;
+
+    while (current <= today && iterations < maxIterations) {
         const day = current.getDay();
-        const key = `${current.getFullYear()}-${current.getMonth()}-${current.getDate()}`;
+        // Use ISO format for consistency: YYYY-MM-DD
+        const key = current.toISOString().split('T')[0];
         const value = intensityMap.get(key) || 0;
 
         const cell = document.createElementNS(SVG_NS, 'rect');
@@ -635,6 +657,7 @@ function renderHeatmap(spec, options = {}) {
 
         if (day === 6) week++;
         current.setDate(current.getDate() + 1);
+        iterations++;
     }
 
     // Day labels
@@ -737,11 +760,14 @@ function drawAxisLabels(svg, xValues, yDomain, xScale, yScale, padding, plotWidt
 
 function drawAnnotations(svg, annotations, xField, xScale, yScale, data, yValues, yDomain) {
     for (const ann of annotations) {
-        // Find matching data point
-        const idx = data.findIndex(d => d[xField] === ann.x || d[xField] === ann[xField]);
+        // Find matching data point - handle both ann.x and ann[xField] formats
+        const annotationKey = ann.x ?? ann[xField];
+        if (annotationKey === undefined) continue;
+
+        const idx = data.findIndex(d => d[xField] == annotationKey || String(d[xField]) === String(annotationKey));
         if (idx === -1) continue;
 
-        const x = xScale(parseValue(ann.x || data[idx][xField], 'temporal'));
+        const x = xScale(parseValue(annotationKey || data[idx][xField], 'temporal'));
         const y = yScale(yValues[idx]);
 
         // Annotation marker
