@@ -257,7 +257,7 @@ function visualize_comparison(args, streams) {
         return { message: validation.error, artifact: null };
     }
 
-    const { comparison_type, metric = 'plays', year, periods, limit = 10 } = args;
+    const { comparison_type, metric = 'plays', year, periods, limit = 10, artist_name } = args;
 
     logger.debug('Executing visualize_comparison', { comparison_type, metric, year });
 
@@ -348,6 +348,36 @@ function visualize_comparison(args, streams) {
 
             title = `${getMetricLabel(metric)} Comparison`;
             explanation = [`Comparing ${getMetricLabel(metric).toLowerCase()} across ${periods.length} time periods.`];
+            break;
+        }
+
+        case 'artist_plays': {
+            if (!artist_name) {
+                return {
+                    message: 'Artist plays requires an artist name.',
+                    artifact: null
+                };
+            }
+
+            const artistLower = artist_name.toLowerCase();
+            const artistStreams = streams.filter(s => {
+                const artist = (s.artistName || s.master_metadata_album_artist_name || '').toLowerCase();
+                return artist.includes(artistLower);
+            });
+
+            // Group by year
+            const yearCounts = new Map();
+            for (const s of artistStreams) {
+                const streamYear = new Date(s.ts || s.endTime).getFullYear();
+                yearCounts.set(streamYear, (yearCounts.get(streamYear) || 0) + 1);
+            }
+
+            data = Array.from(yearCounts.entries())
+                .map(([yr, count]) => ({ category: String(yr), value: count }))
+                .sort((a, b) => a.category.localeCompare(b.category));
+
+            title = `${artist_name} - Plays by Year`;
+            explanation = [`Yearly play count for ${artist_name}.`];
             break;
         }
 
@@ -527,6 +557,40 @@ function show_listening_timeline(args, streams) {
 
             title = 'Listening Milestones';
             explanation = [`Your listening journey from first play to ${count.toLocaleString()} total plays.`];
+            break;
+        }
+
+        case 'era_transitions': {
+            // Find significant listening era transitions
+            // Group by month to identify eras
+            const monthStats = groupByGranularity(streams, 'month');
+
+            // Detect transitions: months where top artist changes
+            const transitions = [];
+            let prevTopArtist = null;
+
+            for (const [month, monthStreams] of Array.from(monthStats.entries()).sort()) {
+                const artistCounts = new Map();
+                for (const s of monthStreams) {
+                    const artist = s.artistName || s.master_metadata_album_artist_name || 'Unknown';
+                    artistCounts.set(artist, (artistCounts.get(artist) || 0) + 1);
+                }
+
+                const topArtist = Array.from(artistCounts.entries())
+                    .sort((a, b) => b[1] - a[1])[0]?.[0];
+
+                if (prevTopArtist && topArtist !== prevTopArtist) {
+                    transitions.push({
+                        date: `${month}-15`,
+                        label: `Transition: ${prevTopArtist} → ${topArtist}`
+                    });
+                }
+                prevTopArtist = topArtist;
+            }
+
+            events = transitions.slice(0, safeLimit);
+            title = 'Listening Era Transitions';
+            explanation = ['Key moments where your primary artist focus shifted.'];
             break;
         }
 
