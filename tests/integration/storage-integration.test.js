@@ -195,6 +195,78 @@ describe('Storage Quota Integration', () => {
     });
 });
 
+describe('Storage.clearExpiredSessions', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2024-01-15T00:00:00Z'));
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('should delete sessions older than maxAgeMs', async () => {
+        const now = Date.now();
+        const oldDate = new Date(now - 40 * 24 * 60 * 60 * 1000).toISOString(); // 40 days ago
+        const recentDate = new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString(); // 10 days ago
+
+        // Mock sessions with different ages - getAllByIndex returns sorted by updatedAt desc
+        const sessions = [
+            { id: 'session-1', updatedAt: oldDate, messages: [] },
+            { id: 'session-2', updatedAt: recentDate, messages: [] },
+            { id: 'session-3', updatedAt: oldDate, messages: [] }
+        ];
+
+        // IndexedDBCore.getAllByIndex is what Storage.getAllSessions() uses
+        mockIDB.getAll = vi.fn().mockResolvedValue(sessions);
+        mockIDB.deleteRecord = vi.fn().mockResolvedValue(undefined);
+
+        // Import Storage to test
+        const { Storage } = await import('../../js/storage.js');
+
+        const result = await Storage.clearExpiredSessions(30 * 24 * 60 * 60 * 1000); // 30 days
+
+        expect(result.deleted).toBe(2); // Two old sessions deleted
+        expect(mockIDB.deleteRecord).toHaveBeenCalledWith('chat_sessions', 'session-1');
+        expect(mockIDB.deleteRecord).toHaveBeenCalledWith('chat_sessions', 'session-3');
+        expect(mockIDB.deleteRecord).not.toHaveBeenCalledWith('chat_sessions', 'session-2');
+    });
+
+    it('should return zero deleted when no sessions exist', async () => {
+        mockIDB.getAll = vi.fn().mockResolvedValue([]);
+        mockIDB.deleteRecord = vi.fn().mockResolvedValue(undefined);
+
+        const { Storage } = await import('../../js/storage.js');
+
+        const result = await Storage.clearExpiredSessions();
+
+        expect(result.deleted).toBe(0);
+        expect(mockIDB.deleteRecord).not.toHaveBeenCalled();
+    });
+
+    it('should use default 30 days when maxAgeMs not provided', async () => {
+        const now = Date.now();
+        const thirtyOneDaysAgo = new Date(now - 31 * 24 * 60 * 60 * 1000).toISOString();
+        const twentyNineDaysAgo = new Date(now - 29 * 24 * 60 * 60 * 1000).toISOString();
+
+        const sessions = [
+            { id: 'old-session', updatedAt: thirtyOneDaysAgo, messages: [] },
+            { id: 'recent-session', updatedAt: twentyNineDaysAgo, messages: [] }
+        ];
+
+        mockIDB.getAll = vi.fn().mockResolvedValue(sessions);
+        mockIDB.deleteRecord = vi.fn().mockResolvedValue(undefined);
+
+        const { Storage } = await import('../../js/storage.js');
+
+        const result = await Storage.clearExpiredSessions();
+
+        expect(result.deleted).toBe(1);
+        expect(mockIDB.deleteRecord).toHaveBeenCalledWith('chat_sessions', 'old-session');
+    });
+});
+
 describe('Cross-Tab Coordination Failure Tests', () => {
     beforeEach(() => {
         vi.clearAllMocks();

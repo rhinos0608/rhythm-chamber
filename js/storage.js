@@ -363,6 +363,23 @@ const Storage = {
     this._notifyUpdate('session', 0);
   },
 
+  async clearExpiredSessions(maxAgeMs = 30 * 24 * 60 * 60 * 1000) {
+    const sessions = await this.getAllSessions();
+    if (!sessions || sessions.length === 0) return { deleted: 0 };
+
+    const cutoffDate = new Date(Date.now() - maxAgeMs);
+    let deletedCount = 0;
+
+    for (const session of sessions) {
+      if (new Date(session.updatedAt) < cutoffDate) {
+        await this.deleteSession(session.id);
+        deletedCount++;
+      }
+    }
+
+    return { deleted: deletedCount };
+  },
+
   // ==========================================
   // Profiles (delegate to ProfileStorage)
   // HNW: Extracted to dedicated module for single-responsibility
