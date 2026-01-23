@@ -87,15 +87,18 @@
 ## Pricing & Monetization
 
 ### Pricing Model
-- [Three-Pillar Pricing Model](pricing-three-pillar-model.md) - Detailed pricing strategy
+- [Two-Tier Pricing Model](pricing-two-tier-model.md) - Sovereign (Free) & Chamber (Premium) tiers
 - [Pricing Implementation Summary](pricing-implementation-summary.md) - Implementation details
+- [Lemon Squeezy Setup Guide](LEMON_SQUEEZY_SETUP.md) - Payment provider configuration
 
 **Tiers:**
 | Tier | Price | Focus |
 |------|-------|-------|
 | **Sovereign** | Free | Privacy & Viral Growth |
-| **Curator** | $19.99 one-time | Data Power-User features |
-| **Chamber** | $4.99/mo or $39/yr | Convenience & Seamlessness |
+| **Chamber** | $4.99/mo or $39/yr | Advanced Analytics & Convenience |
+
+**Payment Provider:**
+- **Lemon Squeezy** - Overlay checkout, built-in license keys, no backend required
 
 ---
 

@@ -5,15 +5,14 @@
  * - All core features (Analysis, Chat, RAG) are FREE.
  * - No user accounts, no server storage.
  *
- * FUTURE MONETIZATION (Three-Pillar Model):
- * - Pillar 1: The Sovereign ($0) - Privacy & Viral Growth
- * - Pillar 2: The Curator ($19.99 one-time) - Data Power-User
- * - Pillar 3: The Chamber ($4.99/mo or $39/yr) - Convenience & Seamlessness
+ * FUTURE MONETIZATION (Two-Tier Model):
+ * - Tier 1: The Sovereign ($0) - Privacy & Viral Growth, 1 free playlist
+ * - Tier 2: The Chamber ($4.99/mo or $39/yr) - Unlimited playlists, metadata, semantic search
  *
  * PRODUCTION BUILD:
  * - Set Config.PRODUCTION_BUILD = true OR
  * - Set Config.PAYMENT_MODE = 'production'
- * - This enables license verification for Curator and Chamber tiers
+ * - This enables license verification for Chamber tier
  */
 
 import { ConfigLoader } from './services/config-loader.js';
@@ -144,23 +143,15 @@ function getPremiumStatus() {
 }
 
 /**
- * Placeholder for upgrade flow
+ * Upgrade flow
  * In MVP, shows a toast explaining all features are free
- * In production, redirects to pricing page or shows upgrade modal
+ * In production, redirects to upgrade page or shows upgrade modal
  */
 function upgradeToPremium() {
     if (isProductionBuild()) {
-        // In production, show upgrade modal with three-pillar options
+        // In production, redirect to upgrade page
         if (typeof window !== 'undefined') {
-            // Provide details so handlers can present context-aware pricing modal
-            const premiumInfo = {
-                feature: 'upgrade',
-                requiredTier: 'curator',
-                tierName: 'The Curator',
-                tierPrice: '$19.99'
-            };
-            const event = new CustomEvent('showPricingModal', { detail: premiumInfo });
-            window.dispatchEvent(event);
+            window.location.href = 'upgrade.html';
         }
         return;
     }
@@ -199,10 +190,25 @@ function hideUpgradeModal() {
 }
 
 /**
- * Placeholder for payment return handling
+ * Handle payment return from Lemon Squeezy
+ * Checks for license key and activates premium if payment successful
  */
-function handlePaymentReturn() {
-    // No-op for MVP - Stripe integration removed
+async function handlePaymentReturn() {
+    // Dynamic import to avoid circular dependency
+    const { LemonSqueezyService } = await import('./services/lemon-squeezy-service.js');
+
+    // Check for stored license from checkout event
+    const stored = localStorage.getItem('rhythm_chamber_license');
+    if (stored) {
+        const license = JSON.parse(stored);
+        return {
+            success: true,
+            status: 'success',
+            tier: license.tier
+        };
+    }
+
+    return { success: false, status: null };
 }
 
 // ES Module export
@@ -216,31 +222,40 @@ export const Payments = {
     hideUpgradeModal,
     handlePaymentReturn,
 
+    // Lemon Squeezy checkout methods
+    startMonthlyCheckout: async (options) => {
+        const { LemonSqueezyService } = await import('./services/lemon-squeezy-service.js');
+        return LemonSqueezyService.openMonthlyCheckout(options);
+    },
+    startYearlyCheckout: async (options) => {
+        const { LemonSqueezyService } = await import('./services/lemon-squeezy-service.js');
+        return LemonSqueezyService.openYearlyCheckout(options);
+    },
+    startLifetimeCheckout: async (options) => {
+        const { LemonSqueezyService } = await import('./services/lemon-squeezy-service.js');
+        return LemonSqueezyService.openLifetimeCheckout(options);
+    },
+
     // Production build utilities
     isProductionBuild,
     checkLicenseStatus,
 
-    // Available plans (informational) - Three-Pillar Model
+    // Available plans (informational) - Two-Tier Model
     PLANS: {
         sovereign: {
             name: 'The Sovereign',
             price: '$0',
-            features: ['Full Local Analysis', 'BYOI Chat (Your Models/Keys)', 'Basic Cards', 'Personality Reveal', '100% Client-Side']
-        },
-        curator: {
-            name: 'The Curator',
-            price: '$19.99 one-time',
-            features: ['PKM Export (Obsidian/Notion)', 'Relationship Resonance Reports', 'Deep Enrichment (BPM/Key/Producer)', 'Metadata Fixer', 'Verified Badge']
+            features: ['Full Local Analysis', 'BYOI Chat (Your Models/Keys)', 'Basic Cards', 'Personality Reveal', '100% Client-Side', '1 Free Playlist']
         },
         chamber: {
             name: 'The Chamber',
             price: '$4.99/mo or $39/yr',
-            status: 'coming_soon',
-            features: ['E2EE Multi-Device Sync', 'Chamber Portal (Web Card Hosting)', 'Managed AI (Bundled Tokens)', 'Weekly Insight Emails', 'Priority Support']
+            status: 'available',
+            features: ['Unlimited Playlists', 'Metadata Enrichment', 'Semantic Search', 'AI Playlist Curator', 'Monthly Insights (coming soon)']
         }
     }
 };
 
 
-console.log('[Payments] Module loaded - Three-Pillar Model');
+console.log('[Payments] Module loaded - Two-Tier Model');
 

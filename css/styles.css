@@ -5669,3 +5669,127 @@ body.read-only-mode .chat-input {
     font-size: 0.85rem;
   }
 }
+/* ==========================================
+   Premium Upgrade Modal Styles
+   ========================================== */
+
+.premium-upgrade-modal .modal-content {
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.premium-upgrade-modal .modal-header {
+  text-align: center;
+}
+
+.premium-upgrade-modal .modal-header h2 {
+  font-size: 1.75rem;
+  margin: 0;
+}
+
+.premium-upgrade-modal .modal-body {
+  padding: var(--space-lg) 0;
+}
+
+.premium-upgrade-modal .modal-footer {
+  display: flex;
+  gap: var(--space-md);
+  justify-content: center;
+  margin-top: var(--space-lg);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.premium-upgrade-modal .modal-footer .btn {
+  flex: 1;
+  max-width: 200px;
+}
+
+/* Upgrade illustration */
+.upgrade-illustration {
+  text-align: center;
+  margin-bottom: var(--space-lg);
+}
+
+.illustration-icon {
+  font-size: 4rem;
+  margin-bottom: var(--space-md);
+}
+
+.upgrade-message {
+  text-align: center;
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-lg);
+}
+
+.upgrade-description {
+  text-align: center;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-md);
+}
+
+/* Feature list */
+.feature-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.feature-icon {
+  font-size: 1.5rem;
+  min-width: 32px;
+  text-align: center;
+}
+
+/* Upgrade price */
+.upgrade-price {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-lg);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-lg);
+}
+
+.price-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.price-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .premium-upgrade-modal .modal-footer {
+    flex-direction: column;
+  }
+
+  .premium-upgrade-modal .modal-footer .btn {
+    max-width: none;
+    width: 100%;
+  }
+}

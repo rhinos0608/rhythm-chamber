@@ -16,12 +16,14 @@ import { DataQuerySchemas } from './schemas/data-queries.js';
 import { TemplateQuerySchemas } from './schemas/template-queries.js';
 import { AnalyticsQuerySchemas } from './schemas/analytics-queries.js';
 import { ArtifactQuerySchemas } from './schemas/artifact-queries.js';
+import { PlaylistQuerySchemas } from './schemas/playlist-queries.js';
 import { FunctionValidation } from './utils/validation.js';
 import { FunctionRetry } from './utils/retry.js';
 import { DataExecutors } from './executors/data-executors.js';
 import { TemplateExecutors } from './executors/template-executors.js';
 import { AnalyticsExecutors } from './executors/analytics-executors.js';
 import { ArtifactExecutors } from './executors/artifact-executors.js';
+import { PlaylistExecutors } from './executors/playlist-executors.js';
 
 // Template function names - functions that don't require user streams
 const TemplateFunctionNames = TemplateQuerySchemas.map(s => s.function.name);
@@ -98,11 +100,12 @@ async function executeFunction(functionName, args, streams, options = {}) {
         return { error: dataQueryValidation.error || "DataQuery module not loaded." };
     }
 
-    // Find executor (includes artifact executors)
+    // Find executor (includes artifact and playlist executors)
     const allExecutors = {
         ...DataExecutors,
         ...AnalyticsExecutors,
-        ...ArtifactExecutors
+        ...ArtifactExecutors,
+        ...PlaylistExecutors
     };
 
     const executor = allExecutors[functionName];
@@ -227,14 +230,15 @@ function validateFunctionArgs(functionName, args) {
 
 /**
  * Get all available function schemas
- * Combines data, template, and analytics schemas
+ * Combines data, template, analytics, artifact, and playlist schemas
  */
 function getAllSchemas() {
     return [
         ...(DataQuerySchemas || []),
         ...(TemplateQuerySchemas || []),
         ...(AnalyticsQuerySchemas || []),
-        ...(ArtifactQuerySchemas || [])
+        ...(ArtifactQuerySchemas || []),
+        ...(PlaylistQuerySchemas || [])
     ];
 }
 

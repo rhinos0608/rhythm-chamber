@@ -16,6 +16,40 @@ import { createLogger } from './utils/logger.js';
 
 const logger = createLogger('GenreEnrichment');
 
+// Premium feature flag for API enrichment
+const ENRICHMENT_PREMIUM_ENABLED = false; // Set to true to enforce premium gate
+const ENRICHMENT_FEATURE = 'metadata_enrichment';
+
+/**
+ * Check if user has access to metadata enrichment (premium feature)
+ * @returns {Promise<boolean>} True if user has access
+ */
+async function checkEnrichmentAccess() {
+    if (!ENRICHMENT_PREMIUM_ENABLED) {
+        return true; // MVP: Allow all access
+    }
+
+    try {
+        const { Pricing } = await import('./pricing.js');
+        return Pricing.hasFeatureAccess(ENRICHMENT_FEATURE);
+    } catch (e) {
+        logger.warn('Failed to check premium access, allowing:', e);
+        return true;
+    }
+}
+
+/**
+ * Show upgrade modal for metadata enrichment
+ */
+async function showEnrichmentUpgradeModal() {
+    try {
+        const { PremiumController } = await import('./controllers/premium-controller.js');
+        PremiumController.showUpgradeModal(ENRICHMENT_FEATURE);
+    } catch (e) {
+        logger.warn('Failed to show upgrade modal:', e);
+    }
+}
+
 // ==========================================
 // Static Artist-Genre Map (Top ~500 Artists)
 // Covers ~80% of typical listening history
@@ -408,13 +442,39 @@ function getTopGenres(streams, limit = 10) {
 /**
  * Enrich streams with genre data
  * Adds _genres field to each stream where possible
- * 
+ *
  * @param {Array} streams - Streaming history
- * @returns {Object} { enriched: number, total: number, coverage: percentage }
+ * @param {Object} options - Enrichment options
+ * @param {boolean} options.full - Enable full enrichment (premium)
+ * @param {boolean} options.includeAudioFeatures - Include BPM, key, danceability (premium)
+ * @returns {Promise<Object>} { enriched: number, total: number, coverage: percentage, premiumFeatures: string[] }
  */
-function enrichStreams(streams) {
+async function enrichStreams(streams, options = {}) {
+    const { full = false, includeAudioFeatures = false } = options;
     let enriched = 0;
+    const premiumFeatures = [];
 
+    // Check for premium access if full enrichment requested
+    if (full || includeAudioFeatures) {
+        const hasAccess = await checkEnrichmentAccess();
+        if (!hasAccess) {
+            showEnrichmentUpgradeModal();
+            return {
+                enriched: 0,
+                total: streams.length,
+                coverage: 0,
+                premiumRequired: true,
+                premiumFeatures: ['Full metadata enrichment', 'Audio features (BPM, key, danceability)']
+            };
+        }
+        premiumFeatures.push('Full metadata enrichment');
+    }
+
+    if (includeAudioFeatures) {
+        premiumFeatures.push('Audio features (BPM, key, danceability)');
+    }
+
+    // Basic genre enrichment (always available from static map)
     for (const stream of streams) {
         if (stream._genres) {
             enriched++;
@@ -428,12 +488,25 @@ function enrichStreams(streams) {
             stream._genres = genres;
             enriched++;
         }
+
+        // Premium: Queue for API enrichment if not in static map
+        if (full && !genres && artistName) {
+            await queueForEnrichment(artistName);
+        }
+    }
+
+    // Premium: Add audio features if requested and Spotify available
+    if (includeAudioFeatures) {
+        const audioFeaturesResult = await enrichAudioFeatures(streams);
+        enriched += audioFeaturesResult.enriched;
+        premiumFeatures.push('Audio features (BPM, key, danceability)');
     }
 
     return {
         enriched,
         total: streams.length,
-        coverage: Math.round((enriched / streams.length) * 100)
+        coverage: Math.round((enriched / streams.length) * 100),
+        premiumFeatures: premiumFeatures.length > 0 ? premiumFeatures : undefined
     };
 }
 
@@ -473,17 +546,27 @@ const API_RATE_LIMIT_MS = 1100; // Slightly over 1 second to be safe
 const MAX_ITERATIONS = 100; // Guard against infinite loops
 
 /**
- * Queue an artist for API enrichment
+ * Queue an artist for API enrichment (PREMIUM FEATURE)
  * Only for artists not in static map
+ * @param {string} artistName - Artist to enrich via MusicBrainz API
+ * @returns {Promise<boolean>} True if queued, false if premium required
  */
-function queueForEnrichment(artistName) {
-    if (!artistName) return;
-    if (isKnownArtist(artistName)) return;
-    if (genreCache && genreCache[artistName]) return;
-    if (API_QUEUE.includes(artistName)) return;
+async function queueForEnrichment(artistName) {
+    if (!artistName) return false;
+    if (isKnownArtist(artistName)) return false;
+    if (genreCache && genreCache[artistName]) return false;
+    if (API_QUEUE.includes(artistName)) return false;
+
+    // PREMIUM GATE: Check metadata enrichment access
+    const hasAccess = await checkEnrichmentAccess();
+    if (!hasAccess) {
+        showEnrichmentUpgradeModal();
+        return false;
+    }
 
     API_QUEUE.push(artistName);
     processApiQueue();
+    return true;
 }
 
 /**
@@ -586,6 +669,286 @@ async function fetchGenreFromMusicBrainz(artistName) {
 }
 
 // ==========================================
+// Spotify Audio Features Enrichment (PREMIUM)
+// ==========================================
+
+/**
+ * Audio features cache for track enrichment
+ * Maps Spotify track IDs to audio feature data
+ */
+const audioFeaturesCache = new Map();
+
+/**
+ * Spotify track ID extraction from stream data
+ * @param {Object} stream - Stream object
+ * @returns {string|null} Spotify track ID or null
+ */
+function extractSpotifyTrackId(stream) {
+    // Try various fields that might contain Spotify URI or ID
+    const uri = stream.spotify_track_uri || stream.trackUri || stream.uri;
+    if (uri && typeof uri === 'string') {
+        // Extract ID from URI like "spotify:track:4iV5W9uYEdYUVa79Axb7Rh"
+        const match = uri.match(/spotify:track:([a-zA-Z0-9]+)/);
+        if (match) return match[1];
+    }
+
+    // Try direct ID field
+    const id = stream.spotify_track_id || stream.trackId || stream.id;
+    if (id && typeof id === 'string') {
+        return id;
+    }
+
+    return null;
+}
+
+/**
+ * Get Spotify access token from user settings
+ * This requires user to have connected their Spotify account
+ * @returns {Promise<string|null>} Access token or null
+ */
+async function getSpotifyAccessToken() {
+    if (typeof window === 'undefined') return null;
+
+    try {
+        // Check if user has Spotify token in storage
+        const { Storage } = await import('./storage.js');
+        const tokenData = await Storage.getConfig('spotify_access_token');
+
+        if (tokenData && tokenData.access_token) {
+            // Check if token is expired
+            if (tokenData.expires_at && Date.now() > tokenData.expires_at) {
+                // Token expired, need refresh
+                return await refreshSpotifyToken(tokenData.refresh_token);
+            }
+
+            return tokenData.access_token;
+        }
+    } catch (e) {
+        logger.warn('Failed to get Spotify token:', e);
+    }
+
+    return null;
+}
+
+/**
+ * Refresh expired Spotify access token
+ * @param {string} refreshToken - Refresh token
+ * @returns {Promise<string|null>} New access token or null
+ */
+async function refreshSpotifyToken(refreshToken) {
+    // This would require a backend proxy to keep client_secret secure
+    // For now, return null to indicate re-authentication needed
+    logger.warn('Spotify token expired, re-authentication required');
+    return null;
+}
+
+/**
+ * Fetch audio features for multiple tracks from Spotify Web API
+ * @param {string[]} trackIds - Array of Spotify track IDs (max 50)
+ * @param {string} accessToken - Valid Spotify access token
+ * @returns {Promise<Object>} Map of track ID to audio features
+ */
+async function fetchAudioFeaturesFromSpotify(trackIds, accessToken) {
+    if (!trackIds.length) return {};
+
+    // Spotify API allows up to 50 tracks per request
+    const idsParam = trackIds.join(',');
+    const url = `https://api.spotify.com/v1/audio-features?ids=${idsParam}`;
+
+    try {
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                throw new Error('SPOTIFY_TOKEN_EXPIRED');
+            }
+            if (response.status === 429) {
+                throw new Error('SPOTIFY_RATE_LIMITED');
+            }
+            throw new Error(`Spotify API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const featuresMap = {};
+
+        for (const track of data.audio_features || []) {
+            if (track && track.id) {
+                featuresMap[track.id] = {
+                    tempo: Math.round(track.tempo), // BPM
+                    key: spotifyKeyToName(track.key), // Convert 0-11 to note names
+                    mode: track.mode === 1 ? 'major' : 'minor',
+                    danceability: Math.round(track.danceability * 100),
+                    energy: Math.round(track.energy * 100),
+                    valence: Math.round(track.valence * 100), // Positivity
+                    acousticness: Math.round(track.acousticness * 100),
+                    instrumentalness: Math.round(track.instrumentalness * 100),
+                    liveness: Math.round(track.liveness * 100),
+                    speechiness: Math.round(track.speechiness * 100),
+                    loudness: Math.round(track.loudness * 10) / 10, // dB
+                    durationMs: track.duration_ms,
+                    timeSignature: track.time_signature
+                };
+
+                // Cache the result
+                audioFeaturesCache.set(track.id, featuresMap[track.id]);
+            }
+        }
+
+        return featuresMap;
+
+    } catch (e) {
+        logger.warn('Failed to fetch audio features:', e);
+        throw e;
+    }
+}
+
+/**
+ * Convert Spotify key number (0-11) to musical note name
+ * @param {number} key - Spotify key number
+ * @returns {string} Key name (e.g., "C", "F#")
+ */
+function spotifyKeyToName(key) {
+    const keyNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    return keyNames[key] || 'Unknown';
+}
+
+/**
+ * Enrich streams with Spotify audio features (PREMIUM FEATURE)
+ * Fetches BPM, key, danceability, energy, and other audio characteristics
+ *
+ * @param {Array} streams - Streaming history
+ * @returns {Promise<Object>} { enriched: number, cached: number, errors: number }
+ */
+async function enrichAudioFeatures(streams) {
+    // Check premium access first
+    const hasAccess = await checkEnrichmentAccess();
+    if (!hasAccess) {
+        showEnrichmentUpgradeModal();
+        return { enriched: 0, cached: 0, errors: 0, premiumRequired: true };
+    }
+
+    // Get Spotify access token
+    const accessToken = await getSpotifyAccessToken();
+    if (!accessToken) {
+        logger.warn('No Spotify access token available for audio features');
+        return { enriched: 0, cached: 0, errors: 0, noToken: true };
+    }
+
+    let enriched = 0;
+    let cached = 0;
+    let errors = 0;
+
+    // Extract track IDs that need enrichment
+    const tracksToFetch = [];
+    for (const stream of streams) {
+        // Skip if already enriched
+        if (stream._audioFeatures) {
+            cached++;
+            continue;
+        }
+
+        const trackId = extractSpotifyTrackId(stream);
+        if (trackId) {
+            // Check cache first
+            if (audioFeaturesCache.has(trackId)) {
+                stream._audioFeatures = audioFeaturesCache.get(trackId);
+                cached++;
+            } else {
+                tracksToFetch.push({ stream, trackId });
+            }
+        }
+    }
+
+    // Batch fetch from Spotify (max 50 at a time)
+    const batchSize = 50;
+    for (let i = 0; i < tracksToFetch.length; i += batchSize) {
+        const batch = tracksToFetch.slice(i, i + batchSize);
+        const trackIds = batch.map(t => t.trackId);
+
+        try {
+            const featuresMap = await fetchAudioFeaturesFromSpotify(trackIds, accessToken);
+
+            // Apply features to streams
+            for (const { stream, trackId } of batch) {
+                if (featuresMap[trackId]) {
+                    stream._audioFeatures = featuresMap[trackId];
+                    enriched++;
+                } else {
+                    errors++;
+                }
+            }
+
+            // Rate limiting: wait between batches if needed
+            if (i + batchSize < tracksToFetch.length) {
+                await new Promise(r => setTimeout(r, 100));
+            }
+
+        } catch (e) {
+            if (e.message === 'SPOTIFY_TOKEN_EXPIRED') {
+                // Token expired, stop processing
+                logger.warn('Spotify token expired during audio features fetch');
+                break;
+            }
+            errors += batch.length;
+        }
+    }
+
+    logger.info(`Audio features enrichment: ${enriched} new, ${cached} cached, ${errors} errors`);
+
+    return { enriched, cached, errors };
+}
+
+/**
+ * Get audio features summary for a collection of streams
+ * @param {Array} streams - Streaming history
+ * @returns {Object} Summary statistics
+ */
+function getAudioFeaturesSummary(streams) {
+    const withFeatures = streams.filter(s => s._audioFeatures);
+    if (withFeatures.length === 0) {
+        return null;
+    }
+
+    const stats = {
+        count: withFeatures.length,
+        avgBpm: 0,
+        avgEnergy: 0,
+        avgDanceability: 0,
+        avgValence: 0,
+        keyDistribution: {},
+        modeDistribution: { major: 0, minor: 0 }
+    };
+
+    let totalBpm = 0;
+    let totalEnergy = 0;
+    let totalDanceability = 0;
+    let totalValence = 0;
+
+    for (const stream of withFeatures) {
+        const af = stream._audioFeatures;
+        totalBpm += af.tempo;
+        totalEnergy += af.energy;
+        totalDanceability += af.danceability;
+        totalValence += af.valence;
+
+        stats.keyDistribution[af.key] = (stats.keyDistribution[af.key] || 0) + 1;
+        stats.modeDistribution[af.mode]++;
+    }
+
+    stats.avgBpm = Math.round(totalBpm / withFeatures.length);
+    stats.avgEnergy = Math.round(totalEnergy / withFeatures.length);
+    stats.avgDanceability = Math.round(totalDanceability / withFeatures.length);
+    stats.avgValence = Math.round(totalValence / withFeatures.length);
+
+    return stats;
+}
+
+// ==========================================
 // Public API
 // ==========================================
 
@@ -604,13 +967,18 @@ export const GenreEnrichment = {
     loadCachedGenres,
     queueForEnrichment,
 
+    // Audio features (premium)
+    enrichAudioFeatures,
+    getAudioFeaturesSummary,
+
     // Stats
     getStats() {
         return {
             staticMapSize: getStaticMapSize(),
             cachedCount: genreCache ? Object.keys(genreCache).length : 0,
             queueLength: API_QUEUE.length,
-            isProcessing: apiProcessing
+            isProcessing: apiProcessing,
+            audioFeaturesCacheSize: audioFeaturesCache.size
         };
     }
 };
