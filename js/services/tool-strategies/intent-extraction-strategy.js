@@ -94,9 +94,9 @@ export class IntentExtractionStrategy extends BaseToolStrategy {
             const abortController = new AbortController();
             const timeoutId = setTimeout(() => abortController.abort(), this.TIMEOUT_MS);
 
-            results = await fc.executeFunctionCalls([intent], streamsData, {
-                signal: abortController.signal
-            });
+            // INTENTION-LAYER NOTE: executeFunctionCalls accepts (calls, streamsData) only
+            // The abort signal is handled internally by FunctionCallingFallback
+            results = await fc.executeFunctionCalls([intent], streamsData);
 
             clearTimeout(timeoutId);
         } catch (execError) {

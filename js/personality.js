@@ -214,14 +214,15 @@ function classifyPersonality(patterns) {
 
 /**
  * Format data insights for prompt
+ * Add NaN/undefined guards for safety
  */
 function formatInsights(insights) {
     if (!insights) return null;
     return [
-        `• Total Time: ${insights.totalMinutes.toLocaleString()} minutes`,
-        `• Distinct Artists: ${insights.uniqueArtists.toLocaleString()}`,
-        `• Top Artist: ${insights.topArtist.name} (${insights.topArtist.minutes.toLocaleString()} mins, ${insights.topArtist.percentile})`,
-        `• Busiest Listening Day: ${insights.peakDay}`
+        `• Total Time: ${(insights.totalMinutes || 0).toLocaleString()} minutes`,
+        `• Distinct Artists: ${(insights.uniqueArtists || 0).toLocaleString()}`,
+        `• Top Artist: ${insights.topArtist?.name || 'Unknown'} (${(insights.topArtist?.minutes || 0).toLocaleString()} mins, ${insights.topArtist?.percentile || 'N/A'})`,
+        `• Busiest Listening Day: ${insights.peakDay || 'N/A'}`
     ].join('\n');
 }
 

@@ -377,8 +377,11 @@ function executeGetDiscoveryStats(args, streams) {
             examples: [...artists].slice(0, 3)
         }));
 
-        const peakMonth = monthlyBreakdown.reduce((max, curr) =>
-            curr.new_artists > max.new_artists ? curr : max, monthlyBreakdown[0]);
+        // Guard against empty array access
+        const peakMonth = monthlyBreakdown.length > 0
+            ? monthlyBreakdown.reduce((max, curr) =>
+                curr.new_artists > max.new_artists ? curr : max, monthlyBreakdown[0])
+            : null;
 
         return {
             year,
@@ -583,7 +586,10 @@ function executeGetPeakListeningDay(args, streams) {
         value: metric === 'minutes' ? data.minutes : data.plays
     }));
 
-    const peakDay = breakdown.reduce((max, curr) => curr.value > max.value ? curr : max, breakdown[0]);
+    // Guard against empty array access
+    const peakDay = breakdown.length > 0
+        ? breakdown.reduce((max, curr) => curr.value > max.value ? curr : max, breakdown[0])
+        : null;
 
     return {
         period: validation.formatPeriodLabel({ year }),

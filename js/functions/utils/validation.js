@@ -67,7 +67,11 @@ function validateYear(year, streams) {
 
     // Check if year is in data range
     if (streams && streams.length > 0) {
-        const years = [...new Set(streams.map(s => s.year))].sort();
+        // Extract year from ts or endTime fields (streams don't have a .year property)
+        const years = [...new Set(streams.map(s => {
+            const date = new Date(s.ts || s.endTime);
+            return isNaN(date.getTime()) ? null : date.getFullYear();
+        }).filter(y => y !== null))].sort();
         if (!years.includes(parsedYear)) {
             return {
                 valid: false,

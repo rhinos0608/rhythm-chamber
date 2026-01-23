@@ -57,6 +57,8 @@ function detectEras(streams, chunks) {
     const byWeek = {};
     streams.forEach(s => {
         const date = new Date(s.ts || s.endTime);
+        // Validate date - skip invalid dates
+        if (isNaN(date.getTime())) return;
         const weekStart = new Date(date);
         weekStart.setDate(date.getDate() - date.getDay());
         const weekKey = weekStart.toISOString().slice(0, 10);
@@ -93,7 +95,7 @@ function detectEras(streams, chunks) {
     }
 
     if (currentEra.weeks >= 4) {
-        currentEra.end = weeks[weeks.length - 1];
+        currentEra.end = weeks.length > 0 ? weeks[weeks.length - 1] : null;
         eras.push(currentEra);
     }
 
@@ -120,6 +122,8 @@ function detectTimePatterns(streams) {
 
     streams.forEach(s => {
         const date = new Date(s.ts || s.endTime);
+        // Validate date - skip invalid dates
+        if (isNaN(date.getTime())) return;
         // Use UTC consistently to avoid DST issues
         const hour = s.hourUTC !== undefined ? s.hourUTC : date.getUTCHours();
         const artist = s.master_metadata_album_artist_name || s.artistName || 'Unknown';
@@ -157,6 +161,8 @@ function detectSocialPatterns(streams) {
 
     streams.forEach(s => {
         const date = new Date(s.ts || s.endTime);
+        // Validate date - skip invalid dates
+        if (isNaN(date.getTime())) return;
         const day = date.getDay();
         const artist = s.master_metadata_album_artist_name || s.artistName || 'Unknown';
 
@@ -190,7 +196,10 @@ function detectGhostedArtists(streams) {
 
     // Find dataset boundaries using iterative reduce (avoids stack overflow with large arrays)
     const maxTime = streams.reduce((max, s) => {
-        const time = new Date(s.ts || s.endTime).getTime();
+        const date = new Date(s.ts || s.endTime);
+        // Validate date - skip invalid dates
+        if (isNaN(date.getTime())) return max;
+        const time = date.getTime();
         return time > max ? time : max;
     }, -Infinity);
     const endDate = maxTime === -Infinity ? new Date() : new Date(maxTime);
@@ -207,6 +216,8 @@ function detectGhostedArtists(streams) {
         if (!artist || artist === 'Unknown') return;
 
         const date = new Date(s.ts || s.endTime);
+        // Validate date - skip invalid dates
+        if (isNaN(date.getTime())) return;
         if (!artistData[artist]) {
             artistData[artist] = { plays: 0, lastPlay: date, firstPlay: date };
         }
@@ -260,6 +271,8 @@ function detectDiscoveryExplosions(streams, chunks) {
 
     sorted.forEach(s => {
         const date = new Date(s.ts || s.endTime);
+        // Validate date - skip invalid dates
+        if (isNaN(date.getTime())) return;
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
         const artist = s.master_metadata_album_artist_name || s.artistName;
 
@@ -277,7 +290,10 @@ function detectDiscoveryExplosions(streams, chunks) {
     // Calculate baseline new artist rate
     const months = Object.keys(byMonth).sort();
     const newArtistCounts = months.map(m => byMonth[m].newArtists);
-    const avgNewArtists = newArtistCounts.reduce((a, b) => a + b, 0) / newArtistCounts.length;
+    // Guard against division by zero
+    const avgNewArtists = newArtistCounts.length > 0
+        ? newArtistCounts.reduce((a, b) => a + b, 0) / newArtistCounts.length
+        : 0;
 
     const explosions = months
         .filter(m => byMonth[m].newArtists > avgNewArtists * 3)
@@ -310,8 +326,13 @@ function detectMoodSearching(streams) {
     let skipsInWindow = 0;
 
     for (let i = 0; i < sorted.length; i++) {
-        const currTime = new Date(sorted[i].ts || sorted[i].endTime).getTime();
-        const windowStartTime = new Date(sorted[windowStart].ts || sorted[windowStart].endTime).getTime();
+        const currDate = new Date(sorted[i].ts || sorted[i].endTime);
+        // Validate date - skip invalid dates
+        if (isNaN(currDate.getTime())) continue;
+        const currTime = currDate.getTime();
+        const windowStartDate = new Date(sorted[windowStart].ts || sorted[windowStart].endTime);
+        if (isNaN(windowStartDate.getTime())) continue;
+        const windowStartTime = windowStartDate.getTime();
 
         // Reset window if more than 10 minutes
         if (currTime - windowStartTime > 10 * 60 * 1000) {
@@ -406,7 +427,10 @@ function generateDataInsights(streams) {
     // Day of week distribution
     const dayCount = [0, 0, 0, 0, 0, 0, 0];
     streams.forEach(s => {
-        const day = new Date(s.ts || s.endTime).getDay();
+        const date = new Date(s.ts || s.endTime);
+        // Validate date - skip invalid dates
+        if (isNaN(date.getTime())) return;
+        const day = date.getDay();
         dayCount[day]++;
     });
     const peakDayIndex = dayCount.indexOf(Math.max(...dayCount));
@@ -429,7 +453,10 @@ function generatePatternSummary(streams, patterns) {
     let minTime = Infinity;
     let maxTime = -Infinity;
     for (const s of streams) {
-        const time = new Date(s.ts || s.endTime).getTime();
+        const date = new Date(s.ts || s.endTime);
+        // Validate date - skip invalid dates
+        if (isNaN(date.getTime())) continue;
+        const time = date.getTime();
         if (time < minTime) minTime = time;
         if (time > maxTime) maxTime = time;
     }

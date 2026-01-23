@@ -697,14 +697,16 @@ export class PerformanceProfiler {
 
         const usages = this._memorySnapshots.map(s => s.usagePercentage);
         const current = this._memorySnapshots[this._memorySnapshots.length - 1];
-        const average = usages.reduce((sum, u) => sum + u, 0) / usages.length;
+        // Guard against division by zero
+        const average = usages.length > 0 ? usages.reduce((sum, u) => sum + u, 0) / usages.length : 0;
         const peak = Math.max(...usages);
 
         // Determine trend
         const recent = usages.slice(-10);
         const older = usages.slice(0, 10);
-        const avgRecent = recent.reduce((sum, u) => sum + u, 0) / recent.length;
-        const avgOlder = older.reduce((sum, u) => sum + u, 0) / older.length;
+        // Guard against division by zero
+        const avgRecent = recent.length > 0 ? recent.reduce((sum, u) => sum + u, 0) / recent.length : 0;
+        const avgOlder = older.length > 0 ? older.reduce((sum, u) => sum + u, 0) / older.length : 0;
 
         let trend = 'stable';
         if (avgRecent > avgOlder * 1.2) {

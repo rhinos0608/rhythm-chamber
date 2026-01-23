@@ -127,10 +127,11 @@ function getDiversityTrend(streams) {
     // Calculate trend direction (last 6 months vs previous 6 months)
     const recentSlice = trend.slice(-6);
     const previousSlice = trend.slice(-12, -6);
-    const recentAvg = recentSlice.length
+    // Guard against division by zero
+    const recentAvg = recentSlice.length > 0
         ? recentSlice.reduce((s, t) => s + t.diversityScore, 0) / recentSlice.length
         : null;
-    const previousAvg = previousSlice.length
+    const previousAvg = previousSlice.length > 0
         ? previousSlice.reduce((s, t) => s + t.diversityScore, 0) / previousSlice.length
         : null;
     let trendDirection = 'insufficient_data';
@@ -196,6 +197,7 @@ function getDiscoveryPrediction(streams) {
 
     // Calculate trend from last 6 months
     const recentRates = discoveryRates.slice(-6);
+    // Guard against division by zero
     const avgRecent = recentRates.length > 0
         ? recentRates.reduce((s, r) => s + r.discoveries, 0) / recentRates.length
         : 0;
@@ -221,6 +223,7 @@ function getDiscoveryPrediction(streams) {
     // Confidence based on data consistency
     const recentDiscoveries = recentRates.map(r => r.discoveries);
     const variance = calculateVariance(recentDiscoveries);
+    // Guard against division by zero
     const meanRecent = recentDiscoveries.length > 0
         ? recentDiscoveries.reduce((s, v) => s + v, 0) / recentDiscoveries.length
         : 0;
@@ -394,11 +397,13 @@ function getDaysInYear(year) {
 
 /**
  * Calculate variance of an array
+ * Guard against division by zero
  */
 function calculateVariance(arr) {
     if (arr.length === 0) return 0;
-    const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
-    return arr.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / arr.length;
+    // Guard against division by zero
+    const mean = arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+    return arr.length > 0 ? arr.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / arr.length : 0;
 }
 
 // ==========================================

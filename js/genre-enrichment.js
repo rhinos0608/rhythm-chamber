@@ -470,6 +470,7 @@ function getStaticMapSize() {
 const API_QUEUE = [];
 let apiProcessing = false;
 const API_RATE_LIMIT_MS = 1100; // Slightly over 1 second to be safe
+const MAX_ITERATIONS = 100; // Guard against infinite loops
 
 /**
  * Queue an artist for API enrichment
@@ -487,13 +488,16 @@ function queueForEnrichment(artistName) {
 
 /**
  * Process the API queue with rate limiting
+ * Add iteration limit to prevent infinite loops
  */
 async function processApiQueue() {
     if (apiProcessing || API_QUEUE.length === 0) return;
 
     apiProcessing = true;
+    let iterations = 0;
 
-    while (API_QUEUE.length > 0) {
+    while (API_QUEUE.length > 0 && iterations < MAX_ITERATIONS) {
+        iterations++;
         const artistName = API_QUEUE.shift();
 
         try {

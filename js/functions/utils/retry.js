@@ -18,14 +18,18 @@ const RETRY_BASE_DELAY_MS = 500;
 function isTransientError(err) {
     if (!err) return false;
 
+    // AbortError is NOT retryable - it indicates intentional cancellation (timeout)
+    if (err.name === 'AbortError') {
+        return false;
+    }
+
     const msg = (err.message || '').toLowerCase();
     return msg.includes('timeout') ||
         msg.includes('rate limit') ||
         msg.includes('429') ||
         msg.includes('503') ||
         msg.includes('network') ||
-        msg.includes('fetch') ||
-        err.name === 'AbortError';
+        msg.includes('fetch');
 }
 
 /**
