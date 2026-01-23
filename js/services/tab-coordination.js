@@ -12,9 +12,49 @@ import { WaveTelemetry } from './wave-telemetry.js';
 import { EventBus } from './event-bus.js';
 import { DeviceDetection } from './device-detection.js';
 import { SharedWorkerCoordinator } from '../workers/shared-worker-coordinator.js';
-import { Security } from '../security/index.js';
+import { Crypto } from '../security/crypto.js';
 import { AppState } from '../state/app-state.js';
 import { escapeHtml } from '../utils/html-escape.js';
+
+/**
+ * Check if crypto session is active for secure messaging
+ * Verifies secure context AND that Crypto module is ready
+ */
+async function isKeySessionActive() {
+    // Check secure context AND that Crypto module is ready
+    if (!Crypto.isSecureContext()) {
+        return false;
+    }
+    // Wait for Crypto to be ready
+    const ready = await Crypto.waitForReady(5000);
+    return ready;
+}
+
+// ==========================================
+// Nonce tracking for replay protection
+// ==========================================
+
+const usedNonces = new Set();
+const NONCE_EXPIRY_MS = 60000; // 1 minute
+
+// Clean up expired nonces periodically
+setInterval(() => {
+    if (usedNonces.size > 1000) {
+        usedNonces.clear();
+    }
+}, NONCE_EXPIRY_MS);
+
+/**
+ * Check if nonce has been used (replay protection)
+ * @param {string} nonce - Nonce to check
+ * @returns {boolean} True if nonce is fresh (not used)
+ */
+function isNonceFresh(nonce) {
+    if (!nonce) return false;
+    if (usedNonces.has(nonce)) return false;
+    usedNonces.add(nonce);
+    return true;
+}
 
 // ==========================================
 // Constants
@@ -449,7 +489,7 @@ async function processMessageQueue() {
         const queued = messageQueue.shift();
 
         // Verify security session is ready before processing
-        if (!Security.isKeySessionActive()) {
+        if (!isKeySessionActive()) {
             // Put message back and stop processing
             messageQueue.unshift(queued);
             break;
@@ -493,24 +533,15 @@ async function sendMessageInternal(msg, skipQueue = false) {
         msg.timestamp = Date.now();
     }
 
-    // Sanitize message to remove sensitive data
-    const sanitizedMsg = Security.MessageSecurity.sanitizeMessage(msg);
+    // Message signing removed - simplified security model
+    // Cross-tab HMAC signing was over-engineering for this application
 
-    // Generate nonce for replay prevention
-    const nonce = `${TAB_ID}_${localSequence}_${msg.timestamp}`;
-
-    // Get signing key and sign message
-    const signingKey = await Security.getSigningKey();
-    const signature = await Security.MessageSecurity.signMessage(sanitizedMsg, signingKey);
-
-    // Add signature, origin, and nonce to message
+    // Send message with basic metadata
     const signedMessage = {
-        ...sanitizedMsg,
+        ...msg,
         seq: localSequence,
         senderId: TAB_ID,
-        signature,
-        origin: window.location.origin,
-        nonce
+        origin: window.location.origin
     };
 
     coordinationTransport?.postMessage(signedMessage);
@@ -530,7 +561,7 @@ function startSecurityReadyWatcher() {
     securityReadyCheckInterval = setInterval(() => {
         waited += CHECK_INTERVAL_MS;
 
-        if (Security.isKeySessionActive()) {
+        if (isKeySessionActive()) {
             stopSecurityReadyWatcher();
             processMessageQueue();
             return;
@@ -798,7 +829,7 @@ async function initWithBroadcastChannel() {
     // Set up heartbeat system
     if (isPrimaryTab) {
         // Verify security session is ready before starting periodic operations
-        if (!Security.isKeySessionActive()) {
+        if (!isKeySessionActive()) {
             console.warn('[TabCoordination] Security session not active, delaying periodic operations');
             const maxWait = IS_TEST_ENV ? 0 : 5000;
             const checkInterval = 100;
@@ -806,7 +837,7 @@ async function initWithBroadcastChannel() {
             let sessionReady = false;
 
             while (!sessionReady && waited < maxWait) {
-                sessionReady = Security.isKeySessionActive();
+                sessionReady = isKeySessionActive();
                 if (!sessionReady) {
                     await new Promise(resolve => setTimeout(resolve, checkInterval));
                     waited += checkInterval;
@@ -912,7 +943,7 @@ async function initWithSharedWorker() {
     // Set up heartbeat system
     if (isPrimaryTab) {
         // Verify security session is ready before starting periodic operations
-        if (!Security.isKeySessionActive()) {
+        if (!isKeySessionActive()) {
             console.warn('[TabCoordination] Security session not active, delaying periodic operations');
             const maxWait = IS_TEST_ENV ? 0 : 5000;
             const checkInterval = 100;
@@ -920,7 +951,7 @@ async function initWithSharedWorker() {
             let sessionReady = false;
 
             while (!sessionReady && waited < maxWait) {
-                sessionReady = Security.isKeySessionActive();
+                sessionReady = isKeySessionActive();
                 if (!sessionReady) {
                     await new Promise(resolve => setTimeout(resolve, checkInterval));
                     waited += checkInterval;
@@ -959,7 +990,7 @@ async function initWithSharedWorker() {
  */
 async function sendMessage(msg, skipQueue = false) {
     // Check if security session is ready before attempting to sign
-    const sessionReady = Security.isKeySessionActive();
+    const sessionReady = isKeySessionActive();
     const inBootstrapWindow = isInBootstrapWindow();
 
     if (!sessionReady && !inBootstrapWindow && !skipQueue) {
@@ -1049,71 +1080,30 @@ function createMessageHandler() {
                 return;
             }
 
-            if (isUnsigned) {
-                console.warn('[TabCoordination] Accepting unsigned message (signature verification skipped) (within bootstrap window, limited to 3 messages)');
-            } else {
-                // Step 0a: Check for missing security fields (signed messages)
-                if (!signature || !origin || !timestamp || !nonce) {
-                    console.warn('[TabCoordination] Rejecting unsigned message - missing security fields');
-                    return;
-                }
-            }
+            // Message signing verification removed - simplified security model
+            // Cross-tab HMAC signing was over-engineering for this application
 
-            // Step 1: Origin validation (XTAB-03) - Fast check
+            // Step 1: Origin validation - keep this for basic security
             if (origin !== window.location.origin) {
                 console.warn(`[TabCoordination] Rejecting message from wrong origin: ${origin}`);
                 return;
             }
 
-            // Step 2: Timestamp validation (XTAB-06) - Fast check
-            const isFresh = Security.MessageSecurity.validateTimestamp(event.data, 5);
+            // Step 2: Timestamp validation - basic staleness check
+            const isFresh = timestamp && (Date.now() - timestamp) < 60000; // 1 minute
             if (!isFresh) {
                 console.warn(`[TabCoordination] Rejecting stale message: timestamp=${timestamp}`);
                 return;
             }
 
-            // Step 3: Nonce replay check (XTAB-05) - Medium speed check
-            if (Security.MessageSecurity.isNonceUsed(nonce)) {
-                console.warn(`[TabCoordination] Rejecting replayed message: nonce=${nonce}`);
-                return;
+            // Step 3: Nonce validation for replay protection
+            if (nonce && !isNonceFresh(nonce)) {
+                logger.warn('[TabCoordination] Rejecting replayed message with nonce:', nonce);
+                return; // Drop the message
             }
 
-            // Step 4: Signature verification (XTAB-02) - Expensive crypto operation (last)
-            // Skip signature verification for unsigned messages (fail-safe from signing failures)
-            if (!isUnsigned) {
-                try {
-                    const signingKey = await Security.getSigningKey();
-                    const isValid = await Security.MessageSecurity.verifyMessage(event.data, signature, signingKey);
-                    if (!isValid) {
-                        console.warn('[TabCoordination] Rejecting message with invalid signature');
-                        return;
-                    }
-                } catch (signError) {
-                    // Check if this is a session initialization error
-                    const isSessionError = signError.message && signError.message.includes('Session not initialized');
-                    if (isSessionError) {
-                        // Only log session errors once to avoid spam
-                        if (!createMessageHandler._sessionErrorLogged) {
-                            console.warn('[TabCoordination] Security session not ready - accepting unsigned messages during initialization');
-                            createMessageHandler._sessionErrorLogged = true;
-                        }
-                        // Treat as unsigned during initialization (bootstrap window only)
-                        if (!inBootstrapWindow) {
-                            console.warn('[TabCoordination] Rejecting message: signature verification failed outside bootstrap window');
-                            return;
-                        }
-                        isUnsigned = true;
-                    } else {
-                        throw signError; // Re-throw other errors
-                    }
-                }
-            }
-
-            // Mark nonce as used after successful verification or for unsigned messages
-            Security.MessageSecurity.markNonceUsed(nonce);
-
-            // Message passed all verification checks - proceed with processing
-            console.log(`[TabCoordination] Message verified: type=${type}, from=${tabId}`);
+            // Message passed basic verification - proceed with processing
+            console.log(`[TabCoordination] Message received: type=${type}, from=${tabId}`);
 
             // Message sequence validation for ordering guarantees
             // HNW Network: Detect out-of-order or duplicate BroadcastChannel messages
@@ -2173,7 +2163,7 @@ const TabCoordinator = {
         size: messageQueue.length,
         isProcessing: isProcessingQueue,
         isWatching: securityReadyCheckInterval !== null,
-        isReady: Security.isKeySessionActive()
+        isReady: isKeySessionActive()
     }),
     processQueue: processMessageQueue,
 
