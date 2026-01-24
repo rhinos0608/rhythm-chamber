@@ -151,10 +151,10 @@ A friendly upgrade message will be displayed if your browser doesn't support req
 
 ## Project Status
 
-✅ **MVP Complete** — Personality types, chat, semantic search, zero-backend architecture
-✅ **v0.9 Security Hardening Complete** — 23/23 security requirements satisfied (AES-GCM-256 encryption, HMAC-SHA256 messaging)
-🔄 **In Progress** — Viral loop testing, premium model integration
-🎯 **Next** — Deploy to production, get 20 beta users
+✅ **Complete** — Core analytics engine, local AI processing, premium integration
+✅ **Complete** — Zero-backend architecture with client-side security
+✅ **Complete** — BYOI (Bring Your Own Intelligence) provider support
+🔄 **Active** — Feature refinement and user experience improvements
 
 ---
 
@@ -214,44 +214,28 @@ We're not building a better stats.fm. We're building the next evolution of music
 
 ---
 
-## Pricing Strategy
+## Pricing & Licensing
 
-### Three-Pillar Model
+Rhythm Chamber offers a simple two-tier pricing model:
 
-| Tier | Price | What You Get | Infrastructure | Purpose |
-|------|-------|--------------|----------------|----------|
-| **Sovereign** | **$0** | Full local analysis, BYOI chat, basic cards, personality reveal | Client-side only | **Loss Leader**: Build community, validate product, zero server costs |
-| **Curator** | **$19.99 one-time** | PKM Export, Relationship Resonance, Deep Enrichment, Metadata Fixer | Client-side only | **Seed Capital**: Funds security audit ($10,000 goal) |
-| **Chamber** | **$4.99/mo or $39/yr** | E2EE Sync, Chamber Portal, Managed AI, Weekly Insights | Hybrid (client + server) | **Recurring Revenue**: Sustainable operations, infrastructure costs |
+| Tier | Price | Features |
+|------|-------|----------|
+| **Sovereign** | Free | Local AI only, manual data import, basic chat, manual profile creation |
+| **Chamber** | $4.99/month | Cloud AI access, Spotify integration, AI-generated profiles, premium features |
 
-### Security Audit Stretch Goal
+### Premium Features (Chamber Tier)
+- Spotify OAuth integration (automatic data import)
+- OpenRouter cloud AI access
+- AI-generated profile narratives
+- Unlimited chat sessions
+- Artifact visualizations
+- Advanced analytics features
 
-**$10,000 raised = Security audit unlocked**
-
-When we reach $10,000 in Supporter revenue, we will commission an external security audit to validate our zero-backend architecture and encryption implementation. This audit will be published publicly to build trust with our community.
-
-### Why This Works
-
-- **Zero Risk Entry**: Users try without payment barrier
-- **Community Investment**: Supporters feel ownership in security development
-- **Borrowed Trust**: External security firm reputation transfers to your product
-- **PKM Export**: "Physical" digital copy of their history that connects to their other notes
-- **Relationship Engine**: Viral loop - one user buys to analyze partner/friend, sells the outcome (relationship insight)
-- **Zero-Backend**: No payment processing infrastructure needed
-- **Viral Loop**: "Compare with Friend" via JSON exchange keeps data private
-- **BYOI Model**: Appeals to privacy-conscious power users who want control and choice over models/keys
-- **Phase 2 Trigger**: Only after hitting Supporter KPI (~250-1,000) and security audit complete
-- **Revenue Allocation**: Supporter funds go directly to security audit and cloud infrastructure
-- **Lifetime Protection**: Separates access fee from compute costs
-- **Two Points of Failure**: Users can switch between local and cloud modes
-- **Never Deprecate Local**: Free tier remains functional forever
-
-### Feature Implementation
-- **PKM Export**: Generates folder of Markdown files (one for every Artist, Month, Era) properly interlinked for Obsidian/Notion/Roam
-- **Relationship Compatibility Report**: Upload second person's zip/JSON to generate "You and Sarah have 84% overlap in 'Melancholy' but divergent 'Energy' curves in 2021. Your common anthem is 'Bloodbuzz Ohio'."
-- **Enrichment Mode** (Strategy 3): Connects to public APIs (MusicBrainz, AcoustID) to fetch BPM, Key, Producer Credits, Lyrics for top tracks
-- **Patreon Perks**: Discord access, voting rights, early access
-- **Phase 2**: Multi-device sync, encrypted cloud backup, managed AI setup, **external security partnership**
+### License Verification
+- Licenses managed through Lemon Squeezy
+- Local validation with encrypted storage
+- Graceful fallback to Sovereign tier
+- 30-day validation cache
 
 ---
 
