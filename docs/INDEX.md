@@ -58,6 +58,7 @@
 
 ## Technical Documentation
 - [Provider Health Monitoring](provider-health-monitoring.md) - AI provider reliability
+- [Artifact Integration](artifact-integration.md) - Visualization development
 
 ## Development Documentation
 
