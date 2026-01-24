@@ -21,9 +21,10 @@ export default {
     const allowedOrigins = env.ALLOWED_ORIGINS ? env.ALLOWED_ORIGINS.split(',') : [];
 
     // Determine if origin is allowed (fallback to empty for same-origin requests)
-    const allowedOrigin = requestOrigin && allowedOrigins.includes(requestOrigin)
-      ? requestOrigin
-      : (allowedOrigins[0] || '');
+    // Handle null origin from local file:// URLs, redirects, and certain privacy modes
+    const allowedOrigin = (requestOrigin === null || !allowedOrigins.includes(requestOrigin))
+      ? (allowedOrigins[0] || '')
+      : requestOrigin;
 
     // CORS headers for all responses - use whitelisted origin only
     const corsHeaders = {
