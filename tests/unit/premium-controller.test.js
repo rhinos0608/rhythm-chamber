@@ -20,6 +20,7 @@ import { PremiumQuota } from '../../js/services/premium-quota.js';
 import { PremiumController } from '../../js/controllers/premium-controller.js';
 import { ConfigLoader } from '../../js/services/config-loader.js';
 import { createFocusTrap } from '../../js/utils/focus-trap.js';
+import { PremiumGatekeeper } from '../../js/services/premium-gatekeeper.js';
 
 // Mock Pricing module
 vi.mock('../../js/pricing.js', () => ({
@@ -54,6 +55,18 @@ vi.mock('../../js/services/premium-quota.js', () => ({
         getQuotaStatus: vi.fn().mockResolvedValue({
             isPremium: false,
             playlists: { used: 0, limit: 1, remaining: 1 }
+        })
+    }
+}));
+
+// Mock PremiumGatekeeper for existing tests
+vi.mock('../../js/services/premium-gatekeeper.js', () => ({
+    PremiumGatekeeper: {
+        checkFeature: vi.fn().mockResolvedValue({
+            allowed: true,
+            reason: null,
+            tier: 'chamber',
+            quotaRemaining: 1
         })
     }
 }));
@@ -165,10 +178,11 @@ describe('PremiumController', () => {
 
     describe('Playlist Creation Check', () => {
         it('should return true when quota allows', async () => {
-            vi.mocked(PremiumQuota.canCreatePlaylist).mockResolvedValue({
+            vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue({
                 allowed: true,
-                remaining: 1,
-                reason: null
+                reason: null,
+                tier: 'chamber',
+                quotaRemaining: 1
             });
 
             const result = await PremiumController.canCreatePlaylist();
@@ -177,10 +191,11 @@ describe('PremiumController', () => {
         });
 
         it('should return false when quota exhausted', async () => {
-            vi.mocked(PremiumQuota.canCreatePlaylist).mockResolvedValue({
+            vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue({
                 allowed: false,
-                remaining: 0,
-                reason: "You've used your 1 free playlist"
+                reason: "You've used your 1 free playlist",
+                tier: null,
+                quotaRemaining: 0
             });
 
             const result = await PremiumController.canCreatePlaylist();
@@ -189,10 +204,11 @@ describe('PremiumController', () => {
         });
 
         it('should show upgrade modal when quota exceeded', async () => {
-            vi.mocked(PremiumQuota.canCreatePlaylist).mockResolvedValue({
+            vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue({
                 allowed: false,
-                remaining: 0,
-                reason: "You've used your 1 free playlist"
+                reason: "You've used your 1 free playlist",
+                tier: null,
+                quotaRemaining: 0
             });
 
             await PremiumController.canCreatePlaylist();
@@ -500,6 +516,37 @@ describe('PremiumController', () => {
             });
 
             expect(() => window.dispatchEvent(event)).not.toThrow();
+        });
+    });
+
+    describe('PremiumController with PremiumGatekeeper', () => {
+        beforeEach(() => {
+            vi.clearAllMocks();
+        });
+
+        it('canCreatePlaylist uses PremiumGatekeeper for access check', async () => {
+            const mockAccess = { allowed: true, tier: 'chamber', reason: null, quotaRemaining: 1 };
+            vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue(mockAccess);
+
+            const result = await PremiumController.canCreatePlaylist();
+
+            expect(PremiumGatekeeper.checkFeature).toHaveBeenCalledWith('unlimited_playlists');
+            expect(result).toBe(true);
+        });
+
+        it('canCreatePlaylist returns false when quota exceeded', async () => {
+            const mockAccess = {
+                allowed: false,
+                reason: 'QUOTA_EXCEEDED',
+                tier: 'sovereign',
+                quotaRemaining: 0
+            };
+            vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue(mockAccess);
+
+            const result = await PremiumController.canCreatePlaylist();
+
+            expect(PremiumGatekeeper.checkFeature).toHaveBeenCalledWith('unlimited_playlists');
+            expect(result).toBe(false);
         });
     });
 });
