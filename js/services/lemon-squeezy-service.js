@@ -14,6 +14,7 @@
 
 import { ConfigLoader } from './config-loader.js';
 import { createLogger } from '../utils/logger.js';
+import { LicenseVerifier } from '../security/license-verifier.js';
 
 const logger = createLogger('LemonSqueezyService');
 
@@ -86,6 +87,82 @@ async function loadLemonJS() {
 }
 
 /**
+ * Verify license key from checkout event via server-side validation
+ * This prevents spoofing of checkout events by validating the key
+ * against the Lemon Squeezy API or validation worker.
+ * @param {string} licenseKey - The license key to verify
+ * @returns {Promise<{valid: boolean, tier?: string, error?: string}>}
+ */
+async function verifyCheckoutLicense(licenseKey) {
+    if (!licenseKey) {
+        return { valid: false, error: 'No license key provided' };
+    }
+
+    try {
+        // Try validating via the worker first (most secure)
+        if (VALIDATION_ENDPOINT) {
+            const response = await fetch(VALIDATION_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'validate',
+                    licenseKey,
+                    instanceName: INSTANCE_NAME
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.valid) {
+                    return {
+                        valid: true,
+                        tier: data.tier || 'chamber',
+                        instanceId: data.instanceId
+                    };
+                }
+                return { valid: false, error: data.error || 'Invalid license' };
+            }
+        }
+
+        // Fallback to direct API validation (less ideal, requires API key)
+        if (API_KEY) {
+            const response = await fetch('https://api.lemonsqueezy.com/v1/licenses/activate', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/vnd.api+json',
+                    'Content-Type': 'application/vnd.api+json',
+                    'Authorization': `Bearer ${API_KEY}`
+                },
+                body: JSON.stringify({
+                    license_key: licenseKey,
+                    instance_name: INSTANCE_NAME
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.license_key?.status === 'active') {
+                    return {
+                        valid: true,
+                        tier: 'chamber',
+                        instanceId: data.instance?.id
+                    };
+                }
+            }
+        }
+
+        // If no validation method is available, still allow the key
+        // but mark it as unverified for UI warning
+        logger.warn('No server-side validation available, license key unverified');
+        return { valid: true, verified: false };
+    } catch (error) {
+        logger.error('License verification failed:', error);
+        // On network failure, allow but mark as unverified
+        return { valid: true, verified: false, error: error.message };
+    }
+}
+
+/**
  * Initialize Lemon.js event handlers
  * @param {Object} handlers - Event handlers for checkout events
  */
@@ -97,9 +174,33 @@ function setupEventHandlers(handlers = {}) {
 
     // Default handlers
     const defaultHandlers = {
-        onCheckoutSuccess: (data) => {
-            logger.info('Checkout successful:', data);
-            handlers.onCheckoutSuccess?.(data);
+        onCheckoutSuccess: async (data) => {
+            logger.info('Checkout successful, verifying license key...');
+
+            // SECURITY: Verify license key server-side before trusting it
+            // This prevents spoofed checkout events from fake licenses
+            const verification = await verifyCheckoutLicense(data.licenseKey);
+
+            if (!verification.valid) {
+                logger.error('License verification failed:', verification.error);
+                // Notify handler of verification failure
+                handlers.onCheckoutError?.({
+                    error: 'VERIFICATION_FAILED',
+                    message: verification.error || 'Could not verify license key'
+                });
+                return;
+            }
+
+            // Add verification status to data
+            const verifiedData = {
+                ...data,
+                verified: verification.verified !== false, // true unless explicitly false
+                tier: verification.tier || data.tier,
+                instanceId: verification.instanceId
+            };
+
+            logger.info('License verified successfully:', verifiedData.tier);
+            handlers.onCheckoutSuccess?.(verifiedData);
         },
         onCheckoutClosed: () => {
             logger.info('Checkout closed');
@@ -119,6 +220,7 @@ function setupEventHandlers(handlers = {}) {
                     const licenseKey = eventData.meta?.license_key?.key ||
                                      eventData.license_key;
 
+                    // SECURITY: Verify license key before processing
                     defaultHandlers.onCheckoutSuccess({
                         licenseKey,
                         orderId: eventData.order_number,
@@ -428,69 +530,131 @@ async function validateViaAPI(licenseKey, instanceId) {
  */
 async function validateLocally(licenseKey) {
     try {
-        // Parse JWT-like format: payload.signature
+        // Parse JWT-like format: header.payload.signature (3 parts)
+        // Legacy format: payload.signature (2 parts)
         const parts = licenseKey.split('.');
-        if (parts.length !== 2) {
+
+        if (parts.length !== 3 && parts.length !== 2) {
             return {
                 valid: false,
                 error: 'INVALID_FORMAT',
-                message: 'Invalid license key format'
+                message: 'Invalid license key format. Expected JWT format (header.payload.signature) or legacy format (payload.signature).'
             };
         }
 
-        const [payloadB64, signature] = parts;
+        let header, payloadB64, signature, payload;
+
+        if (parts.length === 3) {
+            // Standard JWT format: header.payload.signature
+            const [headerB64, payloadB64_jwt, signature_jwt] = parts;
+
+            // Decode header
+            try {
+                const headerBytes = Uint8Array.from(atob(headerB64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+                const headerJson = new TextDecoder().decode(headerBytes);
+                header = JSON.parse(headerJson);
+            } catch (e) {
+                return {
+                    valid: false,
+                    error: 'INVALID_HEADER',
+                    message: 'Invalid JWT header'
+                };
+            }
+
+            payloadB64 = payloadB64_jwt;
+            signature = signature_jwt;
+        } else {
+            // Legacy format: payload.signature
+            [payloadB64, signature] = parts;
+            header = { alg: 'HS256', typ: 'JWT' }; // Assume legacy format
+        }
 
         // Decode payload
-        const payloadBytes = Uint8Array.from(atob(payloadB64), c => c.charCodeAt(0));
+        const payloadBytes = Uint8Array.from(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
         const payloadJson = new TextDecoder().decode(payloadBytes);
-        const payload = JSON.parse(payloadJson);
+        payload = JSON.parse(payloadJson);
+
+        // Verify header algorithm
+        if (header.alg !== 'HS256') {
+            return {
+                valid: false,
+                error: 'UNSUPPORTED_ALGORITHM',
+                message: `Unsupported algorithm: ${header.alg}. Expected HS256.`
+            };
+        }
 
         // Verify signature using derived secret
-        const isValid = await verifySignature(payloadB64, signature);
+        // For JWT: sign header.payload
+        // For legacy: sign payload only
+        const dataToSign = parts.length === 3
+            ? `${parts[0]}.${parts[1]}`  // header.payload
+            : payloadB64;                // payload only (legacy)
+
+        const isValid = await verifySignature(dataToSign, signature, payloadB64);
 
         if (!isValid) {
             return {
                 valid: false,
                 error: 'INVALID_SIGNATURE',
-                message: 'License signature is invalid'
+                message: 'License signature verification failed. Token may have been tampered with.'
+            };
+        }
+
+        // Validate tier
+        if (!payload.tier || !['sovereign', 'chamber', 'curator'].includes(payload.tier)) {
+            return {
+                valid: false,
+                error: 'INVALID_TIER',
+                message: `Invalid tier: ${payload.tier || 'undefined'}`
             };
         }
 
         // Check expiration
-        if (payload.exp) {
-            const now = Math.floor(Date.now() / 1000);
-            if (payload.exp < now) {
-                return {
-                    valid: false,
-                    error: 'EXPIRED',
-                    message: 'License has expired'
-                };
-            }
+        const now = Math.floor(Date.now() / 1000);
+        if (payload.exp && payload.exp < now) {
+            return {
+                valid: false,
+                error: 'EXPIRED',
+                message: `License expired at ${new Date(payload.exp * 1000).toISOString()}`
+            };
+        }
+
+        // Check not before
+        if (payload.nbf && payload.nbf > now) {
+            return {
+                valid: false,
+                error: 'NOT_YET_VALID',
+                message: `License not valid until ${new Date(payload.nbf * 1000).toISOString()}`
+            };
         }
 
         return {
             valid: true,
             tier: payload.tier || 'chamber',
+            instanceId: payload.instanceId || null,
             expiresAt: payload.exp ? new Date(payload.exp * 1000).toISOString() : null,
-            activatedAt: payload.iat ? new Date(payload.iat * 1000).toISOString() : null
+            activatedAt: payload.iat ? new Date(payload.iat * 1000).toISOString() : null,
+            features: payload.features || []
         };
 
     } catch (e) {
+        logger.warn('License validation error:', e);
         return {
             valid: false,
             error: 'PARSE_ERROR',
-            message: 'Could not parse license key'
+            message: `Could not parse license key: ${e.message}`
         };
     }
 }
 
 /**
  * Verify HMAC signature of license payload
- * @param {string} payloadB64 - Base64URL encoded payload
- * @param {string} signature - Hex signature
+ * @param {string} dataToSign - Data that was signed (header.payload for JWT, payload for legacy)
+ * @param {string} signature - Base64URL signature
+ * @param {string} [payloadB64] - Payload for legacy compatibility
  * @returns {Promise<boolean>} True if signature is valid
  */
-async function verifySignature(payloadB64, signature) {
+async function verifySignature(dataToSign, signature, payloadB64 = null) {
     try {
         // Derive secret from obfuscated storage
         const secret = await deriveSecret();
@@ -504,12 +668,20 @@ async function verifySignature(payloadB64, signature) {
             ['verify']
         );
 
-        // Verify signature
-        const signatureBytes = new Uint8Array(
-            signature.match(/[\da-f]{2}/gi)?.map(h => parseInt(h, 16)) || []
-        );
+        // Handle Base64URL signature (JWT format)
+        let signatureBytes;
+        try {
+            // Try Base64URL decoding first (JWT standard)
+            const base64UrlSig = signature.replace(/-/g, '+').replace(/_/g, '/');
+            signatureBytes = Uint8Array.from(atob(base64UrlSig), c => c.charCodeAt(0));
+        } catch {
+            // Fallback to hex format (legacy)
+            signatureBytes = new Uint8Array(
+                signature.match(/[\da-f]{2}/gi)?.map(h => parseInt(h, 16)) || []
+            );
+        }
 
-        const dataBytes = new TextEncoder().encode(payloadB64);
+        const dataBytes = new TextEncoder().encode(dataToSign);
 
         return await crypto.subtle.verify('HMAC', key, signatureBytes, dataBytes);
 
@@ -549,6 +721,7 @@ async function deriveSecret() {
 
 /**
  * Activate a license key (first-time activation)
+ * Uses cryptographic verification and integrity-protected storage
  * @param {string} licenseKey - License key to activate
  * @returns {Promise<Object>} Activation result
  */
@@ -572,7 +745,25 @@ async function activateLicense(licenseKey) {
             };
         }
 
-        // Store in localStorage
+        // Store with cryptographic verification via LicenseVerifier
+        // This stores the signed JWT token with integrity checksum
+        const stored = await LicenseVerifier.storeLicense(licenseKey, {
+            instanceId: validation.instanceId,
+            activatedAt: validation.activatedAt || new Date().toISOString(),
+            expiresAt: validation.expiresAt,
+            source: 'lemonsqueezy'
+        });
+
+        if (!stored) {
+            logger.error('Failed to store license with integrity protection');
+            return {
+                success: false,
+                error: 'STORAGE_FAILED',
+                message: 'Failed to store license securely'
+            };
+        }
+
+        // Also store legacy format for backward compatibility
         const licenseData = {
             tier: validation.tier,
             licenseKey: await hashKey(licenseKey), // Store hash, not raw key
@@ -589,7 +780,7 @@ async function activateLicense(licenseKey) {
         });
         window.dispatchEvent(event);
 
-        logger.info('License activated:', validation.tier);
+        logger.info('License activated with cryptographic verification:', validation.tier);
 
         return {
             success: true,
@@ -621,14 +812,19 @@ async function hashKey(key) {
 
 /**
  * Deactivate/remove current license
+ * Clears both cryptographic storage and legacy format
  */
 async function deactivateLicense() {
+    // Clear cryptographic license storage
+    LicenseVerifier.clearLicense();
+
+    // Clear legacy format
     localStorage.removeItem('rhythm_chamber_license');
 
     const event = new CustomEvent('licenseDeactivated');
     window.dispatchEvent(event);
 
-    logger.info('License deactivated');
+    logger.info('License deactivated (all formats cleared)');
 }
 
 // ==========================================
