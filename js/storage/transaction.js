@@ -631,6 +631,12 @@ async function recoverFromJournal() {
 // ==========================================
 
 /**
+ * Default transaction timeout (30 seconds)
+ * Prevents indefinite hangs on unresponsive operations
+ */
+const DEFAULT_TRANSACTION_TIMEOUT_MS = 30000;
+
+/**
  * Execute a transactional operation across multiple backends
  * Uses Two-Phase Commit (2PC) protocol for enhanced atomicity:
  * 1. Prepare phase: Validate all operations can succeed
@@ -640,11 +646,16 @@ async function recoverFromJournal() {
  *
  * CRITICAL FIX for Issue #2: Checks fatal state before starting transaction
  * MEDIUM FIX for Issue #15: Detects and prevents nested transactions
+ * FIX: Added timeout handling to prevent indefinite hangs
  *
  * @param {function(TransactionContext): Promise<void>} callback - Transaction callback
+ * @param {Object} [options] - Transaction options
+ * @param {number} [options.timeoutMs] - Timeout in milliseconds (default: 30000)
  * @returns {Promise<{success: boolean, operationsCommitted: number, transactionId: string, durationMs: number}>}
  */
-async function transaction(callback) {
+async function transaction(callback, options = {}) {
+    const { timeoutMs = DEFAULT_TRANSACTION_TIMEOUT_MS } = options;
+
     // CRITICAL FIX: Block new transactions when in fatal state
     if (FATAL_STATE.isFatal) {
         const error = new Error(
@@ -677,9 +688,26 @@ async function transaction(callback) {
     const ctx = new TransactionContext();
     NESTED_TRANSACTION_STACK.push(ctx.id);
 
+    // Create timeout promise
+    let timeoutId = null;
+    const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+            reject(new Error(
+                `Transaction ${ctx.id} timed out after ${timeoutMs}ms. ` +
+                `The operation may have hung due to an unresponsive storage backend.`
+            ));
+        }, timeoutMs);
+    });
+
     try {
-        // Phase 0: Execute the transaction callback (collect operations)
-        await callback(ctx);
+        // Phase 0: Execute the transaction callback (collect operations) with timeout
+        await Promise.race([
+            callback(ctx),
+            timeoutPromise
+        ]);
+
+        // Clear timeout after callback completes
+        if (timeoutId) clearTimeout(timeoutId);
 
         if (ctx.operations.length === 0) {
             return {
@@ -690,14 +718,23 @@ async function transaction(callback) {
             };
         }
 
-        // Phase 1: Prepare - validate all operations
-        await preparePhase(ctx);
+        // Phase 1: Prepare - validate all operations (with new timeout)
+        const prepareTimeout = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Transaction prepare phase timed out')), timeoutMs);
+        });
+        await Promise.race([preparePhase(ctx), prepareTimeout]);
 
         // Phase 2: Journal - persist transaction intent for crash recovery
-        await writeJournal(ctx);
+        const journalTimeout = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Transaction journal phase timed out')), 5000);
+        });
+        await Promise.race([writeJournal(ctx), journalTimeout]);
 
-        // Phase 3: Commit - execute all operations
-        await commit(ctx);
+        // Phase 3: Commit - execute all operations (with new timeout)
+        const commitTimeout = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Transaction commit phase timed out')), timeoutMs);
+        });
+        await Promise.race([commit(ctx), commitTimeout]);
 
         // Phase 4: Cleanup - clear journal on success
         if (ctx.journaled) {
@@ -714,6 +751,9 @@ async function transaction(callback) {
             durationMs
         };
     } catch (error) {
+        // Clear timeout on error
+        if (timeoutId) clearTimeout(timeoutId);
+
         // Rollback on any error
         console.error(`[StorageTransaction] Transaction ${ctx.id} failed, rolling back:`, error);
         await rollback(ctx);
@@ -737,7 +777,9 @@ async function transaction(callback) {
 
 /**
  * Commit all operations in the transaction
- * 
+ * CRITICAL FIX for Issue #3: Continues attempting all writes, tracks failures,
+ * only rolls back if no operations succeeded
+ *
  * @param {TransactionContext} ctx - Transaction context
  */
 async function commit(ctx) {
@@ -746,7 +788,10 @@ async function commit(ctx) {
     }
 
     const errors = [];
+    let succeededCount = 0;
 
+    // CRITICAL FIX for Issue #3: Continue attempting all writes even if some fail
+    // Track which operations succeeded and which failed
     for (const op of ctx.operations) {
         try {
             if (op.backend === 'localstorage') {
@@ -782,17 +827,46 @@ async function commit(ctx) {
             }
 
             op.committed = true;
+            succeededCount++;
         } catch (error) {
+            // CRITICAL FIX for Issue #3: Continue processing all operations
+            // Record error but don't break - allows partial commit
             errors.push({ operation: op, error });
-            // Stop committing on first error
-            break;
+            console.warn(`[StorageTransaction] Operation failed during commit:`, {
+                backend: op.backend,
+                type: op.type,
+                key: op.key,
+                error: error.message
+            });
         }
     }
 
+    // CRITICAL FIX for Issue #3: Only rollback if no operations succeeded
+    // If some operations succeeded, we have a partial commit which is better
+    // than rolling back potentially important writes
     if (errors.length > 0) {
-        // Rollback committed operations
-        await rollback(ctx);
-        throw new Error(`Commit failed: ${errors[0].error.message}`);
+        if (succeededCount === 0) {
+            // Complete failure - rollback is appropriate
+            await rollback(ctx);
+            throw new Error(`Commit failed completely: ${errors[0].error.message}`);
+        } else {
+            // Partial success - log but don't rollback
+            // This prevents losing already-committed data
+            const partialCommitError = new Error(
+                `Commit partially succeeded: ${succeededCount}/${ctx.operations.length} operations committed, ` +
+                `${errors.length} failed. Manual intervention may be required.`
+            );
+            partialCommitError.code = 'PARTIAL_COMMIT';
+            partialCommitError.succeededCount = succeededCount;
+            partialCommitError.failedCount = errors.length;
+            partialCommitError.errors = errors;
+
+            // Still mark as committed since some writes succeeded
+            ctx.committed = true;
+            console.error(`[StorageTransaction] Partial commit: ${succeededCount} succeeded, ${errors.length} failed`);
+
+            throw partialCommitError;
+        }
     }
 
     ctx.committed = true;
