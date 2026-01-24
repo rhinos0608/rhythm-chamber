@@ -781,9 +781,10 @@ async function init(options = {}) {
     // Spotify OAuth callback - validate code format
     if (urlParams.has('code')) {
         const code = urlParams.get('code');
+        const state = urlParams.get('state') || '';
         // Basic validation: OAuth codes should be alphanumeric and reasonably long
         if (code && /^[A-Za-z0-9_-]{10,}$/.test(code)) {
-            await SpotifyController.handleSpotifyCallback(code);
+            await SpotifyController.handleSpotifyCallback(code, state);
             window.history.replaceState({}, document.title, window.location.pathname);
             return;
         } else {
@@ -1339,9 +1340,11 @@ async function handleSpotifyConnect() {
 
 /**
  * Handle Spotify OAuth callback
+ * @param {string} code - OAuth authorization code
+ * @param {string} state - OAuth state parameter for CSRF verification
  */
-async function handleSpotifyCallback(code) {
-    await SpotifyController.handleSpotifyCallback(code);
+async function handleSpotifyCallback(code, state) {
+    await SpotifyController.handleSpotifyCallback(code, state);
 }
 
 // ==========================================
