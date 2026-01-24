@@ -38,6 +38,14 @@ const CRITICAL_DEFAULTS = {
             'user-top-read'
         ]
     },
+    lemonsqueezy: {
+        storeUrl: '',
+        variantMonthly: '',
+        variantYearly: '',
+        variantLifetime: '',
+        validationEndpoint: '',
+        apiKey: ''
+    },
     stripe: {
         publishableKey: '',
         prices: {
@@ -343,6 +351,28 @@ function validateConfig(config) {
         // Validate scopes array
         if (config.spotify.scopes && !Array.isArray(config.spotify.scopes)) {
             warnings.push('spotify.scopes should be an array');
+        }
+    }
+
+    // Check Lemon Squeezy config if present
+    if (config.lemonsqueezy) {
+        if (config.lemonsqueezy.storeUrl) {
+            try {
+                new URL(config.lemonsqueezy.storeUrl);
+            } catch (e) {
+                warnings.push('lemonsqueezy.storeUrl is not a valid URL');
+            }
+        }
+        if (config.lemonsqueezy.validationEndpoint) {
+            try {
+                new URL(config.lemonsqueezy.validationEndpoint);
+            } catch (e) {
+                warnings.push('lemonsqueezy.validationEndpoint is not a valid URL');
+            }
+        }
+        // Warn if variant IDs are missing when storeUrl is configured
+        if (config.lemonsqueezy.storeUrl && !config.lemonsqueezy.variantMonthly && !config.lemonsqueezy.variantYearly) {
+            warnings.push('lemonsqueezy variant IDs are missing (variantMonthly, variantYearly)');
         }
     }
 
