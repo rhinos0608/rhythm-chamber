@@ -330,6 +330,16 @@ function formatRelativeDate(date) {
 }
 
 /**
+ * Validate session ID format to prevent injection attacks
+ * Session IDs must be alphanumeric with hyphens and underscores only
+ * @param {string} id - Session ID to validate
+ * @returns {boolean} True if valid format
+ */
+function isValidSessionId(id) {
+    return /^[a-z0-9\-_]+$/i.test(id);
+}
+
+/**
  * Handle session actions via event delegation (XSS prevention)
  * Routes click events from data-action attributes to appropriate handlers
  */
@@ -340,6 +350,12 @@ function handleSessionAction(event) {
 
     const action = target.dataset.action;
     const sessionId = target.dataset.sessionId;
+
+    // SECURITY: Validate session ID format before use
+    if (sessionId && !isValidSessionId(sessionId)) {
+        console.warn('[SidebarController] Invalid session ID format:', sessionId);
+        return;
+    }
 
     switch (action) {
         case 'sidebar-session-click':
@@ -702,9 +718,6 @@ SidebarController.destroy = function destroySidebarController() {
 
 console.log('[SidebarController] Controller loaded');
 
-// Expose on window for inline onclick handlers in rendered HTML
-// This is needed because session items use onclick="SidebarController.handleSessionClick(...)"
-if (typeof window !== 'undefined') {
-    window.SidebarController = SidebarController;
-}
+// SECURITY: Removed global window exposure to reduce attack surface
+// The controller is now accessible via ES module imports only
 
