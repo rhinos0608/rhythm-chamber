@@ -206,6 +206,11 @@ async function initialize(onProgress = () => { }) {
         const transformers = await loadTransformersJS();
         onProgress(15);
 
+        // Configure WASM path to use local files (CSP compliance)
+        // This prevents Transformers.js from fetching WASM from jsDelivr CDN
+        transformers.env.backends.onnx.wasm.wasmPaths = './js/vendor/';
+        console.log('[LocalEmbeddings] Configured local WASM path: ./js/vendor/');
+
         // Check for WebGPU (faster) or fall back to WASM
         const webGPUCheck = await checkWebGPUSupport();
         const device = webGPUCheck.supported ? 'webgpu' : 'wasm';
