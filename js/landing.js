@@ -28,6 +28,20 @@ setTimeout(() => {
 // ==========================================
 
 /**
+ * Validate license data structure
+ * @param {unknown} data - Data to validate
+ * @returns {boolean} True if valid license structure
+ */
+function isValidLicenseData(data) {
+  return (
+    data !== null &&
+    typeof data === 'object' &&
+    !Array.isArray(data) &&
+    typeof data.active === 'boolean'
+  );
+}
+
+/**
  * Detect user premium status and update CTA text accordingly
  * Shows "Premium" for new users, "Manage" for existing premium users
  */
@@ -35,7 +49,30 @@ async function initUserState() {
   try {
     // Check localStorage for premium status
     const storedLicense = localStorage.getItem('rhythm_chamber_license');
-    const isPremium = storedLicense && JSON.parse(storedLicense).active === true;
+
+    if (!storedLicense) {
+      premiumCta?.setAttribute('data-user-state', 'free');
+      return;
+    }
+
+    // SECURITY: Validate JSON.parse with try-catch and structure validation
+    let licenseData;
+    try {
+      licenseData = JSON.parse(storedLicense);
+    } catch (parseError) {
+      console.warn('[Landing] Invalid JSON in license data:', parseError);
+      premiumCta?.setAttribute('data-user-state', 'free');
+      return;
+    }
+
+    // Validate data structure before use
+    if (!isValidLicenseData(licenseData)) {
+      console.warn('[Landing] Invalid license data structure');
+      premiumCta?.setAttribute('data-user-state', 'free');
+      return;
+    }
+
+    const isPremium = licenseData.active === true;
 
     if (isPremium) {
       premiumCta?.setAttribute('data-user-state', 'premium');
