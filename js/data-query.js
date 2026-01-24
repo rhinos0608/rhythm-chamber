@@ -18,22 +18,32 @@ const logger = createLogger('DataQuery');
 function queryByTimePeriod(streams, { year, month, startDate, endDate }) {
     let filtered = streams;
 
-    // Filter by year
+    // Validate month is in range 1-12 before arithmetic
+    if (month !== undefined) {
+        const monthNum = parseInt(month);
+        if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+            return { found: false, message: 'Invalid month. Must be between 1 and 12.' };
+        }
+    }
+
+    // Filter by year (with property existence check)
     if (year) {
-        filtered = filtered.filter(s => s.year === parseInt(year));
+        const yearNum = parseInt(year);
+        filtered = filtered.filter(s => s && s.year === yearNum);
     }
 
     // Filter by month (1-indexed for user convenience)
     if (month) {
-        filtered = filtered.filter(s => s.month === parseInt(month) - 1);
+        const monthNum = parseInt(month);
+        filtered = filtered.filter(s => s && s.month === monthNum - 1);
     }
 
-    // Filter by date range
+    // Filter by date range (with property existence check)
     if (startDate) {
-        filtered = filtered.filter(s => s.date >= startDate);
+        filtered = filtered.filter(s => s && s.date >= startDate);
     }
     if (endDate) {
-        filtered = filtered.filter(s => s.date <= endDate);
+        filtered = filtered.filter(s => s && s.date <= endDate);
     }
 
     if (filtered.length === 0) {
@@ -52,7 +62,7 @@ function queryByTimePeriod(streams, { year, month, startDate, endDate }) {
 function queryByArtist(streams, artistName) {
     const searchTerm = artistName.toLowerCase();
     const filtered = streams.filter(s =>
-        s.artistName.toLowerCase().includes(searchTerm)
+        s && s.artistName && s.artistName.toLowerCase().includes(searchTerm)
     );
 
     if (filtered.length === 0) {
@@ -61,9 +71,9 @@ function queryByArtist(streams, artistName) {
 
     const result = summarizeStreams(filtered);
 
-    // Add artist-specific insights
-    result.firstListen = filtered[0]?.date;
-    result.lastListen = filtered[filtered.length - 1]?.date;
+    // Add artist-specific insights (with null safety)
+    result.firstListen = filtered[0]?.date ?? null;
+    result.lastListen = filtered[filtered.length - 1]?.date ?? null;
     result.topTracks = getTopItems(filtered, 'trackName', 5);
 
     return result;
@@ -78,7 +88,7 @@ function queryByArtist(streams, artistName) {
 function queryByTrack(streams, trackName) {
     const searchTerm = trackName.toLowerCase();
     const filtered = streams.filter(s =>
-        s.trackName.toLowerCase().includes(searchTerm)
+        s && s.trackName && s.trackName.toLowerCase().includes(searchTerm)
     );
 
     if (filtered.length === 0) {
@@ -86,9 +96,9 @@ function queryByTrack(streams, trackName) {
     }
 
     const result = summarizeStreams(filtered);
-    result.artists = [...new Set(filtered.map(s => s.artistName))];
-    result.firstListen = filtered[0]?.date;
-    result.lastListen = filtered[filtered.length - 1]?.date;
+    result.artists = [...new Set(filtered.map(s => s && s.artistName).filter(Boolean))];
+    result.firstListen = filtered[0]?.date ?? null;
+    result.lastListen = filtered[filtered.length - 1]?.date ?? null;
 
     return result;
 }
@@ -163,7 +173,7 @@ function comparePeriods(streams, period1, period2) {
 function findPeakListeningPeriod(streams, artistName) {
     const searchTerm = artistName.toLowerCase();
     const artistStreams = streams.filter(s =>
-        s.artistName.toLowerCase().includes(searchTerm)
+        s && s.artistName && s.artistName.toLowerCase().includes(searchTerm)
     );
 
     if (artistStreams.length === 0) {
@@ -173,6 +183,8 @@ function findPeakListeningPeriod(streams, artistName) {
     // Group by month
     const byMonth = {};
     for (const stream of artistStreams) {
+        // Validate year and month exist
+        if (stream.year == null || stream.month == null) continue;
         const key = `${stream.year}-${String(stream.month + 1).padStart(2, '0')}`;
         byMonth[key] = (byMonth[key] || 0) + 1;
     }
@@ -185,13 +197,13 @@ function findPeakListeningPeriod(streams, artistName) {
 
     return {
         found: true,
-        artistName: artistStreams[0].artistName, // Get exact case
+        artistName: artistStreams[0]?.artistName ?? artistName, // Get exact case
         totalPlays: artistStreams.length,
         peakPeriod: `${getMonthName(parseInt(peakMonth))} ${peakYear}`,
         peakPlays: peak[1],
         // Guard against empty array access
-        firstListen: artistStreams.length > 0 ? artistStreams[0].date : null,
-        lastListen: artistStreams.length > 0 ? artistStreams[artistStreams.length - 1].date : null,
+        firstListen: artistStreams.length > 0 ? artistStreams[0]?.date ?? null : null,
+        lastListen: artistStreams.length > 0 ? artistStreams[artistStreams.length - 1]?.date ?? null : null,
         monthlyBreakdown: Object.entries(byMonth)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 5)
@@ -204,14 +216,14 @@ function findPeakListeningPeriod(streams, artistName) {
 // ==========================================
 
 function summarizeStreams(streams) {
-    const totalMs = streams.reduce((sum, s) => sum + s.msPlayed, 0);
+    const totalMs = streams.reduce((sum, s) => sum + (s?.msPlayed || 0), 0);
     const topArtists = getTopItems(streams, 'artistName', 10);
     const topTracks = getTopItemsWithArtist(streams, 10);
-    const uniqueArtists = new Set(streams.map(s => s.artistName)).size;
-    const uniqueTracks = new Set(streams.map(s => `${s.trackName}::${s.artistName}`)).size;
+    const uniqueArtists = new Set(streams.map(s => s?.artistName).filter(Boolean)).size;
+    const uniqueTracks = new Set(streams.map(s => s?.trackName && s?.artistName ? `${s.trackName}::${s.artistName}` : null).filter(Boolean)).size;
 
-    // Date range
-    const dates = streams.map(s => s.date).sort();
+    // Date range - filter out null dates
+    const dates = streams.map(s => s?.date).filter(d => d != null).sort();
 
     return {
         found: true,
@@ -232,6 +244,8 @@ function summarizeStreams(streams) {
 function getTopItems(streams, field, limit) {
     const counts = {};
     for (const stream of streams) {
+        // Skip if stream or field is null/undefined
+        if (!stream || stream[field] == null) continue;
         const value = stream[field];
         counts[value] = (counts[value] || 0) + 1;
     }
@@ -247,6 +261,8 @@ function getTopItemsWithArtist(streams, limit) {
     const trackArtist = {};
 
     for (const stream of streams) {
+        // Skip if stream or required fields are null/undefined
+        if (!stream || stream.trackName == null) continue;
         const key = stream.trackName;
         counts[key] = (counts[key] || 0) + 1;
         trackArtist[key] = stream.artistName;

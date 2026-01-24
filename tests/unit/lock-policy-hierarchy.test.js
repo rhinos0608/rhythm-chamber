@@ -174,10 +174,13 @@ describe('LockPolicy Hierarchy', () => {
 
         it('should handle multiple active operations', () => {
             // Both system and data operations are active
+            // privacy_clear conflicts with everything, so it should be blocked due to conflict
             const result = LockPolicy.canAcquireInOrder(['user_message'], ['privacy_clear', 'chat_save']);
             expect(result.allowed).toBe(false);
             expect(result.resolution).toBe('abort');
-            expect(result.reason).toContain('Lock hierarchy violation');
+            // privacy_clear conflicts with everything (has wildcard conflict)
+            expect(result.reason).toContain('Blocked by');
+            expect(result.conflicts).toContain('privacy_clear');
         });
     });
 
@@ -185,12 +188,14 @@ describe('LockPolicy Hierarchy', () => {
         it('should use active operations from OperationLock when not provided', async () => {
             // Acquire a lock
             await mockOperationLock.acquire('privacy_clear');
-            
-            // Try to acquire user operation (should fail due to hierarchy)
+
+            // Try to acquire user operation (should fail due to conflict)
+            // privacy_clear conflicts with everything (has wildcard conflict)
             const result = LockPolicy.canAcquireInOrder(['user_message']);
             expect(result.allowed).toBe(false);
             expect(result.resolution).toBe('abort');
-            expect(result.reason).toContain('Lock hierarchy violation');
+            expect(result.reason).toContain('Blocked by');
+            expect(result.conflicts).toContain('privacy_clear');
         });
 
         it('should allow acquiring when OperationLock has no active locks', async () => {

@@ -70,6 +70,7 @@ vi.mock('../../js/services/session-manager.js', () => ({
         init: vi.fn(),
         setUserContext: vi.fn(),
         addMessageToHistory: vi.fn(),
+        addMessagesToHistory: vi.fn(),
         getHistory: vi.fn(() => []),
         saveConversation: vi.fn(),
         flushPendingSaveAsync: vi.fn(),
@@ -105,7 +106,7 @@ vi.mock('../../js/services/llm-provider-routing-service.js', () => ({
     LLMProviderRoutingService: {
         init: vi.fn(),
         callLLM: vi.fn(() => Promise.resolve({
-            choices: [{ message: { content: 'Test response' } }]
+            choices: [{ message: { role: 'assistant', content: 'Test response' } }]
         })),
         buildProviderConfig: vi.fn(() => ({
             provider: 'openrouter',
@@ -150,10 +151,15 @@ vi.mock('../../js/services/fallback-response-service.js', () => ({
 // Create mock window objects
 function createMockWindow() {
     return {
+        location: {
+            origin: 'http://localhost:3000',
+            href: 'http://localhost:3000/app.html'
+        },
         SessionManager: {
             init: vi.fn(),
             setUserContext: vi.fn(),
             addMessageToHistory: vi.fn(),
+            addMessagesToHistory: vi.fn(),
             getHistory: vi.fn(() => []),
             saveConversation: vi.fn(),
             flushPendingSaveAsync: vi.fn(),
@@ -198,7 +204,7 @@ function createMockWindow() {
         LLMProviderRoutingService: {
             init: vi.fn(),
             callLLM: vi.fn(() => Promise.resolve({
-                choices: [{ message: { content: 'Test response' } }]
+                choices: [{ message: { role: 'assistant', content: 'Test response' } }]
             })),
             buildProviderConfig: vi.fn(() => ({
                 provider: 'openrouter',
@@ -255,6 +261,7 @@ describe('Chat TimeoutBudget Integration', () => {
         // Add missing window methods
         mockWindow.addEventListener = vi.fn();
         mockWindow.removeEventListener = vi.fn();
+        mockWindow.dispatchEvent = vi.fn();
 
         globalThis.window = mockWindow;
 
@@ -274,7 +281,7 @@ describe('Chat TimeoutBudget Integration', () => {
         );
 
         // Send a message
-        await Chat.sendMessage('Hello', null, { bypassQueue: true });
+        await Chat.sendMessage('Hello', null, { bypassQueue: true, allowBypass: true });
 
         // Verify timeout budget was allocated for chat turn
         expect(TimeoutBudget.allocate).toHaveBeenCalledWith('chat_turn', 60000);
@@ -292,7 +299,7 @@ describe('Chat TimeoutBudget Integration', () => {
         );
 
         // Send a message
-        await Chat.sendMessage('Hello', null, { bypassQueue: true });
+        await Chat.sendMessage('Hello', null, { bypassQueue: true, allowBypass: true });
 
         // Verify timeout budget was released
         expect(TimeoutBudget.release).toHaveBeenCalled();
@@ -310,7 +317,7 @@ describe('Chat TimeoutBudget Integration', () => {
         );
 
         // Send a message
-        await Chat.sendMessage('Test message', null, { bypassQueue: true });
+        await Chat.sendMessage('Test message', null, { bypassQueue: true, allowBypass: true });
 
         // Verify budget was allocated with correct operation name
         expect(TimeoutBudget.allocate).toHaveBeenCalledWith('chat_turn', 60000);
@@ -318,9 +325,10 @@ describe('Chat TimeoutBudget Integration', () => {
 
     it('should handle errors and still release budget', async () => {
         const { TimeoutBudget } = await import('../../js/services/timeout-budget-manager.js');
+        const { LLMProviderRoutingService } = await import('../../js/services/llm-provider-routing-service.js');
 
         // Make LLM call fail
-        mockWindow.LLMProviderRoutingService.callLLM.mockRejectedValue(new Error('LLM error'));
+        LLMProviderRoutingService.callLLM.mockRejectedValue(new Error('LLM error'));
 
         // Initialize chat
         await Chat.initChat(
@@ -331,7 +339,7 @@ describe('Chat TimeoutBudget Integration', () => {
         );
 
         // Send a message and expect error
-        const result = await Chat.sendMessage('Test message', null, { bypassQueue: true });
+        const result = await Chat.sendMessage('Test message', null, { bypassQueue: true, allowBypass: true });
         expect(result.status).toBe('error');
         expect(result.error).toBe('LLM error');
 
@@ -362,7 +370,7 @@ describe('Chat TimeoutBudget Integration', () => {
         );
 
         // Send a message
-        await Chat.sendMessage('Test message', null, { bypassQueue: true });
+        await Chat.sendMessage('Test message', null, { bypassQueue: true, allowBypass: true });
 
         // Verify budget was allocated with correct timeout
         expect(TimeoutBudget.allocate).toHaveBeenCalledWith('chat_turn', 60000);

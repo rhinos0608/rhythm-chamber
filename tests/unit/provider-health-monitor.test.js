@@ -10,8 +10,42 @@ import { ProviderHealthMonitor, HealthStatus } from '../../js/services/provider-
 // Mock EventBus
 vi.mock('../../js/services/event-bus.js', () => ({
     EventBus: {
-        subscribe: vi.fn(),
+        on: vi.fn(),
         emit: vi.fn()
+    }
+}));
+
+// Mock ProviderHealthAuthority
+vi.mock('../../js/services/provider-health-authority.js', () => ({
+    ProviderHealthAuthority: {
+        getProviderSnapshot: vi.fn(() => ({
+            provider: 'test',
+            status: 'unknown',
+            successCount: 0,
+            failureCount: 0,
+            avgLatencyMs: 0,
+            lastSuccessTime: 0,
+            lastFailureTime: 0,
+            blacklistExpiry: null,
+            circuitState: 'closed',
+            cooldownRemaining: 0
+        })),
+        getHealthSummary: vi.fn(() => ({
+            total: 4,
+            healthy: 0,
+            degraded: 0,
+            unhealthy: 0,
+            blacklisted: 0,
+            unknown: 4,
+            overallStatus: 'unknown'
+        }))
+    },
+    HealthStatus: {
+        HEALTHY: 'healthy',
+        DEGRADED: 'degraded',
+        UNHEALTHY: 'unhealthy',
+        BLACKLISTED: 'blacklisted',
+        UNKNOWN: 'unknown'
     }
 }));
 

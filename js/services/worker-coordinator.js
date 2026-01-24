@@ -206,8 +206,31 @@ async function createWorker(type, workerPath, initHandlers) {
 
             return worker;
         } catch (error) {
+            // Clean up any partially created resources
+            const workerInstance = entry.instance;
             entry.instance = null;
             entry.initialized = false;
+
+            // Terminate the worker if it was created before the error
+            if (workerInstance) {
+                try {
+                    workerInstance.onmessage = null;
+                    workerInstance.onerror = null;
+                    workerInstance.terminate();
+                } catch (terminateError) {
+                    console.warn(`[WorkerCoordinator] Error terminating failed ${type} worker:`, terminateError);
+                }
+            }
+
+            // Call custom cleanup if registered
+            if (entry.cleanup) {
+                try {
+                    entry.cleanup();
+                } catch (cleanupError) {
+                    console.warn(`[WorkerCoordinator] Custom cleanup error for ${type}:`, cleanupError);
+                }
+            }
+
             throw new Error(`Failed to create ${type} worker: ${error.message}`);
         } finally {
             // Clear the promise so future callers can retry if needed

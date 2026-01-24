@@ -16,11 +16,11 @@ function mockCrypto() {
         value: {
             subtle: {
                 generateKey: async (algorithm, extractable, keyUsages) => {
-                    // Return mock key pair
+                    // Return mock key pair with extractable property
                     if (algorithm.name === 'RSA-OAEP') {
                         return {
-                            publicKey: { type: 'public', algorithm },
-                            privateKey: { type: 'private', algorithm }
+                            publicKey: { type: 'public', algorithm, extractable: true },
+                            privateKey: { type: 'private', algorithm, extractable }
                         };
                     }
                     // AES key
@@ -32,6 +32,10 @@ function mockCrypto() {
                 },
                 decrypt: async (algorithm, key, data) => {
                     // Return mock decrypted data
+                    // But fail for invalid data (non-Uint8Array or wrong length)
+                    if (!data || !(data instanceof Uint8Array) || data.length < 16) {
+                        throw new Error('Decryption failed');
+                    }
                     const encoder = new TextEncoder();
                     return encoder.encode('decrypted data');
                 },

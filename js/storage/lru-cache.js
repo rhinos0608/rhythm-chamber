@@ -118,6 +118,9 @@ export class LRUCache {
             const [evictKey] = unpinnedEntries[0];
             this._cache.delete(evictKey);
 
+            // Track pending eviction for async cleanup
+            this._pendingEvictions.push(evictKey);
+
             // Call eviction callback if set
             if (this.onEvict) {
                 try {

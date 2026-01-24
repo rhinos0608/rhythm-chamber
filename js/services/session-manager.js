@@ -429,8 +429,8 @@ async function loadSession(sessionId) {
 
         console.log('[SessionManager] Loaded session:', sessionId, 'with', (session.messages || []).length, 'messages');
         notifySessionUpdate('session:loaded', { sessionId, messageCount: (session.messages || []).length });
-        // Return promise for storage operation to allow caller to handle completion
-        return savePromise || Promise.resolve(session);
+        // Return the session, not the save promise
+        return session;
 
     } catch (e) {
         console.error('[SessionManager] Failed to load session:', e);

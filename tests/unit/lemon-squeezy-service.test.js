@@ -8,6 +8,23 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ConfigLoader } from '../../js/services/config-loader.js';
 
+// Mock crypto.subtle for signature verification
+// Use Object.defineProperty because crypto is read-only in happy-dom
+const mockVerify = vi.fn().mockResolvedValue(true);
+Object.defineProperty(global, 'crypto', {
+    value: {
+        subtle: {
+            importKey: vi.fn().mockResolvedValue({}),
+            verify: mockVerify,
+            digest: vi.fn().mockResolvedValue(
+                new Uint8Array(32).fill(0x12) // Mock hash
+            )
+        }
+    },
+    writable: true,
+    configurable: true
+});
+
 // Mock ConfigLoader
 vi.mock('../../js/services/config-loader.js', () => ({
     ConfigLoader: {
@@ -18,23 +35,30 @@ vi.mock('../../js/services/config-loader.js', () => ({
     }
 }));
 
+// Mock LicenseVerifier
+vi.mock('../../js/security/license-verifier.js', () => ({
+    LicenseVerifier: {
+        storeLicense: vi.fn().mockResolvedValue(true),
+        loadLicense: vi.fn().mockResolvedValue(null),
+        clearLicense: vi.fn(),
+        verifyLicense: vi.fn().mockResolvedValue({ valid: false, error: 'INVALID_FORMAT' }),
+        isPremium: vi.fn().mockResolvedValue(false),
+        getCurrentTier: vi.fn().mockResolvedValue('sovereign'),
+        hasFeatureAccess: vi.fn().mockResolvedValue(false),
+        parseJWT: vi.fn(),
+        generateDeviceFingerprint: vi.fn().mockResolvedValue('mock-fingerprint'),
+        LICENSE_STORAGE_KEY: 'rhythm_chamber_license',
+        LICENSE_CACHE_KEY: 'rhythm_chamber_license_cache',
+        LICENSE_CACHE_DURATION: 86400000
+    }
+}));
+
 // Mock window.LemonSqueezy
 const mockLemonSqueezy = {
     Url: {
         Open: vi.fn()
     },
     Setup: vi.fn()
-};
-
-// Mock crypto.subtle for signature verification
-global.crypto = {
-    subtle: {
-        importKey: vi.fn().mockResolvedValue({}),
-        verify: vi.fn().mockResolvedValue(true),
-        digest: vi.fn().mockResolvedValue(
-            new Uint8Array(32).fill(0x12) // Mock hash
-        )
-    }
 };
 
 describe('LemonSqueezyService', () => {
@@ -148,10 +172,10 @@ describe('LemonSqueezyService', () => {
         beforeEach(async () => {
             // Mock ConfigLoader to return a store URL
             vi.mocked(ConfigLoader.get).mockImplementation((key, defaultValue) => {
-                if (key === 'LEMONSQUEEZY_STORE_URL') return 'https://test.lemonsqueezy.com';
-                if (key === 'LEMON_VARIANT_CHAMBER_MONTHLY') return 'variant-monthly-123';
-                if (key === 'LEMON_VARIANT_CHAMBER_YEARLY') return 'variant-yearly-456';
-                if (key === 'LEMON_VARIANT_CHAMBER_LIFETIME') return 'variant-lifetime-789';
+                if (key === 'lemonsqueezy.storeUrl') return 'https://test.lemonsqueezy.com';
+                if (key === 'lemonsqueezy.variantMonthly') return 'variant-monthly-123';
+                if (key === 'lemonsqueezy.variantYearly') return 'variant-yearly-456';
+                if (key === 'lemonsqueezy.variantLifetime') return 'variant-lifetime-789';
                 return defaultValue;
             });
 
@@ -245,12 +269,25 @@ describe('LemonSqueezyService', () => {
     });
 
     describe('License Activation - Success', () => {
+        // Helper to create a mock JWT-like license key for testing
+        function createMockLicenseKey(tier = 'chamber') {
+            // Create JWT-like format: header.payload.signature
+            const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+            const payload = btoa(JSON.stringify({
+                tier,
+                iat: Math.floor(Date.now() / 1000),
+                exp: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60 // 1 year from now
+            }));
+            // Mock signature (base64 encoded mock value)
+            const signature = btoa('mock-signature');
+            return `${header}.${payload}.${signature}`;
+        }
+
         it('should activate valid developer license', async () => {
             const { LemonSqueezyService } = await import('../../js/services/lemon-squeezy-service.js');
 
-            // Create a developer license key
-            const licenseData = { tier: 'chamber', activatedAt: '2026-01-21' };
-            const licenseKey = btoa(JSON.stringify(licenseData));
+            // Create a mock JWT-like license key
+            const licenseKey = createMockLicenseKey('chamber');
 
             const result = await LemonSqueezyService.activateLicense(licenseKey);
 
@@ -261,8 +298,7 @@ describe('LemonSqueezyService', () => {
         it('should store activated license in localStorage', async () => {
             const { LemonSqueezyService } = await import('../../js/services/lemon-squeezy-service.js');
 
-            const licenseData = { tier: 'chamber', activatedAt: '2026-01-21' };
-            const licenseKey = btoa(JSON.stringify(licenseData));
+            const licenseKey = createMockLicenseKey('chamber');
 
             await LemonSqueezyService.activateLicense(licenseKey);
 
@@ -279,8 +315,7 @@ describe('LemonSqueezyService', () => {
             const eventSpy = vi.fn();
             window.addEventListener('licenseActivated', eventSpy);
 
-            const licenseData = { tier: 'chamber', activatedAt: '2026-01-21' };
-            const licenseKey = btoa(JSON.stringify(licenseData));
+            const licenseKey = createMockLicenseKey('chamber');
 
             await LemonSqueezyService.activateLicense(licenseKey);
 
@@ -313,12 +348,23 @@ describe('LemonSqueezyService', () => {
     });
 
     describe('License Deactivation', () => {
+        // Helper to create a mock JWT-like license key for testing
+        function createMockLicenseKey(tier = 'chamber') {
+            const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+            const payload = btoa(JSON.stringify({
+                tier,
+                iat: Math.floor(Date.now() / 1000),
+                exp: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60
+            }));
+            const signature = btoa('mock-signature');
+            return `${header}.${payload}.${signature}`;
+        }
+
         it('should remove license from localStorage', async () => {
             const { LemonSqueezyService } = await import('../../js/services/lemon-squeezy-service.js');
 
             // First activate a license
-            const licenseData = { tier: 'chamber', activatedAt: '2026-01-21' };
-            const licenseKey = btoa(JSON.stringify(licenseData));
+            const licenseKey = createMockLicenseKey('chamber');
             await LemonSqueezyService.activateLicense(licenseKey);
 
             expect(localStorage.getItem('rhythm_chamber_license')).toBeDefined();

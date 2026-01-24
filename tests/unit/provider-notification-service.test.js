@@ -7,11 +7,42 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ProviderNotificationService, NotificationType, NotificationSeverity } from '../../js/services/provider-notification-service.js';
 
-// Mock EventBus
-vi.mock('../../js/services/event-bus.js', () => ({
-    EventBus: {
-        subscribe: vi.fn(),
-        emit: vi.fn()
+// Mock EventBus with handler tracking
+// The mock factory is defined inline to avoid hoisting issues
+vi.mock('../../js/services/event-bus.js', () => {
+    const handlers = new Map();
+
+    const mockEventBus = {
+        on: vi.fn((event, handler) => {
+            if (!handlers.has(event)) {
+                handlers.set(event, []);
+            }
+            handlers.get(event).push(handler);
+            return vi.fn(); // unsubscribe function
+        }),
+        emit: vi.fn((event, data) => {
+            // Call registered handlers
+            const eventHandlers = handlers.get(event) || [];
+            eventHandlers.forEach(handler => handler(event, data));
+        }),
+        once: vi.fn(() => vi.fn()),
+        off: vi.fn(),
+        // Helper for tests to get handlers
+        _getHandlers: (event) => handlers.get(event) || [],
+        _clearHandlers: () => handlers.clear(),
+        // Internal access to handlers map for tests
+        _handlers: handlers
+    };
+
+    return {
+        EventBus: mockEventBus
+    };
+});
+
+// Mock Settings module for toast notifications
+vi.mock('../../js/settings.js', () => ({
+    Settings: {
+        showToast: vi.fn()
     }
 }));
 
@@ -19,41 +50,38 @@ describe('ProviderNotificationService', () => {
     let service;
     let mockEventBus;
     let mockSettings;
+    let mockHandlers;
 
     beforeEach(async () => {
         // Get mocked EventBus
         const { EventBus } = await import('../../js/services/event-bus.js');
         mockEventBus = EventBus;
+        mockHandlers = mockEventBus._handlers;
 
-        // Create mock Settings
-        mockSettings = {
-            showToast: vi.fn()
-        };
+        // Get mocked Settings
+        const { Settings } = await import('../../js/settings.js');
+        mockSettings = Settings;
 
         // Clear mocks
         vi.clearAllMocks();
-        mockEventBus.subscribe.mockClear();
+        mockEventBus.on.mockClear();
         mockEventBus.emit.mockClear();
         mockSettings.showToast.mockClear();
 
+        // Clear handlers
+        mockEventBus._clearHandlers();
+
         // Create fresh instance
         service = new ProviderNotificationService();
-
-        // Mock global Settings
-        global.Settings = mockSettings;
-    });
-
-    afterEach(() => {
-        delete global.Settings;
     });
 
     describe('Initialization', () => {
         it('should subscribe to provider events', () => {
-            expect(mockEventBus.subscribe).toHaveBeenCalledWith('PROVIDER:FALLBACK', expect.any(Function));
-            expect(mockEventBus.subscribe).toHaveBeenCalledWith('PROVIDER:RECOVERED', expect.any(Function));
-            expect(mockEventBus.subscribe).toHaveBeenCalledWith('PROVIDER:BLACKLISTED', expect.any(Function));
-            expect(mockEventBus.subscribe).toHaveBeenCalledWith('PROVIDER:FAILURE', expect.any(Function));
-            expect(mockEventBus.subscribe).toHaveBeenCalledWith('PROVIDER:ALL_FAILED', expect.any(Function));
+            expect(mockEventBus.on).toHaveBeenCalledWith('PROVIDER:FALLBACK', expect.any(Function));
+            expect(mockEventBus.on).toHaveBeenCalledWith('PROVIDER:RECOVERED', expect.any(Function));
+            expect(mockEventBus.on).toHaveBeenCalledWith('PROVIDER:BLACKLISTED', expect.any(Function));
+            expect(mockEventBus.on).toHaveBeenCalledWith('PROVIDER:FAILURE', expect.any(Function));
+            expect(mockEventBus.on).toHaveBeenCalledWith('PROVIDER:ALL_FAILED', expect.any(Function));
         });
 
         it('should be enabled by default', () => {
@@ -63,9 +91,7 @@ describe('ProviderNotificationService', () => {
 
     describe('Provider Fallback Notifications', () => {
         it('should handle provider fallback event', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:FALLBACK'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:FALLBACK')[0];
 
             callback('PROVIDER:FALLBACK', {
                 fromProvider: 'openrouter',
@@ -81,9 +107,7 @@ describe('ProviderNotificationService', () => {
         });
 
         it('should create appropriate fallback message', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:FALLBACK'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:FALLBACK')[0];
 
             callback('PROVIDER:FALLBACK', {
                 fromProvider: 'openrouter',
@@ -98,9 +122,7 @@ describe('ProviderNotificationService', () => {
         });
 
         it('should include switch back action', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:FALLBACK'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:FALLBACK')[0];
 
             callback('PROVIDER:FALLBACK', {
                 fromProvider: 'openrouter',
@@ -117,9 +139,7 @@ describe('ProviderNotificationService', () => {
 
     describe('Provider Recovery Notifications', () => {
         it('should handle provider recovered event', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:RECOVERED'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:RECOVERED')[0];
 
             callback('PROVIDER:RECOVERED', {
                 provider: 'ollama'
@@ -132,9 +152,7 @@ describe('ProviderNotificationService', () => {
         });
 
         it('should include switch to recovered provider action', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:RECOVERED'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:RECOVERED')[0];
 
             callback('PROVIDER:RECOVERED', {
                 provider: 'ollama'
@@ -150,9 +168,7 @@ describe('ProviderNotificationService', () => {
 
     describe('Provider Blacklist Notifications', () => {
         it('should handle provider blacklisted event', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:BLACKLISTED'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:BLACKLISTED')[0];
 
             const expiry = new Date(Date.now() + 300000).toISOString();
             callback('PROVIDER:BLACKLISTED', {
@@ -168,9 +184,7 @@ describe('ProviderNotificationService', () => {
         });
 
         it('should display expiry time in blacklist message', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:BLACKLISTED'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:BLACKLISTED')[0];
 
             const expiry = new Date(Date.now() + 300000);
             callback('PROVIDER:BLACKLISTED', {
@@ -186,9 +200,7 @@ describe('ProviderNotificationService', () => {
         });
 
         it('should suggest alternative providers', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:BLACKLISTED'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:BLACKLISTED')[0];
 
             callback('PROVIDER:BLACKLISTED', {
                 provider: 'openrouter',
@@ -206,9 +218,7 @@ describe('ProviderNotificationService', () => {
 
     describe('Provider Error Notifications', () => {
         it('should handle provider failure event', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:FAILURE'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:FAILURE')[0];
 
             const error = new Error('Connection refused');
             callback('PROVIDER:FAILURE', {
@@ -223,9 +233,7 @@ describe('ProviderNotificationService', () => {
         });
 
         it('should provide Ollama-specific error guidance', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:FAILURE'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:FAILURE')[0];
 
             const error = new Error('ECONNREFUSED');
             callback('PROVIDER:FAILURE', {
@@ -239,9 +247,7 @@ describe('ProviderNotificationService', () => {
         });
 
         it('should provide LM Studio-specific error guidance', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:FAILURE'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:FAILURE')[0];
 
             const error = new Error('ECONNREFUSED');
             callback('PROVIDER:FAILURE', {
@@ -255,9 +261,7 @@ describe('ProviderNotificationService', () => {
         });
 
         it('should provide OpenRouter-specific error guidance for auth errors', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:FAILURE'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:FAILURE')[0];
 
             const error = new Error('401 Unauthorized');
             callback('PROVIDER:FAILURE', {
@@ -273,9 +277,7 @@ describe('ProviderNotificationService', () => {
 
     describe('All Providers Failed Notifications', () => {
         it('should handle all providers failed event', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:ALL_FAILED'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:ALL_FAILED')[0];
 
             callback('PROVIDER:ALL_FAILED', {
                 attempts: [
@@ -292,9 +294,7 @@ describe('ProviderNotificationService', () => {
         });
 
         it('should list all failed providers', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:ALL_FAILED'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:ALL_FAILED')[0];
 
             callback('PROVIDER:ALL_FAILED', {
                 attempts: [
@@ -313,9 +313,7 @@ describe('ProviderNotificationService', () => {
 
     describe('Notification History', () => {
         it('should maintain notification history', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:FALLBACK'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:FALLBACK')[0];
 
             callback('PROVIDER:FALLBACK', {
                 fromProvider: 'openrouter',
@@ -329,9 +327,7 @@ describe('ProviderNotificationService', () => {
         });
 
         it('should limit history size', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:FALLBACK'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:FALLBACK')[0];
 
             // Generate more notifications than max history size
             for (let i = 0; i < 60; i++) {
@@ -347,9 +343,7 @@ describe('ProviderNotificationService', () => {
         });
 
         it('should clear notification history', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:FALLBACK'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:FALLBACK')[0];
 
             callback('PROVIDER:FALLBACK', {
                 fromProvider: 'openrouter',
@@ -378,9 +372,7 @@ describe('ProviderNotificationService', () => {
         it('should not show notifications when disabled', () => {
             service.disable();
 
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:FALLBACK'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:FALLBACK')[0];
 
             callback('PROVIDER:FALLBACK', {
                 fromProvider: 'openrouter',
@@ -395,9 +387,7 @@ describe('ProviderNotificationService', () => {
             service.disable();
             service.enable();
 
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:FALLBACK'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:FALLBACK')[0];
 
             callback('PROVIDER:FALLBACK', {
                 fromProvider: 'openrouter',
@@ -411,9 +401,7 @@ describe('ProviderNotificationService', () => {
 
     describe('Toast Integration', () => {
         it('should show toast notification when enabled', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:FALLBACK'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:FALLBACK')[0];
 
             callback('PROVIDER:FALLBACK', {
                 fromProvider: 'openrouter',
@@ -425,9 +413,7 @@ describe('ProviderNotificationService', () => {
         });
 
         it('should use appropriate duration for error notifications', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:FAILURE'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:FAILURE')[0];
 
             callback('PROVIDER:FAILURE', {
                 provider: 'ollama',
@@ -438,9 +424,7 @@ describe('ProviderNotificationService', () => {
         });
 
         it('should use default duration for non-error notifications', () => {
-            const callback = mockEventBus.subscribe.mock.calls.find(
-                call => call[0] === 'PROVIDER:RECOVERED'
-            )[1];
+            const callback = mockHandlers.get('PROVIDER:RECOVERED')[0];
 
             callback('PROVIDER:RECOVERED', {
                 provider: 'ollama'

@@ -130,6 +130,27 @@ function createMockSession(id, messages = []) {
     };
 }
 
+// Helper to generate valid UUID v4 format IDs for tests
+function generateMockUUID(suffix = '') {
+    // Generate deterministic UUID based on suffix for consistency
+    const hash = suffix.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const hex = (hash + 0x10000).toString(16).substring(1);
+
+    // UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+    // where x is any hex digit and y is 8, 9, a, or b
+    const segment1 = hex.padStart(8, '0').substring(0, 8);
+    const segment2 = '0000';
+    // 4xxx format - need exactly 4 characters
+    const seg3Hex = hex.padStart(3, '0').substring(0, 3);
+    const segment3 = `4${seg3Hex}`;
+    // yxxx format where y is 8, 9, a, or b - need exactly 4 characters
+    const seg4Hex = hex.padStart(3, '0').substring(0, 3);
+    const segment4 = `8${seg4Hex}`;
+    const segment5 = hex.padStart(12, '0').substring(0, 12);
+
+    return `${segment1}-${segment2}-${segment3}-${segment4}-${segment5}`;
+}
+
 // ==========================================
 // Setup & Teardown
 // ==========================================
@@ -283,7 +304,7 @@ describe('SessionManager Data Access', () => {
     it('should add message to history', async () => {
         await SessionManager.createNewSession();
         const message = { role: 'user', content: 'Hello' };
-        SessionManager.addMessageToHistory(message);
+        await SessionManager.addMessageToHistory(message);
 
         const history = SessionManager.getHistory();
         expect(history).toContainEqual(message);
@@ -301,17 +322,17 @@ describe('SessionManager Data Access', () => {
     it('should tag message with data version', async () => {
         await SessionManager.createNewSession();
         const message = { role: 'user', content: 'Hello' };
-        SessionManager.addMessageToHistory(message);
+        await SessionManager.addMessageToHistory(message);
 
         expect(mockDataVersion.tagMessage).toHaveBeenCalledWith(message);
     });
 
     it('should remove message from history by index', async () => {
         await SessionManager.createNewSession();
-        SessionManager.addMessageToHistory({ role: 'user', content: 'First' });
-        SessionManager.addMessageToHistory({ role: 'assistant', content: 'Response' });
+        await SessionManager.addMessageToHistory({ role: 'user', content: 'First' });
+        await SessionManager.addMessageToHistory({ role: 'assistant', content: 'Response' });
 
-        const removed = SessionManager.removeMessageFromHistory(0);
+        const removed = await SessionManager.removeMessageFromHistory(0);
         expect(removed).toBe(true);
 
         const history = SessionManager.getHistory();
@@ -321,19 +342,19 @@ describe('SessionManager Data Access', () => {
 
     it('should return false when removing invalid index', async () => {
         await SessionManager.createNewSession();
-        SessionManager.addMessageToHistory({ role: 'user', content: 'Test' });
+        await SessionManager.addMessageToHistory({ role: 'user', content: 'Test' });
 
-        const removed = SessionManager.removeMessageFromHistory(10);
+        const removed = await SessionManager.removeMessageFromHistory(10);
         expect(removed).toBe(false);
     });
 
     it('should truncate history to length', async () => {
         await SessionManager.createNewSession();
         for (let i = 0; i < 10; i++) {
-            SessionManager.addMessageToHistory({ role: 'user', content: `Message ${i}` });
+            await SessionManager.addMessageToHistory({ role: 'user', content: `Message ${i}` });
         }
 
-        SessionManager.truncateHistory(5);
+        await SessionManager.truncateHistory(5);
         expect(SessionManager.getHistory()).toHaveLength(5);
     });
 
@@ -344,7 +365,7 @@ describe('SessionManager Data Access', () => {
             { role: 'assistant', content: 'New response' }
         ];
 
-        SessionManager.replaceHistory(newMessages);
+        await SessionManager.replaceHistory(newMessages);
         expect(SessionManager.getHistory()).toEqual(newMessages);
     });
 });
@@ -356,7 +377,7 @@ describe('SessionManager Data Access', () => {
 describe('SessionManager Persistence', () => {
     it('should save current session', async () => {
         const sessionId = await SessionManager.createNewSession();
-        SessionManager.addMessageToHistory({ role: 'user', content: 'Test' });
+        await SessionManager.addMessageToHistory({ role: 'user', content: 'Test' });
 
         await SessionManager.saveCurrentSession();
 
@@ -371,7 +392,7 @@ describe('SessionManager Persistence', () => {
     it('should limit saved messages to MAX_SAVED_MESSAGES', async () => {
         await SessionManager.createNewSession();
         for (let i = 0; i < 150; i++) {
-            SessionManager.addMessageToHistory({ role: 'user', content: `Message ${i}` });
+            await SessionManager.addMessageToHistory({ role: 'user', content: `Message ${i}` });
         }
 
         await SessionManager.saveCurrentSession();
@@ -404,46 +425,49 @@ describe('SessionManager Persistence', () => {
 
 describe('SessionManager Loading', () => {
     it('should load existing session', async () => {
-        const mockSession = createMockSession('existing-id', [
+        const existingId = generateMockUUID('existing-id');
+        const mockSession = createMockSession(existingId, [
             { role: 'user', content: 'Loaded message' }
         ]);
         mockStorage.getSession.mockResolvedValue(mockSession);
 
-        const loaded = await SessionManager.loadSession('existing-id');
+        const loaded = await SessionManager.loadSession(existingId);
         expect(loaded).toEqual(mockSession);
-        expect(SessionManager.getCurrentSessionId()).toBe('existing-id');
+        expect(SessionManager.getCurrentSessionId()).toBe(existingId);
     });
 
     it('should return null for non-existent session', async () => {
         mockStorage.getSession.mockResolvedValue(null);
 
-        const loaded = await SessionManager.loadSession('non-existent');
+        const loaded = await SessionManager.loadSession(generateMockUUID('non-existent'));
         expect(loaded).toBeNull();
     });
 
     it('should return null for invalid session', async () => {
+        const invalidId = generateMockUUID('invalid');
         mockStorage.getSession.mockResolvedValue({
-            id: 'invalid',
+            id: invalidId,
             createdAt: '2023-01-01'
             // Missing messages array
         });
 
-        const loaded = await SessionManager.loadSession('invalid');
+        const loaded = await SessionManager.loadSession(invalidId);
         expect(loaded).toBeNull();
     });
 
     it('should emit session:loaded event', async () => {
-        const mockSession = createMockSession('load-id', [
+        const loadId = generateMockUUID('load-id');
+        const mockSession = createMockSession(loadId, [
             { role: 'user', content: 'Test' }
         ]);
         mockStorage.getSession.mockResolvedValue(mockSession);
 
-        await SessionManager.loadSession('load-id');
+        await SessionManager.loadSession(loadId);
 
         expect(mockEventBus.emit).toHaveBeenCalledWith(
             'session:loaded',
             expect.objectContaining({
-                sessionId: 'load-id'
+                sessionId: loadId
             })
         );
     });
@@ -456,22 +480,23 @@ describe('SessionManager Loading', () => {
 describe('SessionManager Switching', () => {
     it('should switch to another session', async () => {
         const firstId = await SessionManager.createNewSession();
-        SessionManager.addMessageToHistory({ role: 'user', content: 'First session' });
+        await SessionManager.addMessageToHistory({ role: 'user', content: 'First session' });
 
-        const mockSession = createMockSession('second-id', [
+        const secondId = generateMockUUID('second-id');
+        const mockSession = createMockSession(secondId, [
             { role: 'user', content: 'Second session' }
         ]);
         mockStorage.getSession.mockResolvedValue(mockSession);
 
-        const switched = await SessionManager.switchSession('second-id');
+        const switched = await SessionManager.switchSession(secondId);
 
         expect(switched).toBe(true);
-        expect(SessionManager.getCurrentSessionId()).toBe('second-id');
+        expect(SessionManager.getCurrentSessionId()).toBe(secondId);
     });
 
     it('should save current session before switching when there is a pending save', async () => {
         const firstId = await SessionManager.createNewSession();
-        SessionManager.addMessageToHistory({ role: 'user', content: 'Before switch' });
+        await SessionManager.addMessageToHistory({ role: 'user', content: 'Before switch' });
 
         // Trigger a debounced save (which creates autoSaveTimeoutId)
         SessionManager.saveConversation(100);
@@ -479,10 +504,11 @@ describe('SessionManager Switching', () => {
         // Wait a bit and clear the timeout to simulate immediate save
         await new Promise(resolve => setTimeout(resolve, 50));
 
-        const mockSession = createMockSession('second-id', []);
+        const secondId = generateMockUUID('second-id');
+        const mockSession = createMockSession(secondId, []);
         mockStorage.getSession.mockResolvedValue(mockSession);
 
-        await SessionManager.switchSession('second-id');
+        await SessionManager.switchSession(secondId);
 
         // saveSession should be called (either from switchSession or the debounced save)
         expect(mockStorage.saveSession).toHaveBeenCalled();
@@ -492,22 +518,23 @@ describe('SessionManager Switching', () => {
         await SessionManager.createNewSession();
         mockStorage.getSession.mockResolvedValue(null);
 
-        const switched = await SessionManager.switchSession('non-existent');
+        const switched = await SessionManager.switchSession(generateMockUUID('non-existent'));
         expect(switched).toBe(false);
     });
 
     it('should emit session:switched event', async () => {
         const firstId = await SessionManager.createNewSession();
-        const mockSession = createMockSession('target-id', []);
+        const targetId = generateMockUUID('target-id');
+        const mockSession = createMockSession(targetId, []);
         mockStorage.getSession.mockResolvedValue(mockSession);
 
-        await SessionManager.switchSession('target-id');
+        await SessionManager.switchSession(targetId);
 
         expect(mockEventBus.emit).toHaveBeenCalledWith(
             'session:switched',
             expect.objectContaining({
                 fromSessionId: firstId,
-                toSessionId: 'target-id'
+                toSessionId: targetId
             })
         );
     });
@@ -597,15 +624,16 @@ describe('SessionManager Deletion', () => {
 
 describe('SessionManager Renaming', () => {
     it('should rename session', async () => {
-        const mockSession = createMockSession('rename-id', []);
+        const renameId = generateMockUUID('rename-id');
+        const mockSession = createMockSession(renameId, []);
         mockStorage.getSession.mockResolvedValue(mockSession);
 
-        const renamed = await SessionManager.renameSession('rename-id', 'New Title');
+        const renamed = await SessionManager.renameSession(renameId, 'New Title');
 
         expect(renamed).toBe(true);
         expect(mockStorage.saveSession).toHaveBeenCalledWith(
             expect.objectContaining({
-                id: 'rename-id',
+                id: renameId,
                 title: 'New Title'
             })
         );
@@ -614,20 +642,21 @@ describe('SessionManager Renaming', () => {
     it('should return false for non-existent session', async () => {
         mockStorage.getSession.mockResolvedValue(null);
 
-        const renamed = await SessionManager.renameSession('non-existent', 'Title');
+        const renamed = await SessionManager.renameSession(generateMockUUID('non-existent'), 'Title');
         expect(renamed).toBe(false);
     });
 
     it('should emit session:updated event on rename', async () => {
-        const mockSession = createMockSession('update-id', []);
+        const updateId = generateMockUUID('update-id');
+        const mockSession = createMockSession(updateId, []);
         mockStorage.getSession.mockResolvedValue(mockSession);
 
-        await SessionManager.renameSession('update-id', 'Updated');
+        await SessionManager.renameSession(updateId, 'Updated');
 
         expect(mockEventBus.emit).toHaveBeenCalledWith(
             'session:updated',
             expect.objectContaining({
-                sessionId: 'update-id',
+                sessionId: updateId,
                 field: 'title'
             })
         );
@@ -641,8 +670,8 @@ describe('SessionManager Renaming', () => {
 describe('SessionManager Clear Conversation', () => {
     it('should clear conversation history', async () => {
         await SessionManager.createNewSession();
-        SessionManager.addMessageToHistory({ role: 'user', content: 'Test' });
-        SessionManager.addMessageToHistory({ role: 'assistant', content: 'Response' });
+        await SessionManager.addMessageToHistory({ role: 'user', content: 'Test' });
+        await SessionManager.addMessageToHistory({ role: 'assistant', content: 'Response' });
 
         await SessionManager.clearConversation();
 
@@ -651,7 +680,7 @@ describe('SessionManager Clear Conversation', () => {
 
     it('should create new session after clear', async () => {
         const oldId = await SessionManager.createNewSession();
-        SessionManager.addMessageToHistory({ role: 'user', content: 'Test' });
+        await SessionManager.addMessageToHistory({ role: 'user', content: 'Test' });
 
         await SessionManager.clearConversation();
 
@@ -688,6 +717,6 @@ describe('SessionManager Edge Cases', () => {
 
     it('should handle empty messages in addMessageToHistory', async () => {
         await SessionManager.createNewSession();
-        expect(() => SessionManager.addMessageToHistory(null)).not.toThrow();
+        await expect(SessionManager.addMessageToHistory(null)).resolves.not.toThrow();
     });
 });

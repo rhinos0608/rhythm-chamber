@@ -195,19 +195,21 @@ describe('EventLogStore', () => {
         });
 
         it('should compact event log when threshold exceeded', async () => {
-            // Create checkpoint first
-            await EventLogStore.createCheckpoint(0, {});
-
-            // Add events up to threshold
+            // Add events first
             const vectorClock = { tab_1: 1 };
             for (let i = 0; i < 10; i++) {
                 await EventLogStore.appendEvent(`event${i}`, {}, vectorClock, 'tab_1');
             }
 
+            // Create checkpoint at sequence 2 (meaning events 0-2 are checkpointed)
+            await EventLogStore.createCheckpoint(2, {});
+
             // Manually trigger compaction with low threshold for testing
             const originalMaxEvents = EventLogStore.COMPACTION_CONFIG.maxEvents;
+            const originalMinEvents = EventLogStore.COMPACTION_CONFIG.minEventsAfterCheckpoint;
             try {
                 EventLogStore.COMPACTION_CONFIG.maxEvents = 5;
+                EventLogStore.COMPACTION_CONFIG.minEventsAfterCheckpoint = 2;
 
                 const result = await EventLogStore.compactEventLog();
 
@@ -216,6 +218,7 @@ describe('EventLogStore', () => {
             } finally {
                 // Restore original threshold
                 EventLogStore.COMPACTION_CONFIG.maxEvents = originalMaxEvents;
+                EventLogStore.COMPACTION_CONFIG.minEventsAfterCheckpoint = originalMinEvents;
             }
         });
 

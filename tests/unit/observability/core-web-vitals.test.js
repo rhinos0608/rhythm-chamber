@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { CoreWebVitalsTracker, WebVitalType, PerformanceRating } from '../../js/observability/core-web-vitals.js';
+import { CoreWebVitalsTracker, WebVitalType, PerformanceRating } from '../../../js/observability/core-web-vitals.js';
 
 // Mock performance API
 const mockPerformanceAPI = () => {
@@ -17,10 +17,14 @@ const mockPerformanceAPI = () => {
         getEntriesByType: vi.fn(() => [])
     };
 
-    global.PerformanceObserver = vi.fn().mockImplementation((callback) => ({
-        observe: vi.fn(),
-        disconnect: vi.fn()
-    }));
+    // Add PerformanceEventTiming to window (required by _trackINP)
+    global.window.PerformanceEventTiming = class PerformanceEventTiming {};
+
+    // Create a proper mock class for PerformanceObserver
+    global.PerformanceObserver = vi.fn(function(callback) {
+        this.observe = vi.fn();
+        this.disconnect = vi.fn();
+    });
 };
 
 describe('CoreWebVitalsTracker', () => {
@@ -300,10 +304,11 @@ describe('CoreWebVitalsTracker', () => {
             const disconnectSpy = vi.fn();
 
             // Create a new tracker with the disconnect spy already in place
-            PerformanceObserver.mockImplementation(() => ({
-                observe: vi.fn(),
-                disconnect: disconnectSpy
-            }));
+            const TestObserver = vi.fn(function(callback) {
+                this.observe = vi.fn();
+                this.disconnect = disconnectSpy;
+            });
+            global.PerformanceObserver = TestObserver;
 
             const testTracker = new CoreWebVitalsTracker({ enabled: true, maxMetrics: 100 });
             testTracker.disable();

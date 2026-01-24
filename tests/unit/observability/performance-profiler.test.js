@@ -6,14 +6,27 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { PerformanceProfiler, PerformanceCategory } from '../../js/services/performance-profiler.js';
+import { PerformanceProfiler, PerformanceCategory } from '../../../js/services/performance-profiler.js';
 
-// Mock performance API
+// Mock performance API with measure entry simulation
 const mockPerformanceAPI = () => {
+    const mockEntries = [];
+
     global.performance = {
         mark: vi.fn(),
-        measure: vi.fn(),
-        getEntriesByName: vi.fn(() => []),
+        measure: vi.fn((name) => {
+            // Create a mock measure entry
+            mockEntries.push({
+                name,
+                startTime: 0,
+                duration: Math.random() * 100 + 10, // Random duration between 10-110ms
+                entryType: 'measure'
+            });
+        }),
+        getEntriesByName: vi.fn((name) => {
+            // Return entries matching the name
+            return mockEntries.filter(e => e.name === name);
+        }),
         getEntriesByType: vi.fn(() => []),
         now: vi.fn(() => Date.now()),
         memory: {
@@ -22,7 +35,10 @@ const mockPerformanceAPI = () => {
             jsHeapSizeLimit: 200000000 // 200MB
         },
         clearMarks: vi.fn(),
-        clearMeasures: vi.fn()
+        clearMeasures: vi.fn(() => {
+            // Clear all mock entries
+            mockEntries.length = 0;
+        })
     };
 };
 
@@ -490,7 +506,7 @@ describe('Enhanced PerformanceProfiler', () => {
             expect(stats.minDuration).toBe(10);
             expect(stats.maxDuration).toBe(100);
             expect(stats.avgDuration).toBe(55); // (10+20+...+100) / 10
-            expect(stats.medianDuration).toBe(50); // Middle value
+            expect(stats.medianDuration).toBe(55); // Average of middle values (50 + 60) / 2
             expect(stats.p95Duration).toBe(90); // 95th percentile
             expect(stats.p99Duration).toBe(100); // 99th percentile
         });

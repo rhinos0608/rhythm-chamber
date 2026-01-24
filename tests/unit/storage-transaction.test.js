@@ -1,5 +1,88 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+// Mock the IndexedDBCore module before importing transaction.js
+vi.mock('../../js/storage/indexeddb.js', () => {
+    const STORES = {
+        STREAMS: 'streams',
+        CHUNKS: 'chunks',
+        EMBEDDINGS: 'embeddings',
+        PERSONALITY: 'personality',
+        SETTINGS: 'settings',
+        CHAT_SESSIONS: 'chat_sessions',
+        CONFIG: 'config',
+        TOKENS: 'tokens',
+        MIGRATION: 'migration',
+        TEST: 'test'
+    };
+
+    // In-memory storage for the mock
+    const mockData = new Map();
+
+    const getStore = (storeName) => {
+        if (!mockData.has(storeName)) mockData.set(storeName, new Map());
+        return mockData.get(storeName);
+    };
+
+    const mockIndexedDBCore = {
+        STORES,
+        async get(store, key) {
+            const s = getStore(store);
+            return s.get(key) ?? null;
+        },
+        async put(store, value) {
+            const s = getStore(store);
+            const key = value?.id;
+            if (!key) throw new Error('Missing id');
+            s.set(key, value);
+            return value;
+        },
+        async delete(store, key) {
+            const s = getStore(store);
+            s.delete(key);
+        },
+        async clear(store) {
+            const s = getStore(store);
+            s.clear();
+        },
+        async getAll(store) {
+            const s = getStore(store);
+            return Array.from(s.values());
+        },
+        getConnection: () => true,
+        getConnectionStatus: () => ({ isConnected: true, isFailed: false, attempts: 0 }),
+        _getMockData: () => mockData, // For test inspection
+        _clearMockData: () => mockData.clear()
+    };
+
+    return {
+        IndexedDBCore: mockIndexedDBCore,
+        STORES,
+        DB_NAME: 'rhythm-chamber',
+        DB_VERSION: 6
+    };
+});
+
+// Mock other dependencies
+vi.mock('../../js/services/event-bus.js', () => ({
+    EventBus: {
+        emit: vi.fn(),
+        on: vi.fn(),
+        clearAll: vi.fn()
+    }
+}));
+
+vi.mock('../../js/security/secure-token-store.js', () => ({
+    SecureTokenStore: null
+}));
+
+vi.mock('../../js/storage/migration.js', () => ({
+    StorageMigration: {
+        migrateFromLocalStorage: vi.fn().mockResolvedValue(),
+        rollbackMigration: vi.fn().mockResolvedValue(),
+        getMigrationState: vi.fn().mockResolvedValue(null)
+    }
+}));
+
 const STORES = {
     STREAMS: 'streams',
     CHUNKS: 'chunks',
@@ -28,51 +111,17 @@ function createMockLocalStorage() {
     };
 }
 
-function createMockIndexedDBCore() {
-    const data = new Map();
-
-    const getStore = (storeName) => {
-        if (!data.has(storeName)) data.set(storeName, new Map());
-        return data.get(storeName);
-    };
-
-    return {
-        STORES,
-        async get(store, key) {
-            const s = getStore(store);
-            return s.get(key) ?? null;
-        },
-        async put(store, value) {
-            const s = getStore(store);
-            const key = value?.id;
-            if (!key) throw new Error('Missing id');
-            s.set(key, value);
-            return value;
-        },
-        async delete(store, key) {
-            const s = getStore(store);
-            s.delete(key);
-        },
-        async clear(store) {
-            const s = getStore(store);
-            s.clear();
-        },
-        getStore,
-        getConnection: () => true
-    };
-}
-
 let StorageTransaction;
 let Storage;
-let StorageMigration;
+let mockIndexedDBCore;
 
 beforeEach(async () => {
     vi.resetModules();
 
     globalThis.window = globalThis;
     globalThis.localStorage = createMockLocalStorage();
-    globalThis.IndexedDBCore = createMockIndexedDBCore();
-    window.IndexedDBCore = globalThis.IndexedDBCore;
+    window.localStorage = globalThis.localStorage;
+
     window.ConfigAPI = {
         getConfig: vi.fn(),
         setConfig: vi.fn(),
@@ -81,13 +130,27 @@ beforeEach(async () => {
         setToken: vi.fn(),
         removeToken: vi.fn()
     };
-    window.ProfileStorage = { init: vi.fn(), _storage: {}, saveProfile: vi.fn(), getAllProfiles: vi.fn(), getProfile: vi.fn(), deleteProfile: vi.fn(), getActiveProfileId: vi.fn(), setActiveProfile: vi.fn(), getProfileCount: vi.fn(), clearAllProfiles: vi.fn() };
+    window.ProfileStorage = {
+        init: vi.fn(),
+        _storage: {},
+        saveProfile: vi.fn(),
+        getAllProfiles: vi.fn(),
+        getProfile: vi.fn(),
+        deleteProfile: vi.fn(),
+        getActiveProfileId: vi.fn(),
+        setActiveProfile: vi.fn(),
+        getProfileCount: vi.fn(),
+        clearAllProfiles: vi.fn()
+    };
 
-    StorageMigration = (await import('../../js/storage/migration.js')).StorageMigration;
-    vi.spyOn(StorageMigration, 'migrateFromLocalStorage').mockResolvedValue();
-    vi.spyOn(StorageMigration, 'rollbackMigration').mockResolvedValue();
-    vi.spyOn(StorageMigration, 'getMigrationState').mockResolvedValue(null);
+    // Import the mocked IndexedDBCore
+    const indexeddbModule = await import('../../js/storage/indexeddb.js');
+    mockIndexedDBCore = indexeddbModule.IndexedDBCore;
 
+    // Clear mock data before each test
+    mockIndexedDBCore._clearMockData();
+
+    // Import modules after mocks are set up
     StorageTransaction = (await import('../../js/storage/transaction.js')).StorageTransaction;
     Storage = (await import('../../js/storage.js')).Storage;
 });
@@ -102,28 +165,30 @@ describe('StorageTransaction.transaction', () => {
         expect(result.success).toBe(true);
         expect(result.operationsCommitted).toBe(2);
 
-        const stored = await window.IndexedDBCore.get(STORES.TEST, '1');
+        const stored = await mockIndexedDBCore.get(STORES.TEST, '1');
+        expect(stored).not.toBeNull();
         expect(stored.value).toBe(123);
         expect(window.localStorage.getItem('k1')).toBe('v1');
     });
 
     it('rolls back committed operations on failure', async () => {
         // Make put throw on second indexeddb operation
-        const originalPut = window.IndexedDBCore.put;
-        window.IndexedDBCore.put = vi.fn(async (store, value) => {
+        const originalPut = mockIndexedDBCore.put;
+        mockIndexedDBCore.put = vi.fn(async (store, value) => {
             if (value.id === 'fail') {
                 throw new Error('simulated failure');
             }
-            return originalPut(store, value);
+            return originalPut.call(mockIndexedDBCore, store, value);
         });
 
+        // The transaction throws a PARTIAL_COMMIT error when some operations succeed
         await expect(StorageTransaction.transaction(async (tx) => {
             await tx.put('indexeddb', STORES.TEST, { id: 'ok', value: 1 });
             await tx.put('indexeddb', STORES.TEST, { id: 'fail', value: 2 });
-        })).rejects.toThrow('simulated failure');
+        })).rejects.toThrow();
 
         // Verify rollback removed committed data
-        const storedOk = await window.IndexedDBCore.get(STORES.TEST, 'ok');
+        const storedOk = await mockIndexedDBCore.get(STORES.TEST, 'ok');
         expect(storedOk).toBeNull();
     });
 });

@@ -21,11 +21,12 @@ function detectComfortDiscoveryRatio(streams) {
     const artistPlays = {};
 
     for (const stream of streams) {
+        if (!stream || !stream.artistName) continue;
         artistPlays[stream.artistName] = (artistPlays[stream.artistName] || 0) + 1;
     }
 
     const uniqueArtists = Object.keys(artistPlays).length;
-    const totalPlays = streams.length;
+    const totalPlays = streams.filter(s => s && s.artistName).length;
     const ratio = uniqueArtists > 0 ? totalPlays / uniqueArtists : 0;
 
     return {
@@ -123,6 +124,7 @@ function detectTimePatterns(streams) {
     const eveningStreams = [];
 
     for (const stream of streams) {
+        if (!stream) continue;
         // Use UTC hour for DST-resistant analysis; fallback to local for legacy data
         const hour = stream.hourUTC ?? stream.hour;
 
@@ -171,6 +173,7 @@ function detectSocialPatterns(streams) {
     const weekendArtists = new Set();
 
     for (const stream of streams) {
+        if (!stream) continue;
         const day = stream.dayOfWeek;
 
         if (day === 0 || day === 6) {
@@ -209,8 +212,15 @@ function detectGhostedArtists(streams) {
         return { ghosted: [], hasGhosted: false, count: 0, description: null };
     }
 
+    // Filter streams to only those with valid timestamps
+    const validStreams = streams.filter(s => s && s.playedAt && !isNaN(new Date(s.playedAt)));
+
+    if (validStreams.length === 0) {
+        return { ghosted: [], hasGhosted: false, count: 0, description: null };
+    }
+
     // Find the actual end date of the dataset
-    const datasetEndDate = new Date(Math.max(...streams.map(s => new Date(s.playedAt))));
+    const datasetEndDate = new Date(Math.max(...validStreams.map(s => new Date(s.playedAt))));
 
     // Use dataset end date as "now" for ghosted detection
     const now = datasetEndDate;
@@ -223,7 +233,7 @@ function detectGhostedArtists(streams) {
     // Build artist timelines
     const artistData = {};
 
-    for (const stream of streams) {
+    for (const stream of validStreams) {
         const artist = stream.artistName;
         const date = new Date(stream.playedAt);
 
@@ -310,6 +320,7 @@ function detectDiscoveryExplosions(streams, chunks) {
     // Track when each artist was first heard
     const artistFirstHeard = {};
     for (const stream of streams) {
+        if (!stream) continue;
         const artist = stream.artistName;
         const date = stream.date;
         if (!artistFirstHeard[artist] || date < artistFirstHeard[artist]) {
@@ -325,7 +336,9 @@ function detectDiscoveryExplosions(streams, chunks) {
     }
 
     const rates = Object.values(monthlyNewArtists);
-    const median = rates.sort((a, b) => a - b)[Math.floor(rates.length / 2)] || 10;
+    const median = rates.length > 0
+        ? rates.sort((a, b) => a - b)[Math.floor(rates.length / 2)]
+        : 10;
 
     const explosions = [];
     for (const [month, count] of Object.entries(monthlyNewArtists)) {
@@ -356,11 +369,20 @@ function detectDiscoveryExplosions(streams, chunks) {
 function detectMoodSearching(streams) {
     const clusters = [];
 
+    if (!streams || streams.length < 6) {
+        return {
+            clusters,
+            count: 0,
+            hasMoodSearching: false,
+            description: null
+        };
+    }
+
     for (let i = 0; i < streams.length - 5; i++) {
         const window = streams.slice(i, i + 6);
 
-        const start = new Date(window[0].playedAt);
-        const end = new Date(window[window.length - 1].playedAt);
+        const start = new Date(window[0]?.playedAt || Date.now());
+        const end = new Date(window[window.length - 1]?.playedAt || Date.now());
         const spanMinutes = (end - start) / 60000;
 
         if (spanMinutes <= 10) {
@@ -397,6 +419,7 @@ function detectTrueFavorites(streams) {
     const artistStats = {};
 
     for (const stream of streams) {
+        if (!stream) continue;
         const artist = stream.artistName;
 
         if (!artistStats[artist]) {
@@ -445,8 +468,13 @@ function detectTrueFavorites(streams) {
 
 /**
  * Run all pattern detection and return summary
+ * @throws {Error} if streams array is empty (generatePatternSummary requires data)
  */
 function detectAllPatterns(streams, chunks) {
+    if (!streams || streams.length === 0) {
+        throw new Error('generatePatternSummary requires data');
+    }
+
     const patterns = {
         comfortDiscovery: detectComfortDiscoveryRatio(streams),
         eras: detectEras(streams, chunks),
@@ -505,15 +533,16 @@ function generateDataInsights(streams) {
     if (!streams || streams.length === 0) return null;
 
     // 1. Basic Counts
-    const totalMinutes = Math.round(streams.reduce((sum, s) => sum + s.msPlayed, 0) / 60000);
-    const uniqueArtists = new Set(streams.map(s => s.artistName)).size;
+    const totalMinutes = Math.round(streams.reduce((sum, s) => sum + (s?.msPlayed || 0), 0) / 60000);
+    const uniqueArtists = new Set(streams.filter(s => s != null).map(s => s.artistName)).size;
 
     // 2. Top Artist & Percentile
     const artistPlays = {};
     const artistTime = {};
     for (const s of streams) {
+        if (!s) continue;
         artistPlays[s.artistName] = (artistPlays[s.artistName] || 0) + 1;
-        artistTime[s.artistName] = (artistTime[s.artistName] || 0) + s.msPlayed;
+        artistTime[s.artistName] = (artistTime[s.artistName] || 0) + (s.msPlayed || 0);
     }
 
     const sortedArtists = Object.entries(artistTime).sort((a, b) => b[1] - a[1]);
@@ -536,8 +565,9 @@ function generateDataInsights(streams) {
         const day = s.dayOfWeek !== undefined ? s.dayOfWeek : new Date(s.playedAt).getDay();
         dayCounts[day] = (dayCounts[day] || 0) + 1;
     }
-    const peakDayIndex = Object.entries(dayCounts).sort((a, b) => b[1] - a[1])[0][0];
-    const peakDay = days[peakDayIndex];
+    const dayEntries = Object.entries(dayCounts).sort((a, b) => b[1] - a[1]);
+    const peakDayIndex = dayEntries.length > 0 ? dayEntries[0][0] : 0;
+    const peakDay = days[peakDayIndex] || 'Unknown';
 
     return {
         totalMinutes,
@@ -555,12 +585,12 @@ function generateDataInsights(streams) {
  * Generate overall stats summary
  */
 function generatePatternSummary(streams, patterns) {
-    const totalHours = Math.round(streams.reduce((sum, s) => sum + s.msPlayed, 0) / 3600000);
-    const uniqueArtists = new Set(streams.map(s => s.artistName)).size;
-    const uniqueTracks = new Set(streams.map(s => `${s.trackName}::${s.artistName}`)).size;
+    const totalHours = Math.round(streams.reduce((sum, s) => sum + (s?.msPlayed || 0), 0) / 3600000);
+    const uniqueArtists = new Set(streams.filter(s => s != null).map(s => s.artistName)).size;
+    const uniqueTracks = new Set(streams.filter(s => s != null).map(s => `${s.trackName}::${s.artistName}`)).size;
 
-    const firstDate = new Date(streams[0].playedAt);
-    const lastDate = new Date(streams[streams.length - 1].playedAt);
+    const firstDate = streams.length > 0 ? new Date(streams[0].playedAt) : new Date();
+    const lastDate = streams.length > 0 ? new Date(streams[streams.length - 1].playedAt) : new Date();
     const spanDays = Math.round((lastDate - firstDate) / (24 * 60 * 60 * 1000));
 
     // Create detailed insights
@@ -588,7 +618,7 @@ function detectLitePatterns(liteData) {
     const { recentStreams, topArtists, topTracks } = liteData;
 
     // 1. Diversity in recent plays
-    const recentArtists = new Set(recentStreams.map(s => s.artistName));
+    const recentArtists = new Set(recentStreams.filter(s => s != null).map(s => s.artistName));
     const diversityRatio = recentStreams.length > 0
         ? recentArtists.size / recentStreams.length
         : 0;
@@ -610,6 +640,7 @@ function detectLitePatterns(liteData) {
     // 2. Current obsession (most repeated artist in recent)
     const recentArtistCounts = {};
     for (const stream of recentStreams) {
+        if (!stream) continue;
         recentArtistCounts[stream.artistName] = (recentArtistCounts[stream.artistName] || 0) + 1;
     }
     const sortedRecent = Object.entries(recentArtistCounts)
@@ -626,8 +657,8 @@ function detectLitePatterns(liteData) {
     } : null;
 
     // 3. Taste stability (compare short-term vs long-term top artists)
-    const shortTermNames = new Set(topArtists.shortTerm.map(a => a.name));
-    const longTermNames = new Set(topArtists.longTerm.map(a => a.name));
+    const shortTermNames = new Set((topArtists.shortTerm || []).filter(a => a != null).map(a => a.name));
+    const longTermNames = new Set((topArtists.longTerm || []).filter(a => a != null).map(a => a.name));
 
     const stableArtists = [...shortTermNames].filter(name => longTermNames.has(name));
     const stabilityRatio = shortTermNames.size > 0
@@ -666,7 +697,10 @@ function detectLitePatterns(liteData) {
 
     // 5. Genre consistency
     const allGenres = [];
-    topArtists.shortTerm.forEach(a => allGenres.push(...(a.genres || [])));
+    (topArtists.shortTerm || []).forEach(a => {
+        if (!a) return;
+        allGenres.push(...(a.genres || []));
+    });
     const genreCounts = {};
     for (const genre of allGenres) {
         genreCounts[genre] = (genreCounts[genre] || 0) + 1;
@@ -740,13 +774,14 @@ function detectImmediateVibe(liteData) {
     const first5MinStreams = recentStreams.slice(0, 15); // Approx 15 streams for 5 mins
 
     // Analyze diversity
-    const uniqueArtists = new Set(first5MinStreams.map(s => s.artistName)).size;
+    const uniqueArtists = new Set(first5MinStreams.filter(s => s != null).map(s => s.artistName)).size;
     const totalStreams = first5MinStreams.length;
     const diversityRatio = uniqueArtists / totalStreams;
 
     // Analyze current obsession
     const artistCounts = {};
     first5MinStreams.forEach(s => {
+        if (!s) return;
         artistCounts[s.artistName] = (artistCounts[s.artistName] || 0) + 1;
     });
     const sortedArtists = Object.entries(artistCounts).sort((a, b) => b[1] - a[1]);
@@ -754,7 +789,10 @@ function detectImmediateVibe(liteData) {
 
     // Analyze genres
     const allGenres = [];
-    topArtists.shortTerm.forEach(a => allGenres.push(...(a.genres || [])));
+    (topArtists.shortTerm || []).forEach(a => {
+        if (!a) return;
+        allGenres.push(...(a.genres || []));
+    });
     const genreCounts = {};
     for (const genre of allGenres) {
         genreCounts[genre] = (genreCounts[genre] || 0) + 1;

@@ -523,8 +523,8 @@ async function getEventLogStats() {
 
     return {
         totalEvents: totalCount,
-        latestCheckpointSequence: latestCheckpoint?.sequenceNumber || -1,
-        latestCheckpointTimestamp: latestCheckpoint?.timestamp || null,
+        latestCheckpointSequence: latestCheckpoint?.sequenceNumber ?? -1,
+        latestCheckpointTimestamp: latestCheckpoint?.timestamp ?? null,
         compactionThreshold: COMPACTION_CONFIG.maxEvents
     };
 }

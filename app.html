@@ -7,8 +7,37 @@
     <title>Rhythm Chamber — Analyze</title>
     <meta name="description"
         content="Your AI writes your musical story. Every time you visit. On your device. Watching you evolve. Chat with your complete Spotify history. Runs privately in your browser. BYOI for power users.">
+    <!--
+      Content Security Policy (CSP)
+
+      Strict CSP configuration to prevent XSS attacks:
+
+      - default-src 'self': Only allow resources from same origin
+      - script-src 'self' 'unsafe-eval': Load scripts from same origin only
+        * 'unsafe-eval' is REQUIRED for WebAssembly compilation in Transformers.js
+        * See: tests/embeddings-csp.spec.js for verification
+        * Removed 'unsafe-inline' - all scripts must be external or module scripts
+      - script-src-elem 'self' blob: https://app.lemonsqueezy.com https://assets.lemonsqueezy.com: Explicit script source control
+        * Allows blob: URLs for dynamic workers
+        * Allows external payment processor scripts
+      - worker-src 'self' blob:: Required for Web Workers and Transformers.js
+      - style-src 'self' 'unsafe-inline': Allow inline styles for dynamic UI elements
+        * Allows Google Fonts stylesheet
+      - font-src 'self' https://fonts.gstatic.com: Google Fonts
+      - connect-src 'self' https://accounts.spotify.com https://api.spotify.com https://openrouter.ai http://localhost:11434 http://localhost:1234 http://127.0.0.1:11434 http://127.0.0.1:1234 https://*.lemonsqueezy.com: API connections
+        * Spotify OAuth and API endpoints
+        * OpenRouter AI service
+        * Local AI providers (Ollama, LM Studio)
+        * Lemon Squeezy payment processor
+      - img-src 'self' data: https://i.scdn.co: Image sources
+        * Spotify album art from CDN
+      - object-src 'none': Block plugins (Flash, Java, etc.)
+      - base-uri 'self': Restrict <base> tag to same origin
+      - form-action 'self': Restrict form submissions to same origin
+      - frame-src 'self' https://*.lemonsqueezy.com: Allow payment processor iframes
+    -->
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://app.lemonsqueezy.com https://assets.lemonsqueezy.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://accounts.spotify.com https://api.spotify.com https://openrouter.ai http://localhost:11434 http://localhost:1234 http://127.0.0.1:11434 http://127.0.0.1:1234 https://*.lemonsqueezy.com; img-src 'self' data: https://i.scdn.co; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'self' https://*.lemonsqueezy.com;">
+        content="default-src 'self'; script-src 'self' 'unsafe-eval'; script-src-elem 'self' blob: https://app.lemonsqueezy.com https://assets.lemonsqueezy.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://accounts.spotify.com https://api.spotify.com https://openrouter.ai http://localhost:11434 http://localhost:1234 http://127.0.0.1:11434 http://127.0.0.1:1234 https://*.lemonsqueezy.com; img-src 'self' data: https://i.scdn.co; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'self' https://*.lemonsqueezy.com;">
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">

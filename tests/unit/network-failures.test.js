@@ -55,11 +55,33 @@ describe('Network Failure Scenarios', () => {
             it('should handle timeout with AbortSignal', async () => {
                 const { LicenseService } = await import('../../js/services/license-service.js');
 
-                // Mock fetch to never resolve
-                global.fetch = vi.fn(() => new Promise(() => {}));
+                // Mock fetch to respect AbortSignal
+                let fetchAborted = false;
+                global.fetch = vi.fn((_, options) => {
+                    return new Promise((_, reject) => {
+                        // If signal is already aborted, reject immediately
+                        if (options?.signal?.aborted) {
+                            fetchAborted = true;
+                            reject(new DOMException('Aborted', 'AbortError'));
+                            return;
+                        }
+                        // Otherwise listen for abort event
+                        options?.signal?.addEventListener('abort', () => {
+                            fetchAborted = true;
+                            reject(new DOMException('Aborted', 'AbortError'));
+                        });
+                        // Also set up a timeout to reject if not aborted
+                        setTimeout(() => {
+                            if (!fetchAborted) {
+                                reject(new Error('Network error'));
+                            }
+                        }, 100);
+                    });
+                });
 
                 const controller = new AbortController();
-                setTimeout(() => controller.abort(), 50);
+                // Abort immediately
+                controller.abort();
 
                 const result = await LicenseService.verifyLicenseKey('test-key', {
                     signal: controller.signal
@@ -267,8 +289,8 @@ describe('Network Failure Scenarios', () => {
             const { PlaylistService } = await import('../../js/services/playlist-service.js');
             const { PremiumQuota } = await import('../../js/services/premium-quota.js');
 
-            // Mock quota to be exhausted
-            vi.mocked(PremiumQuota.canCreatePlaylist).mockResolvedValue({
+            // Spy on canCreatePlaylist and mock it
+            const canCreateSpy = vi.spyOn(PremiumQuota, 'canCreatePlaylist').mockResolvedValue({
                 allowed: false,
                 remaining: 0,
                 reason: 'Quota exceeded'
@@ -278,24 +300,32 @@ describe('Network Failure Scenarios', () => {
 
             expect(result.gated).toBe(true);
             expect(result.playlist).toBeNull();
+
+            canCreateSpy.mockRestore();
         });
 
         it('should handle missing streams gracefully', async () => {
             const { PlaylistService } = await import('../../js/services/playlist-service.js');
             const { PremiumQuota } = await import('../../js/services/premium-quota.js');
 
-            // Mock quota allowed
-            vi.mocked(PremiumQuota.canCreatePlaylist).mockResolvedValue({
+            // Spy on canCreatePlaylist and mock it
+            const canCreateSpy = vi.spyOn(PremiumQuota, 'canCreatePlaylist').mockResolvedValue({
                 allowed: true,
                 remaining: 1,
                 reason: null
             });
 
-            // Pass empty streams
-            const result = await PlaylistService.createPlaylist([]);
+            // Pass empty streams with required options
+            const result = await PlaylistService.createPlaylist([], {
+                type: 'era',
+                startDate: '2024-01-01',
+                endDate: '2024-01-31'
+            });
 
             expect(result).toBeDefined();
-            // Should handle empty streams
+            // Should handle empty streams gracefully
+
+            canCreateSpy.mockRestore();
         });
     });
 
@@ -368,7 +398,7 @@ describe('Network Failure Scenarios', () => {
 
             // Mock quota to allow one, then deny
             let callCount = 0;
-            vi.mocked(PremiumQuota.canCreatePlaylist).mockImplementation(async () => {
+            const canCreateSpy = vi.spyOn(PremiumQuota, 'canCreatePlaylist').mockImplementation(async () => {
                 callCount++;
                 return {
                     allowed: callCount <= 1,
@@ -390,6 +420,8 @@ describe('Network Failure Scenarios', () => {
             );
 
             expect(gated.length).toBeGreaterThan(0);
+
+            canCreateSpy.mockRestore();
         });
     });
 

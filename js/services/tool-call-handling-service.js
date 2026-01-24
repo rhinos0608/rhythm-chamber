@@ -371,8 +371,8 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
                 });
             }
 
-            // Return undefined to continue processing (no early return)
-            return undefined;
+            // Continue to next tool call (no early return)
+            continue;
         } finally {
             // MEMORY LEAK FIX: Always release budget, even on error or early return
             TimeoutBudget.release(functionBudget);

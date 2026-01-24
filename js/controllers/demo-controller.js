@@ -541,8 +541,8 @@ function addDemoBadge() {
         const badge = document.createElement('span');
         badge.id = 'demo-badge';
         badge.className = 'demo-badge';
-        // SAFE: Static text content with no user input
-        badge.innerHTML = '🎭 Demo Mode';
+        // SAFE: Using textContent instead of innerHTML
+        badge.textContent = '🎭 Demo Mode';
         badge.title = 'You are viewing sample data. Upload your own data to see your real personality.';
         badge.style.cssText = `
             background: linear-gradient(135deg, var(--accent), var(--accent-secondary, #9b59b6));
@@ -586,24 +586,25 @@ function setupDemoChatSuggestions() {
         return undefined;
     }
 
-    // Replace with demo-specific suggestions
-    // The event listeners from setupEventListeners() use querySelectorAll at init time,
-    // so these NEW elements need their own handlers
-    // SAFE: Static HTML with pre-defined demo questions (no user input)
-    suggestions.innerHTML = `
-        <button class="suggestion-chip demo-chip" data-question="Tell me about my MCR obsession">
-            Tell me about my MCR obsession
-        </button>
-        <button class="suggestion-chip demo-chip" data-question="What was my emo phase like in 2019?">
-            What was my emo phase like in 2019?
-        </button>
-        <button class="suggestion-chip demo-chip" data-question="Why did I stop listening to Pierce The Veil?">
-            Why did I stop listening to Pierce The Veil?
-        </button>
-        <button class="suggestion-chip demo-chip" data-question="How has my taste evolved over the years?">
-            How has my taste evolved?
-        </button>
-    `;
+    // Clear existing content
+    suggestions.textContent = '';
+
+    // SAFE: Use DOM methods instead of innerHTML for security best practices
+    // Even though content is static, using DOM APIs prevents accidental XSS
+    const demoQuestions = [
+        'Tell me about my MCR obsession',
+        'What was my emo phase like in 2019?',
+        'Why did I stop listening to Pierce The Veil?',
+        'How has my taste evolved?'
+    ];
+
+    demoQuestions.forEach(question => {
+        const button = document.createElement('button');
+        button.className = 'suggestion-chip demo-chip';
+        button.dataset.question = question;
+        button.textContent = question;
+        suggestions.appendChild(button);
+    });
 
     // Track attached chips and their handlers for cleanup
     const chips = [];
