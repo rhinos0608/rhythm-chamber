@@ -1363,19 +1363,17 @@ async function processFile(file) {
 let isSending = false;
 
 async function handleChatSend() {
-    const input = document.getElementById('chat-input');
-    const sendBtn = document.getElementById('chat-send');
-
-    // Prevent concurrent submissions - CRITICAL: Set flag immediately after check
-    // BEFORE any async operations or DOM queries to prevent race condition
+    // CRITICAL: Set isSending flag IMMEDIATELY at function start
+    // This prevents race condition where two simultaneous calls could
+    // both pass the isSending check before either sets it to true
     if (isSending) {
         console.warn('[App] Message already sending, ignoring duplicate submission');
         return;
     }
-
-    // Set sending flag IMMEDIATELY to prevent race condition
-    // This must happen before any async operations or message validation
     isSending = true;
+
+    const input = document.getElementById('chat-input');
+    const sendBtn = document.getElementById('chat-send');
 
     const message = input.value.trim();
 
