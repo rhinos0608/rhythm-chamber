@@ -32,8 +32,28 @@ Mostly client-side: Static HTML/CSS/ES6 Modules + IndexedDB + Web Workers + Open
 
 | Tier | Price | Features | Purpose |
 |------|------|----------|---------|
-| **The Sovereign (Free)** | **$0** | Full local analysis, BYOI chat, basic cards, 100% Client-side, 1 free playlist | Build community, validate product |
-| **The Chamber** | **$4.99/mo or $39/yr** | Unlimited playlists, metadata enrichment, semantic embeddings, AI playlist curator | Recurring revenue, sustainable operations |
+| **Sovereign (Free)** | **$0** | Local AI only, manual data import, basic chat, manual profile creation | Build community, validate product |
+| **Chamber** | **$4.99/mo** | Spotify OAuth integration, cloud AI access, AI-generated profiles, artifact visualizations, advanced analytics | Recurring revenue, sustainable operations |
+
+### License Verification System
+
+**Implementation:** Lemon Squeezy + Cloudflare Worker + Client-side validation
+
+**Architecture:**
+```
+Client App → License Verifier → Cloudflare Worker → Lemon Squeezy API
+     ↓                ↓                    ↓
+ Local Cache   Device Binding      HMAC Signature Validation
+```
+
+**Flow:**
+1. Client validates license key format
+2. Cloudflare Worker verifies with Lemon Squeezy API
+3. License bound to device fingerprint (SHA-256)
+4. Result cached for 24 hours locally
+5. Graceful fallback to Sovereign tier if validation fails
+
+**Documentation:** See [docs/license-verification.md](docs/license-verification.md) and [docs/premium-features-guide.md](docs/premium-features-guide.md)
 
 ### Payment Integration: Lemon Squeezy
 
@@ -133,9 +153,32 @@ Mostly client-side: Static HTML/CSS/ES6 Modules + IndexedDB + Web Workers + Open
 3. Dependency checking (early-fail pattern)
 4. Tab coordination setup
 5. Storage initialization
-6. Controller initialization
+6. Controller initialization (via IoC Container)
 7. Event system setup
 8. OAuth/mode handling
+
+#### IoC Container Pattern
+
+The application uses a custom **IoC (Inversion of Control) Container** for dependency injection:
+
+```javascript
+// Service Registration
+container.register('Storage', () => new Storage());
+container.register('AppState', () => new AppState());
+container.register('Chat', () => new Chat());
+
+// Controller Initialization with Auto-wiring
+const chatController = new ChatUIController({
+  chat: container.resolve('Chat'),
+  artifacts: container.resolve('Artifacts')
+});
+```
+
+**Benefits:**
+- Centralized dependency management
+- Easier testing with mock injection
+- Clear dependency graph
+- Singleton service lifecycle
 
 #### Controllers (`js/controllers/`)
 | Controller | Responsibility |
@@ -469,13 +512,51 @@ js/artifacts/
 - **Responsive** — Adapts to container width
 - **Collapse/expand** — Users can minimize artifacts
 
-See [docs/artifact-visualization-guide.md](docs/artifact-visualization-guide.md) for complete documentation.
+See [docs/artifact-visualization-guide.md](docs/artifact-visualization-guide.md) for user documentation, or [docs/artifact-integration.md](docs/artifact-integration.md) for developer integration guide.
 
-### Semantic Search (100% Local)
-- WASM-only via Transformers.js (INT8 quantization, ~6MB)
-- Battery-aware mode (WebGPU → WASM)
+### Semantic Search (100% Client-Side WASM)
+
+**Architecture:**
+```
+User Query
+    ↓
+WASM Embedding Generator (@xenova/transformers)
+    ↓
+Local Vector Store (IndexedDB)
+    ↓
+Cosine Similarity Calculation
+    ↓
+Ranked Results
+```
+
+**Implementation:**
+- WASM-only via `@xenova/transformers` (no external API calls)
+- Model: `Xenova/all-MiniLM-L6-v2` (INT8 quantization, ~6MB)
+- Performance: ~500ms first query (model loading), ~50ms subsequent
+- Works offline after initial model load
 - IndexedDB persistence with LRU cache (5000-vector cap)
 - Web Worker offloading for 60fps
+
+**Privacy:**
+- No API calls to external services
+- Queries processed locally
+- No data transmitted
+
+### BYOI (Bring Your Own Intelligence)
+
+Users can choose their AI provider:
+
+| Provider | Type | Cost | Setup |
+|----------|------|------|-------|
+| Ollama | Local | Free | Install Ollama, run model |
+| LM Studio | Local | Free | Install LM Studio, enable API |
+| OpenRouter | Cloud | Pay-per-use | Add API key in settings |
+
+**Provider Health Monitoring:**
+- Circuit breaker pattern (Closed, Open, Half-Open states)
+- Automatic fallback on provider failure
+- Health tracking: Healthy, Degraded, Unhealthy, Blacklisted
+- See [docs/provider-health-monitoring.md](docs/provider-health-monitoring.md)
 
 ### Chat Session Storage
 - Persistent chat conversations via IndexedDB
@@ -547,6 +628,12 @@ See [docs/artifact-visualization-guide.md](docs/artifact-visualization-guide.md)
 - ✅ Sensitive data sanitized from broadcasts
 - ✅ Keys cleared on logout
 - ✅ Secure context validation (HTTPS/localhost only)
+
+**Recent Security Fixes (v0.9):**
+- **TOCTOU Prevention**: Reservation mechanism in QuotaManager prevents race conditions
+- **Token Binding**: SHA-256 hashed device fingerprints for all API access
+- **Session Versioning**: Automatic credential invalidation on auth events
+- **CORS Validation**: Proper handling of null origins from file:// URLs
 
 ---
 
