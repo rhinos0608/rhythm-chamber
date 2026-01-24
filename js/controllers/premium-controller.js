@@ -15,6 +15,7 @@
 import { Pricing } from '../pricing.js';
 import { PremiumQuota } from '../services/premium-quota.js';
 import { createFocusTrap } from '../utils/focus-trap.js';
+import { LemonSqueezyService } from '../services/lemon-squeezy-service.js';
 
 // ==========================================
 // Premium Controller
@@ -26,6 +27,7 @@ const PremiumController = {
     _focusTrap: null,
     _currentFeature: null,
     _upgradeCallback: null,
+    _lemonSqueezyInitialized: false,
 
     /**
      * Check if user has access to a premium feature
@@ -76,6 +78,56 @@ const PremiumController = {
     },
 
     /**
+     * Initialize Lemon Squeezy event handlers
+     * Should be called once on app initialization
+     */
+    async initLemonSqueezy() {
+        if (this._lemonSqueezyInitialized) {
+            return;
+        }
+
+        try {
+            // Load Lemon.js
+            await LemonSqueezyService.loadLemonJS();
+
+            // Setup event handlers
+            LemonSqueezyService.setupEventHandlers({
+                onCheckoutSuccess: async (data) => {
+                    console.log('[PremiumController] Checkout successful:', data);
+
+                    // Activate license if key provided
+                    if (data.licenseKey) {
+                        const result = await LemonSqueezyService.activateLicense(data.licenseKey);
+                        if (result.success) {
+                            // Show success message
+                            if (typeof window.showToast === 'function') {
+                                window.showToast('Premium activated! Enjoy unlimited playlists.', 'success', 5000);
+                            }
+                            // Refresh UI to show premium features
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 1500);
+                        } else {
+                            // Show activation error
+                            if (typeof window.showToast === 'function') {
+                                window.showToast(`Activation failed: ${result.message || 'Unknown error'}`, 'error', 5000);
+                            }
+                        }
+                    }
+                },
+                onCheckoutClosed: () => {
+                    console.log('[PremiumController] Checkout closed');
+                }
+            });
+
+            this._lemonSqueezyInitialized = true;
+            console.log('[PremiumController] Lemon Squeezy initialized');
+        } catch (e) {
+            console.error('[PremiumController] Failed to initialize Lemon Squeezy:', e);
+        }
+    },
+
+    /**
      * Show upgrade modal for a specific feature
      *
      * @param {string} feature - Feature key
@@ -109,6 +161,9 @@ const PremiumController = {
      * @param {Object} data - Additional data for modal content
      */
     _showModal(type, data = {}) {
+        // Initialize Lemon Squeezy if not already done
+        this.initLemonSqueezy();
+
         // Remove existing modal if present
         if (this._modal) {
             this.hideModal();
@@ -126,6 +181,26 @@ const PremiumController = {
                 initialFocus: '.upgrade-modal-close-btn'
             });
             this._focusTrap.activate();
+        }
+    },
+
+    /**
+     * Handle upgrade button click
+     * @param {string} plan - 'monthly' or 'yearly'
+     */
+    async _handleUpgrade(plan) {
+        console.log(`[PremiumController] Opening ${plan} checkout`);
+
+        const result = plan === 'monthly'
+            ? await LemonSqueezyService.openMonthlyCheckout()
+            : await LemonSqueezyService.openYearlyCheckout();
+
+        if (!result.success) {
+            // Show error message
+            if (typeof window.showToast === 'function') {
+                const errorMsg = result.message || 'Failed to open checkout';
+                window.showToast(errorMsg, 'error', 4000);
+            }
         }
     },
 
@@ -178,9 +253,14 @@ const PremiumController = {
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" data-action="hide-upgrade-modal">Maybe Later</button>
-                    <a href="upgrade.html" class="btn btn-primary" data-action="navigate-upgrade">
-                        <span>✨</span> Upgrade to Premium
-                    </a>
+                    <div class="upgrade-actions">
+                        <button class="btn btn-primary" data-action="upgrade-monthly">
+                            $4.99/mo
+                        </button>
+                        <button class="btn btn-primary" data-action="upgrade-yearly">
+                            $39/yr (Save 35%)
+                        </button>
+                    </div>
                 </div>
             </div>
         `;
@@ -322,8 +402,13 @@ const PremiumController = {
                     e.preventDefault();
                     this.hideModal();
                     break;
-                case 'navigate-upgrade':
-                    // Let the link navigate naturally
+                case 'upgrade-monthly':
+                    e.preventDefault();
+                    this._handleUpgrade('monthly');
+                    break;
+                case 'upgrade-yearly':
+                    e.preventDefault();
+                    this._handleUpgrade('yearly');
                     break;
             }
         });
