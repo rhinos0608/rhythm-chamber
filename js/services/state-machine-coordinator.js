@@ -165,7 +165,8 @@ const TRANSITION_RULES = {
             mode: MODES.IDLE,
             upload: UPLOAD_STATES.IDLE,
             chat: CHAT_STATES.DISABLED,
-            spotify: SPOTIFY_STATES.IDLE
+            spotify: SPOTIFY_STATES.IDLE,
+            transitionHistory: []  // Clear history on reset
         }
     }
 };
@@ -233,15 +234,20 @@ function request(event, metadata = {}) {
 
     console.log(`[StateMachine] Transition ${event}: ${JSON.stringify(previousState)} → ${JSON.stringify(currentState)}`);
 
-    // Notify subscribers
-    notifySubscribers(event, previousState, currentState, metadata);
-
-    return {
+    // CRITICAL: Create return snapshot BEFORE notifying subscribers
+    // This prevents race conditions where subscribers might modify state
+    // before the return value is fully constructed
+    const returnSnapshot = {
         allowed: true,
         previousState,
         newState: { ...currentState },
         reason: 'Transition successful'
     };
+
+    // Notify subscribers AFTER return value is fully constructed
+    notifySubscribers(event, previousState, currentState, metadata);
+
+    return returnSnapshot;
 }
 
 /**
