@@ -505,6 +505,18 @@
     <!-- Lemon Squeezy Script (overlay checkout) -->
     <script src="https://app.lemonsqueezy.com/js/lemon.js" defer></script>
 
+    <!-- Config Loader Initialization -->
+    <script type="module">
+        import { ConfigLoader } from './js/services/config-loader.js';
+        // Load config before any services that depend on it
+        await ConfigLoader.load();
+        console.log('[Config] Loaded, Lemon Squeezy config:', {
+            storeUrl: ConfigLoader.get('lemonsqueezy.storeUrl'),
+            variantMonthly: ConfigLoader.get('lemonsqueezy.variantMonthly'),
+            variantYearly: ConfigLoader.get('lemonsqueezy.variantYearly')
+        });
+    </script>
+
     <!-- Scripts -->
     <script type="module">
         import { PremiumController } from './js/controllers/premium-controller.js';
