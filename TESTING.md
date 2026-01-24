@@ -5,8 +5,12 @@ This guide covers running and writing tests for Rhythm Chamber.
 ## Table of Contents
 
 - [Test Overview](#test-overview)
+- [Test Structure](#test-structure)
+- [Test Frameworks](#test-frameworks)
 - [Running Tests](#running-tests)
 - [Writing Unit Tests](#writing-unit-tests)
+- [Integration Testing](#integration-testing)
+- [Security Testing](#security-testing)
 - [Writing E2E Tests](#writing-e2e-tests)
 - [Test Data](#test-data)
 - [Common Patterns](#common-patterns)
@@ -14,32 +18,48 @@ This guide covers running and writing tests for Rhythm Chamber.
 
 ## Test Overview
 
-Rhythm Chamber uses a two-tier testing strategy:
+Rhythm Chamber uses a multi-tier testing strategy:
 
 | Test Type | Framework | Location | Purpose |
 |-----------|-----------|----------|---------|
 | **Unit Tests** | Vitest | `tests/unit/` | Test individual modules, schemas, utilities |
-| **E2E Tests** | Playwright | `tests/rhythm-chamber.spec.ts` | Test complete user flows |
+| **Integration Tests** | Vitest | `tests/integration/` | Test cross-module functionality |
+| **E2E Tests** | Playwright | `tests/e2e/` | Test complete user flows |
 
-### Test Files
+## Test Structure
 
 ```
 tests/
-├── unit/
-│   ├── schemas/          # Schema validation tests
-│   ├── patterns/         # Pattern detection tests
-│   └── utils/            # Utility function tests
-├── integration/          # Integration tests
-└── rhythm-chamber.spec.ts  # E2E test suite
+├── unit/                    # Unit tests (53 files)
+│   ├── observability/       # Performance monitoring tests
+│   ├── critical-*.test.js   # Security and bug fix tests
+│   └── [module].test.js     # Module-specific tests
+├── integration/             # Integration tests (1 file)
+├── e2e/                     # End-to-end tests (2 files)
+├── fixtures/                # Test data files
+└── rhythm-chamber.spec.ts  # Main E2E test suite
 ```
+
+## Test Frameworks
+
+- **Vitest**: Unit and integration tests with happy-dom environment
+- **Playwright**: End-to-end testing with visual debugging
+- **Happy-DOM**: Browser-like environment for unit tests
 
 ## Running Tests
 
-### All Tests
-
 ```bash
-npm test                # Run E2E tests
-npm run test:unit       # Run unit tests
+# Unit tests
+npm run test:unit
+
+# E2E tests
+npm run test:e2e
+
+# All tests
+npm run test
+
+# With coverage
+npm run test:unit -- --coverage
 ```
 
 ### Watch Mode (TDD)
@@ -147,6 +167,71 @@ it('should emit event on completion', () => {
     expect(handler).toHaveBeenCalledWith(
         expect.objectContaining({ status: 'success' })
     );
+});
+```
+
+## Integration Testing
+
+Integration tests verify cross-module functionality:
+
+- **Storage encryption**: End-to-end data encryption workflows
+- **License verification**: Complete license validation flow
+- **Spotify integration**: OAuth to data import pipeline
+- **Premium gating**: Feature unlock with valid license
+
+### Writing Integration Tests
+
+```javascript
+import { describe, it, expect } from 'vitest';
+import { Storage, Crypto } from '@/js/services/index.js';
+
+describe('Storage Encryption Integration', () => {
+  it('should encrypt and decrypt data end-to-end', async () => {
+    const storage = new Storage();
+    const testData = { sensitive: 'data' };
+
+    await storage.set('test-key', testData);
+    const retrieved = await storage.get('test-key');
+
+    expect(retrieved).toEqual(testData);
+  });
+});
+```
+
+## Security Testing
+
+### Race Condition Testing
+
+```javascript
+describe('TOCTOU Race Conditions', () => {
+  it('should prevent concurrent write quota violations', async () => {
+    const quotaManager = new QuotaManager(1000);
+
+    // Reserve space before write
+    await quotaManager.reserve(500);
+
+    // Parallel writes should respect reservation
+    const results = await Promise.allSettled([
+      quotaManager.write('key1', new Uint8Array(500)),
+      quotaManager.write('key2', new Uint8Array(500))
+    ]);
+
+    expect(results[1].status).toBe('rejected');
+  });
+});
+```
+
+### License Verification Testing
+
+```javascript
+describe('License Verification', () => {
+  it('should validate Chamber tier license', async () => {
+    const verifier = new LicenseVerifier();
+    const result = await verifier.verify('chamber-license-key');
+
+    expect(result.valid).toBe(true);
+    expect(result.tier).toBe('chamber');
+  });
 });
 ```
 
