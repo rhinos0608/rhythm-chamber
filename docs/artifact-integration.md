@@ -59,11 +59,9 @@ const table = createTable({
 ```javascript
 import { Artifacts } from '../js/artifacts/index.js';
 
-// Validate and render in one step
-const result = Artifacts.render(spec, container);
-
-if (!result.success) {
-  console.error('Render failed:', result.errors);
+const element = Artifacts.render(spec, container);
+if (!element) {
+    console.error('Render failed: spec or container was invalid');
 }
 ```
 
