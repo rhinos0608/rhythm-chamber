@@ -14,6 +14,7 @@
 
 import { Pricing } from '../pricing.js';
 import { PremiumQuota } from '../services/premium-quota.js';
+import { PremiumGatekeeper } from '../services/premium-gatekeeper.js';
 import { createFocusTrap } from '../utils/focus-trap.js';
 import { LemonSqueezyService } from '../services/lemon-squeezy-service.js';
 import { escapeHtml } from '../utils/html-escape.js';
@@ -59,14 +60,14 @@ const PremiumController = {
      * @returns {Promise<boolean>} True if user can create playlist
      */
     async canCreatePlaylist() {
-        const { allowed, remaining, reason } = await PremiumQuota.canCreatePlaylist();
+        const access = await PremiumGatekeeper.checkFeature('unlimited_playlists');
 
-        if (allowed) {
+        if (access.allowed) {
             return true;
         }
 
         // Show upgrade modal with quota message
-        this.showPlaylistUpgradeModal(remaining, reason);
+        this.showPlaylistUpgradeModal(access.quotaRemaining ?? 0, access.reason);
         return false;
     },
 
