@@ -715,7 +715,8 @@ const decrypted = await decryptData(encrypted, keyMaterial);
 #### Key Derivation (PBKDF2)
 
 Keys are derived using:
-- 600,000 iterations (PBKDF2)
+- 210,000 iterations for simplified encryption (Crypto module)
+- 600,000 iterations for high-security operations (KeyManager)
 - Session salt + Spotify refresh token + session version
 - SHA-256 HMAC
 
