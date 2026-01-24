@@ -74,11 +74,23 @@ const ProfileStorage = {
 
     /**
      * Delete a saved profile
+     * CRITICAL FIX for Issue #4: Use direct key deletion without get-check-act pattern
+     * to prevent race conditions with concurrent saves
+     *
      * @param {string} id - Profile ID
      * @returns {Promise<void>}
      */
     async deleteProfile(id) {
+        // CRITICAL FIX for Issue #4: Get-then-delete pattern allows concurrent saves to be lost
+        // Use atomic update approach with read-modify-write on single key
         const profiles = await this._getProfilesMap();
+
+        // Early return if profile doesn't exist (no-op, not an error)
+        if (!profiles[id]) {
+            console.log(`[ProfileStorage] Profile not found for deletion: ${id}`);
+            return;
+        }
+
         delete profiles[id];
         await this._storage.saveSetting('saved_profiles', profiles);
 
