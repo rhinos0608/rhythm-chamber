@@ -11,6 +11,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventBus } from '../../js/services/event-bus.js';
+import { WaveTelemetry } from '../../js/services/wave-telemetry.js';
 
 // ==========================================
 // Setup & Teardown
@@ -19,10 +20,12 @@ import { EventBus } from '../../js/services/event-bus.js';
 beforeEach(() => {
     EventBus.clearAll();
     EventBus.setDebugMode(false);
+    WaveTelemetry._clearWaves();
 });
 
 afterEach(() => {
     EventBus.clearAll();
+    WaveTelemetry._clearWaves();
 });
 
 // ==========================================
@@ -314,5 +317,50 @@ describe('EventBus Diagnostics', () => {
         expect(schemas).toHaveProperty('storage:updated');
         expect(schemas).toHaveProperty('session:created');
         expect(schemas['storage:updated']).toHaveProperty('description');
+    });
+});
+
+// ==========================================
+// Wave Integration Tests
+// ==========================================
+
+describe('EventBus Wave Integration', () => {
+    it('emit creates wave context for critical events', () => {
+        WaveTelemetry.setCriticalEvents(['file_uploaded']);
+
+        const handler = vi.fn();
+        EventBus.on('file_uploaded', handler);
+        EventBus.emit('file_uploaded', { data: 'test' });
+
+        // Verify the event was marked as critical
+        const criticalEvents = WaveTelemetry.getCriticalEvents();
+        expect(criticalEvents).toContain('file_uploaded');
+    });
+
+    it('emit propagates waveId to handlers for critical events', () => {
+        WaveTelemetry.setCriticalEvents(['test_event']);
+
+        let receivedWaveId = null;
+        const handler = (data, meta) => {
+            receivedWaveId = meta.waveId;
+        };
+        EventBus.on('test_event', handler);
+        EventBus.emit('test_event', {});
+
+        expect(receivedWaveId).toMatch(/^[0-9a-f-]{36}$/); // UUID format
+    });
+
+    it('non-critical events do not create wave context', () => {
+        WaveTelemetry.setCriticalEvents(['critical_only']);
+
+        let receivedWaveId = null;
+        const handler = (data, meta) => {
+            receivedWaveId = meta.waveId;
+        };
+        EventBus.on('non_critical', handler);
+        EventBus.emit('non_critical', {});
+
+        // Non-critical events should not have waveId
+        expect(receivedWaveId).toBeUndefined();
     });
 });
