@@ -535,19 +535,21 @@ function updateLoadingMessage(id, state) {
     switch (state.type) {
         case 'tool_start':
             el.className = 'message tool-execution';
-            // SAFE: state.tool is a predefined tool name from internal tool registry
-            el.innerHTML = `<span class="icon">⚡</span> Analyzing data with ${escapeHtml(state.tool)}...`;
+            // SECURITY: Validate tool name against whitelist before display
+            const startToolName = isValidToolName(state.tool) ? state.tool : 'tool';
+            el.innerHTML = `<span class="icon">⚡</span> Analyzing data with ${escapeHtml(startToolName)}...`;
             break;
 
         case 'tool_end':
             el.className = 'message assistant loading';
-            // SAFE: state.tool and error messages come from internal tool system
+            // SECURITY: Validate tool name against whitelist before display
+            const toolName = isValidToolName(state.tool) ? state.tool : 'Tool';
             const errorMsg = state.error || state.result?.error;
             const statusIcon = errorMsg ? '⚠️' : '✅';
             const statusText = errorMsg ? 'failed' : 'finished';
             el.innerHTML = `
                 <div class="tool-status ${errorMsg ? 'error' : 'success'}">
-                    ${statusIcon} ${escapeHtml(state.tool || 'Tool')} ${statusText}
+                    ${statusIcon} ${escapeHtml(toolName)} ${statusText}
                 </div>
                 <div class="typing-indicator"><span></span><span></span><span></span></div>
             `;
@@ -842,6 +844,24 @@ function processArtifactResult(result) {
 
 // Edge case: Maximum message length to prevent performance issues
 const MAX_MESSAGE_LENGTH = 50000; // 50K characters
+
+// SECURITY: Whitelist of valid tool names to prevent XSS
+const VALID_TOOL_NAMES = [
+    'DataQuery',
+    'PatternAnalyzer',
+    'PersonalityClassifier',
+    'StreamProcessor'
+];
+
+/**
+ * Validate tool name against whitelist
+ * @param {string} toolName - Tool name to validate
+ * @returns {boolean} True if tool name is valid
+ */
+function isValidToolName(toolName) {
+    if (typeof toolName !== 'string') return false;
+    return VALID_TOOL_NAMES.includes(toolName);
+}
 
 /**
  * Get the current input value
