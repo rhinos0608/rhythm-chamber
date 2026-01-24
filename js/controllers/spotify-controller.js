@@ -67,9 +67,10 @@ async function handleSpotifyConnect() {
 /**
  * Handle Spotify OAuth callback
  * @param {string} code - OAuth authorization code
+ * @param {string} state - OAuth state parameter for CSRF verification
  * @returns {Promise<void>}
  */
-async function handleSpotifyCallback(code) {
+async function handleSpotifyCallback(code, state) {
     if (!_ViewController || !_Spotify) {
         console.error('[SpotifyController] Required dependencies not available');
         return;
@@ -79,8 +80,8 @@ async function handleSpotifyCallback(code) {
     _ViewController.updateProgress('Connecting to Spotify...');
 
     try {
-        // Exchange code for token
-        await _Spotify.handleCallback(code);
+        // Exchange code for token with state verification
+        await _Spotify.handleCallback(code, state);
 
         // Start background token refresh for long operations
         startBackgroundRefresh();
