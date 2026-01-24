@@ -15,6 +15,7 @@
 import { VectorClock } from './vector-clock.js';
 import { EventLogStore } from '../storage/event-log-store.js';
 import { TabCoordinator } from './tab-coordination.js';
+import { WaveTelemetry } from './wave-telemetry.js';
 
 // ==========================================
 // Event Contracts (Schemas)
@@ -529,6 +530,9 @@ let stormDroppedAtStart = 0;    // Track drops at storm start
 let backpressureWarningEmitted = false; // Prevent duplicate backpressure warnings
 let droppedCount = 0;
 
+// Wave tracking state
+const activeWaves = new Map();
+
 // Event versioning and replay state
 let eventVectorClock = new VectorClock();
 let eventSequenceNumber = 0;
@@ -757,6 +761,17 @@ function emit(eventType, payload = {}, options = {}) {
         return false;
     }
 
+    // Wave tracking: Create wave context for critical events
+    let waveId = options.waveId || null;
+    const isCritical = WaveTelemetry.isCriticalEvent(eventType);
+
+    if (isCritical && !waveId) {
+        // Start a new wave for critical events
+        waveId = WaveTelemetry.startWave(eventType);
+        activeWaves.set(waveId, eventType);
+    }
+
+    // Build eventMeta - only include waveId if we have one
     const eventMeta = {
         type: eventType,
         timestamp,
@@ -767,6 +782,11 @@ function emit(eventType, payload = {}, options = {}) {
         sequenceNumber,
         isReplay: eventReplayInProgress
     };
+
+    // Only add waveId to eventMeta if we have one (for critical events)
+    if (waveId) {
+        eventMeta.waveId = waveId;
+    }
 
     // Additional safeguard - take snapshot of handler IDs at start
     const handlerSnapshot = allHandlers.map(h => ({ ...h }));
@@ -822,6 +842,11 @@ function emit(eventType, payload = {}, options = {}) {
         const handlerStartTime = performance.now();
         markHandlerStarted(id);
 
+        // Record handler execution in wave chain
+        if (waveId) {
+            WaveTelemetry.recordNode(`handler:${id}`, waveId);
+        }
+
         try {
             handler(payload, eventMeta);
             const durationMs = performance.now() - handlerStartTime;
@@ -831,6 +856,16 @@ function emit(eventType, payload = {}, options = {}) {
             recordHandlerFailure(id, durationMs, error);
             console.error(`[EventBus] Handler ${id} threw error for "${eventType}":`, error);
             // Don't stop other handlers from executing - isolated by circuit breaker
+        }
+    }
+
+    // End wave after all handlers complete
+    if (waveId && isCritical) {
+        try {
+            WaveTelemetry.endWave(waveId);
+            activeWaves.delete(waveId);
+        } catch (error) {
+            console.error(`[EventBus] Failed to end wave ${waveId}:`, error);
         }
     }
 
@@ -1386,7 +1421,24 @@ function clearAll() {
     eventLogEnabled = false;
     eventReplayInProgress = false;
     eventVectorClock = new VectorClock();
+    // Reset wave tracking state
+    activeWaves.clear();
     console.log('[EventBus] All subscribers and circuit breaker state cleared');
+}
+
+/**
+ * Get active waves (for testing)
+ * @returns {Map} Active waves map
+ */
+function _getActiveWaves() {
+    return activeWaves;
+}
+
+/**
+ * Clear active waves (for testing)
+ */
+function _clearWaves() {
+    activeWaves.clear();
 }
 
 // ==========================================
@@ -2060,6 +2112,8 @@ export const EventBus = {
 
     // Testing
     clearAll,
+    _getActiveWaves,
+    _clearWaves,
 
     // Constants
     PRIORITY,

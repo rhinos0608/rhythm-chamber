@@ -294,6 +294,15 @@ function getCriticalEvents() {
 }
 
 /**
+ * Check if an event is critical
+ * @param {string} eventName - The event name to check
+ * @returns {boolean} True if the event is critical
+ */
+function isCriticalEvent(eventName) {
+    return criticalEvents.includes(eventName);
+}
+
+/**
  * Clear all waves (for testing)
  */
 function clearWaves() {
@@ -325,6 +334,7 @@ export const WaveTelemetry = {
     getWave,
     setCriticalEvents,
     getCriticalEvents,
+    isCriticalEvent,
     _clearWaves: clearWaves,
 
     // Configuration (read-only)
