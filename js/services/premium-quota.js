@@ -308,6 +308,9 @@ async function setPlaylistCount(count) {
 // ==========================================
 
 export const PremiumQuota = {
+    // Premium status
+    isPremiumUser,
+
     // Quota checks
     canCreatePlaylist,
     getQuotaStatus,

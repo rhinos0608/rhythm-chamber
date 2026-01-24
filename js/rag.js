@@ -27,7 +27,7 @@ import { OperationLock } from './operation-lock.js';
 import { safeJsonParse } from './utils/safe-json.js';
 
 // Premium feature flag for semantic search
-const PREMIUM_RAG_ENABLED = false; // Set to true to enforce premium gate
+const PREMIUM_RAG_ENABLED = true; // Set to true to enforce premium gate
 const RAG_PREMIUM_FEATURE = 'semantic_embeddings';
 
 /**
@@ -40,10 +40,11 @@ async function checkSemanticAccess() {
     }
 
     try {
-        // Dynamic import to avoid circular dependency
-        const { Pricing } = await import('./pricing.js');
-        const hasAccess = Pricing.hasFeatureAccess(RAG_PREMIUM_FEATURE);
-        return { allowed: hasAccess, isPremium: hasAccess };
+        // Use PremiumQuota service for access check
+        const { PremiumQuota } = await import('./services/premium-quota.js');
+        const isPremium = PremiumQuota.isPremiumUser?.() || false;
+
+        return { allowed: isPremium, isPremium };
     } catch (e) {
         console.warn('[RAG] Failed to check premium access, allowing:', e);
         return { allowed: true, isPremium: false };
@@ -56,7 +57,17 @@ async function checkSemanticAccess() {
 async function showSemanticUpgradeModal() {
     try {
         const { PremiumController } = await import('./controllers/premium-controller.js');
-        PremiumController.showUpgradeModal(RAG_PREMIUM_FEATURE);
+
+        // Show custom message for semantic search quota
+        if (PremiumController.showUpgradeModalWithMessage) {
+            PremiumController.showUpgradeModalWithMessage(
+                'semantic_embeddings',
+                "You've used all 5 free semantic searches. Upgrade to The Chamber for unlimited access."
+            );
+        } else {
+            // Fallback to generic modal
+            PremiumController.showUpgradeModal(RAG_PREMIUM_FEATURE);
+        }
     } catch (e) {
         console.warn('[RAG] Failed to show upgrade modal:', e);
     }
@@ -1221,11 +1232,23 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abo
  * @returns {Promise<Array>} Search results with payloads
  */
 async function searchLocal(query, limit = 5) {
-    // PREMIUM GATE: Check semantic search access
-    const { allowed } = await checkSemanticAccess();
-    if (!allowed) {
-        showSemanticUpgradeModal();
-        throw new Error('SEMANTIC_SEARCH_REQUIRED');
+    // PREMIUM GATE: Check quota first
+    try {
+        const { PremiumQuota } = await import('./services/premium-quota.js');
+        const { allowed, remaining } = await PremiumQuota.checkAndDecrement('semantic_search');
+
+        if (!allowed) {
+            showSemanticUpgradeModal();
+            return []; // Return empty results when quota exhausted
+        }
+
+        // Show remaining count toast (only for non-premium users)
+        if (remaining !== Infinity) {
+            PremiumQuota.showQuotaToast('semantic_search', remaining);
+        }
+    } catch (quotaError) {
+        console.warn('[RAG] Quota check failed, allowing search:', quotaError);
+        // Allow search to continue on quota check failure (graceful degradation)
     }
 
     // Get modules - load on-demand if not available
@@ -1305,10 +1328,24 @@ async function getSemanticContext(query, limit = 3) {
         return null;
     }
 
-    // PREMIUM GATE: Check semantic search access
-    const { allowed } = await checkSemanticAccess();
-    if (!allowed) {
-        return null; // Silently skip semantic context for non-premium users
+    // PREMIUM GATE: Check quota for semantic search
+    try {
+        const { PremiumQuota } = await import('./services/premium-quota.js');
+        const { allowed, remaining } = await PremiumQuota.checkAndDecrement('semantic_search');
+
+        if (!allowed) {
+            // Quota exhausted - show modal once, then silently skip
+            showSemanticUpgradeModal();
+            return null;
+        }
+
+        // Show remaining count toast (only for non-premium users)
+        if (remaining !== Infinity) {
+            PremiumQuota.showQuotaToast('semantic_search', remaining);
+        }
+    } catch (quotaError) {
+        console.warn('[RAG] Quota check failed for semantic context:', quotaError);
+        // Allow semantic context to continue on quota check failure (graceful degradation)
     }
 
     try {
