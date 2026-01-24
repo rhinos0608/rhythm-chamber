@@ -8,7 +8,7 @@
   <meta name="description"
     content="Understand why your music matters. Chat with your complete Spotify history. Runs privately in your browser. BYOI for power users.">
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self';">
+    content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://app.lemonsqueezy.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.lemonsqueezy.com; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'self' https://*.lemonsqueezy.com;">
 
   <!-- Open Graph -->
   <meta property="og:title" content="Rhythm Chamber — Chat With Your Spotify Data">
@@ -27,6 +27,35 @@
 </head>
 
 <body>
+  <!-- Premium Upgrade CTA -->
+  <button id="premium-cta" class="premium-cta" data-user-state="unknown" aria-label="Upgrade to Premium">
+    <span class="premium-icon">👑</span>
+    <span class="premium-text">Premium</span>
+  </button>
+
+  <!-- Premium Preview Modal -->
+  <div id="premium-modal" class="modal-overlay premium-preview-modal" hidden>
+    <div class="modal-content premium-modal-content">
+      <button class="modal-close" aria-label="Close modal">×</button>
+      <h2 class="gradient-text">✨ Unlock Rhythm Chamber Premium</h2>
+      <div class="premium-features">
+        <div class="feature-item">🎵 Unlimited playlist generation</div>
+        <div class="feature-item">📊 Advanced analytics & insights</div>
+        <div class="feature-item">🔍 Semantic search with AI</div>
+        <div class="feature-item">⚡ Priority processing</div>
+      </div>
+      <div class="premium-pricing">
+        <span class="price-monthly">$4.99/mo</span>
+        <span class="price-divider">or</span>
+        <span class="price-yearly">$39/yr <small>(Save 35%)</small></span>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" data-action="close-modal">Maybe Later</button>
+        <a href="upgrade.html" class="btn btn-primary">Upgrade Now</a>
+      </div>
+    </div>
+  </div>
+
   <div class="landing">
     <!-- Hero Section -->
     <section class="hero">
@@ -249,6 +278,9 @@
 
   <!-- Browser Compatibility Check -->
   <script src="js/compatibility.js?v=1"></script>
+
+  <!-- Landing page interactions (Premium CTA) -->
+  <script src="js/landing.js?v=1"></script>
 
   <!-- Scripts -->
   <!-- Settings module for landing page (ES module) - Config loaded dynamically -->
