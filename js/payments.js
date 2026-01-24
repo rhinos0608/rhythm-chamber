@@ -18,6 +18,7 @@
 import { ConfigLoader } from './services/config-loader.js';
 import { Settings } from './settings.js';
 import { LicenseVerifier } from './security/license-verifier.js';
+import { PremiumGatekeeper } from './services/premium-gatekeeper.js';
 
 // ==========================================
 // Production Build Detection
@@ -78,21 +79,22 @@ async function checkLicenseStatus() {
 }
 
 /**
- * Check if user has premium access (Curator or Chamber tier)
+ * Check if user has premium access (Chamber tier)
  *
- * Now uses cryptographic signature verification to prevent bypass.
- * For MVP, everything is free. For production, verifies license.
+ * Now uses PremiumGatekeeper for unified feature access.
+ * This consolidates license verification logic into a single source of truth.
  *
  * @returns {Promise<boolean>} True if user has premium access
  */
 async function isPremium() {
-    // Production build: Check actual license with crypto verification
-    if (isProductionBuild()) {
-        return await checkLicenseStatus();
+    try {
+        // Use PremiumGatekeeper to check any license-required feature
+        const access = await PremiumGatekeeper.checkFeature('semantic_search');
+        return access.allowed && access.tier === 'chamber';
+    } catch {
+        // Fallback to false on error
+        return false;
     }
-
-    // MVP: Everything is free
-    return true;
 }
 
 /**
