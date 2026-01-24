@@ -704,12 +704,61 @@ function wrapRequest(request, transaction, timeoutMs = 5000) {
 }
 
 /**
+ * CRITICAL FIX: Transaction pool for explicit transaction management
+ * Enables proper transaction isolation for put operations to prevent
+ * concurrent writes from losing data.
+ *
+ * @type {Map<string, IDBTransaction>}
+ */
+const transactionPool = new Map();
+
+/**
+ * Acquire or create a transaction for the given store
+ * CRITICAL FIX for Issue #1: Provides explicit transaction with proper locking
+ *
+ * @param {IDBDatabase} database - Database connection
+ * @param {string} storeName - Store name
+ * @param {string} [mode='readwrite'] - Transaction mode
+ * @returns {IDBTransaction} Transaction instance
+ */
+function acquireTransaction(database, storeName, mode = 'readwrite') {
+    const poolKey = `${storeName}_${mode}`;
+
+    // Check if transaction exists and is not complete
+    const existingTx = transactionPool.get(poolKey);
+    if (existingTx) {
+        // Verify transaction is still active
+        if (existingTx.readyState !== 'finished' && existingTx.readyState !== 'done') {
+            return existingTx;
+        }
+        // Remove stale transaction
+        transactionPool.delete(poolKey);
+    }
+
+    // Create new transaction
+    const transaction = database.transaction(storeName, mode);
+
+    // Clean up pool when transaction completes
+    transaction.oncomplete = () => transactionPool.delete(poolKey);
+    transaction.onerror = () => transactionPool.delete(poolKey);
+    transaction.onabort = () => transactionPool.delete(poolKey);
+
+    // Store in pool
+    transactionPool.set(poolKey, transaction);
+
+    return transaction;
+}
+
+/**
  * Put (insert or update) a record
  * FALLBACK: Uses FallbackBackend when IndexedDB is unavailable
+ * CRITICAL FIX for Issue #1: Uses explicit transaction with proper locking
+ *
  * @param {string} storeName - Store name
  * @param {object} data - Data to store
  * @param {Object} [options] - Options
  * @param {boolean} [options.bypassAuthority] - Skip write authority check
+ * @param {IDBTransaction} [options.transaction] - Explicit transaction to use
  * @returns {Promise<IDBValidKey>} The key of the stored record
  */
 async function put(storeName, data, options = {}) {
@@ -738,12 +787,38 @@ async function put(storeName, data, options = {}) {
 
     try {
         const database = await initDatabase();
-        const transaction = database.transaction(storeName, 'readwrite');
+
+        // CRITICAL FIX for Issue #1: Use explicit transaction for proper isolation
+        // If a transaction is provided, use it. Otherwise acquire from pool or create new.
+        let transaction = options.transaction;
+        let shouldComplete = false;
+
+        if (!transaction) {
+            transaction = acquireTransaction(database, storeName, 'readwrite');
+            shouldComplete = true;
+        }
+
         const store = transaction.objectStore(storeName);
         const request = store.put(stampedData);
 
         // CRITICAL FIX: Use wrapRequest for timeout and abort handling
-        return wrapRequest(request, transaction);
+        const result = await wrapRequest(request, transaction);
+
+        // For auto-created transactions, wait for completion before returning
+        // This ensures proper locking and isolation
+        if (shouldComplete) {
+            await new Promise((resolve, reject) => {
+                if (transaction.readyState === 'finished' || transaction.readyState === 'done') {
+                    resolve();
+                    return;
+                }
+                transaction.oncomplete = () => resolve();
+                transaction.onerror = () => reject(transaction.error);
+                transaction.onabort = () => reject(transaction.error || new Error('Transaction aborted'));
+            });
+        }
+
+        return result;
     } catch (error) {
         // On error, try falling back if not already
         if (!usingFallback) {
@@ -1032,6 +1107,8 @@ async function getAllByIndex(storeName, indexName, direction = 'next') {
 /**
  * Atomic read-modify-write operation using cursor
  * This ensures true atomicity for append operations
+ * CRITICAL FIX for Issue #2: Adds try-catch around modifier call with explicit transaction abort on error
+ *
  * @param {string} storeName - Store name
  * @param {IDBValidKey} key - Record key
  * @param {function} modifier - Function that modifies the value
@@ -1044,11 +1121,29 @@ async function atomicUpdate(storeName, key, modifier) {
         const store = transaction.objectStore(storeName);
         const request = store.openCursor(key);
 
+        // CRITICAL FIX for Issue #2: Track whether modifier threw to properly abort transaction
+        let modifierThrew = false;
+        let modifierError = null;
+
         request.onsuccess = (event) => {
             const cursor = event.target.result;
             if (cursor) {
                 const currentValue = cursor.value;
-                const newValue = modifier(currentValue);
+
+                // CRITICAL FIX for Issue #2: Wrap modifier in try-catch
+                // If modifier throws, explicitly abort the transaction
+                let newValue;
+                try {
+                    newValue = modifier(currentValue);
+                } catch (error) {
+                    modifierThrew = true;
+                    modifierError = error;
+                    console.error('[IndexedDB] atomicUpdate modifier threw, aborting transaction:', error);
+                    transaction.abort();
+                    reject(error);
+                    return;
+                }
+
                 // Add write epoch to atomic updates with VectorClock
                 const clockState = writeVectorClock.tick();
                 const stampedValue = {
@@ -1056,11 +1151,24 @@ async function atomicUpdate(storeName, key, modifier) {
                     _writeEpoch: clockState,
                     _writerId: writeVectorClock.processId
                 };
-                cursor.update(stampedValue);
-                resolve(stampedValue);
+                const updateReq = cursor.update(stampedValue);
+                updateReq.onerror = () => reject(updateReq.error);
+                updateReq.onsuccess = () => resolve(stampedValue);
             } else {
                 // Key doesn't exist, create new
-                const newValue = modifier(undefined);
+                // CRITICAL FIX for Issue #2: Wrap modifier in try-catch
+                let newValue;
+                try {
+                    newValue = modifier(undefined);
+                } catch (error) {
+                    modifierThrew = true;
+                    modifierError = error;
+                    console.error('[IndexedDB] atomicUpdate modifier threw (new key), aborting transaction:', error);
+                    transaction.abort();
+                    reject(error);
+                    return;
+                }
+
                 const clockState = writeVectorClock.tick();
                 const stampedValue = {
                     ...newValue,
@@ -1072,7 +1180,23 @@ async function atomicUpdate(storeName, key, modifier) {
                 putRequest.onerror = () => reject(putRequest.error);
             }
         };
-        request.onerror = () => reject(request.error);
+
+        request.onerror = () => {
+            // Only reject if modifier didn't throw (modifier error already handled)
+            if (!modifierThrew) {
+                reject(request.error);
+            }
+        };
+
+        // CRITICAL FIX for Issue #2: Handle transaction abort explicitly
+        transaction.onabort = () => {
+            if (modifierThrew) {
+                // Already rejected with modifier error
+                return;
+            }
+            // Transaction aborted for another reason
+            reject(transaction.error || new Error('Transaction aborted during atomicUpdate'));
+        };
     });
 }
 
