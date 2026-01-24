@@ -78,11 +78,25 @@ Security enables control value by:
 
 ## Security Features
 
-### 1. Credential Encryption (AES-GCM)
+### 1. Semantic Search
 
-**WASM-Only Architecture**: Semantic search now uses 100% client-side local embeddings (WASM-based). No external credentials or cloud services are required for RAG functionality.
+All semantic search functionality is implemented using:
+- **100% Client-Side**: WASM-compiled transformers running in the browser
+- **No External Dependencies**: No cloud vector databases or API calls
+- **Local Embeddings**: Generated using @xenova/transformers
+- **Privacy Preserving**: Search queries never leave the device
 
-Previously, RAG credentials (Qdrant API keys) were encrypted using the Web Crypto API with AES-GCM. This infrastructure remains available for future extensions if needed:
+### 2. Storage Security
+
+Recent security improvements (v0.9):
+- **TOCTOU Prevention**: Reservation mechanism in QuotaManager prevents race conditions
+- **Token Binding**: SHA-256 hashed device fingerprints for all API access
+- **Session Versioning**: Automatic credential invalidation on auth events
+- **CORS Validation**: Proper handling of null origins from file:// URLs
+
+### 3. Credential Encryption (AES-GCM)
+
+RAG credentials are encrypted using the Web Crypto API with AES-GCM. This infrastructure remains available for future extensions if needed:
 
 ```javascript
 // Credentials are NEVER stored in plaintext
@@ -97,7 +111,7 @@ const creds = await Security.getEncryptedCredentials('service_credentials');
 
 **Key derivation**: PBKDF2 with 600,000 iterations from session salt + Spotify refresh token + session version.
 
-### 2. Session Versioning & Invalidation
+### 4. Session Versioning & Invalidation
 
 Sessions are bound to a version number that increments on:
 - Token refresh failures
@@ -114,7 +128,7 @@ Security.invalidateSessions();
 > [!IMPORTANT]
 > **After changing passwords**: Log out of Rhythm Chamber to reset security keys.
 
-### 3. XSS Token Protection (NEW)
+### 5. XSS Token Protection (NEW)
 
 Spotify access tokens are bound to device fingerprints to mitigate localStorage theft:
 
@@ -143,7 +157,7 @@ if (!check.secure) {
 }
 ```
 
-### 4. Geographic Anomaly Detection
+### 6. Geographic Anomaly Detection
 
 To detect proxy/VPN-based credential stuffing attacks, we track connection patterns:
 
@@ -166,7 +180,7 @@ if (suspicious.geoAnomaly) {
 const threshold = Security.calculateAdaptiveThreshold(5, 'embedding');
 ```
 
-### 5. Rate Limiting
+### 7. Rate Limiting
 
 Client-side rate limiting prevents abuse of embedding APIs:
 
@@ -176,7 +190,7 @@ if (Security.isRateLimited('embedding', 5)) {
 }
 ```
 
-### 6. Obfuscation vs Encryption
+### 8. Obfuscation vs Encryption
 
 > [!IMPORTANT]
 > Rhythm Chamber uses **two different protection levels** depending on data sensitivity:
@@ -190,7 +204,7 @@ if (Security.isRateLimited('embedding', 5)) {
 
 **Encryption** (`Security.encryptData()`) uses AES-GCM with PBKDF2 key derivation (600k iterations). This is real encryption, though keys are still client-side.
 
-### 7. Unified Error Context (NEW)
+### 9. Unified Error Context (NEW)
 
 Structured error handling with recovery paths:
 
@@ -202,14 +216,14 @@ const error = Security.ErrorContext.create('GEO_LOCKOUT', 'Too many location cha
 // Returns: { code, rootCause, recoveryPath, userMessage, severity, ... }
 ```
 
-### 8. Navigation Cleanup
+### 10. Navigation Cleanup
 
 Tab visibility and navigation events are monitored for suspicious patterns:
 
 - Extended hidden tab periods (>30 min) trigger re-auth suggestion
 - Page unload events are logged for audit trail
 
-### 9. Fail-Closed Architecture (Safe Mode) (NEW)
+### 11. Fail-Closed Architecture (Safe Mode) (NEW)
 **Problem**: If security modules fail to load (e.g., spotty connection), the app should not fallback to unencrypted storage.
 
 **Solution**:
@@ -220,7 +234,7 @@ Tab visibility and navigation events are monitored for suspicious patterns:
 
 ---
 
-### 10. Security Checklist (First-Run Waiver) (NEW)
+### 12. Security Checklist (First-Run Waiver) (NEW)
 
 To ensure users understand the client-side security model, a mandatory checklist appears on first run:
 
@@ -237,7 +251,7 @@ To ensure users understand the client-side security model, a mandatory checklist
 
 **Mitigation**: Credentials are AES-GCM encrypted. Attacker sees:
 ```
-rhythm_chamber_encrypted_creds: {"qdrant_credentials":{"cipher":"ZnVja3lvdXRoaXNpc2VuY3J5cHRlZA==..."}}
+rhythm_chamber_encrypted_creds: {"service_credentials":{"cipher":"ZnVja3lvdXRoaXNpc2VuY3J5cHRlZA==..."}}
 ```
 
 Without the active session key, decryption fails.
@@ -325,8 +339,9 @@ If you discover a security vulnerability in Rhythm Chamber:
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.4 | 2026-01-18 | Updated to reflect WASM-only semantic search (removed Qdrant cloud dependency) |
+| 1.5 | 2026-01-24 | Added v0.9 storage security improvements (TOCTOU prevention, token binding, CORS validation) |
+| 1.4 | 2026-01-18 | Updated to reflect WASM-only semantic search (removed cloud vector database dependency) |
 | 1.3 | 2026-01-15 | Updated to reflect three-layer value stack (Emotional, Privacy, Control) |
-| 1.2 | 2026-01-13 | Clarified obfuscation vs encryption, removed namespace isolation (user owns Qdrant) |
+| 1.2 | 2026-01-13 | Clarified obfuscation vs encryption |
 | 1.1 | 2026-01-12 | XSS token protection, adaptive lockouts, unified errors |
 | 1.0 | 2026-01-12 | Initial security model |
