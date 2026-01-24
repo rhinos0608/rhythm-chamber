@@ -24,32 +24,34 @@ const logger = createLogger('LemonSqueezyService');
 /**
  * Lemon Squeezy Store URL
  * Format: https://yourstore.lemonsqueezy.com
- * TODO: Set in config when store is created
+ * Configured in config.json as lemonsqueezy.storeUrl
  */
-const STORE_URL = ConfigLoader.get('LEMONSQUEEZY_STORE_URL', '');
+const STORE_URL = ConfigLoader.get('lemonsqueezy.storeUrl', '');
 
 /**
  * Lemon Squeezy API Key for license validation
- * TODO: Set in config or use Cloudflare Worker
+ * NOTE: Not used when validationEndpoint is set (Worker mode)
+ * TODO: Set in config if not using Cloudflare Worker
  */
-const API_KEY = ConfigLoader.get('LEMONSQUEEZY_API_KEY', '');
+const API_KEY = ConfigLoader.get('lemonsqueezy.apiKey', '');
 
 /**
  * Variant IDs for Chamber tier
- * TODO: Configure in Lemon Squeezy Dashboard
+ * Configured in config.json as lemonsqueezy.variantMonthly, variantYearly, variantLifetime
  */
 const VARIANT_IDS = {
-    chamber_monthly: ConfigLoader.get('LEMON_VARIANT_CHAMBER_MONTHLY', ''),
-    chamber_yearly: ConfigLoader.get('LEMON_VARIANT_CHAMBER_YEARLY', ''),
-    chamber_lifetime: ConfigLoader.get('LEMON_VARIANT_CHAMBER_LIFETIME', '')
+    chamber_monthly: ConfigLoader.get('lemonsqueezy.variantMonthly', ''),
+    chamber_yearly: ConfigLoader.get('lemonsqueezy.variantYearly', ''),
+    chamber_lifetime: ConfigLoader.get('lemonsqueezy.variantLifetime', '')
 };
 
 /**
  * Validation endpoint (Cloudflare Worker or direct API)
+ * Configured in config.json as lemonsqueezy.validationEndpoint
  * If set, uses Worker for secure validation
  * If empty, uses direct API with client-side key (not recommended for production)
  */
-const VALIDATION_ENDPOINT = ConfigLoader.get('LEMON_VALIDATION_ENDPOINT', '');
+const VALIDATION_ENDPOINT = ConfigLoader.get('lemonsqueezy.validationEndpoint', '');
 
 // Instance name for this installation
 const INSTANCE_NAME = 'rhythm-chamber';
