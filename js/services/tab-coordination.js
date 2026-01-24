@@ -34,25 +34,64 @@ async function isKeySessionActive() {
 // Nonce tracking for replay protection
 // ==========================================
 
-const usedNonces = new Set();
+// FIX: Use Map instead of Set to track nonce timestamps
+// Previously used Set.clear() which removed ALL nonces (including recent ones)
+// breaking replay protection. Now we track each nonce's timestamp and only
+// remove nonces older than NONCE_EXPIRY_MS.
+const usedNonces = new Map(); // nonce -> timestamp when first seen
 const NONCE_EXPIRY_MS = 60000; // 1 minute
+const NONCE_CLEANUP_INTERVAL_MS = 30000; // Run cleanup every 30 seconds
+const CLEANUP_THRESHOLD = 500; // Only cleanup when we have this many nonces
 
-// Clean up expired nonces periodically
+/**
+ * Clean up expired nonces periodically
+ * FIX: Only removes nonces older than NONCE_EXPIRY_MS, not ALL nonces.
+ * This preserves replay protection for recent nonces while preventing
+ * unbounded memory growth.
+ */
 setInterval(() => {
-    if (usedNonces.size > 1000) {
-        usedNonces.clear();
+    // Only run cleanup if we have accumulated many nonces
+    if (usedNonces.size > CLEANUP_THRESHOLD) {
+        const now = Date.now();
+        const expiredNonces = [];
+        let removedCount = 0;
+
+        // Find all expired nonces (older than NONCE_EXPIRY_MS)
+        for (const [nonce, timestamp] of usedNonces.entries()) {
+            if (now - timestamp > NONCE_EXPIRY_MS) {
+                expiredNonces.push(nonce);
+            }
+        }
+
+        // Remove expired nonces
+        for (const nonce of expiredNonces) {
+            usedNonces.delete(nonce);
+            removedCount++;
+        }
+
+        if (removedCount > 0) {
+            console.log(`[TabCoordination] Cleaned up ${removedCount} expired nonces (${usedNonces.size} remaining)`);
+        }
     }
-}, NONCE_EXPIRY_MS);
+}, NONCE_CLEANUP_INTERVAL_MS);
 
 /**
  * Check if nonce has been used (replay protection)
+ * FIX: Now stores timestamp with each nonce to support age-based cleanup.
+ *
  * @param {string} nonce - Nonce to check
  * @returns {boolean} True if nonce is fresh (not used)
  */
 function isNonceFresh(nonce) {
     if (!nonce) return false;
-    if (usedNonces.has(nonce)) return false;
-    usedNonces.add(nonce);
+
+    // Check if nonce was already used
+    if (usedNonces.has(nonce)) {
+        return false;
+    }
+
+    // Store nonce with current timestamp
+    usedNonces.set(nonce, Date.now());
     return true;
 }
 
@@ -1098,7 +1137,7 @@ function createMessageHandler() {
 
             // Step 3: Nonce validation for replay protection
             if (nonce && !isNonceFresh(nonce)) {
-                logger.warn('[TabCoordination] Rejecting replayed message with nonce:', nonce);
+                console.warn('[TabCoordination] Rejecting replayed message with nonce:', nonce);
                 return; // Drop the message
             }
 

@@ -168,10 +168,18 @@ export class PerformanceProfiler {
      * @param {Object} options - Configuration options
      * @param {boolean} options.enabled - Whether profiling is enabled
      * @param {number} options.maxMeasurements - Maximum measurements to store
+     * @param {number} options.maxSnapshots - Maximum memory snapshots to store
+     * @param {number} options.maxDegradationAlerts - Maximum degradation alerts to store
      */
-    constructor({ enabled = true, maxMeasurements = 1000 } = {}) {
+    constructor({ enabled = true, maxMeasurements = 1000, maxSnapshots, maxDegradationAlerts } = {}) {
         this._enabled = enabled && this._isPerformanceAPIAvailable();
         this._maxMeasurements = maxMeasurements;
+        if (maxSnapshots !== undefined) {
+            this._maxMemorySnapshots = maxSnapshots;
+        }
+        if (maxDegradationAlerts !== undefined) {
+            this._maxDegradationAlerts = maxDegradationAlerts;
+        }
 
         // Initialize category measurements
         for (const category of Object.values(PerformanceCategory)) {
@@ -514,15 +522,24 @@ export class PerformanceProfiler {
         const durations = measurements.map(m => m.duration).sort((a, b) => a - b);
         const totalDuration = durations.reduce((sum, d) => sum + d, 0);
 
+        // Calculate median - average of two middle values for even-length arrays
+        let medianDuration;
+        const mid = Math.floor(durations.length / 2);
+        if (durations.length % 2 === 0) {
+            medianDuration = (durations[mid - 1] + durations[mid]) / 2;
+        } else {
+            medianDuration = durations[mid];
+        }
+
         return {
             count: measurements.length,
             totalDuration,
             avgDuration: totalDuration / measurements.length,
             minDuration: durations[0],
             maxDuration: durations[durations.length - 1],
-            medianDuration: durations[Math.floor(durations.length / 2)],
-            p95Duration: durations[Math.floor(durations.length * 0.95)],
-            p99Duration: durations[Math.floor(durations.length * 0.99)]
+            medianDuration,
+            p95Duration: durations[Math.floor((durations.length - 1) * 0.95)],
+            p99Duration: durations[Math.min(Math.floor(durations.length * 0.99), durations.length - 1)]
         };
     }
 

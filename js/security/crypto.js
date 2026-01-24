@@ -188,7 +188,7 @@ async function getSessionKey() {
 
     // Combine all keying material
     const combinedSecret = `${sessionSalt}:${deviceSecret}:rhythm-chamber:v${version}`;
-    return deriveKey(combinedSecret);
+    return deriveKey(combinedSecret, sessionSalt);
 }
 
 /**
@@ -212,7 +212,7 @@ async function getDataEncryptionKey() {
  */
 async function encryptData(data, keyOrPassword) {
     const key = typeof keyOrPassword === 'string'
-        ? await deriveKey(keyOrPassword)
+        ? await deriveKey(keyOrPassword, getSessionSalt())
         : keyOrPassword;
 
     const encoder = new TextEncoder();
@@ -241,7 +241,7 @@ async function encryptData(data, keyOrPassword) {
 async function decryptData(encryptedData, keyOrPassword) {
     try {
         const key = typeof keyOrPassword === 'string'
-            ? await deriveKey(keyOrPassword)
+            ? await deriveKey(keyOrPassword, getSessionSalt())
             : keyOrPassword;
 
         const combined = new Uint8Array(

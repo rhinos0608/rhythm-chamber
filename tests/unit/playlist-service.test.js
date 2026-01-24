@@ -69,6 +69,18 @@ describe('PlaylistService', () => {
             localStorage.clear();
         }
         vi.clearAllMocks();
+
+        // Reset mocks to default values (quota available)
+        vi.mocked(PremiumQuota.canCreatePlaylist).mockResolvedValue({
+            allowed: true,
+            remaining: 1,
+            reason: null
+        });
+        vi.mocked(PremiumQuota.recordPlaylistCreation).mockResolvedValue(0);
+        vi.mocked(PremiumQuota.getQuotaStatus).mockResolvedValue({
+            isPremium: false,
+            playlists: { used: 0, limit: 1, remaining: 1 }
+        });
     });
 
     afterEach(() => {

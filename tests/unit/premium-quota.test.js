@@ -12,7 +12,14 @@ import { ConfigLoader } from '../../js/services/config-loader.js';
 vi.mock('../../js/services/config-loader.js', () => ({
     ConfigLoader: {
         get: vi.fn((key, defaultValue) => {
-            // By default, return the default value (not production, not testing quota limits)
+            // MVP mode: TEST_QUOTA_LIMITS=true means quota disabled (everyone is premium)
+            // This simulates the default MVP behavior where quota tracking is disabled
+            if (key === 'TEST_QUOTA_LIMITS') {
+                return true; // Disable quota limits in MVP mode (everyone is premium)
+            }
+            if (key === 'PRODUCTION_BUILD') {
+                return false; // Not production in tests
+            }
             return defaultValue;
         })
     }

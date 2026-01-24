@@ -248,8 +248,9 @@ function showSecurityError(reason) {
 
         const causesTitle = document.createElement('p');
         causesTitle.style.marginBottom = '0.5rem';
-        // SAFE: Static HTML literal with no user input
-        causesTitle.innerHTML = '<strong>Common causes:</strong>';
+        // SAFE: Using textContent with styled element instead of innerHTML
+        causesTitle.textContent = 'Common causes:';
+        causesTitle.style.fontWeight = 'bold';
         causesBox.appendChild(causesTitle);
 
         const causesList = document.createElement('ul');
@@ -293,15 +294,6 @@ function showSecurityError(reason) {
         // we're rendering at the right time in the frame cycle
         requestAnimationFrame(showError);
     }
-}
-
-/**
- * Escape HTML for safe display
- */
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
 }
 
 /**

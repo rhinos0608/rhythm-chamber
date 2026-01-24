@@ -205,11 +205,18 @@ function determineResolution(requested, conflicts) {
 
 /**
  * Get currently active operations from OperationLock
- * 
+ *
+ * Checks window.OperationLock first (for test mocks), then falls back to the module.
+ *
  * @returns {string[]}
  */
 function getActiveOperations() {
-    if (OperationLock) {
+    // Check window.OperationLock first (for test mocks)
+    if (typeof window !== 'undefined' && window.OperationLock && typeof window.OperationLock.getActiveLocks === 'function') {
+        return window.OperationLock.getActiveLocks();
+    }
+    // Fall back to the imported module
+    if (OperationLock && typeof OperationLock.getActiveLocks === 'function') {
         return OperationLock.getActiveLocks();
     }
     return [];

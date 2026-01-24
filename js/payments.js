@@ -17,6 +17,7 @@
 
 import { ConfigLoader } from './services/config-loader.js';
 import { Settings } from './settings.js';
+import { LicenseVerifier } from './security/license-verifier.js';
 
 // ==========================================
 // Production Build Detection
@@ -35,11 +36,11 @@ function isProductionBuild() {
 }
 
 /**
- * Check actual license/entitlement status
- * TODO: Implement server-side verification for production
- * @returns {boolean} True if user has valid license
+ * Check actual license/entitlement status with cryptographic verification
+ * Uses JWT signature verification to prevent client-side bypass
+ * @returns {Promise<boolean>} True if user has valid license
  */
-function checkLicenseStatus() {
+async function checkLicenseStatus() {
     // Check environment and storage availability
     if (typeof window === 'undefined') {
         return false;
@@ -49,42 +50,45 @@ function checkLicenseStatus() {
         return false;
     }
 
-    try {
-        // Check localStorage for cached license
-        const licenseData = localStorage.getItem('rhythm_chamber_license');
-        if (licenseData) {
-            const license = JSON.parse(licenseData);
-            // Simple expiry check - production should verify server-side
-            if (license.validUntil && new Date(license.validUntil) > new Date()) {
-                return true;
-            }
-
-            if (!license.validUntil && license.tier === 'curator') {
-                // Curator tier is one-time, no expiry
-                return true;
-            }
-        }
-    } catch (e) {
-        // Handle localStorage access errors (SSR, storage disabled, quota exceeded, etc.)
-        console.warn('[Payments] Cannot access localStorage:', e);
+    if (!window.crypto || !window.crypto.subtle) {
+        console.warn('[Payments] Web Crypto API not available');
+        return false;
     }
 
-    // No valid license found
-    return false;
+    try {
+        // Use cryptographic verification
+        const license = await LicenseVerifier.loadLicense();
+
+        if (!license) {
+            return false;
+        }
+
+        // LicenseVerifier.verifyLicense already checks:
+        // - JWT signature (prevents tampering)
+        // - Expiration (exp claim)
+        // - Device binding (prevents sharing)
+        // - Tier validity
+        return license.valid;
+
+    } catch (e) {
+        // Handle verification errors
+        console.warn('[Payments] License verification failed:', e);
+        return false;
+    }
 }
 
 /**
  * Check if user has premium access (Curator or Chamber tier)
  *
- * HNW Note: Client-side entitlement = no real security.
- * For MVP, everything is free. For production, verify server-side.
+ * Now uses cryptographic signature verification to prevent bypass.
+ * For MVP, everything is free. For production, verifies license.
  *
- * @returns {boolean} True if user has premium access
+ * @returns {Promise<boolean>} True if user has premium access
  */
-function isPremium() {
-    // Production build: Check actual license
+async function isPremium() {
+    // Production build: Check actual license with crypto verification
     if (isProductionBuild()) {
-        return checkLicenseStatus();
+        return await checkLicenseStatus();
     }
 
     // MVP: Everything is free
@@ -93,22 +97,22 @@ function isPremium() {
 
 /**
  * Get premium status details
- * @returns {object} Premium status info
+ * @returns {Promise<object>} Premium status info
  */
-function getPremiumStatus() {
+async function getPremiumStatus() {
     if (isProductionBuild()) {
-        const hasLicense = checkLicenseStatus();
+        const hasLicense = await checkLicenseStatus();
         let activatedAt = null;
         let tier = 'sovereign';
+        let expiresAt = null;
 
         if (hasLicense) {
             try {
-                const licenseData = localStorage.getItem('rhythm_chamber_license');
-                if (licenseData) {
-                    const license = JSON.parse(licenseData);
-                    // Extract activation date from license object
-                    activatedAt = license.activatedAt || license.date || null;
-                    tier = license.tier || 'sovereign';
+                const license = await LicenseVerifier.loadLicense();
+                if (license && license.valid) {
+                    activatedAt = license.activatedAt;
+                    tier = license.tier;
+                    expiresAt = license.expiresAt;
                 }
             } catch (e) {
                 console.warn('[Payments] Failed to parse license for activation date:', e);
@@ -127,6 +131,7 @@ function getPremiumStatus() {
             tierName: tierNames[tier] || 'The Sovereign',
             productionBuild: true,
             activatedAt,
+            expiresAt,
             description: hasLicense ? `${tierNames[tier]} Tier - Premium Features Enabled` : 'The Sovereign Tier - Upgrade for Premium Features'
         };
     }
@@ -138,7 +143,7 @@ function getPremiumStatus() {
         productionBuild: false,
         activatedAt: new Date().toISOString(),
         description: 'MVP Free Tier - All Features Enabled',
-        note: 'For production, implement server-side verification'
+        note: 'Cryptographic license verification enabled for production builds'
     };
 }
 
@@ -192,15 +197,13 @@ function hideUpgradeModal() {
 /**
  * Handle payment return from Lemon Squeezy
  * Checks for license key and activates premium if payment successful
+ * Uses cryptographic verification for secure license storage
  */
 async function handlePaymentReturn() {
-    // Dynamic import to avoid circular dependency
-    const { LemonSqueezyService } = await import('./services/lemon-squeezy-service.js');
+    // Use LicenseVerifier to check for valid license
+    const license = await LicenseVerifier.loadLicense();
 
-    // Check for stored license from checkout event
-    const stored = localStorage.getItem('rhythm_chamber_license');
-    if (stored) {
-        const license = JSON.parse(stored);
+    if (license && license.valid) {
         return {
             success: true,
             status: 'success',
@@ -240,6 +243,9 @@ export const Payments = {
     isProductionBuild,
     checkLicenseStatus,
 
+    // LicenseVerifier reference for direct access
+    LicenseVerifier,
+
     // Available plans (informational) - Two-Tier Model
     PLANS: {
         sovereign: {
@@ -257,5 +263,6 @@ export const Payments = {
 };
 
 
-console.log('[Payments] Module loaded - Two-Tier Model');
+console.log('[Payments] Module loaded - Cryptographic license verification enabled');
+
 

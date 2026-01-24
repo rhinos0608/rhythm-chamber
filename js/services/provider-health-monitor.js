@@ -81,7 +81,7 @@ export class ProviderHealthMonitor {
     constructor() {
         this._initializeHealthData();
         this._subscribeToEvents();
-        // Don't start monitoring in constructor - make it explicit
+        this._startMonitoring();
     }
 
     /**
@@ -345,8 +345,54 @@ export class ProviderHealthMonitor {
      * @returns {Object} Health summary
      */
     getHealthSummary() {
-        // Delegate to ProviderHealthAuthority
-        return ProviderHealthAuthority.getHealthSummary();
+        let healthy = 0;
+        let degraded = 0;
+        let unhealthy = 0;
+        let blacklisted = 0;
+        let unknown = 0;
+
+        for (const healthData of this._healthData.values()) {
+            switch (healthData.status) {
+                case HealthStatus.HEALTHY:
+                    healthy++;
+                    break;
+                case HealthStatus.DEGRADED:
+                    degraded++;
+                    break;
+                case HealthStatus.UNHEALTHY:
+                    unhealthy++;
+                    break;
+                case HealthStatus.BLACKLISTED:
+                    blacklisted++;
+                    break;
+                case HealthStatus.UNKNOWN:
+                    unknown++;
+                    break;
+            }
+        }
+
+        const total = this._healthData.size;
+        let overallStatus = HealthStatus.UNKNOWN;
+
+        if (total === 0) {
+            overallStatus = HealthStatus.UNKNOWN;
+        } else if (blacklisted > 0 || unhealthy > 0) {
+            overallStatus = HealthStatus.UNHEALTHY;
+        } else if (degraded > 0) {
+            overallStatus = HealthStatus.DEGRADED;
+        } else if (healthy === total) {
+            overallStatus = HealthStatus.HEALTHY;
+        }
+
+        return {
+            total,
+            healthy,
+            degraded,
+            unhealthy,
+            blacklisted,
+            unknown,
+            overallStatus
+        };
     }
 
     /**

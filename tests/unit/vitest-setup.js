@@ -1,8 +1,10 @@
 /**
  * Vitest Setup File
- * 
+ *
  * Sets up test environment globals and mocks that happy-dom doesn't provide.
  */
+
+import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 
 // Mock localStorage with full implementation
 class LocalStorageMock {
@@ -42,3 +44,9 @@ const localStorage = new LocalStorageMock();
 globalThis.localStorage = localStorage;
 
 console.log('[Vitest Setup] localStorage mock initialized');
+
+// Set up fake-indexeddb for tests that require IndexedDB
+globalThis.indexedDB = new IDBFactory();
+globalThis.IDBKeyRange = IDBKeyRange;
+
+console.log('[Vitest Setup] IndexedDB mock initialized');

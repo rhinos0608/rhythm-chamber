@@ -1,18 +1,224 @@
 /**
  * Configuration Loader Service
- * 
+ *
  * Loads configuration from JSON file with retry logic, validation, and fallback defaults.
  * Replaces the fragile <script src="config.js"> pattern with a resilient async loader.
- * 
+ *
  * Features:
  * - Fetch with exponential backoff retry (3 attempts)
  * - Inline critical defaults for app functionality
  * - LocalStorage caching for offline resilience
  * - Config validation against required fields
  * - Event emission on config load/failure for UI awareness
- * 
+ * - Safe localStorage operations with try-catch and quota error handling
+ * - Environment variable support for configuration overrides
+ *
+ * Environment Variables:
+ * ----------------------
+ * The following environment variables can be set to override configuration:
+ *
+ * Build-time / Runtime Config:
+ * - VITE_CONFIG_URL or RHYTHM_CONFIG_URL: Overrides the config.json URL (default: './js/config.json')
+ * - VITE_NODE_ENV or NODE_ENV: Environment detection ('development', 'production', 'test')
+ *
+ * OpenRouter API:
+ * - VITE_OPENROUTER_API_KEY or OPENROUTER_API_KEY: OpenRouter API key
+ * - VITE_OPENROUTER_API_URL or OPENROUTER_API_URL: OpenRouter API URL
+ * - VITE_OPENROUTER_MODEL or OPENROUTER_MODEL: Default model to use
+ *
+ * Spotify OAuth:
+ * - VITE_SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_ID: Spotify OAuth client ID
+ *
+ * Lemon Squeezy Payments:
+ * - VITE_LEMONSQUEEZY_STORE_URL or LEMONSQUEEZY_STORE_URL: Lemon Squeezy store URL
+ * - VITE_LEMONSQUEEZY_API_KEY or LEMONSQUEEZY_API_KEY: Lemon Squeezy API key
+ * - VITE_LEMONSQUEEZY_VARIANT_MONTHLY or LEMONSQUEEZY_VARIANT_MONTHLY: Monthly variant ID
+ * - VITE_LEMONSQUEEZY_VARIANT_YEARLY or LEMONSQUEEZY_VARIANT_YEARLY: Yearly variant ID
+ * - VITE_LEMONSQUEEZY_VARIANT_LIFETIME or LEMONSQUEEZY_VARIANT_LIFETIME: Lifetime variant ID
+ *
+ * Stripe Payments:
+ * - VITE_STRIPE_PUBLISHABLE_KEY or STRIPE_PUBLISHABLE_KEY: Stripe publishable key
+ * - VITE_STRIPE_PRICE_LIFETIME or STRIPE_PRICE_LIFETIME: Lifetime price ID
+ * - VITE_STRIPE_PRICE_MONTHLY or STRIPE_PRICE_MONTHLY: Monthly price ID
+ *
+ * Application:
+ * - VITE_APP_NAME or APP_NAME: Application name (default: 'Rhythm Chamber')
+ * - VITE_PAYMENT_MODE or PAYMENT_MODE: Payment mode ('' for MVP, 'chamber' for production)
+ *
+ * Priority Order:
+ * 1. Environment variables (highest priority)
+ * 2. Loaded config.json values
+ * 3. localStorage cached values
+ * 4. CRITICAL_DEFAULTS (lowest priority)
+ *
  * @module services/config-loader
  */
+
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('ConfigLoader');
+
+// ==========================================
+// Environment Variable Helpers
+// ==========================================
+
+/**
+ * Get an environment variable value.
+ * Checks multiple possible sources with priority:
+ * 1. import.meta.env (Vite build-time env vars)
+ * 2. window.env (runtime-injected env vars)
+ * 3. process.env (for Node.js compatibility)
+ *
+ * @param {string[]} names - Array of possible env var names (checked in order)
+ * @returns {string|undefined} The env var value or undefined
+ */
+function getEnvVar(names) {
+    // Vite build-time env vars (prefixed with VITE_)
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+        for (const name of names) {
+            const viteName = name.startsWith('VITE_') ? name : `VITE_${name}`;
+            if (import.meta.env[viteName] !== undefined) {
+                return import.meta.env[viteName];
+            }
+        }
+    }
+
+    // Runtime-injected env vars on window
+    if (typeof window !== 'undefined' && window.env) {
+        for (const name of names) {
+            if (window.env[name] !== undefined) {
+                return window.env[name];
+            }
+        }
+    }
+
+    // process.env (Node.js / SSR compatibility)
+    if (typeof process !== 'undefined' && process.env) {
+        for (const name of names) {
+            if (process.env[name] !== undefined) {
+                return process.env[name];
+            }
+        }
+    }
+
+    return undefined;
+}
+
+/**
+ * Get the current environment (development, production, test)
+ *
+ * @returns {string} The environment name
+ */
+function getEnvironment() {
+    return getEnvVar(['NODE_ENV']) || 'development';
+}
+
+/**
+ * Get the config URL from environment or default
+ *
+ * @returns {string} The config URL to load
+ */
+function getConfigUrl() {
+    const customUrl = getEnvVar(['RHYTHM_CONFIG_URL', 'CONFIG_URL']);
+    return customUrl || './js/config.json';
+}
+
+/**
+ * Build configuration overrides from environment variables.
+ * Env vars take highest priority and override all other sources.
+ *
+ * @returns {Object} Configuration overrides from environment
+ */
+function getEnvConfigOverrides() {
+    const overrides = {};
+    const env = getEnvironment();
+
+    // Environment detection
+    overrides.env = env;
+
+    // OpenRouter configuration
+    const openrouterApiKey = getEnvVar(['OPENROUTER_API_KEY']);
+    if (openrouterApiKey) {
+        overrides.openrouter = { ...overrides.openrouter, apiKey: openrouterApiKey };
+    }
+
+    const openrouterApiUrl = getEnvVar(['OPENROUTER_API_URL']);
+    if (openrouterApiUrl) {
+        overrides.openrouter = { ...overrides.openrouter, apiUrl: openrouterApiUrl };
+    }
+
+    const openrouterModel = getEnvVar(['OPENROUTER_MODEL']);
+    if (openrouterModel) {
+        overrides.openrouter = { ...overrides.openrouter, model: openrouterModel };
+    }
+
+    // Spotify configuration
+    const spotifyClientId = getEnvVar(['SPOTIFY_CLIENT_ID']);
+    if (spotifyClientId) {
+        overrides.spotify = { ...overrides.spotify, clientId: spotifyClientId };
+    }
+
+    // Lemon Squeezy configuration
+    const lsStoreUrl = getEnvVar(['LEMONSQUEEZY_STORE_URL']);
+    if (lsStoreUrl) {
+        overrides.lemonsqueezy = { ...overrides.lemonsqueezy, storeUrl: lsStoreUrl };
+    }
+
+    const lsApiKey = getEnvVar(['LEMONSQUEEZY_API_KEY']);
+    if (lsApiKey) {
+        overrides.lemonsqueezy = { ...overrides.lemonsqueezy, apiKey: lsApiKey };
+    }
+
+    const lsVariantMonthly = getEnvVar(['LEMONSQUEEZY_VARIANT_MONTHLY']);
+    if (lsVariantMonthly) {
+        overrides.lemonsqueezy = { ...overrides.lemonsqueezy, variantMonthly: lsVariantMonthly };
+    }
+
+    const lsVariantYearly = getEnvVar(['LEMONSQUEEZY_VARIANT_YEARLY']);
+    if (lsVariantYearly) {
+        overrides.lemonsqueezy = { ...overrides.lemonsqueezy, variantYearly: lsVariantYearly };
+    }
+
+    const lsVariantLifetime = getEnvVar(['LEMONSQUEEZY_VARIANT_LIFETIME']);
+    if (lsVariantLifetime) {
+        overrides.lemonsqueezy = { ...overrides.lemonsqueezy, variantLifetime: lsVariantLifetime };
+    }
+
+    // Stripe configuration
+    const stripeKey = getEnvVar(['STRIPE_PUBLISHABLE_KEY']);
+    if (stripeKey) {
+        overrides.stripe = { ...overrides.stripe, publishableKey: stripeKey };
+    }
+
+    const stripePriceLifetime = getEnvVar(['STRIPE_PRICE_LIFETIME']);
+    if (stripePriceLifetime) {
+        overrides.stripe = {
+            ...overrides.stripe,
+            prices: { ...overrides.stripe?.prices, lifetime: stripePriceLifetime }
+        };
+    }
+
+    const stripePriceMonthly = getEnvVar(['STRIPE_PRICE_MONTHLY']);
+    if (stripePriceMonthly) {
+        overrides.stripe = {
+            ...overrides.stripe,
+            prices: { ...overrides.stripe?.prices, monthly: stripePriceMonthly }
+        };
+    }
+
+    // Application configuration
+    const appName = getEnvVar(['APP_NAME']);
+    if (appName) {
+        overrides.app = { ...overrides.app, name: appName };
+    }
+
+    const paymentMode = getEnvVar(['PAYMENT_MODE']);
+    if (paymentMode !== undefined) {
+        overrides.PAYMENT_MODE = paymentMode;
+    }
+
+    return overrides;
+}
 
 // ==========================================
 // Default Configuration (Critical Fallbacks)
@@ -57,7 +263,8 @@ const CRITICAL_DEFAULTS = {
         name: 'Rhythm Chamber',
         url: typeof window !== 'undefined' ? window.location.origin : ''
     },
-    PAYMENT_MODE: '' // Empty = MVP mode, 'chamber' = production mode
+    PAYMENT_MODE: '', // Empty = MVP mode, 'chamber' = production mode
+    env: 'development'
 };
 
 // ==========================================
@@ -80,7 +287,6 @@ let loadFailed = false;
 let loadError = null;
 
 const CONFIG_CACHE_KEY = 'rhythm_chamber_config_cache';
-const CONFIG_URL = './js/config.json';
 const MAX_RETRIES = 3;
 const BASE_RETRY_DELAY_MS = 500;
 
@@ -90,13 +296,14 @@ const BASE_RETRY_DELAY_MS = 500;
 
 /**
  * Load configuration with retry logic
- * 
+ *
  * @param {Object} [options] - Load options
  * @param {boolean} [options.forceRefresh=false] - Bypass cache and reload
- * @returns {Promise<Object>} Merged configuration (loaded + defaults)
+ * @param {boolean} [options.skipEnvOverride=false] - Skip environment variable overrides
+ * @returns {Promise<Object>} Merged configuration (env vars + loaded + defaults)
  */
 async function load(options = {}) {
-    const { forceRefresh = false } = options;
+    const { forceRefresh = false, skipEnvOverride = false } = options;
 
     // Return cached config if available
     if (loadedConfig && !forceRefresh) {
@@ -112,15 +319,19 @@ async function load(options = {}) {
     loadFailed = false;
     loadError = null;
 
+    // Get config URL (may be overridden by env var)
+    const configUrl = getConfigUrl();
+    logger.info(`Loading config from: ${configUrl}`);
+
     loadingPromise = (async () => {
         let lastError = null;
 
         // Try to load with retries
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
-                console.log(`[ConfigLoader] Loading config (attempt ${attempt}/${MAX_RETRIES})...`);
+                logger.info(`Loading config (attempt ${attempt}/${MAX_RETRIES})...`);
 
-                const response = await fetch(CONFIG_URL, {
+                const response = await fetch(configUrl, {
                     cache: forceRefresh ? 'no-cache' : 'default'
                 });
 
@@ -133,20 +344,31 @@ async function load(options = {}) {
                 // Validate required structure
                 const validation = validateConfig(json);
                 if (!validation.valid) {
-                    console.warn('[ConfigLoader] Config validation warnings:', validation.warnings);
+                    logger.warn('Config validation warnings:', validation.warnings);
                 }
 
-                // Merge with defaults (loaded values take precedence)
+                // Merge: defaults -> loaded values -> env overrides
                 loadedConfig = deepMerge(CRITICAL_DEFAULTS, json);
 
+                // Apply environment variable overrides (highest priority)
+                if (!skipEnvOverride) {
+                    const envOverrides = getEnvConfigOverrides();
+                    const appliedOverrides = applyEnvOverrides(loadedConfig, envOverrides);
+                    if (Object.keys(appliedOverrides).length > 0) {
+                        logger.info('Applied environment variable overrides:', Object.keys(appliedOverrides));
+                    }
+                }
+
                 // Add computed properties
-                loadedConfig.spotify.redirectUri = window.location.origin + '/app.html';
-                loadedConfig.app.url = window.location.origin;
+                if (typeof window !== 'undefined') {
+                    loadedConfig.spotify.redirectUri = window.location.origin + '/app.html';
+                    loadedConfig.app.url = window.location.origin;
+                }
 
                 // Cache to localStorage for offline resilience
                 cacheConfig(loadedConfig);
 
-                console.log('[ConfigLoader] Config loaded successfully');
+                logger.info('Config loaded successfully');
                 emitEvent('config:loaded', { source: 'network' });
 
                 isLoading = false;
@@ -154,32 +376,46 @@ async function load(options = {}) {
 
             } catch (error) {
                 lastError = error;
-                console.warn(`[ConfigLoader] Attempt ${attempt} failed:`, error.message);
+                logger.warn(`Attempt ${attempt} failed:`, error.message);
 
                 if (attempt < MAX_RETRIES) {
                     // Exponential backoff: 500ms, 1000ms, 2000ms
                     const delay = BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
-                    console.log(`[ConfigLoader] Retrying in ${delay}ms...`);
+                    logger.info(`Retrying in ${delay}ms...`);
                     await sleep(delay);
                 }
             }
         }
 
         // All retries failed - try cache
-        console.warn('[ConfigLoader] All retries failed, trying cache...');
+        logger.warn('All retries failed, trying cache...');
         const cached = getCachedConfig();
 
         if (cached) {
-            console.log('[ConfigLoader] Using cached config');
+            logger.info('Using cached config');
             loadedConfig = deepMerge(CRITICAL_DEFAULTS, cached);
+
+            // Still apply env overrides to cached config
+            if (!skipEnvOverride) {
+                const envOverrides = getEnvConfigOverrides();
+                applyEnvOverrides(loadedConfig, envOverrides);
+            }
+
             emitEvent('config:loaded', { source: 'cache', warning: 'Network load failed' });
             isLoading = false;
             return loadedConfig;
         }
 
-        // No cache - use critical defaults
-        console.warn('[ConfigLoader] No cache available, using critical defaults');
+        // No cache - use critical defaults with env overrides
+        logger.warn('No cache available, using critical defaults');
         loadedConfig = deepMerge({}, CRITICAL_DEFAULTS);
+
+        // Apply env overrides even when using defaults
+        if (!skipEnvOverride) {
+            const envOverrides = getEnvConfigOverrides();
+            applyEnvOverrides(loadedConfig, envOverrides);
+        }
+
         loadFailed = true;
         loadError = lastError?.message || 'Unknown error';
 
@@ -196,8 +432,41 @@ async function load(options = {}) {
 }
 
 /**
+ * Apply environment variable overrides to config.
+ * Env vars take highest priority and will overwrite existing values.
+ *
+ * @param {Object} config - The config object to modify
+ * @param {Object} overrides - The overrides to apply
+ * @returns {Object} The overrides that were applied
+ */
+function applyEnvOverrides(config, overrides) {
+    const applied = {};
+
+    for (const [key, value] of Object.entries(overrides)) {
+        if (value !== undefined) {
+            if (typeof value === 'object' && !Array.isArray(value)) {
+                // Nested object - merge recursively
+                if (!config[key] || typeof config[key] !== 'object') {
+                    config[key] = {};
+                }
+                const nestedApplied = applyEnvOverrides(config[key], value);
+                if (Object.keys(nestedApplied).length > 0) {
+                    applied[key] = nestedApplied;
+                }
+            } else {
+                // Primitive value - direct assignment
+                config[key] = value;
+                applied[key] = value;
+            }
+        }
+    }
+
+    return applied;
+}
+
+/**
  * Get a configuration value by dot-notation path
- * 
+ *
  * @param {string} path - Dot-notation path (e.g., 'openrouter.apiKey')
  * @param {*} [defaultValue] - Default if path not found
  * @returns {*} Configuration value
@@ -226,7 +495,7 @@ function get(path, defaultValue = undefined) {
 
 /**
  * Check if configuration is loaded and ready
- * 
+ *
  * @returns {boolean}
  */
 function isReady() {
@@ -235,7 +504,7 @@ function isReady() {
 
 /**
  * Check if configuration load failed
- * 
+ *
  * @returns {{failed: boolean, error: string|null, usingDefaults: boolean}}
  */
 function getLoadStatus() {
@@ -248,7 +517,7 @@ function getLoadStatus() {
 
 /**
  * Get the full configuration object
- * 
+ *
  * @returns {Object|null}
  */
 function getAll() {
@@ -257,7 +526,7 @@ function getAll() {
 
 /**
  * Set a configuration value at runtime (does not persist)
- * 
+ *
  * @param {string} path - Dot-notation path
  * @param {*} value - Value to set
  */
@@ -407,10 +676,21 @@ function validateConfig(config) {
 
 /**
  * Cache configuration to localStorage
- * 
+ *
  * @param {Object} config - Config to cache
  */
 function cacheConfig(config) {
+    // Check for localStorage in window or global (for test environments)
+    const storage = typeof window !== 'undefined' && window.localStorage
+        ? window.localStorage
+        : typeof global !== 'undefined' && global.localStorage
+            ? global.localStorage
+            : null;
+
+    if (!storage) {
+        return;
+    }
+
     try {
         // Don't cache sensitive data
         const cacheable = { ...config };
@@ -421,24 +701,39 @@ function cacheConfig(config) {
             cacheable.stripe = { ...cacheable.stripe, publishableKey: '' };
         }
 
-        localStorage.setItem(CONFIG_CACHE_KEY, JSON.stringify({
+        storage.setItem(CONFIG_CACHE_KEY, JSON.stringify({
             config: cacheable,
             timestamp: Date.now()
         }));
     } catch (e) {
-        // Ignore localStorage errors
-        console.warn('[ConfigLoader] Failed to cache config:', e.message);
+        // Handle quota exceeded errors specifically
+        if (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014) {
+            logger.warn('localStorage quota exceeded, unable to cache config');
+        } else {
+            logger.warn('Failed to cache config:', e);
+        }
     }
 }
 
 /**
  * Get cached configuration from localStorage
- * 
+ *
  * @returns {Object|null}
  */
 function getCachedConfig() {
+    // Check for localStorage in window or global (for test environments)
+    const storage = typeof window !== 'undefined' && window.localStorage
+        ? window.localStorage
+        : typeof global !== 'undefined' && global.localStorage
+            ? global.localStorage
+            : null;
+
+    if (!storage) {
+        return null;
+    }
+
     try {
-        const stored = localStorage.getItem(CONFIG_CACHE_KEY);
+        const stored = storage.getItem(CONFIG_CACHE_KEY);
         if (!stored) return null;
 
         const { config, timestamp } = JSON.parse(stored);
@@ -446,12 +741,13 @@ function getCachedConfig() {
         // Cache expires after 7 days
         const maxAge = 7 * 24 * 60 * 60 * 1000;
         if (Date.now() - timestamp > maxAge) {
-            localStorage.removeItem(CONFIG_CACHE_KEY);
+            clearCache();
             return null;
         }
 
         return config;
     } catch (e) {
+        logger.warn('Failed to read cached config:', e);
         return null;
     }
 }
@@ -460,10 +756,21 @@ function getCachedConfig() {
  * Clear cached configuration
  */
 function clearCache() {
+    // Check for localStorage in window or global (for test environments)
+    const storage = typeof window !== 'undefined' && window.localStorage
+        ? window.localStorage
+        : typeof global !== 'undefined' && global.localStorage
+            ? global.localStorage
+            : null;
+
+    if (!storage) {
+        return;
+    }
+
     try {
-        localStorage.removeItem(CONFIG_CACHE_KEY);
+        storage.removeItem(CONFIG_CACHE_KEY);
     } catch (e) {
-        // Ignore
+        logger.warn('Failed to clear config cache:', e);
     }
 }
 
@@ -473,7 +780,7 @@ function clearCache() {
 
 /**
  * Deep merge objects (source overrides target)
- * 
+ *
  * @param {Object} target - Base object
  * @param {Object} source - Override object
  * @returns {Object} Merged object
@@ -484,7 +791,10 @@ function deepMerge(target, source) {
     for (const key of Object.keys(source)) {
         if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
             result[key] = deepMerge(result[key] || {}, source[key]);
-        } else if (source[key] !== undefined && source[key] !== '') {
+        } else if (source[key] !== undefined) {
+            // FIX: Allow empty strings to be set (distinguish between unset and empty)
+            // Previously: `source[key] !== undefined && source[key] !== ''`
+            // This prevented intentionally empty values from being set
             result[key] = source[key];
         }
     }
@@ -494,7 +804,7 @@ function deepMerge(target, source) {
 
 /**
  * Sleep for a duration
- * 
+ *
  * @param {number} ms - Milliseconds to sleep
  * @returns {Promise<void>}
  */
@@ -504,7 +814,7 @@ function sleep(ms) {
 
 /**
  * Emit a custom event (for EventBus integration)
- * 
+ *
  * @param {string} eventType - Event type
  * @param {Object} payload - Event payload
  */
@@ -530,7 +840,7 @@ function installWindowProxy() {
 
     // If legacy config.js already loaded, preserve it
     if (window.Config && Object.keys(window.Config).length > 0) {
-        console.log('[ConfigLoader] Legacy window.Config detected, merging...');
+        logger.info('Legacy window.Config detected, merging...');
         if (loadedConfig) {
             loadedConfig = deepMerge(loadedConfig, window.Config);
         } else {
@@ -543,7 +853,7 @@ function installWindowProxy() {
     Object.defineProperty(window, 'Config', {
         get() {
             if (!loadedConfig) {
-                console.warn('[ConfigLoader] Accessed window.Config before load() completed');
+                logger.warn('Accessed window.Config before load() completed');
                 return CRITICAL_DEFAULTS;
             }
             return loadedConfig;
@@ -579,11 +889,14 @@ const ConfigLoader = {
     // Backward compatibility
     installWindowProxy,
 
+    // Environment helpers
+    getEnvironment,
+    getConfigUrl,
+
     // Constants (for testing)
-    CRITICAL_DEFAULTS,
-    CONFIG_URL
+    CRITICAL_DEFAULTS
 };
 
 export { ConfigLoader };
 
-console.log('[ConfigLoader] Configuration Loader Service loaded');
+logger.info('Configuration Loader Service loaded');

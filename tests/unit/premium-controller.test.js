@@ -6,10 +6,20 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+// Mock focus-trap utility - must be before imports
+vi.mock('../../js/utils/focus-trap.js', () => ({
+    createFocusTrap: vi.fn(() => ({
+        activate: vi.fn(),
+        deactivate: vi.fn()
+    }))
+}));
+
 import { Pricing } from '../../js/pricing.js';
 import { PremiumQuota } from '../../js/services/premium-quota.js';
 import { PremiumController } from '../../js/controllers/premium-controller.js';
 import { ConfigLoader } from '../../js/services/config-loader.js';
+import { createFocusTrap } from '../../js/utils/focus-trap.js';
 
 // Mock Pricing module
 vi.mock('../../js/pricing.js', () => ({
@@ -55,14 +65,6 @@ vi.mock('../../js/services/config-loader.js', () => ({
     }
 }));
 
-// Mock focus-trap utility
-vi.mock('../../js/utils/focus-trap.js', () => ({
-    createFocusTrap: vi.fn(() => ({
-        activate: vi.fn(),
-        deactivate: vi.fn()
-    }))
-}));
-
 describe('PremiumController', () => {
     let mockFocusTrap;
 
@@ -84,8 +86,7 @@ describe('PremiumController', () => {
             activate: vi.fn(),
             deactivate: vi.fn()
         };
-        const { createFocusTrap } = require('../../js/utils/focus-trap.js');
-        createFocusTrap.mockReturnValue(mockFocusTrap);
+        vi.mocked(createFocusTrap).mockReturnValue(mockFocusTrap);
     });
 
     afterEach(() => {
@@ -386,20 +387,20 @@ describe('PremiumController', () => {
         });
 
         it('should have Maybe Later button', () => {
-            const button = document.querySelector('[data-action="hide-upgrade-modal"]');
-            expect(button).toBeTruthy();
-            expect(button?.textContent).toContain('Maybe Later');
+            const buttons = document.querySelectorAll('[data-action="hide-upgrade-modal"]');
+            expect(buttons.length).toBeGreaterThan(0);
+            // First button is the close button (×), second is "Maybe Later"
+            const maybeLaterBtn = Array.from(buttons).find(btn => btn.textContent.includes('Maybe Later'));
+            expect(maybeLaterBtn).toBeTruthy();
         });
 
-        it('should have Upgrade button', () => {
-            const button = document.querySelector('[data-action="navigate-upgrade"]');
-            expect(button).toBeTruthy();
-            expect(button?.textContent).toContain('Upgrade');
-        });
-
-        it('should link to upgrade.html', () => {
-            const button = document.querySelector('[data-action="navigate-upgrade"]');
-            expect(button?.getAttribute('href')).toBe('upgrade.html');
+        it('should have Upgrade buttons', () => {
+            const monthlyBtn = document.querySelector('[data-action="upgrade-monthly"]');
+            const yearlyBtn = document.querySelector('[data-action="upgrade-yearly"]');
+            expect(monthlyBtn).toBeTruthy();
+            expect(yearlyBtn).toBeTruthy();
+            expect(monthlyBtn?.textContent).toContain('$4.99');
+            expect(yearlyBtn?.textContent).toContain('$39');
         });
     });
 

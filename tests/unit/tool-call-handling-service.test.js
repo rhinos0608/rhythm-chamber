@@ -34,7 +34,7 @@ const mockFunctionCallingFallback = {
 };
 
 const mockTimeoutBudget = {
-    allocate: vi.fn(() => ({ remaining: () => 10000 })),
+    allocate: vi.fn(() => ({ remaining: () => 10000, signal: new AbortController().signal })),
     release: vi.fn()
 };
 

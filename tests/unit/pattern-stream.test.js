@@ -1,6 +1,6 @@
 /**
  * Unit Tests for Pattern Stream Service
- * 
+ *
  * Tests for progressive pattern detection and streaming
  */
 
@@ -14,28 +14,11 @@ import { EventBus } from '../../js/services/event-bus.js';
 
 beforeEach(() => {
     EventBus.clearAll();
-
-    // Mock Patterns module on window
-    global.window = {
-        Patterns: {
-            detectComfortVsDiscovery: vi.fn().mockResolvedValue({ ratio: 50 }),
-            detectListeningEras: vi.fn().mockResolvedValue({ eras: [] }),
-            detectTimeOfDayPatterns: vi.fn().mockResolvedValue({ peakHour: 21 }),
-            detectWeekdayWeekendPatterns: vi.fn().mockResolvedValue({ weekendBias: 30 }),
-            detectEmotionalJourney: vi.fn().mockResolvedValue({ dominant: 'melancholy' }),
-            detectGhostedArtists: vi.fn().mockResolvedValue({ artists: [] }),
-            detectArtistLoyalty: vi.fn().mockResolvedValue({ loyal: [] }),
-            detectGenreEvolution: vi.fn().mockResolvedValue({ genres: [] }),
-            detectSeasonalPatterns: vi.fn().mockResolvedValue({ seasons: {} }),
-            detectBingeSessions: vi.fn().mockResolvedValue({ sessions: [] })
-        }
-    };
 });
 
 afterEach(() => {
     EventBus.clearAll();
     PatternStream.abort();
-    delete global.window;
 });
 
 // ==========================================
@@ -43,17 +26,29 @@ afterEach(() => {
 // ==========================================
 
 describe('PatternStream startStream', () => {
+    // Helper to create valid mock stream data
+    const createMockStreams = (count = 10) => {
+        const artists = ['Artist A', 'Artist B', 'Artist C', 'Artist D', 'Artist E'];
+        return Array.from({ length: count }, (_, i) => ({
+            artistName: artists[i % artists.length],
+            playedAt: new Date(Date.now() - (count - i) * 86400000).toISOString(),
+            msPlayed: 180000,
+            hourUTC: 12,
+            dayOfWeek: i % 7
+        }));
+    };
+
     it('should detect patterns and return all results', async () => {
-        const mockStreams = [{ ts: '2023-01-01' }];
+        const mockStreams = createMockStreams(10);
 
         const result = await PatternStream.startStream(mockStreams, { delay: 0 });
 
         expect(result).toHaveProperty('comfortDiscovery');
-        expect(result.comfortDiscovery).toEqual({ ratio: 50 });
+        expect(result.comfortDiscovery).toHaveProperty('ratio');
     });
 
     it('should emit pattern:detected events for each pattern', async () => {
-        const mockStreams = [{ ts: '2023-01-01' }];
+        const mockStreams = createMockStreams(10);
         const patternHandler = vi.fn();
 
         EventBus.on('pattern:detected', patternHandler);
@@ -66,7 +61,7 @@ describe('PatternStream startStream', () => {
     });
 
     it('should emit pattern:all_complete when done', async () => {
-        const mockStreams = [{ ts: '2023-01-01' }];
+        const mockStreams = createMockStreams(10);
         const completeHandler = vi.fn();
 
         EventBus.on('pattern:all_complete', completeHandler);
@@ -83,7 +78,7 @@ describe('PatternStream startStream', () => {
     });
 
     it('should call onPattern callback for each pattern', async () => {
-        const mockStreams = [{ ts: '2023-01-01' }];
+        const mockStreams = createMockStreams(10);
         const onPattern = vi.fn();
 
         await PatternStream.startStream(mockStreams, { delay: 0, onPattern });
@@ -93,7 +88,7 @@ describe('PatternStream startStream', () => {
     });
 
     it('should call onComplete callback when finished', async () => {
-        const mockStreams = [{ ts: '2023-01-01' }];
+        const mockStreams = createMockStreams(10);
         const onComplete = vi.fn();
 
         await PatternStream.startStream(mockStreams, { delay: 0, onComplete });
@@ -109,8 +104,20 @@ describe('PatternStream startStream', () => {
 // ==========================================
 
 describe('PatternStream State', () => {
+    // Helper to create valid mock stream data
+    const createMockStreams = (count = 10) => {
+        const artists = ['Artist A', 'Artist B', 'Artist C', 'Artist D', 'Artist E'];
+        return Array.from({ length: count }, (_, i) => ({
+            artistName: artists[i % artists.length],
+            playedAt: new Date(Date.now() - (count - i) * 86400000).toISOString(),
+            msPlayed: 180000,
+            hourUTC: 12,
+            dayOfWeek: i % 7
+        }));
+    };
+
     it('should track progress during streaming', async () => {
-        const mockStreams = [{ ts: '2023-01-01' }];
+        const mockStreams = createMockStreams(10);
 
         // Start streaming (no await)
         const promise = PatternStream.startStream(mockStreams, { delay: 10 });
@@ -125,7 +132,7 @@ describe('PatternStream State', () => {
     });
 
     it('should return detected patterns', async () => {
-        const mockStreams = [{ ts: '2023-01-01' }];
+        const mockStreams = createMockStreams(10);
 
         await PatternStream.startStream(mockStreams, { delay: 0 });
 
@@ -134,7 +141,7 @@ describe('PatternStream State', () => {
     });
 
     it('should report progress', async () => {
-        const mockStreams = [{ ts: '2023-01-01' }];
+        const mockStreams = createMockStreams(10);
 
         await PatternStream.startStream(mockStreams, { delay: 0 });
 
@@ -150,8 +157,20 @@ describe('PatternStream State', () => {
 // ==========================================
 
 describe('PatternStream Abort', () => {
+    // Helper to create valid mock stream data
+    const createMockStreams = (count = 10) => {
+        const artists = ['Artist A', 'Artist B', 'Artist C', 'Artist D', 'Artist E'];
+        return Array.from({ length: count }, (_, i) => ({
+            artistName: artists[i % artists.length],
+            playedAt: new Date(Date.now() - (count - i) * 86400000).toISOString(),
+            msPlayed: 180000,
+            hourUTC: 12,
+            dayOfWeek: i % 7
+        }));
+    };
+
     it('should abort streaming when abort() is called', async () => {
-        const mockStreams = [{ ts: '2023-01-01' }];
+        const mockStreams = createMockStreams(10);
 
         // Start streaming with long delay
         const promise = PatternStream.startStream(mockStreams, { delay: 100 });

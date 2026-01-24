@@ -1225,10 +1225,15 @@ function setupEventListeners() {
         if (handler) {
             // HNW Fix: Properly await async handlers so errors propagate
             // Some handlers like 'confirm-delete-chat' are async
-            Promise.resolve(handler()).catch(err => {
-                console.error(`[App] Handler '${action}' failed:`, err);
-                EventBus.emit('handler:failed', { action, error: err });
-            });
+            // Use async IIFE to ensure all errors (sync throws, async rejections) are caught
+            (async () => {
+                try {
+                    await handler();
+                } catch (err) {
+                    console.error(`[App] Handler '${action}' failed:`, err);
+                    EventBus.emit('handler:failed', { action, error: err });
+                }
+            })();
         } else {
             console.warn(`[App] Unknown action: ${action}`);
         }

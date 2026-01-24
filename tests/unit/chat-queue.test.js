@@ -46,6 +46,7 @@ vi.mock('../../js/services/session-manager.js', () => ({
         init: vi.fn(),
         setUserContext: vi.fn(),
         addMessageToHistory: vi.fn(),
+        addMessagesToHistory: vi.fn(), // Added for atomic message batching
         getHistory: vi.fn(() => []),
         saveConversation: vi.fn(),
         flushPendingSaveAsync: vi.fn(),
@@ -81,7 +82,7 @@ vi.mock('../../js/services/llm-provider-routing-service.js', () => ({
     LLMProviderRoutingService: {
         init: vi.fn(),
         callLLM: vi.fn(() => Promise.resolve({
-            choices: [{ message: { content: 'Test response' } }]
+            choices: [{ message: { content: 'Test response', role: 'assistant' } }]
         })),
         buildProviderConfig: vi.fn(() => ({
             provider: 'openrouter',
@@ -133,7 +134,8 @@ vi.mock('../../js/services/timeout-budget-manager.js', () => ({
             startTime: Date.now(),
             remaining: () => budgetMs,
             isExhausted: () => false,
-            elapsed: () => 0
+            elapsed: () => 0,
+            signal: new AbortController().signal
         })),
         release: vi.fn(),
         getBudget: vi.fn(() => null),
@@ -146,13 +148,147 @@ vi.mock('../../js/services/timeout-budget-manager.js', () => ({
     }
 }));
 
+// Mock WaveTelemetry as ES module
+vi.mock('../../js/services/wave-telemetry.js', () => ({
+    WaveTelemetry: {
+        record: vi.fn(),
+        recordMetrics: vi.fn(),
+        getMetrics: vi.fn(() => ({}))
+    }
+}));
+
+// Mock Storage as ES module
+vi.mock('../../js/storage.js', () => ({
+    Storage: {
+        onUpdate: vi.fn(),
+        getStreams: vi.fn(() => [])
+    }
+}));
+
+// Mock Settings as ES module
+vi.mock('../../js/settings.js', () => ({
+    Settings: {
+        getSettings: vi.fn(() => ({
+            llm: { provider: 'openrouter', model: 'test-model' },
+            openrouter: { apiKey: 'test-key' }
+        })),
+        showToast: vi.fn()
+    }
+}));
+
+// Mock Prompts as ES module
+vi.mock('../../js/prompts.js', () => ({
+    Prompts: {
+        system: 'System prompt for {{personality_name}}',
+        build: vi.fn(() => 'System prompt')
+    }
+}));
+
+// Mock TokenCounter as ES module
+vi.mock('../../js/token-counter.js', () => ({
+    TokenCounter: {
+        countTokens: vi.fn(() => 100)
+    }
+}));
+
+// Mock Patterns, Personality, Parser, DataQuery, ProviderInterface, FunctionCallingFallback
+vi.mock('../../js/patterns.js', () => ({
+    Patterns: {}
+}));
+
+vi.mock('../../js/personality.js', () => ({
+    Personality: {}
+}));
+
+vi.mock('../../js/parser.js', () => ({
+    Parser: {}
+}));
+
+vi.mock('../../js/data-query.js', () => ({
+    DataQuery: {
+        parseDateQuery: vi.fn(),
+        queryByTimePeriod: vi.fn(),
+        findPeakListeningPeriod: vi.fn(),
+        comparePeriods: vi.fn()
+    }
+}));
+
+vi.mock('../../js/providers/provider-interface.js', () => ({
+    ProviderInterface: {
+        callAPI: vi.fn()
+    }
+}));
+
+vi.mock('../../js/services/function-calling-fallback.js', () => ({
+    FunctionCallingFallback: {
+        handleFallback: vi.fn()
+    }
+}));
+
+vi.mock('../../js/functions/index.js', () => ({
+    Functions: {
+        getEnabledSchemas: vi.fn(() => []),
+        schemas: []
+    }
+}));
+
+// Mock ConfigLoader to prevent window.location.origin access
+vi.mock('../../js/services/config-loader.js', () => ({
+    ConfigLoader: {
+        getAll: vi.fn(() => ({
+            openrouter: { apiKey: 'test-key' },
+            spotify: {
+                clientId: '',
+                redirectUri: '',
+                scopes: ['user-read-recently-played', 'user-top-read']
+            }
+        }))
+    }
+}));
+
+// Mock ConversationOrchestrator
+vi.mock('../../js/services/conversation-orchestrator.js', () => ({
+    ConversationOrchestrator: {
+        init: vi.fn(),
+        setUserContext: vi.fn(),
+        setStreamsData: vi.fn(),
+        getUserContext: vi.fn(() => ({
+            personality: { name: 'Test' },
+            patterns: {},
+            summary: {}
+        })),
+        buildSystemPrompt: vi.fn(() => 'System prompt'),
+        generateQueryContext: vi.fn(() => 'Query context'),
+        getStreamsData: vi.fn(() => [])
+    }
+}));
+
+// Mock MessageOperations
+vi.mock('../../js/services/message-operations.js', () => ({
+    MessageOperations: {
+        init: vi.fn(),
+        regenerateLastResponse: vi.fn(),
+        deleteMessage: vi.fn(),
+        editMessage: vi.fn()
+    }
+}));
+
 // Create mock window objects
 function createMockWindow() {
     return {
+        location: {
+            origin: 'http://localhost:3000',
+            href: 'http://localhost:3000/app.html'
+        },
+        document: {
+            visibilityState: 'visible',
+            addEventListener: vi.fn()
+        },
         SessionManager: {
             init: vi.fn(),
             setUserContext: vi.fn(),
             addMessageToHistory: vi.fn(),
+            addMessagesToHistory: vi.fn(), // Added for atomic message batching
             getHistory: vi.fn(() => []),
             saveConversation: vi.fn(),
             flushPendingSaveAsync: vi.fn(),
@@ -296,17 +432,17 @@ describe('Chat TurnQueue Integration', () => {
             []
         );
 
-        // Send a message with bypassQueue option
-        const result = await Chat.sendMessage('Internal message', null, { bypassQueue: true });
+        // Send a message with bypassQueue option AND allowBypass flag (required for security)
+        const result = await Chat.sendMessage('Internal message', null, { bypassQueue: true, allowBypass: true });
 
         // Verify TurnQueue.push was NOT called
         expect(TurnQueue.push).not.toHaveBeenCalled();
 
-        // Verify the message was processed directly (use ES module mock, not window)
-        expect(SessionManager.addMessageToHistory).toHaveBeenCalledWith({
-            role: 'user',
-            content: 'Internal message'
-        });
+        // Verify the message was processed directly - messages are added atomically via addMessagesToHistory
+        expect(SessionManager.addMessagesToHistory).toHaveBeenCalledWith([
+            { role: 'user', content: 'Internal message' },
+            { role: 'assistant', content: 'Test response' }
+        ]);
     });
 
     it('should handle multiple messages in sequence via TurnQueue', async () => {

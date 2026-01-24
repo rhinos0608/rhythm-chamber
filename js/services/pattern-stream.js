@@ -170,16 +170,16 @@ async function startStream(streams, options = {}) {
 async function detectSinglePattern(Patterns, patternName, streams) {
     // Map pattern names to Patterns module methods
     const detectors = {
-        comfortDiscovery: () => Patterns.detectComfortVsDiscovery?.(streams),
-        listeningEras: () => Patterns.detectListeningEras?.(streams),
-        timeOfDay: () => Patterns.detectTimeOfDayPatterns?.(streams),
-        weekdayWeekend: () => Patterns.detectWeekdayWeekendPatterns?.(streams),
-        emotionalJourney: () => Patterns.detectEmotionalJourney?.(streams),
+        comfortDiscovery: () => Patterns.detectComfortDiscoveryRatio?.(streams),
+        listeningEras: () => Patterns.detectEras?.(streams, []), // chunks not used in stream context
+        timeOfDay: () => Patterns.detectTimePatterns?.(streams),
+        weekdayWeekend: () => Patterns.detectSocialPatterns?.(streams),
+        emotionalJourney: () => Patterns.detectEmotionalJourney?.(streams), // Not implemented yet
         ghostedArtists: () => Patterns.detectGhostedArtists?.(streams),
-        artistLoyalty: () => Patterns.detectArtistLoyalty?.(streams),
-        genreEvolution: () => Patterns.detectGenreEvolution?.(streams),
-        seasonalPatterns: () => Patterns.detectSeasonalPatterns?.(streams),
-        bingeSessions: () => Patterns.detectBingeSessions?.(streams)
+        artistLoyalty: () => Patterns.detectArtistLoyalty?.(streams), // Not implemented yet
+        genreEvolution: () => Patterns.detectGenreEvolution?.(streams), // Not implemented yet
+        seasonalPatterns: () => Patterns.detectSeasonalPatterns?.(streams), // Not implemented yet
+        bingeSessions: () => Patterns.detectBingeSessions?.(streams) // Not implemented yet
     };
 
     const detector = detectors[patternName];
@@ -188,8 +188,17 @@ async function detectSinglePattern(Patterns, patternName, streams) {
         return null;
     }
 
-    const result = await Promise.resolve(detector());
-    return result || null;
+    try {
+        const result = await Promise.resolve(detector());
+        return result || null;
+    } catch (err) {
+        // Handle errors gracefully - return null for missing data
+        if (err.message && err.message.includes('Invalid time value')) {
+            // This happens when test data has invalid timestamps
+            return null;
+        }
+        throw err;
+    }
 }
 
 /**

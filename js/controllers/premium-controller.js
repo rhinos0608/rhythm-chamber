@@ -16,6 +16,7 @@ import { Pricing } from '../pricing.js';
 import { PremiumQuota } from '../services/premium-quota.js';
 import { createFocusTrap } from '../utils/focus-trap.js';
 import { LemonSqueezyService } from '../services/lemon-squeezy-service.js';
+import { escapeHtml } from '../utils/html-escape.js';
 
 // ==========================================
 // Premium Controller
@@ -164,9 +165,10 @@ const PremiumController = {
         // Initialize Lemon Squeezy if not already done
         this.initLemonSqueezy();
 
-        // Remove existing modal if present
+        // Remove existing modal if present - immediately remove from DOM
         if (this._modal) {
-            this.hideModal();
+            this._modal.remove();
+            this._modal = null;
         }
 
         this._createModal(type, data);
@@ -239,11 +241,13 @@ const PremiumController = {
 
         const content = this._getModalContent(type, data);
 
+        // SAFE: Escape all dynamic content before inserting into innerHTML
+        // Static HTML structure is preserved, dynamic content is escaped
         modal.innerHTML = `
             <div class="modal-overlay-bg" data-action="hide-upgrade-modal"></div>
             <div class="modal-content" role="dialog" aria-labelledby="upgrade-modal-title" aria-modal="true">
                 <div class="modal-header">
-                    <h2 id="upgrade-modal-title" class="gradient-text">${content.title}</h2>
+                    <h2 id="upgrade-modal-title" class="gradient-text">${escapeHtml(content.title)}</h2>
                     <button class="modal-close upgrade-modal-close-btn"
                             data-action="hide-upgrade-modal"
                             aria-label="Close modal">×</button>
@@ -279,13 +283,15 @@ const PremiumController = {
     _getModalContent(type, data) {
         switch (type) {
             case 'playlist': {
+                // SAFE: Escape dynamic reason message
+                const escapedReason = escapeHtml(data.reason || 'You\'ve used your free playlist.');
                 return {
                     title: '✨ Unlock Unlimited Playlists',
                     body: `
                         <div class="upgrade-illustration">
                             <div class="illustration-icon">🎵</div>
                         </div>
-                        <p class="upgrade-message">${data.reason || 'You\'ve used your free playlist.'}</p>
+                        <p class="upgrade-message">${escapedReason}</p>
                         <div class="feature-list">
                             <div class="feature-item">
                                 <span class="feature-icon">∞</span>
@@ -317,13 +323,17 @@ const PremiumController = {
                 const featureName = feature?.name || 'Premium Feature';
                 const featureDesc = feature?.description || '';
 
+                // SAFE: Escape feature name and description
+                const escapedFeatureName = escapeHtml(featureName);
+                const escapedFeatureDesc = escapeHtml(featureDesc);
+
                 return {
-                    title: `✨ ${featureName}`,
+                    title: `✨ ${escapedFeatureName}`,
                     body: `
                         <div class="upgrade-illustration">
                             <div class="illustration-icon">🔒</div>
                         </div>
-                        <p class="upgrade-description">${featureDesc}</p>
+                        <p class="upgrade-description">${escapedFeatureDesc}</p>
                         <p class="upgrade-message">This feature is available with Premium.</p>
                         <div class="feature-list">
                             <div class="feature-item">

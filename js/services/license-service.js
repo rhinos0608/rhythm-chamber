@@ -80,7 +80,12 @@ function saveStoredLicense(license) {
     try {
         localStorage.setItem(LICENSE_STORAGE_KEY, JSON.stringify(license));
     } catch (e) {
-        logger.warn('Failed to save license:', e);
+        // Handle quota exceeded errors specifically
+        if (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014) {
+            logger.error('localStorage quota exceeded, unable to save license');
+        } else {
+            logger.warn('Failed to save license:', e);
+        }
     }
 }
 
@@ -125,7 +130,12 @@ function saveVerificationCache(verification) {
         };
         localStorage.setItem(LICENSE_CACHE_KEY, JSON.stringify(cached));
     } catch (e) {
-        logger.warn('Failed to save verification cache:', e);
+        // Handle quota exceeded errors specifically
+        if (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014) {
+            logger.warn('localStorage quota exceeded, unable to cache verification');
+        } else {
+            logger.warn('Failed to save verification cache:', e);
+        }
     }
 }
 
@@ -254,7 +264,20 @@ async function verifyLicenseKey(licenseKey, options = {}) {
         // Network error - fall back to local validation
         logger.warn('License verification failed, falling back to local validation:', e);
 
-        return await verifyLicenseLocally(licenseKey);
+        const localResult = await verifyLicenseLocally(licenseKey);
+
+        // Cache the local verification result to avoid repeated failures
+        if (localResult.valid) {
+            saveVerificationCache({
+                valid: true,
+                licenseKey,
+                tier: localResult.tier,
+                license: localResult.license,
+                local: true
+            });
+        }
+
+        return localResult;
     }
 }
 
