@@ -8,7 +8,8 @@ This document provides API documentation for core modules in Rhythm Chamber. It 
 - [EventBus](#eventbus---event-driven-communication)
 - [Storage](#storage---data-persistence-layer)
 - [Security](#security---cryptography--threat-protection)
-  - [Hybrid Encryption](#hybrid-encryption---multi-recipient-encryption)
+  - [Security Module](#security-module)
+  - [Recent Security Fixes (v0.9)](#recent-security-fixes-v09)
   - [Recovery Handlers](#recovery-handlers---error-recovery)
 - [IoC Container](#ioc-container---dependency-management)
 - [Providers](#providers---ai-provider-interface)
@@ -693,6 +694,62 @@ const status = await Storage.getSyncStatus();
 
 Security facade providing encryption, token binding, anomaly detection, and key management.
 
+---
+
+### Security Module
+
+#### AES-GCM-256 Encryption
+
+The `Crypto` module implements AES-GCM-256 encryption for sensitive data:
+
+```javascript
+import { encryptData, decryptData } from './security/crypto.js';
+
+// Encrypt API keys
+const encrypted = await encryptData(apiKey, keyMaterial);
+
+// Decrypt with key derivation
+const decrypted = await decryptData(encrypted, keyMaterial);
+```
+
+#### Key Derivation (PBKDF2)
+
+Keys are derived using:
+- 600,000 iterations (PBKDF2)
+- Session salt + Spotify refresh token + session version
+- SHA-256 HMAC
+
+#### Token Binding
+
+All token access requires device binding verification:
+
+```javascript
+import { SecureTokenStore } from './security/secure-token-store.js';
+
+const tokenStore = new SecureTokenStore();
+const token = await tokenStore.getToken(); // Automatic binding verification
+```
+
+---
+
+### Recent Security Fixes (v0.9)
+
+#### TOCTOU Race Condition
+Added reservation mechanism to `QuotaManager.checkWriteFits()`:
+- Space reserved before write operation
+- 30-second auto-release for stale reservations
+- Prevents concurrent write quota violations
+
+#### CORS Validation
+- Handle null origin from file:// URLs
+- Fail closed when license verification unavailable
+- State parameter validation for OAuth callbacks
+
+#### Device Secret Race Condition
+Protected device secret generation from race conditions during initialization.
+
+---
+
 ### Initialization
 
 #### `Security.init(options)`
@@ -832,18 +889,16 @@ Check if nonce was used before (replay prevention).
 
 ---
 
-### Legacy Encryption
+### Data Encryption Methods
 
-These methods use simpler encryption for backward compatibility.
+#### `Security.encryptData(data, keyMaterial)`
+Encrypt data using AES-GCM-256 with key derivation.
 
-#### `Security.encryptData(data, key)`
-Encrypt data (legacy method).
-
-#### `Security.decryptData(encryptedData, key)`
-Decrypt data (legacy method).
+#### `Security.decryptData(encryptedData, keyMaterial)`
+Decrypt data with derived key.
 
 #### `Security.storeEncryptedCredentials(key, credentials)`
-Store encrypted credentials.
+Store encrypted credentials with automatic key derivation.
 
 #### `Security.getEncryptedCredentials(key)`
 Retrieve encrypted credentials.
@@ -959,106 +1014,6 @@ Constant-time string comparison to prevent timing attacks.
 ```javascript
 const isValid = Security.constantTimeCompare(storedToken, providedToken);
 // Always compares all characters, preventing timing-based information leakage
-```
-
----
-
-### Hybrid Encryption {#hybrid-encryption---multi-recipient-encryption}
-
-Advanced encryption combining RSA-OAEP-2048 (asymmetric) with AES-GCM-256 (symmetric) for multi-recipient scenarios.
-
-#### `Security.HybridEncryption.generateKeyPair(extractable)`
-
-Generate RSA-OAEP key pair for asymmetric encryption.
-
-```javascript
-const keyPair = await Security.HybridEncryption.generateKeyPair(false);
-// Private key is non-extractable by default for security
-```
-
-**Parameters:**
-- `extractable` (Boolean, optional): Whether private key should be extractable (default: false)
-
-**Returns:** CryptoKeyPair with public and private keys
-
----
-
-#### `Security.HybridEncryption.exportPublicKey(publicKey)`
-
-Export public key to base64 SPKI format for sharing.
-
-```javascript
-const exportedKey = await Security.HybridEncryption.exportPublicKey(keyPair.publicKey);
-// Returns: Base64-encoded public key safe to share
-```
-
----
-
-#### `Security.HybridEncryption.importPublicKey(exportedKey)`
-
-Import a previously exported public key.
-
-```javascript
-const publicKey = await Security.HybridEncryption.importPublicKey(exportedKey);
-```
-
----
-
-#### `Security.HybridEncryption.encrypt(plaintext, recipientPublicKey)`
-
-Encrypt data using hybrid encryption (RSA-OAEP + AES-GCM).
-
-```javascript
-const encrypted = await Security.HybridEncryption.encrypt('sensitive data', recipientPublicKey);
-// Returns: { encryptedKey, iv, ciphertext, algorithm, timestamp }
-```
-
-**Process:**
-1. Generate ephemeral AES-256 key
-2. Encrypt plaintext with AES-GCM
-3. Encrypt ephemeral key with RSA-OAEP
-4. Return bundled result
-
----
-
-#### `Security.HybridEncryption.decrypt(encryptedData, privateKey)`
-
-Decrypt hybrid-encrypted data.
-
-```javascript
-const decrypted = await Security.HybridEncryption.decrypt(encrypted, privateKey);
-// Returns: Decrypted plaintext or null if decryption fails
-```
-
----
-
-#### `Security.HybridEncryption.encryptForMultiple(plaintext, recipientKeys)`
-
-Encrypt for multiple recipients without re-encrypting.
-
-```javascript
-const encrypted = await Security.HybridEncryption.encryptForMultiple(
-    'secret message',
-    {
-        'user1': user1PublicKey,
-        'user2': user2PublicKey
-    }
-);
-// Returns: { encryptedKeys: {user1, user2}, iv, ciphertext, recipientIds, ... }
-```
-
----
-
-#### `Security.HybridEncryption.decryptMultiple(encryptedData, recipientId, privateKey)`
-
-Decrypt multi-recipient data using your private key.
-
-```javascript
-const decrypted = await Security.HybridEncryption.decryptMultiple(
-    encrypted,
-    'user1',
-    privateKey
-);
 ```
 
 ---
