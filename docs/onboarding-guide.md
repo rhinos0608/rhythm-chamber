@@ -105,6 +105,50 @@ For maximum privacy, run AI models directly on your computer.
 
 ---
 
+## Option 4: OpenAI-Compatible Provider
+
+Use any OpenAI-compatible API endpoint with your choice. This option gives you maximum flexibility to connect to:
+
+- **Self-hosted servers**: vLLM, Text Generation WebUI, LocalAI
+- **Cloud providers**: Together AI, Anyscale, DeepInfra, Groq, etc.
+- **Local OpenAI-compatible servers**: Ollama with OpenAI compatibility mode
+- **Official OpenAI API**: Direct integration
+
+### Setup
+
+1. **Get your API endpoint and key**
+   - Obtain the base URL from your provider (e.g., `https://api.together.xyz/v1/chat/completions`)
+   - Get your API key from your provider's dashboard
+   - Note: Some local/self-hosted providers don't require an API key
+
+2. **Add to Rhythm Chamber**
+   - Open Rhythm Chamber
+   - Click the Settings (gear) icon
+   - Select "OpenAI Compatible" from the LLM Provider dropdown
+   - Enter your Base URL (full endpoint including `/chat/completions`)
+   - Enter your API Key (optional for some providers)
+   - Enter your Model Name (e.g., `meta-llama/Llama-3-8b-chat-hf`)
+   - Click "Save Settings"
+
+### Examples
+
+**Self-hosted (vLLM):**
+- Base URL: `http://localhost:8000/v1/chat/completions`
+- Model: `meta-llama/Llama-3-8b-chat-hf`
+- API Key: (optional)
+
+**Cloud (Together AI):**
+- Base URL: `https://api.together.xyz/v1/chat/completions`
+- Model: `meta-llama/Llama-3-8b-chat-hf`
+- API Key: (required)
+
+**Cloud (Anyscale):**
+- Base URL: `https://api.endpoints.anyscale.com/v1/chat/completions`
+- Model: `meta-llama/Llama-3-8b-chat-hf`
+- API Key: (required)
+
+---
+
 ## Troubleshooting
 
 ### "Invalid API Key" Error

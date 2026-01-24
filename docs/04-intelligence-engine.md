@@ -272,8 +272,10 @@ Users can choose their AI provider:
 | Ollama | Local | Free | Install Ollama, run model |
 | LM Studio | Local | Free | Install LM Studio, enable API |
 | OpenRouter | Cloud | Pay-per-use | Add API key in settings |
+| OpenAI-Compatible | Cloud or Local | Depends on chosen provider | Configure custom base URL and API key in settings |
+| Gemini | Cloud | Pay-per-use | Add API key in settings |
 
-The system automatically detects available providers and falls back gracefully.
+The OpenAI-Compatible provider supports any OpenAI-compatible API, including self-hosted servers, cloud providers like Together AI, Anyscale, DeepInfra, or the official OpenAI API. The system automatically detects available providers and falls back gracefully.
 
 ---
 

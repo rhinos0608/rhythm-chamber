@@ -20,6 +20,7 @@ import { Settings } from '../settings.js';
 import { OpenRouterProvider } from './openrouter.js';
 import { LMStudioProvider } from './lmstudio.js';
 import { GeminiProvider } from './gemini.js';
+import { OpenAICompatibleProvider } from './openai-compatible.js';
 
 // ==========================================
 // Timeout Constants
@@ -153,6 +154,19 @@ function buildProviderConfig(provider, settings, baseConfig) {
                 privacyLevel: 'cloud'
             };
 
+        case 'openai-compatible':
+            return {
+                provider: 'openai-compatible',
+                apiUrl: settings.openaiCompatible?.apiUrl || '',
+                model: settings.openaiCompatible?.model || 'gpt-3.5-turbo',
+                temperature: settings.openaiCompatible?.temperature ?? settings.openrouter?.temperature ?? 0.7,
+                topP: settings.openaiCompatible?.topP ?? 0.9,
+                maxTokens: settings.openaiCompatible?.maxTokens || 4000,
+                timeout: PROVIDER_TIMEOUTS.cloud,
+                isLocal: false,
+                privacyLevel: 'cloud'
+            };
+
         case 'openrouter':
         default:
             return {
@@ -241,6 +255,9 @@ async function callProvider(config, apiKey, messages, tools, onProgress = null) 
                             return await providerModule.call(config, messages, tools, onProgress);
 
                         case 'gemini':
+                            return await providerModule.call(apiKey, config, messages, tools, onProgress);
+
+                        case 'openai-compatible':
                             return await providerModule.call(apiKey, config, messages, tools, onProgress);
 
                         case 'openrouter':
@@ -377,6 +394,8 @@ function getProviderModule(provider) {
             return LMStudioProvider || null;
         case 'gemini':
             return GeminiProvider || null;
+        case 'openai-compatible':
+            return OpenAICompatibleProvider || null;
         case 'openrouter':
         default:
             return OpenRouterProvider || null;
@@ -433,6 +452,26 @@ async function isProviderAvailable(provider) {
                 return false;
             }
 
+        case 'openai-compatible':
+            // Check for apiUrl configuration
+            const openaiCompatibleUrl = Settings?.get?.()?.openaiCompatible?.apiUrl;
+            if (!openaiCompatibleUrl) {
+                return false;
+            }
+            // Quick health check with short timeout
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                const response = await fetch(openaiCompatibleUrl.replace('/chat/completions', '/models'), {
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                // Accept 200, 401 (auth works but no key), or 404 (no /models endpoint)
+                return response.ok || response.status === 401 || response.status === 404;
+            } catch {
+                return false;
+            }
+
         case 'openrouter':
         default:
             // MEDIUM FIX #15: Verify OpenRouter API key AND connectivity
@@ -464,7 +503,7 @@ async function isProviderAvailable(provider) {
  * @returns {Promise<Array<{name: string, available: boolean}>>}
  */
 async function getAvailableProviders() {
-    const providers = ['openrouter', 'ollama', 'lmstudio', 'gemini'];
+    const providers = ['openrouter', 'ollama', 'lmstudio', 'gemini', 'openai-compatible'];
     const results = await Promise.all(
         providers.map(async (name) => ({
             name,
@@ -903,6 +942,107 @@ async function checkGeminiHealth() {
 }
 
 /**
+ * Check OpenAI-Compatible provider health
+ * @returns {Promise<ProviderHealthStatus>}
+ */
+async function checkOpenAICompatibleHealth() {
+    const start = Date.now();
+    const config = Settings?.get?.()?.openaiCompatible || {};
+
+    if (!config.apiUrl) {
+        return {
+            available: false,
+            status: 'not_configured',
+            reason: 'No API endpoint configured',
+            models: [],
+            latencyMs: 0
+        };
+    }
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT);
+
+        // Build models endpoint URL
+        let modelsUrl = config.apiUrl;
+        if (modelsUrl.endsWith('/chat/completions')) {
+            modelsUrl = modelsUrl.replace('/chat/completions', '/models');
+        } else if (!modelsUrl.endsWith('/models')) {
+            const url = new URL(modelsUrl);
+            url.pathname = url.pathname.replace(/\/$/, '') + '/models';
+            modelsUrl = url.toString();
+        }
+
+        const headers = {};
+        if (config.apiKey) {
+            headers['Authorization'] = `Bearer ${config.apiKey}`;
+        }
+
+        const response = await fetch(modelsUrl, {
+            headers,
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        const latencyMs = Date.now() - start;
+
+        if (response.status === 401 || response.status === 403) {
+            return {
+                available: false,
+                status: 'invalid_key',
+                reason: 'API key is invalid or expired',
+                models: [],
+                latencyMs
+            };
+        }
+
+        if (!response.ok && response.status !== 404) {
+            return {
+                available: false,
+                status: 'error',
+                reason: `API error: ${response.status}`,
+                models: [],
+                latencyMs
+            };
+        }
+
+        // If 404, endpoint might work for chat even if /models doesn't exist
+        let models = [];
+        if (response.ok) {
+            const data = await safeJSONParse(response, { data: [] });
+            models = data.data?.map(m => m.id) || [];
+        }
+
+        return {
+            available: true,
+            status: 'ready',
+            models: models.slice(0, 20),
+            totalModels: models.length,
+            hasKey: !!config.apiKey,
+            latencyMs
+        };
+    } catch (error) {
+        const latencyMs = Date.now() - start;
+        if (error.name === 'AbortError') {
+            return {
+                available: false,
+                status: 'timeout',
+                reason: 'Connection timeout - check your endpoint URL',
+                models: [],
+                latencyMs
+            };
+        }
+        return {
+            available: false,
+            status: 'error',
+            reason: error.message,
+            models: [],
+            latencyMs
+        };
+    }
+}
+
+/**
  * Comprehensive health check for all providers
  * Returns detailed status including model availability
  *
@@ -910,18 +1050,20 @@ async function checkGeminiHealth() {
  *   openrouter: ProviderHealthStatus,
  *   ollama: ProviderHealthStatus,
  *   lmstudio: ProviderHealthStatus,
- *   gemini: ProviderHealthStatus
+ *   gemini: ProviderHealthStatus,
+ *   openaiCompatible: ProviderHealthStatus
  * }>}
  */
 async function checkHealth() {
-    const [openrouter, ollama, lmstudio, gemini] = await Promise.all([
+    const [openrouter, ollama, lmstudio, gemini, openaiCompatible] = await Promise.all([
         checkOpenRouterHealth(),
         checkOllamaHealth(),
         checkLMStudioHealth(),
-        checkGeminiHealth()
+        checkGeminiHealth(),
+        checkOpenAICompatibleHealth()
     ]);
 
-    return { openrouter, ollama, lmstudio, gemini };
+    return { openrouter, ollama, lmstudio, gemini, openaiCompatible };
 }
 
 // ==========================================
@@ -947,6 +1089,7 @@ export const ProviderInterface = {
     checkOllamaHealth,
     checkLMStudioHealth,
     checkGeminiHealth,
+    checkOpenAICompatibleHealth,
 
     // Error handling
     normalizeProviderError,

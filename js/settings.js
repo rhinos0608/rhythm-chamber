@@ -38,7 +38,8 @@ const PROVIDER_ID = {
     OLLAMA: 'ollama',
     LM_STUDIO: 'lmstudio',
     GEMINI: 'gemini',
-    OPENROUTER: 'openrouter'
+    OPENROUTER: 'openrouter',
+    OPENAI_COMPATIBLE: 'openai-compatible'
 };
 
 // Available LLM providers
@@ -46,7 +47,8 @@ const LLM_PROVIDERS = [
     { id: PROVIDER_ID.OLLAMA, name: 'Ollama (Local)', description: 'Run AI models on your own hardware - zero data transmission' },
     { id: PROVIDER_ID.LM_STUDIO, name: 'LM Studio (Local)', description: 'User-friendly local AI with OpenAI-compatible API' },
     { id: PROVIDER_ID.GEMINI, name: 'Gemini (Google AI Studio)', description: 'Google AI models - Gemini 2.0 Flash is FREE!' },
-    { id: PROVIDER_ID.OPENROUTER, name: 'OpenRouter (Cloud)', description: 'Optional cloud provider for premium models' }
+    { id: PROVIDER_ID.OPENROUTER, name: 'OpenRouter (Cloud)', description: 'Optional cloud provider for premium models' },
+    { id: PROVIDER_ID.OPENAI_COMPATIBLE, name: 'OpenAI Compatible', description: 'Connect to any OpenAI-compatible API - custom endpoint' }
 ];
 
 // Default endpoints for local providers
@@ -514,6 +516,14 @@ async function saveSettings(settings) {
             ConfigLoader.set('gemini.topP', settings.gemini.topP);
         }
     }
+    if (settings.openaiCompatible) {
+        if (settings.openaiCompatible.apiKey !== undefined) {
+            ConfigLoader.set('openaiCompatible.apiKey', settings.openaiCompatible.apiKey);
+        }
+        if (settings.openaiCompatible.model !== undefined) {
+            ConfigLoader.set('openaiCompatible.model', settings.openaiCompatible.model);
+        }
+    }
     if (settings.spotify?.clientId) {
         ConfigLoader.set('spotify.clientId', settings.spotify.clientId);
     }
@@ -769,6 +779,50 @@ async function showSettingsModal() {
                                    value="${settings.gemini?.maxTokens || LLM_CONFIG.DEFAULT_MAX_TOKENS_GEMINI}"
                                    min="${LLM_CONFIG.MIN_MAX_TOKENS_GEMINI}" max="${LLM_CONFIG.MAX_MAX_TOKENS_GEMINI}" step="100">
                             <span class="settings-hint">tokens (max ${LLM_CONFIG.MAX_MAX_TOKENS_GEMINI} for Gemini)</span>
+                        </div>
+                    </div>
+
+                    <!-- OpenAI-Compatible Provider Settings -->
+                    <div class="settings-section provider-section" data-provider="openai-compatible">
+                        <h3>🔌 OpenAI-Compatible Provider</h3>
+                        <p class="settings-description">
+                            Connect to any OpenAI-compatible API. Use with local servers, self-hosted models, or cloud providers like Together AI, Anyscale, or DeepInfra.
+                        </p>
+
+                        <div class="settings-field">
+                            <label for="setting-openai-compatible-url">Base URL</label>
+                            <input type="text" id="setting-openai-compatible-url"
+                                   value="${settings.openaiCompatible?.apiUrl || ''}"
+                                   placeholder="https://api.example.com/v1/chat/completions"
+                                   autocomplete="off">
+                            <span class="settings-hint">Full URL to chat completions endpoint (e.g., https://api.together.xyz/v1/chat/completions)</span>
+                        </div>
+
+                        <div class="settings-field">
+                            <label for="setting-openai-compatible-api-key">API Key</label>
+                            <input type="password" id="setting-openai-compatible-api-key"
+                                   value="${settings.openaiCompatible?.apiKey || ''}"
+                                   placeholder="Optional for local providers"
+                                   autocomplete="new-password">
+                            <button class="btn-show-password" data-action="toggle-password" data-target="setting-openai-compatible-api-key">Show</button>
+                            <span class="settings-hint">Required for most cloud providers (optional for local servers)</span>
+                        </div>
+
+                        <div class="settings-field">
+                            <label for="setting-openai-compatible-model">Model Name</label>
+                            <input type="text" id="setting-openai-compatible-model"
+                                   value="${settings.openaiCompatible?.model || 'gpt-3.5-turbo'}"
+                                   placeholder="Model identifier"
+                                   autocomplete="off">
+                            <span class="settings-hint">Model name as expected by your provider (e.g., gpt-3.5-turbo, meta-llama/Llama-3-8b-chat-hf)</span>
+                        </div>
+
+                        <div class="settings-field">
+                            <label for="setting-openai-compatible-max-tokens">Max Response Length</label>
+                            <input type="number" id="setting-openai-compatible-max-tokens"
+                                   value="${settings.openaiCompatible?.maxTokens || 4000}"
+                                   min="${LLM_CONFIG.MIN_MAX_TOKENS}" max="${LLM_CONFIG.MAX_MAX_TOKENS}" step="100">
+                            <span class="settings-hint">tokens (max ${LLM_CONFIG.MAX_MAX_TOKENS})</span>
                         </div>
                     </div>
 
@@ -1314,6 +1368,12 @@ async function saveFromModal() {
     const geminiApiKey = geminiApiKeyInput?.value?.trim();
     const geminiMaxTokens = parseInt(document.getElementById('setting-gemini-max-tokens')?.value) || 8192;
 
+    // OpenAI-Compatible settings
+    const openaiCompatibleUrl = document.getElementById('setting-openai-compatible-url')?.value?.trim() || '';
+    const openaiCompatibleApiKey = document.getElementById('setting-openai-compatible-api-key')?.value?.trim() || '';
+    const openaiCompatibleModel = document.getElementById('setting-openai-compatible-model')?.value?.trim() || 'gpt-3.5-turbo';
+    const openaiCompatibleMaxTokens = parseInt(document.getElementById('setting-openai-compatible-max-tokens')?.value) || 4000;
+
     const spotifyInput = document.getElementById('setting-spotify-client-id');
 
     // Only save API key if user actually entered one (field not readonly)
@@ -1324,6 +1384,7 @@ async function saveFromModal() {
     const settingsToValidate = {
         openrouter: { apiKey, model },
         gemini: { apiKey: geminiApiKey },
+        openaiCompatible: { apiUrl: openaiCompatibleUrl, apiKey: openaiCompatibleApiKey },
         spotify: { clientId: spotifyClientId },
         llm: { ollamaEndpoint, lmstudioEndpoint }
     };
@@ -1367,6 +1428,14 @@ async function saveFromModal() {
             model: geminiModel,
             apiKey: geminiApiKey || '',
             maxTokens: Math.min(Math.max(geminiMaxTokens, 100), 8192),
+            temperature: Math.min(Math.max(temperature, 0), 2),
+            topP: Math.min(Math.max(topP, 0), 1)
+        },
+        openaiCompatible: {
+            apiUrl: openaiCompatibleUrl,
+            apiKey: openaiCompatibleApiKey,
+            model: openaiCompatibleModel,
+            maxTokens: Math.min(Math.max(openaiCompatibleMaxTokens, 100), 8000),
             temperature: Math.min(Math.max(temperature, 0), 2),
             topP: Math.min(Math.max(topP, 0), 1)
         },

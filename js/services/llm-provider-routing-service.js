@@ -45,7 +45,7 @@ function buildProviderConfig(provider, settings, baseConfig) {
     // CRITICAL: Validate provider name at function entry
     // Prevents silent acceptance of invalid provider names which could
     // lead to unexpected behavior or security issues
-    const VALID_PROVIDERS = ['openrouter', 'ollama', 'lmstudio'];
+    const VALID_PROVIDERS = ['openrouter', 'ollama', 'lmstudio', 'gemini', 'openai-compatible'];
     if (!provider || typeof provider !== 'string') {
         throw new TypeError(`Invalid provider: must be a non-empty string. Got: ${typeof provider}`);
     }

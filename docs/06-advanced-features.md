@@ -110,7 +110,7 @@ Instead of one-time export:
 
 **Bring Your Own Intelligence = you own the compute path:**
 - **Privacy-first:** Local/offline models run keyless; cloud keys are optional when premium quality is desired.
-- **Transparency:** Users pick the provider (Ollama, LM Studio, OpenRouter) and vector store (local or their Qdrant).
+- **Transparency:** Users pick the provider (Ollama, LM Studio, OpenRouter, OpenAI-Compatible, or Gemini) and vector store (local or their Qdrant).
 - **Sovereignty:** No lock-in or forced billing; cost and model selection stay with the user.
 
 **Implementation:**

@@ -132,7 +132,7 @@ Client App → License Verifier → Cloudflare Worker → Lemon Squeezy API
 │   │   └── renderer.js     # Custom SVG renderer
 │   │
 │   ├── functions/          # Function Calling
-│   ├── providers/          # LLM Providers
+│   ├── providers/          # LLM Providers (openrouter, gemini, ollama, lm-studio, openai-compatible)
 │   └── observability/      # Performance monitoring
 │
 ├── tests/                  # Vitest unit tests
@@ -315,7 +315,7 @@ const INITIAL_STATE = {
 #### Provider Architecture
 
 **ProviderFallbackChain (`js/services/provider-fallback-chain.js`):**
-- Priority: OPENROUTER → LM_STUDIO → OLLAMA → FALLBACK
+- Priority: OPENROUTER → OPENAI_COMPATIBLE → LM_STUDIO → OLLAMA → FALLBACK
 - Dynamic health-based ordering
 - Atomic circuit breaker protection
 
@@ -551,6 +551,9 @@ Users can choose their AI provider:
 | Ollama | Local | Free | Install Ollama, run model |
 | LM Studio | Local | Free | Install LM Studio, enable API |
 | OpenRouter | Cloud | Pay-per-use | Add API key in settings |
+| OpenAI-Compatible | Cloud or Local | Depends on chosen provider | Configure custom base URL and API key in settings |
+
+The OpenAI-Compatible provider supports any OpenAI-compatible API, including self-hosted servers, cloud providers like Together AI/Anyscale/DeepInfra, or the official OpenAI API.
 
 **Provider Health Monitoring:**
 - Circuit breaker pattern (Closed, Open, Half-Open states)
