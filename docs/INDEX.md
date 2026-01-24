@@ -56,6 +56,9 @@
 
 ---
 
+## Technical Documentation
+- [Provider Health Monitoring](provider-health-monitoring.md) - AI provider reliability
+
 ## Development Documentation
 
 ### Development Workflow
