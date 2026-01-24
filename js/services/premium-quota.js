@@ -20,7 +20,7 @@ const logger = createLogger('PremiumQuota');
 // Quota limits for sovereign tier
 const QUOTA_LIMITS = {
     playlist_generation: 1, // 1 free playlist for sovereign tier
-    // Future quotas can be added here
+    semantic_search: 5, // 5 free semantic searches for sovereign tier
 };
 
 // Storage key for quota data
@@ -46,7 +46,7 @@ async function getQuotaData() {
     }
 
     if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
-        return { playlists: 0 };
+        return { playlists: 0, semantic_search: 0 };
     }
 
     try {
@@ -60,7 +60,7 @@ async function getQuotaData() {
     }
 
     // Initialize with zero usage
-    quotaCache = { playlists: 0 };
+    quotaCache = { playlists: 0, semantic_search: 0 };
     return quotaCache;
 }
 
@@ -182,8 +182,90 @@ async function getQuotaStatus() {
             used: quota.playlists || 0,
             limit: isPremium ? Infinity : QUOTA_LIMITS.playlist_generation,
             remaining: isPremium ? Infinity : Math.max(0, QUOTA_LIMITS.playlist_generation - (quota.playlists || 0))
+        },
+        semantic_search: {
+            used: quota.semantic_search || 0,
+            limit: isPremium ? Infinity : QUOTA_LIMITS.semantic_search,
+            remaining: isPremium ? Infinity : Math.max(0, QUOTA_LIMITS.semantic_search - (quota.semantic_search || 0))
         }
     };
+}
+
+/**
+ * Check quota and decrement if available
+ * @param {string} feature - Feature name (e.g., 'semantic_search')
+ * @returns {Promise<{allowed: boolean, remaining: number}>}
+ */
+async function checkAndDecrement(feature) {
+    // Premium users bypass quota
+    if (isPremiumUser()) {
+        return { allowed: true, remaining: Infinity };
+    }
+
+    const quota = await getQuotaData();
+    const limit = QUOTA_LIMITS[feature];
+    if (!limit) {
+        logger.warn(`Unknown feature: ${feature}`);
+        return { allowed: true, remaining: Infinity };
+    }
+
+    const used = quota[feature] || 0;
+    const remaining = Math.max(0, limit - used);
+
+    if (remaining === 0) {
+        return { allowed: false, remaining: 0 };
+    }
+
+    // Decrement quota
+    quota[feature] = used + 1;
+    await saveQuotaData(quota);
+
+    const newRemaining = remaining - 1;
+    logger.info(`${feature} used. ${newRemaining} remaining`);
+
+    return { allowed: true, remaining: newRemaining };
+}
+
+/**
+ * Get remaining quota for a feature
+ * @param {string} feature - Feature name
+ * @returns {Promise<number>} Remaining count or Infinity for premium
+ */
+async function getRemaining(feature) {
+    if (isPremiumUser()) {
+        return Infinity;
+    }
+
+    const quota = await getQuotaData();
+    const limit = QUOTA_LIMITS[feature];
+    if (!limit) {
+        return Infinity;
+    }
+
+    const used = quota[feature] || 0;
+    return Math.max(0, limit - used);
+}
+
+/**
+ * Show quota toast message
+ * @param {string} feature - Feature name
+ * @param {number} remaining - Remaining count
+ */
+function showQuotaToast(feature, remaining) {
+    if (!window.showToast) {
+        logger.info(`${feature}: ${remaining} remaining`);
+        return;
+    }
+
+    const featureNames = {
+        semantic_search: 'semantic search',
+        playlist_generation: 'playlist generation'
+    };
+
+    const featureName = featureNames[feature] || feature;
+    const message = `${remaining} ${featureName}${remaining !== 1 ? 'es' : ''} remaining`;
+
+    showToast(message, 'info');
 }
 
 /**
@@ -191,7 +273,7 @@ async function getQuotaStatus() {
  * @returns {Promise<void>}
  */
 async function resetQuota() {
-    const resetData = { playlists: 0 };
+    const resetData = { playlists: 0, semantic_search: 0 };
 
     if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
         quotaCache = resetData;
@@ -232,6 +314,11 @@ export const PremiumQuota = {
 
     // Usage tracking
     recordPlaylistCreation,
+
+    // Generic quota helpers
+    checkAndDecrement,
+    getRemaining,
+    showQuotaToast,
 
     // Admin/Testing
     resetQuota,
