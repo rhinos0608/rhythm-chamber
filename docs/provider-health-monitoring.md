@@ -37,9 +37,8 @@ Fallback: Local AI → Next Provider → Error
 States:
 1. **Closed**: Normal operation
 2. **Open**: Provider marked unhealthy, requests bypassed
-3. **Half-Open**: Test requests to check recovery
 
-Configuration:
+Configuration (example values):
 ```javascript
 {
   failureThreshold: 3,

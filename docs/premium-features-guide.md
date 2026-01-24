@@ -46,12 +46,14 @@ Beautiful, interactive data visualizations:
 
 ### Activating Your License
 
-1. Purchase from [Lemon Squeezy]
+1. Purchase from [Lemon Squeezy](https://www.lemonsqueezy.com)
 2. Copy your license key
 3. Enter in Settings -> License
 4. Features unlock automatically
 
 ### License Tiers
+
+Rhythm Chamber currently offers a two-tier licensing model. The Curator tier is no longer offered.
 
 | Feature | Sovereign (Free) | Chamber ($4.99/mo) |
 |---------|------------------|---------------------|
