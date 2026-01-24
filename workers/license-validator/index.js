@@ -16,12 +16,23 @@
 
 export default {
   async fetch(request, env, ctx) {
-    // CORS headers for all responses
+    // SECURITY: Get origin from request and validate against whitelist
+    const requestOrigin = request.headers.get('Origin');
+    const allowedOrigins = env.ALLOWED_ORIGINS ? env.ALLOWED_ORIGINS.split(',') : [];
+
+    // Determine if origin is allowed (fallback to empty for same-origin requests)
+    const allowedOrigin = requestOrigin && allowedOrigins.includes(requestOrigin)
+      ? requestOrigin
+      : (allowedOrigins[0] || '');
+
+    // CORS headers for all responses - use whitelisted origin only
     const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': allowedOrigin,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Max-Age': '86400',
+      // Vary header required for proper caching when origin is dynamic
+      'Vary': 'Origin'
     };
 
     const url = new URL(request.url);
@@ -71,6 +82,30 @@ export default {
  * Handle license validation requests
  */
 async function handleValidate(request, env, corsHeaders) {
+  // SECURITY: Apply rate limiting before processing
+  const clientId = getClientIdentifier(request);
+  const rateLimitConfig = env.RATE_LIMIT_CONFIG
+    ? JSON.parse(env.RATE_LIMIT_CONFIG)
+    : { maxRequests: 10, windowMs: 60000 };
+
+  const rateLimitCheck = checkRateLimit(
+    clientId,
+    rateLimitConfig.maxRequests || 10,
+    rateLimitConfig.windowMs || 60000
+  );
+
+  if (!rateLimitCheck.allowed) {
+    return jsonResponse({
+      valid: false,
+      error: 'RATE_LIMITED',
+      message: 'Too many validation requests. Please try again later.',
+      retryAfter: rateLimitCheck.retryAfter
+    }, 429, {
+      ...corsHeaders,
+      'Retry-After': String(rateLimitCheck.retryAfter)
+    });
+  }
+
   try {
     const body = await request.json();
     const { licenseKey, instanceId, action } = body;
@@ -274,6 +309,77 @@ function timingSafeEqual(a, b) {
 
   return result === 0;
 }
+
+// ==========================================
+// Rate Limiting (In-memory for single instance)
+// ==========================================
+
+/**
+ * Rate limit store using a Map
+ * For production with multiple worker instances, use KV or Durable Objects
+ */
+const rateLimitStore = new Map();
+
+/**
+ * Check if request should be rate limited
+ * @param {string} identifier - IP address or identifier
+ * @param {number} maxRequests - Max requests per window
+ * @param {number} windowMs - Time window in milliseconds
+ * @returns {{allowed: boolean, retryAfter?: number}}
+ */
+function checkRateLimit(identifier, maxRequests = 10, windowMs = 60000) {
+  const now = Date.now();
+  const record = rateLimitStore.get(identifier);
+
+  if (!record || record.resetAt < now) {
+    // First request or window expired
+    rateLimitStore.set(identifier, {
+      count: 1,
+      resetAt: now + windowMs
+    });
+    return { allowed: true };
+  }
+
+  if (record.count >= maxRequests) {
+    // Rate limit exceeded
+    const retryAfter = Math.ceil((record.resetAt - now) / 1000);
+    return { allowed: false, retryAfter };
+  }
+
+  // Increment counter
+  record.count++;
+  rateLimitStore.set(identifier, record);
+  return { allowed: true };
+}
+
+/**
+ * Get client IP from request headers
+ * @param {Request} request
+ * @returns {string}
+ */
+function getClientIdentifier(request) {
+  // Check various headers for real IP (behind proxy)
+  const headers = [
+    'CF-Connecting-IP',  // Cloudflare
+    'X-Forwarded-For',   // General proxy
+    'X-Real-IP',         // Nginx
+  ];
+
+  for (const header of headers) {
+    const value = request.headers.get(header);
+    if (value) {
+      // X-Forwarded-For may contain multiple IPs, take the first
+      return value.split(',')[0].trim();
+    }
+  }
+
+  // Fallback to a hash of the request (less ideal but works)
+  return 'unknown';
+}
+
+// ==========================================
+// Response Helpers
+// ==========================================
 
 /**
  * Helper: JSON response with headers
