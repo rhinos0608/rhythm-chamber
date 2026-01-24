@@ -25,6 +25,12 @@ const MAX_SAMPLES = 100;        // Keep last 100 samples per metric
 /** @type {Map<string, { samples: number[], expected: number | null }>} */
 const metrics = new Map();
 
+/** @type {Map<string, { id: string, origin: string, startTime: number, endTime: number | null, chain: Array<{ node: string, parent: string | null, timestamp: number }> }>} */
+const waves = new Map();
+
+/** @type {string[]} */
+let criticalEvents = [];
+
 // ==========================================
 // Core Functions
 // ==========================================
@@ -149,6 +155,153 @@ function getSamples(metric) {
 }
 
 // ==========================================
+// Wave Context Tracking
+// ==========================================
+
+/**
+ * Generate a UUID v4 for wave identification
+ * @returns {string} A UUID v4 string
+ */
+function generateUUID() {
+    // Use crypto.randomUUID if available (modern browsers), otherwise fall back to Math.random
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    // Fallback implementation compatible with older environments
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
+/**
+ * Start a new wave context with a unique ID and origin
+ * @param {string} origin - The origin of the wave (e.g., 'user:upload_file')
+ * @returns {string} The wave ID (UUID)
+ */
+function startWave(origin) {
+    const waveId = generateUUID();
+    waves.set(waveId, {
+        id: waveId,
+        origin,
+        startTime: Date.now(),
+        endTime: null,
+        chain: []
+    });
+    return waveId;
+}
+
+/**
+ * Record a node in the wave chain with parent reference
+ * @param {string} nodeName - The name of the node (e.g., 'event:test_event')
+ * @param {string} waveId - The wave ID to add the node to
+ */
+function recordNode(nodeName, waveId) {
+    const wave = waves.get(waveId);
+    if (!wave) {
+        console.warn(`[WaveTelemetry] Wave not found: ${waveId}`);
+        return;
+    }
+
+    const parent = wave.chain.length > 0 ? wave.chain[wave.chain.length - 1].node : null;
+    wave.chain.push({
+        node: nodeName,
+        parent,
+        timestamp: Date.now()
+    });
+}
+
+/**
+ * End a wave and calculate total latency and bottlenecks
+ * @param {string} waveId - The wave ID to end
+ * @returns {{ totalLatency: number, bottlenecks: Array<{ node: string, latency: number }> } | null}
+ */
+function endWave(waveId) {
+    const wave = waves.get(waveId);
+    if (!wave) {
+        console.warn(`[WaveTelemetry] Wave not found: ${waveId}`);
+        return null;
+    }
+
+    wave.endTime = Date.now();
+
+    // Calculate total latency based on the chain timestamps
+    // If there are nodes, use the time from wave start to last node
+    // Otherwise use endTime - startTime
+    let totalLatency;
+    if (wave.chain.length > 0) {
+        const lastNode = wave.chain[wave.chain.length - 1];
+        totalLatency = lastNode.timestamp - wave.startTime;
+    } else {
+        totalLatency = wave.endTime - wave.startTime;
+    }
+
+    // Calculate bottlenecks (nodes with latency > 100ms)
+    const bottlenecks = [];
+    for (let i = 0; i < wave.chain.length; i++) {
+        const node = wave.chain[i];
+        let latency = 0;
+
+        if (i === 0) {
+            // First node: time from wave start
+            latency = node.timestamp - wave.startTime;
+        } else {
+            // Subsequent nodes: time from previous node
+            latency = node.timestamp - wave.chain[i - 1].timestamp;
+        }
+
+        if (latency > 100) {
+            bottlenecks.push({
+                node: node.node,
+                latency
+            });
+        }
+    }
+
+    // Sort bottlenecks by latency descending
+    bottlenecks.sort((a, b) => b.latency - a.latency);
+
+    return {
+        totalLatency,
+        bottlenecks
+    };
+}
+
+/**
+ * Get a wave by ID
+ * @param {string} waveId - The wave ID
+ * @returns {Object | undefined} The wave object or undefined if not found
+ */
+function getWave(waveId) {
+    return waves.get(waveId);
+}
+
+/**
+ * Set the critical events whitelist
+ * @param {string[]} events - Array of critical event names
+ */
+function setCriticalEvents(events) {
+    criticalEvents = [...events];
+}
+
+/**
+ * Get the critical events whitelist
+ * @returns {string[]} Array of critical event names
+ */
+function getCriticalEvents() {
+    return [...criticalEvents];
+}
+
+/**
+ * Clear all waves (for testing)
+ */
+function clearWaves() {
+    waves.clear();
+    criticalEvents = [];
+}
+
+// ==========================================
 // Public API
 // ==========================================
 
@@ -164,6 +317,15 @@ export const WaveTelemetry = {
 
     // Debug
     getSamples,
+
+    // Wave Context Tracking
+    startWave,
+    recordNode,
+    endWave,
+    getWave,
+    setCriticalEvents,
+    getCriticalEvents,
+    _clearWaves: clearWaves,
 
     // Configuration (read-only)
     ANOMALY_THRESHOLD,
