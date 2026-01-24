@@ -19,38 +19,66 @@ Artifacts are dynamically generated visualizations with narrative context.
 ### 1. Define ArtifactSpec
 
 ```javascript
-import { ArtifactSpec } from './artifacts/artifact-spec.js';
+import { createLineChart, createBarChart, createTable } from '../js/artifacts/index.js';
 
-const spec = new ArtifactSpec({
-  type: 'line-chart',
+// Line chart for trends over time
+const lineChart = createLineChart({
   title: 'Listening Trends',
   data: processedData,
-  metadata: {
-    explanation: 'Your listening increased over 2024',
-    annotations: ['Peak in summer']
-  }
+  xField: 'date',
+  yField: 'plays',
+  xType: 'temporal',
+  explanation: ['Your listening increased over 2024', 'Peak activity in summer'],
+  annotations: [{ x: '2024-06-15', label: 'Summer peak' }]
+});
+
+// Bar chart for categorical comparison
+const barChart = createBarChart({
+  title: 'Top Artists',
+  data: artistData,
+  categoryField: 'artist',
+  valueField: 'playCount',
+  horizontal: true,
+  explanation: ['Your top 5 artists by play count']
+});
+
+// Table for structured data
+const table = createTable({
+  title: 'Listening Statistics',
+  data: statsData,
+  columns: [
+    { field: 'metric', label: 'Metric' },
+    { field: 'value', label: 'Value' }
+  ],
+  explanation: ['Detailed breakdown of your listening habits']
 });
 ```
 
 ### 2. Render Artifact
 
 ```javascript
-import { ArtifactRenderer } from './artifacts/renderer.js';
+import { Artifacts } from '../js/artifacts/index.js';
 
-const renderer = new ArtifactRenderer();
-const svg = await renderer.render(spec);
-container.appendChild(svg);
+// Validate and render in one step
+const result = Artifacts.render(spec, container);
+
+if (!result.success) {
+  console.error('Render failed:', result.errors);
+}
 ```
 
 ### 3. Validate Before Rendering
 
 ```javascript
-import { validateArtifactSpec } from './artifacts/validation.js';
+import { Artifacts } from '../js/artifacts/index.js';
 
-const errors = validateArtifactSpec(spec);
-if (errors.length > 0) {
-  throw new Error(`Invalid spec: ${errors.join(', ')}`);
+const validation = Artifacts.validate(spec);
+if (!validation.valid) {
+  throw new Error(`Invalid spec: ${validation.errors.join(', ')}`);
 }
+
+// Use sanitized spec for rendering
+await Artifacts.render(validation.sanitized, container);
 ```
 
 ## CSP Compliance
