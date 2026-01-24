@@ -52,6 +52,100 @@ let currentStatus = {
 };
 let isInitialized = false;
 
+// ==========================================
+// Reservation Mechanism (CRITICAL FIX for Issue #5)
+// ==========================================
+
+/**
+ * CRITICAL FIX for Issue #5: Pending write reservations to prevent TOCTOU race
+ *
+ * Tracks pending writes that have passed quota checks but not yet completed.
+ * This prevents the time-of-check-to-time-of-use (TOCTOU) race condition where:
+ * 1. checkWriteFits() passes (space available)
+ * 2. Another operation writes data
+ * 3. Original write exceeds quota
+ *
+ * Reservations are automatically released after a timeout to prevent stale locks.
+ */
+const pendingReservations = new Map(); // reservationId -> { size, timestamp }
+const RESERVATION_TIMEOUT_MS = 30000; // 30 seconds - auto-release stale reservations
+let reservationIdCounter = 0;
+
+/**
+ * Create a write reservation
+ * CRITICAL FIX for Issue #5: Reserve space before write to prevent TOCTOU race
+ *
+ * @param {number} sizeBytes - Size to reserve
+ * @returns {string} Reservation ID for later release
+ */
+function createReservation(sizeBytes) {
+    const reservationId = `res_${Date.now()}_${++reservationIdCounter}`;
+    pendingReservations.set(reservationId, {
+        size: sizeBytes,
+        timestamp: Date.now()
+    });
+    console.log(`[QuotaManager] Created reservation ${reservationId} for ${sizeBytes} bytes`);
+    return reservationId;
+}
+
+/**
+ * Release a write reservation
+ * CRITICAL FIX for Issue #5: Release reservation after write completes or fails
+ *
+ * @param {string} reservationId - Reservation ID to release
+ */
+function releaseReservation(reservationId) {
+    if (pendingReservations.has(reservationId)) {
+        const reservation = pendingReservations.get(reservationId);
+        pendingReservations.delete(reservationId);
+        console.log(`[QuotaManager] Released reservation ${reservationId} (${reservation.size} bytes)`);
+    }
+}
+
+/**
+ * Get total reserved bytes
+ * CRITICAL FIX for Issue #5: Calculate total pending reservations
+ *
+ * @returns {number} Total reserved bytes
+ */
+function getTotalReservedBytes() {
+    let total = 0;
+    const now = Date.now();
+
+    // Clean up expired reservations while calculating
+    for (const [id, reservation] of pendingReservations.entries()) {
+        if (now - reservation.timestamp > RESERVATION_TIMEOUT_MS) {
+            console.warn(`[QuotaManager] Auto-releasing stale reservation ${id}`);
+            pendingReservations.delete(id);
+        } else {
+            total += reservation.size;
+        }
+    }
+
+    return total;
+}
+
+/**
+ * Clean up stale reservations
+ * CRITICAL FIX for Issue #5: Periodic cleanup of expired reservations
+ */
+function cleanupStaleReservations() {
+    const now = Date.now();
+    let cleaned = 0;
+
+    for (const [id, reservation] of pendingReservations.entries()) {
+        if (now - reservation.timestamp > RESERVATION_TIMEOUT_MS) {
+            console.warn(`[QuotaManager] Auto-releasing stale reservation ${id}`);
+            pendingReservations.delete(id);
+            cleaned++;
+        }
+    }
+
+    if (cleaned > 0) {
+        console.log(`[QuotaManager] Cleaned up ${cleaned} stale reservation(s)`);
+    }
+}
+
 // Event listeners (for threshold_exceeded, quota_cleaned, etc.)
 const eventListeners = new Map();
 
@@ -95,6 +189,7 @@ async function init(options = {}) {
 /**
  * Check quota immediately and update status
  * CRITICAL FIX for High Issue #12: Accounts for pending writes in quota estimation
+ * CRITICAL FIX for Issue #5: Includes reserved bytes in quota calculation
  *
  * Previous implementation only checked current usage, missing writes that are pending
  * in the WAL or operation queue. This version accepts pendingWriteSizeBytes parameter
@@ -108,9 +203,13 @@ async function checkNow(pendingWriteSizeBytes = 0) {
         const estimate = await getStorageEstimate();
         const previousTier = currentStatus.tier;
 
+        // CRITICAL FIX for Issue #5: Include reserved bytes in effective usage
+        // This prevents TOCTOU race condition by accounting for pending reservations
+        const reservedBytes = getTotalReservedBytes();
+
         // CRITICAL FIX for High Issue #12: Include pending writes in effective usage
         // This prevents scenarios where a check passes but actual write exceeds quota
-        const effectiveUsage = estimate.usage + (pendingWriteSizeBytes || 0);
+        const effectiveUsage = estimate.usage + (pendingWriteSizeBytes || 0) + reservedBytes;
         const effectivePercentage = (effectiveUsage / estimate.quota) * 100;
         const effectiveAvailable = estimate.quota - effectiveUsage;
 
@@ -212,6 +311,8 @@ function startPolling() {
 
     pollIntervalId = setInterval(async () => {
         await checkNow();
+        // CRITICAL FIX for Issue #5: Clean up stale reservations periodically
+        cleanupStaleReservations();
     }, QUOTA_CONFIG.pollIntervalMs);
 }
 
@@ -260,16 +361,28 @@ async function notifyLargeWrite(bytesWritten, pendingBytes = 0) {
 /**
  * Check if a write of given size would fit within quota limits
  * CRITICAL FIX for High Issue #12: Pre-flight quota estimation
+ * CRITICAL FIX for Issue #5: Creates reservation to prevent TOCTOU race condition
  *
  * @param {number} writeSizeBytes - Size of write to check
- * @returns {Promise<{ fits: boolean, currentStatus: QuotaStatus }>}
+ * @returns {Promise<{ fits: boolean, currentStatus: QuotaStatus, reservationId?: string }>}
  */
 async function checkWriteFits(writeSizeBytes) {
-    const status = await checkNow(writeSizeBytes);
+    // CRITICAL FIX for Issue #5: Check quota including existing reservations
+    const status = await checkNow(0); // checkNow already includes reservations
+
+    const fits = !status.isBlocked && status.availableBytes >= writeSizeBytes;
+
+    let reservationId;
+    if (fits) {
+        // CRITICAL FIX for Issue #5: Create reservation to prevent TOCTOU race
+        // Caller must release this reservation after write completes
+        reservationId = createReservation(writeSizeBytes);
+    }
 
     return {
-        fits: !status.isBlocked && status.availableBytes >= 0,
-        currentStatus: status
+        fits,
+        currentStatus: status,
+        reservationId // CRITICAL FIX for Issue #5: Return reservation ID for later release
     };
 }
 
@@ -311,6 +424,7 @@ function setCriticalThreshold(threshold) {
 
 /**
  * Reset QuotaManager state (for testing)
+ * CRITICAL FIX for Issue #5: Also clears pending reservations
  */
 function reset() {
     stopPolling();
@@ -327,6 +441,10 @@ function reset() {
         isBlocked: false,
         tier: 'normal'
     };
+
+    // CRITICAL FIX for Issue #5: Clear pending reservations
+    pendingReservations.clear();
+    reservationIdCounter = 0;
 
     // Clear event listeners
     eventListeners.clear();
@@ -416,6 +534,12 @@ export const QuotaManager = {
     setCriticalThreshold,
     stopPolling,
     reset,
+
+    // CRITICAL FIX for Issue #5: Reservation management API
+    createReservation,
+    releaseReservation,
+    getTotalReservedBytes,
+    cleanupStaleReservations,
 
     // Event listener API
     on,
