@@ -76,6 +76,9 @@ import { TemplateProfileStore } from './template-profiles.js';
 import { ProfileSynthesizer } from './profile-synthesizer.js';
 import { ProfileStorage } from './storage/profiles.js';
 
+// Premium services
+import { LemonSqueezyService } from './services/lemon-squeezy-service.js';
+
 // ==========================================
 // State Management
 // ==========================================
@@ -607,6 +610,44 @@ async function initializeControllers() {
 // ==========================================
 
 /**
+ * Validate existing license on startup
+ * Checks with worker if available, clears expired licenses
+ */
+async function validateExistingLicense() {
+    try {
+        const licenseData = localStorage.getItem('rhythm_chamber_license');
+        if (!licenseData) {
+            return; // No license found
+        }
+
+        const license = JSON.parse(licenseData);
+
+        // If we have a license key, validate it
+        if (license.licenseKey) {
+            console.log('[App] Validating existing license...');
+            const result = await LemonSqueezyService.validateLicense(license.licenseKey);
+
+            if (!result.valid && result.error === 'EXPIRED') {
+                console.log('[App] License expired, clearing from storage');
+                localStorage.removeItem('rhythm_chamber_license');
+
+                // Notify user
+                showToast('Your Premium license has expired. Please renew to continue using Premium features.', 'warning', 6000);
+            } else if (!result.valid) {
+                console.warn('[App] License validation failed:', result.error);
+                // Don't clear on validation errors (network issues, etc.)
+                // Let the user continue with cached license
+            } else {
+                console.log('[App] License valid:', result.tier);
+            }
+        }
+    } catch (e) {
+        console.warn('[App] License validation failed:', e);
+        // Don't block app usage on validation errors
+    }
+}
+
+/**
  * Initialize the application
  * @param {Object} options - Initialization options
  * @param {string|null} options.safeModeReason - If set, security check failed with this reason
@@ -723,6 +764,9 @@ async function init(options = {}) {
 
     // Initialize session manager
     await SessionManager.init();
+
+    // Validate existing license on startup
+    await validateExistingLicense();
 
     // Initialize all controllers with dependencies
     await initializeControllers();
