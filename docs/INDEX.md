@@ -90,6 +90,7 @@
 - [Two-Tier Pricing Model](pricing-two-tier-model.md) - Sovereign (Free) & Chamber (Premium) tiers
 - [Pricing Implementation Summary](pricing-implementation-summary.md) - Implementation details
 - [Lemon Squeezy Setup Guide](LEMON_SQUEEZY_SETUP.md) - Payment provider configuration
+- [License Verification](license-verification.md) - Premium feature licensing
 
 **Tiers:**
 | Tier | Price | Focus |
