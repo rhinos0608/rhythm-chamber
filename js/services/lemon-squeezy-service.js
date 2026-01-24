@@ -151,14 +151,14 @@ async function verifyCheckoutLicense(licenseKey) {
             }
         }
 
-        // If no validation method is available, still allow the key
-        // but mark it as unverified for UI warning
-        logger.warn('No server-side validation available, license key unverified');
-        return { valid: true, verified: false };
+        // SECURITY: If no validation method is available, fail closed
+        // This prevents attackers from bypassing license checks by blocking network requests
+        logger.warn('No server-side validation available, rejecting license key');
+        return { valid: false, error: 'VERIFICATION_UNAVAILABLE', message: 'License verification unavailable. Please check your connection or try again later.' };
     } catch (error) {
         logger.error('License verification failed:', error);
-        // On network failure, allow but mark as unverified
-        return { valid: true, verified: false, error: error.message };
+        // SECURITY: On network failure, fail closed rather than fail open
+        return { valid: false, error: 'VERIFICATION_UNAVAILABLE', message: 'Could not verify license key. Please check your connection and try again.' };
     }
 }
 
