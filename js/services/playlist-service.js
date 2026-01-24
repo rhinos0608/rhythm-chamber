@@ -16,6 +16,7 @@
  */
 
 import { PlaylistGenerator } from './playlist-generator.js';
+import { PremiumGatekeeper } from './premium-gatekeeper.js';
 import { PremiumQuota } from './premium-quota.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -38,25 +39,25 @@ const logger = createLogger('PlaylistService');
  * @returns {Promise<Object>} Result with playlist or gated status
  */
 async function createPlaylist(streams, options = {}) {
-    // Check quota first
-    const { allowed, remaining } = await PremiumQuota.canCreatePlaylist();
+    // Check feature access using PremiumGatekeeper
+    const access = await PremiumGatekeeper.checkFeature('unlimited_playlists');
 
-    if (!allowed) {
-        logger.info('Playlist quota exceeded, showing upgrade modal');
+    if (!access.allowed) {
+        logger.info(`Playlist quota exceeded: ${access.reason}`);
 
         // Dynamically import PremiumController to avoid circular dependencies
         const { PremiumController } = await import('../controllers/premium-controller.js');
-        PremiumController.showPlaylistUpgradeModal(remaining);
+        PremiumController.showPlaylistUpgradeModal(access.quotaRemaining ?? 0);
 
         return {
             gated: true,
             playlist: null,
-            remaining
+            remaining: access.quotaRemaining ?? 0
         };
     }
 
     // Quota available - create the playlist
-    logger.info(`Creating playlist (quota remaining: ${remaining})`);
+    logger.info(`Creating playlist (tier: ${access.tier})`);
 
     let playlist;
     const { type = 'era' } = options;
@@ -78,9 +79,14 @@ async function createPlaylist(streams, options = {}) {
             playlist = PlaylistGenerator.createPlaylistFromEra(streams, options);
     }
 
-    // Record the usage after successful creation
-    const newRemaining = await PremiumQuota.recordPlaylistCreation();
-    logger.info(`Playlist created successfully. New quota remaining: ${newRemaining}`);
+    // Record usage only for sovereign tier (free users)
+    let newRemaining = null;
+    if (access.tier === 'sovereign') {
+        newRemaining = await PremiumQuota.recordPlaylistCreation();
+        logger.info(`Playlist created successfully. Quota remaining: ${newRemaining}`);
+    } else {
+        logger.info('Playlist created successfully (premium user, no quota tracking)');
+    }
 
     return {
         gated: false,
@@ -105,19 +111,19 @@ async function getQuotaStatus() {
  * @returns {Promise<Object>} Result with spotify playlist or gated status
  */
 async function createOnSpotify(streams, options = {}) {
-    // Check quota first
-    const { allowed, remaining } = await PremiumQuota.canCreatePlaylist();
+    // Check feature access using PremiumGatekeeper
+    const access = await PremiumGatekeeper.checkFeature('unlimited_playlists');
 
-    if (!allowed) {
-        logger.info('Spotify playlist quota exceeded, showing upgrade modal');
+    if (!access.allowed) {
+        logger.info(`Spotify playlist quota exceeded: ${access.reason}`);
 
         const { PremiumController } = await import('../controllers/premium-controller.js');
-        PremiumController.showPlaylistUpgradeModal(remaining);
+        PremiumController.showPlaylistUpgradeModal(access.quotaRemaining ?? 0);
 
         return {
             gated: true,
             spotifyPlaylist: null,
-            remaining
+            remaining: access.quotaRemaining ?? 0
         };
     }
 
@@ -142,8 +148,13 @@ async function createOnSpotify(streams, options = {}) {
     // Then create on Spotify
     const spotifyPlaylist = await PlaylistGenerator.createOnSpotify(playlist, options);
 
-    // Record usage
-    await PremiumQuota.recordPlaylistCreation();
+    // Record usage only for sovereign tier (free users)
+    if (access.tier === 'sovereign') {
+        await PremiumQuota.recordPlaylistCreation();
+        logger.info(`Spotify playlist created successfully. Quota tracked for sovereign tier.`);
+    } else {
+        logger.info('Spotify playlist created successfully (premium user, no quota tracking)');
+    }
 
     return {
         gated: false,

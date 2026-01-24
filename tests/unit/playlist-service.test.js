@@ -2,14 +2,28 @@
  * Playlist Service Tests
  *
  * Tests for premium-gated playlist creation, quota checking,
- * and integration with PremiumQuota.
+ * and integration with PremiumQuota and PremiumGatekeeper.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { PremiumQuota } from '../../js/services/premium-quota.js';
+import { PremiumGatekeeper } from '../../js/services/premium-gatekeeper.js';
 import { ConfigLoader } from '../../js/services/config-loader.js';
 
-// Mock PremiumQuota
+// Mock PremiumGatekeeper - provides unified feature access control
+vi.mock('../../js/services/premium-gatekeeper.js', () => ({
+    PremiumGatekeeper: {
+        checkFeature: vi.fn().mockResolvedValue({
+            allowed: true,
+            reason: null,
+            tier: 'sovereign',
+            quotaRemaining: 1,
+            upgradeUrl: '/upgrade.html'
+        })
+    }
+}));
+
+// Mock PremiumQuota - used for recording quota usage
 vi.mock('../../js/services/premium-quota.js', () => ({
     PremiumQuota: {
         canCreatePlaylist: vi.fn().mockResolvedValue({
@@ -71,6 +85,13 @@ describe('PlaylistService', () => {
         vi.clearAllMocks();
 
         // Reset mocks to default values (quota available)
+        vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue({
+            allowed: true,
+            reason: null,
+            tier: 'sovereign',
+            quotaRemaining: 1,
+            upgradeUrl: '/upgrade.html'
+        });
         vi.mocked(PremiumQuota.canCreatePlaylist).mockResolvedValue({
             allowed: true,
             remaining: 1,
@@ -123,16 +144,19 @@ describe('PlaylistService', () => {
 
             await PlaylistService.createPlaylist([]);
 
-            expect(PremiumQuota.canCreatePlaylist).toHaveBeenCalled();
+            expect(PremiumGatekeeper.checkFeature).toHaveBeenCalledWith('unlimited_playlists');
         });
 
         it('should return gated result when quota exhausted', async () => {
             const { PlaylistService } = await import('../../js/services/playlist-service.js');
 
-            vi.mocked(PremiumQuota.canCreatePlaylist).mockResolvedValue({
+            vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue({
                 allowed: false,
                 remaining: 0,
-                reason: "You've used your 1 free playlist"
+                reason: 'QUOTA_EXCEEDED',
+                tier: 'sovereign',
+                quotaRemaining: 0,
+                upgradeUrl: '/upgrade.html'
             });
 
             const result = await PlaylistService.createPlaylist([]);
@@ -145,10 +169,12 @@ describe('PlaylistService', () => {
         it('should return remaining count in result', async () => {
             const { PlaylistService } = await import('../../js/services/playlist-service.js');
 
-            vi.mocked(PremiumQuota.canCreatePlaylist).mockResolvedValue({
+            vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue({
                 allowed: true,
-                remaining: 1,
-                reason: null
+                reason: null,
+                tier: 'sovereign',
+                quotaRemaining: 1,
+                upgradeUrl: '/upgrade.html'
             });
 
             const result = await PlaylistService.createPlaylist([]);
@@ -159,10 +185,12 @@ describe('PlaylistService', () => {
         it('should allow playlist creation when quota available', async () => {
             const { PlaylistService } = await import('../../js/services/playlist-service.js');
 
-            vi.mocked(PremiumQuota.canCreatePlaylist).mockResolvedValue({
+            vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue({
                 allowed: true,
-                remaining: 1,
-                reason: null
+                reason: null,
+                tier: 'sovereign',
+                quotaRemaining: 1,
+                upgradeUrl: '/upgrade.html'
             });
 
             const result = await PlaylistService.createPlaylist([]);
@@ -237,8 +265,16 @@ describe('PlaylistService', () => {
     });
 
     describe('createPlaylist - Usage Recording', () => {
-        it('should record playlist creation after success', async () => {
+        it('should record playlist creation after success (sovereign tier)', async () => {
             const { PlaylistService } = await import('../../js/services/playlist-service.js');
+
+            vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue({
+                allowed: true,
+                reason: null,
+                tier: 'sovereign',
+                quotaRemaining: 1,
+                upgradeUrl: '/upgrade.html'
+            });
 
             await PlaylistService.createPlaylist([]);
 
@@ -248,10 +284,13 @@ describe('PlaylistService', () => {
         it('should not record usage when quota exhausted', async () => {
             const { PlaylistService } = await import('../../js/services/playlist-service.js');
 
-            vi.mocked(PremiumQuota.canCreatePlaylist).mockResolvedValue({
+            vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue({
                 allowed: false,
                 remaining: 0,
-                reason: 'Quota exceeded'
+                reason: 'QUOTA_EXCEEDED',
+                tier: 'sovereign',
+                quotaRemaining: 0,
+                upgradeUrl: '/upgrade.html'
             });
 
             await PlaylistService.createPlaylist([]);
@@ -262,6 +301,13 @@ describe('PlaylistService', () => {
         it('should return new remaining count', async () => {
             const { PlaylistService } = await import('../../js/services/playlist-service.js');
 
+            vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue({
+                allowed: true,
+                reason: null,
+                tier: 'sovereign',
+                quotaRemaining: 1,
+                upgradeUrl: '/upgrade.html'
+            });
             vi.mocked(PremiumQuota.recordPlaylistCreation).mockResolvedValue(0);
 
             const result = await PlaylistService.createPlaylist([]);
@@ -276,16 +322,19 @@ describe('PlaylistService', () => {
 
             await PlaylistService.createOnSpotify([]);
 
-            expect(PremiumQuota.canCreatePlaylist).toHaveBeenCalled();
+            expect(PremiumGatekeeper.checkFeature).toHaveBeenCalledWith('unlimited_playlists');
         });
 
         it('should return gated result when quota exhausted for Spotify', async () => {
             const { PlaylistService } = await import('../../js/services/playlist-service.js');
 
-            vi.mocked(PremiumQuota.canCreatePlaylist).mockResolvedValue({
+            vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue({
                 allowed: false,
                 remaining: 0,
-                reason: 'Quota exceeded'
+                reason: 'QUOTA_EXCEEDED',
+                tier: 'sovereign',
+                quotaRemaining: 0,
+                upgradeUrl: '/upgrade.html'
             });
 
             const result = await PlaylistService.createOnSpotify([]);
@@ -428,10 +477,13 @@ describe('PlaylistService', () => {
         it('should trigger upgrade modal when quota exhausted', async () => {
             const { PlaylistService } = await import('../../js/services/playlist-service.js');
 
-            vi.mocked(PremiumQuota.canCreatePlaylist).mockResolvedValue({
+            vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue({
                 allowed: false,
                 remaining: 0,
-                reason: 'Quota exceeded'
+                reason: 'QUOTA_EXCEEDED',
+                tier: 'sovereign',
+                quotaRemaining: 0,
+                upgradeUrl: '/upgrade.html'
             });
 
             // Mock the PremiumController import
@@ -454,12 +506,15 @@ describe('PlaylistService', () => {
             const { PlaylistService } = await import('../../js/services/playlist-service.js');
 
             let callCount = 0;
-            vi.mocked(PremiumQuota.canCreatePlaylist).mockImplementation(async () => {
+            vi.mocked(PremiumGatekeeper.checkFeature).mockImplementation(async () => {
                 callCount++;
                 return {
                     allowed: callCount === 1,
                     remaining: Math.max(0, 1 - callCount),
-                    reason: callCount > 1 ? 'Quota exceeded' : null
+                    reason: callCount > 1 ? 'QUOTA_EXCEEDED' : null,
+                    tier: 'sovereign',
+                    quotaRemaining: Math.max(0, 1 - callCount),
+                    upgradeUrl: '/upgrade.html'
                 };
             });
 
@@ -495,10 +550,13 @@ describe('PlaylistService', () => {
         it('should return consistent structure for gated result', async () => {
             const { PlaylistService } = await import('../../js/services/playlist-service.js');
 
-            vi.mocked(PremiumQuota.canCreatePlaylist).mockResolvedValue({
+            vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue({
                 allowed: false,
                 remaining: 0,
-                reason: 'Quota exceeded'
+                reason: 'QUOTA_EXCEEDED',
+                tier: 'sovereign',
+                quotaRemaining: 0,
+                upgradeUrl: '/upgrade.html'
             });
 
             const result = await PlaylistService.createPlaylist([]);
@@ -517,5 +575,173 @@ describe('PlaylistService', () => {
             expect(result).toHaveProperty('spotifyPlaylist');
             expect(result).toHaveProperty('playlist');
         });
+    });
+});
+
+describe('PlaylistService with PremiumGatekeeper', () => {
+    // Mock PremiumGatekeeper
+    vi.mock('../../js/services/premium-gatekeeper.js', () => ({
+        PremiumGatekeeper: {
+            checkFeature: vi.fn()
+        }
+    }));
+
+    // Keep existing PremiumQuota mock
+    vi.mock('../../js/services/premium-quota.js', () => ({
+        PremiumQuota: {
+            canCreatePlaylist: vi.fn().mockResolvedValue({
+                allowed: true,
+                remaining: 1,
+                reason: null
+            }),
+            recordPlaylistCreation: vi.fn().mockResolvedValue(0),
+            getQuotaStatus: vi.fn().mockResolvedValue({
+                isPremium: false,
+                playlists: { used: 0, limit: 1, remaining: 1 }
+            })
+        }
+    }));
+
+    // Mock PremiumController
+    vi.mock('../../js/controllers/premium-controller.js', () => ({
+        PremiumController: {
+            showPlaylistUpgradeModal: vi.fn()
+        }
+    }));
+
+    // Mock PlaylistGenerator
+    const mockPlaylist = {
+        name: 'Test Playlist',
+        description: 'A test playlist',
+        tracks: [
+            { name: 'Song 1', artist: 'Artist 1' },
+            { name: 'Song 2', artist: 'Artist 2' }
+        ]
+    };
+
+    vi.mock('../../js/services/playlist-generator.js', () => ({
+        PlaylistGenerator: {
+            PLAYLIST_TYPES: ['era', 'energy', 'discovery', 'time_machine'],
+            createPlaylistFromEra: vi.fn(() => mockPlaylist),
+            createEnergyPlaylist: vi.fn(() => mockPlaylist),
+            suggestNewArtists: vi.fn(() => ({
+                name: 'Discoveries',
+                artists: [
+                    { name: 'New Artist 1', reason: 'Similar to your favorites' },
+                    { name: 'New Artist 2', reason: 'Trending in your genre' }
+                ]
+            })),
+            createTimeMachinePlaylist: vi.fn(() => mockPlaylist),
+            createOnSpotify: vi.fn().mockResolvedValue({
+                id: 'spotify-123',
+                url: 'https://open.spotify.com/playlist/spotify-123'
+            })
+        }
+    }));
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('createPlaylist uses PremiumGatekeeper for feature check', async () => {
+        const { PlaylistService } = await import('../../js/services/playlist-service.js');
+        const { PremiumGatekeeper } = await import('../../js/services/premium-gatekeeper.js');
+
+        const mockAccess = { allowed: true, reason: null, tier: 'chamber', quotaRemaining: null, upgradeUrl: '/upgrade.html' };
+        vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue(mockAccess);
+
+        const result = await PlaylistService.createPlaylist([]);
+
+        expect(PremiumGatekeeper.checkFeature).toHaveBeenCalledWith('unlimited_playlists');
+        expect(result.gated).toBe(false);
+    });
+
+    it('createPlaylist returns gated=true when feature denied', async () => {
+        const { PlaylistService } = await import('../../js/services/playlist-service.js');
+        const { PremiumGatekeeper } = await import('../../js/services/premium-gatekeeper.js');
+        const { PremiumController } = await import('../../js/controllers/premium-controller.js');
+
+        const mockAccess = {
+            allowed: false,
+            reason: 'QUOTA_EXCEEDED',
+            tier: 'sovereign',
+            quotaRemaining: 0,
+            upgradeUrl: '/upgrade.html'
+        };
+        vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue(mockAccess);
+
+        const result = await PlaylistService.createPlaylist([]);
+
+        expect(result.gated).toBe(true);
+        expect(result.remaining).toBe(0);
+        expect(result.playlist).toBeNull();
+        expect(PremiumController.showPlaylistUpgradeModal).toHaveBeenCalledWith(0);
+    });
+
+    it('records quota usage only for sovereign tier', async () => {
+        const { PlaylistService } = await import('../../js/services/playlist-service.js');
+        const { PremiumGatekeeper } = await import('../../js/services/premium-gatekeeper.js');
+        const { PremiumQuota } = await import('../../js/services/premium-quota.js');
+
+        const mockAccess = { allowed: true, reason: null, tier: 'sovereign', quotaRemaining: 1, upgradeUrl: '/upgrade.html' };
+        vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue(mockAccess);
+        vi.mocked(PremiumQuota.recordPlaylistCreation).mockResolvedValue(0);
+
+        await PlaylistService.createPlaylist([]);
+
+        expect(PremiumQuota.recordPlaylistCreation).toHaveBeenCalled();
+    });
+
+    it('does not record quota for chamber tier', async () => {
+        const { PlaylistService } = await import('../../js/services/playlist-service.js');
+        const { PremiumGatekeeper } = await import('../../js/services/premium-gatekeeper.js');
+        const { PremiumQuota } = await import('../../js/services/premium-quota.js');
+
+        const mockAccess = { allowed: true, reason: null, tier: 'chamber', quotaRemaining: null, upgradeUrl: '/upgrade.html' };
+        vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue(mockAccess);
+
+        await PlaylistService.createPlaylist([]);
+
+        expect(PremiumQuota.recordPlaylistCreation).not.toHaveBeenCalled();
+    });
+
+    it('createOnSpotify uses PremiumGatekeeper for feature check', async () => {
+        const { PlaylistService } = await import('../../js/services/playlist-service.js');
+        const { PremiumGatekeeper } = await import('../../js/services/premium-gatekeeper.js');
+
+        const mockAccess = { allowed: true, reason: null, tier: 'chamber', quotaRemaining: null, upgradeUrl: '/upgrade.html' };
+        vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue(mockAccess);
+
+        const result = await PlaylistService.createOnSpotify([]);
+
+        expect(PremiumGatekeeper.checkFeature).toHaveBeenCalledWith('unlimited_playlists');
+        expect(result.gated).toBe(false);
+    });
+
+    it('createOnSpotify records quota only for sovereign tier', async () => {
+        const { PlaylistService } = await import('../../js/services/playlist-service.js');
+        const { PremiumGatekeeper } = await import('../../js/services/premium-gatekeeper.js');
+        const { PremiumQuota } = await import('../../js/services/premium-quota.js');
+
+        const mockAccess = { allowed: true, reason: null, tier: 'sovereign', quotaRemaining: 1, upgradeUrl: '/upgrade.html' };
+        vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue(mockAccess);
+        vi.mocked(PremiumQuota.recordPlaylistCreation).mockResolvedValue(0);
+
+        await PlaylistService.createOnSpotify([]);
+
+        expect(PremiumQuota.recordPlaylistCreation).toHaveBeenCalled();
+    });
+
+    it('createOnSpotify does not record quota for chamber tier', async () => {
+        const { PlaylistService } = await import('../../js/services/playlist-service.js');
+        const { PremiumGatekeeper } = await import('../../js/services/premium-gatekeeper.js');
+        const { PremiumQuota } = await import('../../js/services/premium-quota.js');
+
+        const mockAccess = { allowed: true, reason: null, tier: 'chamber', quotaRemaining: null, upgradeUrl: '/upgrade.html' };
+        vi.mocked(PremiumGatekeeper.checkFeature).mockResolvedValue(mockAccess);
+
+        await PlaylistService.createOnSpotify([]);
+
+        expect(PremiumQuota.recordPlaylistCreation).not.toHaveBeenCalled();
     });
 });
