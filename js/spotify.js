@@ -15,6 +15,7 @@ const Spotify = (() => {
     // Storage keys
     const STORAGE_KEYS = {
         CODE_VERIFIER: 'spotify_code_verifier',
+        OAUTH_STATE: 'spotify_oauth_state',
         ACCESS_TOKEN: 'spotify_access_token',
         REFRESH_TOKEN: 'spotify_refresh_token',
         TOKEN_EXPIRY: 'spotify_token_expiry'
@@ -227,6 +228,16 @@ const Spotify = (() => {
         return base64URLEncode(hashed);
     }
 
+    /**
+     * Generate a cryptographically random state string for CSRF protection
+     * @returns {string} Random state string
+     */
+    function generateOAuthState() {
+        const array = new Uint8Array(32);
+        crypto.getRandomValues(array);
+        return Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+    }
+
     // ==========================================
     // OAuth Flow
     // ==========================================
@@ -304,15 +315,49 @@ const Spotify = (() => {
             code_challenge: codeChallenge
         });
 
+        // SECURITY: Generate and store state parameter for CSRF protection
+        const state = generateOAuthState();
+        params.set('state', state);
+
+        // Store state in sessionStorage for verification on callback
+        // SECURITY: Must use sessionStorage, not localStorage, to prevent XSS
+        try {
+            sessionStorage.setItem(STORAGE_KEYS.OAUTH_STATE, state);
+        } catch (e) {
+            logger.error('sessionStorage required for OAuth state parameter', e);
+            throw new Error(
+                'sessionStorage required for secure OAuth flow. ' +
+                'Please enable cookies/storage in your browser settings.'
+            );
+        }
+
         window.location.href = `${ENDPOINTS.authorize}?${params.toString()}`;
     }
 
     /**
      * Handle OAuth callback - exchange code for tokens
      * @param {string} code - Authorization code from callback
+     * @param {string} state - State parameter from callback for CSRF verification
      * @returns {Promise<boolean>} Success status
      */
-    async function handleCallback(code) {
+    async function handleCallback(code, state) {
+        // SECURITY: Verify state parameter to prevent CSRF attacks
+        // This ensures the callback is from a request we initiated
+        const storedState = sessionStorage.getItem(STORAGE_KEYS.OAUTH_STATE);
+
+        if (!storedState || storedState !== state) {
+            // State mismatch - possible CSRF attack
+            sessionStorage.removeItem(STORAGE_KEYS.OAUTH_STATE);
+            logger.error('OAuth state mismatch - possible CSRF attack');
+            throw new Error(
+                'Security verification failed. The authorization flow may have been tampered with. ' +
+                'Please try connecting again.'
+            );
+        }
+
+        // Clear state after successful verification (single-use)
+        sessionStorage.removeItem(STORAGE_KEYS.OAUTH_STATE);
+
         // SECURITY FIX (HIGH Issue #7): Only check sessionStorage for PKCE verifier
         // Previous implementation fell back to localStorage which is insecure
         const codeVerifier = sessionStorage.getItem(STORAGE_KEYS.CODE_VERIFIER);
