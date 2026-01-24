@@ -44,6 +44,13 @@ function buildSystemPrompt(queryContext = null, semanticContext = null) {
     const template = _Prompts?.system;
     if (!template || !userContext) return '';
 
+    // CRITICAL: Validate userContext structure before destructuring
+    // Prevents null pointer exceptions when personality, patterns, or summary are missing
+    if (!userContext?.personality || !userContext?.summary) {
+        console.warn('[ConversationOrchestrator] Invalid userContext: missing personality or summary');
+        return template; // Return base template without user-specific substitutions
+    }
+
     const { personality, patterns, summary } = userContext;
 
     const dateRange = summary?.dateRange
