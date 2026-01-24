@@ -16,7 +16,8 @@
     "lemonsqueezy": {
         "storeUrl": "https://rhythmchamber.lemonsqueezy.com",
         "variantMonthly": "1246781",
-        "variantYearly": "1246780"
+        "variantYearly": "1246780",
+        "validationEndpoint": "https://rhythm-chamber-license-validator.rhythmchamber-license.workers.dev/validate"
     },
     "app": {
         "name": "Rhythm Chamber"
