@@ -73,6 +73,44 @@ async function handleFileUpload(file) {
     // Determine expected file type from extension
     const fileType = file.name.toLowerCase().endsWith('.zip') ? 'zip' : 'json';
 
+    // SECURITY: Validate MIME type and file signature, not just extension
+    const validMimeTypes = [
+        'application/zip',
+        'application/json',
+        'application/x-zip-compressed',
+        'text/plain'
+    ];
+
+    // Check MIME type
+    if (!validMimeTypes.includes(file.type)) {
+        _showToast(`Invalid file type: ${file.type || 'unknown'}. Please upload a .zip or .json file.`);
+        return;
+    }
+
+    // For ZIP files, verify magic bytes (file signature)
+    // ZIP files start with PK (0x504B) - checking first 4 bytes
+    if (fileType === 'zip') {
+        const slice = file.slice(0, 4);
+        const arrayBuffer = await slice.arrayBuffer();
+        const signature = new Uint8Array(arrayBuffer);
+
+        // ZIP magic bytes: 0x50 0x4B (PK) - either 0x504B0304 or 0x504B0506 or 0x504B0708
+        const validZipSignatures = [
+            [0x50, 0x4B, 0x03, 0x04], // Local file header
+            [0x50, 0x4B, 0x05, 0x06], // End of central directory
+            [0x50, 0x4B, 0x07, 0x08]  // Data descriptor
+        ];
+
+        const isValidZip = validZipSignatures.some(sig =>
+            sig.every((byte, i) => signature[i] === byte)
+        );
+
+        if (!isValidZip) {
+            _showToast('Invalid ZIP file. The file signature does not match a ZIP archive.');
+            return;
+        }
+    }
+
     // Validate file type and content using InputValidation utility
     // Note: We need to dynamically import since InputValidation might not be loaded
     let InputValidation;
@@ -90,7 +128,7 @@ async function handleFileUpload(file) {
             return;
         }
     } else {
-        // Fallback to basic extension check
+        // Fallback to basic extension check (only if InputValidation unavailable)
         if (!file.name.endsWith('.zip') && !file.name.endsWith('.json')) {
             _showToast('Please upload a .zip or .json file');
             return;
