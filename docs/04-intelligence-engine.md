@@ -197,6 +197,29 @@ What happened?"
 
 ChatGPT has a context window limit. Your complete listening history is too big. We handle it locally with semantic search.
 
+### Semantic Search
+
+**Implementation**: 100% client-side using WASM-compiled transformers
+
+```javascript
+import { pipeline } from '@xenova/transformers';
+
+// Generate embeddings locally
+const extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+const embedding = await extractor(query, { pooling: 'mean', normalize: true });
+```
+
+**Performance**:
+- ~500ms for first query (model loading)
+- ~50ms for subsequent queries
+- No network latency
+- Works offline after initial model load
+
+**Privacy**:
+- No API calls to external services
+- Queries processed locally
+- No data transmitted
+
 ### How It Works
 
 1. **Chunking**: Your data is broken into meaningful chunks:
@@ -204,11 +227,11 @@ ChatGPT has a context window limit. Your complete listening history is too big. 
    - Artist profiles (history, patterns)
    - Era summaries (emotional periods)
 
-2. **Embeddings**: Each chunk gets a vector representation using OpenRouter's embedding API.
+2. **Embeddings**: Each chunk gets a vector representation using local WASM inference.
 
 3. **Search**: When you ask a question, we:
-   - Generate embedding for your query
-   - Search Qdrant for top 3-5 relevant chunks
+   - Generate embedding for your query locally
+   - Search indexed chunks for top 3-5 relevant matches
    - Inject those chunks into the LLM context
    - LLM generates accurate, contextual response
 
@@ -220,11 +243,11 @@ ChatGPT has a context window limit. Your complete listening history is too big. 
 ```
 You: "What was I listening to during my breakup in March 2020?"
 
-System: "In March 2020, you played The National's 'I Need My Girl' 
-127 times, mostly between 2-4am. Before that, you hadn't played 
+System: "In March 2020, you played The National's 'I Need My Girl'
+127 times, mostly between 2-4am. Before that, you hadn't played
 it since 2018. This matches your 'Emotional Archaeologist' pattern.
 
-You also discovered 23 new artists that month—unusual for you. 
+You also discovered 23 new artists that month—unusual for you.
 What opened you up during that time?"
 ```
 
@@ -237,6 +260,20 @@ What opened you up during that time?"
 | Surface-level trends | Deep behavioral patterns |
 
 **We're not competing on real-time.** We're competing on depth of understanding.
+
+---
+
+## Bring Your Own Intelligence (BYOI)
+
+Users can choose their AI provider:
+
+| Provider | Type | Cost | Setup |
+|----------|------|------|-------|
+| Ollama | Local | Free | Install Ollama, run model |
+| LM Studio | Local | Free | Install LM Studio, enable API |
+| OpenRouter | Cloud | Pay-per-use | Add API key in settings |
+
+The system automatically detects available providers and falls back gracefully.
 
 ---
 
