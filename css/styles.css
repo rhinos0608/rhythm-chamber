@@ -2284,6 +2284,12 @@ button:focus:not(:focus-visible) {
   padding: var(--space-lg);
 }
 
+/* Hidden state for modals - must override .modal-overlay display: flex */
+.modal-overlay.hidden,
+[hidden].modal-overlay {
+  display: none !important;
+}
+
 .modal-content {
   background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
@@ -2352,6 +2358,124 @@ button:focus:not(:focus-visible) {
 .modal-overlay.modal-closing .modal-content {
   transform: scale(0.95);
   transition: transform 0.2s ease;
+}
+
+/* ==========================================
+   Premium CTA & Modal Styles
+   ========================================== */
+
+/* Premium CTA Button */
+.premium-cta {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-full);
+  background: var(--accent-gradient);
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 10px 40px rgba(139, 92, 246, 0.2);
+  opacity: 0;
+  transform: translateY(-20px);
+  transition: all 300ms ease-in-out;
+  font-family: var(--font-body);
+}
+
+.premium-cta.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.premium-cta:hover {
+  transform: translateY(0) scale(1.05);
+  box-shadow: 0 10px 50px rgba(6, 182, 212, 0.3);
+}
+
+.premium-cta:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+}
+
+/* Premium Preview Modal */
+.premium-preview-modal {
+  z-index: 10001; /* Above safe-mode-banner (10000) and demo-transitioning overlay (9999) */
+}
+
+.premium-modal-content {
+  max-width: 450px;
+  width: 90%;
+  padding: 2rem;
+}
+
+.premium-modal-content h2 {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.premium-features {
+  margin: 1.5rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-glass);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  transition: var(--transition-base);
+}
+
+.feature-item:hover {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: var(--border-accent);
+}
+
+.premium-pricing {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  background: rgba(139, 92, 246, 0.1);
+  border-radius: var(--radius-md);
+  text-align: center;
+  border: 1px solid var(--border-accent);
+}
+
+.price-monthly,
+.price-yearly {
+  font-weight: 500;
+}
+
+.price-divider {
+  margin: 0 0.5rem;
+  color: var(--text-muted);
+}
+
+.price-yearly small {
+  color: var(--accent-secondary);
+  font-weight: 600;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.modal-actions .btn {
+  flex: 1;
 }
 
 /* ==========================================
@@ -4391,10 +4515,17 @@ body.demo-transitioning::after {
 
 /* Read-only mode: Disable interactive elements */
 body.read-only-mode .btn-primary:not(.btn-readonly-allowed),
-body.read-only-mode button:not(.btn-readonly-allowed):not(.chat-send) {
+body.read-only-mode button:not(.btn-readonly-allowed):not(.chat-send):not(.modal-close) {
   opacity: 0.5;
   cursor: not-allowed;
   pointer-events: none;
+}
+
+/* Modal close buttons always work, even in read-only mode */
+body.read-only-mode .modal-close {
+  opacity: 1;
+  cursor: pointer;
+  pointer-events: auto;
 }
 
 body.read-only-mode .upload-zone {

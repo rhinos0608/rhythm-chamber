@@ -56,7 +56,8 @@ const CRITICAL_DEFAULTS = {
     app: {
         name: 'Rhythm Chamber',
         url: typeof window !== 'undefined' ? window.location.origin : ''
-    }
+    },
+    PAYMENT_MODE: '' // Empty = MVP mode, 'chamber' = production mode
 };
 
 // ==========================================
