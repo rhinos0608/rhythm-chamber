@@ -3,18 +3,18 @@
   "name": "rhythm-chamber-license-validator",
   "main": "index.js",
   "compatibility_date": "2025-01-23",
-  "description": "License validation service for Rhythm Chamber app",
 
   "vars": {
     "ENVIRONMENT": "production"
   },
 
-  "routes": [
-    {
-      "pattern": "license-validator.rhythmchamber.com/*",
-      "zone_name": "rhythmchamber.com"
-    }
-  ],
+  // Custom domain routes - uncomment when you own the domain
+  // "routes": [
+  //   {
+  //     "pattern": "license-validator.rhythmchamber.com/*",
+  //     "zone_name": "rhythmchamber.com"
+  //   }
+  // ],
 
   "observability": {
     "enabled": true,
