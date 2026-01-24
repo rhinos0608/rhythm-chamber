@@ -1334,8 +1334,8 @@ async function getSemanticContext(query, limit = 3) {
         const { allowed, remaining } = await PremiumQuota.checkAndDecrement('semantic_search');
 
         if (!allowed) {
-            // Quota exhausted - show modal once, then silently skip
-            showSemanticUpgradeModal();
+            // Quota exhausted - silently skip for chat (don't show modal during conversation)
+            // Modal will be shown on direct search instead
             return null;
         }
 
