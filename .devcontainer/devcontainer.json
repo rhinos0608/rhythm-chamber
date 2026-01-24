@@ -1,0 +1,30 @@
+{
+  "name": "claude-code-devcontainer",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+
+  "features": {
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
+  },
+
+  "containerEnv": {
+    "ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic",
+    "API_TIMEOUT_MS": "3000000",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  },
+
+  "remoteEnv": {
+    "ANTHROPIC_AUTH_TOKEN": "${localEnv:ANTHROPIC_AUTH_TOKEN}"
+  },
+
+  "postCreateCommand": "claude --version || true",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode-remote.remote-containers"
+      ]
+    }
+  }
+}
