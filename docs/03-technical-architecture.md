@@ -212,6 +212,28 @@ Extracted complex function calling logic from `chat.js` into dedicated strategie
 - Makes adding new fallback methods easier
 - Improves testability of individual strategies
 
+### 9. IoC Container Pattern (NEW)
+
+The application uses a custom IoC (Inversion of Control) Container for dependency injection:
+
+```javascript
+// Service Registration
+container.register('Storage', () => new Storage());
+container.register('AppState', () => new AppState());
+
+// Controller Initialization with Auto-wiring
+const chatController = new ChatUIController({
+  chat: container.resolve('Chat'),
+  artifacts: container.resolve('Artifacts')
+});
+```
+
+**Benefits:**
+- Centralized dependency management
+- Easier testing with mock injection
+- Clear dependency graph
+- Singleton service lifecycle
+
 ---
 
 ## HNW Patterns Addressed
@@ -1833,6 +1855,20 @@ flowchart LR
     D --> E[Top 3 Chunks]
     E --> F[Inject into System Prompt]
     F --> G[LLM Response]
+```
+
+All semantic search processing happens client-side with no external dependencies:
+
+```
+User Query
+    ↓
+WASM Embedding Generator (@xenova/transformers)
+    ↓
+Local Vector Store (IndexedDB)
+    ↓
+Cosine Similarity Calculation
+    ↓
+Ranked Results
 ```
 
 ### WASM Embedding Stack
