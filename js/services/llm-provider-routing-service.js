@@ -42,13 +42,27 @@ function init(dependencies) {
  * @returns {object} Provider-specific config
  */
 function buildProviderConfig(provider, settings, baseConfig) {
+    // CRITICAL: Validate provider name at function entry
+    // Prevents silent acceptance of invalid provider names which could
+    // lead to unexpected behavior or security issues
+    const VALID_PROVIDERS = ['openrouter', 'ollama', 'lmstudio'];
+    if (!provider || typeof provider !== 'string') {
+        throw new TypeError(`Invalid provider: must be a non-empty string. Got: ${typeof provider}`);
+    }
+    const normalizedProvider = provider.toLowerCase().trim();
+    if (!VALID_PROVIDERS.includes(normalizedProvider)) {
+        throw new RangeError(
+            `Invalid provider name: "${provider}". Valid providers are: ${VALID_PROVIDERS.join(', ')}`
+        );
+    }
+
     // Delegate to provider interface if available
     if (_ProviderInterface?.buildProviderConfig) {
-        return _ProviderInterface.buildProviderConfig(provider, settings, baseConfig);
+        return _ProviderInterface.buildProviderConfig(normalizedProvider, settings, baseConfig);
     }
 
     // Fallback for backward compatibility
-    switch (provider) {
+    switch (normalizedProvider) {
         case 'ollama':
             return {
                 provider: 'ollama',
