@@ -36,7 +36,7 @@
   <!-- Premium Preview Modal -->
   <div id="premium-modal" class="modal-overlay premium-preview-modal" hidden>
     <div class="modal-content premium-modal-content">
-      <button class="modal-close" aria-label="Close modal">×</button>
+      <button class="modal-close" data-action="close-modal" aria-label="Close modal">×</button>
       <h2 class="gradient-text">✨ Unlock Rhythm Chamber Premium</h2>
       <div class="premium-features">
         <div class="feature-item">🎵 Unlimited playlist generation</div>
@@ -288,7 +288,7 @@
     import { Settings } from './js/settings.js';
     import { ConfigLoader } from './js/services/config-loader.js';
 
-    // Load config first, then setup event delegation
+    // Load config, then setup event delegation for complex actions
     try {
       await ConfigLoader.load();
     } catch (error) {
@@ -296,11 +296,13 @@
     } finally {
       ConfigLoader.installWindowProxy();
 
-      // Setup event delegation for data-action pattern (replaces inline onclick)
+      // Setup event delegation for actions that require module imports
       document.addEventListener('click', async (e) => {
         const button = e.target.closest('[data-action]');
         if (button) {
           const action = button.dataset.action;
+
+          // Show settings modal (requires Settings import)
           if (action === 'show-settings-modal') {
             e.preventDefault();
             Settings.showSettingsModal();

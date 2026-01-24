@@ -508,9 +508,9 @@
     <!-- Config Loader Initialization -->
     <script type="module">
         import { ConfigLoader } from './js/services/config-loader.js';
-        // Load config before any services that depend on it
-        await ConfigLoader.load();
-        console.log('[Config] Loaded, Lemon Squeezy config:', {
+        // Force config refresh to bypass cache and get latest PAYMENT_MODE
+        await ConfigLoader.load({ forceRefresh: true });
+        console.log('[Config] Loaded, PAYMENT_MODE:', ConfigLoader.get('PAYMENT_MODE'), 'Lemon Squeezy config:', {
             storeUrl: ConfigLoader.get('lemonsqueezy.storeUrl'),
             variantMonthly: ConfigLoader.get('lemonsqueezy.variantMonthly'),
             variantYearly: ConfigLoader.get('lemonsqueezy.variantYearly')

@@ -21,5 +21,6 @@
     },
     "app": {
         "name": "Rhythm Chamber"
-    }
+    },
+    "PAYMENT_MODE": "chamber"
 }

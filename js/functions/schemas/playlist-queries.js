@@ -133,4 +133,4 @@ const PLAYLIST_QUERY_SCHEMAS = [
     }
 ];
 
-export { PLAYLIST_QUERY_SCHEMAS };
+export { PLAYLIST_QUERY_SCHEMAS as PlaylistQuerySchemas };
