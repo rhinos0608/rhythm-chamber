@@ -19,6 +19,78 @@ const LMSTUDIO_TIMEOUT_MS = 90000;  // 90 seconds for local models
 const LMSTUDIO_DEFAULT_ENDPOINT = 'http://localhost:1234/v1';
 
 // ==========================================
+// Endpoint Validation (SSRF Protection)
+// ==========================================
+
+/**
+ * Validate that the endpoint is a localhost address
+ * Prevents SSRF attacks by ensuring only local addresses are used
+ * @param {string} endpoint - The endpoint URL to validate
+ * @returns {{valid: boolean, error?: string}}
+ */
+function validateEndpoint(endpoint) {
+    try {
+        const url = new URL(endpoint);
+
+        // Check protocol - only allow http or https
+        if (!['http:', 'https:'].includes(url.protocol)) {
+            return {
+                valid: false,
+                error: 'Invalid protocol. Only HTTP/HTTPS are allowed.'
+            };
+        }
+
+        const hostname = url.hostname.toLowerCase();
+
+        // List of allowed localhost patterns
+        const allowedPatterns = [
+            'localhost',
+            '127.0.0.1',
+            '[::1]',  // IPv6 localhost
+        ];
+
+        // Check if hostname matches any allowed pattern
+        const isAllowed = allowedPatterns.some(pattern => {
+            // For IPv6 address with brackets, compare directly
+            if (pattern.startsWith('[')) {
+                return hostname === pattern;
+            }
+            // For other patterns, check exact match or starts with
+            return hostname === pattern || hostname.startsWith(pattern);
+        });
+
+        // Also allow 127.x.x.x range (loopback)
+        const isLoopback = /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
+
+        if (!isAllowed && !isLoopback) {
+            return {
+                valid: false,
+                error: `Invalid hostname "${hostname}". LM Studio endpoint must be localhost (127.0.0.1).`
+            };
+        }
+
+        // Validate port if specified (default to 1234 for LM Studio)
+        const port = url.port || '1234';
+        const portNum = parseInt(port, 10);
+
+        // Reject privileged ports and suspicious high ports
+        if (portNum < 1024 || portNum > 65535) {
+            return {
+                valid: false,
+                error: `Invalid port "${port}". Port must be between 1024 and 65535.`
+            };
+        }
+
+        return { valid: true };
+    } catch (e) {
+        return {
+            valid: false,
+            error: `Invalid endpoint URL: ${e.message}`
+        };
+    }
+}
+
+// ==========================================
 // API Call
 // ==========================================
 
@@ -41,6 +113,12 @@ async function call(config, messages, tools, onProgress = null) {
 
     const useStreaming = typeof onProgress === 'function';
     const endpoint = config.endpoint || LMSTUDIO_DEFAULT_ENDPOINT;
+
+    // SECURITY: Validate endpoint is localhost only (SSRF protection)
+    const endpointValidation = validateEndpoint(endpoint);
+    if (!endpointValidation.valid) {
+        throw new Error(endpointValidation.error);
+    }
 
     const body = {
         model: config.model,
@@ -439,6 +517,12 @@ async function handleStreamingResponse(response, onProgress) {
  * @returns {Promise<{available: boolean, error?: string}>}
  */
 async function detectServer(endpoint = LMSTUDIO_DEFAULT_ENDPOINT) {
+    // SECURITY: Validate endpoint is localhost only (SSRF protection)
+    const endpointValidation = validateEndpoint(endpoint);
+    if (!endpointValidation.valid) {
+        return { available: false, error: endpointValidation.error };
+    }
+
     try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -477,6 +561,12 @@ async function isAvailable(endpoint = LMSTUDIO_DEFAULT_ENDPOINT) {
  * @returns {Promise<Array>} List of models
  */
 async function listModels(endpoint = LMSTUDIO_DEFAULT_ENDPOINT) {
+    // SECURITY: Validate endpoint is localhost only (SSRF protection)
+    const endpointValidation = validateEndpoint(endpoint);
+    if (!endpointValidation.valid) {
+        throw new Error(endpointValidation.error);
+    }
+
     // HIGH FIX #8: Add timeout to listModels() call
     // Prevents indefinite hang when LM Studio server is frozen
     const controller = new AbortController();
