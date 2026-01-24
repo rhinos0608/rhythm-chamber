@@ -166,7 +166,7 @@ A friendly upgrade message will be displayed if your browser doesn't support req
 - Exit demo to keep sample data isolated from your real analysis
 
 ### 1. Quick Snapshot (Instant)
-- Connect Spotify OAuth
+- Connect Spotify OAuth (Chamber tier)
 - Get current vibe analysis
 - Limited to recent data
 
@@ -210,8 +210,6 @@ We're not building a better stats.fm. We're building the next evolution of music
 
 **Your data. Your intelligence. Your control. Your insights.**
 
-**New Strategy:** Focus on PKM export and relationship insights for Supporters, drop CLI and paid themes, keep everything else free and local.
-
 ---
 
 ## Pricing & Licensing
@@ -241,7 +239,7 @@ Rhythm Chamber offers a simple two-tier pricing model:
 
 ## Target Audience
 
-**New framing:** Everyone who screenshots Wrapped (~100M+) + quantified-self enthusiasts + PKM users + relationship-focused users
+**New framing:** Everyone who screenshots Wrapped (~100M+) + quantified-self enthusiasts + relationship-focused users
 
 The data export friction is real, but the payoff is self-discovery and deeper connections, not just stats.
 
