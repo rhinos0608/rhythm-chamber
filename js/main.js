@@ -134,6 +134,7 @@ import { MessageOperations } from './services/message-operations.js';
 import { WorkerCoordinator } from './services/worker-coordinator.js';
 import { EventBus } from './services/event-bus.js';
 import { EventLogStore } from './storage/event-log-store.js';
+import { WaveTelemetry } from './services/wave-telemetry.js';
 
 // Controllers
 import { ChatUIController } from './controllers/chat-ui-controller.js';
@@ -178,6 +179,26 @@ import { ErrorBoundary, installGlobalErrorHandler } from './services/error-bound
 // window.SidebarController is exposed for inline onclick handlers.
 
 logger.debug('All modules imported via ES modules');
+
+
+// ==========================================
+// Wave Telemetry Initialization
+// ==========================================
+
+/**
+ * Initialize wave telemetry with critical events
+ * These events will be auto-tracked for performance analysis
+ */
+function initializeWaveTelemetry() {
+    const criticalEvents = [
+        'file_uploaded',
+        'pattern:all_complete',
+        'embedding:generation_complete',
+        'streams:processed'
+    ];
+    WaveTelemetry.setCriticalEvents(criticalEvents);
+    logger.debug('Wave telemetry initialized with critical events:', criticalEvents);
+}
 
 
 // ==========================================
@@ -486,6 +507,9 @@ async function bootstrap() {
     logger.info('Bootstrapping application...');
 
     try {
+        // Initialize wave telemetry with critical events
+        initializeWaveTelemetry();
+
         // Load configuration with retry logic (replaces fragile <script src="config.js">)
         logger.debug('Loading configuration...');
         await ConfigLoader.load();
