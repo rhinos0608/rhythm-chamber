@@ -107,6 +107,7 @@
 
 ### Onboarding
 - [Onboarding Guide](onboarding-guide.md) - New user orientation
+- [Premium Features Guide](premium-features-guide.md) - Chamber tier features
 
 ### User Journeys
 - [The Skeptical Privacy Advocate](user-journeys/01-the-skeptical-privacy-advocate.md)
