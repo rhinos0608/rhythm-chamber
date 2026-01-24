@@ -69,16 +69,20 @@ async function getQuotaData() {
  * @param {Object} data - Quota data to save
  */
 async function saveQuotaData(data) {
-    quotaCache = data;
-
     if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+        quotaCache = data; // Update cache even without localStorage
         return;
     }
 
     try {
+        // CRITICAL: Write to storage FIRST, then update cache on success only
+        // This prevents cache desync if localStorage write fails (quota exceeded, privacy mode, etc.)
         localStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify(data));
+        quotaCache = data; // Only update cache after successful storage write
     } catch (e) {
         logger.warn('Failed to save quota data to localStorage:', e);
+        // HIGH: Do NOT update cache on failure - this prevents desync between cache and storage
+        throw e; // Re-throw to allow caller to handle the failure
     }
 }
 
@@ -106,8 +110,9 @@ function isPremiumUser() {
     }
 
     // MVP: Everyone is "premium" for testing
-    // Set to false to test quota limits
-    return ConfigLoader.get('TEST_QUOTA_LIMITS', false) === false;
+    // Set TEST_QUOTA_LIMITS to true to disable quota (testing mode)
+    // Set TEST_QUOTA_LIMITS to false to enforce quota limits (production behavior)
+    return ConfigLoader.get('TEST_QUOTA_LIMITS', false) === true;
 }
 
 /**
@@ -147,7 +152,15 @@ async function recordPlaylistCreation() {
 
     const quota = await getQuotaData();
     quota.playlists = (quota.playlists || 0) + 1;
-    await saveQuotaData(quota);
+
+    try {
+        await saveQuotaData(quota);
+    } catch (e) {
+        // HIGH: If save fails, still return the computed remaining count
+        // The cache wasn't updated (per saveQuotaData fix), so next read will get stale data
+        // But the user's operation succeeded, so we acknowledge it
+        logger.warn(`Playlist recorded but not persisted: ${e.message}`);
+    }
 
     const remaining = Math.max(0, QUOTA_LIMITS.playlist_generation - quota.playlists);
     logger.info(`Playlist created. Remaining quota: ${remaining}`);
@@ -178,17 +191,21 @@ async function getQuotaStatus() {
  * @returns {Promise<void>}
  */
 async function resetQuota() {
-    quotaCache = { playlists: 0 };
+    const resetData = { playlists: 0 };
 
-    if (typeof window !== 'undefined' && typeof window.localStorage === 'undefined') {
+    if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+        quotaCache = resetData;
         return;
     }
 
     try {
-        localStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify(quotaCache));
+        // CRITICAL: Write to storage FIRST, then update cache on success only
+        localStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify(resetData));
+        quotaCache = resetData;
         logger.info('Quota reset to zero');
     } catch (e) {
         logger.warn('Failed to reset quota:', e);
+        // Do NOT update cache on failure - prevents desync
     }
 }
 
