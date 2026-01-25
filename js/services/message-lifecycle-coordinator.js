@@ -136,6 +136,25 @@ function clearDuplicateCache() {
     _processedMessageHashes.clear();
 }
 
+function getEarlyReturnAssistantMessage(earlyReturn) {
+    if (!earlyReturn || typeof earlyReturn !== 'object') return null;
+
+    if (typeof earlyReturn.content === 'string' && earlyReturn.content.trim().length > 0) {
+        return earlyReturn.content;
+    }
+
+    const nestedMessage = earlyReturn.message || earlyReturn.responseMessage;
+    if (nestedMessage && typeof nestedMessage.content === 'string' && nestedMessage.content.trim().length > 0) {
+        return nestedMessage.content;
+    }
+
+    if (typeof earlyReturn.error === 'string' && earlyReturn.error.trim().length > 0) {
+        return earlyReturn.error;
+    }
+
+    return null;
+}
+
 /**
  * Build user-friendly error message with provider-specific hints
  * @param {Error} error - The error that occurred
@@ -259,6 +278,19 @@ async function sendMessage(message, optionsOrKey = null, options = {}) {
         throw new Error('Chat not initialized. Call initChat first.');
     }
 
+    // Normalize optionsOrKey into options early for validation
+    // This ensures flags like isRegeneration are available for duplicate check
+    if (!options || Object.keys(options).length === 0) {
+        options = (typeof optionsOrKey === 'string')
+            ? { apiKey: optionsOrKey }
+            : (optionsOrKey || {});
+    } else {
+        // Merge optionsOrKey into options if both are provided
+        if (optionsOrKey && typeof optionsOrKey !== 'string') {
+            options = { ...optionsOrKey, ...options };
+        }
+    }
+
     // ISSUE 2: Input validation at entry point
     const validation = validateMessage(message, { skipDuplicateCheck: options?.isRegeneration });
     if (!validation.valid) {
@@ -365,7 +397,6 @@ async function processMessage(message, optionsOrKey = null) {
             ];
             await _SessionManager.addMessagesToHistory(messagesToAdd);
             userMessageCommitted = true;
-            trackProcessedMessage(message);  // Track even fallback responses
 
             // Show subtle fallback notification once per session
             if (!_hasShownFallbackNotification && _Settings?.showToast) {
@@ -502,17 +533,55 @@ async function processMessage(message, optionsOrKey = null) {
                 messages,
                 message
             );
+
+            // DIAGNOSTIC: Log tool handling result
+            console.log('[MessageLifecycleCoordinator] Tool handling result:', {
+                hasResponseMessage: !!toolHandlingResult?.responseMessage,
+                hasEarlyReturn: !!toolHandlingResult?.earlyReturn,
+                earlyReturnStatus: toolHandlingResult?.earlyReturn?.status,
+                hadFunctionErrors: toolHandlingResult?.hadFunctionErrors
+            });
+
             if (toolHandlingResult?.earlyReturn) {
-                // Commit user message before early return
-                if (!userMessageCommitted) {
-                    await _SessionManager.addMessageToHistory({
-                        role: 'user',
-                        content: message
-                    });
-                    userMessageCommitted = true;
-                    trackProcessedMessage(message);  // ISSUE 3: Track successful message
+                const earlyReturnContent = getEarlyReturnAssistantMessage(toolHandlingResult.earlyReturn);
+                const messagesToAdd = [{ role: 'user', content: message }];
+
+                if (earlyReturnContent) {
+                    messagesToAdd.push({ role: 'assistant', content: earlyReturnContent });
                 }
+
+                if (!userMessageCommitted) {
+                    // FIX Issue 3: Wrap addMessagesToHistory in try/catch
+                    // If commit fails, handle gracefully and don't proceed to saveConversation
+                    try {
+                        if (messagesToAdd.length > 1) {
+                            await _SessionManager.addMessagesToHistory(messagesToAdd);
+                        } else {
+                            await _SessionManager.addMessageToHistory(messagesToAdd[0]);
+                        }
+                        userMessageCommitted = true;
+                    } catch (commitError) {
+                        console.error('[MessageLifecycleCoordinator] Failed to commit messages to history:', commitError);
+                        // Return early return without saving - messages weren't committed
+                        return {
+                            ...toolHandlingResult.earlyReturn,
+                            error: 'Failed to save message to history',
+                            status: 'error'
+                        };
+                    }
+                }
+
+                _SessionManager.saveConversation();
+
                 return toolHandlingResult.earlyReturn;
+            }
+
+            // DIAGNOSTIC: Check if responseMessage is null after tool handling
+            if (!toolHandlingResult?.responseMessage) {
+                console.error('[MessageLifecycleCoordinator] Tool handling returned null responseMessage!', {
+                    originalResponseMessage: responseMessage,
+                    toolHandlingResult
+                });
             }
             responseMessage = toolHandlingResult.responseMessage || responseMessage;
 
@@ -555,12 +624,26 @@ async function processMessage(message, optionsOrKey = null) {
 
             // ISSUE 6: Mark error messages to exclude from LLM context
             // The 'error' flag allows filtering when building context for future turns
-            await _SessionManager.addMessageToHistory({
-                role: 'assistant',
-                content: errorMessage,
-                error: true,
-                excludeFromContext: true  // Signal to exclude from LLM context
-            });
+            if (!userMessageCommitted) {
+                const errorMessagesToAdd = [
+                    { role: 'user', content: message },
+                    {
+                        role: 'assistant',
+                        content: errorMessage,
+                        error: true,
+                        excludeFromContext: true
+                    }
+                ];
+                await _SessionManager.addMessagesToHistory(errorMessagesToAdd);
+                userMessageCommitted = true;
+            } else {
+                await _SessionManager.addMessageToHistory({
+                    role: 'assistant',
+                    content: errorMessage,
+                    error: true,
+                    excludeFromContext: true
+                });
+            }
             _SessionManager.saveConversation();
 
             // Always show error toast with actionable information
@@ -609,6 +692,12 @@ async function regenerateLastResponse(options = null) {
 
     const lastUserMsg = conversationHistory[lastMsgIndex];
     const message = lastUserMsg.content;
+
+    // FIX Issue 2: Clear the hash of the message we're about to regenerate
+    // When history is truncated, the old message's hash is still in _processedMessageHashes.
+    // This would cause sendMessage to fail with "duplicate message detected" error.
+    const messageHash = hashMessageContent(message);
+    _processedMessageHashes.delete(messageHash);
 
     // HIGH PRIORITY FIX: Await truncateHistory since it's now async with mutex protection
     // This prevents race condition where sendMessage starts before truncation completes

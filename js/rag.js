@@ -27,7 +27,7 @@ import { OperationLock } from './operation-lock.js';
 import { safeJsonParse } from './utils/safe-json.js';
 
 // Premium feature flag for semantic search
-const PREMIUM_RAG_ENABLED = true; // Set to true to enforce premium gate
+const PREMIUM_RAG_ENABLED = false; // Set to true to enforce premium gate (disabled for testing)
 const RAG_PREMIUM_FEATURE = 'semantic_embeddings';
 
 /**
@@ -147,11 +147,14 @@ function cleanupEmbeddingWorker() {
  * @returns {Promise<Array>} Chunks for embedding
  */
 async function createChunksWithWorker(streams, onProgress = () => { }) {
+    console.log('[RAG] DIAGNOSTIC: createChunksWithWorker() called');
     const worker = getEmbeddingWorker();
+    console.log('[RAG] DIAGNOSTIC: Worker available?', !!worker);
 
     // Fallback to main thread if worker not available
     // Uses async version with batching to prevent UI freeze
     if (!worker) {
+        console.log('[RAG] DIAGNOSTIC: Worker not available, using main thread fallback');
         onProgress(0, 100, 'Creating chunks (main thread - async fallback)...');
         return await createChunks(streams, onProgress);
     }
@@ -171,9 +174,14 @@ async function createChunksWithWorker(streams, onProgress = () => { }) {
         // Set up message handler ONCE at module initialization to prevent race conditions
         if (!worker._chunksHandlerSetup) {
             worker.onmessage = (event) => {
+                console.log('[RAG] DIAGNOSTIC: Worker message received:', event.data);
                 const { type, requestId: rid, current, total, message, chunks } = event.data;
                 const pending = pendingWorkerRequests.get(rid);
-                if (!pending) return;
+                if (!pending) {
+                    console.warn('[RAG] DIAGNOSTIC: No pending request found for requestId:', rid);
+                    return;
+                }
+                console.log('[RAG] DIAGNOSTIC: Processing worker message type:', type);
 
                 switch (type) {
                     case 'progress':
@@ -192,6 +200,7 @@ async function createChunksWithWorker(streams, onProgress = () => { }) {
                 }
             };
             worker._chunksHandlerSetup = true;
+            console.log('[RAG] DIAGNOSTIC: Worker message handler set up');
         }
 
         // Capture the original error handler before assigning new one
@@ -201,8 +210,14 @@ async function createChunksWithWorker(streams, onProgress = () => { }) {
             clearTimeout(timeoutId);
             console.warn('[RAG] Worker error, falling back to async main thread:', error.message);
 
-            // CRITICAL: Disable the onmessage handler to prevent duplicate resolution
-            worker.onmessage = null;
+            // FIX Issue 1 & 4: Remove the pending request from the map BEFORE resolving/rejecting
+            // This prevents memory leaks and allows proper cleanup
+            pendingWorkerRequests.delete(requestId);
+
+            // FIX Issue 1: Do NOT set worker.onmessage = null here - it permanently disables
+            // the handler for all future operations. The handler should remain functional.
+            // Instead, we've already removed this requestId from pendingWorkerRequests,
+            // so any late responses for this request will be safely ignored.
 
             // Fallback to async main thread version
             try {
@@ -227,7 +242,9 @@ async function createChunksWithWorker(streams, onProgress = () => { }) {
         };
 
         // Send streams to worker with requestId
+        console.log('[RAG] DIAGNOSTIC: Sending createChunks message to worker, requestId:', requestId);
         worker.postMessage({ type: 'createChunks', streams, requestId });
+        console.log('[RAG] DIAGNOSTIC: Message sent, waiting for worker response (120s timeout)...');
     });
 }
 
@@ -699,9 +716,12 @@ async function updateManifestAfterEmbedding(embeddedChunks) {
         }
     });
 
+    const patternChunkCount = embeddedChunks.filter(chunk => chunk.type === 'pattern_result' || chunk.type === 'pattern_summary').length;
+
     manifest.embeddedMonths = [...monthsSet];
     manifest.embeddedArtists = [...artistsSet];
     manifest.totalChunksEmbedded = (manifest.totalChunksEmbedded || 0) + embeddedChunks.length;
+    manifest.patternChunksEmbedded = (manifest.patternChunksEmbedded || 0) + patternChunkCount;
     manifest.lastEmbeddedAt = Date.now();
 
     await saveEmbeddingManifest(manifest);
@@ -726,7 +746,7 @@ async function search(query, limit = 5, abortSignal = null) {
     }
 
     // Always route to local mode in WASM-only architecture
-    return searchLocal(query, limit);
+    return searchLocal(query, limit, abortSignal);
 }
 
 /**
@@ -752,6 +772,18 @@ async function generateEmbeddings(onProgress = () => { }, options = {}, abortSig
  * @param {Function} onProgress - Optional progress callback
  * @returns {Promise<Array>} Chunks for embedding
  */
+function getMonthName(year, month) {
+    const months = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+    return `${months[month - 1]} ${year}`;
+}
+
+function formatDate(date) {
+    if (!date) return 'Unknown';
+    const d = new Date(date);
+    return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+}
+
 async function createChunks(streams, onProgress = () => { }) {
     const chunks = [];
     const INITIAL_BATCH_SIZE = 1000; // Reduced from 5000 for better responsiveness
@@ -834,7 +866,7 @@ async function createChunks(streams, onProgress = () => { }) {
 
         const hours = Math.round(totalMs / 3600000 * 10) / 10;
         const [year, monthNum] = month.split('-');
-        const monthName = new Date(year, monthNum - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        const monthName = getMonthName(parseInt(year, 10), parseInt(monthNum, 10));
 
         chunks.push({
             type: 'monthly_summary',
@@ -890,7 +922,7 @@ async function createChunks(streams, onProgress = () => { }) {
 
         chunks.push({
             type: 'artist_profile',
-            text: `Artist: ${artist}. Total plays: ${artistStreams.length}. Listening time: ${hours} hours. First listened: ${firstListen?.toLocaleDateString()}. Last listened: ${lastListen?.toLocaleDateString()}. Top tracks: ${topTracks.join(', ')}.`,
+            text: `Artist: ${artist}. Total plays: ${artistStreams.length}. Listening time: ${hours} hours. First listened: ${formatDate(firstListen)}. Last listened: ${formatDate(lastListen)}. Top tracks: ${topTracks.join(', ')}.`,
             metadata: { artist, plays: artistStreams.length, hours }
         });
 
@@ -1153,18 +1185,24 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abo
         });
 
         onProgress(50, 100, 'Initializing local vector store...');
+        console.log('[RAG] DIAGNOSTIC: About to call LocalVectorStore.init()...');
 
         // Initialize LocalVectorStore
         await LocalVectorStore.init();
+        console.log('[RAG] DIAGNOSTIC: LocalVectorStore.init() completed successfully');
 
         // Get streaming data
+        console.log('[RAG] DIAGNOSTIC: About to call Storage.getStreams()...');
         const streams = await Storage.getStreams();
+        console.log('[RAG] DIAGNOSTIC: Storage.getStreams() returned', streams?.length || 0, 'streams');
         if (!streams || streams.length === 0) {
             throw new Error('No streaming data found. Please upload your Spotify data first.');
         }
 
         // Create chunks from streaming data (uses worker to avoid UI jank)
+        console.log('[RAG] DIAGNOSTIC: About to call createChunksWithWorker with', streams.length, 'streams...');
         const chunks = await createChunksWithWorker(streams, onProgress);
+        console.log('[RAG] DIAGNOSTIC: createChunksWithWorker completed, returned', chunks.length, 'chunks');
         const totalChunks = chunks.length;
 
         console.log(`[RAG] Generating local embeddings for ${totalChunks} chunks...`);
@@ -1202,7 +1240,8 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abo
             embeddingsGenerated: true,
             storageMode: 'local',
             chunksCount: totalChunks,
-            generatedAt: new Date().toISOString()
+            generatedAt: new Date().toISOString(),
+            dataHash: await Storage.getDataHash?.()
         });
 
         onProgress(100, 100, '✓ Local embeddings generated successfully!');
@@ -1231,7 +1270,12 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abo
  * @param {number} limit - Number of results to return
  * @returns {Promise<Array>} Search results with payloads
  */
-async function searchLocal(query, limit = 5) {
+async function searchLocal(query, limit = 5, abortSignal = null) {
+    // Check for cancellation before expensive operations
+    if (abortSignal?.aborted) {
+        throw new Error('Search cancelled');
+    }
+
     // PREMIUM GATE: Check quota first
     try {
         const { PremiumQuota } = await import('./services/premium-quota.js');
@@ -1249,6 +1293,11 @@ async function searchLocal(query, limit = 5) {
     } catch (quotaError) {
         console.warn('[RAG] Quota check failed, allowing search:', quotaError);
         // Allow search to continue on quota check failure (graceful degradation)
+    }
+
+    // Check for cancellation again after quota check
+    if (abortSignal?.aborted) {
+        throw new Error('Search cancelled');
     }
 
     // Get modules - load on-demand if not available
@@ -1270,12 +1319,23 @@ async function searchLocal(query, limit = 5) {
         throw new Error('LocalVectorStore module not loaded. Check browser compatibility.');
     }
 
+    // Auto-initialize LocalEmbeddings if not ready (can happen after page reload)
+    // The model downloads and initializes, but embeddings data is in LocalVectorStore
     if (!LocalEmbeddings.isReady()) {
-        throw new Error('Local embeddings not initialized. Generate embeddings first.');
+        console.log('[RAG] LocalEmbeddings not ready after page reload, initializing...');
+        await LocalEmbeddings.initialize(() => { });
     }
 
+    // Auto-initialize LocalVectorStore if not ready (can happen after page reload)
+    // This loads the stored embeddings from IndexedDB
     if (!LocalVectorStore.isReady()) {
+        console.log('[RAG] LocalVectorStore not ready after page reload, initializing...');
         await LocalVectorStore.init();
+    }
+
+    // Check for cancellation before embedding generation (expensive)
+    if (abortSignal?.aborted) {
+        throw new Error('Search cancelled');
     }
 
     // Generate embedding for query
