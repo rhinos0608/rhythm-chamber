@@ -258,14 +258,24 @@ function validateMessageStructure(message) {
     }
 
     // ADVERSARIAL FIX: Check object depth limit (max 10 levels to prevent stack overflow)
+    // ADVERSARIAL FIX: Track visited objects to prevent infinite recursion on circular references
     const MAX_DEPTH = 10;
-    function checkDepth(obj, depth = 0) {
+    function checkDepth(obj, depth = 0, visited = new WeakSet()) {
         if (depth > MAX_DEPTH) {
             return false;
         }
-        if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+        if (!obj || typeof obj !== 'object') {
+            return true;
+        }
+        // ADVERSARIAL FIX: Check for circular references to prevent infinite recursion
+        if (visited.has(obj)) {
+            return false; // Circular reference detected
+        }
+        visited.add(obj);
+
+        if (!Array.isArray(obj)) {
             for (const key of Object.keys(obj)) {
-                if (!checkDepth(obj[key], depth + 1)) {
+                if (!checkDepth(obj[key], depth + 1, visited)) {
                     return false;
                 }
             }
@@ -273,7 +283,7 @@ function validateMessageStructure(message) {
         return true;
     }
     if (!checkDepth(message)) {
-        return { valid: false, error: `Message object depth exceeds ${MAX_DEPTH} levels` };
+        return { valid: false, error: `Message object depth exceeds ${MAX_DEPTH} levels or contains circular references` };
     }
 
     // ADVERSARIAL FIX: Check for prototype pollution attempts
