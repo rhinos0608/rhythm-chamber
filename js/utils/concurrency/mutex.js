@@ -59,23 +59,40 @@ export class Mutex {
         const previousLock = this._lock;
 
         // Create a new promise for the next operation to wait for
-        let releaseLock;
-        this._lock = new Promise(resolve => {
+        let releaseLock, rejectLock;
+        this._lock = new Promise((resolve, reject) => {
             releaseLock = resolve;
+            rejectLock = reject;
         });
 
         // Wait for previous operations to complete
         await previousLock;
 
-        // Increment lock count to indicate we're now locked
-        this._lockCount++;
+        // Use a local flag to track lock state within this execution context
+        // This prevents race conditions between increment/decrement operations
+        let lockAcquired = false;
 
         try {
+            // Atomic increment - only do this once
+            if (!lockAcquired) {
+                this._lockCount++;
+                lockAcquired = true;
+            }
+
             // Execute the critical section
             return await fn();
+        } catch (error) {
+            // Reject the lock promise if critical section throws
+            // This ensures any waiting operations are notified of the failure
+            rejectLock(error);
+            throw error;
         } finally {
-            // Decrement lock count and release the lock for the next operation
-            this._lockCount--;
+            // Always decrement lock count if we acquired it
+            if (lockAcquired) {
+                this._lockCount--;
+            }
+            // Always release the lock (resolve the promise)
+            // This prevents promise memory leaks and deadlocks
             releaseLock();
         }
     }
