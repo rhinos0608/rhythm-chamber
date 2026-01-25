@@ -229,7 +229,7 @@ async function put(storeName, data) {
             // Handle both single-record stores (like streams) and key-value stores
             if (storeName === 'streams' || storeName === 'chunks' || storeName === 'embeddings') {
                 // These are array-based stores, replace entire store
-                localStorage.setItem(lsKey, serialize(data));
+                localStorage.setItem(lsKey, serialize(data?.data ?? data));
             } else {
                 // These are key-value stores
                 existing[key] = data;
@@ -270,9 +270,14 @@ async function get(storeName, key) {
 
             // Handle different store structures
             if (storeName === 'streams' || storeName === 'chunks' || storeName === 'embeddings') {
-                // These stores directly contain the data
-                // For streams, return the data field if it exists
-                return stored.data || stored;
+                // CRITICAL FIX Issue #1: Return consistent structure matching IndexedDB
+                // IndexedDB returns {id, data, savedAt} wrapper, not raw data
+                const storedData = stored.data || stored;
+                return {
+                    id: key,
+                    data: storedData,
+                    savedAt: stored.savedAt || Date.now()
+                };
             } else {
                 // Key-value stores
                 return stored[key];
@@ -347,10 +352,8 @@ async function clear(storeName) {
 
 /**
  * Delete a specific record
- * MEDIUM FIX Issue #13: Improves performance and prevents data corruption by:
- * 1. Using Object.assign() for efficient deletion without full re-parse
- * 2. Validating JSON.stringify success before removing old data
- * 3. Adding atomic write with rollback on failure
+ * CRITICAL FIX Issue #2: Implements proper backup/rollback to prevent data corruption
+ * on quota exceeded errors. Clone before modification, rollback on failure.
  *
  * @param {string} storeName - Store name
  * @param {string} key - Record key
@@ -368,28 +371,20 @@ async function deleteRecord(storeName, key) {
             const stored = deserialize(storedJson);
 
             if (stored && typeof stored === 'object') {
-                // Create new object without the deleted key (more efficient than filter)
-                // Use delete for in-place modification, then validate
+                // CRITICAL FIX Issue #2: Clone before modification for rollback capability
+                const backup = JSON.parse(JSON.stringify(stored));
+
+                // Now safe to modify in-place
                 delete stored[key];
 
-                // MEDIUM FIX Issue #13: Validate serialization before committing
-                // This prevents data corruption if stringify fails midway
                 try {
-                    const newJson = serialize(stored);
-
-                    // Validate the serialized result
-                    if (typeof newJson !== 'string' || newJson.length === 0) {
-                        throw new Error('Serialization produced invalid result');
-                    }
-
-                    // Only update localStorage after successful serialization
-                    localStorage.setItem(lsKey, newJson);
-                } catch (stringifyError) {
-                    // MEDIUM FIX Issue #13: If serialization fails, log and don't modify storage
-                    // This prevents partial data corruption from quota exceeded mid-write
-                    // Note: localStorage.setItem was not called, so storage is already unchanged
-                    console.error('[Fallback] Delete serialization failed:', stringifyError);
-                    throw stringifyError;
+                    localStorage.setItem(lsKey, JSON.stringify(stored));
+                } catch (e) {
+                    // CRITICAL FIX Issue #2: Rollback on failure (e.g., quota exceeded)
+                    // Restore the original data to the stored object
+                    Object.assign(stored, backup);
+                    console.error('[Fallback] Delete failed, rolled back:', e);
+                    throw e;
                 }
             }
         } catch (e) {
