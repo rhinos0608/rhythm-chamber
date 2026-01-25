@@ -316,8 +316,14 @@ function validateMessageStructure(message) {
 
 /**
  * Rate limiting per message type
- * ARCH FIX: Prevents message flood attacks
+ * ADVERSARIAL REVIEW FIX: All message types must have rate limits
+ * SECURITY FIX: Prevents denial of service via message flooding
  */
+const DEFAULT_RATE_LIMIT = 10; // Default for unknown types
+const GLOBAL_RATE_LIMIT = 50; // Global limit across all types
+const BURST_RATE_LIMIT = 10; // Max 10 messages in 100ms window
+const BURST_WINDOW_MS = 100;
+
 const MESSAGE_RATE_LIMITS = {
     CANDIDATE: { maxPerSecond: 10 },
     CLAIM_PRIMARY: { maxPerSecond: 5 },
@@ -330,19 +336,63 @@ const MESSAGE_RATE_LIMITS = {
 };
 
 const messageRateTracking = new Map(); // type -> [{count, windowStart}]
+let globalMessageCount = 0;
+let globalWindowStart = Date.now();
+let burstMessageCount = 0;
+let burstWindowStart = Date.now();
+
+/**
+ * Cleanup old tracking entries to prevent memory leak
+ */
+function cleanupOldTrackingEntries(now) {
+    const windowStart = now - 1000;
+    for (const [type, entries] of messageRateTracking.entries()) {
+        const validEntries = entries.filter(entry => entry.windowStart > windowStart);
+        if (validEntries.length === 0) {
+            messageRateTracking.delete(type);
+        } else {
+            messageRateTracking.set(type, validEntries);
+        }
+    }
+}
 
 /**
  * Check if message rate limit exceeded
- * ARCH FIX: Prevents denial of service via message flooding
+ * ADVERSARIAL REVIEW FIX: Prevents denial of service via message flooding
  *
  * @param {string} messageType - Type of message
  * @returns {boolean} True if rate limit exceeded
  */
 function isRateLimited(messageType) {
-    const limit = MESSAGE_RATE_LIMITS[messageType];
-    if (!limit) return false;
-
     const now = Date.now();
+
+    // SECURITY FIX 1: Burst protection (max 10 messages in 100ms)
+    const burstWindowElapsed = now - burstWindowStart;
+    if (burstWindowElapsed > BURST_WINDOW_MS) {
+        burstMessageCount = 0;
+        burstWindowStart = now;
+    }
+    burstMessageCount++;
+    if (burstMessageCount > BURST_RATE_LIMIT) {
+        console.warn(`[TabCoordination] Burst rate limit exceeded: ${burstMessageCount} messages in ${burstWindowElapsed}ms`);
+        return true;
+    }
+
+    // SECURITY FIX 2: Global rate limit (max 50 messages/second across all types)
+    const globalWindowElapsed = now - globalWindowStart;
+    if (globalWindowElapsed > 1000) {
+        globalMessageCount = 0;
+        globalWindowStart = now;
+    }
+    globalMessageCount++;
+    if (globalMessageCount > GLOBAL_RATE_LIMIT) {
+        console.warn(`[TabCoordination] Global rate limit exceeded: ${globalMessageCount} messages/second`);
+        return true;
+    }
+
+    // SECURITY FIX 3: Default limit for unknown message types
+    const limit = MESSAGE_RATE_LIMITS[messageType] || { maxPerSecond: DEFAULT_RATE_LIMIT };
+
     const tracking = messageRateTracking.get(messageType) || [];
 
     // Remove entries outside the current 1-second window
@@ -358,6 +408,11 @@ function isRateLimited(messageType) {
     // Add current message to tracking
     validEntries.push({ count: 1, windowStart: now });
     messageRateTracking.set(messageType, validEntries);
+
+    // SECURITY FIX 4: Periodic cleanup of tracking data (1% chance per message)
+    if (Math.random() < 0.01) {
+        cleanupOldTrackingEntries(now);
+    }
 
     return false;
 }
@@ -621,6 +676,8 @@ let lastHeartbeatSentTime = 0; // Track for WaveTelemetry
 let heartbeatInProgress = false; // Track if heartbeat is currently being sent
 // FIX Issue #2: Track if handleSecondaryMode has been called to prevent split-brain
 let hasCalledSecondaryMode = false;
+// FIX CRITICAL #3: Track if this tab has conceded leadership - once set, never become primary again this session
+let hasConcededLeadership = false;
 
 // Event replay watermark tracking
 let lastEventWatermark = -1; // Last event sequence number processed
@@ -991,6 +1048,8 @@ async function initWithBroadcastChannel() {
     electionAborted = false;
     // FIX Issue #2: Reset secondary mode flag for new election
     hasCalledSecondaryMode = false;
+    // FIX CRITICAL #3: Reset conceded leadership flag for new election (fresh start)
+    hasConcededLeadership = false;
 
     // Announce candidacy with Vector clock for deterministic ordering and message security
     sendMessage({
@@ -1103,6 +1162,8 @@ async function initWithSharedWorker() {
     electionAborted = false;
     // FIX Issue #2: Reset secondary mode flag for SharedWorker election
     hasCalledSecondaryMode = false;
+    // FIX CRITICAL #3: Reset conceded leadership flag for SharedWorker election (fresh start)
+    hasConcededLeadership = false;
 
     console.log('[TabCoordination] Announcing candidacy via SharedWorker:', TAB_ID);
 
@@ -1381,31 +1442,42 @@ function createMessageHandler() {
                 case MESSAGE_TYPES.CLAIM_PRIMARY:
                     // Another tab claimed primary - we become secondary
                     // FIX Issue #2: ALWAYS become secondary when someone else claims primary
-                    // RACE CONDITION FIX: Use atomic compare-and-set pattern to prevent
-                    // multiple tabs from simultaneously transitioning to secondary mode
+                    // FIX CRITICAL #3: Use atomic compare-and-set pattern to prevent split-brain
                     if (tabId !== TAB_ID) {
-                        // Atomic transition: check current state, update all state in one block
-                        const wasPrimary = isPrimaryTab;
+                        // ATOMIC TRANSITION: Check and update state in single conditional block
+                        // This eliminates race window between checking state and updating it
+                        if (isPrimaryTab && !hasConcededLeadership) {
+                            // Mark that we've conceded - this is permanent for this session
+                            // Once conceded, we can NEVER become primary again (prevents split-brain)
+                            hasConcededLeadership = true;
 
-                        // Update module-scoped state atomically (single assignment)
-                        receivedPrimaryClaim = true;
-                        electionAborted = true;
-                        isPrimaryTab = false;
-                        hasCalledSecondaryMode = true; // Set flag before calling handleSecondaryMode
+                            // Update all other state atomically (all in same execution block)
+                            const wasPrimary = true; // We know we were primary from the if condition
+                            receivedPrimaryClaim = true;
+                            electionAborted = true;
+                            isPrimaryTab = false;
+                            hasCalledSecondaryMode = true;
 
-                        // Only call handleSecondaryMode if we were actually primary
-                        // This prevents redundant UI updates and ensures idempotency
-                        if (wasPrimary) {
-                            // Use setTimeout to break reentrancy and ensure message
-                            // processing completes before handleSecondaryMode runs
-                            setTimeout(() => {
-                                try {
-                                    handleSecondaryMode();
-                                } catch (error) {
-                                    console.error('[TabCoordination] Error transitioning to secondary mode:', error);
-                                }
-                            }, 0);
+                            // CRITICAL FIX: Call handleSecondaryMode SYNCHRONOUSLY
+                            // The setTimeout(..., 0) created a race window where flag=true but UI still active
+                            // By calling synchronously, we ensure UI is disabled immediately
+                            // Use try-catch to prevent errors from breaking message processing
+                            try {
+                                handleSecondaryMode();
+                            } catch (error) {
+                                console.error('[TabCoordination] Error transitioning to secondary mode:', error);
+                            }
+
+                            console.log(`[TabCoordination] Conceded leadership to tab ${tabId} (atomic transition)`);
+                        } else if (!isPrimaryTab && !hasConcededLeadership) {
+                            // We weren't primary, but mark as conceded for consistency
+                            // This prevents us from becoming primary later if race occurs
+                            hasConcededLeadership = true;
+                            receivedPrimaryClaim = true;
+                            electionAborted = true;
+                            console.log(`[TabCoordination] Marking as secondary (was not primary) - conceded to tab ${tabId}`);
                         }
+                        // If already hasConcededLeadership, this is a duplicate claim - ignore
                     }
                     break;
 
@@ -1498,8 +1570,23 @@ function createMessageHandler() {
 
 /**
  * Claim this tab as primary
+ * FIX CRITICAL #3: Add validation to prevent split-brain - once conceded, never reclaim
  */
 function claimPrimary() {
+    // CRITICAL #3: Validate we haven't conceded leadership
+    // Once a tab has conceded, it can NEVER become primary again this session
+    // This is the key defense against split-brain
+    if (hasConcededLeadership) {
+        console.error('[TabCoordination] REFUSING to claim primary - already conceded leadership (split-brain prevention)');
+        return; // Do NOT claim primary - would cause split-brain
+    }
+
+    // Also validate we haven't received a claim from another tab
+    if (receivedPrimaryClaim) {
+        console.error('[TabCoordination] REFUSING to claim primary - received claim from another tab (split-brain prevention)');
+        return; // Do NOT claim primary - would cause split-brain
+    }
+
     isPrimaryTab = true;
     // FIX Issue #2: Reset secondary mode flag when becoming primary
     hasCalledSecondaryMode = false;
@@ -1513,8 +1600,14 @@ function claimPrimary() {
 
 /**
  * Handle transition to secondary mode
+ * FIX CRITICAL #3: Add split-brain detection and recovery
  */
 function handleSecondaryMode() {
+    // CRITICAL #3: Detect split-brain scenario - if we're somehow marked as primary while being called to secondary
+    if (isPrimaryTab) {
+        console.error('[TabCoordination] SPLIT-BRAIN DETECTED: handleSecondaryMode called but isPrimaryTab=true. This indicates a race condition. Forcing secondary mode.');
+    }
+
     console.log('[TabCoordination] Entering secondary mode (read-only)');
 
     // Stop watermark broadcast as we're now secondary
@@ -2258,6 +2351,8 @@ function cleanup() {
     electionAborted = false;
     // FIX Issue #2: Reset secondary mode flag on cleanup
     hasCalledSecondaryMode = false;
+    // FIX CRITICAL #3: Reset conceded leadership flag on cleanup (fresh start on reload)
+    hasConcededLeadership = false;
 
     // HNW Network: Clear remote sequence tracking
     remoteSequences.clear();
