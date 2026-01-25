@@ -15,6 +15,38 @@ import { DataVersion } from './data-version.js';
 import { safeJsonParse } from '../utils/safe-json.js';
 import { STORAGE_KEYS } from '../storage/keys.js';
 import { AppState } from '../state/app-state.js';
+import { Mutex } from '../utils/concurrency/mutex.js';
+
+// ==========================================
+// Event Schemas (decentralized registration)
+// ==========================================
+
+/**
+ * Session event schemas
+ * Registered with EventBus during initialization for decentralized schema management
+ */
+const SESSION_EVENT_SCHEMAS = {
+    'session:created': {
+        description: 'New chat session created',
+        payload: { sessionId: 'string', title: 'string?' }
+    },
+    'session:loaded': {
+        description: 'Session loaded from storage',
+        payload: { sessionId: 'string', messageCount: 'number' }
+    },
+    'session:switched': {
+        description: 'Active session changed',
+        payload: { fromSessionId: 'string?', toSessionId: 'string' }
+    },
+    'session:updated': {
+        description: 'Session data updated',
+        payload: { sessionId: 'string', field: 'string?' }
+    },
+    'session:ended': {
+        description: 'Chat session ended',
+        payload: { reason: 'string' }
+    }
+};
 
 // ==========================================
 // Constants
@@ -40,65 +72,115 @@ let currentSessionCreatedAt = null;
 let autoSaveTimeoutId = null;
 let _eventListenersRegistered = false; // Track if event listeners are registered to prevent duplicates
 
-// In-memory session data with async mutex for thread-safety
+// In-memory session data with mutex protection
 let _sessionData = { id: null, messages: [] };
-let _sessionDataLock = Promise.resolve(); // Async mutex: promises chain sequentially
+const _sessionDataMutex = new Mutex();
 
 // Session lock for preventing session switches during message processing
 let _processingSessionId = null;  // Session ID currently being processed
-let _processingLock = Promise.resolve();  // Processing lock
+const _processingMutex = new Mutex();
+
+// DEADLOCK PREVENTION: Queue-based lock management with timeout
+const LOCK_ACQUISITION_TIMEOUT_MS = 5000;  // 5 second timeout for lock acquisition
+const MAX_RETRY_ATTEMPTS = 3;  // Maximum retry attempts with exponential backoff
+const BASE_RETRY_DELAY_MS = 100;  // Base delay for exponential backoff
 
 /**
  * Acquire session processing lock to prevent session switches during message processing
  * This prevents race conditions where a session switch happens mid-message processing
+ *
+ * Uses Mutex for standardized lock management with timeout support
+ *
  * @param {string} expectedSessionId - The session ID expected to be active
- * @returns {Promise<{ locked: boolean, currentSessionId: string|null, release?: Function }>} Lock result
+ * @returns {Promise<{ locked: boolean, currentSessionId: string|null, release?: Function, error?: string }>} Lock result
  */
 async function acquireProcessingLock(expectedSessionId) {
-    const previousLock = _processingLock;
-    let releaseLock;
+    const startTime = Date.now();
+    let attemptCount = 0;
 
-    // Create new lock in the chain
-    _processingLock = new Promise(resolve => {
-        releaseLock = resolve;
-    });
+    while (attemptCount < MAX_RETRY_ATTEMPTS) {
+        attemptCount++;
 
-    // Wait for previous processing to complete
-    await previousLock;
-
-    // Issue 3 Fix: Re-validate that currentSessionId still matches expected after acquiring lock
-    // Session can switch between the await and returning the lock
-    if (expectedSessionId && currentSessionId !== expectedSessionId) {
-        // Session changed during lock wait
-        releaseLock();
-        return {
-            locked: false,
-            currentSessionId: currentSessionId,
-            error: 'Session switched while waiting for lock'
-        };
-    }
-
-    // Check if session has switched
-    if (_processingSessionId !== null && _processingSessionId !== expectedSessionId) {
-        // Session changed during lock acquisition
-        releaseLock();
-        return {
-            locked: false,
-            currentSessionId: currentSessionId,
-            error: 'Session switched during lock acquisition'
-        };
-    }
-
-    // Acquire the lock
-    _processingSessionId = expectedSessionId || currentSessionId;
-
-    return {
-        locked: true,
-        currentSessionId: currentSessionId,
-        release: () => {
-            _processingSessionId = null;
-            releaseLock();
+        // Check timeout
+        if (Date.now() - startTime > LOCK_ACQUISITION_TIMEOUT_MS) {
+            console.warn('[SessionManager] Lock acquisition timeout after', LOCK_ACQUISITION_TIMEOUT_MS, 'ms');
+            return {
+                locked: false,
+                currentSessionId: currentSessionId,
+                error: 'Lock acquisition timeout'
+            };
         }
+
+        // CIRCULAR WAIT DETECTION: Check if we're waiting for ourselves
+        if (_processingSessionId === expectedSessionId) {
+            console.warn('[SessionManager] Circular wait detected - same session already holds lock');
+            return {
+                locked: false,
+                currentSessionId: currentSessionId,
+                error: 'Circular wait detected'
+            };
+        }
+
+        // Try to acquire lock using mutex with timeout
+        try {
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Lock wait timeout')), LOCK_ACQUISITION_TIMEOUT_MS);
+            });
+
+            // Try to acquire the lock
+            const lockPromise = _processingMutex.runExclusive(async () => {
+                // Re-validate session ID after acquiring lock
+                if (expectedSessionId && currentSessionId !== expectedSessionId) {
+                    throw new Error('Session switched while waiting for lock');
+                }
+
+                if (_processingSessionId !== null && _processingSessionId !== expectedSessionId) {
+                    throw new Error('Session switched during lock acquisition');
+                }
+
+                // Acquire the lock
+                _processingSessionId = expectedSessionId || currentSessionId;
+
+                // Return a release function
+                return () => {
+                    _processingSessionId = null;
+                };
+            });
+
+            const release = await Promise.race([lockPromise, timeoutPromise]);
+
+            return {
+                locked: true,
+                currentSessionId: currentSessionId,
+                release: release
+            };
+
+        } catch (error) {
+            console.warn('[SessionManager] Lock acquisition attempt', attemptCount, 'failed:', error.message);
+
+            // If session mismatch, don't retry
+            if (error.message.includes('Session switched')) {
+                return {
+                    locked: false,
+                    currentSessionId: currentSessionId,
+                    error: error.message
+                };
+            }
+
+            // Exponential backoff before retry
+            if (attemptCount < MAX_RETRY_ATTEMPTS) {
+                const delayMs = BASE_RETRY_DELAY_MS * Math.pow(2, attemptCount - 1);
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+        }
+    }
+
+    // All retries exhausted
+    console.warn('[SessionManager] Lock acquisition failed after', MAX_RETRY_ATTEMPTS, 'attempts');
+    return {
+        locked: false,
+        currentSessionId: currentSessionId,
+        error: 'Max retry attempts exceeded'
     };
 }
 
@@ -188,18 +270,7 @@ function syncSessionIdToAppState(sessionId) {
  * @returns {Promise<void>}
  */
 async function updateSessionData(updaterFn) {
-    const previousLock = _sessionDataLock;
-    let releaseLock;
-
-    // Create new lock in the chain
-    _sessionDataLock = new Promise(resolve => {
-        releaseLock = resolve;
-    });
-
-    // Wait for previous updates to complete
-    await previousLock;
-
-    try {
+    return _sessionDataMutex.runExclusive(async () => {
         const currentData = getSessionData();
         const newData = updaterFn(currentData);
         _sessionData = {
@@ -211,9 +282,7 @@ async function updateSessionData(updaterFn) {
         if (typeof window !== 'undefined') {
             window._sessionData = getSessionData();
         }
-    } finally {
-        releaseLock(); // Release the lock for next operation
-    }
+    });
 }
 
 // ==========================================
@@ -253,6 +322,9 @@ function isValidUUID(sessionId) {
  * @returns {Promise<string|null>} Current session ID or null if none exists
  */
 async function init() {
+    // Register session event schemas with EventBus (decentralized schema management)
+    EventBus.registerSchemas(SESSION_EVENT_SCHEMAS);
+
     // Recover any emergency backup from previous session (tab closed mid-save)
     await recoverEmergencyBackup();
 
@@ -678,14 +750,20 @@ let previousSessionId = null;
 async function switchSession(sessionId) {
     // Issue 2 Fix: Actually acquire the lock (not just check it)
     // Hold lock through the save operation to prevent race conditions
-    const lockResult = await acquireProcessingLock(currentSessionId);
+    const MAX_SWITCH_RETRIES = 3;
+    let attempt = 0;
+    let lockResult;
 
-    if (!lockResult.locked) {
+    while (attempt < MAX_SWITCH_RETRIES) {
+        attempt++;
+        lockResult = await acquireProcessingLock(currentSessionId);
+        if (lockResult.locked) break;
+
         console.warn('[SessionManager] Failed to acquire lock for session switch:', lockResult.error);
-        // Still wait for any ongoing processing to complete
-        if (_processingSessionId !== null) {
-            await _processingLock;
+        if (attempt >= MAX_SWITCH_RETRIES) {
+            return false;
         }
+        await new Promise(resolve => setTimeout(resolve, BASE_RETRY_DELAY_MS));
     }
 
     try {
@@ -711,7 +789,7 @@ async function switchSession(sessionId) {
         return false;
     } finally {
         // Issue 2 Fix: Release lock after save completes
-        if (lockResult.locked && lockResult.release) {
+        if (lockResult?.locked && lockResult.release) {
             lockResult.release();
         }
     }
