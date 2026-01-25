@@ -66,6 +66,18 @@ async function acquireProcessingLock(expectedSessionId) {
     // Wait for previous processing to complete
     await previousLock;
 
+    // Issue 3 Fix: Re-validate that currentSessionId still matches expected after acquiring lock
+    // Session can switch between the await and returning the lock
+    if (expectedSessionId && currentSessionId !== expectedSessionId) {
+        // Session changed during lock wait
+        releaseLock();
+        return {
+            locked: false,
+            currentSessionId: currentSessionId,
+            error: 'Session switched while waiting for lock'
+        };
+    }
+
     // Check if session has switched
     if (_processingSessionId !== null && _processingSessionId !== expectedSessionId) {
         // Session changed during lock acquisition
@@ -537,6 +549,13 @@ async function flushPendingSaveAsync() {
         try {
             await saveCurrentSession();
             console.log('[SessionManager] Session flushed on visibility change');
+            // Issue 4 Fix: Clear emergency backup after successful async save
+            // This prevents stale backup data if tab closes normally after async save
+            try {
+                localStorage.removeItem(SESSION_EMERGENCY_BACKUP_KEY);
+            } catch (e) {
+                console.warn('[SessionManager] Failed to clear emergency backup after save:', e);
+            }
         } catch (e) {
             console.error('[SessionManager] Flush save failed:', e);
         }
@@ -657,35 +676,45 @@ let previousSessionId = null;
  * @returns {Promise<boolean>} Success status
  */
 async function switchSession(sessionId) {
-    // SESSION LOCKING: Wait for any ongoing message processing to complete
-    // This prevents race conditions where a session switch happens mid-message
-    if (_processingSessionId !== null) {
-        console.warn('[SessionManager] Waiting for message processing to complete before switching sessions...');
-        // Wait for the processing lock to be released
-        await _processingLock;
-        console.log('[SessionManager] Message processing completed, proceeding with session switch');
-    }
+    // Issue 2 Fix: Actually acquire the lock (not just check it)
+    // Hold lock through the save operation to prevent race conditions
+    const lockResult = await acquireProcessingLock(currentSessionId);
 
-    // CRITICAL FIX: Always save current session before switching
-    // Previous conditional (only if autoSaveTimeoutId) created data loss window
-    if (currentSessionId) {
-        // Cancel any pending save and save immediately
-        if (autoSaveTimeoutId) {
-            clearTimeout(autoSaveTimeoutId);
-            autoSaveTimeoutId = null;
+    if (!lockResult.locked) {
+        console.warn('[SessionManager] Failed to acquire lock for session switch:', lockResult.error);
+        // Still wait for any ongoing processing to complete
+        if (_processingSessionId !== null) {
+            await _processingLock;
         }
-        await saveCurrentSession();
     }
 
-    // Track the previous session ID before switching
-    previousSessionId = currentSessionId;
+    try {
+        // CRITICAL FIX: Always save current session before switching
+        // Previous conditional (only if autoSaveTimeoutId) created data loss window
+        if (currentSessionId) {
+            // Cancel any pending save and save immediately
+            if (autoSaveTimeoutId) {
+                clearTimeout(autoSaveTimeoutId);
+                autoSaveTimeoutId = null;
+            }
+            await saveCurrentSession();
+        }
 
-    const session = await loadSession(sessionId);
-    if (session) {
-        notifySessionUpdate('session:switched', { fromSessionId: previousSessionId, toSessionId: sessionId });
-        return true;
+        // Track the previous session ID before switching
+        previousSessionId = currentSessionId;
+
+        const session = await loadSession(sessionId);
+        if (session) {
+            notifySessionUpdate('session:switched', { fromSessionId: previousSessionId, toSessionId: sessionId });
+            return true;
+        }
+        return false;
+    } finally {
+        // Issue 2 Fix: Release lock after save completes
+        if (lockResult.locked && lockResult.release) {
+            lockResult.release();
+        }
     }
-    return false;
 }
 
 /**
