@@ -226,13 +226,37 @@ function scheduleNotification() {
         // Freeze the root state object
         const frozenState = Object.freeze(clonedState);
 
+        // FIX Issue #4: Improved subscriber error handling with better logging
+        // Each subscriber is isolated - errors in one don't affect others
+        // Note: changedArray is immutable and consistent for all subscribers
+        let subscriberIndex = 0;
+        const totalSubscribers = _subscribers.size;
+        const errors = [];
+
         _subscribers.forEach(callback => {
+            subscriberIndex++;
             try {
+                // Pass frozen state and changed domains (both immutable)
                 callback(frozenState, changedArray);
             } catch (err) {
-                console.error('[AppState] Subscriber error:', err);
+                // FIX Issue #4: Enhanced error logging with subscriber context
+                const errorInfo = {
+                    subscriberIndex,
+                    totalSubscribers,
+                    changedDomains: changedArray,
+                    errorMessage: err.message || String(err),
+                    errorStack: err.stack
+                };
+                errors.push(errorInfo);
+                console.error('[AppState] Subscriber error:', errorInfo);
+                console.error('[AppState] Subscriber error stack:', err);
             }
         });
+
+        // FIX Issue #4: Log summary if any errors occurred
+        if (errors.length > 0) {
+            console.warn(`[AppState] ${errors.length}/${totalSubscribers} subscriber(s) threw errors during notification for domains: ${changedArray.join(', ')}`);
+        }
     });
 }
 
