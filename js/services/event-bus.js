@@ -539,6 +539,8 @@ let eventSequenceNumber = 0;
 let eventLogEnabled = false;
 let eventReplayInProgress = false;
 let lastEventWatermark = -1; // Last sequence number we processed
+// FIX Issue #1: Track failed persist sequences for replay watermark compensation
+const failedPersistSequences = new Set();
 
 // ==========================================
 // Health Monitoring State
@@ -708,16 +710,37 @@ function emit(eventType, payload = {}, options = {}) {
     eventSequenceNumber++;
     const sequenceNumber = eventSequenceNumber;
 
+    // FIX Issue #1: Track sequence number BEFORE persistence attempt
+    // If persist fails, we track the gap for replay watermark compensation
     // Store event in log if enabled
     if (eventLogEnabled && !eventReplayInProgress && !options.skipEventLog) {
-        const persistPromise = persistEvent(eventType, payload, currentVectorClock, sequenceNumber, options)
+        // Track this sequence as pending persistence
+        const persistenceRecord = { sequenceNumber, eventType, timestamp: Date.now() };
+
+        persistEvent(eventType, payload, currentVectorClock, sequenceNumber, options)
+            .then(() => {
+                // Successful persistence - mark as completed
+                if (debugMode) {
+                    console.log(`[EventBus] Event ${sequenceNumber} persisted successfully`);
+                }
+            })
             .catch(err => {
                 console.error('[EventBus] Failed to persist event:', err);
+                // FIX Issue #1: Track the failed sequence for watermark compensation
+                // This allows replay to know about gaps and handle them appropriately
+                failedPersistSequences.add(sequenceNumber);
                 // Skip event log for persistence_failed events to prevent recursive logging
-                EventBus.emit('event:persistence_failed', { eventType, error: err }, { skipEventLog: true });
+                EventBus.emit('event:persistence_failed', {
+                    eventType,
+                    error: err.message || String(err),
+                    sequenceNumber,
+                    // Include gap info for replay compensation
+                    gapInfo: {
+                        failedAt: sequenceNumber,
+                        totalFailedPersists: failedPersistSequences.size
+                    }
+                }, { skipEventLog: true });
                 totalEventsFailed++;
-                // Rethrow to allow caller to handle the error
-                throw err;
             });
     }
 
@@ -1421,6 +1444,8 @@ function clearAll() {
     eventLogEnabled = false;
     eventReplayInProgress = false;
     eventVectorClock = new VectorClock();
+    // FIX Issue #1: Clear failed persist tracking
+    failedPersistSequences.clear();
     // Reset wave tracking state
     activeWaves.clear();
     console.log('[EventBus] All subscribers and circuit breaker state cleared');
@@ -2109,6 +2134,9 @@ export const EventBus = {
     replayEvents,
     getEventLogStats,
     clearEventLog,
+    // FIX Issue #1: Expose failed persist sequences for replay watermark compensation
+    getFailedPersistSequences: () => new Set(failedPersistSequences),
+    clearFailedPersistSequences: () => failedPersistSequences.clear(),
 
     // Testing
     clearAll,

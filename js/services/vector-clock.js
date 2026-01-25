@@ -52,6 +52,15 @@ export class VectorClock {
     }
 
     /**
+     * Get the current clock state without incrementing (for speculative reads)
+     * FIX Issue #1: Enables reading clock state before committing to an increment
+     * @returns {Object} Current clock state (copy)
+     */
+    peek() {
+        return this.toJSON();
+    }
+
+    /**
      * Update local clock on receiving a message from another process
      * @param {Object} receivedClock - The clock from the received message
      * @returns {Object} The updated clock state

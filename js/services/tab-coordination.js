@@ -454,6 +454,8 @@ let receivedPrimaryClaim = false;
 let electionAborted = false;
 let lastHeartbeatSentTime = 0; // Track for WaveTelemetry
 let heartbeatInProgress = false; // Track if heartbeat is currently being sent
+// FIX Issue #2: Track if handleSecondaryMode has been called to prevent split-brain
+let hasCalledSecondaryMode = false;
 
 // Event replay watermark tracking
 let lastEventWatermark = -1; // Last event sequence number processed
@@ -822,6 +824,8 @@ async function initWithBroadcastChannel() {
     electionCandidates = new Set([TAB_ID]);
     receivedPrimaryClaim = false;
     electionAborted = false;
+    // FIX Issue #2: Reset secondary mode flag for new election
+    hasCalledSecondaryMode = false;
 
     // Announce candidacy with Vector clock for deterministic ordering and message security
     sendMessage({
@@ -932,6 +936,8 @@ async function initWithSharedWorker() {
     electionCandidates.add(TAB_ID);
     receivedPrimaryClaim = false;
     electionAborted = false;
+    // FIX Issue #2: Reset secondary mode flag for SharedWorker election
+    hasCalledSecondaryMode = false;
 
     console.log('[TabCoordination] Announcing candidacy via SharedWorker:', TAB_ID);
 
@@ -1196,14 +1202,19 @@ function createMessageHandler() {
 
                 case MESSAGE_TYPES.CLAIM_PRIMARY:
                     // Another tab claimed primary - we become secondary
+                    // FIX Issue #2: ALWAYS become secondary when someone else claims primary
                     if (tabId !== TAB_ID) {
                         // Update module-scoped state to prevent race condition
                         receivedPrimaryClaim = true;
                         electionAborted = true;
 
-                        if (isPrimaryTab) {
+                        // FIX Issue #2: Call handleSecondaryMode if we were primary OR
+                        // if we haven't called it yet (prevents split-brain where a tab
+                        // receives CLAIM_PRIMARY before starting its own election)
+                        if (isPrimaryTab || !hasCalledSecondaryMode) {
                             isPrimaryTab = false;
                             handleSecondaryMode();
+                            hasCalledSecondaryMode = true;
                         }
                     }
                     break;
@@ -1300,6 +1311,8 @@ function createMessageHandler() {
  */
 function claimPrimary() {
     isPrimaryTab = true;
+    // FIX Issue #2: Reset secondary mode flag when becoming primary
+    hasCalledSecondaryMode = false;
     sendMessage({
         type: MESSAGE_TYPES.CLAIM_PRIMARY,
         tabId: TAB_ID
@@ -1387,6 +1400,8 @@ async function initiateReElection() {
     electionCandidates = new Set([TAB_ID]);
     receivedPrimaryClaim = false;
     electionAborted = false;
+    // FIX Issue #2: Reset secondary mode flag for re-election
+    hasCalledSecondaryMode = false;
 
     // Announce candidacy with message security
     sendMessage({
@@ -2051,6 +2066,8 @@ function cleanup() {
     electionCandidates = new Set();
     receivedPrimaryClaim = false;
     electionAborted = false;
+    // FIX Issue #2: Reset secondary mode flag on cleanup
+    hasCalledSecondaryMode = false;
 
     // HNW Network: Clear remote sequence tracking
     remoteSequences.clear();
