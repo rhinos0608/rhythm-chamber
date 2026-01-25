@@ -79,11 +79,10 @@ export class LRUCache {
             const value = this._cache.get(key);
             this._cache.delete(key);
             this._cache.set(key, value);
-        } else {
-            // Just get value without moving (pinned items stay in place)
-            return this._cache.get(key);
+            return value;
         }
 
+        // Just get value without moving (pinned items stay in place)
         return this._cache.get(key);
     }
 
