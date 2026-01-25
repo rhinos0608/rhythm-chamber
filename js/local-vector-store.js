@@ -81,7 +81,9 @@ function buildSharedVectorData() {
         if (expectedDimensions === null) {
             expectedDimensions = currentDimensions;
         } else if (currentDimensions !== expectedDimensions) {
-            console.error(`[LocalVectorStore] Dimension mismatch at index ${i}: expected ${expectedDimensions}, got ${currentDimensions}`);
+            // Issue 7 fix: Log a more prominent warning for dimension mismatch
+            console.warn(`[LocalVectorStore] DIMENSION MISMATCH DETECTED at index ${i}: expected ${expectedDimensions}, got ${currentDimensions}. Vector ID: ${item.id}`);
+            console.warn('[LocalVectorStore] Falling back to slower search path. Consider cleaning up mismatched vectors.');
             return null;
         }
 
@@ -138,6 +140,9 @@ let requestIdCounter = 0;
 let workerInitPromise = null;
 let workerReady = false;
 
+// Issue 1 fix: Track failed persists for retry
+let failedPersists = new Set();
+
 
 // ==========================================
 // Web Worker Management
@@ -159,10 +164,12 @@ async function initWorkerAsync() {
     // Already initialized
     if (searchWorker && workerReady) return searchWorker;
 
+    // Issue 3 fix: Check and assign synchronously before any await to prevent race condition
     // Initialization in progress - wait for it
     if (workerInitPromise) return workerInitPromise;
 
-    // Start initialization - create single promise that all callers will share
+    // Start initialization - set promise IMMEDIATELY before any async code
+    // This ensures two concurrent calls both see the same promise
     workerInitPromise = new Promise((resolve) => {
         try {
             // Check if we're in a context where workers can be created
@@ -183,9 +190,11 @@ async function initWorkerAsync() {
                 workerStarted = true;
                 const { type, id, results, stats, message } = event.data;
 
+                // Issue 4 fix: Check if request is still in pendingSearches before processing
+                // This handles the case where a search timed out but the worker responds late
                 const pending = pendingSearches.get(id);
                 if (!pending) {
-                    console.warn('[LocalVectorStore] Received response for unknown request:', id);
+                    // Already timed out or cancelled - ignore late response
                     return;
                 }
 
@@ -228,10 +237,8 @@ async function initWorkerAsync() {
                 searchWorker = null;
                 workerReady = false;
 
-                // Only clear workerInitPromise for non-network errors to prevent retry loops
-                if (!isNetworkError) {
-                    workerInitPromise = null;
-                }
+                // Clear workerInitPromise to allow future retries after failure
+                workerInitPromise = null;
 
                 // For network errors, don't retry immediately
                 // The sync fallback will handle all searches
@@ -330,6 +337,11 @@ async function loadFromDB() {
 
             vectors.clear();
             for (const item of request.result) {
+                // Issue 2 fix: Validate before adding to prevent corrupt data crashes
+                if (!item.id || !item.vector || !Array.isArray(item.vector)) {
+                    console.warn('[LocalVectorStore] Skipping invalid vector:', item.id);
+                    continue;
+                }
                 vectors.set(item.id, item);
             }
 
@@ -358,6 +370,7 @@ function initializeVectorsCache() {
 
 /**
  * Process pending evictions from LRU cache by deleting from IndexedDB
+ * Issue 5 fix: Wait for transaction completion before clearing from memory
  */
 async function processEvictions() {
     if (!vectors || !db) return;
@@ -373,7 +386,18 @@ async function processEvictions() {
             store.delete(id);
         }
 
-        console.log(`[LocalVectorStore] Cleaned up ${evicted.length} evicted vectors from IndexedDB`);
+        // Issue 5 fix: Wait for transaction to complete before confirming
+        // This prevents "zombie" vectors that reappear on reload
+        await new Promise((resolve, reject) => {
+            transaction.oncomplete = () => {
+                console.log(`[LocalVectorStore] Cleaned up ${evicted.length} evicted vectors from IndexedDB`);
+                resolve();
+            };
+            transaction.onerror = () => {
+                console.warn('[LocalVectorStore] Failed to clean up evicted vectors:', transaction.error);
+                reject(transaction.error);
+            };
+        });
     } catch (e) {
         console.warn('[LocalVectorStore] Failed to clean up evicted vectors:', e);
     }
@@ -498,10 +522,34 @@ const LocalVectorStore = {
         const item = { id, vector, payload };
         const evicted = vectors.set(id, item);
 
-        // Async persist to IndexedDB (non-blocking)
-        persistVector(item).catch(e => {
-            console.warn('[LocalVectorStore] Persist failed:', e);
-        });
+        // Issue 1 fix: Retry any previously failed persists before new one
+        if (failedPersists.size > 0) {
+            const retryIds = Array.from(failedPersists);
+            for (const retryId of retryIds) {
+                const retryItem = vectors.get(retryId);
+                if (retryItem) {
+                    try {
+                        await persistVector(retryItem);
+                        failedPersists.delete(retryId);
+                        console.log(`[LocalVectorStore] Successfully retried persist for ${retryId}`);
+                    } catch (e) {
+                        console.warn(`[LocalVectorStore] Retry persist still failing for ${retryId}:`, e);
+                        // Keep in failedPersists for next retry
+                    }
+                } else {
+                    // Item no longer in memory, remove from failed set
+                    failedPersists.delete(retryId);
+                }
+            }
+        }
+
+        // Persist to IndexedDB - track failures for retry
+        try {
+            await persistVector(item);
+        } catch (e) {
+            console.warn('[LocalVectorStore] Persist failed, will retry on next operation:', e);
+            failedPersists.add(id);
+        }
 
         // Clean up any evicted items from IndexedDB
         if (evicted) {
@@ -516,11 +564,12 @@ const LocalVectorStore = {
      * @param {Array<{id, vector, payload}>} items - Array of vectors to add
      */
     async upsertBatch(items) {
+        if (!vectors) initializeVectorsCache();
+
         for (const item of items) {
             vectors.set(item.id, item);
         }
 
-        // Batch persist to IndexedDB
         if (db) {
             const transaction = db.transaction([STORE_NAME], 'readwrite');
             const store = transaction.objectStore(STORE_NAME);
@@ -530,11 +579,15 @@ const LocalVectorStore = {
             }
 
             return new Promise((resolve, reject) => {
-                transaction.oncomplete = () => resolve(items.length);
+                transaction.oncomplete = () => {
+                    processEvictions();
+                    resolve(items.length);
+                };
                 transaction.onerror = () => reject(transaction.error);
             });
         }
 
+        processEvictions();
         return items.length;
     },
 
@@ -551,6 +604,13 @@ const LocalVectorStore = {
     search(queryVector, limit = 5, threshold = 0.5) {
         if (!queryVector || queryVector.length === 0) {
             return [];
+        }
+
+        // Defensive: initialize vectors cache if not already done
+        // This can happen if init() failed or search is called before init
+        if (!vectors) {
+            console.warn('[LocalVectorStore] Vectors cache not initialized, initializing now');
+            initializeVectorsCache();
         }
 
         const results = [];
@@ -586,6 +646,13 @@ const LocalVectorStore = {
     async searchAsync(queryVector, limit = 5, threshold = 0.5) {
         if (!queryVector || queryVector.length === 0) {
             return [];
+        }
+
+        // CRITICAL: If vectors cache is null (page reload), we need to fully reinitialize
+        // Just calling initializeVectorsCache() would create empty cache - we need init() to load from IndexedDB
+        if (!vectors) {
+            console.warn('[LocalVectorStore] Vectors cache not initialized after page reload, calling init() to reload from IndexedDB');
+            await this.init();
         }
 
         // Try to use worker for non-blocking search (async initialization prevents race)
@@ -686,6 +753,10 @@ const LocalVectorStore = {
      * @returns {number} Number of vectors stored
      */
     count() {
+        // Defensive: handle null vectors gracefully
+        if (!vectors) {
+            return 0;
+        }
         return vectors.size;
     },
 
@@ -764,9 +835,10 @@ const LocalVectorStore = {
 
     /**
      * Check if store is ready
+     * Ready means: DB is open AND vectors cache is initialized
      */
     isReady() {
-        return dbReady;
+        return dbReady && vectors !== null;
     },
 
     /**

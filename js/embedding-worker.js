@@ -18,41 +18,59 @@
  * Handle incoming messages from main thread
  */
 self.onmessage = function (event) {
-    const { type, streams } = event.data;
+    const { type, streams, requestId } = event.data;
 
     switch (type) {
         case 'createChunks':
             try {
-                const chunks = createChunks(streams);
-                self.postMessage({ type: 'complete', chunks });
+                const chunks = createChunks(streams, requestId);
+                self.postMessage({ type: 'complete', chunks, requestId });
             } catch (error) {
-                self.postMessage({ type: 'error', message: error.message });
+                self.postMessage({ type: 'error', message: error.message, requestId });
             }
             break;
 
         default:
-            self.postMessage({ type: 'error', message: `Unknown message type: ${type}` });
+            self.postMessage({ type: 'error', message: `Unknown message type: ${type}`, requestId: requestId || null });
     }
 };
 
 /**
  * Create searchable chunks from streaming data
  * Moved from rag.js to run off the main thread
- * 
+ *
  * @param {Array} streams - Spotify streaming history
+ * @param {string} requestId - Request ID for tracking progress
  * @returns {Array} Chunks for embedding
  */
-function createChunks(streams) {
+function createChunks(streams, requestId) {
     const chunks = [];
     const totalStreams = streams.length;
 
+    // Helper to post progress with requestId
+    const postProgress = (current, message) => {
+        self.postMessage({ type: 'progress', current, total: 100, message, requestId });
+    };
+
     // Report initial progress
-    self.postMessage({ type: 'progress', current: 0, total: 100, message: 'Grouping streams by month...' });
+    postProgress(0, 'Grouping streams by month...');
 
     // Group streams by month
     const byMonth = {};
     streams.forEach((stream, idx) => {
-        const date = new Date(stream.ts || stream.endTime);
+        // Issue 6 fix: Validate timestamp before creating Date object
+        const timestamp = stream.ts || stream.endTime;
+        if (!timestamp) {
+            console.warn('[EmbeddingWorker] Stream missing timestamp, skipping stream at index:', idx);
+            return;  // Skip this stream - equivalent to continue in forEach
+        }
+
+        const date = new Date(timestamp);
+        if (isNaN(date.getTime())) {
+            console.warn('[EmbeddingWorker] Invalid date for stream at index:', idx, 'timestamp:', timestamp);
+            return;  // Skip this stream
+        }
+
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
         if (!byMonth[monthKey]) byMonth[monthKey] = [];
         byMonth[monthKey].push(stream);
@@ -60,11 +78,11 @@ function createChunks(streams) {
         // Report progress every 10000 streams
         if (idx > 0 && idx % 10000 === 0) {
             const percent = Math.round((idx / totalStreams) * 30);
-            self.postMessage({ type: 'progress', current: percent, total: 100, message: `Grouped ${idx.toLocaleString()} streams...` });
+            postProgress(percent, `Grouped ${idx.toLocaleString()} streams...`);
         }
     });
 
-    self.postMessage({ type: 'progress', current: 30, total: 100, message: 'Creating monthly summaries...' });
+    postProgress(30, 'Creating monthly summaries...');
 
     // Create monthly summary chunks
     const monthKeys = Object.keys(byMonth);
@@ -106,10 +124,10 @@ function createChunks(streams) {
 
         // Report progress
         const monthProgress = 30 + Math.round((monthIdx / monthKeys.length) * 30);
-        self.postMessage({ type: 'progress', current: monthProgress, total: 100, message: `Processed month ${monthIdx + 1}/${monthKeys.length}` });
+        postProgress(monthProgress, `Processed month ${monthIdx + 1}/${monthKeys.length}`);
     });
 
-    self.postMessage({ type: 'progress', current: 60, total: 100, message: 'Creating artist profiles...' });
+    postProgress(60, 'Creating artist profiles...');
 
     // Group by artist for artist profiles
     const byArtist = {};
@@ -133,13 +151,24 @@ function createChunks(streams) {
         artistStreams.forEach(s => {
             const track = s.master_metadata_track_name || s.trackName || 'Unknown';
             const ms = s.ms_played || s.msPlayed || 0;
-            const date = new Date(s.ts || s.endTime);
+
+            // Issue 6 fix: Validate timestamp before creating Date for artist profiles
+            const timestamp = s.ts || s.endTime;
+            let date = null;
+            if (timestamp) {
+                const tempDate = new Date(timestamp);
+                if (!isNaN(tempDate.getTime())) {
+                    date = tempDate;
+                }
+            }
 
             tracks[track] = (tracks[track] || 0) + 1;
             totalMs += ms;
 
-            if (!firstListen || date < firstListen) firstListen = date;
-            if (!lastListen || date > lastListen) lastListen = date;
+            if (date) {
+                if (!firstListen || date < firstListen) firstListen = date;
+                if (!lastListen || date > lastListen) lastListen = date;
+            }
         });
 
         const topTracks = Object.entries(tracks)
@@ -157,10 +186,10 @@ function createChunks(streams) {
 
         // Report progress
         const artistProgress = 60 + Math.round((artistIdx / topArtistEntries.length) * 40);
-        self.postMessage({ type: 'progress', current: artistProgress, total: 100, message: `Processed artist ${artistIdx + 1}/${topArtistEntries.length}` });
+        postProgress(artistProgress, `Processed artist ${artistIdx + 1}/${topArtistEntries.length}`);
     });
 
-    self.postMessage({ type: 'progress', current: 100, total: 100, message: `Created ${chunks.length} chunks` });
+    postProgress(100, `Created ${chunks.length} chunks`);
 
     return chunks;
 }
