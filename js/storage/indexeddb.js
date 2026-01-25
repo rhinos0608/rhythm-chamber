@@ -45,7 +45,9 @@ const INDEXEDDB_STORES = {
     EVENT_CHECKPOINT: 'event_checkpoint',
     DEMO_STREAMS: 'demo_streams',
     DEMO_PATTERNS: 'demo_patterns',
-    DEMO_PERSONALITY: 'demo_personality'
+    DEMO_PERSONALITY: 'demo_personality',
+    TRANSACTION_JOURNAL: 'TRANSACTION_JOURNAL',
+    TRANSACTION_COMPENSATION: 'TRANSACTION_COMPENSATION'
 };
 
 // Database connection
@@ -502,6 +504,8 @@ function resetConnectionState() {
     isConnectionFailed = false;
     connectionAttempts = 0;
     indexedDBConnection = null;
+    usingFallback = false;
+    fallbackInitialized = false;
 }
 
 /**
@@ -716,6 +720,11 @@ const transactionPool = new Map();
  * Acquire or create a transaction for the given store
  * CRITICAL FIX for Issue #1: Provides explicit transaction with proper locking
  *
+ * NOTE: Transaction state can change between readyState check and actual use.
+ * To prevent race conditions, we now always create a fresh transaction rather
+ * than reusing from pool when state is uncertain. Pool entries are only used
+ * if they are confirmed 'active' AND have not been marked as completing.
+ *
  * @param {IDBDatabase} database - Database connection
  * @param {string} storeName - Store name
  * @param {string} [mode='readwrite'] - Transaction mode
@@ -727,21 +736,32 @@ function acquireTransaction(database, storeName, mode = 'readwrite') {
     // Check if transaction exists and is not complete
     const existingTx = transactionPool.get(poolKey);
     if (existingTx) {
-        // Verify transaction is still active
-        if (existingTx.readyState !== 'finished' && existingTx.readyState !== 'done') {
+        // CRITICAL FIX: Only reuse if state is 'active' - transaction can complete
+        // between this check and use, but we minimize the window by also checking
+        // that the transaction hasn't been marked as completing via our flag
+        if (existingTx.readyState === 'active' && !existingTx._isCompleting) {
             return existingTx;
         }
-        // Remove stale transaction
+        // Remove stale or completing transaction
         transactionPool.delete(poolKey);
     }
 
     // Create new transaction
     const transaction = database.transaction(storeName, mode);
 
+    // CRITICAL FIX: Add flag to track when transaction starts completing
+    // This helps prevent race condition where readyState check passes
+    // but transaction completes before caller can use it
+    transaction._isCompleting = false;
+
     // Clean up pool when transaction completes
-    transaction.oncomplete = () => transactionPool.delete(poolKey);
-    transaction.onerror = () => transactionPool.delete(poolKey);
-    transaction.onabort = () => transactionPool.delete(poolKey);
+    const markCompleting = () => {
+        transaction._isCompleting = true;
+        transactionPool.delete(poolKey);
+    };
+    transaction.oncomplete = markCompleting;
+    transaction.onerror = markCompleting;
+    transaction.onabort = markCompleting;
 
     // Store in pool
     transactionPool.set(poolKey, transaction);
@@ -808,7 +828,9 @@ async function put(storeName, data, options = {}) {
         // This ensures proper locking and isolation
         if (shouldComplete) {
             await new Promise((resolve, reject) => {
-                if (transaction.readyState === 'finished' || transaction.readyState === 'done') {
+                // CRITICAL FIX: Valid IndexedDB transaction states are 'active', 'inactive', 'done'
+                // The 'finished' state does NOT exist in the IndexedDB spec
+                if (transaction.readyState === 'done') {
                     resolve();
                     return;
                 }
@@ -1012,9 +1034,20 @@ async function transaction(storeName, mode, operations) {
     if (usingFallback) {
         // Fallback doesn't support transactions - execute operations directly
         // This provides basic functionality but not atomicity
+        //
+        // CRITICAL FIX: Create a wrapper object that mimics IDBObjectStore interface
+        // by binding the storeName to FallbackBackend methods. This ensures the
+        // operations callback can use the same API as IndexedDB objectStore.
+        const fallbackStore = {
+            put: (data) => FallbackBackend.put(storeName, data),
+            get: (key) => FallbackBackend.get(storeName, key),
+            delete: (key) => FallbackBackend.delete(storeName, key),
+            clear: () => FallbackBackend.clear(storeName)
+        };
+
         return new Promise((resolve) => {
             try {
-                operations(FallbackBackend);
+                operations(fallbackStore);
             } catch (e) {
                 console.warn('[IndexedDB] Fallback transaction operation failed:', e);
             }
@@ -1130,11 +1163,16 @@ async function atomicUpdate(storeName, key, modifier) {
             if (cursor) {
                 const currentValue = cursor.value;
 
+                // CRITICAL FIX for Issue #4: Deep clone currentValue before passing to modifier
+                // This prevents the modifier from mutating the original object in-place
+                // before throwing, which would leave the caller seeing a partially mutated object
+                const clonedValue = JSON.parse(JSON.stringify(currentValue));
+
                 // CRITICAL FIX for Issue #2: Wrap modifier in try-catch
                 // If modifier throws, explicitly abort the transaction
                 let newValue;
                 try {
-                    newValue = modifier(currentValue);
+                    newValue = modifier(clonedValue);
                 } catch (error) {
                     modifierThrew = true;
                     modifierError = error;
