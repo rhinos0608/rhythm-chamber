@@ -145,6 +145,16 @@ let workerReady = false;
 // Structure: Map<id, {timestamp, retryCount, lastError}>
 let failedPersists = new Map();
 
+// ADVERSARIAL FIX: Track which vectors are currently being retried to prevent concurrent retries
+let retryInProgress = new Set();
+
+// ADVERSARIAL FIX: Track last retry time to implement cooldown (prevent retry storms)
+let lastRetryTime = 0;
+const RETRY_COOLDOWN_MS = 5000; // 5 seconds between retry attempts
+
+// ADVERSARIAL FIX: Limit retries per upsert to prevent retry storms
+const MAX_RETRIES_PER_UPSERT = 10;
+
 
 // ==========================================
 // Web Worker Management
@@ -197,11 +207,29 @@ async function initWorkerAsync() {
                 const pending = pendingSearches.get(id);
                 if (!pending) {
                     // ENHANCEMENT: Log late response for debugging (Issue #4)
+                    // ADVERSARIAL FIX: Validate ID format before parsing to prevent NaN errors
                     const now = Date.now();
-                    const age = id.includes('_') ? {
-                        extracted: id.split('_').pop(),
-                        ageMs: now - parseInt(id.split('_').pop())
-                    } : { unknown: true };
+                    let age;
+                    if (id.includes('_')) {
+                        const parts = id.split('_');
+                        const lastPart = parts.pop();
+                        const timestamp = parseInt(lastPart, 10);
+                        // ADVERSARIAL FIX: Check if parseInt returned a valid number
+                        if (!isNaN(timestamp) && timestamp > 0) {
+                            age = {
+                                extracted: lastPart,
+                                ageMs: now - timestamp
+                            };
+                        } else {
+                            // ADVERSARIAL FIX: Log raw ID if parsing fails
+                            age = {
+                                raw: id,
+                                parseError: `Could not parse timestamp from: ${lastPart}`
+                            };
+                        }
+                    } else {
+                        age = { unknown: true, raw: id };
+                    }
 
                     console.warn('[LocalVectorStore] LATE SEARCH RESPONSE DETECTED:', {
                         searchId: id,
@@ -539,48 +567,85 @@ const LocalVectorStore = {
         const evicted = vectors.set(id, item);
 
         // Issue 7 fix: Optimized retry logic with O(1) validation and cleanup
+        // ADVERSARIAL FIX: Added cooldown, concurrent retry protection, and per-upsert limits
         if (failedPersists.size > 0) {
             const now = Date.now();
             const RETRY_TIMEOUT = 60000; // 1 minute
             const MAX_RETRIES = 3;
 
-            // Use Map.entries() for O(1) direct access (no Array.from conversion)
-            for (const [retryId, metadata] of failedPersists.entries()) {
-                // Skip if too old (stale cleanup)
-                if (now - metadata.timestamp > RETRY_TIMEOUT) {
-                    failedPersists.delete(retryId);
-                    console.log(`[LocalVectorStore] Removed stale retry entry for ${retryId}`);
-                    continue;
+            // ADVERSARIAL FIX: Check cooldown before retrying (prevents retry storms)
+            const timeSinceLastRetry = now - lastRetryTime;
+            if (timeSinceLastRetry < RETRY_COOLDOWN_MS) {
+                console.log(`[LocalVectorStore] Retry cooldown active, skipping retry (${RETRY_COOLDOWN_MS - timeSinceLastRetry}ms remaining)`);
+            } else {
+                // Clone entries to prevent modification during iteration
+                const entries = Array.from(failedPersists.entries());
+                let retriesAttempted = 0;
+
+                // Use Map.entries() for O(1) direct access (no Array.from conversion)
+                for (const [retryId, metadata] of entries) {
+                    // ADVERSARIAL FIX: Limit retries per upsert (prevents retry storms)
+                    if (retriesAttempted >= MAX_RETRIES_PER_UPSERT) {
+                        console.log(`[LocalVectorStore] Reached max retries per upsert (${MAX_RETRIES_PER_UPSERT}), stopping retry loop`);
+                        break;
+                    }
+
+                    // ADVERSARIAL FIX: Skip if already being retried concurrently (prevents TOCTOU race)
+                    if (retryInProgress.has(retryId)) {
+                        console.log(`[LocalVectorStore] Retry already in progress for ${retryId}, skipping`);
+                        continue;
+                    }
+
+                    // Skip if too old (stale cleanup)
+                    if (now - metadata.timestamp > RETRY_TIMEOUT) {
+                        failedPersists.delete(retryId);
+                        console.log(`[LocalVectorStore] Removed stale retry entry for ${retryId}`);
+                        continue;
+                    }
+
+                    // Skip if max retries exceeded
+                    if (metadata.retryCount >= MAX_RETRIES) {
+                        failedPersists.delete(retryId);
+                        console.warn(`[LocalVectorStore] Max retries exceeded for ${retryId}, giving up`);
+                        continue;
+                    }
+
+                    // Validate retry target still exists before attempting (prevents data loss)
+                    const retryItem = vectors.get(retryId);
+                    if (!retryItem) {
+                        // Vector was deleted - clean up retry entry immediately
+                        failedPersists.delete(retryId);
+                        console.log(`[LocalVectorStore] Vector ${retryId} no longer exists, cleaned up retry entry`);
+                        continue;
+                    }
+
+                    // ADVERSARIAL FIX: Mark as in-progress before async operation (prevents concurrent retries)
+                    retryInProgress.add(retryId);
+                    retriesAttempted++;
+
+                    // Attempt retry
+                    try {
+                        await persistVector(retryItem);
+                        failedPersists.delete(retryId);
+                        retryInProgress.delete(retryId);
+                        console.log(`[LocalVectorStore] Successfully retried persist for ${retryId} (attempt ${metadata.retryCount + 1})`);
+                    } catch (e) {
+                        // Clone metadata before mutation to avoid reference sharing issues
+                        const updatedMetadata = {
+                            timestamp: now,
+                            retryCount: metadata.retryCount + 1,
+                            lastError: e.message
+                        };
+                        failedPersists.set(retryId, updatedMetadata);
+                        retryInProgress.delete(retryId);
+                        console.warn(`[LocalVectorStore] Retry ${updatedMetadata.retryCount}/${MAX_RETRIES} failed for ${retryId}:`, e);
+                        // Keep in failedPersists for next retry
+                    }
                 }
 
-                // Skip if max retries exceeded
-                if (metadata.retryCount >= MAX_RETRIES) {
-                    failedPersists.delete(retryId);
-                    console.warn(`[LocalVectorStore] Max retries exceeded for ${retryId}, giving up`);
-                    continue;
-                }
-
-                // Validate retry target still exists before attempting (prevents data loss)
-                const retryItem = vectors.get(retryId);
-                if (!retryItem) {
-                    // Vector was deleted - clean up retry entry immediately
-                    failedPersists.delete(retryId);
-                    console.log(`[LocalVectorStore] Vector ${retryId} no longer exists, cleaned up retry entry`);
-                    continue;
-                }
-
-                // Attempt retry
-                try {
-                    await persistVector(retryItem);
-                    failedPersists.delete(retryId);
-                    console.log(`[LocalVectorStore] Successfully retried persist for ${retryId} (attempt ${metadata.retryCount + 1})`);
-                } catch (e) {
-                    // Update retry metadata
-                    metadata.retryCount++;
-                    metadata.timestamp = now;
-                    metadata.lastError = e.message;
-                    console.warn(`[LocalVectorStore] Retry ${metadata.retryCount}/${MAX_RETRIES} failed for ${retryId}:`, e);
-                    // Keep in failedPersists for next retry
+                // ADVERSARIAL FIX: Update last retry time after attempting retries
+                if (retriesAttempted > 0) {
+                    lastRetryTime = now;
                 }
             }
         }
@@ -696,9 +761,12 @@ const LocalVectorStore = {
         }
 
         // Validate vector dimension matches expected (all-MiniLM-L6-v2 outputs 384 dimensions)
+        // ADVERSARIAL FIX: Log warning instead of throwing to prevent app crash
         const expectedDimensions = 384;
         if (queryVector.length !== expectedDimensions) {
-            throw new Error(`[LocalVectorStore] Query vector has wrong dimensions: ${queryVector.length}, expected ${expectedDimensions}`);
+            console.warn(`[LocalVectorStore] Query vector has wrong dimensions: ${queryVector.length}, expected ${expectedDimensions}. Returning empty results.`);
+            // ADVERSARIAL FIX: Return empty results instead of throwing - allows app to continue
+            return [];
         }
 
         // CRITICAL: If vectors cache is null (page reload), we need to fully reinitialize
