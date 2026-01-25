@@ -16,6 +16,7 @@ import { safeJsonParse } from '../utils/safe-json.js';
 import { STORAGE_KEYS } from '../storage/keys.js';
 import { AppState } from '../state/app-state.js';
 import { Mutex } from '../utils/concurrency/mutex.js';
+import lockManager from './session-lock-manager.js';
 
 // ==========================================
 // Event Schemas (decentralized registration)
@@ -76,112 +77,17 @@ let _eventListenersRegistered = false; // Track if event listeners are registere
 let _sessionData = { id: null, messages: [] };
 const _sessionDataMutex = new Mutex();
 
-// Session lock for preventing session switches during message processing
-let _processingSessionId = null;  // Session ID currently being processed
-const _processingMutex = new Mutex();
-
-// DEADLOCK PREVENTION: Queue-based lock management with timeout
-const LOCK_ACQUISITION_TIMEOUT_MS = 5000;  // 5 second timeout for lock acquisition
-const MAX_RETRY_ATTEMPTS = 3;  // Maximum retry attempts with exponential backoff
-const BASE_RETRY_DELAY_MS = 100;  // Base delay for exponential backoff
-
 /**
  * Acquire session processing lock to prevent session switches during message processing
  * This prevents race conditions where a session switch happens mid-message processing
  *
- * Uses Mutex for standardized lock management with timeout support
+ * Delegates to SessionLockManager for lock management
  *
  * @param {string} expectedSessionId - The session ID expected to be active
  * @returns {Promise<{ locked: boolean, currentSessionId: string|null, release?: Function, error?: string }>} Lock result
  */
 async function acquireProcessingLock(expectedSessionId) {
-    const startTime = Date.now();
-    let attemptCount = 0;
-
-    while (attemptCount < MAX_RETRY_ATTEMPTS) {
-        attemptCount++;
-
-        // Check timeout
-        if (Date.now() - startTime > LOCK_ACQUISITION_TIMEOUT_MS) {
-            console.warn('[SessionManager] Lock acquisition timeout after', LOCK_ACQUISITION_TIMEOUT_MS, 'ms');
-            return {
-                locked: false,
-                currentSessionId: currentSessionId,
-                error: 'Lock acquisition timeout'
-            };
-        }
-
-        // CIRCULAR WAIT DETECTION: Check if we're waiting for ourselves
-        if (_processingSessionId === expectedSessionId) {
-            console.warn('[SessionManager] Circular wait detected - same session already holds lock');
-            return {
-                locked: false,
-                currentSessionId: currentSessionId,
-                error: 'Circular wait detected'
-            };
-        }
-
-        // Try to acquire lock using mutex with timeout
-        try {
-            const timeoutPromise = new Promise((_, reject) => {
-                setTimeout(() => reject(new Error('Lock wait timeout')), LOCK_ACQUISITION_TIMEOUT_MS);
-            });
-
-            // Try to acquire the lock
-            const lockPromise = _processingMutex.runExclusive(async () => {
-                // Re-validate session ID after acquiring lock
-                if (expectedSessionId && currentSessionId !== expectedSessionId) {
-                    throw new Error('Session switched while waiting for lock');
-                }
-
-                if (_processingSessionId !== null && _processingSessionId !== expectedSessionId) {
-                    throw new Error('Session switched during lock acquisition');
-                }
-
-                // Acquire the lock
-                _processingSessionId = expectedSessionId || currentSessionId;
-
-                // Return a release function
-                return () => {
-                    _processingSessionId = null;
-                };
-            });
-
-            const release = await Promise.race([lockPromise, timeoutPromise]);
-
-            return {
-                locked: true,
-                currentSessionId: currentSessionId,
-                release: release
-            };
-
-        } catch (error) {
-            console.warn('[SessionManager] Lock acquisition attempt', attemptCount, 'failed:', error.message);
-
-            // If session mismatch, don't retry
-            if (error.message.includes('Session switched')) {
-                return {
-                    locked: false,
-                    currentSessionId: currentSessionId,
-                    error: error.message
-                };
-            }
-
-            // Exponential backoff before retry
-            if (attemptCount < MAX_RETRY_ATTEMPTS) {
-                const delayMs = BASE_RETRY_DELAY_MS * Math.pow(2, attemptCount - 1);
-                await new Promise(resolve => setTimeout(resolve, delayMs));
-            }
-        }
-    }
-
-    // All retries exhausted
-    console.warn('[SessionManager] Lock acquisition failed after', MAX_RETRY_ATTEMPTS, 'attempts');
-    return {
-        locked: false,
-        currentSessionId: currentSessionId,
-        error: 'Max retry attempts exceeded'
-    };
+    return lockManager.acquireProcessingLock(expectedSessionId);
 }
 
 /**
