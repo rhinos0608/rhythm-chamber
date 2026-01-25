@@ -349,11 +349,19 @@ function runCircuitBreakerChecks(eventType, priority, timestamp) {
     const queuePercentFull = pendingEvents.length / CIRCUIT_BREAKER_CONFIG.maxQueueSize;
     if (queuePercentFull >= CIRCUIT_BREAKER_CONFIG.backpressureWarningThreshold && !backpressureWarningEmitted) {
         backpressureWarningEmitted = true;
-        emit('eventbus:backpressure_warning', {
-            queueSize: pendingEvents.length,
-            maxSize: CIRCUIT_BREAKER_CONFIG.maxQueueSize,
-            percentFull: queuePercentFull
-        }, { bypassCircuitBreaker: true, skipValidation: true });
+        // MEDIUM FIX Issue #23: Wrap backpressure warning emit in try-catch to prevent
+        // listener exceptions from leaving the paused state inconsistent. If a handler
+        // throws an error, we catch it and log it, but still emit the warning.
+        try {
+            emit('eventbus:backpressure_warning', {
+                queueSize: pendingEvents.length,
+                maxSize: CIRCUIT_BREAKER_CONFIG.maxQueueSize,
+                percentFull: queuePercentFull
+            }, { bypassCircuitBreaker: true, skipValidation: true });
+        } catch (emitError) {
+            // Handler threw an error - log but don't fail the circuit breaker check
+            console.error('[EventBus] Backpressure warning handler threw error:', emitError);
+        }
         console.warn(`[EventBus] Backpressure warning: queue at ${(queuePercentFull * 100).toFixed(1)}% capacity`);
     }
 
@@ -663,7 +671,7 @@ function once(eventType, handler, options = {}) {
 
 /**
  * Unsubscribe a handler by ID
- * 
+ *
  * @param {string} eventType - Event type
  * @param {string} handlerId - Handler ID returned by on()
  */
@@ -678,6 +686,12 @@ function off(eventType, handlerId) {
             console.log(`[EventBus] Unsubscribed handler ${handlerId} from "${eventType}"`);
         }
     }
+
+    // MEDIUM FIX Issue #24: Clean up handlerMetrics Map to prevent unbounded growth
+    // When a handler is unsubscribed, its metrics should be removed to prevent
+    // memory leaks. The handlerMetrics Map was growing unbounded because entries
+    // were never removed when handlers were unsubscribed.
+    handlerMetrics.delete(handlerId);
 }
 
 /**
@@ -814,87 +828,92 @@ function emit(eventType, payload = {}, options = {}) {
     // Additional safeguard - take snapshot of handler IDs at start
     const handlerSnapshot = allHandlers.map(h => ({ ...h }));
 
-    // Call handlers in priority order, filtering by domain
-    for (const { handler, id, domain: handlerDomain } of handlerSnapshot) {
-        // Verify handler still exists and is active before execution
-        // A handler could have been removed during iteration
-        const currentHandler = subscribers.get(eventType)?.find(h => h.id === id) ||
-                              subscribers.get('*')?.find(h => h.id === id);
-        if (!currentHandler || currentHandler.handler !== handler) {
-            continue; // Handler was removed or replaced during iteration
-        }
-
-        // Domain filtering: handler receives event if:
-        // 1. Handler domain is 'global' (receives all events - catch-all handlers)
-        // 2. Event domain matches handler domain (scoped delivery)
-        const domainMatches = handlerDomain === 'global' ||
-            handlerDomain === eventDomain;
-
-        if (!domainMatches) {
-            if (debugMode) {
-                console.log(`[EventBus] Skipping handler ${id} (domain mismatch: ${handlerDomain} vs ${eventDomain})`);
+    // CRITICAL FIX: Wrap handler execution in try-finally to ensure cleanup always runs
+    // Previously, if an error occurred before cleanupFn call, the pending event would leak
+    try {
+        // Call handlers in priority order, filtering by domain
+        for (const { handler, id, domain: handlerDomain } of handlerSnapshot) {
+            // Verify handler still exists and is active before execution
+            // A handler could have been removed during iteration
+            const currentHandler = subscribers.get(eventType)?.find(h => h.id === id) ||
+                                  subscribers.get('*')?.find(h => h.id === id);
+            if (!currentHandler || currentHandler.handler !== handler) {
+                continue; // Handler was removed or replaced during iteration
             }
-            continue;
-        }
 
-        // Get or initialize handler metrics with circuit breaker state
-        let handlerHealthMetrics = handlerMetrics.get(id);
-        if (!handlerHealthMetrics) {
-            handlerHealthMetrics = initializeHandlerMetrics();
-            handlerMetrics.set(id, handlerHealthMetrics);
-        }
+            // Domain filtering: handler receives event if:
+            // 1. Handler domain is 'global' (receives all events - catch-all handlers)
+            // 2. Event domain matches handler domain (scoped delivery)
+            const domainMatches = handlerDomain === 'global' ||
+                handlerDomain === eventDomain;
 
-        // Skip paused handlers (health monitoring)
-        if (handlerHealthMetrics.isPaused) {
-            if (debugMode) {
-                console.log(`[EventBus] Skipping paused handler ${id}`);
+            if (!domainMatches) {
+                if (debugMode) {
+                    console.log(`[EventBus] Skipping handler ${id} (domain mismatch: ${handlerDomain} vs ${eventDomain})`);
+                }
+                continue;
             }
-            continue;
-        }
 
-        // Per-handler circuit breaker check
-        const circuitState = checkHandlerCircuitState(id, handlerHealthMetrics);
-        if (circuitState === CIRCUIT_STATE.OPEN) {
-            if (debugMode) {
-                console.log(`[EventBus] Skipping handler ${id} (circuit OPEN)`);
+            // Get or initialize handler metrics with circuit breaker state
+            let handlerHealthMetrics = handlerMetrics.get(id);
+            if (!handlerHealthMetrics) {
+                handlerHealthMetrics = initializeHandlerMetrics();
+                handlerMetrics.set(id, handlerHealthMetrics);
             }
-            continue;
+
+            // Skip paused handlers (health monitoring)
+            if (handlerHealthMetrics.isPaused) {
+                if (debugMode) {
+                    console.log(`[EventBus] Skipping paused handler ${id}`);
+                }
+                continue;
+            }
+
+            // Per-handler circuit breaker check
+            const circuitState = checkHandlerCircuitState(id, handlerHealthMetrics);
+            if (circuitState === CIRCUIT_STATE.OPEN) {
+                if (debugMode) {
+                    console.log(`[EventBus] Skipping handler ${id} (circuit OPEN)`);
+                }
+                continue;
+            }
+
+            // Track handler execution for health monitoring
+            const handlerStartTime = performance.now();
+            markHandlerStarted(id);
+
+            // Record handler execution in wave chain
+            if (waveId) {
+                WaveTelemetry.recordNode(`handler:${id}`, waveId);
+            }
+
+            try {
+                handler(payload, eventMeta);
+                const durationMs = performance.now() - handlerStartTime;
+                recordHandlerSuccess(id, durationMs);
+            } catch (error) {
+                const durationMs = performance.now() - handlerStartTime;
+                recordHandlerFailure(id, durationMs, error);
+                console.error(`[EventBus] Handler ${id} threw error for "${eventType}":`, error);
+                // Don't stop other handlers from executing - isolated by circuit breaker
+            }
         }
 
-        // Track handler execution for health monitoring
-        const handlerStartTime = performance.now();
-        markHandlerStarted(id);
-
-        // Record handler execution in wave chain
-        if (waveId) {
-            WaveTelemetry.recordNode(`handler:${id}`, waveId);
+        // End wave after all handlers complete
+        if (waveId && isCritical) {
+            try {
+                WaveTelemetry.endWave(waveId);
+                activeWaves.delete(waveId);
+            } catch (error) {
+                console.error(`[EventBus] Failed to end wave ${waveId}:`, error);
+            }
         }
-
-        try {
-            handler(payload, eventMeta);
-            const durationMs = performance.now() - handlerStartTime;
-            recordHandlerSuccess(id, durationMs);
-        } catch (error) {
-            const durationMs = performance.now() - handlerStartTime;
-            recordHandlerFailure(id, durationMs, error);
-            console.error(`[EventBus] Handler ${id} threw error for "${eventType}":`, error);
-            // Don't stop other handlers from executing - isolated by circuit breaker
+    } finally {
+        // CRITICAL FIX: Always remove pending event, even if handlers throw
+        // This prevents memory leak in circuit breaker tracking
+        if (!options.bypassCircuitBreaker && circuitBreakerResult?.cleanupFn) {
+            circuitBreakerResult.cleanupFn();
         }
-    }
-
-    // End wave after all handlers complete
-    if (waveId && isCritical) {
-        try {
-            WaveTelemetry.endWave(waveId);
-            activeWaves.delete(waveId);
-        } catch (error) {
-            console.error(`[EventBus] Failed to end wave ${waveId}:`, error);
-        }
-    }
-
-    // Remove the pending event entry after handlers complete
-    if (!options.bypassCircuitBreaker && circuitBreakerResult?.cleanupFn) {
-        circuitBreakerResult.cleanupFn();
     }
 
     return true;
@@ -903,19 +922,26 @@ function emit(eventType, payload = {}, options = {}) {
 /**
  * Emit an event asynchronously (next tick)
  * Useful for avoiding synchronous cascades
- * 
+ *
  * NOTE: This does NOT await async handlers - it just defers emit() to the next microtask.
  * For awaiting async handlers, use emitAndAwait() or emitParallel() instead.
- * 
+ *
  * @param {string} eventType - Event type
  * @param {Object} [payload={}] - Event payload
  * @returns {Promise<boolean>} Resolves when handlers complete
  */
 function emitAsync(eventType, payload = {}) {
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
         queueMicrotask(() => {
-            const result = emit(eventType, payload);
-            resolve(result);
+            try {
+                const result = emit(eventType, payload);
+                resolve(result);
+            } catch (error) {
+                // CRITICAL FIX: Propagate synchronous exceptions from emit()
+                // Previously, synchronous exceptions were silently caught by queueMicrotask
+                // and never propagated to callers, making debugging impossible
+                reject(error);
+            }
         });
     });
 }
@@ -1021,72 +1047,76 @@ async function emitAndAwait(eventType, payload = {}, options = {}) {
 
     const results = [];
 
-    // Execute handlers sequentially, awaiting each one
-    for (const { handler, id, domain: handlerDomain } of allHandlers) {
-        // Domain filtering
-        const domainMatches = handlerDomain === 'global' || handlerDomain === eventDomain;
-        if (!domainMatches) {
-            continue;
-        }
-
-        // Get or initialize handler metrics
-        let handlerHealthMetrics = handlerMetrics.get(id);
-        if (!handlerHealthMetrics) {
-            handlerHealthMetrics = initializeHandlerMetrics();
-            handlerMetrics.set(id, handlerHealthMetrics);
-        }
-
-        // Skip paused handlers
-        if (handlerHealthMetrics.isPaused) {
-            continue;
-        }
-
-        // Per-handler circuit breaker check
-        const circuitState = checkHandlerCircuitState(id, handlerHealthMetrics);
-        if (circuitState === CIRCUIT_STATE.OPEN) {
-            continue;
-        }
-
-        const handlerStartTime = performance.now();
-        markHandlerStarted(id);
-
-        try {
-            // Await the handler if it returns a Promise
-            const handlerResult = handler(payload, eventMeta);
-            if (handlerResult && typeof handlerResult.then === 'function') {
-                await handlerResult;
+    // CRITICAL FIX: Wrap handler execution in try-finally to ensure cleanup always runs
+    try {
+        // Execute handlers sequentially, awaiting each one
+        for (const { handler, id, domain: handlerDomain } of allHandlers) {
+            // Domain filtering
+            const domainMatches = handlerDomain === 'global' || handlerDomain === eventDomain;
+            if (!domainMatches) {
+                continue;
             }
 
-            const durationMs = performance.now() - handlerStartTime;
-            recordHandlerSuccess(id, durationMs);
+            // Get or initialize handler metrics
+            let handlerHealthMetrics = handlerMetrics.get(id);
+            if (!handlerHealthMetrics) {
+                handlerHealthMetrics = initializeHandlerMetrics();
+                handlerMetrics.set(id, handlerHealthMetrics);
+            }
 
-            results.push({
-                handlerId: id,
-                success: true,
-                durationMs
-            });
-        } catch (error) {
-            const durationMs = performance.now() - handlerStartTime;
-            recordHandlerFailure(id, durationMs, error);
+            // Skip paused handlers
+            if (handlerHealthMetrics.isPaused) {
+                continue;
+            }
 
-            results.push({
-                handlerId: id,
-                success: false,
-                error,
-                durationMs
-            });
+            // Per-handler circuit breaker check
+            const circuitState = checkHandlerCircuitState(id, handlerHealthMetrics);
+            if (circuitState === CIRCUIT_STATE.OPEN) {
+                continue;
+            }
 
-            console.error(`[EventBus] Async handler ${id} threw error for "${eventType}":`, error);
+            const handlerStartTime = performance.now();
+            markHandlerStarted(id);
 
-            if (stopOnError) {
-                break;
+            try {
+                // Await the handler if it returns a Promise
+                const handlerResult = handler(payload, eventMeta);
+                if (handlerResult && typeof handlerResult.then === 'function') {
+                    await handlerResult;
+                }
+
+                const durationMs = performance.now() - handlerStartTime;
+                recordHandlerSuccess(id, durationMs);
+
+                results.push({
+                    handlerId: id,
+                    success: true,
+                    durationMs
+                });
+            } catch (error) {
+                const durationMs = performance.now() - handlerStartTime;
+                recordHandlerFailure(id, durationMs, error);
+
+                results.push({
+                    handlerId: id,
+                    success: false,
+                    error,
+                    durationMs
+                });
+
+                console.error(`[EventBus] Async handler ${id} threw error for "${eventType}":`, error);
+
+                if (stopOnError) {
+                    break;
+                }
             }
         }
-    }
-
-    // Clean up pending event entry after handlers complete (FIX: was missing this cleanup)
-    if (!options.bypassCircuitBreaker && circuitBreakerResult?.cleanupFn) {
-        circuitBreakerResult.cleanupFn();
+    } finally {
+        // CRITICAL FIX: Always remove pending event, even if handlers throw
+        // This prevents memory leak in circuit breaker tracking
+        if (!options.bypassCircuitBreaker && circuitBreakerResult?.cleanupFn) {
+            circuitBreakerResult.cleanupFn();
+        }
     }
 
     return {
