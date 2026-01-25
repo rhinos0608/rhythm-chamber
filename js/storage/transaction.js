@@ -230,6 +230,70 @@ function clearInMemoryCompensationLog(transactionId) {
 // ==========================================
 
 /**
+ * Transaction configuration limits
+ * ARCH FIX: Prevents unbounded queue growth and adds retry logic
+ */
+const MAX_OPERATIONS_PER_TRANSACTION = 100;
+const OPERATION_TIMEOUT_MS = 5000;
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 100;
+
+/**
+ * Retry wrapper for transient storage failures
+ * Implements exponential backoff: 100ms, 200ms, 400ms
+ *
+ * @param {Function} operation - Async operation to retry
+ * @param {number} attempts - Maximum retry attempts (default: 3)
+ * @returns {Promise<any>} Result of operation
+ */
+async function retryOperation(operation, attempts = MAX_RETRY_ATTEMPTS) {
+    let lastError;
+
+    for (let i = 0; i < attempts; i++) {
+        try {
+            return await operation();
+        } catch (error) {
+            lastError = error;
+
+            // Don't retry on non-transient errors
+            if (error.name === 'QuotaExceededError' ||
+                error.name === 'InvalidStateError' ||
+                error.message?.includes('fatal') ||
+                error.message?.includes('not supported')) {
+                throw error;
+            }
+
+            // If not the last attempt, wait with exponential backoff
+            if (i < attempts - 1) {
+                const delay = RETRY_BASE_DELAY_MS * Math.pow(2, i);
+                console.warn(`[StorageTransaction] Operation failed, retrying in ${delay}ms (attempt ${i + 1}/${attempts}):`, error.message);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+
+    // All retries exhausted
+    throw new Error(`Operation failed after ${attempts} attempts: ${lastError.message}`);
+}
+
+/**
+ * Timeout wrapper for storage operations
+ * Prevents indefinite hangs on unresponsive backends
+ *
+ * @param {Function} operation - Async operation to wrap
+ * @param {number} timeoutMs - Timeout in milliseconds (default: 5000)
+ * @returns {Promise<any>} Result of operation
+ */
+async function withTimeout(operation, timeoutMs = OPERATION_TIMEOUT_MS) {
+    return Promise.race([
+        operation(),
+        new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Operation timed out after ${timeoutMs}ms`)), timeoutMs)
+        )
+    ]);
+}
+
+/**
  * Represents a pending operation in the transaction
  */
 class TransactionOperation {
@@ -243,12 +307,14 @@ class TransactionOperation {
         this.previousOptions = previousOptions;  // For rollback (token options)
         this.committed = false;
         this.timestamp = Date.now();
+        this.retryCount = 0;  // ARCH FIX: Track retry attempts
     }
 }
 
 /**
  * Transaction context passed to transaction callback
  * Enhanced with 2PC support for cross-backend atomicity
+ * ARCH FIX: Added queue depth limits and operation tracking
  */
 class TransactionContext {
     constructor() {
@@ -261,11 +327,14 @@ class TransactionContext {
         this.prepared = false;  // 2PC: prepare phase completed
         this.journaled = false; // 2PC: journal written
         this.startTime = Date.now();
+        this.operationTimeouts = 0;  // ARCH FIX: Track timed out operations
+        this.retryAttempts = 0;      // ARCH FIX: Total retry attempts
     }
 
     /**
      * Add a put operation to the transaction
-     * 
+     * ARCH FIX: Enforces MAX_OPERATIONS_PER_TRANSACTION to prevent unbounded growth
+     *
      * @param {string} backend - 'indexeddb' or 'localstorage'
      * @param {string} storeOrKey - Store name (IndexedDB) or key (localStorage)
      * @param {*} value - Value to store
@@ -274,6 +343,14 @@ class TransactionContext {
     async put(backend, storeOrKey, value, key = null) {
         if (this.committed || this.rolledBack) {
             throw new Error('Transaction already completed');
+        }
+
+        // ARCH FIX: Enforce queue depth limit
+        if (this.operations.length >= MAX_OPERATIONS_PER_TRANSACTION) {
+            throw new Error(
+                `Transaction too large: maximum ${MAX_OPERATIONS_PER_TRANSACTION} operations per transaction. ` +
+                `Current: ${this.operations.length}. Consider splitting into multiple transactions.`
+            );
         }
 
         let previousValue = null;
@@ -320,7 +397,8 @@ class TransactionContext {
 
     /**
      * Add a delete operation to the transaction
-     * 
+     * ARCH FIX: Enforces MAX_OPERATIONS_PER_TRANSACTION to prevent unbounded growth
+     *
      * @param {string} backend - 'indexeddb' or 'localstorage'
      * @param {string} storeOrKey - Store name (IndexedDB) or key (localStorage)
      * @param {string} [key] - Key within store (IndexedDB only)
@@ -328,6 +406,14 @@ class TransactionContext {
     async delete(backend, storeOrKey, key = null) {
         if (this.committed || this.rolledBack) {
             throw new Error('Transaction already completed');
+        }
+
+        // ARCH FIX: Enforce queue depth limit
+        if (this.operations.length >= MAX_OPERATIONS_PER_TRANSACTION) {
+            throw new Error(
+                `Transaction too large: maximum ${MAX_OPERATIONS_PER_TRANSACTION} operations per transaction. ` +
+                `Current: ${this.operations.length}. Consider splitting into multiple transactions.`
+            );
         }
 
         let previousValue = null;
@@ -779,6 +865,7 @@ async function transaction(callback, options = {}) {
  * Commit all operations in the transaction
  * CRITICAL FIX for Issue #3: Continues attempting all writes, tracks failures,
  * only rolls back if no operations succeeded
+ * ARCH FIX: Added retry logic with exponential backoff for transient failures
  *
  * @param {TransactionContext} ctx - Transaction context
  */
@@ -792,43 +879,58 @@ async function commit(ctx) {
 
     // CRITICAL FIX for Issue #3: Continue attempting all writes even if some fail
     // Track which operations succeeded and which failed
+    // ARCH FIX: Wrap each operation in retry logic for transient failures
     for (const op of ctx.operations) {
         try {
-            if (op.backend === 'localstorage') {
-                if (op.type === 'put') {
-                    localStorage.setItem(op.key,
-                        typeof op.value === 'string' ? op.value : JSON.stringify(op.value)
-                    );
-                } else if (op.type === 'delete') {
-                    localStorage.removeItem(op.key);
-                }
-            } else if (op.backend === 'indexeddb') {
-                if (!IndexedDBCore) {
-                    throw new Error('IndexedDBCore not available');
-                }
+            // ARCH FIX: Use retry wrapper for storage operations
+            await retryOperation(async () => {
+                // ARCH FIX: Add timeout wrapper to prevent hangs
+                await withTimeout(async () => {
+                    if (op.backend === 'localstorage') {
+                        if (op.type === 'put') {
+                            localStorage.setItem(op.key,
+                                typeof op.value === 'string' ? op.value : JSON.stringify(op.value)
+                            );
+                        } else if (op.type === 'delete') {
+                            localStorage.removeItem(op.key);
+                        }
+                    } else if (op.backend === 'indexeddb') {
+                        if (!IndexedDBCore) {
+                            throw new Error('IndexedDBCore not available');
+                        }
 
-                if (op.type === 'put') {
-                    await IndexedDBCore.put(op.store, op.value);
-                } else if (op.type === 'delete') {
-                    await IndexedDBCore.delete(op.store, op.key);
-                }
-            } else if (op.backend === 'securetoken') {
-                // HNW Network: SecureTokenStore integration
-                if (!SecureTokenStore) {
-                    throw new Error('SecureTokenStore not available');
-                }
+                        if (op.type === 'put') {
+                            await IndexedDBCore.put(op.store, op.value);
+                        } else if (op.type === 'delete') {
+                            await IndexedDBCore.delete(op.store, op.key);
+                        }
+                    } else if (op.backend === 'securetoken') {
+                        // HNW Network: SecureTokenStore integration
+                        if (!SecureTokenStore) {
+                            throw new Error('SecureTokenStore not available');
+                        }
 
-                if (op.type === 'put') {
-                    const { value, options } = op.value;
-                    await SecureTokenStore.store(op.key, value, options);
-                } else if (op.type === 'delete') {
-                    await SecureTokenStore.invalidate(op.key);
-                }
-            }
+                        if (op.type === 'put') {
+                            const { value, options } = op.value;
+                            await SecureTokenStore.store(op.key, value, options);
+                        } else if (op.type === 'delete') {
+                            await SecureTokenStore.invalidate(op.key);
+                        }
+                    }
+                }, OPERATION_TIMEOUT_MS);
+            }, MAX_RETRY_ATTEMPTS);
 
             op.committed = true;
             succeededCount++;
         } catch (error) {
+            // ARCH FIX: Track retry attempts in context
+            if (error.message?.includes('failed after')) {
+                ctx.retryAttempts++;
+            }
+            if (error.message?.includes('timed out')) {
+                ctx.operationTimeouts++;
+            }
+
             // CRITICAL FIX for Issue #3: Continue processing all operations
             // Record error but don't break - allows partial commit
             errors.push({ operation: op, error });
@@ -852,6 +954,33 @@ async function commit(ctx) {
         } else {
             // Partial success - log but don't rollback
             // This prevents losing already-committed data
+
+            // ENHANCEMENT: Create detailed failure summary for debugging
+            const failureSummary = errors.map((err, idx) => ({
+                index: idx,
+                backend: err.operation.backend,
+                type: err.operation.type,
+                store: err.operation.store,
+                key: err.operation.key,
+                error: err.error.message,
+                errorName: err.error.name || 'Error'
+            }));
+
+            // Group failures by backend for better visibility
+            const failuresByBackend = errors.reduce((acc, err) => {
+                const backend = err.operation.backend;
+                if (!acc[backend]) {
+                    acc[backend] = { count: 0, errors: [] };
+                }
+                acc[backend].count++;
+                acc[backend].errors.push({
+                    type: err.operation.type,
+                    key: err.operation.key,
+                    error: err.error.message
+                });
+                return acc;
+            }, {});
+
             const partialCommitError = new Error(
                 `Commit partially succeeded: ${succeededCount}/${ctx.operations.length} operations committed, ` +
                 `${errors.length} failed. Manual intervention may be required.`
@@ -860,10 +989,34 @@ async function commit(ctx) {
             partialCommitError.succeededCount = succeededCount;
             partialCommitError.failedCount = errors.length;
             partialCommitError.errors = errors;
+            partialCommitError.failureSummary = failureSummary;
+            partialCommitError.failuresByBackend = failuresByBackend;
 
             // Still mark as committed since some writes succeeded
             ctx.committed = true;
-            console.error(`[StorageTransaction] Partial commit: ${succeededCount} succeeded, ${errors.length} failed`);
+
+            // Enhanced logging with backend breakdown
+            console.error(`[StorageTransaction] PARTIAL COMMIT DETECTED:`, {
+                transactionId: ctx.id,
+                succeeded: succeededCount,
+                failed: errors.length,
+                total: ctx.operations.length,
+                failuresByBackend,
+                timestamp: new Date().toISOString()
+            });
+
+            // Emit event for monitoring/debugging
+            if (EventBus) {
+                EventBus.emit('transaction:partial_commit', {
+                    transactionId: ctx.id,
+                    succeededCount,
+                    failedCount: errors.length,
+                    totalOperations: ctx.operations.length,
+                    failureSummary,
+                    failuresByBackend,
+                    timestamp: Date.now()
+                });
+            }
 
             throw partialCommitError;
         }
@@ -1315,6 +1468,12 @@ const StorageTransaction = {
     isInTransaction,
     getTransactionDepth,
 
+    // ARCH FIX: Transaction limits and retry configuration
+    MAX_OPERATIONS_PER_TRANSACTION,
+    OPERATION_TIMEOUT_MS,
+    MAX_RETRY_ATTEMPTS,
+    RETRY_BASE_DELAY_MS,
+
     // For advanced use
     TransactionContext,
     TransactionOperation,
@@ -1326,7 +1485,9 @@ const StorageTransaction = {
     _rollback: rollback,
     _preparePhase: preparePhase,
     _writeJournal: writeJournal,
-    _clearJournal: clearJournal
+    _clearJournal: clearJournal,
+    _retryOperation: retryOperation,
+    _withTimeout: withTimeout
 };
 
 // ES Module export
