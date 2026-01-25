@@ -197,6 +197,171 @@ const MESSAGE_TYPES = {
     SAFE_MODE_CHANGED: 'SAFE_MODE_CHANGED'  // Cross-tab Safe Mode synchronization
 };
 
+// ==========================================
+// Message Validation Schema
+// ARCH FIX: Comprehensive message validation to prevent crashes from malformed data
+// ==========================================
+
+/**
+ * Message schema definitions
+ * Defines required and optional fields for each message type
+ */
+const MESSAGE_SCHEMA = {
+    CANDIDATE: {
+        required: ['type', 'tabId', 'timestamp'],
+        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock']
+    },
+    CLAIM_PRIMARY: {
+        required: ['type', 'tabId', 'timestamp'],
+        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock']
+    },
+    RELEASE_PRIMARY: {
+        required: ['type', 'tabId', 'timestamp'],
+        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock']
+    },
+    HEARTBEAT: {
+        required: ['type', 'tabId', 'timestamp'],
+        optional: ['senderId', 'seq', 'nonce', 'origin', 'lamportTimestamp', 'vectorClock']
+    },
+    EVENT_WATERMARK: {
+        required: ['type', 'tabId', 'timestamp', 'watermark'],
+        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock']
+    },
+    REPLAY_REQUEST: {
+        required: ['type', 'tabId', 'timestamp', 'fromWatermark'],
+        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock']
+    },
+    REPLAY_RESPONSE: {
+        required: ['type', 'tabId', 'timestamp', 'events'],
+        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock']
+    },
+    SAFE_MODE_CHANGED: {
+        required: ['type', 'tabId', 'timestamp', 'enabled', 'reason'],
+        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock']
+    }
+};
+
+/**
+ * Validate message structure against schema
+ * ARCH FIX: Prevents crashes from malformed messages
+ *
+ * @param {Object} message - Message to validate
+ * @returns {{valid: boolean, error: string|null}} Validation result
+ */
+function validateMessageStructure(message) {
+    // Check message is an object
+    if (!message || typeof message !== 'object') {
+        return { valid: false, error: 'Message is not an object' };
+    }
+
+    // Check message type exists
+    const { type } = message;
+    if (!type) {
+        return { valid: false, error: 'Message missing type field' };
+    }
+
+    // Check message type is valid
+    const schema = MESSAGE_SCHEMA[type];
+    if (!schema) {
+        return { valid: false, error: `Unknown message type: ${type}` };
+    }
+
+    // Check required fields
+    for (const field of schema.required) {
+        if (message[field] === undefined || message[field] === null) {
+            return { valid: false, error: `Missing required field: ${field} for type ${type}` };
+        }
+    }
+
+    // Type-specific validation
+    if (type === MESSAGE_TYPES.EVENT_WATERMARK) {
+        if (typeof message.watermark !== 'number') {
+            return { valid: false, error: 'watermark must be a number' };
+        }
+    }
+
+    if (type === MESSAGE_TYPES.REPLAY_REQUEST) {
+        if (typeof message.fromWatermark !== 'number') {
+            return { valid: false, error: 'fromWatermark must be a number' };
+        }
+    }
+
+    if (type === MESSAGE_TYPES.REPLAY_RESPONSE) {
+        if (!Array.isArray(message.events)) {
+            return { valid: false, error: 'events must be an array' };
+        }
+    }
+
+    if (type === MESSAGE_TYPES.SAFE_MODE_CHANGED) {
+        if (typeof message.enabled !== 'boolean') {
+            return { valid: false, error: 'enabled must be a boolean' };
+        }
+        if (typeof message.reason !== 'string') {
+            return { valid: false, error: 'reason must be a string' };
+        }
+    }
+
+    // Timestamp validation
+    if (message.timestamp && typeof message.timestamp !== 'number') {
+        return { valid: false, error: 'timestamp must be a number' };
+    }
+
+    // tabId validation
+    if (message.tabId && typeof message.tabId !== 'string') {
+        return { valid: false, error: 'tabId must be a string' };
+    }
+
+    return { valid: true, error: null };
+}
+
+/**
+ * Rate limiting per message type
+ * ARCH FIX: Prevents message flood attacks
+ */
+const MESSAGE_RATE_LIMITS = {
+    CANDIDATE: { maxPerSecond: 10 },
+    CLAIM_PRIMARY: { maxPerSecond: 5 },
+    RELEASE_PRIMARY: { maxPerSecond: 5 },
+    HEARTBEAT: { maxPerSecond: 10 },
+    EVENT_WATERMARK: { maxPerSecond: 20 },
+    REPLAY_REQUEST: { maxPerSecond: 5 },
+    REPLAY_RESPONSE: { maxPerSecond: 10 },
+    SAFE_MODE_CHANGED: { maxPerSecond: 5 }
+};
+
+const messageRateTracking = new Map(); // type -> [{count, windowStart}]
+
+/**
+ * Check if message rate limit exceeded
+ * ARCH FIX: Prevents denial of service via message flooding
+ *
+ * @param {string} messageType - Type of message
+ * @returns {boolean} True if rate limit exceeded
+ */
+function isRateLimited(messageType) {
+    const limit = MESSAGE_RATE_LIMITS[messageType];
+    if (!limit) return false;
+
+    const now = Date.now();
+    const tracking = messageRateTracking.get(messageType) || [];
+
+    // Remove entries outside the current 1-second window
+    const windowStart = now - 1000;
+    const validEntries = tracking.filter(entry => entry.windowStart > windowStart);
+
+    // Check if limit exceeded
+    if (validEntries.length >= limit.maxPerSecond) {
+        console.warn(`[TabCoordination] Rate limit exceeded for ${messageType}: ${validEntries.length}/${limit.maxPerSecond} per second`);
+        return true;
+    }
+
+    // Add current message to tracking
+    validEntries.push({ count: 1, windowStart: now });
+    messageRateTracking.set(messageType, validEntries);
+
+    return false;
+}
+
 /**
  * Timing configuration - can be overridden at runtime
  * HNW Wave: Configurable timing for different environments
@@ -1108,15 +1273,28 @@ async function sendMessage(msg, skipQueue = false) {
 function createMessageHandler() {
     return async (event) => {
         try {
-            // Extract security fields from message
+            // ==========================================
+            // MESSAGE VALIDATION PIPELINE
+            // ARCH FIX: Comprehensive validation to prevent crashes and DoS
+            // ==========================================
+
+            // Step 0: Structure validation - catch malformed messages early
+            const structureValidation = validateMessageStructure(event.data);
+            if (!structureValidation.valid) {
+                console.warn(`[TabCoordination] Rejecting malformed message: ${structureValidation.error}`, event.data);
+                return;
+            }
+
+            // Extract validated fields
             const { type, tabId, vectorClock: remoteClock, seq, senderId, signature, origin, timestamp, nonce } = event.data;
 
-            // ==========================================
-            // MESSAGE VERIFICATION PIPELINE
-            // Phase 14: Verify all incoming messages before processing
-            // ==========================================
+            // Step 1: Rate limiting - prevent message flood attacks
+            if (isRateLimited(type)) {
+                console.warn(`[TabCoordination] Rate limit exceeded for message type: ${type}`);
+                return;
+            }
 
-            // Step 0: Check for unsigned flag (fail-safe from signing failures)
+            // Step 2: Check for unsigned flag (fail-safe from signing failures)
             let { unsigned: isUnsigned } = event.data;
 
             // SECURITY FIX (HIGH Issue #10): Check unsigned message allowance with rate limiting
@@ -1128,20 +1306,20 @@ function createMessageHandler() {
             // Message signing verification removed - simplified security model
             // Cross-tab HMAC signing was over-engineering for this application
 
-            // Step 1: Origin validation - keep this for basic security
-            if (origin !== window.location.origin) {
+            // Step 3: Origin validation - keep this for basic security
+            if (origin && origin !== window.location.origin) {
                 console.warn(`[TabCoordination] Rejecting message from wrong origin: ${origin}`);
                 return;
             }
 
-            // Step 2: Timestamp validation - basic staleness check
+            // Step 4: Timestamp validation - basic staleness check
             const isFresh = timestamp && (Date.now() - timestamp) < 60000; // 1 minute
             if (!isFresh) {
-                console.warn(`[TabCoordination] Rejecting stale message: timestamp=${timestamp}`);
+                console.warn(`[TabCoordination] Rejecting stale message: timestamp=${timestamp}, age=${Date.now() - timestamp}ms`);
                 return;
             }
 
-            // Step 3: Nonce validation for replay protection
+            // Step 5: Nonce validation for replay protection
             if (nonce && !isNonceFresh(nonce)) {
                 console.warn('[TabCoordination] Rejecting replayed message with nonce:', nonce);
                 return; // Drop the message
@@ -1203,18 +1381,30 @@ function createMessageHandler() {
                 case MESSAGE_TYPES.CLAIM_PRIMARY:
                     // Another tab claimed primary - we become secondary
                     // FIX Issue #2: ALWAYS become secondary when someone else claims primary
+                    // RACE CONDITION FIX: Use atomic compare-and-set pattern to prevent
+                    // multiple tabs from simultaneously transitioning to secondary mode
                     if (tabId !== TAB_ID) {
-                        // Update module-scoped state to prevent race condition
+                        // Atomic transition: check current state, update all state in one block
+                        const wasPrimary = isPrimaryTab;
+
+                        // Update module-scoped state atomically (single assignment)
                         receivedPrimaryClaim = true;
                         electionAborted = true;
+                        isPrimaryTab = false;
+                        hasCalledSecondaryMode = true; // Set flag before calling handleSecondaryMode
 
-                        // FIX Issue #2: Call handleSecondaryMode if we were primary OR
-                        // if we haven't called it yet (prevents split-brain where a tab
-                        // receives CLAIM_PRIMARY before starting its own election)
-                        if (isPrimaryTab || !hasCalledSecondaryMode) {
-                            isPrimaryTab = false;
-                            handleSecondaryMode();
-                            hasCalledSecondaryMode = true;
+                        // Only call handleSecondaryMode if we were actually primary
+                        // This prevents redundant UI updates and ensures idempotency
+                        if (wasPrimary) {
+                            // Use setTimeout to break reentrancy and ensure message
+                            // processing completes before handleSecondaryMode runs
+                            setTimeout(() => {
+                                try {
+                                    handleSecondaryMode();
+                                } catch (error) {
+                                    console.error('[TabCoordination] Error transitioning to secondary mode:', error);
+                                }
+                            }, 0);
                         }
                     }
                     break;
@@ -2226,6 +2416,13 @@ const TabCoordinator = {
     // Transport info (diagnostics)
     getTransportType: () => sharedWorkerFallback ? 'SharedWorker' : 'BroadcastChannel',
     isUsingFallback: () => sharedWorkerFallback,
+
+    // ARCH FIX: Message validation API
+    validateMessageStructure,
+    MESSAGE_SCHEMA,
+    MESSAGE_TYPES,
+    getMessageRateLimit: (type) => MESSAGE_RATE_LIMITS[type],
+    getRateTracking: () => new Map(messageRateTracking),
 
     // Heartbeat (exposed for testing)
     _startHeartbeat: startHeartbeat,
