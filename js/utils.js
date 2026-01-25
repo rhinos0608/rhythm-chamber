@@ -1,8 +1,9 @@
 /**
  * Utility Functions for Rhythm Chamber
- * 
+ *
  * Provides resilient network utilities with timeouts and retries.
  */
+import { withRetry, RETRY_CONFIG, classifyError } from './utils/resilient-retry.js';
 
 /**
  * Fetch with timeout support and external abort signal
@@ -79,39 +80,71 @@ async function fetchWithRetry(url, config = {}) {
         timeoutMs = 30000,
         retryOnStatus = [429, 500, 502, 503, 504]
     } = config;
-    let lastError;
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        try {
-            const response = await fetchWithTimeout(url, options, timeoutMs);
+    // Build retry config from provided parameters
+    const retryConfig = {
+        ...RETRY_CONFIG,
+        MAX_RETRIES: maxRetries,
+        BASE_DELAY_MS: baseDelayMs,
+        MAX_DELAY_MS: maxDelayMs
+    };
 
-            // Check if we should retry based on status
-            if (retryOnStatus.includes(response.status) && attempt < maxRetries) {
-                const delay = Math.min(baseDelayMs * Math.pow(2, attempt), maxDelayMs);
-                console.warn(`[Utils] Retrying after ${delay}ms (status ${response.status})`);
-                await sleep(delay);
-                continue;
+    // Create shouldRetry callback that checks both error classification and HTTP status
+    const createShouldRetry = (retryStatuses) => {
+        return (error, attempt) => {
+            // First check if the error itself is retryable
+            const errorType = classifyError(error);
+
+            // Don't retry authentication or client errors
+            if (errorType === 'auth' || errorType === 'client_error') {
+                return false;
             }
 
-            return response;
-        } catch (err) {
-            lastError = err;
-
-            // Don't retry on non-network errors
-            if (err.message.includes('timed out') || err.name === 'TypeError') {
-                if (attempt < maxRetries) {
-                    const delay = Math.min(baseDelayMs * Math.pow(2, attempt), maxDelayMs);
-                    console.warn(`[Utils] Retrying after ${delay}ms (${err.message})`);
-                    await sleep(delay);
-                    continue;
+            // For HTTP status errors, check if status is in retry list
+            if (error.message && error.message.includes('status')) {
+                const statusMatch = error.message.match(/status (\d+)/);
+                if (statusMatch) {
+                    const status = parseInt(statusMatch[1], 10);
+                    return retryStatuses.includes(status);
                 }
             }
 
-            throw err;
-        }
-    }
+            // For other errors, use classification
+            const retryableTypes = ['transient', 'rate_limit', 'server_error'];
+            return retryableTypes.includes(errorType);
+        };
+    };
 
-    throw lastError;
+    // Use withRetry from resilient-retry module
+    const { result } = await withRetry(
+        async () => {
+            const response = await fetchWithTimeout(url, options, timeoutMs);
+
+            // Check if response status should trigger retry
+            if (retryOnStatus.includes(response.status)) {
+                // Create an error that will be caught and retried
+                const error = new Error(`HTTP error: status ${response.status}`);
+                error.status = response.status;
+                error.response = response;
+                throw error;
+            }
+
+            return response;
+        },
+        {
+            maxRetries,
+            config: retryConfig,
+            shouldRetry: createShouldRetry(retryOnStatus),
+            onRetry: (error, attempt, delay) => {
+                console.warn(
+                    `[Utils] Retrying after ${delay}ms ` +
+                    `(attempt ${attempt}/${maxRetries}, ${error.message})`
+                );
+            }
+        }
+    );
+
+    return result;
 }
 
 /**
