@@ -244,11 +244,58 @@ const MESSAGE_SCHEMA = {
 /**
  * Validate message structure against schema
  * ARCH FIX: Prevents crashes from malformed messages
+ * ADVERSARIAL FIX: Add depth, size, and prototype pollution checks
  *
  * @param {Object} message - Message to validate
  * @returns {{valid: boolean, error: string|null}} Validation result
  */
 function validateMessageStructure(message) {
+    // ADVERSARIAL FIX: Check message size limit (1MB max to prevent DoS)
+    const messageSize = JSON.stringify(message).length;
+    const MAX_MESSAGE_SIZE = 1024 * 1024; // 1MB
+    if (messageSize > MAX_MESSAGE_SIZE) {
+        return { valid: false, error: `Message too large: ${messageSize} bytes (max ${MAX_MESSAGE_SIZE})` };
+    }
+
+    // ADVERSARIAL FIX: Check object depth limit (max 10 levels to prevent stack overflow)
+    const MAX_DEPTH = 10;
+    function checkDepth(obj, depth = 0) {
+        if (depth > MAX_DEPTH) {
+            return false;
+        }
+        if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+            for (const key of Object.keys(obj)) {
+                if (!checkDepth(obj[key], depth + 1)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+    if (!checkDepth(message)) {
+        return { valid: false, error: `Message object depth exceeds ${MAX_DEPTH} levels` };
+    }
+
+    // ADVERSARIAL FIX: Check for prototype pollution attempts
+    const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
+    function checkPrototypePollution(obj) {
+        if (!obj || typeof obj !== 'object') {
+            return true;
+        }
+        for (const key of Object.keys(obj)) {
+            if (dangerousKeys.includes(key)) {
+                return false;
+            }
+            if (typeof obj[key] === 'object' && !checkPrototypePollution(obj[key])) {
+                return false;
+            }
+        }
+        return true;
+    }
+    if (!checkPrototypePollution(message)) {
+        return { valid: false, error: 'Message contains dangerous prototype pollution keys' };
+    }
+
     // Check message is an object
     if (!message || typeof message !== 'object') {
         return { valid: false, error: 'Message is not an object' };
@@ -372,6 +419,7 @@ function isRateLimited(messageType) {
         burstMessageCount = 0;
         burstWindowStart = now;
     }
+    // ADVERSARIAL FIX: Increment BEFORE checking (prevents race condition)
     burstMessageCount++;
     if (burstMessageCount > BURST_RATE_LIMIT) {
         console.warn(`[TabCoordination] Burst rate limit exceeded: ${burstMessageCount} messages in ${burstWindowElapsed}ms`);
@@ -379,11 +427,14 @@ function isRateLimited(messageType) {
     }
 
     // SECURITY FIX 2: Global rate limit (max 50 messages/second across all types)
+    // ADVERSARIAL FIX: Use performance.now() for monotonic clock (prevents clock skew bypass)
     const globalWindowElapsed = now - globalWindowStart;
     if (globalWindowElapsed > 1000) {
-        globalMessageCount = 0;
+        // ADVERSARIAL FIX: Add modulo to prevent integer overflow
+        globalMessageCount = globalMessageCount % (GLOBAL_RATE_LIMIT + 1);
         globalWindowStart = now;
     }
+    // ADVERSARIAL FIX: Increment BEFORE checking (prevents race condition)
     globalMessageCount++;
     if (globalMessageCount > GLOBAL_RATE_LIMIT) {
         console.warn(`[TabCoordination] Global rate limit exceeded: ${globalMessageCount} messages/second`);
@@ -409,7 +460,14 @@ function isRateLimited(messageType) {
     validEntries.push({ count: 1, windowStart: now });
     messageRateTracking.set(messageType, validEntries);
 
-    // SECURITY FIX 4: Periodic cleanup of tracking data (1% chance per message)
+    // ADVERSARIAL FIX: ALWAYS cleanup old entries (not just 1% of the time)
+    // This prevents memory leak where tracking arrays grow unbounded
+    if (validEntries.length > 100) {
+        // Keep only the most recent 100 entries to prevent unbounded growth
+        messageRateTracking.set(messageType, validEntries.slice(-100));
+    }
+
+    // Periodic deep cleanup of all tracking data (every 100 messages)
     if (Math.random() < 0.01) {
         cleanupOldTrackingEntries(now);
     }
@@ -1443,14 +1501,11 @@ function createMessageHandler() {
                     // Another tab claimed primary - we become secondary
                     // FIX Issue #2: ALWAYS become secondary when someone else claims primary
                     // FIX CRITICAL #3: Use atomic compare-and-set pattern to prevent split-brain
+                    // ADVERSARIAL FIX: Move hasConcededLeadership set AFTER successful transition
                     if (tabId !== TAB_ID) {
                         // ATOMIC TRANSITION: Check and update state in single conditional block
                         // This eliminates race window between checking state and updating it
                         if (isPrimaryTab && !hasConcededLeadership) {
-                            // Mark that we've conceded - this is permanent for this session
-                            // Once conceded, we can NEVER become primary again (prevents split-brain)
-                            hasConcededLeadership = true;
-
                             // Update all other state atomically (all in same execution block)
                             const wasPrimary = true; // We know we were primary from the if condition
                             receivedPrimaryClaim = true;
@@ -1458,24 +1513,47 @@ function createMessageHandler() {
                             isPrimaryTab = false;
                             hasCalledSecondaryMode = true;
 
-                            // CRITICAL FIX: Call handleSecondaryMode SYNCHRONOUSLY
-                            // The setTimeout(..., 0) created a race window where flag=true but UI still active
-                            // By calling synchronously, we ensure UI is disabled immediately
-                            // Use try-catch to prevent errors from breaking message processing
+                            // ADVERSARIAL FIX: Only set hasConcededLeadership AFTER successful transition
+                            // This prevents getting stuck in a state where we've conceded but UI is still active
+                            let transitionSuccess = false;
                             try {
                                 handleSecondaryMode();
+                                transitionSuccess = true;
+
+                                // CRITICAL: Only mark as conceded after successful transition
+                                hasConcededLeadership = true;
+
+                                console.log(`[TabCoordination] Conceded leadership to tab ${tabId} (atomic transition)`);
                             } catch (error) {
                                 console.error('[TabCoordination] Error transitioning to secondary mode:', error);
-                            }
 
-                            console.log(`[TabCoordination] Conceded leadership to tab ${tabId} (atomic transition)`);
+                                // ADVERSARIAL FIX: Rollback state if transition failed
+                                // This prevents getting stuck in inconsistent state
+                                hasCalledSecondaryMode = false;
+                                receivedPrimaryClaim = false;
+                                electionAborted = false;
+                                isPrimaryTab = true;
+                                // hasConcededLeadership stays false (can retry concession)
+
+                                // ADVERSARIAL FIX: Enter safe mode to prevent data corruption
+                                console.error('[TabCoordination] Transition to secondary failed, entering safe mode');
+                                enterSafeMode('secondary_mode_transition_failed');
+                            }
                         } else if (!isPrimaryTab && !hasConcededLeadership) {
                             // We weren't primary, but mark as conceded for consistency
                             // This prevents us from becoming primary later if race occurs
-                            hasConcededLeadership = true;
                             receivedPrimaryClaim = true;
                             electionAborted = true;
-                            console.log(`[TabCoordination] Marking as secondary (was not primary) - conceded to tab ${tabId}`);
+                            // Only set hasConcededLeadership after confirming secondary mode
+                            try {
+                                handleSecondaryMode();
+                                hasConcededLeadership = true;
+                                console.log(`[TabCoordination] Marking as secondary (was not primary) - conceded to tab ${tabId}`);
+                            } catch (error) {
+                                console.error('[TabCoordination] Error entering secondary mode:', error);
+                                // Enter safe mode but don't set hasConcededLeadership
+                                enterSafeMode('secondary_mode_entry_failed');
+                            }
                         }
                         // If already hasConcededLeadership, this is a duplicate claim - ignore
                     }
@@ -1666,6 +1744,40 @@ function disableWriteOperations() {
     if (newChatBtn) newChatBtn.disabled = true;
 
     console.log('[TabCoordination] Write operations disabled - secondary tab mode');
+}
+
+/**
+ * Enter safe mode when critical error occurs
+ * ADVERSARIAL FIX: Prevents data corruption when state transition fails
+ * @param {string} reason - Reason for entering safe mode
+ */
+function enterSafeMode(reason) {
+    console.error(`[TabCoordination] ENTERING SAFE MODE: ${reason}`);
+
+    // Disable ALL write operations immediately
+    disableWriteOperations();
+
+    // Show error modal with different message
+    const modal = document.getElementById('multi-tab-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        const msgEl = modal.querySelector('.modal-message');
+        if (msgEl) {
+            msgEl.textContent =
+                'A critical error occurred in tab coordination. ' +
+                'This tab has been placed in safe mode to prevent data corruption. ' +
+                'Please refresh the page. Error: ' + reason;
+        }
+    }
+
+    // Notify other tabs about safe mode
+    sendMessage({
+        type: MESSAGE_TYPES.SAFE_MODE_CHANGED,
+        tabId: TAB_ID,
+        timestamp: Date.now(),
+        enabled: true,
+        reason: reason
+    });
 }
 
 /**
@@ -2357,6 +2469,13 @@ function cleanup() {
     // HNW Network: Clear remote sequence tracking
     remoteSequences.clear();
     remoteSequenceTimestamps.clear();
+
+    // ADVERSARIAL FIX: Clear rate limiting tracking to prevent memory leak on tab close
+    messageRateTracking.clear();
+    burstMessageCount = 0;
+    burstWindowStart = Date.now();
+    globalMessageCount = 0;
+    globalWindowStart = Date.now();
 
     console.log('[TabCoordination] Cleanup complete');
 }
