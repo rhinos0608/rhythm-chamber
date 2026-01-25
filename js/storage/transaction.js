@@ -774,8 +774,14 @@ async function transaction(callback, options = {}) {
     const ctx = new TransactionContext();
     NESTED_TRANSACTION_STACK.push(ctx.id);
 
-    // Create timeout promise
+    // MEDIUM FIX Issue #25: Prevent double timeout cleanup by tracking cleared state
+    // The original code had potential double-clear issues where timeoutId could be
+    // cleared in both the success path (line 796) and the catch path (line 841).
+    // While clearTimeout on an already-cleared timeout is harmless in JavaScript,
+    // it indicates unclear cleanup logic. We use a flag to make the intent explicit.
     let timeoutId = null;
+    let timeoutCleared = false;
+
     const timeoutPromise = new Promise((_, reject) => {
         timeoutId = setTimeout(() => {
             reject(new Error(
@@ -792,8 +798,11 @@ async function transaction(callback, options = {}) {
             timeoutPromise
         ]);
 
-        // Clear timeout after callback completes
-        if (timeoutId) clearTimeout(timeoutId);
+        // MEDIUM FIX Issue #25: Clear timeout with flag check to prevent double-clear
+        if (timeoutId !== null && !timeoutCleared) {
+            clearTimeout(timeoutId);
+            timeoutCleared = true;
+        }
 
         if (ctx.operations.length === 0) {
             return {
@@ -837,8 +846,11 @@ async function transaction(callback, options = {}) {
             durationMs
         };
     } catch (error) {
-        // Clear timeout on error
-        if (timeoutId) clearTimeout(timeoutId);
+        // MEDIUM FIX Issue #25: Clear timeout with flag check to prevent double-clear
+        if (timeoutId !== null && !timeoutCleared) {
+            clearTimeout(timeoutId);
+            timeoutCleared = true;
+        }
 
         // Rollback on any error
         console.error(`[StorageTransaction] Transaction ${ctx.id} failed, rolling back:`, error);

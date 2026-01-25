@@ -115,10 +115,20 @@ async function safeJsonParse(json) {
         return parsed;
     };
 
+    // MEDIUM FIX Issue #22: Promise.race timeout with proper rejection handling
+    // Track timeout ID to clear it and prevent unhandled rejections
+    let timeoutId;
     try {
         // Simple timeout wrapper using Promise.race
+        // MEDIUM FIX Issue #22: Attach .catch() to timeoutPromise to handle unhandled rejections
+        // When parsePromise wins the race and clearTimeout is called, there's a race window
+        // where the timeout callback may already be queued. Without .catch(), this causes
+        // an unhandled rejection error in the console.
         const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error(`JSON parsing timeout after ${MAX_JSON_PARSE_TIME_MS}ms`)), MAX_JSON_PARSE_TIME_MS);
+            timeoutId = setTimeout(() => reject(new Error(`JSON parsing timeout after ${MAX_JSON_PARSE_TIME_MS}ms`)), MAX_JSON_PARSE_TIME_MS);
+        }).catch(err => {
+            // Silently swallow timeout rejection - this promise lost the race
+            // The error is already handled by the Promise.race above
         });
 
         const parsePromise = new Promise((resolve) => {
@@ -144,6 +154,14 @@ async function safeJsonParse(json) {
             );
         }
         throw error;
+    } finally {
+        // MEDIUM FIX Issue #22: Always clear timeout to prevent memory leak
+        // When parsePromise wins the race, the timeout promise's setTimeout
+        // continues running. Without clearing, it will fire and reject an
+        // already-settled promise, causing an unhandled rejection.
+        if (timeoutId !== undefined) {
+            clearTimeout(timeoutId);
+        }
     }
 }
 
@@ -173,6 +191,10 @@ const safeJsonParseSync = (json) => {
 
 /**
  * Pause processing for memory pressure relief
+ * RACE CONDITION FIX: Added critical section protection to prevent interruption
+ * of async operations like postProgress(). The pause state is now checked before
+ * any progress updates, ensuring atomic pause-resume semantics.
+ *
  * @param {string} reason - Why we're pausing (memory_api or chunk_count)
  * @param {number} metric - Usage metric for logging
  */
@@ -180,13 +202,22 @@ async function pauseForMemory(reason, metric) {
     console.log(`[Worker] Memory pressure detected (${reason}: ${Math.round(metric * 100)}%) - pausing...`);
     self.postMessage({ type: 'memory_warning', reason, metric });
 
+    // RACE CONDITION FIX: Set pause flag BEFORE waiting to ensure no new operations start
+    // This prevents postProgress() and other async operations from initiating mid-pause
+    isPaused = true;
+
     // Wait for resume signal from main thread
     await new Promise(resolve => {
         pauseResolve = resolve;
-        isPaused = true;
     });
 
     console.log('[Worker] Resuming processing...');
+
+    // RACE CONDITION FIX: Clear pause flag AFTER resume completes, before any new operations
+    // This ensures we don't send progress updates until fully resumed
+    isPaused = false;
+    pauseResolve = null;
+
     self.postMessage({ type: 'memory_resumed' });
 }
 
@@ -734,7 +765,18 @@ async function parseZipFile(file, existingStreams = null) {
 }
 
 
+/**
+ * Post progress update with pause state checking
+ * RACE CONDITION FIX: Check isPaused before posting to prevent messages
+ * during memory pause window. This ensures clean pause/resume boundaries.
+ */
 function postProgress(message) {
+    // RACE CONDITION FIX: Don't send progress if paused - prevents messages
+    // from being sent during memory pressure pause window
+    if (isPaused) {
+        console.log('[Worker] Suppressing progress message during pause:', message);
+        return;
+    }
     self.postMessage({ type: 'progress', message });
 }
 

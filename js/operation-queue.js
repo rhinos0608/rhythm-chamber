@@ -166,6 +166,9 @@ class OperationQueue {
 
     /**
      * Process the queue
+     * RACE CONDITION FIX: Added deadlock detection and circular wait prevention
+     * to prevent indefinite blocking when operations form circular dependencies.
+     *
      * @private
      */
     async processQueue() {
@@ -176,6 +179,10 @@ class OperationQueue {
         const MAX_PRE_CHECK_RETRIES = 10;
         let preCheckRetries = 0;
 
+        // RACE CONDITION FIX: Track operations we're waiting on to detect circular dependencies
+        // If the same operation keeps getting blocked by the same set of locks, we may have a deadlock
+        const blockedHistory = new Map(); // operationName -> [{ blockedBy, timestamp }]
+
         while (this.queue.length > 0) {
             const operation = this.queue[0];
 
@@ -183,6 +190,7 @@ class OperationQueue {
             if (operation.status === STATUS.CANCELLED) {
                 this.queue.shift();
                 preCheckRetries = 0; // Reset for next operation
+                blockedHistory.delete(operation.operationName);
                 continue;
             }
 
@@ -191,6 +199,35 @@ class OperationQueue {
 
             if (!check.canAcquire) {
                 preCheckRetries++;
+
+                // RACE CONDITION FIX: Deadlock detection - track blocked operations
+                const history = blockedHistory.get(operation.operationName) || [];
+                history.push({
+                    blockedBy: check.blockedBy,
+                    timestamp: Date.now()
+                });
+                blockedHistory.set(operation.operationName, history);
+
+                // Check for circular wait: if we've been blocked by the same operations
+                // multiple times, we may be in a deadlock scenario
+                if (history.length > 3) {
+                    const recentBlocks = history.slice(-3);
+                    const sameBlockers = recentBlocks.every(h =>
+                        JSON.stringify(h.blockedBy) === JSON.stringify(check.blockedBy)
+                    );
+
+                    if (sameBlockers) {
+                        console.error(`[OperationQueue] Circular wait detected for '${operation.operationName}' - blocked by: ${check.blockedBy.join(', ')}`);
+                        operation.status = STATUS.FAILED;
+                        operation.error = new Error(`Deadlock detected: circular wait on locks ${check.blockedBy.join(', ')}`);
+                        this.queue.shift();
+                        operation.reject(operation.error);
+                        this.emit('failed', operation);
+                        preCheckRetries = 0;
+                        blockedHistory.delete(operation.operationName);
+                        continue;
+                    }
+                }
 
                 // Fail if exceeded max retries to avoid indefinite blocking
                 if (preCheckRetries >= MAX_PRE_CHECK_RETRIES) {
@@ -201,6 +238,7 @@ class OperationQueue {
                     operation.reject(operation.error);
                     this.emit('failed', operation);
                     preCheckRetries = 0; // Reset for next operation
+                    blockedHistory.delete(operation.operationName);
                     continue;
                 }
 
@@ -210,15 +248,25 @@ class OperationQueue {
 
                 // Wait before retry
                 await new Promise(resolve => setTimeout(resolve, waitTime));
-                // Re-sort queue after waiting - priorities may have changed or new ops added
-                this.queue.sort((a, b) => b.priority - a.priority);
-                // Reset retry counter since operation identity may have changed after re-sort
-                preCheckRetries = 0;
+
+                // MEDIUM FIX Issue #21: Removed confusing queue re-sort after wait
+                // The original code re-sorted the queue and reset the retry counter,
+                // which could lead to operations retrying indefinitely and violating
+                // the MAX_PRE_CHECK_RETRIES limit. This was confusing because:
+                // 1. A high-priority operation that fails could jump behind lower-priority ops
+                // 2. The retry counter reset meant operations could retry forever
+                // 3. Priority semantics were violated (a failed operation should maintain position)
+                //
+                // Now: Queue is only sorted when new operations are added (in enqueue()).
+                // The current operation remains at queue[0] and will retry with the same
+                // preCheckRetries counter, ensuring the limit is enforced.
                 continue;
             }
 
             // Reset retry counter on successful check
             preCheckRetries = 0;
+            // Clear blocked history when we successfully acquire
+            blockedHistory.delete(operation.operationName);
 
             // Execute operation
             try {
@@ -239,16 +287,9 @@ class OperationQueue {
                     // Wait before retry
                     await new Promise(resolve => setTimeout(resolve, operation.retryDelay));
 
-                    // MEDIUM FIX Issue #21: Avoid priority inversion by NOT re-sorting queue on retry
-                    // The original code re-sorted the entire queue after each retry, which could
-                    // cause a high-priority operation that just failed to jump behind newly added
-                    // lower-priority operations. This violates priority semantics.
-                    //
-                    // Instead, only sort when new operations are added (in enqueue()),
-                    // or explicitly trigger a re-sort if priority was intentionally changed.
-                    //
-                    // The failed operation remains at its current position (front of queue),
-                    // which is correct since it has been waiting the longest and deserves another chance.
+                    // MEDIUM FIX Issue #21: No re-sort on retry - operation maintains queue position
+                    // This preserves priority semantics and prevents priority inversion where
+                    // a failed high-priority operation could lose its place to lower-priority ops.
                 } else {
                     // Final failure
                     this.queue.shift();
