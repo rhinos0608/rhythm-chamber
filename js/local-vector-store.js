@@ -140,8 +140,10 @@ let requestIdCounter = 0;
 let workerInitPromise = null;
 let workerReady = false;
 
-// Issue 1 fix: Track failed persists for retry
-let failedPersists = new Set();
+// Issue 7 fix: Track failed persists for retry with metadata
+// Changed from Set to Map for O(1) cleanup and validation
+// Structure: Map<id, {timestamp, retryCount, lastError}>
+let failedPersists = new Map();
 
 
 // ==========================================
@@ -194,7 +196,21 @@ async function initWorkerAsync() {
                 // This handles the case where a search timed out but the worker responds late
                 const pending = pendingSearches.get(id);
                 if (!pending) {
-                    // Already timed out or cancelled - ignore late response
+                    // ENHANCEMENT: Log late response for debugging (Issue #4)
+                    const now = Date.now();
+                    const age = id.includes('_') ? {
+                        extracted: id.split('_').pop(),
+                        ageMs: now - parseInt(id.split('_').pop())
+                    } : { unknown: true };
+
+                    console.warn('[LocalVectorStore] LATE SEARCH RESPONSE DETECTED:', {
+                        searchId: id,
+                        messageType: type,
+                        timestamp: now,
+                        requestAge: age,
+                        pendingSearches: Array.from(pendingSearches.keys()),
+                        reason: 'Search already completed, timed out, or cancelled'
+                    });
                     return;
                 }
 
@@ -522,33 +538,63 @@ const LocalVectorStore = {
         const item = { id, vector, payload };
         const evicted = vectors.set(id, item);
 
-        // Issue 1 fix: Retry any previously failed persists before new one
+        // Issue 7 fix: Optimized retry logic with O(1) validation and cleanup
         if (failedPersists.size > 0) {
-            const retryIds = Array.from(failedPersists);
-            for (const retryId of retryIds) {
-                const retryItem = vectors.get(retryId);
-                if (retryItem) {
-                    try {
-                        await persistVector(retryItem);
-                        failedPersists.delete(retryId);
-                        console.log(`[LocalVectorStore] Successfully retried persist for ${retryId}`);
-                    } catch (e) {
-                        console.warn(`[LocalVectorStore] Retry persist still failing for ${retryId}:`, e);
-                        // Keep in failedPersists for next retry
-                    }
-                } else {
-                    // Item no longer in memory, remove from failed set
+            const now = Date.now();
+            const RETRY_TIMEOUT = 60000; // 1 minute
+            const MAX_RETRIES = 3;
+
+            // Use Map.entries() for O(1) direct access (no Array.from conversion)
+            for (const [retryId, metadata] of failedPersists.entries()) {
+                // Skip if too old (stale cleanup)
+                if (now - metadata.timestamp > RETRY_TIMEOUT) {
                     failedPersists.delete(retryId);
+                    console.log(`[LocalVectorStore] Removed stale retry entry for ${retryId}`);
+                    continue;
+                }
+
+                // Skip if max retries exceeded
+                if (metadata.retryCount >= MAX_RETRIES) {
+                    failedPersists.delete(retryId);
+                    console.warn(`[LocalVectorStore] Max retries exceeded for ${retryId}, giving up`);
+                    continue;
+                }
+
+                // Validate retry target still exists before attempting (prevents data loss)
+                const retryItem = vectors.get(retryId);
+                if (!retryItem) {
+                    // Vector was deleted - clean up retry entry immediately
+                    failedPersists.delete(retryId);
+                    console.log(`[LocalVectorStore] Vector ${retryId} no longer exists, cleaned up retry entry`);
+                    continue;
+                }
+
+                // Attempt retry
+                try {
+                    await persistVector(retryItem);
+                    failedPersists.delete(retryId);
+                    console.log(`[LocalVectorStore] Successfully retried persist for ${retryId} (attempt ${metadata.retryCount + 1})`);
+                } catch (e) {
+                    // Update retry metadata
+                    metadata.retryCount++;
+                    metadata.timestamp = now;
+                    metadata.lastError = e.message;
+                    console.warn(`[LocalVectorStore] Retry ${metadata.retryCount}/${MAX_RETRIES} failed for ${retryId}:`, e);
+                    // Keep in failedPersists for next retry
                 }
             }
         }
 
-        // Persist to IndexedDB - track failures for retry
+        // Persist to IndexedDB - track failures for retry with metadata
         try {
             await persistVector(item);
         } catch (e) {
             console.warn('[LocalVectorStore] Persist failed, will retry on next operation:', e);
-            failedPersists.add(id);
+            failedPersists.set(id, {
+                timestamp: Date.now(),
+                retryCount: 0,
+                lastError: e.message
+            });
         }
 
         // Clean up any evicted items from IndexedDB
@@ -645,7 +691,14 @@ const LocalVectorStore = {
      */
     async searchAsync(queryVector, limit = 5, threshold = 0.5) {
         if (!queryVector || queryVector.length === 0) {
+            console.warn('[LocalVectorStore] Query vector is empty');
             return [];
+        }
+
+        // Validate vector dimension matches expected (all-MiniLM-L6-v2 outputs 384 dimensions)
+        const expectedDimensions = 384;
+        if (queryVector.length !== expectedDimensions) {
+            throw new Error(`[LocalVectorStore] Query vector has wrong dimensions: ${queryVector.length}, expected ${expectedDimensions}`);
         }
 
         // CRITICAL: If vectors cache is null (page reload), we need to fully reinitialize
@@ -653,6 +706,12 @@ const LocalVectorStore = {
         if (!vectors) {
             console.warn('[LocalVectorStore] Vectors cache not initialized after page reload, calling init() to reload from IndexedDB');
             await this.init();
+        }
+
+        // Validate we have vectors to search after initialization
+        if (!vectors || vectors.size === 0) {
+            console.warn('[LocalVectorStore] No vectors available to search - embeddings may not have been generated');
+            return [];
         }
 
         // Try to use worker for non-blocking search (async initialization prevents race)
@@ -741,6 +800,13 @@ const LocalVectorStore = {
     async delete(id) {
         vectors.delete(id);
 
+        // Issue 7 fix: Clean up retry entries when vectors are deleted
+        // This prevents attempting to persist vectors that no longer exist
+        if (failedPersists.has(id)) {
+            failedPersists.delete(id);
+            console.log(`[LocalVectorStore] Cleaned up retry entry for deleted vector ${id}`);
+        }
+
         if (db) {
             const transaction = db.transaction([STORE_NAME], 'readwrite');
             const store = transaction.objectStore(STORE_NAME);
@@ -764,6 +830,13 @@ const LocalVectorStore = {
      * Clear all vectors
      */
     async clear() {
+        // Issue 7 fix: Clear retry queue when clearing all vectors
+        const retryCount = failedPersists.size;
+        failedPersists.clear();
+        if (retryCount > 0) {
+            console.log(`[LocalVectorStore] Cleared ${retryCount} retry entries`);
+        }
+
         await clearDB();
     },
 
@@ -781,6 +854,11 @@ const LocalVectorStore = {
                 sharedMemory: {
                     available: SHARED_MEMORY_AVAILABLE,
                     enabled: false
+                },
+                retryQueue: {
+                    size: 0,
+                    oldestEntry: null,
+                    maxRetries: 0
                 }
             };
         }
@@ -806,6 +884,20 @@ const LocalVectorStore = {
         // Get LRU stats
         const lruStats = vectors.getStats();
 
+        // Issue 7 fix: Add retry queue metrics
+        let oldestRetry = null;
+        let maxRetries = 0;
+        const now = Date.now();
+
+        for (const [id, metadata] of failedPersists) {
+            if (!oldestRetry || metadata.timestamp < oldestRetry) {
+                oldestRetry = metadata.timestamp;
+            }
+            if (metadata.retryCount > maxRetries) {
+                maxRetries = metadata.retryCount;
+            }
+        }
+
         return {
             count,
             maxVectors: currentMaxVectors,
@@ -829,6 +921,11 @@ const LocalVectorStore = {
             sharedMemory: {
                 available: SHARED_MEMORY_AVAILABLE,
                 enabled: SHARED_MEMORY_AVAILABLE && count > 0
+            },
+            retryQueue: {
+                size: failedPersists.size,
+                oldestEntryAge: oldestRetry ? now - oldestRetry : null,
+                maxRetries
             }
         };
     },
