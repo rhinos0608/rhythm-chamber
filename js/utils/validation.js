@@ -13,6 +13,8 @@
  * @module utils/validation
  */
 
+import { hashMessageContent } from './crypto-hashing.js';
+
 // ==========================================
 // Validation Result Types
 // ==========================================
@@ -50,40 +52,6 @@ let _lruTail = null; // Least recently used
 let _lruCache = new Map(); // hash -> node
 let _lruSize = 0;
 
-/**
- * Generate a cryptographic hash for message content using SHA-256
- * Provides collision-resistant hashing for duplicate detection
- *
- * @param {string} content - The message content to hash
- * @returns {Promise<string>} Hex string hash (64 characters for SHA-256)
- * @private
- */
-async function _hashMessageContent(content) {
-    if (!content || typeof content !== 'string') return '';
-
-    try {
-        const encoder = new TextEncoder();
-        const data = encoder.encode(content);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    } catch (error) {
-        // Fallback to simple hash if crypto API unavailable
-        console.warn('[Validation] Crypto API unavailable, using fallback hash');
-        let hash = 0x811c9dc5;
-        for (let i = 0; i < content.length; i++) {
-            hash ^= content.charCodeAt(i);
-            hash = Math.imul(hash, 0x01000193);
-        }
-        // Combine with second hash for better distribution
-        let hash2 = 0x811c9dc5;
-        for (let i = content.length - 1; i >= 0; i--) {
-            hash2 ^= content.charCodeAt(i);
-            hash2 = Math.imul(hash2, 0x01000193);
-        }
-        return ((hash >>> 0) + '_' + (hash2 >>> 0)).toString(16);
-    }
-}
 
 /**
  * Validate a message content
@@ -164,7 +132,7 @@ export async function validateMessage(message, options = {}) {
 
     // Check for duplicate content (skip if regenerating)
     if (!skipDuplicateCheck) {
-        const messageHash = await _hashMessageContent(message);
+        const messageHash = await hashMessageContent(message);
         if (_lruCache.has(messageHash)) {
             return {
                 valid: false,
@@ -187,7 +155,7 @@ export async function validateMessage(message, options = {}) {
  * await trackProcessedMessage(userMessage);
  */
 export async function trackProcessedMessage(message) {
-    const messageHash = await _hashMessageContent(message);
+    const messageHash = await hashMessageContent(message);
     if (!messageHash) return messageHash;
 
     const now = Date.now();
@@ -312,7 +280,7 @@ export function clearProcessedMessages() {
  * await removeProcessedMessage(originalMessage);
  */
 export async function removeProcessedMessage(message) {
-    const messageHash = await _hashMessageContent(message);
+    const messageHash = await hashMessageContent(message);
     if (!messageHash) return false;
 
     const node = _lruCache.get(messageHash);
