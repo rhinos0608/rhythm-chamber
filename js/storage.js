@@ -23,6 +23,7 @@ import { ConfigAPI } from './storage/config-api.js';
 import { SyncManager } from './storage/sync-strategy.js';
 import { Crypto } from './security/crypto.js';
 import { STORAGE_EVENT_SCHEMAS } from './storage/storage-event-schemas.js';
+import { AutoRepairService } from './storage/auto-repair.js';
 
 // ==========================================
 // Security Enforcement
@@ -51,40 +52,21 @@ let sessionOnlyMode = false;
 let dataPersistenceConsent = true;
 
 // ==========================================
-// Auto-Repair Configuration
+// Service Instantiation
 // ==========================================
 
-/**
- * Auto-repair configuration for storage consistency issues
- * When enabled, automatically attempts to repair detected issues
- */
-const autoRepairConfig = {
-  enabled: true,
-  // Maximum number of repair attempts per issue type
-  maxAttempts: 3,
-  // Whether to repair orphaned data (data without parent references)
-  repairOrphans: true,
-  // Whether to rebuild corrupted indexes
-  rebuildIndexes: true,
-  // Whether to recalculate inconsistent metadata
-  recalcMetadata: true,
-  // Whether to attempt data recovery for corrupted records
-  attemptRecovery: true,
-  // Backup data before repair operations
-  backupBeforeRepair: true
-};
+const autoRepairService = new AutoRepairService(EventBus, IndexedDBCore);
 
-/**
- * Repair log for tracking all repair actions
- */
-const repairLog = [];
+// ==========================================
+// Auto-Repair Configuration
+// ==========================================
 
 /**
  * Get current auto-repair configuration
  * @returns {Object} Copy of auto-repair configuration
  */
 function getAutoRepairConfig() {
-  return { ...autoRepairConfig };
+  return autoRepairService.getAutoRepairConfig();
 }
 
 /**
@@ -93,10 +75,10 @@ function getAutoRepairConfig() {
  * @returns {Object} Updated configuration
  */
 function setAutoRepairConfig(config) {
-  Object.assign(autoRepairConfig, config);
-  console.log('[Storage] Auto-repair config updated:', autoRepairConfig);
-  EventBus.emit('storage:autorepair_config_changed', { config: getAutoRepairConfig() });
-  return getAutoRepairConfig();
+  console.log('[Storage] Auto-repair config updated:', config);
+  const updated = autoRepairService.setAutoRepairConfig(config);
+  EventBus.emit('storage:autorepair_config_changed', { config: updated });
+  return updated;
 }
 
 /**
@@ -105,10 +87,12 @@ function setAutoRepairConfig(config) {
  * @returns {boolean} Current enabled state
  */
 function setAutoRepairEnabled(enabled) {
-  autoRepairConfig.enabled = !!enabled;
+  const config = autoRepairService.getAutoRepairConfig();
+  config.enabled = !!enabled;
   console.log(`[Storage] Auto-repair ${enabled ? 'enabled' : 'disabled'}`);
-  EventBus.emit('storage:autorepair_toggled', { enabled: autoRepairConfig.enabled });
-  return autoRepairConfig.enabled;
+  autoRepairService.setAutoRepairConfig(config);
+  EventBus.emit('storage:autorepair_toggled', { enabled: config.enabled });
+  return config.enabled;
 }
 
 /**
@@ -116,7 +100,8 @@ function setAutoRepairEnabled(enabled) {
  * @returns {boolean}
  */
 function isAutoRepairEnabled() {
-  return autoRepairConfig.enabled;
+  const config = autoRepairService.getAutoRepairConfig();
+  return config.enabled;
 }
 
 /**
@@ -134,7 +119,7 @@ function logRepair(issueType, action, success, details = null) {
     success,
     details
   };
-  repairLog.push(entry);
+  autoRepairService._logRepair(action, entry);
   console.log(`[Storage] Repair ${success ? 'succeeded' : 'failed'}: ${issueType} - ${action}`);
   EventBus.emit('storage:repair_action', entry);
 }
@@ -147,7 +132,7 @@ function logRepair(issueType, action, success, details = null) {
  * @returns {Array} Repair log entries
  */
 function getRepairLog(options = {}) {
-  let filtered = [...repairLog];
+  let filtered = autoRepairService.getRepairLog();
 
   if (options.issueType) {
     filtered = filtered.filter(entry => entry.issueType === options.issueType);
@@ -164,7 +149,7 @@ function getRepairLog(options = {}) {
  * Clear repair log
  */
 function clearRepairLog() {
-  repairLog.length = 0;
+  autoRepairService.clearRepairLog();
   console.log('[Storage] Repair log cleared');
 }
 
