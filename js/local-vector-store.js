@@ -136,9 +136,12 @@ let searchWorker = null;
 let pendingSearches = new Map(); // id -> { resolve, reject }
 let requestIdCounter = 0;
 
-// Race condition fix: Single initialization promise ensures only one worker is created
+// CRITICAL FIX: Worker initialization semaphore prevents concurrent worker creation
+// Multiple concurrent calls to searchAsync() can trigger multiple worker creation attempts
+// This semaphore ensures only one worker is created at a time, with timeout-based recovery
 let workerInitPromise = null;
 let workerReady = false;
+let initStartTime = 0; // Track when init started for timeout detection
 
 // Issue 7 fix: Track failed persists for retry with metadata
 // Changed from Set to Map for O(1) cleanup and validation
@@ -161,24 +164,45 @@ const MAX_RETRIES_PER_UPSERT = 10;
 // ==========================================
 
 /**
- * Initialize the search worker asynchronously
- * Uses promise-based initialization to prevent race condition when
- * multiple concurrent calls try to create the worker simultaneously.
- * 
+ * Initialize the search worker asynchronously with initialization semaphore
+ *
+ * CRITICAL FIX: Worker initialization race condition
+ * Multiple concurrent calls to searchAsync() can trigger multiple worker creation attempts,
+ * causing resource leaks and inconsistent state. This fix implements a semaphore pattern
+ * with timeout-based recovery to ensure only one worker is created at a time.
+ *
  * Handles offline/network errors gracefully:
  * - Detects network failures (script fetch errors)
  * - Prevents retry loops on persistent network issues
  * - Falls back to sync search without breaking the app
- * 
+ * - Uses timeout to detect and recover from hung initialization
+ *
  * @returns {Promise<Worker|null>} The worker instance or null if unavailable
  */
 async function initWorkerAsync() {
     // Already initialized
     if (searchWorker && workerReady) return searchWorker;
 
-    // Issue 3 fix: Check and assign synchronously before any await to prevent race condition
+    // CRITICAL FIX: Check for stale initialization promise with timeout
+    // If initialization has been in progress for >5 seconds, it's likely hung
+    // and we should allow retry by clearing the stale promise
+    if (workerInitPromise && initStartTime > 0) {
+        const initDuration = Date.now() - initStartTime;
+        if (initDuration > 5000) {
+            console.warn(`[LocalVectorStore] Worker init timeout after ${initDuration}ms, retrying`);
+            workerInitPromise = null;
+            initStartTime = 0;
+        }
+    }
+
+    // CRITICAL FIX: Check and assign synchronously before any await to prevent race condition
+    // This ensures two concurrent calls both see the same promise (initialization semaphore)
     // Initialization in progress - wait for it
     if (workerInitPromise) return workerInitPromise;
+
+    // CRITICAL FIX: Record start time IMMEDIATELY before creating promise
+    // This ensures timeout detection works even if concurrent calls occur
+    initStartTime = Date.now();
 
     // Start initialization - set promise IMMEDIATELY before any async code
     // This ensures two concurrent calls both see the same promise
@@ -283,6 +307,7 @@ async function initWorkerAsync() {
 
                 // Clear workerInitPromise to allow future retries after failure
                 workerInitPromise = null;
+                initStartTime = 0;
 
                 // For network errors, don't retry immediately
                 // The sync fallback will handle all searches
@@ -305,6 +330,7 @@ async function initWorkerAsync() {
             }
 
             workerInitPromise = null; // Allow retry
+            initStartTime = 0;
             resolve(null);
         }
     });
