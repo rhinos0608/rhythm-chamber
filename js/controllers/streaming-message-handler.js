@@ -43,9 +43,16 @@ function isValidToolName(toolName) {
 /** Global SSE stream buffer instance for reordering out-of-order chunks */
 const streamBuffer = new StreamBuffer();
 
+/** Timeout for chunk processing (30 seconds) - prevents stale buffer corruption */
+const CHUNK_PROCESSING_TIMEOUT = 30000;
+
+/** Active timeout tracker for cleanup */
+let activeTimeout = null;
+
 /**
- * Process a chunk with sequence validation
+ * Process a chunk with sequence validation and timeout protection
  * Buffers out-of-order chunks and processes in-order
+ * CRITICAL: Timeout prevents stale buffer corruption during network interruptions
  *
  * @param {number} seq - Sequence number of the chunk
  * @param {string} data - Chunk data
@@ -53,13 +60,50 @@ const streamBuffer = new StreamBuffer();
  * @returns {boolean} True if processed immediately, false if buffered
  */
 function processSequencedChunk(seq, data, handler) {
-    return streamBuffer.process(seq, data, handler);
+    // Clear any existing timeout from previous chunk
+    // This creates a sliding window: each chunk resets the 30-second timer
+    if (activeTimeout) {
+        clearTimeout(activeTimeout);
+        activeTimeout = null;
+    }
+
+    // Add timeout protection for network interruption scenarios
+    // CRITICAL: If no chunk arrives within 30 seconds, assume stream failed
+    // and reset buffer to prevent stale data corruption in subsequent streams
+    activeTimeout = setTimeout(() => {
+        console.warn('[StreamingMessageHandler] Chunk processing timeout - resetting buffer to prevent corruption');
+        console.warn('[StreamingMessageHandler] This indicates a network interruption or stalled stream');
+        resetSequenceBuffer();
+        activeTimeout = null;
+    }, CHUNK_PROCESSING_TIMEOUT);
+
+    try {
+        return streamBuffer.process(seq, data, handler);
+        // NOTE: Timeout is NOT cleared here intentionally
+        // The timeout stays active until the next chunk arrives (sliding window)
+        // or until manual reset/explicit cleanup
+    } catch (error) {
+        // Ensure timeout is cleared on error to prevent cascading failures
+        if (activeTimeout) {
+            clearTimeout(activeTimeout);
+            activeTimeout = null;
+        }
+        console.error('[StreamingMessageHandler] Error processing sequenced chunk:', error);
+        throw error;
+    }
 }
 
 /**
  * Reset the sequence buffer (call at stream start)
+ * CRITICAL: Clears any active timeout to prevent premature buffer reset
  */
 function resetSequenceBuffer() {
+    // Clear any pending timeout to avoid race conditions
+    if (activeTimeout) {
+        clearTimeout(activeTimeout);
+        activeTimeout = null;
+    }
+
     streamBuffer.reset();
 }
 
