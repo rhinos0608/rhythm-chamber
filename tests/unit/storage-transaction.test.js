@@ -205,3 +205,284 @@ describe('Storage.beginTransaction', () => {
         expect(window.localStorage.getItem('k2')).toBe('v2');
     });
 });
+
+describe('CRITICAL FIX: Fatal State Recovery (Issue #1)', () => {
+    it('blocks transactions when in fatal state', async () => {
+        // Manually set fatal state
+        const { clearFatalState } = StorageTransaction;
+        StorageTransaction.FATAL_STATE = {
+            isFatal: true,
+            reason: 'Test fatal state',
+            timestamp: Date.now(),
+            transactionId: 'test-txn-123',
+            compensationLogCount: 2
+        };
+
+        // Attempt to start a new transaction
+        await expect(StorageTransaction.transaction(async (tx) => {
+            await tx.put('localstorage', 'k1', 'v1');
+        })).rejects.toThrow('System in fatal error state');
+
+        // Clear fatal state
+        clearFatalState('Test cleanup');
+
+        // Verify transactions work again
+        const result = await StorageTransaction.transaction(async (tx) => {
+            await tx.put('localstorage', 'k1', 'v1');
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('provides fatal state details', async () => {
+        // Manually set fatal state
+        StorageTransaction.FATAL_STATE = {
+            isFatal: true,
+            reason: 'Test fatal state',
+            timestamp: Date.now(),
+            transactionId: 'test-txn-456',
+            compensationLogCount: 3
+        };
+
+        const fatalState = StorageTransaction.getFatalState();
+        expect(fatalState).not.toBeNull();
+        expect(fatalState.isFatal).toBe(true);
+        expect(fatalState.reason).toBe('Test fatal state');
+        expect(fatalState.transactionId).toBe('test-txn-456');
+        expect(fatalState.compensationLogCount).toBe(3);
+
+        // Cleanup
+        StorageTransaction.clearFatalState('Test cleanup');
+    });
+
+    it('clears fatal state and emits event', async () => {
+        const { EventBus } = await import('../../js/services/event-bus.js');
+
+        // Manually set fatal state
+        StorageTransaction.FATAL_STATE = {
+            isFatal: true,
+            reason: 'Test fatal state',
+            timestamp: Date.now(),
+            transactionId: 'test-txn-789',
+            compensationLogCount: 1
+        };
+
+        // Clear fatal state
+        StorageTransaction.clearFatalState('Manual recovery test');
+
+        // Verify state cleared
+        expect(StorageTransaction.isFatalState()).toBe(false);
+        expect(StorageTransaction.getFatalState()).toBeNull();
+
+        // Verify event emitted
+        expect(EventBus.emit).toHaveBeenCalledWith(
+            'transaction:fatal_cleared',
+            expect.objectContaining({
+                reason: 'Manual recovery test',
+                timestamp: expect.any(Number)
+            })
+        );
+    });
+});
+
+describe('CRITICAL FIX: Compensation Log Multi-Level Fallback (Issue #2)', () => {
+    it('stores compensation logs in localStorage when IndexedDB fails', async () => {
+        // Mock IndexedDB to fail
+        const originalPut = mockIndexedDBCore.put;
+        mockIndexedDBCore.put = vi.fn(() => {
+            throw new Error('IndexedDB quota exceeded');
+        });
+
+        // Mock localStorage to work
+        const lsSetItemSpy = vi.spyOn(window.localStorage, 'setItem');
+
+        // Create a transaction that will fail rollback
+        const originalLocalStorageRemoveItem = window.localStorage.removeItem;
+        const removeItemSpy = vi.spyOn(window.localStorage, 'removeItem').mockImplementation(() => {
+            throw new Error('Rollback failure for testing');
+        });
+
+        try {
+            await StorageTransaction.transaction(async (tx) => {
+                await tx.put('localstorage', 'test_key', 'test_value');
+                // This will fail rollback
+                window.localStorage.removeItem = () => {
+                    throw new Error('Simulated rollback failure');
+                };
+            });
+        } catch (error) {
+            // Expected to fail
+        } finally {
+            removeItemSpy.mockRestore();
+        }
+
+        // Verify localStorage was used as fallback
+        expect(lsSetItemSpy).toHaveBeenCalledWith(
+            '_transaction_compensation_logs',
+            expect.any(String)
+        );
+
+        // Verify compensation logs exist in localStorage
+        const lsLogs = JSON.parse(window.localStorage.getItem('_transaction_compensation_logs') || '[]');
+        expect(lsLogs.length).toBeGreaterThan(0);
+
+        // Restore IndexedDB
+        mockIndexedDBCore.put = originalPut;
+
+        // Cleanup
+        window.localStorage.removeItem('_transaction_compensation_logs');
+    });
+
+    it('falls back to in-memory storage when both IndexedDB and localStorage fail', async () => {
+        // Mock both IndexedDB and localStorage to fail
+        const originalPut = mockIndexedDBCore.put;
+        mockIndexedDBCore.put = vi.fn(() => {
+            throw new Error('IndexedDB quota exceeded');
+        });
+
+        const lsSetItemSpy = vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+            throw new Error('localStorage quota exceeded');
+        });
+
+        try {
+            await StorageTransaction.transaction(async (tx) => {
+                await tx.put('localstorage', 'test_key_mem', 'test_value');
+                window.localStorage.removeItem = () => {
+                    throw new Error('Simulated rollback failure');
+                };
+            });
+        } catch (error) {
+            // Expected to fail
+        }
+
+        // Verify in-memory compensation logs exist
+        const memoryLogs = StorageTransaction.getAllInMemoryCompensationLogs();
+        expect(memoryLogs.length).toBeGreaterThan(0);
+
+        // Verify the log has the expected structure
+        const log = memoryLogs[0];
+        expect(log.storage).toBe('memory');
+        expect(log.resolved).toBe(false);
+        expect(log.entries).toBeDefined();
+
+        // Restore functions
+        mockIndexedDBCore.put = originalPut;
+        lsSetItemSpy.mockRestore();
+
+        // Cleanup
+        StorageTransaction.clearInMemoryCompensationLog(log.id);
+    });
+
+    it('retrieves compensation logs from all storage levels', async () => {
+        // Add logs to different storage levels
+        const transactionId1 = 'test-txn-ls-' + Date.now();
+        const transactionId2 = 'test-txn-mem-' + Date.now();
+
+        // Add to localStorage
+        const lsLogs = [{
+            id: transactionId1,
+            entries: [{ operation: 'test1' }],
+            timestamp: Date.now(),
+            resolved: false
+        }];
+        window.localStorage.setItem('_transaction_compensation_logs', JSON.stringify(lsLogs));
+
+        // Add to memory
+        StorageTransaction.addInMemoryCompensationLog(transactionId2, [{ operation: 'test2' }]);
+
+        // Retrieve all logs
+        const allLogs = await StorageTransaction.getCompensationLogs();
+
+        // Verify both logs are present
+        expect(allLogs.length).toBeGreaterThanOrEqual(2);
+
+        const log1 = allLogs.find(l => l.id === transactionId1);
+        const log2 = allLogs.find(l => l.id === transactionId2);
+
+        expect(log1).toBeDefined();
+        expect(log2).toBeDefined();
+
+        // Cleanup
+        window.localStorage.removeItem('_transaction_compensation_logs');
+        StorageTransaction.clearInMemoryCompensationLog(transactionId2);
+    });
+
+    it('resolves compensation logs across all storage levels', async () => {
+        const transactionId1 = 'test-resolve-ls-' + Date.now();
+        const transactionId2 = 'test-resolve-mem-' + Date.now();
+
+        // Add logs to both localStorage and memory
+        const lsLogs = [{
+            id: transactionId1,
+            entries: [{ operation: 'test' }],
+            timestamp: Date.now(),
+            resolved: false
+        }];
+        window.localStorage.setItem('_transaction_compensation_logs', JSON.stringify(lsLogs));
+        StorageTransaction.addInMemoryCompensationLog(transactionId2, [{ operation: 'test' }]);
+
+        // Resolve both logs
+        const resolved1 = await StorageTransaction.resolveCompensationLog(transactionId1);
+        const resolved2 = await StorageTransaction.resolveCompensationLog(transactionId2);
+
+        expect(resolved1).toBe(true);
+        expect(resolved2).toBe(true);
+
+        // Verify they are marked as resolved
+        const allLogs = await StorageTransaction.getCompensationLogs();
+        const log1 = allLogs.find(l => l.id === transactionId1);
+        const log2 = allLogs.find(l => l.id === transactionId2);
+
+        expect(log1?.resolved).toBe(true);
+        expect(log2?.resolved).toBe(true);
+
+        // Cleanup
+        window.localStorage.removeItem('_transaction_compensation_logs');
+        StorageTransaction.clearInMemoryCompensationLog(transactionId2);
+    });
+
+    it('clears resolved compensation logs from all storage levels', async () => {
+        const transactionId1 = 'test-clear-ls-' + Date.now();
+        const transactionId2 = 'test-clear-mem-' + Date.now();
+
+        // Add logs
+        const lsLogs = [{
+            id: transactionId1,
+            entries: [{ operation: 'test' }],
+            timestamp: Date.now(),
+            resolved: true
+        }];
+        window.localStorage.setItem('_transaction_compensation_logs', JSON.stringify(lsLogs));
+        StorageTransaction.addInMemoryCompensationLog(transactionId2, [{ operation: 'test' }]);
+
+        // Mark memory log as resolved
+        await StorageTransaction.resolveCompensationLog(transactionId2);
+
+        // Clear resolved logs
+        const clearedCount = await StorageTransaction.clearResolvedCompensationLogs();
+
+        expect(clearedCount).toBeGreaterThan(0);
+
+        // Verify they are cleared
+        const allLogs = await StorageTransaction.getCompensationLogs();
+        expect(allLogs.find(l => l.id === transactionId1 && l.resolved === true)).toBeUndefined();
+
+        // Cleanup
+        window.localStorage.removeItem('_transaction_compensation_logs');
+    });
+
+    it('prevents unbounded growth of in-memory compensation logs', async () => {
+        // Add more than MAX_MEMORY_LOGS (100) entries
+        for (let i = 0; i < 105; i++) {
+            StorageTransaction.addInMemoryCompensationLog(`test-txn-${i}`, [{ operation: `test${i}` }]);
+        }
+
+        // Verify we don't exceed the limit
+        const memoryLogs = StorageTransaction.getAllInMemoryCompensationLogs();
+        expect(memoryLogs.length).toBeLessThanOrEqual(100);
+
+        // Cleanup
+        for (const log of memoryLogs) {
+            StorageTransaction.clearInMemoryCompensationLog(log.id);
+        }
+    });
+});
