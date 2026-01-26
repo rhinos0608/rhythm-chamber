@@ -10,6 +10,7 @@
 'use strict';
 
 import { escapeHtml } from '../utils/html-escape.js';
+import { Common } from '../utils/common.js';
 
 // ==========================================
 // Constants
@@ -72,26 +73,8 @@ async function getStorageEstimate() {
  * @param {number} decimals - Decimal places (default 1)
  * @returns {string} Formatted string (e.g., "45.2 MB")
  */
-function formatBytes(bytes, decimals = 1) {
-    if (bytes === 0) return '0 Bytes';
-
-    // Handle non-finite values
-    if (!Number.isFinite(bytes)) return 'Unknown';
-
-    // Handle negative values
-    const negative = bytes < 0;
-    const absBytes = Math.abs(bytes);
-
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    let i = Math.floor(Math.log(absBytes) / Math.log(k));
-
-    // Clamp to valid range to avoid out-of-bounds access
-    i = Math.max(0, Math.min(i, sizes.length - 1));
-
-    const value = parseFloat((absBytes / Math.pow(k, i)).toFixed(decimals));
-    return (negative ? '-' : '') + value + ' ' + sizes[i];
-}
+// Use formatBytes from Common utilities
+const { formatBytes } = Common;
 
 /**
  * Get quota status with human-readable values

@@ -129,8 +129,10 @@ ollama serve
 - **LM Studio** (`js/providers/lmstudio.js`): Local inference
 - **Ollama** (`js/providers/ollama-adapter.js`): Local inference adapter
 
-### 3. Controller Pattern (NEW - 7 Controllers)
+### 3. Controller Pattern (ENHANCED - 15 Controllers)
 UI logic extracted from `app.js` into focused controllers:
+
+#### Core Controllers (7)
 - **ChatUIController** (`js/controllers/chat-ui-controller.js`): Message rendering, streaming, markdown
 - **SidebarController** (`js/controllers/sidebar-controller.js`): Session list management
 - **ViewController** (`js/controllers/view-controller.js`): Transitions and state
@@ -139,8 +141,20 @@ UI logic extracted from `app.js` into focused controllers:
 - **DemoController** (`js/controllers/demo-controller.js`): Demo mode
 - **ResetController** (`js/controllers/reset-controller.js`): Reset operations
 
-### 4. Service Pattern (NEW - 17 Services)
+#### Advanced Controllers (NEW - 8)
+- **MessageRenderer** (`js/controllers/message-renderer.js`): Advanced message rendering with artifacts
+- **StreamingMessageHandler** (`js/controllers/streaming-message-handler.js`): Real-time streaming response handling
+- **ChatInputManager** (`js/controllers/chat-input-manager.js`): Advanced input handling with validation
+- **MessageActions** (`js/controllers/message-actions.js`): Message interaction handlers (regenerate, edit, delete)
+- **ArtifactRenderer** (`js/controllers/artifact-renderer.js`): Data visualization and chart rendering
+- **StreamingController** (`js/controllers/streaming-controller.js`): Stream coordination and buffering
+- **ErrorBoundaryController** (`js/controllers/error-boundary-controller.js`): Error handling and recovery
+- **AnalyticsController** (`js/controllers/analytics-controller.js`): User behavior tracking and insights
+
+### 4. Service Pattern (ENHANCED - 25+ Services)
 Extracted from God objects into independent services:
+
+#### Core Services (17)
 - **MessageOperations** (`js/services/message-operations.js`): Message operations (regenerate, delete, edit, query context)
 - **SessionManager** (`js/services/session-manager.js`): Session lifecycle (create, load, save, delete)
 - **TabCoordinator** (`js/services/tab-coordination.js`): Cross-tab coordination (ENHANCED - heartbeat failover)
@@ -159,10 +173,83 @@ Extracted from God objects into independent services:
 - **TemporalAnalysis** (`js/services/temporal-analysis.js`): 5-year trend visualization (Phase 2)
 - **PlaylistGenerator** (`js/services/playlist-generator.js`): AI playlist creation (Phase 2)
 
-### 5. State Management
+#### Enhanced Services (NEW - 8+)
+- **LLMApiOrchestrator** (`js/services/llm-api-orchestrator.js`): Advanced LLM request routing with load balancing
+- **MessageErrorHandler** (`js/services/message-error-handler.js`): Intelligent error classification and recovery
+- **MessageValidator** (`js/services/message-validator.js`): Advanced message validation and sanitization
+- **StreamProcessor** (`js/services/stream-parser.js`): Real-time stream processing and parsing
+- **AdaptiveCircuitBreaker** (`js/services/adaptive-circuit-breaker.js`): Intelligent circuit breaker with adaptive thresholds
+- **RetryManager** (`js/services/retry-manager.js`): Exponential backoff with jitter and circuit breaker integration
+- **RateLimiter** (`js/services/rate-limiter.js`): Adaptive rate limiting with dynamic adjustment
+- **SecurityService** (`js/services/security-service.js`): Enhanced security monitoring and protection
+
+### 5. Utility Pattern (NEW - 13+ Utilities)
+Specialized utilities for enhanced functionality and reliability:
+
+#### Error Handling Utilities
+- **ErrorHandlingUtils** (`js/utils/error-handling.js`): Comprehensive error classification and recovery
+- **ErrorHandler** (`js/utils/error-handler.js`): Centralized error processing and logging
+
+#### Retry & Resilience Utilities
+- **RetryManager** (`js/utils/retry-manager.js`): Sophisticated retry with backoff and circuit breaker integration
+- **ResilientRetry** (`js/utils/resilient-retry.js`): Enhanced retry patterns with adaptive strategies
+- **AdaptiveRateLimiter** (`js/utils/adaptive-rate-limiter.js`): Dynamic rate limiting based on system conditions
+
+#### Validation Utilities
+- **ValidationUtils** (`js/utils/validation.js`): Advanced input validation and sanitization
+- **SchemaRegistry** (`js/utils/schema-registry.js`): Centralized schema management and validation
+- **FunctionValidator** (`js/utils/function-validator.js`): Runtime function validation and type checking
+
+#### Processing Utilities
+- **StreamBuffer** (`js/utils/stream-buffer.js`): Efficient stream buffering and management
+- **ParserUtils** (`js/utils/parser.js`): Advanced data parsing and transformation
+- **FunctionExecutor** (`js/utils/function-executor.js`): Safe function execution with timeout and error handling
+- **SemanticExecutors** (`js/utils/semantic-executors.js`): Specialized semantic query execution
+
+### 6. State Management
 - **AppState** (`js/state/app-state.js`): Centralized state with demo isolation
 
-### 6. Main Controller (app.js)
+### 7. Enhanced Error Handling & Reliability System (NEW)
+Advanced error handling and resilience patterns for improved user experience:
+
+#### Architecture Overview
+The enhanced error handling system provides:
+- **Intelligent Error Classification**: Automatic categorization of errors (network, API, validation, user input)
+- **Circuit Breaker Patterns**: Prevent cascade failures with adaptive thresholds
+- **Exponential Backoff Retry**: Smart retry with jitter and circuit breaker integration
+- **Graceful Degradation**: Fallback responses when services are unavailable
+- **User-Friendly Error Messages**: Context-aware error guidance and actionable suggestions
+- **Error Recovery**: Automatic recovery mechanisms for common failure scenarios
+
+#### Key Components
+- **Adaptive Circuit Breaker**: Monitors service health and opens circuits when failure rates exceed thresholds
+- **Retry Manager**: Implements exponential backoff with jitter, maximum retry limits, and timeout management
+- **Error Handler**: Centralized error processing with classification, logging, and recovery strategies
+- **Message Validator**: Real-time input validation with sanitization and error prevention
+- **Rate Limiter**: Adaptive rate limiting based on system conditions and user behavior
+
+#### Integration Points
+- **Controllers**: Error boundaries catch and handle UI errors gracefully
+- **Services**: Automatic retry and fallback for API calls
+- **Utilities**: Comprehensive error handling across all operations
+- **User Interface**: Real-time error indicators and recovery options
+
+### 8. Enhanced Streaming & Artifact Processing (NEW)
+Advanced streaming capabilities with real-time data visualization:
+
+#### Streaming Enhancements
+- **Real-time Message Streaming**: Smooth streaming responses with proper buffering
+- **Stream Processing**: Incremental parsing and processing of streaming data
+- **Message Rendering**: Advanced rendering with markdown support and artifact display
+- **Error Recovery**: Automatic recovery from streaming interruptions
+
+#### Artifact Processing
+- **Data Visualization**: Chart rendering for analytics and insights
+- **Artifact Renderer**: Intelligent display of charts, graphs, and visual elements
+- **Streaming Controller**: Coordinates multiple streams with proper synchronization
+- **Message Actions**: Advanced message interactions with real-time updates
+
+### 9. Main Controller (app.js)
 **New Structure:** ~1064 lines (vs 1,426 original) - **~25% reduction!**
 
 **Responsibilities:**

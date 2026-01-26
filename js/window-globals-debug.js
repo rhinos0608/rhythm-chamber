@@ -21,6 +21,7 @@ const DEPRECATED_WINDOW_GLOBALS = [
     'LemonSqueezy',
     // Dev/debug globals (double-underscore prefixed)
     '__COMPATIBILITY_PASSED__',
+    '__DEBUG_LRU_EVICTION',
     '__DEVTOOLS__',
     'AppState',
     'Cards',

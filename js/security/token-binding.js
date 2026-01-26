@@ -9,6 +9,8 @@
 
 'use strict';
 
+import { Common } from '../utils/common.js';
+
 // ==========================================
 // Constants
 // ==========================================
@@ -30,30 +32,17 @@ let _fallbackReason = null;
 // ==========================================
 
 function checkSecureContext() {
-    // In test environments, window.isSecureContext might be undefined
-    // Only check if window exists and isSecureContext is explicitly false
-    if (typeof window !== 'undefined' && window.isSecureContext === false) {
-        return {
-            secure: false,
-            reason: 'Insecure context: App must be accessed via HTTPS or localhost'
-        };
-    }
+    const result = Common.checkSecureContext();
 
-    if (!crypto?.subtle) {
-        return {
-            secure: false,
-            reason: 'Web Crypto API unavailable: Please use a modern browser with crypto.subtle support'
-        };
-    }
-
-    if (typeof crypto?.getRandomValues !== 'function') {
+    // Additional check for getRandomValues
+    if (result.secure && typeof crypto?.getRandomValues !== 'function') {
         return {
             secure: false,
             reason: 'CSPRNG unavailable: crypto.getRandomValues is required for secure operations'
         };
     }
 
-    return { secure: true };
+    return result;
 }
 
 /**

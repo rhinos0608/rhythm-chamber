@@ -37,7 +37,7 @@
       - frame-src 'self' https://*.lemonsqueezy.com: Allow payment processor iframes
     -->
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self' 'unsafe-eval'; script-src-elem 'self' blob: https://app.lemonsqueezy.com https://assets.lemonsqueezy.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://accounts.spotify.com https://api.spotify.com https://openrouter.ai http://localhost:11434 http://localhost:1234 http://127.0.0.1:11434 http://127.0.0.1:1234 https://*.lemonsqueezy.com; img-src 'self' data: https://i.scdn.co; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'self' https://*.lemonsqueezy.com;">
+        content="default-src 'self'; script-src 'self' 'unsafe-eval'; script-src-elem 'self' blob: https://cdn.jsdelivr.net https://app.lemonsqueezy.com https://assets.lemonsqueezy.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co https://accounts.spotify.com https://api.spotify.com https://openrouter.ai http://localhost:11434 http://localhost:1234 http://127.0.0.1:11434 http://127.0.0.1:1234 https://*.lemonsqueezy.com; img-src 'self' data: https://i.scdn.co; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'self' https://*.lemonsqueezy.com;">
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -48,17 +48,15 @@
 
     <!-- Vendored marked.js (35KB) - loaded locally for privacy and offline support -->
     <script src="js/vendor/marked.min.js"></script>
-    <!-- Vendored Transformers.js (~877KB) - loaded as ES module for CSP compliance and WASM support -->
-    <script type="module">
-        // Import the vendored transformers bundle and expose it globally
-        // This is necessary because transformers.js is an ES module library
-        import * as transformers from './js/vendor/transformers.min.js';
 
-        // Expose to window for non-module code that expects it
-        window.transformers = transformers;
-        window.transformersReady = Promise.resolve(transformers);
-
-        console.log('[Transformers] Loaded and exported to window.transformers');
+    <!-- Import map for Transformers.js - maps to CDN ES module -->
+    <!-- Used by local-embeddings.js for dynamic import -->
+    <script type="importmap">
+    {
+        "imports": {
+            "@xenova/transformers": "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2"
+        }
+    }
     </script>
     <link rel="stylesheet" href="css/styles.css">
 </head>
@@ -386,7 +384,7 @@
         This is a regular (non-module) script so it can execute even if
         the browser doesn't support ES modules.
     -->
-    <script src="js/compatibility.js?v=1"></script>
+    <script src="js/compatibility.js?v=2"></script>
 
     <!--
         Single ES Module Entry Point
@@ -394,7 +392,7 @@
         This replaces 60+ individual script tags with a single module load.
         Config is loaded dynamically by main.js with retry logic.
     -->
-    <script type="module" src="js/main.js?v=5"></script>
+    <script type="module" src="js/main.js?v=6"></script>
 </body>
 
 </html>

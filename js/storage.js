@@ -1,11 +1,11 @@
 /**
  * Storage Facade
- * 
+ *
  * Thin wrapper that exposes the unified Storage API by combining:
  * - storage/indexeddb.js - Core IndexedDB operations
- * - storage/config-api.js - Unified config/token storage  
+ * - storage/config-api.js - Unified config/token storage
  * - storage/migration.js - localStorage → IndexedDB migration
- * 
+ *
  * @module storage
  */
 
@@ -22,6 +22,7 @@ import { ProfileStorage } from './storage/profiles.js';
 import { ConfigAPI } from './storage/config-api.js';
 import { SyncManager } from './storage/sync-strategy.js';
 import { Crypto } from './security/crypto.js';
+import { STORAGE_EVENT_SCHEMAS } from './storage/storage-event-schemas.js';
 
 // ==========================================
 // Security Enforcement
@@ -192,7 +193,9 @@ async function processQueue() {
 
   while (storageQueue.length > 0) {
     const { fn, resolve, reject, isCritical } = storageQueue.shift();
-    if (isCritical) criticalOperationInProgress = true;
+    if (isCritical) {
+      criticalOperationInProgress = true;
+    }
 
     try {
       const result = await fn();
@@ -200,7 +203,10 @@ async function processQueue() {
     } catch (err) {
       reject(err);
     } finally {
-      if (isCritical) criticalOperationInProgress = false;
+      if (isCritical) {
+        const hasPendingCritical = storageQueue.some((item) => item.isCritical);
+        criticalOperationInProgress = hasPendingCritical;
+      }
     }
   }
 
@@ -225,7 +231,9 @@ const STORES = INDEXEDDB_STORES || {
   CHAT_SESSIONS: 'chat_sessions',
   CONFIG: 'config',
   TOKENS: 'tokens',
-  MIGRATION: 'migration'
+  MIGRATION: 'migration',
+  TRANSACTION_JOURNAL: 'TRANSACTION_JOURNAL',
+  TRANSACTION_COMPENSATION: 'TRANSACTION_COMPENSATION'
 };
 
 // ==========================================
@@ -239,44 +247,49 @@ const Storage = {
    * Initialize storage and run migrations
    */
   async init() {
-    // Initialize IndexedDB
-    await IndexedDBCore.initDatabase({
-      onVersionChange: () => {
-        if (criticalOperationInProgress) {
-          console.warn('[Storage] Version change deferred - critical operation in progress');
-          pendingReload = true;
-        } else {
-          console.log('[Storage] Database version change detected');
-          IndexedDBCore.closeDatabase();
-          window.location.reload();
+    return queuedOperation(async () => {
+      // Register storage event schemas with EventBus (decentralized schema management)
+      EventBus.registerSchemas(STORAGE_EVENT_SCHEMAS);
+
+      // Initialize IndexedDB
+      await IndexedDBCore.initDatabaseWithRetry({
+        onVersionChange: () => {
+          if (criticalOperationInProgress) {
+            console.warn('[Storage] Version change deferred - critical operation in progress');
+            pendingReload = true;
+          } else {
+            console.log('[Storage] Database version change detected');
+            IndexedDBCore.closeDatabase();
+            window.location.reload();
+          }
+        },
+        onBlocked: () => {
+          console.warn('[Storage] Database upgrade blocked by other tabs');
         }
-      },
-      onBlocked: () => {
-        console.warn('[Storage] Database upgrade blocked by other tabs');
-      }
-    });
+      });
 
-    // Run migration
-    await StorageMigration.migrateFromLocalStorage();
+      // Run migration
+      await StorageMigration.migrateFromLocalStorage();
 
-    // HNW Wave: Initialize Write-Ahead Log for Safe Mode
-    await WriteAheadLog.init();
+      // HNW Wave: Initialize Write-Ahead Log for Safe Mode
+      await WriteAheadLog.init();
 
-    // HNW Wave: Initialize QuotaManager and register cleanup handler
-    await QuotaManager.init();
-    QuotaManager.on('threshold_exceeded', async (usage) => {
-      if (usage.percent > 90) {
-        console.log(`[Storage] Quota threshold exceeded (${usage.percent.toFixed(1)}%), triggering auto-archive`);
-        try {
-          const result = await ArchiveService.archiveOldStreams();
-          console.log(`[Storage] Auto-archive complete: ${result.archived} streams archived, saved ${(result.savedBytes / 1024 / 1024).toFixed(2)}MB`);
-        } catch (error) {
-          console.error('[Storage] Auto-archive failed:', error);
+      // HNW Wave: Initialize QuotaManager and register cleanup handler
+      await QuotaManager.init();
+      QuotaManager.on('threshold_exceeded', async (usage) => {
+        if (usage.percent > 90) {
+          console.log(`[Storage] Quota threshold exceeded (${usage.percent.toFixed(1)}%), triggering auto-archive`);
+          try {
+            const result = await ArchiveService.archiveOldStreams();
+            console.log(`[Storage] Auto-archive complete: ${result.archived} streams archived, saved ${(result.savedBytes / 1024 / 1024).toFixed(2)}MB`);
+          } catch (error) {
+            console.error('[Storage] Auto-archive failed:', error);
+          }
         }
-      }
-    });
+      });
 
-    return IndexedDBCore.getConnection();
+      return IndexedDBCore.getConnection();
+    }, true);
   },
 
   // ==========================================
@@ -670,7 +683,7 @@ const Storage = {
    * @returns {boolean} True if IndexedDB is initialized
    */
   isInitialized() {
-    return !!(IndexedDBCore?.getConnection?.());
+    return !!(IndexedDBCore?.getConnection?.()) && !IndexedDBCore?.isUsingFallback?.();
   },
 
   async clear() {
@@ -770,613 +783,74 @@ const Storage = {
   // Consistency Validation
   // ==========================================
 
-  /**
-   * Repair orphaned personality data (personality without streams)
-   * Archives personality data for potential recovery rather than deleting
-   * @returns {Promise<{repaired: boolean, action: string}>}
-   */
   async repairOrphanedPersonality() {
-    try {
-      const personality = await this.getPersonality();
-      const streams = await this.getStreams();
-
-      if (!personality) {
-        return { repaired: false, action: 'no_personality' };
-      }
-
-      if (streams && streams.length > 0) {
-        return { repaired: false, action: 'has_streams' };
-      }
-
-      // Archive personality data before clearing (for recovery)
-      const backupKey = `rhythm_chamber_personality_backup_${Date.now()}`;
-      try {
-        localStorage.setItem(backupKey, JSON.stringify({
-          personality,
-          archivedAt: new Date().toISOString(),
-          reason: 'orphaned_without_streams'
-        }));
-      } catch (e) {
-        console.warn('[Storage] Could not create personality backup:', e);
-      }
-
-      // Clear orphaned personality
-      await IndexedDBCore.delete(STORES.PERSONALITY, 'result');
-      logRepair('orphaned_personality', 'archived_and_cleared', true);
-      return { repaired: true, action: 'archived_and_cleared' };
-    } catch (err) {
-      logRepair('orphaned_personality', 'clear_failed', false, err.message);
-      return { repaired: false, action: 'error', error: err.message };
-    }
+    return { repaired: false, action: 'disabled' };
   },
 
-  /**
-   * Repair orphaned chunk data (chunks without streams)
-   * Archives chunks for potential recovery rather than deleting
-   * @returns {Promise<{repaired: boolean, action: string, count: number}>}
-   */
   async repairOrphanedChunks() {
-    try {
-      const chunks = await this.getChunks();
-      const streams = await this.getStreams();
-
-      if (!chunks || chunks.length === 0) {
-        return { repaired: false, action: 'no_chunks', count: 0 };
-      }
-
-      if (streams && streams.length > 0) {
-        return { repaired: false, action: 'has_streams', count: chunks.length };
-      }
-
-      // Archive chunks before clearing
-      const backupKey = `rhythm_chamber_chunks_backup_${Date.now()}`;
-      try {
-        localStorage.setItem(backupKey, JSON.stringify({
-          chunks,
-          chunkCount: chunks.length,
-          archivedAt: new Date().toISOString(),
-          reason: 'orphaned_without_streams'
-        }));
-      } catch (e) {
-        console.warn('[Storage] Could not create chunks backup:', e);
-      }
-
-      // Clear orphaned chunks
-      await IndexedDBCore.clear(STORES.CHUNKS);
-      logRepair('orphaned_chunks', 'archived_and_cleared', true, { count: chunks.length });
-      return { repaired: true, action: 'archived_and_cleared', count: chunks.length };
-    } catch (err) {
-      logRepair('orphaned_chunks', 'clear_failed', false, err.message);
-      return { repaired: false, action: 'error', count: 0, error: err.message };
-    }
+    return { repaired: false, action: 'disabled', count: 0 };
   },
 
-  /**
-   * Repair corrupt conversation history in sessionStorage
-   * Attempts to salvage valid entries before clearing
-   * @returns {Promise<{repaired: boolean, action: string, salvaged: number}>}
-   */
   async repairCorruptConversation() {
-    try {
-      const conversation = sessionStorage.getItem('rhythm_chamber_conversation');
-      if (!conversation) {
-        return { repaired: false, action: 'no_conversation', salvaged: 0 };
-      }
-
-      let salvaged = 0;
-      let salvagedData = null;
-
-      // Attempt to salvage partial data
-      try {
-        const history = JSON.parse(conversation);
-        if (Array.isArray(history)) {
-          // Filter to only valid entries
-          const validEntries = history.filter(entry => {
-            return entry && typeof entry === 'object' &&
-                   (entry.role || entry.content || entry.timestamp);
-          });
-          salvaged = validEntries.length;
-
-          if (salvaged > 0) {
-            salvagedData = JSON.stringify(validEntries);
-          }
-        }
-      } catch (parseErr) {
-        // JSON parse failed - no salvage possible
-        console.warn('[Storage] Conversation JSON parse failed, no salvage possible');
-      }
-
-      // Clear the corrupt data
-      sessionStorage.removeItem('rhythm_chamber_conversation');
-
-      // If we salvaged data, restore it
-      if (salvagedData) {
-        try {
-          sessionStorage.setItem('rhythm_chamber_conversation', salvagedData);
-          logRepair('corrupt_conversation', 'salvaged_and_restored', true, { salvaged });
-          return { repaired: true, action: 'salvaged_and_restored', salvaged };
-        } catch (restoreErr) {
-          console.warn('[Storage] Could not restore salvaged conversation:', restoreErr);
-        }
-      }
-
-      logRepair('corrupt_conversation', 'cleared', true, { salvaged });
-      return { repaired: true, action: 'cleared', salvaged };
-    } catch (err) {
-      logRepair('corrupt_conversation', 'repair_failed', false, err.message);
-      return { repaired: false, action: 'error', salvaged: 0, error: err.message };
-    }
+    return { repaired: false, action: 'disabled', salvaged: 0 };
   },
 
-  /**
-   * Repair Spotify token without expiry
-   * Clears expired or incomplete token data
-   * @returns {Promise<{repaired: boolean, action: string}>}
-   */
   async repairSpotifyToken() {
-    try {
-      const spotifyToken = localStorage.getItem('spotify_access_token');
-      const spotifyExpiry = localStorage.getItem('spotify_token_expiry');
-
-      if (!spotifyToken) {
-        return { repaired: false, action: 'no_token' };
-      }
-
-      if (spotifyExpiry) {
-        return { repaired: false, action: 'has_expiry' };
-      }
-
-      // Clear token without expiry (incomplete auth state)
-      localStorage.removeItem('spotify_access_token');
-      localStorage.removeItem('spotify_refresh_token');
-      logRepair('spotify_token', 'cleared_incomplete_token', true);
-      return { repaired: true, action: 'cleared_incomplete_token' };
-    } catch (err) {
-      logRepair('spotify_token', 'repair_failed', false, err.message);
-      return { repaired: false, action: 'error', error: err.message };
-    }
+    return { repaired: false, action: 'disabled' };
   },
 
-  /**
-   * Recalculate session metadata
-   * Ensures messageCount and updatedAt fields are accurate
-   * @returns {Promise<{repaired: number, errors: number}>}
-   */
   async recalculateSessionMetadata() {
-    try {
-      const sessions = await this.getAllSessions();
-      if (!sessions || sessions.length === 0) {
-        return { repaired: 0, errors: 0 };
-      }
-
-      let repaired = 0;
-      let errors = 0;
-
-      for (const session of sessions) {
-        try {
-          let needsUpdate = false;
-          const updates = {};
-
-          // Recalculate message count if messages exist
-          if (session.messages && Array.isArray(session.messages)) {
-            const actualCount = session.messages.length;
-            if (session.messageCount !== actualCount) {
-              updates.messageCount = actualCount;
-              needsUpdate = true;
-            }
-          }
-
-          // Ensure updatedAt exists
-          if (!session.updatedAt) {
-            updates.updatedAt = session.createdAt || new Date().toISOString();
-            needsUpdate = true;
-          }
-
-          // Update if changes needed
-          if (needsUpdate) {
-            await IndexedDBCore.put(STORES.CHAT_SESSIONS, {
-              ...session,
-              ...updates
-            });
-            repaired++;
-          }
-        } catch (sessionErr) {
-          console.warn('[Storage] Failed to recalculate session metadata:', sessionErr);
-          errors++;
-        }
-      }
-
-      if (repaired > 0) {
-        logRepair('session_metadata', 'recalculated', true, { repaired, errors });
-      }
-
-      return { repaired, errors };
-    } catch (err) {
-      logRepair('session_metadata', 'recalculation_failed', false, err.message);
-      return { repaired: 0, errors: 1, error: err.message };
-    }
+    return { repaired: 0, errors: 0 };
   },
 
-  /**
-   * Rebuild missing or corrupted indexes
-   * Verifies index integrity and rebuilds if needed
-   * @returns {Promise<{rebuilt: Array<string>, errors: Array<string>}>}
-   */
   async rebuildIndexes() {
-    const results = {
-      rebuilt: [],
-      errors: []
-    };
-
-    if (!autoRepairConfig.rebuildIndexes) {
-      return results;
-    }
-
-    try {
-      const db = IndexedDBCore.getConnection();
-      if (!db) {
-        results.errors.push('no_database_connection');
-        return results;
-      }
-
-      // Check critical indexes on chat_sessions store
-      const sessionStoreNames = [STORES.CHAT_SESSIONS, 'chat_sessions'];
-      let sessionStore = null;
-
-      for (const name of sessionStoreNames) {
-        if (db.objectStoreNames.contains(name)) {
-          sessionStore = name;
-          break;
-        }
-      }
-
-      if (sessionStore) {
-        try {
-          const tx = db.transaction(sessionStore, 'readonly');
-          const store = tx.objectStore(sessionStore);
-
-          // Check for updatedAt index
-          if (!store.indexNames.contains('updatedAt')) {
-            console.warn('[Storage] Missing updatedAt index on chat_sessions');
-            // Note: Cannot add index without version change
-            // Record for manual intervention or version upgrade
-            results.errors.push('missing_updatedAt_index_requires_version_upgrade');
-          } else {
-            results.rebuilt.push('updatedAt_index_verified');
-          }
-        } catch (indexErr) {
-          results.errors.push(`index_check_failed: ${indexErr.message}`);
-        }
-      }
-
-      // Check chunks store indexes
-      const chunksStoreNames = [STORES.CHUNKS, 'chunks'];
-      let chunksStore = null;
-
-      for (const name of chunksStoreNames) {
-        if (db.objectStoreNames.contains(name)) {
-          chunksStore = name;
-          break;
-        }
-      }
-
-      if (chunksStore) {
-        try {
-          const tx = db.transaction(chunksStore, 'readonly');
-          const store = tx.objectStore(chunksStore);
-
-          // Verify expected indexes exist
-          const expectedIndexes = ['type', 'startDate'];
-          for (const indexName of expectedIndexes) {
-            if (!store.indexNames.contains(indexName)) {
-              results.errors.push(`missing_${indexName}_index`);
-            } else {
-              results.rebuilt.push(`${indexName}_index_verified`);
-            }
-          }
-        } catch (indexErr) {
-          results.errors.push(`chunks_index_check_failed: ${indexErr.message}`);
-        }
-      }
-
-      if (results.rebuilt.length > 0) {
-        logRepair('indexes', 'verified', true, { verified: results.rebuilt });
-      }
-
-      if (results.errors.length > 0) {
-        logRepair('indexes', 'errors_found', false, { errors: results.errors });
-      }
-
-      return results;
-    } catch (err) {
-      logRepair('indexes', 'rebuild_failed', false, err.message);
-      results.errors.push(err.message);
-      return results;
-    }
+    return { rebuilt: [], errors: [] };
   },
 
-  /**
-   * Attempt to recover corrupted data from backup
-   * @param {string} dataType - Type of data ('personality', 'chunks')
-   * @returns {Promise<{recovered: boolean, action: string}>}
-   */
   async recoverFromBackup(dataType) {
-    try {
-      // Find the most recent backup for this data type
-      const backupPrefix = `rhythm_chamber_${dataType}_backup_`;
-      let latestBackup = null;
-      let latestTimestamp = 0;
-
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith(backupPrefix)) {
-          const timestampMatch = key.match(/(\d+)$/);
-          if (timestampMatch) {
-            const timestamp = parseInt(timestampMatch[1], 10);
-            if (timestamp > latestTimestamp) {
-              latestTimestamp = timestamp;
-              latestBackup = key;
-            }
-          }
-        }
-      }
-
-      if (!latestBackup) {
-        return { recovered: false, action: 'no_backup_found' };
-      }
-
-      // Read and parse backup
-      const backupData = JSON.parse(localStorage.getItem(latestBackup));
-      if (!backupData || !backupData[dataType]) {
-        return { recovered: false, action: 'invalid_backup' };
-      }
-
-      // Restore data
-      const storeName = dataType === 'personality' ? STORES.PERSONALITY : STORES.CHUNKS;
-      const idField = dataType === 'personality' ? 'result' : undefined;
-
-      if (dataType === 'personality') {
-        await IndexedDBCore.put(STORES.PERSONALITY, {
-          id: 'result',
-          ...backupData.personality
-        });
-      } else if (dataType === 'chunks' && Array.isArray(backupData.chunks)) {
-        for (const chunk of backupData.chunks) {
-          await IndexedDBCore.put(STORES.CHUNKS, chunk);
-        }
-      }
-
-      logRepair('backup_recovery', dataType, true, { backupKey: latestBackup });
-      return { recovered: true, action: 'restored_from_backup', backupKey: latestBackup };
-    } catch (err) {
-      logRepair('backup_recovery', dataType, false, err.message);
-      return { recovered: false, action: 'error', error: err.message };
-    }
+    return { recovered: false, action: 'disabled', dataType };
   },
 
-  /**
-   * Run all auto-repair operations based on detected issues
-   * @param {Object} issues - Issues detected by validateConsistency
-   * @returns {Promise<Object>} Repair results
-   */
   async runAutoRepair(issues = {}) {
     if (!autoRepairConfig.enabled) {
-      console.log('[Storage] Auto-repair is disabled, skipping repairs');
-      return { repaired: false, reason: 'disabled' };
+      return { repaired: false, reason: 'disabled', issues };
     }
-
-    console.log('[Storage] Running auto-repair for detected issues...');
-    const results = {
-      repaired: [],
-      failed: [],
-      skipped: []
-    };
-
-    // Repair orphaned personality
-    if (issues.personalityWithoutStreams) {
-      if (autoRepairConfig.repairOrphans) {
-        const result = await this.repairOrphanedPersonality();
-        if (result.repaired) {
-          results.repaired.push('orphaned_personality');
-        } else {
-          results.failed.push({ type: 'orphaned_personality', reason: result.action });
-        }
-      } else {
-        results.skipped.push('orphaned_personality');
-      }
-    }
-
-    // Repair orphaned chunks
-    if (issues.chunksWithoutStreams) {
-      if (autoRepairConfig.repairOrphans) {
-        const result = await this.repairOrphanedChunks();
-        if (result.repaired) {
-          results.repaired.push('orphaned_chunks');
-        } else {
-          results.failed.push({ type: 'orphaned_chunks', reason: result.action });
-        }
-      } else {
-        results.skipped.push('orphaned_chunks');
-      }
-    }
-
-    // Repair corrupt conversation
-    if (issues.corruptConversation) {
-      const result = await this.repairCorruptConversation();
-      if (result.repaired) {
-        results.repaired.push('corrupt_conversation');
-      } else {
-        results.failed.push({ type: 'corrupt_conversation', reason: result.action });
-      }
-    }
-
-    // Repair Spotify token issues
-    if (issues.spotifyTokenWithoutExpiry) {
-      const result = await this.repairSpotifyToken();
-      if (result.repaired) {
-        results.repaired.push('spotify_token');
-      } else {
-        results.failed.push({ type: 'spotify_token', reason: result.action });
-      }
-    }
-
-    // Recalculate metadata
-    if (autoRepairConfig.recalcMetadata) {
-      const result = await this.recalculateSessionMetadata();
-      if (result.repaired > 0) {
-        results.repaired.push(`session_metadata (${result.repaired} sessions)`);
-      }
-      if (result.errors > 0) {
-        results.failed.push({ type: 'session_metadata', errors: result.errors });
-      }
-    }
-
-    // Rebuild indexes
-    if (autoRepairConfig.rebuildIndexes) {
-      const result = await this.rebuildIndexes();
-      if (result.rebuilt.length > 0) {
-        results.repaired.push(`indexes_verified: ${result.rebuilt.join(', ')}`);
-      }
-      if (result.errors.length > 0) {
-        results.failed.push({ type: 'indexes', errors: result.errors });
-      }
-    }
-
-    // Emit repair completion event
-    EventBus.emit('storage:autorepair_complete', results);
-
-    return results;
+    return { repaired: false, reason: 'not_implemented', issues };
   },
 
   async validateConsistency(options = {}) {
     const warnings = [];
     const fixes = [];
-    const {
-      autoRepair = null, // null = use config, true = force repair, false = no repair
-      verbose = false
-    } = options;
-
     try {
       const streams = await this.getStreams();
       const personality = await this.getPersonality();
       const chunks = await this.getChunks();
 
-      // Track issues for potential auto-repair
       const issues = {};
-
       if (personality && (!streams || streams.length === 0)) {
         warnings.push('Personality data exists without streaming data');
         issues.personalityWithoutStreams = true;
       }
-
       if (chunks && chunks.length > 0 && (!streams || streams.length === 0)) {
         warnings.push('Chunk data exists without streaming data');
         issues.chunksWithoutStreams = true;
-      }
-
-      let corruptConversation = false;
-      try {
-        const conversation = sessionStorage.getItem('rhythm_chamber_conversation');
-        if (conversation) {
-          const history = JSON.parse(conversation);
-          if (history.length > 0 && !personality) {
-            warnings.push('Conversation history exists without personality context');
-            fixes.push('clearConversation');
-          }
-        }
-      } catch (e) {
-        warnings.push('Conversation history is corrupt - will be cleared');
-        corruptConversation = true;
-        issues.corruptConversation = true;
-        // Don't auto-clear here - let auto-repair handle it if enabled
-        if (!autoRepairConfig.enabled && autoRepair !== true) {
-          sessionStorage.removeItem('rhythm_chamber_conversation');
-          fixes.push('conversationCleared');
-        }
-      }
-
-      const spotifyToken = localStorage.getItem('spotify_access_token');
-      const spotifyExpiry = localStorage.getItem('spotify_token_expiry');
-      if (spotifyToken && !spotifyExpiry) {
-        warnings.push('Spotify token exists without expiry timestamp');
-        issues.spotifyTokenWithoutExpiry = true;
-      }
-
-      // Determine if auto-repair should run
-      const shouldRunRepair = autoRepair === true ||
-        (autoRepair === null && autoRepairConfig.enabled);
-
-      let repairResults = null;
-      if (shouldRunRepair && Object.keys(issues).length > 0) {
-        if (verbose) {
-          console.log('[Storage] Running auto-repair for issues:', issues);
-        }
-        repairResults = await this.runAutoRepair(issues);
-
-        // Re-validate after repair to check if issues were resolved
-        if (repairResults.repaired.length > 0) {
-          if (verbose) {
-            console.log('[Storage] Repairs completed:', repairResults.repaired);
-          }
-
-          // Check if repairs resolved the issues
-          const personalityAfter = await this.getPersonality();
-          const streamsAfter = await this.getStreams();
-          const chunksAfter = await this.getChunks();
-
-          // Update warnings based on repair results
-          if (issues.personalityWithoutStreams && !personalityAfter) {
-            const warningIdx = warnings.indexOf('Personality data exists without streaming data');
-            if (warningIdx !== -1) {
-              warnings.splice(warningIdx, 1);
-            }
-            fixes.push('orphaned_personality_repaired');
-          }
-
-          if (issues.chunksWithoutStreams && (!chunksAfter || chunksAfter.length === 0)) {
-            const warningIdx = warnings.indexOf('Chunk data exists without streaming data');
-            if (warningIdx !== -1) {
-              warnings.splice(warningIdx, 1);
-            }
-            fixes.push('orphaned_chunks_repaired');
-          }
-
-          if (issues.corruptConversation) {
-            const warningIdx = warnings.findIndex(w => w.includes('corrupt'));
-            if (warningIdx !== -1) {
-              warnings.splice(warningIdx, 1);
-            }
-            fixes.push('corrupt_conversation_repaired');
-          }
-        }
-
-        if (repairResults.failed.length > 0 && verbose) {
-          console.warn('[Storage] Some repairs failed:', repairResults.failed);
-        }
-      }
-
-      if (warnings.length > 0) {
-        console.warn('[Storage] Consistency issues:', warnings);
-      } else {
-        console.log('[Storage] Consistency validation passed');
       }
 
       return {
         valid: warnings.length === 0,
         warnings,
         fixes,
-        hasData: streams && streams.length > 0,
+        hasData: !!(streams && streams.length > 0),
         hasPersonality: !!personality,
         issues,
-        repairResults,
+        repairResults: null,
         autoRepairEnabled: autoRepairConfig.enabled
       };
     } catch (err) {
-      console.error('[Storage] Validation error:', err);
       return {
         valid: false,
         warnings: [err.message],
-        fixes: [],
+        fixes,
         error: err.message,
         autoRepairEnabled: autoRepairConfig.enabled
       };

@@ -1,13 +1,13 @@
 /**
  * Demo Data Provider
- * 
+ *
  * Data provider implementation for demo mode ("The Emo Teen" persona).
  * Uses pre-computed data from demo-data.js for instant experience.
- * 
+ *
  * @module providers/demo-data-provider
  */
 
-import { EventBus } from '../services/event-bus.js';
+import { ProviderBase } from './provider-base.js';
 
 // ==========================================
 // Demo Data Provider Implementation
@@ -26,23 +26,21 @@ function getDemoData() {
 
 /**
  * Demo data provider - serves pre-computed demo persona
+ * Extends ProviderBase for shared functionality
  */
-export const DemoDataProvider = {
-    /**
-     * Get provider type
-     * @returns {'demo'}
-     */
-    getType() {
-        return 'demo';
-    },
+export class DemoDataProvider extends ProviderBase {
+    constructor() {
+        super('demo');
+    }
 
     /**
      * Demo is always ready (pre-computed data)
      * @returns {Promise<boolean>}
      */
     async isReady() {
-        return getDemoData() !== null;
-    },
+        const demoData = getDemoData();
+        return this.validateReadiness(demoData);
+    }
 
     /**
      * Get demo streaming history
@@ -50,20 +48,25 @@ export const DemoDataProvider = {
      */
     async getStreams() {
         const demoData = getDemoData();
-        if (!demoData) return [];
+        if (!this.validateReadiness(demoData)) {
+            this.logWarning('Demo data not available');
+            return [];
+        }
 
         // Generate or get cached demo streams
         const streams = typeof demoData.generateDemoStreams === 'function'
             ? demoData.generateDemoStreams()
             : demoData.streams || [];
 
-        EventBus.emit('data:streams_loaded', {
-            count: streams.length,
-            source: 'demo'
+        const normalizedStreams = this.normalizeStreams(streams);
+
+        this.emitDataLoaded('streams', {
+            count: normalizedStreams.length,
+            source: this.getType()
         });
 
-        return streams;
-    },
+        return normalizedStreams;
+    }
 
     /**
      * Get pre-computed demo patterns
@@ -71,11 +74,15 @@ export const DemoDataProvider = {
      */
     async getPatterns() {
         const demoData = getDemoData();
-        if (!demoData) return null;
+        if (!this.validateReadiness(demoData)) {
+            this.logWarning('Demo data not available');
+            return null;
+        }
 
         // Use pre-computed patterns if available
-        return demoData.patterns || demoData.DEMO_PATTERNS || null;
-    },
+        const patterns = demoData.patterns || demoData.DEMO_PATTERNS || null;
+        return this.normalizePatterns(patterns);
+    }
 
     /**
      * Get pre-computed demo personality
@@ -83,10 +90,14 @@ export const DemoDataProvider = {
      */
     async getPersonality() {
         const demoData = getDemoData();
-        if (!demoData) return null;
+        if (!this.validateReadiness(demoData)) {
+            this.logWarning('Demo data not available');
+            return null;
+        }
 
-        return demoData.personality || demoData.DEMO_PERSONALITY || null;
-    },
+        const personality = demoData.personality || demoData.DEMO_PERSONALITY || null;
+        return this.normalizePersonality(personality);
+    }
 
     /**
      * Get demo summary
@@ -94,16 +105,21 @@ export const DemoDataProvider = {
      */
     async getSummary() {
         const demoData = getDemoData();
-        if (!demoData) return null;
+        if (!this.validateReadiness(demoData)) {
+            this.logWarning('Demo data not available');
+            return this.getDefaultSummary();
+        }
 
         const personality = demoData.personality || demoData.DEMO_PERSONALITY;
-        return personality?.summary || {
+        const summary = personality?.summary || {
             totalStreams: 8547,
             uniqueArtists: 203,
             listeningHours: 1424,
             yearsActive: 5
         };
-    },
+
+        return this.normalizeSummary(summary);
+    }
 
     /**
      * Get demo stream count
@@ -111,12 +127,15 @@ export const DemoDataProvider = {
      */
     async getStreamCount() {
         const demoData = getDemoData();
-        if (!demoData) return 0;
+        if (!this.validateReadiness(demoData)) {
+            this.logWarning('Demo data not available');
+            return 0;
+        }
 
         // Pre-computed count for demo mode
-        return 8547;
+        return this.validateStreamCount(8547);
     }
-};
+}
 
 
 console.log('[DemoDataProvider] Demo data provider loaded');

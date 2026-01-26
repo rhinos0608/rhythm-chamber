@@ -13,6 +13,7 @@
 // EventBus import for toast notifications
 import { EventBus } from './services/event-bus.js';
 import { escapeHtml } from './utils/html-escape.js';
+import { Common } from './utils/common.js';
 
 // ==========================================
 // Storage Breakdown Panel
@@ -138,33 +139,8 @@ function createCategoryRows(breakdown) {
     }).join('');
 }
 
-/**
- * Format bytes to human readable string
- * @param {number} bytes - Bytes to format
- * @returns {string} Formatted string
- */
-function formatBytes(bytes) {
-    // Validate input: check for finite number
-    if (typeof bytes !== 'number' || !Number.isFinite(bytes)) {
-        return '0 B';
-    }
-
-    if (bytes === 0) return '0 B';
-
-    // Preserve sign for negative values
-    const sign = Math.sign(bytes);
-    const absBytes = Math.abs(bytes);
-
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB'];
-
-    // Calculate unit index and clamp to array bounds
-    const i = Math.min(Math.floor(Math.log(absBytes) / Math.log(k)), sizes.length - 1);
-
-    // Format the value and reapply sign
-    const value = parseFloat((absBytes / Math.pow(k, i)).toFixed(2));
-    return (sign * value) + ' ' + sizes[i];
-}
+// Use formatBytes from Common utilities
+const { formatBytes } = Common;
 
 // ==========================================
 // Public API
