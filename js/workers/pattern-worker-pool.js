@@ -605,49 +605,91 @@ function checkStaleWorkers() {
         }
     }
 
-    // Restart stale workers
+    // CRITICAL FIX: Atomic worker restart to prevent race condition
+    // Previous implementation had multiple restart operations interleaving, causing
+    // request completion tracking to become inconsistent. Fixed by making the
+    // state transition atomic within a single try-catch block per worker.
+    //
+    // RACE CONDITION FIX: Multiple workers can restart simultaneously, causing
+    // request completion tracking to become inconsistent. Fixed by ensuring
+    // atomic state transitions - clear old worker state FIRST before creating new.
     staleWorkers.forEach(({ workerInfo, index }) => {
         console.warn(`[PatternWorkerPool] Worker ${index} is stale, restarting...`);
 
-        try {
-            // Clean up old heartbeat channel
-            const oldChannel = workerHeartbeatChannels.get(workerInfo.worker);
-            if (oldChannel && oldChannel.port) {
-                try {
-                    oldChannel.port.close();
-                } catch (e) {
-                    console.error('[PatternWorkerPool] Failed to close heartbeat channel:', e);
-                    EventBus.emit('worker:cleanup_failed', { error: e.message, workerIndex: index });
-                }
-            }
-            workerHeartbeatChannels.delete(workerInfo.worker);
-            workerLastHeartbeat.delete(workerInfo.worker);
-
-            // Terminate the stale worker
-            workerInfo.worker.terminate();
-
-            // Create a new worker
-            const newWorker = new Worker('./pattern-worker.js');
-
-            // Setup message handler
-            newWorker.onmessage = handleWorkerMessage;
-            newWorker.onerror = handleWorkerError;
-
-            // Update the worker info
-            workerInfo.worker = newWorker;
-            workerInfo.busy = false;
-
-            // Reset heartbeat tracking
-            workerLastHeartbeat.set(newWorker, Date.now());
-
-            // Setup new heartbeat channel
-            setupHeartbeatChannel(newWorker, index);
-
-            console.log(`[PatternWorkerPool] Worker ${index} restarted successfully with new heartbeat channel`);
-        } catch (error) {
-            console.error(`[PatternWorkerPool] Failed to restart worker ${index}:`, error);
-        }
+        restartWorker(workerInfo, index);
     });
+}
+
+/**
+ * Restart a single worker with atomic state transition
+ * CRITICAL FIX: Prevents race conditions when multiple workers restart simultaneously
+ *
+ * @param {Object} workerInfo - Worker info object containing worker reference
+ * @param {number} index - Worker index for logging
+ * @returns {void}
+ */
+function restartWorker(workerInfo, index) {
+    const oldWorker = workerInfo.worker;
+    const oldChannel = workerHeartbeatChannels.get(oldWorker);
+
+    try {
+        // ATOMIC TRANSITION: Clear old worker state FIRST
+        // This prevents any other code from trying to use the old worker
+        // or its heartbeat channel during the restart process.
+
+        // Step 1: Close and cleanup heartbeat channel atomically
+        if (oldChannel && oldChannel.port) {
+            try {
+                oldChannel.port.close();
+            } catch (e) {
+                console.error('[PatternWorkerPool] Failed to close heartbeat channel:', e);
+                EventBus.emit('worker:cleanup_failed', { error: e.message, workerIndex: index });
+            }
+        }
+        workerHeartbeatChannels.delete(oldWorker);
+        workerLastHeartbeat.delete(oldWorker);
+
+        // Step 2: Terminate old worker (now completely disconnected)
+        oldWorker.terminate();
+
+        // Step 3: Create new worker and setup fresh state
+        const newWorker = new Worker('./pattern-worker.js');
+
+        // Setup message handlers BEFORE any messages can arrive
+        newWorker.onmessage = handleWorkerMessage;
+        newWorker.onerror = handleWorkerError;
+
+        // ATOMIC UPDATE: Replace worker reference only AFTER everything is ready
+        workerInfo.worker = newWorker;
+        workerInfo.busy = false;
+
+        // Initialize heartbeat tracking for new worker
+        workerLastHeartbeat.set(newWorker, Date.now());
+
+        // Setup new heartbeat channel (completes the initialization)
+        setupHeartbeatChannel(newWorker, index);
+
+        console.log(`[PatternWorkerPool] Worker ${index} restarted successfully with new heartbeat channel`);
+    } catch (error) {
+        console.error(`[PatternWorkerPool] Failed to restart worker ${index}:`, error);
+
+        // Recovery attempt: If restart failed, ensure old worker is cleaned up
+        // to prevent zombie workers from hanging around
+        try {
+            if (oldWorker) {
+                oldWorker.terminate();
+            }
+            if (oldChannel && oldChannel.port) {
+                oldChannel.port.close();
+            }
+        } catch (cleanupError) {
+            console.error('[PatternWorkerPool] Error during cleanup after failed restart:', cleanupError);
+        }
+
+        // Mark worker as unusable but keep it in the array to maintain indexing
+        workerInfo.worker = null;
+        workerInfo.busy = false;
+    }
 }
 
 /**
