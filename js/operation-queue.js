@@ -386,14 +386,76 @@ class OperationQueue {
 
     /**
      * Clear completed and failed operations
+     * MEMORY LEAK FIX: Also cleans up completed/failed event listeners to prevent
+     * unbounded memory growth when operations accumulate over time.
+     *
      * @returns {number} Number of operations cleared
      */
     clearCompleted() {
         const initialLength = this.queue.length;
+        const clearedCount = this.queue.filter(op =>
+            op.status === STATUS.COMPLETED || op.status === STATUS.FAILED
+        ).length;
+
         this.queue = this.queue.filter(op =>
             op.status === STATUS.PENDING || op.status === STATUS.PROCESSING
         );
-        return initialLength - this.queue.length;
+
+        // Clean up listeners for completed operations
+        // This prevents memory leaks when long-running apps process many operations
+        if (clearedCount > 100) {
+            // If we've cleared a lot of operations, proactively clean up listeners
+            // to prevent unbounded memory growth
+            this.clearAllListeners();
+        }
+
+        return clearedCount;
+    }
+
+    /**
+     * Destroy the operation queue
+     * MEMORY LEAK FIX: Clean up all resources and prevent memory leaks when the
+     * queue instance is no longer needed. This should be called during application
+     * shutdown or when destroying the queue instance.
+     *
+     * - Cancels all pending operations
+     * - Clears all event listeners (preventing memory leaks)
+     * - Clears the queue
+     * - Logs shutdown for debugging
+     *
+     * @returns {Object} Shutdown statistics
+     */
+    destroy() {
+        const stats = {
+            pending: 0,
+            processing: 0,
+            cancelled: 0,
+            listenersCleared: 0
+        };
+
+        // Cancel all pending operations
+        this.queue.forEach(op => {
+            if (op.status === STATUS.PENDING) {
+                op.status = STATUS.CANCELLED;
+                op.reject(new Error('Operation cancelled during queue shutdown'));
+                stats.pending++;
+                this.emit('cancelled', op);
+            } else if (op.status === STATUS.PROCESSING) {
+                stats.processing++;
+            }
+        });
+
+        // Clear all event listeners to prevent memory leaks
+        const listenerCounts = this.clearAllListeners();
+        stats.listenersCleared = Object.values(listenerCounts).reduce((sum, count) => sum + count, 0);
+
+        // Clear the queue
+        stats.cancelled = this.queue.length;
+        this.queue = [];
+        this.processing = false;
+
+        console.log('[OperationQueue] Queue destroyed:', stats);
+        return stats;
     }
 
     /**
@@ -437,6 +499,57 @@ class OperationQueue {
                 this.listeners[event].splice(index, 1);
             }
         }
+    }
+
+    /**
+     * Clear all listeners for a specific event type
+     * MEMORY LEAK FIX: Prevents unbounded memory growth by removing all listeners
+     * for a specific event type.
+     *
+     * Use this when:
+     * - A component or module that registered listeners is being destroyed
+     * - You want to stop receiving notifications for a specific event type
+     * - You're switching to a different event handling strategy
+     *
+     * @param {string} eventType - Event type (queued, processing, completed, failed, cancelled)
+     * @returns {boolean} True if listeners were cleared
+     */
+    clearListeners(eventType) {
+        if (this.listeners[eventType]) {
+            const count = this.listeners[eventType].length;
+            this.listeners[eventType] = [];
+            console.log(`[OperationQueue] Cleared ${count} listener(s) for '${eventType}' event`);
+            return count > 0;
+        }
+        return false;
+    }
+
+    /**
+     * Clear all event listeners
+     * MEMORY LEAK FIX: Prevents unbounded memory growth by removing all listeners.
+     * Critical for preventing memory leaks in long-running applications.
+     *
+     * Use this when:
+     * - The OperationQueue instance is no longer needed
+     * - You're shutting down the application or module
+     * - You want to completely reset the event system
+     * - You've finished a batch of operations and want to release references
+     *
+     * WARNING: After calling this method, no events will be emitted until new
+     * listeners are registered via on().
+     *
+     * @returns {Object} Count of cleared listeners per event type
+     */
+    clearAllListeners() {
+        const counts = {};
+        Object.keys(this.listeners).forEach(key => {
+            counts[key] = this.listeners[key].length;
+            this.listeners[key] = [];
+        });
+
+        const totalCleared = Object.values(counts).reduce((sum, count) => sum + count, 0);
+        console.log(`[OperationQueue] Cleared all listeners (${totalCleared} total):`, counts);
+        return counts;
     }
 }
 
