@@ -167,7 +167,16 @@ class DeadlockError extends Error {
     }
 }
 
-// Export for use in operation-lock.js and other modules
+// ES Module exports
+export {
+    LockAcquisitionError,
+    LockTimeoutError,
+    LockReleaseError,
+    LockForceReleaseError,
+    DeadlockError
+};
+
+// CommonJS export for compatibility
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         LockAcquisitionError,
