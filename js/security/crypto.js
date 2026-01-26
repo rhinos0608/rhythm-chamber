@@ -18,6 +18,35 @@
 import { Common } from '../utils/common.js';
 
 // ==========================================
+// TIMING-SAFE COMPARISON
+// ==========================================
+
+/**
+ * Constant-time string comparison to prevent timing attacks.
+ * Uses bitwise operations to ensure all comparisons take the same time
+ * regardless of where the difference occurs.
+ *
+ * @param {string} a - First string to compare
+ * @param {string} b - Second string to compare
+ * @returns {boolean} True if strings are equal, false otherwise
+ */
+function constantTimeCompare(a, b) {
+    // Early return for different lengths (length comparison is not timing-sensitive)
+    if (a.length !== b.length) {
+        return false;
+    }
+
+    // Use XOR and OR operations to compare all characters
+    // This ensures all comparisons take the same time
+    let result = 0;
+    for (let i = 0; i < a.length; i++) {
+        result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+
+    return result === 0;
+}
+
+// ==========================================
 // CONSTANTS
 // ==========================================
 
@@ -311,7 +340,10 @@ async function getEncryptedCredentials(key) {
         if (!entry?.cipher) return null;
 
         // Check if credentials were encrypted with current session version
-        if (entry.version !== getSessionVersion()) {
+        // Use constant-time comparison to prevent timing attacks
+        const currentVersion = String(getSessionVersion());
+        const storedVersion = String(entry.version);
+        if (!constantTimeCompare(currentVersion, storedVersion)) {
             console.warn(`[Crypto] Credentials for ${key} are from old session`);
             return null;
         }
