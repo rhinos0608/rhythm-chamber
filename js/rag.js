@@ -12,8 +12,6 @@
  */
 
 const RAG_STORAGE_KEY = 'rhythm_chamber_rag';
-const RAG_CHECKPOINT_KEY = 'rhythm_chamber_rag_checkpoint';
-const RAG_CHECKPOINT_CIPHER_KEY = 'rhythm_chamber_rag_checkpoint_cipher';
 
 // Local embedding constants
 const LOCAL_EMBEDDING_DIMENSIONS = 384; // all-MiniLM-L6-v2 output dimension
@@ -26,6 +24,8 @@ import { Crypto } from './security/crypto.js';
 import { OperationLock } from './operation-lock.js';
 import { safeJsonParse } from './utils/safe-json.js';
 import { ragChunkingService } from './rag/chunking-service.js';
+import { ragCheckpointManager } from './rag/checkpoint-manager.js';
+import { RAGWorkerPool } from './rag/rag-worker-pool.js';
 
 // Premium feature flag for semantic search
 const PREMIUM_RAG_ENABLED = false; // Set to true to enforce premium gate (disabled for testing)
@@ -74,217 +74,16 @@ async function showSemanticUpgradeModal() {
     }
 }
 
-// EmbeddingWorker instance (lazy-loaded)
-let embeddingWorker = null;
-
-// Track pending worker requests to prevent race conditions from multiple concurrent calls
-const pendingWorkerRequests = new Map();
-// Counter for generating unique request IDs (prevents collisions)
-let chunksRequestIdCounter = 0;
-
-/**
- * Get or create the EmbeddingWorker instance
- * Lazy-loads the worker to avoid blocking page load
- * @returns {Worker|null} Worker instance or null if not supported
- */
-function getEmbeddingWorker() {
-    if (embeddingWorker) return embeddingWorker;
-
-    if (typeof Worker === 'undefined') {
-        console.warn('[RAG] Web Workers not supported, falling back to main thread');
-        return null;
-    }
-
-    try {
-        embeddingWorker = new Worker('js/embedding-worker.js');
-        console.log('[RAG] EmbeddingWorker initialized');
-
-        // Set up error handler for cleanup
-        embeddingWorker.onerror = (error) => {
-            console.warn('[RAG] EmbeddingWorker error:', error.message);
-            cleanupEmbeddingWorker();
-        };
-
-        return embeddingWorker;
-    } catch (err) {
-        console.warn('[RAG] Failed to create EmbeddingWorker:', err.message);
-        return null;
-    }
-}
-
-/**
- * Clean up the EmbeddingWorker instance
- * Should be called when worker is no longer needed or on page unload
- * @returns {boolean} True if worker was cleaned up
- */
-function cleanupEmbeddingWorker() {
-    if (!embeddingWorker) {
-        return false;
-    }
-
-    try {
-        // Reject all pending requests before cleanup
-        for (const [requestId, pending] of pendingWorkerRequests.entries()) {
-            clearTimeout(pending.timeoutId);
-            pending.reject(new Error('Worker cleaned up before completion'));
-        }
-        pendingWorkerRequests.clear();
-
-        embeddingWorker.onmessage = null;
-        embeddingWorker.onerror = null;
-        embeddingWorker.terminate();
-        embeddingWorker = null;
-        console.log('[RAG] EmbeddingWorker cleaned up');
-        return true;
-    } catch (err) {
-        console.warn('[RAG] Error during EmbeddingWorker cleanup:', err.message);
-        embeddingWorker = null;
-        return false;
-    }
-}
-
 /**
  * Create chunks using the worker (off-thread) or fallback to main thread
+ * Delegates to RAGWorkerPool for worker management
  * @param {Array} streams - Streaming data
  * @param {Function} onProgress - Progress callback (current, total, message)
  * @returns {Promise<Array>} Chunks for embedding
  */
 async function createChunksWithWorker(streams, onProgress = () => { }) {
     console.log('[RAG] DIAGNOSTIC: createChunksWithWorker() called');
-    const worker = getEmbeddingWorker();
-    console.log('[RAG] DIAGNOSTIC: Worker available?', !!worker);
-
-    // Fallback to main thread if worker not available
-    // Uses async version with batching to prevent UI freeze
-    if (!worker) {
-        console.log('[RAG] DIAGNOSTIC: Worker not available, using main thread fallback');
-        onProgress(0, 100, 'Creating chunks (main thread - async fallback)...');
-        return await createChunks(streams, onProgress);
-    }
-
-    // Generate unique request ID for this call using counter (prevents collisions)
-    const requestId = `chunks_${++chunksRequestIdCounter}_${Date.now()}`;
-
-    return new Promise((resolve, reject) => {
-        const timeoutId = setTimeout(() => {
-            pendingWorkerRequests.delete(requestId);
-            reject(new Error('Worker timed out after 120 seconds'));
-        }, 120000);
-
-        // Store the request's resolve/reject handlers
-        pendingWorkerRequests.set(requestId, { resolve, reject, onProgress, timeoutId });
-
-        // Set up message handler ONCE at module initialization to prevent race conditions
-        if (!worker._chunksHandlerSetup) {
-            worker.onmessage = (event) => {
-                console.log('[RAG] DIAGNOSTIC: Worker message received:', event.data);
-                const { type, requestId: rid, current, total, message, chunks } = event.data;
-
-                // CRITICAL FIX #4: Validate request timestamp to reject stale responses
-                // Request ID format: chunks_<counter>_<timestamp>
-                const requestIdParts = rid.split('_');
-                if (requestIdParts.length >= 3) {
-                    const requestTimestamp = parseInt(requestIdParts[2]);
-                    const responseAge = Date.now() - requestTimestamp;
-
-                    // Reject responses older than 130 seconds (timeout is 120s)
-                    const MAX_RESPONSE_AGE_MS = 130000;
-                    if (responseAge > MAX_RESPONSE_AGE_MS) {
-                        console.warn('[RAG] STALE RESPONSE REJECTED:', {
-                            requestId: rid,
-                            messageType: type,
-                            responseAge: `${Math.round(responseAge / 1000)}s`,
-                            maxAge: `${Math.round(MAX_RESPONSE_AGE_MS / 1000)}s`,
-                            reason: 'Response timestamp exceeds maximum allowed age'
-                        });
-                        return;
-                    }
-                }
-
-                const pending = pendingWorkerRequests.get(rid);
-                if (!pending) {
-                    // ENHANCEMENT: Log late response for debugging (Issue #4)
-                    const now = Date.now();
-                    const age = requestIdParts.length >= 3 ? {
-                        extracted: requestIdParts[2],
-                        ageMs: now - parseInt(requestIdParts[2])
-                    } : { unknown: true };
-
-                    console.warn('[RAG] LATE RESPONSE DETECTED:', {
-                        requestId: rid,
-                        messageType: type,
-                        timestamp: now,
-                        requestAge: age,
-                        pendingRequests: Array.from(pendingWorkerRequests.keys()),
-                        reason: 'Request already completed, timed out, or cleaned up'
-                    });
-                    return;
-                }
-                console.log('[RAG] DIAGNOSTIC: Processing worker message type:', type);
-
-                switch (type) {
-                    case 'progress':
-                        pending.onProgress(current, total, message);
-                        break;
-                    case 'complete':
-                        clearTimeout(pending.timeoutId);
-                        pendingWorkerRequests.delete(rid);
-                        pending.resolve(chunks);
-                        break;
-                    case 'error':
-                        clearTimeout(pending.timeoutId);
-                        pendingWorkerRequests.delete(rid);
-                        pending.reject(new Error(message || 'Worker error'));
-                        break;
-                }
-            };
-            worker._chunksHandlerSetup = true;
-            console.log('[RAG] DIAGNOSTIC: Worker message handler set up');
-        }
-
-        // Capture the original error handler before assigning new one
-        const originalOnError = worker.onerror;
-
-        worker.onerror = async (error) => {
-            clearTimeout(timeoutId);
-            console.warn('[RAG] Worker error, falling back to async main thread:', error.message);
-
-            // FIX Issue 1 & 4: Remove the pending request from the map BEFORE resolving/rejecting
-            // This prevents memory leaks and allows proper cleanup
-            pendingWorkerRequests.delete(requestId);
-
-            // FIX Issue 1: Do NOT set worker.onmessage = null here - it permanently disables
-            // the handler for all future operations. The handler should remain functional.
-            // Instead, we've already removed this requestId from pendingWorkerRequests,
-            // so any late responses for this request will be safely ignored.
-
-            // Fallback to async main thread version
-            try {
-                const chunks = await createChunks(streams, onProgress);
-                // Call cleanup after successful fallback
-                cleanupEmbeddingWorker();
-                resolve(chunks);
-            } catch (fallbackError) {
-                // Call cleanup after failed fallback
-                cleanupEmbeddingWorker();
-                reject(fallbackError);
-            }
-
-            // Invoke the original error handler if it existed
-            if (originalOnError && typeof originalOnError === 'function') {
-                try {
-                    originalOnError.call(worker, error);
-                } catch (handlerError) {
-                    console.warn('[RAG] Original error handler failed:', handlerError.message);
-                }
-            }
-        };
-
-        // Send streams to worker with requestId
-        console.log('[RAG] DIAGNOSTIC: Sending createChunks message to worker, requestId:', requestId);
-        worker.postMessage({ type: 'createChunks', streams, requestId });
-        console.log('[RAG] DIAGNOSTIC: Message sent, waiting for worker response (120s timeout)...');
-    });
+    return await RAGWorkerPool.createChunksWithWorker(streams, onProgress);
 }
 
 // ==========================================
@@ -451,112 +250,27 @@ async function isStale() {
 
 /**
  * Get checkpoint for resume
- * Decrypts dataHash if encrypted. Uses unified storage with fallback.
+ * @returns {Promise<Object|null>} Checkpoint data or null if not found
  */
 async function getCheckpoint() {
-    try {
-        // Try unified storage first (IndexedDB)
-        if (Storage.getConfig) {
-            const cipher = await Storage.getConfig(RAG_CHECKPOINT_CIPHER_KEY);
-            if (cipher && Crypto.decryptData) {
-                try {
-                    const sessionKey = await Crypto.getSessionKey();
-                    const decrypted = await Crypto.decryptData(cipher, sessionKey);
-                    if (decrypted) {
-                        return JSON.parse(decrypted);
-                    }
-                } catch (decryptErr) {
-                    console.warn('[RAG] Checkpoint decryption failed (session changed?)');
-                }
-            }
-
-            // Check for unencrypted checkpoint in unified storage
-            const plainCheckpoint = await Storage.getConfig(RAG_CHECKPOINT_KEY);
-            if (plainCheckpoint) {
-                return plainCheckpoint;
-            }
-        }
-
-        // Fallback to localStorage
-        const cipher = localStorage.getItem(RAG_CHECKPOINT_CIPHER_KEY);
-        if (cipher && Crypto.decryptData) {
-            try {
-                const sessionKey = await Crypto.getSessionKey();
-                const decrypted = await Crypto.decryptData(cipher, sessionKey);
-                if (decrypted) {
-                    return JSON.parse(decrypted);
-                }
-            } catch (decryptErr) {
-                console.warn('[RAG] Checkpoint decryption failed (session changed?)');
-            }
-        }
-
-        // Fallback to legacy unencrypted checkpoint in localStorage
-        const stored = localStorage.getItem(RAG_CHECKPOINT_KEY);
-        return stored ? JSON.parse(stored) : null;
-    } catch (e) {
-        console.error('[RAG] Failed to get checkpoint:', e);
-        return null;
-    }
+    return await ragCheckpointManager.getCheckpoint();
 }
 
 /**
  * Save checkpoint for resume
- * Encrypts with session key for security. Uses unified storage with fallback.
+ * @param {Object} data - Checkpoint data to save
+ * @returns {Promise<void>}
  */
 async function saveCheckpoint(data) {
-    const checkpoint = {
-        ...data,
-        timestamp: Date.now()
-    };
-
-    // Try to encrypt checkpoint
-    if (Crypto.encryptData && Crypto.getSessionKey) {
-        try {
-            const sessionKey = await Crypto.getSessionKey();
-            const encrypted = await Crypto.encryptData(
-                JSON.stringify(checkpoint),
-                sessionKey
-            );
-
-            // Save to unified storage (IndexedDB)
-            if (Storage.setConfig) {
-                await Storage.setConfig(RAG_CHECKPOINT_CIPHER_KEY, encrypted);
-                await Storage.removeConfig(RAG_CHECKPOINT_KEY);
-            }
-            // Also save to localStorage as fallback
-            localStorage.setItem(RAG_CHECKPOINT_CIPHER_KEY, encrypted);
-            localStorage.removeItem(RAG_CHECKPOINT_KEY);
-            return;
-        } catch (encryptErr) {
-            console.warn('[RAG] Checkpoint encryption failed, using plaintext fallback');
-        }
-    }
-
-    // Fallback to unencrypted (if Security module not loaded)
-    if (Storage.setConfig) {
-        await Storage.setConfig(RAG_CHECKPOINT_KEY, checkpoint);
-    }
-    localStorage.setItem(RAG_CHECKPOINT_KEY, JSON.stringify(checkpoint));
+    await ragCheckpointManager.saveCheckpoint(data);
 }
 
 /**
  * Clear checkpoint after completion
- * Clears from both unified storage and localStorage
+ * @returns {Promise<void>}
  */
 async function clearCheckpoint() {
-    // Clear from unified storage
-    if (Storage.removeConfig) {
-        try {
-            await Storage.removeConfig(RAG_CHECKPOINT_KEY);
-            await Storage.removeConfig(RAG_CHECKPOINT_CIPHER_KEY);
-        } catch (e) {
-            console.warn('[RAG] Failed to clear checkpoint from unified storage:', e);
-        }
-    }
-    // Also clear from localStorage
-    localStorage.removeItem(RAG_CHECKPOINT_KEY);
-    localStorage.removeItem(RAG_CHECKPOINT_CIPHER_KEY);
+    await ragCheckpointManager.clearCheckpoint();
 }
 
 // ==========================================
@@ -1144,7 +858,7 @@ export const RAG = {
     clearLocalEmbeddings,
 
     // Worker lifecycle management
-    cleanupEmbeddingWorker,
+    cleanupEmbeddingWorker: () => RAGWorkerPool.cleanup(),
 
     // Constants
     LOCAL_EMBEDDING_DIMENSIONS
