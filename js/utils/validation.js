@@ -28,6 +28,13 @@ import {
     _safeRegexTest
 } from './validation/regex-validator.js';
 
+import {
+    validateSchema,
+    _validateType,
+    _validateEnum,
+    _validateObjectProperties
+} from './validation/schema-validator.js';
+
 // Re-export for backward compatibility
 export {
     validateMessage,
@@ -38,7 +45,11 @@ export {
     _detectNestedQuantifiers,
     _validateRegexPattern,
     _createSafeRegex,
-    _safeRegexTest
+    _safeRegexTest,
+    validateSchema,
+    _validateType,
+    _validateEnum,
+    _validateObjectProperties
 };
 
 // ==========================================
@@ -54,264 +65,6 @@ export {
  * @property {string} [error] - Single error message (alternative to errors array)
  */
 
-// ==========================================
-// Schema Validation
-// ==========================================
-
-/**
- * Validate an object against a schema definition
- * Based on JSON Schema-like validation
- *
- * @param {*} value - Value to validate
- * @param {Object} schema - Schema definition
- * @param {string} [schema.type] - Expected type ('string', 'number', 'integer', 'boolean', 'array', 'object')
- * @param {*} [schema.enum] - Enum of allowed values
- * @param {number} [schema.min] - Minimum value (for numbers)
- * @param {number} [schema.max] - Maximum value (for numbers)
- * @param {number} [schema.minLength] - Minimum length (for strings/arrays)
- * @param {number} [schema.maxLength] - Maximum length (for strings/arrays)
- * @param {string} [schema.pattern] - Regex pattern (for strings)
- * @param {boolean} [schema.required] - Whether value is required (non-null/non-undefined)
- * @param {Object} [schema.properties] - Property schemas (for objects)
- * @param {string[]} [schema.requiredProperties] - Required property names (for objects)
- * @returns {ValidationResult} Validation result with optional normalized value
- *
- * @example
- * // Validate a string
- * const result = validateSchema(input, { type: 'string', minLength: 1, maxLength: 100 });
- *
- * @example
- * // Validate an enum
- * const result = validateSchema(status, {
- *   type: 'string',
- *   enum: ['pending', 'active', 'completed']
- * });
- *
- * @example
- * // Validate an object
- * const result = validateSchema(data, {
- *   type: 'object',
- *   properties: {
- *     name: { type: 'string', required: true },
- *     age: { type: 'integer', min: 0, max: 120 }
- *   },
- *   requiredProperties: ['name']
- * });
- */
-export function validateSchema(value, schema) {
-    const errors = [];
-    let normalizedValue = value;
-
-    // Check required
-    if (schema.required && (value === null || value === undefined)) {
-        return {
-            valid: false,
-            error: 'Value is required'
-        };
-    }
-
-    // Skip validation if value is null/undefined and not required
-    if (value === null || value === undefined) {
-        return { valid: true, normalizedValue };
-    }
-
-    // Type validation
-    if (schema.type) {
-        const typeValidation = _validateType(value, schema.type);
-        if (!typeValidation.valid) {
-            errors.push(typeValidation.error);
-            // Try to normalize
-            if (typeValidation.normalizedValue !== undefined) {
-                normalizedValue = typeValidation.normalizedValue;
-            } else {
-                return { valid: false, errors };
-            }
-        }
-    }
-
-    // Enum validation
-    if (schema.enum && Array.isArray(schema.enum)) {
-        const enumValidation = _validateEnum(normalizedValue, schema.enum);
-        if (!enumValidation.valid) {
-            // Try to normalize
-            if (enumValidation.normalizedValue !== undefined) {
-                normalizedValue = enumValidation.normalizedValue;
-            } else {
-                errors.push(enumValidation.error);
-            }
-        }
-    }
-
-    // Range validation (numbers)
-    if (schema.type === 'number' || schema.type === 'integer') {
-        if (schema.min !== undefined && normalizedValue < schema.min) {
-            errors.push(`Value must be at least ${schema.min}`);
-        }
-        if (schema.max !== undefined && normalizedValue > schema.max) {
-            errors.push(`Value must be at most ${schema.max}`);
-        }
-    }
-
-    // Length validation (strings/arrays)
-    if (schema.type === 'string' || schema.type === 'array') {
-        const length = normalizedValue.length;
-        if (schema.minLength !== undefined && length < schema.minLength) {
-            errors.push(`Length must be at least ${schema.minLength}`);
-        }
-        if (schema.maxLength !== undefined && length > schema.maxLength) {
-            errors.push(`Length must be at most ${schema.maxLength}`);
-        }
-    }
-
-    // Pattern validation (strings)
-    if (schema.type === 'string' && schema.pattern) {
-        try {
-            if (!_safeRegexTest(normalizedValue, schema.pattern)) {
-                errors.push(`Value does not match required pattern`);
-            }
-        } catch (error) {
-            errors.push(`Pattern validation error: ${error.message}`);
-        }
-    }
-
-    // Object validation
-    if (schema.type === 'object' && schema.properties) {
-        const objectValidation = _validateObjectProperties(
-            normalizedValue,
-            schema.properties,
-            schema.requiredProperties
-        );
-        if (!objectValidation.valid) {
-            errors.push(...objectValidation.errors);
-        }
-    }
-
-    return {
-        valid: errors.length === 0,
-        errors: errors.length > 0 ? errors : undefined,
-        normalizedValue
-    };
-}
-
-/**
- * Validate type of a value
- * @private
- */
-function _validateType(value, expectedType) {
-    const actualType = Array.isArray(value) ? 'array' : typeof value;
-
-    // Type matches
-    if (actualType === expectedType) {
-        return { valid: true };
-    }
-
-    // Special case: integer is a subtype of number
-    if (expectedType === 'integer' && actualType === 'number' && Number.isInteger(value)) {
-        return { valid: true };
-    }
-
-    // Try to normalize string to number
-    if (expectedType === 'number' || expectedType === 'integer') {
-        if (actualType === 'string' && !isNaN(Number(value))) {
-            const normalized = Number(value);
-            if (expectedType === 'integer' && !Number.isInteger(normalized)) {
-                return {
-                    valid: false,
-                    error: `Expected ${expectedType}, got string that cannot be converted to integer`
-                };
-            }
-            return { valid: true, normalizedValue: normalized };
-        }
-    }
-
-    return {
-        valid: false,
-        error: `Expected type ${expectedType}, got ${actualType}`
-    };
-}
-
-/**
- * Validate enum value
- * @private
- */
-function _validateEnum(value, enumValues) {
-    // Exact match
-    if (enumValues.includes(value)) {
-        return { valid: true };
-    }
-
-    // Try case-insensitive normalization for strings
-    if (typeof value === 'string') {
-        const normalized = value.trim();
-        const exactMatch = enumValues.find(e => e === normalized);
-        if (exactMatch) {
-            return { valid: true, normalizedValue: exactMatch };
-        }
-
-        const caseMatch = enumValues.find(e => e.toLowerCase() === normalized.toLowerCase());
-        if (caseMatch) {
-            return { valid: true, normalizedValue: caseMatch };
-        }
-    }
-
-    return {
-        valid: false,
-        error: `Value must be one of: ${enumValues.join(', ')}`
-    };
-}
-
-/**
- * Validate object properties
- * @private
- */
-function _validateObjectProperties(obj, properties, requiredProperties = []) {
-    const errors = [];
-
-    if (typeof obj !== 'object' || obj === null) {
-        return {
-            valid: false,
-            errors: ['Value must be an object']
-        };
-    }
-
-    // Check required properties
-    for (const prop of requiredProperties) {
-        if (!(prop in obj) || obj[prop] === null || obj[prop] === undefined) {
-            errors.push(`Missing required property: ${prop}`);
-        }
-    }
-
-    // Validate each property if schema is provided
-    for (const [propName, propSchema] of Object.entries(properties)) {
-        if (propName in obj) {
-            const propValue = obj[propName];
-            const result = validateSchema(propValue, propSchema);
-            if (!result.valid) {
-                errors.push(...(result.errors || [`Property ${propName} is invalid`]));
-            }
-        }
-    }
-
-    return {
-        valid: errors.length === 0,
-        errors
-    };
-}
-
-// ==========================================
-// Type Guards
-// ==========================================
-
-/**
- * Ensure a value is a number, with fallback
- * @param {*} value - Value to convert to number
- * @param {number} [fallback=0] - Fallback value if conversion fails
- * @returns {number} Number value or fallback
- *
- * @example
- * const count = ensureNumber(streams.length, 0);
- * const price = ensureNumber(userInput, 0);
- */
 export function ensureNumber(value, fallback = 0) {
     if (typeof value === 'number' && Number.isFinite(value)) {
         return value;
