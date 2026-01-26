@@ -1,16 +1,16 @@
 /**
  * Local Embeddings Module for Rhythm Chamber
- * 
+ *
  * In-browser embedding generation using Transformers.js
  * 100% client-side semantic search (no external dependencies).
- * 
+ *
  * Uses all-MiniLM-L6-v2 model with INT8 quantization:
  * - ~6MB download size (INT8) vs ~22MB (fp32)
  * - 384-dimensional embeddings
  * - WebGPU acceleration when available (100x faster)
  * - WASM SIMD fallback for broader compatibility
  * - Battery-aware mode selection for mobile devices
- * 
+ *
  * HNW Considerations:
  * - Hierarchy: LocalEmbeddings is authority for local mode
  * - Network: No external API calls after model download
@@ -23,6 +23,37 @@
 
 import { EventBus } from './services/event-bus.js';
 import PerformanceProfiler, { PerformanceCategory } from './services/performance-profiler.js';
+
+// ==========================================
+// Event Schemas (decentralized registration)
+// ==========================================
+
+/**
+ * Embedding event schemas
+ * Registered with EventBus during initialization for decentralized schema management
+ */
+const EMBEDDING_EVENT_SCHEMAS = {
+    'embedding:model_loaded': {
+        description: 'Embedding model fully loaded',
+        payload: { model: 'string', backend: 'string', quantization: 'string?', loadTimeMs: 'number' }
+    },
+    'embedding:mode_change': {
+        description: 'Embedding mode changed (battery-aware switching)',
+        payload: { from: 'string', to: 'string', batteryLevel: 'number?', charging: 'boolean?' }
+    },
+    'embedding:generation_start': {
+        description: 'Embedding generation started',
+        payload: { count: 'number', mode: 'string' }
+    },
+    'embedding:generation_complete': {
+        description: 'Embedding generation completed',
+        payload: { count: 'number', durationMs: 'number', avgTimePerEmbedding: 'number' }
+    },
+    'embedding:error': {
+        description: 'Embedding error occurred',
+        payload: { error: 'string', context: 'string?' }
+    }
+};
 
 // ==========================================
 // Constants
@@ -79,37 +110,66 @@ let cachedTransformers = null;
  * 2. Transformers.js uses WebAssembly which requires 'unsafe-eval' in CSP
  * 3. Vendoring the library keeps everything self-contained and CSP-compliant
  */
+/**
+ * Load Transformers.js from CDN using dynamic import
+ *
+ * Uses import map in app.html to resolve @xenova/transformers to CDN URL.
+ * Falls back to direct CDN URL if import map not available.
+ *
+ * CSP Requirements:
+ * - script-src-elem must include https://cdn.jsdelivr.net
+ * - connect-src must include https://cdn.jsdelivr.net, https://huggingface.co, https://*.hf.co
+ */
 async function loadTransformersJS() {
     // Return cached version if available
     if (cachedTransformers?.pipeline) {
         return cachedTransformers;
     }
 
-    // Access the vendored Transformers.js from window
-    // The module script in app.html loads it and creates transformersReady promise
+    if (window?.transformers?.pipeline && window?.transformers?.env) {
+        cachedTransformers = window.transformers;
+        return cachedTransformers;
+    }
+
+    console.log('[LocalEmbeddings] Loading Transformers.js from CDN...');
+
     try {
-        // Wait for transformers.js to be fully initialized via the ready promise
-        // This handles the timing between ES module loading and usage
-        if (window.transformersReady) {
-            const transformers = await window.transformersReady;
-            if (!transformers || typeof transformers.pipeline !== 'function') {
-                throw new Error('Transformers.js loaded but pipeline function not available');
-            }
-            cachedTransformers = transformers;
-            return transformers;
+        // Try importing via import map first (cleanest approach)
+        let module;
+        try {
+            module = await import('@xenova/transformers');
+            console.log('[LocalEmbeddings] Loaded via import map');
+        } catch (importMapError) {
+            // Fallback: direct CDN import
+            console.warn('[LocalEmbeddings] Import map not available, using direct CDN URL:', importMapError);
+            module = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js');
+            console.log('[LocalEmbeddings] Loaded via direct CDN URL');
         }
 
-        // Fallback: direct access for legacy scenarios
-        const transformers = window.transformers;
-        if (!transformers || typeof transformers.pipeline !== 'function') {
-            throw new Error('Transformers.js not loaded. Ensure js/vendor/transformers.min.js is included in app.html as a module');
+        // Validate that we got the exports we need
+        if (!module || typeof module.pipeline !== 'function') {
+            throw new Error('Transformers.js loaded but pipeline function not available');
         }
 
+        if (!module.env) {
+            throw new Error('Transformers.js loaded but env object not available');
+        }
+
+        // Create a transformers object with the expected structure
+        const transformers = {
+            pipeline: module.pipeline,
+            env: module.env
+        };
+
+        // Cache for subsequent calls
         cachedTransformers = transformers;
+
+        console.log('[LocalEmbeddings] Transformers.js loaded successfully, pipeline type:', typeof transformers.pipeline);
         return transformers;
+
     } catch (e) {
         console.error('[LocalEmbeddings] Failed to load Transformers.js:', e);
-        throw new Error('Failed to load Transformers.js: ' + e.message);
+        throw new Error('Failed to load Transformers.js from CDN: ' + e.message);
     }
 }
 
@@ -172,6 +232,9 @@ function checkWASMSupport() {
  * @returns {Promise<boolean>} True if initialization successful
  */
 async function initialize(onProgress = () => { }) {
+    // Register embedding event schemas with EventBus (decentralized schema management)
+    EventBus.registerSchemas(EMBEDDING_EVENT_SCHEMAS);
+
     if (isInitialized && pipeline) {
         onProgress(100);
         return true;
@@ -281,9 +344,10 @@ async function initialize(onProgress = () => { }) {
 /**
  * Generate embedding for a single text
  * @param {string} text - Text to embed
+ * @param {number} [timeoutMs=30000] - Timeout in milliseconds (default: 30s)
  * @returns {Promise<number[]>} 384-dimensional embedding vector
  */
-async function getEmbedding(text) {
+async function getEmbedding(text, timeoutMs = 30000) {
     if (!isInitialized || !pipeline) {
         throw new Error('LocalEmbeddings not initialized. Call initialize() first.');
     }
@@ -292,8 +356,13 @@ async function getEmbedding(text) {
         throw new Error('Invalid input: text must be a non-empty string');
     }
 
-    // Generate embedding
-    const output = await pipeline(text, { pooling: 'mean', normalize: true });
+    // Generate embedding with timeout protection
+    const output = await Promise.race([
+        pipeline(text, { pooling: 'mean', normalize: true }),
+        new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Embedding generation timeout after ${timeoutMs}ms`)), timeoutMs)
+        )
+    ]);
 
     // Convert to regular array
     return Array.from(output.data);

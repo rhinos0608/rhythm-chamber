@@ -101,17 +101,8 @@ export class NativeToolStrategy extends BaseToolStrategy {
                 hadFunctionErrors = true;
                 functionErrors.push({ function: functionName, error: execError.message });
                 if (onProgress) onProgress({ type: 'tool_end', tool: functionName, error: true });
-                const errorReturn = {
-                    earlyReturn: {
-                        status: 'error',
-                        content: `Function call '${functionName}' failed: ${execError.message}. Please try again or select a different model.`,
-                        role: 'assistant',
-                        isFunctionError: true,
-                        hadFunctionErrors: true,
-                        functionErrors: [{ function: functionName, error: execError.message }]
-                    }
-                };
-                return errorReturn;
+                // Continue processing - don't return early, so we add user message to history properly
+                result = { error: execError.message };
             }
 
             console.log(`[NativeToolStrategy] Result:`, result);
@@ -142,26 +133,58 @@ export class NativeToolStrategy extends BaseToolStrategy {
         if (onProgress) onProgress({ type: 'thinking' });
 
         try {
+            console.log('[NativeToolStrategy] Making follow-up LLM call with tool results...');
             const response = await callLLM(providerConfig, key, followUpMessages, undefined);
+            console.log('[NativeToolStrategy] Follow-up LLM call completed, response:', response);
             // HNW Fix: Safely handle missing choices array
             const choices = Array.isArray(response?.choices) ? response.choices : [];
+            console.log('[NativeToolStrategy] Choices count:', choices.length, 'First choice message:', choices[0]?.message);
+
+            // CRITICAL FIX: Validate we got a valid response message
+            const responseMessage = choices[0]?.message;
+            if (!responseMessage || (!responseMessage.content && !responseMessage.tool_calls)) {
+                console.warn('[NativeToolStrategy] Follow-up returned invalid message:', responseMessage);
+                // Return an error earlyReturn instead of null responseMessage
+                return {
+                    earlyReturn: {
+                        status: 'error',
+                        content: 'The AI completed the tool call but failed to generate a final response. Please try again.',
+                        role: 'assistant'
+                    },
+                    hadFunctionErrors,
+                    functionErrors
+                };
+            }
+
             const result = {
-                responseMessage: choices[0]?.message ?? null
+                responseMessage
             };
             // Include function error information if any occurred
             if (hadFunctionErrors) {
                 result.functionErrors = functionErrors;
                 result.hadFunctionErrors = true;
             }
+            console.log('[NativeToolStrategy] Returning result:', result);
             return result;
         } catch (error) {
             console.error('[NativeToolStrategy] Follow-up LLM call failed:', error);
-            const result = { responseMessage: null };
-            if (hadFunctionErrors) {
-                result.functionErrors = functionErrors;
-                result.hadFunctionErrors = true;
-            }
-            return result;
+            // CRITICAL FIX: Return earlyReturn instead of null responseMessage
+            // This ensures the error is displayed to the user
+            const errorContent = hadFunctionErrors
+                ? `Tool execution had errors: ${functionErrors.map(e => `${e.function}: ${e.error}`).join('; ')}. Please try again.`
+                : `Failed to get AI response after tool execution: ${error.message}. Please try again.`;
+
+            return {
+                earlyReturn: {
+                    status: 'error',
+                    content: errorContent,
+                    role: 'assistant',
+                    hadFunctionErrors,
+                    functionErrors
+                },
+                hadFunctionErrors,
+                functionErrors
+            };
         }
     }
 

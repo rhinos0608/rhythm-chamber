@@ -218,7 +218,12 @@ async function checkAndDecrement(feature) {
 
     // Decrement quota
     quota[feature] = used + 1;
-    await saveQuotaData(quota);
+    try {
+        await saveQuotaData(quota);
+    } catch (e) {
+        logger.error(`Failed to persist quota for ${feature}:`, e);
+        // Allow operation but report failure; remaining still reflects intended decrement
+    }
 
     const newRemaining = remaining - 1;
     logger.info(`${feature} used. ${newRemaining} remaining`);
@@ -263,7 +268,8 @@ function showQuotaToast(feature, remaining) {
     };
 
     const featureName = featureNames[feature] || feature;
-    const message = `${remaining} ${featureName}${remaining !== 1 ? 'es' : ''} remaining`;
+    const plural = remaining === 1 ? '' : 's';
+    const message = `${remaining} ${featureName}${plural} remaining`;
 
     showToast(message, 'info');
 }

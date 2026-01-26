@@ -21,23 +21,35 @@ describe('Mutex.isLocked()', () => {
     it('returns true while mutex is locked', async () => {
         const mutex = new Mutex();
         let locked = false;
+        let canProceed = Promise.resolve();
+        const proceedSignal = { resolve: null };
+
+        // Create a promise that controls when the lock operation completes
+        canProceed = new Promise(resolve => {
+            proceedSignal.resolve = resolve;
+        });
 
         // Start a lock operation but don't await it yet
         const lockPromise = mutex.runExclusive(async () => {
             locked = true;
             // Check that we're locked while inside
             expect(mutex.isLocked()).toBe(true);
-            // Wait a bit to ensure we stay locked
-            await new Promise(resolve => setTimeout(resolve, 10));
+            // Wait for signal before completing
+            await canProceed;
             locked = false;
         });
 
-        // Wait a bit to ensure the lock is acquired
-        await new Promise(resolve => setTimeout(resolve, 5));
+        // Use a microtask to ensure the lock has been acquired
+        // This is deterministic - await Promise.resolve() schedules in the microtask queue
+        await Promise.resolve();
+        await Promise.resolve();
 
         // Should be locked while operation is in progress
         expect(mutex.isLocked()).toBe(true);
         expect(locked).toBe(true);
+
+        // Signal the lock to proceed
+        proceedSignal.resolve();
 
         // Wait for lock to release
         await lockPromise;

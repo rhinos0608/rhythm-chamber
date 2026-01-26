@@ -384,34 +384,37 @@ function requireCoordinator(coordinatorName, coordinator) {
     if (!coordinator) {
         throw new Error(`${coordinatorName} is not initialized. Ensure chat.initChat() has been called successfully.`);
     }
+    if (typeof coordinator.isInitialized === 'function' && !coordinator.isInitialized()) {
+        throw new Error('Chat not initialized. Call initChat first.');
+    }
     return coordinator;
 }
 
 // ES Module export
 export const Chat = {
     initChat,
-    sendMessage: (...args) => {
+    sendMessage: async (...args) => {
         const coordinator = requireCoordinator('MessageLifecycleCoordinator', MessageLifecycleCoordinator);
         return coordinator.sendMessage(...args);
     },
-    regenerateLastResponse: (...args) => {
+    regenerateLastResponse: async (...args) => {
         const coordinator = requireCoordinator('MessageLifecycleCoordinator', MessageLifecycleCoordinator);
         return coordinator.regenerateLastResponse(...args);
     },
-    deleteMessage: (...args) => {
+    deleteMessage: async (...args) => {
         const coordinator = requireCoordinator('MessageLifecycleCoordinator', MessageLifecycleCoordinator);
         return coordinator.deleteMessage(...args);
     },
-    editMessage: (...args) => {
+    editMessage: async (...args) => {
         const coordinator = requireCoordinator('MessageLifecycleCoordinator', MessageLifecycleCoordinator);
         return coordinator.editMessage(...args);
     },
-    clearHistory: (...args) => {
+    clearHistory: async (...args) => {
         const coordinator = requireCoordinator('MessageLifecycleCoordinator', MessageLifecycleCoordinator);
         return coordinator.clearHistory(...args);
     },
     clearConversation,
-    getHistory: (...args) => {
+    getHistory: async (...args) => {
         const coordinator = requireCoordinator('MessageLifecycleCoordinator', MessageLifecycleCoordinator);
         return coordinator.getHistory(...args);
     },

@@ -20,6 +20,7 @@
 'use strict';
 
 import { createLogger } from '../utils/logger.js';
+import { Common } from '../utils/common.js';
 
 const logger = createLogger('KeyManager');
 
@@ -60,16 +61,11 @@ let _sessionActive = false;
  * @returns {boolean} True if secure context available
  */
 function checkSecureContext() {
-    // Check for secure context in browser
-    if (typeof window !== 'undefined' && !window.isSecureContext) {
-        logger.warn('Running in insecure context - cryptographic operations unavailable');
-        return false;
+    const { secure, reason } = Common.checkSecureContext();
+    if (!secure) {
+        logger.warn(`Running in insecure context - cryptographic operations unavailable: ${reason}`);
     }
-    if (!crypto?.subtle) {
-        logger.warn('crypto.subtle unavailable - cryptographic operations unavailable');
-        return false;
-    }
-    return true;
+    return secure;
 }
 
 // ==========================================

@@ -15,6 +15,8 @@
  * while maintaining all actually-used functionality.
  */
 
+import { Common } from '../utils/common.js';
+
 // ==========================================
 // CONSTANTS
 // ==========================================
@@ -46,7 +48,7 @@ function isSecureContext() {
  * @returns {boolean} True if secure context
  */
 function checkSecureContext() {
-    const secure = isSecureContext();
+    const { secure } = Common.checkSecureContext();
     if (!secure) {
         console.warn('[Crypto] Running in insecure context - cryptographic operations may be unavailable');
     }

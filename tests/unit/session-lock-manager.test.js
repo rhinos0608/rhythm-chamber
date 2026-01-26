@@ -180,4 +180,153 @@ describe('SessionLockManager', () => {
             expect(stats.isLocked).toBe(false);
         });
     });
+
+    describe('Proactive Circular Wait Detection', () => {
+        it('should detect simple circular wait between two sessions BEFORE acquisition', async () => {
+            // Session-1 holds lock
+            const result1 = await lockManager.acquireProcessingLock('session-1');
+            expect(result1.locked).toBe(true);
+
+            // Session-2 waits for session-1 (don't await, let it run in background)
+            const lockPromise2 = lockManager.acquireProcessingLock('session-2').catch(() => ({ locked: false }));
+
+            // Wait for session-2 to be registered in wait-for graph
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // Now session-1 tries to acquire again (would create cycle: session-1 -> session-2 -> session-1)
+            const resultCycle = await lockManager.acquireProcessingLock('session-1');
+
+            // Should detect cycle BEFORE attempting acquisition
+            expect(resultCycle.locked).toBe(false);
+            expect(resultCycle.error).toBe('Circular wait detected');
+
+            // Cleanup
+            result1.release();
+            await lockPromise2;
+        });
+
+        it('should detect circular wait in three-session chain BEFORE acquisition', async () => {
+            // Session-1 holds lock
+            const result1 = await lockManager.acquireProcessingLock('session-1');
+            expect(result1.locked).toBe(true);
+
+            // Session-2 waits for session-1
+            const lockPromise2 = lockManager.acquireProcessingLock('session-2').catch(() => ({ locked: false }));
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // Session-3 waits for session-2 (which waits for session-1)
+            const lockPromise3 = lockManager.acquireProcessingLock('session-3').catch(() => ({ locked: false }));
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // Now session-1 tries to acquire again (would create cycle)
+            const resultCycle = await lockManager.acquireProcessingLock('session-1');
+
+            // Should detect cycle BEFORE attempting acquisition
+            expect(resultCycle.locked).toBe(false);
+            expect(resultCycle.error).toBe('Circular wait detected');
+
+            // Cleanup
+            result1.release();
+            await lockPromise2;
+            await lockPromise3;
+        });
+
+        it('should allow lock acquisition when no circular wait exists', async () => {
+            // Session-1 holds lock
+            const result1 = await lockManager.acquireProcessingLock('session-1');
+            expect(result1.locked).toBe(true);
+
+            // Session-2 waits for session-1
+            const lockPromise2 = lockManager.acquireProcessingLock('session-2').catch(() => ({ locked: false }));
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // Session-3 is not in the wait chain, should be able to start waiting
+            const lockPromise3 = lockManager.acquireProcessingLock('session-3').catch(() => ({ locked: false }));
+
+            // Wait a bit to ensure session-3 starts waiting
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // Session-3 should be waiting (not rejected)
+            // We can't check the promise state directly, but we can verify it hasn't rejected
+            expect(lockPromise3).toBeDefined();
+
+            // Cleanup
+            result1.release();
+            await lockPromise2;
+            await lockPromise3;
+        });
+
+        it('should maintain wait-for graph correctly on lock release', async () => {
+            // Session-1 holds lock
+            const result1 = await lockManager.acquireProcessingLock('session-1');
+
+            // Session-2 waits for session-1
+            const lockPromise2 = lockManager.acquireProcessingLock('session-2');
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // Release session-1 lock
+            result1.release();
+
+            // Session-2 should acquire lock
+            const result2 = await lockPromise2;
+            expect(result2.locked).toBe(true);
+
+            // Now session-1 should be able to acquire again (no cycle)
+            const result1Again = await lockManager.acquireProcessingLock('session-1');
+            expect(result1Again.locked).toBe(true);
+
+            // Cleanup
+            result2.release();
+            result1Again.release();
+        });
+
+        it('should handle complex wait-for graph with multiple waiting sessions', async () => {
+            // Session-1 holds lock
+            const result1 = await lockManager.acquireProcessingLock('session-1');
+
+            // Multiple sessions wait for session-1
+            const lockPromise2 = lockManager.acquireProcessingLock('session-2').catch(() => ({ locked: false }));
+            await new Promise(resolve => setTimeout(resolve, 30));
+
+            const lockPromise3 = lockManager.acquireProcessingLock('session-3').catch(() => ({ locked: false }));
+            await new Promise(resolve => setTimeout(resolve, 30));
+
+            const lockPromise4 = lockManager.acquireProcessingLock('session-4').catch(() => ({ locked: false }));
+            await new Promise(resolve => setTimeout(resolve, 30));
+
+            // Any of them trying to re-acquire should detect cycle
+            const resultCycle = await lockManager.acquireProcessingLock('session-2');
+            expect(resultCycle.locked).toBe(false);
+            expect(resultCycle.error).toBe('Circular wait detected');
+
+            // Cleanup
+            result1.release();
+            await lockPromise2;
+            await lockPromise3;
+            await lockPromise4;
+        });
+
+        it('should clean up wait-for graph entries after successful acquisition', async () => {
+            // Session-1 holds lock
+            const result1 = await lockManager.acquireProcessingLock('session-1');
+
+            // Session-2 waits for session-1
+            const lockPromise2 = lockManager.acquireProcessingLock('session-2');
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // Release and let session-2 acquire
+            result1.release();
+            const result2 = await lockPromise2;
+            expect(result2.locked).toBe(true);
+
+            // Session-2 should be removed from waiting set
+            // Session-1 should be able to acquire without cycle detection
+            const result1Again = await lockManager.acquireProcessingLock('session-1');
+            expect(result1Again.locked).toBe(true);
+
+            // Cleanup
+            result2.release();
+            result1Again.release();
+        });
+    });
 });

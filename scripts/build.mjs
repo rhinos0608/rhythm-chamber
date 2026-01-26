@@ -15,6 +15,7 @@ import { build } from 'esbuild';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { Common } from '../js/utils/common.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ROOT_DIR = dirname(__dirname);
@@ -116,7 +117,7 @@ function copyStaticFiles() {
     // Simplified copy - in production would use recursive copy
   }
 
-  console.log(`   ✓ Copied ${copiedCount} files (${formatBytes(totalSize)})`);
+  console.log(`   ✓ Copied ${copiedCount} files (${Common.formatBytes(totalSize)})`);
 }
 
 /**
@@ -138,19 +139,9 @@ function minifyCSS(sourcePath, destPath) {
   const newSize = minified.length;
   const savings = ((1 - newSize / originalSize) * 100).toFixed(1);
 
-  console.log(`   ✓ styles.css: ${formatBytes(originalSize)} → ${formatBytes(newSize)} (${savings}% reduction)`);
+  console.log(`   ✓ styles.css: ${Common.formatBytes(originalSize)} → ${Common.formatBytes(newSize)} (${savings}% reduction)`);
 }
 
-/**
- * Format bytes for human readable output
- */
-function formatBytes(bytes) {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-}
 
 /**
  * Build JavaScript with esbuild
@@ -186,7 +177,7 @@ async function buildJS() {
     const minifiedSize = statSync(outPath).size;
     const savings = ((1 - minifiedSize / originalSize) * 100).toFixed(1);
 
-    console.log(`   ✓ ${relativePath}: ${formatBytes(originalSize)} → ${formatBytes(minifiedSize)} (${savings}% reduction)`);
+    console.log(`   ✓ ${relativePath}: ${Common.formatBytes(originalSize)} → ${Common.formatBytes(minifiedSize)} (${savings}% reduction)`);
   }
 }
 
@@ -245,10 +236,10 @@ function generateReport() {
 
   totalSize = calculateDirSize(DIST_DIR);
 
-  console.log(`   Total size:    ${formatBytes(totalSize)}`);
-  console.log(`   JavaScript:    ${formatBytes(jsSize)}`);
-  console.log(`   CSS:           ${formatBytes(cssSize)}`);
-  console.log(`   Other:         ${formatBytes(totalSize - jsSize - cssSize)}`);
+  console.log(`   Total size:    ${Common.formatBytes(totalSize)}`);
+  console.log(`   JavaScript:    ${Common.formatBytes(jsSize)}`);
+  console.log(`   CSS:           ${Common.formatBytes(cssSize)}`);
+  console.log(`   Other:         ${Common.formatBytes(totalSize - jsSize - cssSize)}`);
   console.log('\n✅ Build complete! Output in ./dist/\n');
 }
 

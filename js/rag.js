@@ -78,6 +78,8 @@ let embeddingWorker = null;
 
 // Track pending worker requests to prevent race conditions from multiple concurrent calls
 const pendingWorkerRequests = new Map();
+// Counter for generating unique request IDs (prevents collisions)
+let chunksRequestIdCounter = 0;
 
 /**
  * Get or create the EmbeddingWorker instance
@@ -159,8 +161,8 @@ async function createChunksWithWorker(streams, onProgress = () => { }) {
         return await createChunks(streams, onProgress);
     }
 
-    // Generate unique request ID for this call
-    const requestId = `chunks_${Date.now()}_${Math.random().toString(36)}`;
+    // Generate unique request ID for this call using counter (prevents collisions)
+    const requestId = `chunks_${++chunksRequestIdCounter}_${Date.now()}`;
 
     return new Promise((resolve, reject) => {
         const timeoutId = setTimeout(() => {
@@ -176,9 +178,45 @@ async function createChunksWithWorker(streams, onProgress = () => { }) {
             worker.onmessage = (event) => {
                 console.log('[RAG] DIAGNOSTIC: Worker message received:', event.data);
                 const { type, requestId: rid, current, total, message, chunks } = event.data;
+
+                // CRITICAL FIX #4: Validate request timestamp to reject stale responses
+                // Request ID format: chunks_<counter>_<timestamp>
+                const requestIdParts = rid.split('_');
+                if (requestIdParts.length >= 3) {
+                    const requestTimestamp = parseInt(requestIdParts[2]);
+                    const responseAge = Date.now() - requestTimestamp;
+
+                    // Reject responses older than 130 seconds (timeout is 120s)
+                    const MAX_RESPONSE_AGE_MS = 130000;
+                    if (responseAge > MAX_RESPONSE_AGE_MS) {
+                        console.warn('[RAG] STALE RESPONSE REJECTED:', {
+                            requestId: rid,
+                            messageType: type,
+                            responseAge: `${Math.round(responseAge / 1000)}s`,
+                            maxAge: `${Math.round(MAX_RESPONSE_AGE_MS / 1000)}s`,
+                            reason: 'Response timestamp exceeds maximum allowed age'
+                        });
+                        return;
+                    }
+                }
+
                 const pending = pendingWorkerRequests.get(rid);
                 if (!pending) {
-                    console.warn('[RAG] DIAGNOSTIC: No pending request found for requestId:', rid);
+                    // ENHANCEMENT: Log late response for debugging (Issue #4)
+                    const now = Date.now();
+                    const age = requestIdParts.length >= 3 ? {
+                        extracted: requestIdParts[2],
+                        ageMs: now - parseInt(requestIdParts[2])
+                    } : { unknown: true };
+
+                    console.warn('[RAG] LATE RESPONSE DETECTED:', {
+                        requestId: rid,
+                        messageType: type,
+                        timestamp: now,
+                        requestAge: age,
+                        pendingRequests: Array.from(pendingWorkerRequests.keys()),
+                        reason: 'Request already completed, timed out, or cleaned up'
+                    });
                     return;
                 }
                 console.log('[RAG] DIAGNOSTIC: Processing worker message type:', type);
@@ -1270,29 +1308,31 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abo
  * @param {number} limit - Number of results to return
  * @returns {Promise<Array>} Search results with payloads
  */
-async function searchLocal(query, limit = 5, abortSignal = null) {
+async function searchLocal(query, limit = 5, abortSignal = null, skipQuotaCheck = false) {
     // Check for cancellation before expensive operations
     if (abortSignal?.aborted) {
         throw new Error('Search cancelled');
     }
 
-    // PREMIUM GATE: Check quota first
-    try {
-        const { PremiumQuota } = await import('./services/premium-quota.js');
-        const { allowed, remaining } = await PremiumQuota.checkAndDecrement('semantic_search');
+    // PREMIUM GATE: Check quota first (unless explicitly skipped)
+    if (!skipQuotaCheck) {
+        try {
+            const { PremiumQuota } = await import('./services/premium-quota.js');
+            const { allowed, remaining } = await PremiumQuota.checkAndDecrement('semantic_search');
 
-        if (!allowed) {
-            showSemanticUpgradeModal();
-            return []; // Return empty results when quota exhausted
-        }
+            if (!allowed) {
+                showSemanticUpgradeModal();
+                return []; // Return empty results when quota exhausted
+            }
 
-        // Show remaining count toast (only for non-premium users)
-        if (remaining !== Infinity) {
-            PremiumQuota.showQuotaToast('semantic_search', remaining);
+            // Show remaining count toast (only for non-premium users)
+            if (remaining !== Infinity) {
+                PremiumQuota.showQuotaToast('semantic_search', remaining);
+            }
+        } catch (quotaError) {
+            console.warn('[RAG] Quota check failed, allowing search:', quotaError);
+            // Allow search to continue on quota check failure (graceful degradation)
         }
-    } catch (quotaError) {
-        console.warn('[RAG] Quota check failed, allowing search:', quotaError);
-        // Allow search to continue on quota check failure (graceful degradation)
     }
 
     // Check for cancellation again after quota check
@@ -1388,28 +1428,9 @@ async function getSemanticContext(query, limit = 3) {
         return null;
     }
 
-    // PREMIUM GATE: Check quota for semantic search
+    // PREMIUM GATE: Check quota for semantic search (handled at searchLocal level, skipped here)
     try {
-        const { PremiumQuota } = await import('./services/premium-quota.js');
-        const { allowed, remaining } = await PremiumQuota.checkAndDecrement('semantic_search');
-
-        if (!allowed) {
-            // Quota exhausted - silently skip for chat (don't show modal during conversation)
-            // Modal will be shown on direct search instead
-            return null;
-        }
-
-        // Show remaining count toast (only for non-premium users)
-        if (remaining !== Infinity) {
-            PremiumQuota.showQuotaToast('semantic_search', remaining);
-        }
-    } catch (quotaError) {
-        console.warn('[RAG] Quota check failed for semantic context:', quotaError);
-        // Allow semantic context to continue on quota check failure (graceful degradation)
-    }
-
-    try {
-        const results = await search(query, limit);
+        const results = await searchLocal(query, limit, null, true);
 
         if (results.length === 0) {
             return null;

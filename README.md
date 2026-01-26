@@ -90,6 +90,42 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 6. **Power User Focus** — If you can set up an API key, you can use Rhythm Chamber
 7. **Provider Health Monitoring** — Real-time AI provider status with automatic fallback and smart error guidance
 
+## Enhanced Features & Reliability
+
+### 🚀 Advanced Error Handling & Recovery
+- **Intelligent Error Classification** — Automatic categorization of errors (network, API, validation, user input)
+- **Adaptive Circuit Breaker** — Prevents cascade failures with smart threshold management
+- **Exponential Backoff Retry** — Sophisticated retry patterns with jitter and recovery
+- **Graceful Degradation** — Fallback responses when services are unavailable
+- **User-Friendly Error Messages** — Context-aware error guidance with actionable suggestions
+
+### 🔄 Enhanced Streaming & Real-Time Processing
+- **Real-time Message Streaming** — Smooth streaming responses with proper buffering
+- **Advanced Message Rendering** — Markdown support with data visualization and artifacts
+- **Stream Processing** — Incremental parsing and real-time data handling
+- **Message Actions** — Advanced interactions (regenerate, edit, delete, query context)
+- **Artifact Visualization** — Intelligent charts and data visualization in chat
+
+### 🛡️ Improved Reliability & Performance
+- **Adaptive Rate Limiting** — Dynamic rate adjustment based on system conditions
+- **Service Health Monitoring** — Real-time provider health with automatic fallback
+- **Cross-Tab Coordination** — Seamless session sharing across browser tabs
+- **Enhanced Validation** — Advanced input validation and security scanning
+- **Performance Optimization** — Smart caching and optimization strategies
+
+### 🎯 Advanced UI Components
+- **15 Controllers** — Modular UI components for focused functionality
+- **25+ Services** — Comprehensive business logic layer
+- **13+ Utilities** — Common functionality for enhanced reliability
+- **Error Boundaries** — Graceful error handling and recovery
+- **Analytics Tracking** — User behavior insights and performance monitoring
+
+### 🔒 Enhanced Security
+- **Message Validation** — Advanced content sanitization and security scanning
+- **Rate Limiting** — Protection against abuse and DDoS
+- **Error Recovery** — Automatic recovery from common failure scenarios
+- **Data Protection** — Enhanced encryption and privacy controls
+
 ### What Stats.fm Can't Match
 
 - **"Your data never leaves your device"** — For the quantified-self crowd, this is hugely compelling
@@ -146,6 +182,15 @@ A friendly upgrade message will be displayed if your browser doesn't support req
 - Understand API keys (technical)
 - Appreciate transparency (no black box)
 - Willing to pay for their own infrastructure (sovereignty)
+
+### Enhanced Capabilities
+
+The application now features advanced reliability patterns including:
+- **Self-healing AI providers** — Automatic fallback with real-time health monitoring
+- **Robust error handling** — Intelligent recovery from network and API failures
+- **Seamless streaming** — Real-time responses with proper error recovery
+- **Cross-tab synchronization** — Seamless session sharing across browser tabs
+- **Enhanced security** — Advanced validation and protection mechanisms
 
 ---
 

@@ -227,9 +227,30 @@ function close() {
 
     stopHeartbeat();
     isConnected = false;
-    workerPort = null;
-    sharedWorker = null;
+
+    if (workerPort) {
+        // Feature-detect close; some environments may not support it
+        if (typeof workerPort.close === 'function') {
+            try {
+                workerPort.close();
+            } catch (e) {
+                // Swallow close errors
+            }
+        }
+        workerPort = null;
+    }
+
+    if (sharedWorker) {
+        try {
+            sharedWorker.port?.close?.();
+        } catch (_) {
+            // Ignore
+        }
+        sharedWorker = null;
+    }
+
     portId = null;
+    pendingClaims.clear();
 
     console.log('[SharedWorkerCoordinator] Connection closed');
 }
@@ -294,8 +315,10 @@ async function claimPrimary() {
             }
         };
 
-        // Listen for worker disconnect
-        workerPort.addEventListener('disconnect', disconnectHandler, { once: true });
+        // CRITICAL FIX: MessagePort uses 'close' event, not 'disconnect'
+        // 'disconnect' event doesn't exist on MessagePort, so this listener never fires
+        // causing memory leaks when the port is closed
+        workerPort.addEventListener('close', disconnectHandler, { once: true });
 
         // Send claim request
         try {
@@ -309,7 +332,7 @@ async function claimPrimary() {
             // MEDIUM FIX Issue #14: Clean up on postMessage error
             pendingClaims.delete(claimId);
             // Remove disconnect handler since we're rejecting anyway
-            workerPort.removeEventListener('disconnect', disconnectHandler);
+            workerPort.removeEventListener('close', disconnectHandler);
             reject(error);
         }
     });
@@ -413,6 +436,16 @@ function handleWorkerError(error) {
             console.error('[SharedWorkerCoordinator] Error listener threw:', e);
         }
     }
+
+    // Clear pending claims on disconnect/error to avoid hung promises
+    pendingClaims.forEach(({ reject }) => {
+        try {
+            reject(new Error('Worker disconnected'));
+        } catch (_) {
+            // ignore
+        }
+    });
+    pendingClaims.clear();
 
     // Attempt reconnection
     attemptReconnect();

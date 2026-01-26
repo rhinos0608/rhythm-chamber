@@ -1,0 +1,381 @@
+/**
+ * Function Calling Facade Module
+ *
+ * Unified entry point for all function calling capabilities.
+ * Re-exports schemas and provides centralized execute() function.
+ *
+ * HNW Considerations:
+ * - Hierarchy: Single entry point for all function operations
+ * - Network: Centralizes error handling and logging
+ * - Wave: Consistent async execution with retry logic
+ */
+
+import { Settings } from '../settings.js';
+import { DataQuery } from '../data-query.js';
+import { DataQuerySchemas } from './schemas/data-queries.js';
+import { TemplateQuerySchemas } from './schemas/template-queries.js';
+import { AnalyticsQuerySchemas } from './schemas/analytics-queries.js';
+import { ArtifactQuerySchemas } from './schemas/artifact-queries.js';
+import { PlaylistQuerySchemas } from './schemas/playlist-queries.js';
+import { SemanticQuerySchemas } from './schemas/semantic-queries.js';
+import { FunctionValidation } from './utils/validation.js';
+import { FunctionRetry } from './utils/retry.js';
+import { DataExecutors } from './executors/data-executors.js';
+import { TemplateExecutors } from './executors/template-executors.js';
+import { AnalyticsExecutors } from './executors/analytics-executors.js';
+import { ArtifactExecutors } from './executors/artifact-executors.js';
+import { PlaylistExecutors } from './executors/playlist-executors.js';
+import { SemanticExecutors } from './executors/semantic-executors.js';
+
+// Template function names - functions that don't require user streams
+const TemplateFunctionNames = TemplateQuerySchemas.map(s => s.function.name);
+
+// ==========================================
+// Unified Execute Function
+// ==========================================
+
+/**
+ * Execute a function call against the user's streaming data
+ * Routes to appropriate executor based on function name
+ * 
+ * HNW Defensive: Validates arguments against schema to catch drift early
+ * 
+ * @param {string} functionName - Name of the function to execute
+ * @param {Object} args - Arguments passed by the LLM
+ * @param {Array} streams - User's streaming data
+ * @param {Object} [options] - Optional configuration
+ * @param {AbortSignal} [options.signal] - AbortController signal for cancellation
+ * @returns {Promise<Object>} Result to send back to the LLM
+ */
+async function executeFunction(functionName, args, streams, options = {}) {
+    const { signal } = options;
+    const validation = FunctionValidation;
+    const retry = FunctionRetry;
+
+    // Check for abort before any processing
+    if (signal?.aborted) {
+        return { error: 'Operation cancelled', aborted: true };
+    }
+
+    // HNW Hierarchy: Check function exists before any processing
+    if (!hasFunction(functionName)) {
+        console.warn(`[Functions] Unknown function requested: ${functionName}`);
+        return { error: `Unknown function: ${functionName}` };
+    }
+
+    // HNW Defensive: Validate arguments against schema
+    const argsValidation = validateFunctionArgs(functionName, args);
+    if (!argsValidation.valid) {
+        console.warn(`[Functions] Schema validation failed for ${functionName}:`, argsValidation.errors);
+        return {
+            error: `Invalid arguments for ${functionName}: ${argsValidation.errors.join(', ')}`,
+            validationErrors: argsValidation.errors
+        };
+    }
+
+    // Use normalized arguments (fixes enum case mismatches, type coercions)
+    const normalizedArgs = argsValidation.normalizedArgs || args;
+
+    // Template functions don't require user streams
+    if (TemplateFunctionNames.includes(functionName)) {
+        const executor = TemplateExecutors?.[functionName];
+        if (!executor) {
+            return { error: `Unknown template function: ${functionName}` };
+        }
+
+        try {
+            return await Promise.resolve(executor(normalizedArgs));
+        } catch (err) {
+            return { error: `Template function error: ${err.message}` };
+        }
+    }
+
+    // Validate streams for data functions
+    const streamsValidation = validation?.validateStreams(streams) || { valid: streams?.length > 0 };
+    if (!streamsValidation.valid) {
+        return { error: streamsValidation.error || "No streaming data available." };
+    }
+
+    // Validate DataQuery is available
+    const dataQueryValidation = validation?.validateDataQuery() || { valid: !!DataQuery };
+    if (!dataQueryValidation.valid) {
+        return { error: dataQueryValidation.error || "DataQuery module not loaded." };
+    }
+
+    // Find executor (includes artifact, playlist, and semantic executors)
+    const allExecutors = {
+        ...DataExecutors,
+        ...AnalyticsExecutors,
+        ...ArtifactExecutors,
+        ...PlaylistExecutors,
+        ...SemanticExecutors
+    };
+
+    const executor = allExecutors[functionName];
+    if (!executor) {
+        return { error: `Unknown function: ${functionName}` };
+    }
+
+    // Execute with retry logic
+    if (retry?.withRetry) {
+        try {
+            return await retry.withRetry(
+                () => Promise.resolve(executor(normalizedArgs, streams)),
+                functionName
+            );
+        } catch (err) {
+            return { error: `Failed to execute ${functionName}: ${err.message}` };
+        }
+    }
+
+    // Fallback without retry
+    try {
+        return await Promise.resolve(executor(normalizedArgs, streams));
+    } catch (err) {
+        return { error: `Failed to execute ${functionName}: ${err.message}` };
+    }
+}
+
+// ==========================================
+// Schema Validation
+// ==========================================
+
+/**
+ * Validate function arguments against schema definition
+ * HNW Defensive: Catches schema drift and invalid LLM outputs
+ * 
+ * @param {string} functionName - Name of function
+ * @param {Object} args - Arguments to validate
+ * @returns {{ valid: boolean, errors: string[] }}
+ */
+function validateFunctionArgs(functionName, args) {
+    const errors = [];
+    const normalizedArgs = { ...args }; // Copy for normalization
+
+    // Get schema for this function
+    const schema = getFunctionSchema(functionName);
+    if (!schema) {
+        // No schema = no validation (fail-open for backwards compatibility)
+        return { valid: true, errors: [], normalizedArgs: args };
+    }
+
+    const properties = schema.function?.parameters?.properties || {};
+    const required = schema.function?.parameters?.required || [];
+
+    // Check required parameters
+    for (const param of required) {
+        if (args?.[param] === undefined || args?.[param] === null) {
+            errors.push(`Missing required parameter: ${param}`);
+        }
+    }
+
+    // Validate parameter types and normalize values
+    if (args && typeof args === 'object') {
+        for (const [key, value] of Object.entries(args)) {
+            const paramSchema = properties[key];
+
+            // Unknown parameter (not in schema) - log but don't fail
+            if (!paramSchema) {
+                console.warn(`[Functions] Unknown parameter '${key}' for ${functionName}`);
+                continue;
+            }
+
+            // Type validation with normalization
+            const expectedType = paramSchema.type;
+            const actualType = Array.isArray(value) ? 'array' : typeof value;
+
+            if (expectedType && actualType !== expectedType) {
+                // Allow string to number coercion for LLM outputs
+                if (expectedType === 'integer' && typeof value === 'number') {
+                    continue; // integers are numbers in JS
+                }
+                if (expectedType === 'number' && typeof value === 'string' && !isNaN(Number(value))) {
+                    normalizedArgs[key] = Number(value); // Normalize string numbers
+                    continue;
+                }
+
+                errors.push(`Parameter '${key}' expected ${expectedType}, got ${actualType}`);
+            }
+
+            // Enum validation with normalization
+            if (paramSchema.enum && !paramSchema.enum.includes(value)) {
+                // Try to normalize: case-insensitive match for strings
+                if (typeof value === 'string') {
+                    const normalized = value.trim();
+                    const exactMatch = paramSchema.enum.find(e => e === normalized);
+                    const caseMatch = paramSchema.enum.find(e => e.toLowerCase() === normalized.toLowerCase());
+
+                    if (exactMatch) {
+                        normalizedArgs[key] = exactMatch;
+                    } else if (caseMatch) {
+                        console.warn(`[Functions] Normalized '${key}' from "${value}" to "${caseMatch}"`);
+                        normalizedArgs[key] = caseMatch;
+                    } else {
+                        errors.push(`Parameter '${key}' must be one of: ${paramSchema.enum.join(', ')}`);
+                    }
+                } else {
+                    errors.push(`Parameter '${key}' must be one of: ${paramSchema.enum.join(', ')}`);
+                }
+            }
+        }
+    }
+
+    return {
+        valid: errors.length === 0,
+        errors,
+        normalizedArgs: Object.keys(normalizedArgs).length > 0 ? normalizedArgs : args
+    };
+}
+
+// ==========================================
+// Schema Aggregation
+// ==========================================
+
+/**
+ * Get all available function schemas
+ * Combines data, template, analytics, artifact, and playlist schemas
+ */
+function getAllSchemas() {
+    return [
+        ...(DataQuerySchemas || []),
+        ...(TemplateQuerySchemas || []),
+        ...(AnalyticsQuerySchemas || []),
+        ...(ArtifactQuerySchemas || []),
+        ...(PlaylistQuerySchemas || []),
+        ...(SemanticQuerySchemas || [])
+    ];
+}
+
+/**
+ * Get artifact schemas only (visualization-producing functions)
+ */
+function getArtifactSchemas() {
+    return ArtifactQuerySchemas || [];
+}
+
+/**
+ * Get core data query schemas only
+ */
+function getDataSchemas() {
+    return DataQuerySchemas || [];
+}
+
+/**
+ * Get template schemas only
+ */
+function getTemplateSchemas() {
+    return TemplateQuerySchemas || [];
+}
+
+/**
+ * Get analytics schemas only
+ */
+function getAnalyticsSchemas() {
+    return AnalyticsQuerySchemas || [];
+}
+
+// ==========================================
+// Function Discovery
+// ==========================================
+
+/**
+ * Get list of all available function names
+ */
+function getAvailableFunctions() {
+    return getAllSchemas().map(s => s.function.name);
+}
+
+/**
+ * Get schemas filtered by enabled tools setting
+ * Returns only schemas for tools the user has enabled
+ * @returns {Array} Enabled function schemas
+ */
+function getEnabledSchemas() {
+    const allSchemas = getAllSchemas();
+
+    // Check if Settings module is available
+    if (!Settings?.getEnabledTools) {
+        return allSchemas; // All enabled by default
+    }
+
+    const enabledTools = Settings.getEnabledTools();
+
+    // null means all tools are enabled
+    if (enabledTools === null) {
+        return allSchemas;
+    }
+
+    // Filter to only enabled tools
+    const filtered = allSchemas.filter(schema =>
+        enabledTools.includes(schema.function.name)
+    );
+
+    console.log(`[Functions] Using ${filtered.length}/${allSchemas.length} enabled tools`);
+    return filtered;
+}
+
+/**
+ * Check if a function exists
+ */
+function hasFunction(name) {
+    return getAllSchemas().some(s => s.function.name === name);
+}
+
+/**
+ * Get function schema by name
+ */
+function getFunctionSchema(name) {
+    return getAllSchemas().find(s => s.function.name === name);
+}
+
+// ==========================================
+// Public API
+// ==========================================
+
+// ES Module export
+export const Functions = {
+    // Execution
+    execute: executeFunction,
+
+    // Schema access
+    schemas: [], // Populated after load
+    allSchemas: [], // Populated after load
+    templateSchemas: [], // Populated after load
+
+    // Schema getters (dynamic)
+    getAllSchemas,
+    getEnabledSchemas,
+    getDataSchemas,
+    getTemplateSchemas,
+    getAnalyticsSchemas,
+    getArtifactSchemas,
+
+    // Discovery
+    getAvailableFunctions,
+    hasFunction,
+    getFunctionSchema
+};
+
+
+// Populate static schema arrays after all modules load
+document.addEventListener('DOMContentLoaded', () => {
+    Functions.schemas = getAllSchemas();
+    Functions.templateSchemas = getTemplateSchemas();
+    Functions.allSchemas = getAllSchemas();
+
+    console.log(`[Functions] Loaded ${Functions.allSchemas.length} function schemas`);
+});
+
+// Also try to populate immediately if DOM is already loaded
+if (document.readyState !== 'loading') {
+    setTimeout(() => {
+        Functions.schemas = getAllSchemas();
+        Functions.templateSchemas = getTemplateSchemas();
+        Functions.allSchemas = getAllSchemas();
+
+        console.log(`[Functions] Loaded ${Functions.allSchemas.length} function schemas`);
+    }, 0);
+}
+
+console.log('[Functions] Facade module loaded');
+

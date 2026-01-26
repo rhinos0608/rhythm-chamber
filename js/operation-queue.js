@@ -9,6 +9,19 @@
 import { OperationLock } from './operation-lock.js';
 import { LockAcquisitionError } from './operation-lock-errors.js';
 
+const normalizeBlockers = (blockedBy) => {
+    if (!Array.isArray(blockedBy)) return [];
+    return [...new Set(blockedBy.filter(Boolean))].sort();
+};
+
+const blockersEqual = (a, b) => {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
+};
+
 /**
  * Priority levels for queued operations
  * @enum {number}
@@ -211,15 +224,14 @@ class OperationQueue {
                 // Check for circular wait: if we've been blocked by the same operations
                 // multiple times, we may be in a deadlock scenario
                 if (history.length > 3) {
-                    const recentBlocks = history.slice(-3);
-                    const sameBlockers = recentBlocks.every(h =>
-                        JSON.stringify(h.blockedBy) === JSON.stringify(check.blockedBy)
-                    );
+                    const recentBlocks = history.slice(-3).map(entry => normalizeBlockers(entry.blockedBy));
+                    const currentBlockers = normalizeBlockers(check.blockedBy);
+                    const sameBlockers = recentBlocks.every(blockers => blockersEqual(blockers, currentBlockers));
 
                     if (sameBlockers) {
-                        console.error(`[OperationQueue] Circular wait detected for '${operation.operationName}' - blocked by: ${check.blockedBy.join(', ')}`);
+                        console.error(`[OperationQueue] Circular wait detected for '${operation.operationName}' - blocked by: ${currentBlockers.join(', ')}`);
                         operation.status = STATUS.FAILED;
-                        operation.error = new Error(`Deadlock detected: circular wait on locks ${check.blockedBy.join(', ')}`);
+                        operation.error = new Error(`Deadlock detected: circular wait on locks ${currentBlockers.join(', ')}`);
                         this.queue.shift();
                         operation.reject(operation.error);
                         this.emit('failed', operation);

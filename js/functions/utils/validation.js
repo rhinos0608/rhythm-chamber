@@ -12,7 +12,7 @@ import { DataQuery } from '../../data-query.js';
 /**
  * Validate that streams data is available
  * @param {Array} streams - User's streaming data
- * @returns {{valid: boolean, error?: string}}
+ * @returns {{valid: boolean, error: string}}
  */
 function validateStreams(streams) {
     if (!streams || !Array.isArray(streams)) {
@@ -29,12 +29,12 @@ function validateStreams(streams) {
         };
     }
 
-    return { valid: true };
+    return { valid: true, error: '' };
 }
 
 /**
  * Validate DataQuery module is loaded
- * @returns {{valid: boolean, error?: string}}
+ * @returns {{valid: boolean, error: string}}
  */
 function validateDataQuery() {
     if (!DataQuery) {
@@ -43,7 +43,7 @@ function validateDataQuery() {
             error: "DataQuery module not loaded."
         };
     }
-    return { valid: true };
+    return { valid: true, error: '' };
 }
 
 /**

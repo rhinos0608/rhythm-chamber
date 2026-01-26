@@ -13,6 +13,9 @@ This document provides API documentation for core modules in Rhythm Chamber. It 
   - [Recovery Handlers](#recovery-handlers---error-recovery)
 - [IoC Container](#ioc-container---dependency-management)
 - [Providers](#providers---ai-provider-interface)
+- [Controllers](#controllers---ui-layer-management)
+- [Services](#services---business-logic-layer)
+- [Utilities](#utilities---common-functionality)
 
 ---
 
@@ -1421,5 +1424,364 @@ interface StorageOptions {
 
 ---
 
-**Last Updated:** 2026-01-23
-**API Version:** v1.0
+## Controllers - UI Layer Management
+
+Controllers manage UI logic, user interactions, and coordinate between the frontend and backend services.
+
+### Core Controllers
+
+#### ChatUIController (`js/controllers/chat-ui-controller.js`)
+Manages chat interface, message rendering, and streaming responses.
+
+**API:**
+- `ChatUIController.renderMessage(message, container)` - Render a message with markdown and artifacts
+- `ChatUIController.startStreaming(messages, onUpdate)` - Start streaming response with real-time updates
+- `ChatUIController.stopStreaming()` - Stop current streaming
+- `ChatUIController.clearChat()` - Clear all messages
+- `ChatUIController.scrollToBottom()` - Scroll chat to bottom
+- `ChatUIController.setTypingIndicator(isTyping)` - Show/hide typing indicator
+
+#### MessageRenderer (`js/controllers/message-renderer.js`)
+Handles advanced message rendering with support for artifacts and data visualization.
+
+**API:**
+- `MessageRenderer.render(message, options)` - Render message with artifacts
+- `MessageRenderer.renderArtifact(artifact, container)` - Render data visualization
+- `MessageRenderer.updateMessage(id, updates)` - Update existing message
+- `MessageRenderer.deleteMessage(id)` - Delete message
+- `MessageRenderer.getMessageElement(id)` - Get DOM element for message
+
+#### StreamingMessageHandler (`js/controllers/streaming-message-handler.js`)
+Manages real-time streaming responses with proper buffering and error handling.
+
+**API:**
+- `StreamingMessageHandler.startStream(messages, callbacks)` - Start streaming session
+- `StreamingMessageHandler.handleToken(token)` - Process streaming token
+- `StreamingMessageHandler.handleError(error)` - Handle streaming errors
+- `StreamingMessageHandler.completeStream()` - Complete streaming session
+- `StreamingMessageHandler.cancelStream()` - Cancel streaming session
+
+#### ChatInputManager (`js/controllers/chat-input-manager.js`)
+Advanced input handling with validation and auto-suggestions.
+
+**API:**
+- `ChatInputManager.handleInput(input, options)` - Process user input with validation
+- `ChatInputManager.validateInput(input)` - Validate user input
+- `ChatInputManager.getSuggestions(input)` - Get auto-suggestions
+- `ChatInputManager.clearInput()` - Clear input field
+- `ChatInputManager.setMaxLength(length)` - Set input character limit
+
+#### MessageActions (`js/controllers/message-actions.js`)
+Handles message interactions like regenerate, edit, delete, and query context.
+
+**API:**
+- `MessageActions.regenerateMessage(id, options)` - Regenerate message
+- `MessageActions.editMessage(id, newContent)` - Edit message content
+- `MessageActions.deleteMessage(id)` - Delete message
+- `MessageActions.queryContext(message)` - Query context for message
+- `MessageActions.copyMessage(id)` - Copy message to clipboard
+
+#### SidebarController (`js/controllers/sidebar-controller.js`)
+Manages session list and navigation.
+
+**API:**
+- `SidebarController.addSession(session)` - Add new session
+- `SidebarController.loadSession(id)` - Load session
+- `SidebarController.deleteSession(id)` - Delete session
+- `SidebarController.updateSession(id, updates)` - Update session
+- `SidebarController.getSessions()` - Get all sessions
+- `SidebarController.setCurrentSession(id)` - Set current session
+
+#### ViewController (`js/controllers/view-controller.js`)
+Handles view transitions and state management.
+
+**API:**
+- `ViewController.switchView(viewName)` - Switch to view
+- `ViewController.getCurrentView()` - Get current view
+- `ViewController.getViewHistory()` - Get view history
+- `ViewController.canGoBack()` - Check if can navigate back
+- `ViewController.goBack()` - Navigate back
+- `ViewController.goForward()` - Navigate forward
+
+### Advanced Controllers
+
+#### ArtifactRenderer (`js/controllers/artifact-renderer.js`)
+Handles data visualization and chart rendering.
+
+**API:**
+- `ArtifactRenderer.renderChart(data, options, container)` - Render chart
+- `ArtifactRenderer.renderTable(data, options, container)` - Render table
+- `ArtifactRenderer.renderCustom(type, data, container)` - Render custom visualization
+- `ArtifactRenderer.destroyArtifact(id)` - Destroy artifact
+- `ArtifactRenderer.getArtifactStats()` - Get artifact statistics
+
+#### ErrorBoundaryController (`js/controllers/error-boundary-controller.js`)
+Handles error boundaries and user-friendly error display.
+
+**API:**
+- `ErrorBoundaryController.handleError(error, context)` - Handle error
+- `ErrorBoundaryController.showError(message, details)` - Show error to user
+- `ErrorBoundaryController.dismissError(id)` - Dismiss error
+- `ErrorBoundaryController.getRecentErrors()` - Get recent errors
+- `ErrorBoundaryController.recordError(error)` - Record error for analysis
+
+#### AnalyticsController (`js/controllers/analytics-controller.js`)
+Tracks user behavior and provides insights.
+
+**API:**
+- `AnalyticsController.track(event, data)` - Track user event
+- `AnalyticsController.getSessionMetrics(sessionId)` - Get session metrics
+- `AnalyticsController.getUserBehavior()` - Get user behavior patterns
+- `AnalyticsController.getPerformanceMetrics()` - Get performance metrics
+- `AnalyticsController.exportAnalytics()` - Export analytics data
+
+---
+
+## Services - Business Logic Layer
+
+Services handle core business logic, external API interactions, and data processing.
+
+### Core Services
+
+#### SessionManager (`js/services/session-manager.js`)
+Manages session lifecycle, persistence, and recovery.
+
+**API:**
+- `SessionManager.createSession(config)` - Create new session
+- `SessionManager.loadSession(id)` - Load existing session
+- `SessionManager.saveSession(session)` - Save session
+- `SessionManager.deleteSession(id)` - Delete session
+- `SessionManager.archiveSession(id)` - Archive session
+- `SessionManager.getSessionCount()` - Get session count
+
+#### MessageOperations (`js/services/message-operations.js`)
+Handles message operations like regenerate, delete, edit, and query context.
+
+**API:**
+- `MessageOperations.regenerateMessage(id, options)` - Regenerate message
+- `MessageOperations.editMessage(id, newContent)` - Edit message
+- `MessageOperations.deleteMessage(id)` - Delete message
+- `MessageOperations.queryContext(message)` - Query context
+- `MessageOperations.getMessageHistory()` - Get message history
+
+#### TabCoordinator (`js/services/tab-coordination.js`)
+Coordinates across browser tabs for session sharing and state synchronization.
+
+**API:**
+- `TabCoordinator.broadcastState(state)` - Broadcast state to other tabs
+- `TabCoordinator.onStateUpdate(callback)` - Listen for state updates
+- `TabCoordinator.getCurrentTabId()` - Get current tab ID
+- `TabCoordinator.isPrimaryTab()` - Check if primary tab
+- `TabCoordinator.requestSessionSync()` - Request session sync
+
+#### TokenCountingService (`js/services/token-counting-service.js`)
+Counts tokens and manages context window.
+
+**API:**
+- `TokenCountingService.countTokens(text)` - Count tokens in text
+- `TokenCountingService.getContextWindow(model)` - Get context window size
+- `TokenCountingService.fitToContext(messages, model)` - Fit messages to context
+- `TokenCountingService.getTokenUsage()` - Get current token usage
+- `TokenCountingService.resetTokenCount()` - Reset token count
+
+### Enhanced Services
+
+#### LLMApiOrchestrator (`js/services/llm-api-orchestrator.js`)
+Advanced LLM request routing with load balancing and health monitoring.
+
+**API:**
+- `LLMApiOrchestrator.request(messages, tools, options)` - Make LLM request
+- `LLMApiOrchestrator.setProvider(provider)` - Set preferred provider
+- `LLMApiOrchestrator.getHealthStatus()` - Get provider health
+- `LLMApiOrchestrator.switchProvider()` - Switch to healthy provider
+- `LLMApiOrchestrator.addProvider(provider)` - Add new provider
+- `LLMApiOrchestrator.removeProvider(provider)` - Remove provider
+
+#### MessageErrorHandler (`js/services/message-error-handler.js`)
+Intelligent error classification and recovery for API calls.
+
+**API:**
+- `MessageErrorHandler.handleError(error, context)` - Handle error
+- `MessageErrorHandler.classifyError(error)` - Classify error type
+- `MessageErrorHandler.recoverFromError(error)` - Attempt recovery
+- `MessageErrorHandler.getRecoverySuggestions(error)` - Get suggestions
+- `MessageErrorHandler.recordError(error)` - Record error for analysis
+
+#### MessageValidator (`js/services/message-validator.js`)
+Advanced message validation and sanitization.
+
+**API:**
+- `MessageValidator.validateMessage(message)` - Validate message
+- `MessageValidator.sanitizeMessage(message)` - Sanitize message
+- `MessageValidator.checkSpam(message)` - Check for spam
+- `MessageValidator.validateInput(input)` - Validate input
+- `MessageValidator.getValidationRules()` - Get validation rules
+
+#### AdaptiveCircuitBreaker (`js/services/adaptive-circuit-breaker.js`)
+Intelligent circuit breaker with adaptive thresholds.
+
+**API:**
+- `AdaptiveCircuitBreaker.call(operation, callback)` - Call operation with circuit breaker
+- `AdaptiveCircuitBreaker.getState(operation)` - Get circuit state
+- `AdaptiveCircuitBreaker.recordSuccess(operation)` - Record success
+- `AdaptiveCircuitBreaker.recordFailure(operation)` - Record failure
+- `AdaptiveCircuitBreaker.reset(operation)` - Reset circuit
+- `AdaptiveCircuitBreaker.configure(config)` - Configure circuit breaker
+
+#### RetryManager (`js/services/retry-manager.js`)
+Sophisticated retry with exponential backoff and circuit breaker integration.
+
+**API:**
+- `RetryManager.execute(operation, options)` - Execute operation with retry
+- `RetryManager.setConfig(config)` - Set retry configuration
+- `RetryManager.getRetryCount(operation)` - Get retry count
+- `RetryManager.shouldRetry(error)` - Check if should retry
+- `RetryManager.calculateDelay(attempt)` - Calculate delay time
+
+#### StateMachineCoordinator (`js/services/state-machine-coordinator.js`)
+Manages complex state transitions and workflows.
+
+**API:**
+- `StateMachineCoordinator.transition(currentState, event)` - Handle state transition
+- `StateMachineCoordinator.getCurrentState()` - Get current state
+- `StateMachineCoordinator.getAvailableTransitions()` - Get available transitions
+- `StateMachineCoordinator.addState(state, transitions)` - Add state
+- `StateMachineCoordinator.reset()` - Reset state machine
+
+---
+
+## Utilities - Common Functionality
+
+Utilities provide common functionality used across the application.
+
+### Error Handling Utilities
+
+#### ErrorHandlingUtils (`js/utils/error-handling.js`)
+Comprehensive error classification and recovery.
+
+**API:**
+- `ErrorHandlingUtils.classifyError(error)` - Classify error type
+- `ErrorHandlingUtils.handle(error, context)` - Handle error
+- `ErrorHandlingUtils.recover(error)` - Attempt recovery
+- `ErrorHandlingUtils.logError(error)` - Log error
+- `ErrorHandlingUtils.getUserMessage(error)` - Get user-friendly message
+
+#### ErrorHandler (`js/utils/error-handler.js`)
+Centralized error processing and logging.
+
+**API:**
+- `ErrorHandler.handleError(error, context)` - Handle error
+- `ErrorHandler.logError(error, context)` - Log error
+- `ErrorHandler.reportError(error)` - Report error
+- `ErrorHandler.getErrorHistory()` - Get error history
+- `ErrorHandler.clearErrorHistory()` - Clear error history
+
+### Retry & Resilience Utilities
+
+#### RetryManager (`js/utils/retry-manager.js`)
+Enhanced retry patterns with adaptive strategies.
+
+**API:**
+- `RetryManager.execute(operation, options)` - Execute with retry
+- `RetryManager.setMaxAttempts(max)` - Set max attempts
+- `RetryManager.setDelayConfig(config)` - Set delay config
+- `RetryManager.shouldRetry(error)` - Check if should retry
+- `RetryManager.getRetryStats()` - Get retry statistics
+
+#### ResilientRetry (`js/utils/resilient-retry.js`)
+Advanced retry patterns with circuit breaker integration.
+
+**API:**
+- `ResilientRetry.execute(operation, options)` - Execute resilient retry
+- `ResilientRetry.setCircuitBreaker(circuitBreaker)` - Set circuit breaker
+- `ResilientRetry.addRetryCondition(condition)` - Add retry condition
+- `ResilientRetry.getRetryHistory()` - Get retry history
+- `ResilientRetry.reset()` - Reset retry state
+
+#### AdaptiveRateLimiter (`js/utils/adaptive-rate-limiter.js`)
+Dynamic rate limiting based on system conditions.
+
+**API:**
+- `AdaptiveRateLimiter.limit(operation, callback)` - Rate limit operation
+- `AdaptiveRateLimiter.setConfig(config)` - Set rate limit config
+- `AdaptiveRateLimiter.getRate()` - Get current rate
+- `AdaptiveRateLimiter.setRate(rate)` - Set rate
+- `AdaptiveRateLimiter.getStats()` - Get rate limit statistics
+
+### Validation Utilities
+
+#### ValidationUtils (`js/utils/validation.js`)
+Advanced input validation and sanitization.
+
+**API:**
+- `ValidationUtils.validate(input, rules)` - Validate input
+- `ValidationUtils.sanitize(input)` - Sanitize input
+- `ValidationUtils.checkSpam(input)` - Check for spam
+- `ValidationUtils.validateEmail(email)` - Validate email
+- `ValidationUtils.validateUrl(url)` - Validate URL
+
+#### SchemaRegistry (`js/utils/schema-registry.js`)
+Centralized schema management and validation.
+
+**API:**
+- `SchemaRegistry.register(schema, name)` - Register schema
+- `SchemaRegistry.getSchema(name)` - Get schema
+- `SchemaRegistry.validate(data, schemaName)` - Validate data
+- `SchemaRegistry.removeSchema(name)` - Remove schema
+- `SchemaRegistry.listSchemas()` - List all schemas
+
+#### FunctionValidator (`js/utils/function-validator.js`)
+Runtime function validation and type checking.
+
+**API:**
+- `FunctionValidator.validateFunction(fn, expectedTypes)` - Validate function
+- `FunctionValidator.validateArgs(args, expectedTypes)` - Validate arguments
+- `FunctionValidator.validateReturn(fn, expectedType)` - Validate return type
+- `FunctionValidator.createWrapper(fn, validator)` - Create wrapper
+
+### Processing Utilities
+
+#### StreamBuffer (`js/utils/stream-buffer.js`)
+Efficient stream buffering and management.
+
+**API:**
+- `StreamBuffer.add(data)` - Add data to buffer
+- `StreamBuffer.get()` - Get buffered data
+- `StreamBuffer.clear()` - Clear buffer
+- `StreamBuffer.getSize()` - Get buffer size
+- `StreamBuffer.isFull()` - Check if buffer is full
+
+#### ParserUtils (`js/utils/parser.js`)
+Advanced data parsing and transformation.
+
+**API:**
+- `ParserUtils.parseJSON(data)` - Parse JSON safely
+- `ParserUtils.parseXML(data)` - Parse XML
+- `ParserUtils.parseCSV(data)` - Parse CSV
+- `ParserUtils.transform(data, transformer)` - Transform data
+- `ParserUtils.sanitize(data)` - Sanitize data
+
+#### FunctionExecutor (`js/utils/function-executor.js`)
+Safe function execution with timeout and error handling.
+
+**API:**
+- `FunctionExecutor.execute(fn, args, options)` - Execute function
+- `FunctionExecutor.executeAsync(fn, args, options)` - Execute async function
+- `FunctionExecutor.setTimeout(fn, timeout)` - Set timeout for function
+- `FunctionExecutor.wrap(fn, wrapper)` - Wrap function
+- `FunctionExecutor.validate(fn)` - Validate function
+
+#### SemanticExecutors (`js/utils/semantic-executors.js)
+Specialized semantic query execution.
+
+**API:**
+- `SemanticExecutors.executeQuery(query, context)` - Execute semantic query
+- `SemanticExecutors.search(text, options)` - Semantic search
+- `SemanticExecutors.analyzeSentiment(text)` - Analyze sentiment
+- `SemanticExecutors.extractEntities(text)` - Extract entities
+- `SemanticExecutors.classifyText(text)` - Classify text
+
+---
+
+**Last Updated:** 2026-01-26
+**API Version:** v2.0

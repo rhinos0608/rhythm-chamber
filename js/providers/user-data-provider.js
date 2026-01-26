@@ -7,7 +7,7 @@
  * @module providers/user-data-provider
  */
 
-import { EventBus } from '../services/event-bus.js';
+import { ProviderBase } from './provider-base.js';
 import { Storage } from '../storage.js';
 
 // ==========================================
@@ -24,15 +24,12 @@ function getStorage() {
 
 /**
  * User data provider - serves real user streaming data
+ * Extends ProviderBase for shared functionality
  */
-export const UserDataProvider = {
-    /**
-     * Get provider type
-     * @returns {'user'}
-     */
-    getType() {
-        return 'user';
-    },
+export class UserDataProvider extends ProviderBase {
+    constructor() {
+        super('user');
+    }
 
     /**
      * Check if provider has data available
@@ -40,11 +37,14 @@ export const UserDataProvider = {
      */
     async isReady() {
         const storage = getStorage();
-        if (!storage) return false;
+        if (!storage) {
+            this.logWarning('Storage not available');
+            return false;
+        }
 
         const streams = await storage.getStreams();
-        return streams !== null && streams.length > 0;
-    },
+        return this.hasValidData(streams);
+    }
 
     /**
      * Get streaming history from storage
@@ -52,20 +52,24 @@ export const UserDataProvider = {
      */
     async getStreams() {
         const storage = getStorage();
-        if (!storage) return [];
+        if (!storage) {
+            this.logWarning('Storage not available');
+            return [];
+        }
 
         const streams = await storage.getStreams();
+        const normalizedStreams = this.normalizeStreams(streams || []);
 
         // Emit event for tracking
-        if (streams && streams.length > 0) {
-            EventBus.emit('data:streams_loaded', {
-                count: streams.length,
-                source: 'user'
+        if (normalizedStreams.length > 0) {
+            this.emitDataLoaded('streams', {
+                count: normalizedStreams.length,
+                source: this.getType()
             });
         }
 
-        return streams || [];
-    },
+        return normalizedStreams;
+    }
 
     /**
      * Get stored patterns
@@ -74,12 +78,16 @@ export const UserDataProvider = {
      */
     async getPatterns() {
         const storage = getStorage();
-        if (!storage) return null;
+        if (!storage) {
+            this.logWarning('Storage not available');
+            return null;
+        }
 
         // Check if we have cached patterns in personality result
         const personality = await storage.getPersonality();
-        return personality?.patterns || null;
-    },
+        const patterns = personality?.patterns || null;
+        return this.normalizePatterns(patterns);
+    }
 
     /**
      * Get personality result
@@ -87,9 +95,14 @@ export const UserDataProvider = {
      */
     async getPersonality() {
         const storage = getStorage();
-        if (!storage) return null;
-        return storage.getPersonality();
-    },
+        if (!storage) {
+            this.logWarning('Storage not available');
+            return null;
+        }
+
+        const personality = await storage.getPersonality();
+        return this.normalizePersonality(personality);
+    }
 
     /**
      * Get data summary
@@ -97,11 +110,15 @@ export const UserDataProvider = {
      */
     async getSummary() {
         const storage = getStorage();
-        if (!storage) return null;
+        if (!storage) {
+            this.logWarning('Storage not available');
+            return this.getDefaultSummary();
+        }
 
         const personality = await storage.getPersonality();
-        return personality?.summary || null;
-    },
+        const summary = personality?.summary || null;
+        return this.normalizeSummary(summary);
+    }
 
     /**
      * Get stream count
@@ -109,12 +126,15 @@ export const UserDataProvider = {
      */
     async getStreamCount() {
         const storage = getStorage();
-        if (!storage) return 0;
+        if (!storage) {
+            this.logWarning('Storage not available');
+            return 0;
+        }
 
         const streams = await storage.getStreams();
-        return streams?.length || 0;
+        return this.validateStreamCount(streams?.length || 0);
     }
-};
+}
 
 
 console.log('[UserDataProvider] User data provider loaded');

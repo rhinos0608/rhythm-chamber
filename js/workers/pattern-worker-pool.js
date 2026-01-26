@@ -103,6 +103,10 @@ const workerLastHeartbeat = new Map(); // Track last heartbeat response from eac
 const workerHeartbeatChannels = new Map(); // Track dedicated heartbeat MessageChannel per worker
 const HEARTBEAT_DEBUG_LOGS = false; // Reduce console spam and GC pressure in production
 
+// CRITICAL FIX: Track cleanup function for page unload handler
+let unloadHandlerRegistered = false;
+let unloadCleanupFn = null;
+
 // Backpressure state (HNW Wave)
 let pendingResultCount = 0;
 const BACKPRESSURE_THRESHOLD = 50; // Pause at 50 pending results
@@ -163,17 +167,34 @@ async function init(options = {}) {
                 processedCount: 0
             });
 
-            // Initialize heartbeat tracking for this worker
-            workerLastHeartbeat.set(worker, Date.now());
-            
+            // RACE CONDITION FIX: Setup heartbeat channel BEFORE tracking heartbeat
+            // Previous order: set tracking (line 171), then setup channel (line 174)
+            // This created a race window where stale worker detection could trigger
+            // before the channel was ready. Now we ensure channel is ready first.
+
             // Create dedicated MessageChannel for heartbeats (prevents contention with work messages)
             setupHeartbeatChannel(worker, i);
+
+            // Only initialize heartbeat tracking AFTER channel is ready
+            // This ensures the first heartbeat check has a valid channel to use
+            workerLastHeartbeat.set(worker, Date.now());
         }
 
         initialized = true;
 
         // Start heartbeat monitoring
         startHeartbeat();
+
+        // CRITICAL FIX: Register page unload handler to prevent memory leaks
+        if (!unloadHandlerRegistered && typeof window !== 'undefined') {
+            unloadCleanupFn = () => {
+                console.log('[PatternWorkerPool] Page unload detected, cleaning up...');
+                terminate();
+            };
+            window.addEventListener('beforeunload', unloadCleanupFn);
+            unloadHandlerRegistered = true;
+            console.log('[PatternWorkerPool] Registered beforeunload handler for cleanup');
+        }
 
         console.log('[PatternWorkerPool] Initialized successfully');
     } catch (error) {
@@ -382,16 +403,17 @@ function handleWorkerError(error) {
  * @param {number} index - Worker index for logging
  */
 function setupHeartbeatChannel(worker, index) {
+    let channel;
     try {
         // Create a dedicated MessageChannel for this worker's heartbeats
-        const channel = new MessageChannel();
-        
+        channel = new MessageChannel();
+
         // Store the channel for later use
         workerHeartbeatChannels.set(worker, {
             port: channel.port1,
             index
         });
-        
+
         // Setup handler for heartbeat responses on port1
         channel.port1.onmessage = (event) => {
             const { type, timestamp } = event.data;
@@ -402,18 +424,28 @@ function setupHeartbeatChannel(worker, index) {
                 }
             }
         };
-        
+
         // Transfer port2 to the worker
         worker.postMessage({
             type: 'HEARTBEAT_CHANNEL',
             port: channel.port2
         }, [channel.port2]);
-        
+
         console.log(`[PatternWorkerPool] Heartbeat channel established for worker ${index}`);
     } catch (error) {
+        // CRITICAL FIX: Clean up MessageChannel if postMessage fails
+        // If we don't close port1 and remove the listener, it will leak
+        if (channel) {
+            try {
+                channel.port1.close();
+            } catch (closeError) {
+                console.error('[PatternWorkerPool] Failed to close port1 during cleanup:', closeError);
+            }
+        }
+        workerHeartbeatChannels.delete(worker);
+
         // Fallback: some environments don't support MessageChannel transferable
         console.warn(`[PatternWorkerPool] MessageChannel not available for worker ${index}, using fallback:`, error.message);
-        workerHeartbeatChannels.delete(worker);
     }
 }
 
@@ -938,6 +970,14 @@ function terminate() {
 
     workers = [];
     initialized = false;
+
+    // CRITICAL FIX: Remove page unload handler to prevent leaks
+    if (unloadHandlerRegistered && unloadCleanupFn && typeof window !== 'undefined') {
+        window.removeEventListener('beforeunload', unloadCleanupFn);
+        unloadHandlerRegistered = false;
+        unloadCleanupFn = null;
+        console.log('[PatternWorkerPool] Removed beforeunload handler');
+    }
 
     console.log('[PatternWorkerPool] Terminated all workers and heartbeat channels');
 }

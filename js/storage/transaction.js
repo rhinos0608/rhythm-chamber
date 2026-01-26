@@ -306,6 +306,7 @@ class TransactionOperation {
         this.previousValue = previousValue;  // For rollback
         this.previousOptions = previousOptions;  // For rollback (token options)
         this.committed = false;
+        this.rolledBack = false;
         this.timestamp = Date.now();
         this.retryCount = 0;  // ARCH FIX: Track retry attempts
     }
@@ -889,14 +890,22 @@ async function commit(ctx) {
     const errors = [];
     let succeededCount = 0;
 
-    // CRITICAL FIX for Issue #3: Continue attempting all writes even if some fail
-    // Track which operations succeeded and which failed
-    // ARCH FIX: Wrap each operation in retry logic for transient failures
-    for (const op of ctx.operations) {
-        try {
-            // ARCH FIX: Use retry wrapper for storage operations
-            await retryOperation(async () => {
-                // ARCH FIX: Add timeout wrapper to prevent hangs
+    // ADVERSARIAL REVIEW FIX: Retry ENTIRE transaction to maintain atomicity
+    // If any operation fails, rollback and retry everything
+    for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
+        // Clear previous attempt's state
+        errors.length = 0;
+        succeededCount = 0;
+
+        // Reset all committed flags
+        for (const op of ctx.operations) {
+            op.committed = false;
+        }
+
+        // Try to commit all operations
+        for (const op of ctx.operations) {
+            try {
+                // No retry here - if it fails, entire transaction fails
                 await withTimeout(async () => {
                     if (op.backend === 'localstorage') {
                         if (op.type === 'put') {
@@ -917,7 +926,6 @@ async function commit(ctx) {
                             await IndexedDBCore.delete(op.store, op.key);
                         }
                     } else if (op.backend === 'securetoken') {
-                        // HNW Network: SecureTokenStore integration
                         if (!SecureTokenStore) {
                             throw new Error('SecureTokenStore not available');
                         }
@@ -930,44 +938,46 @@ async function commit(ctx) {
                         }
                     }
                 }, OPERATION_TIMEOUT_MS);
-            }, MAX_RETRY_ATTEMPTS);
 
-            op.committed = true;
-            succeededCount++;
-        } catch (error) {
-            // ARCH FIX: Track retry attempts in context
-            if (error.message?.includes('failed after')) {
-                ctx.retryAttempts++;
+                op.committed = true;
+                succeededCount++;
+            } catch (error) {
+                errors.push({ operation: op, error });
+                // One failure = entire transaction fails
+                break;
             }
-            if (error.message?.includes('timed out')) {
-                ctx.operationTimeouts++;
-            }
-
-            // CRITICAL FIX for Issue #3: Continue processing all operations
-            // Record error but don't break - allows partial commit
-            errors.push({ operation: op, error });
-            console.warn(`[StorageTransaction] Operation failed during commit:`, {
-                backend: op.backend,
-                type: op.type,
-                key: op.key,
-                error: error.message
-            });
         }
+
+        // If all operations succeeded, we're done
+        if (errors.length === 0) {
+            ctx.committed = true;
+            console.log(`[StorageTransaction] Transaction ${ctx.id} committed successfully (${succeededCount} operations)`);
+            return;
+        }
+
+        // If this was the last attempt, give up
+        if (attempt === MAX_RETRY_ATTEMPTS - 1) {
+            break;
+        }
+
+        // Rollback this attempt and retry
+        console.warn(`[StorageTransaction] Transaction ${ctx.id} attempt ${attempt + 1} failed, rolling back and retrying...`);
+        await rollback(ctx);
+
+        // Wait before retry (exponential backoff)
+        const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+        await new Promise(resolve => setTimeout(resolve, delay));
     }
 
-    // CRITICAL FIX for Issue #3: Only rollback if no operations succeeded
-    // If some operations succeeded, we have a partial commit which is better
-    // than rolling back potentially important writes
+    // All retry attempts failed - handle errors
     if (errors.length > 0) {
         if (succeededCount === 0) {
             // Complete failure - rollback is appropriate
             await rollback(ctx);
-            throw new Error(`Commit failed completely: ${errors[0].error.message}`);
+            throw new Error(`Transaction failed completely after ${MAX_RETRY_ATTEMPTS} attempts: ${errors[0].error.message}`);
         } else {
-            // Partial success - log but don't rollback
-            // This prevents losing already-committed data
-
-            // ENHANCEMENT: Create detailed failure summary for debugging
+            // Partial success - this should NOT happen with atomic transactions
+            // But we handle it gracefully for robustness
             const failureSummary = errors.map((err, idx) => ({
                 index: idx,
                 backend: err.operation.backend,
@@ -978,7 +988,6 @@ async function commit(ctx) {
                 errorName: err.error.name || 'Error'
             }));
 
-            // Group failures by backend for better visibility
             const failuresByBackend = errors.reduce((acc, err) => {
                 const backend = err.operation.backend;
                 if (!acc[backend]) {
@@ -994,21 +1003,20 @@ async function commit(ctx) {
             }, {});
 
             const partialCommitError = new Error(
-                `Commit partially succeeded: ${succeededCount}/${ctx.operations.length} operations committed, ` +
-                `${errors.length} failed. Manual intervention may be required.`
+                `Transaction partially succeeded after ${MAX_RETRY_ATTEMPTS} attempts: ` +
+                `${succeededCount}/${ctx.operations.length} operations committed, ` +
+                `${errors.length} failed. This indicates a non-transient error.`
             );
-            partialCommitError.code = 'PARTIAL_COMMIT';
+            partialCommitError.code = 'PARTIAL_COMMIT_AFTER_RETRIES';
             partialCommitError.succeededCount = succeededCount;
             partialCommitError.failedCount = errors.length;
             partialCommitError.errors = errors;
             partialCommitError.failureSummary = failureSummary;
             partialCommitError.failuresByBackend = failuresByBackend;
 
-            // Still mark as committed since some writes succeeded
             ctx.committed = true;
 
-            // Enhanced logging with backend breakdown
-            console.error(`[StorageTransaction] PARTIAL COMMIT DETECTED:`, {
+            console.error(`[StorageTransaction] PARTIAL COMMIT AFTER RETRIES:`, {
                 transactionId: ctx.id,
                 succeeded: succeededCount,
                 failed: errors.length,
@@ -1017,7 +1025,6 @@ async function commit(ctx) {
                 timestamp: new Date().toISOString()
             });
 
-            // Emit event for monitoring/debugging
             if (EventBus) {
                 EventBus.emit('transaction:partial_commit', {
                     transactionId: ctx.id,
@@ -1034,6 +1041,7 @@ async function commit(ctx) {
         }
     }
 
+    // Should not reach here, but for safety
     ctx.committed = true;
     console.log(`[StorageTransaction] Committed ${ctx.operations.length} operations`);
 }
@@ -1059,10 +1067,6 @@ async function revertIndexedDBOperation(op) {
  * @param {TransactionContext} ctx - Transaction context
  */
 async function rollback(ctx) {
-    if (ctx.rolledBack) {
-        return;
-    }
-
     // Rollback in reverse order
     const toRollback = ctx.operations.filter(op => op.committed).reverse();
     const compensationLog = [];
