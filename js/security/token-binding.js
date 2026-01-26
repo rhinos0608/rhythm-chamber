@@ -12,6 +12,35 @@
 import { Common } from '../utils/common.js';
 
 // ==========================================
+// TIMING-SAFE COMPARISON
+// ==========================================
+
+/**
+ * Constant-time string comparison to prevent timing attacks.
+ * Uses bitwise operations to ensure all comparisons take the same time
+ * regardless of where the difference occurs.
+ *
+ * @param {string} a - First string to compare
+ * @param {string} b - Second string to compare
+ * @returns {boolean} True if strings are equal, false otherwise
+ */
+function constantTimeCompare(a, b) {
+    // Early return for different lengths (length comparison is not timing-sensitive)
+    if (a.length !== b.length) {
+        return false;
+    }
+
+    // Use XOR and OR operations to compare all characters
+    // This ensures all comparisons take the same time
+    let result = 0;
+    for (let i = 0; i < a.length; i++) {
+        result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+
+    return result === 0;
+}
+
+// ==========================================
 // Constants
 // ==========================================
 
@@ -241,7 +270,8 @@ async function verifyTokenBinding(token) {
         const binding = JSON.parse(bindingJson);
         const currentFingerprint = await generateDeviceFingerprint();
 
-        if (binding.fingerprint !== currentFingerprint) {
+        // Use constant-time comparison to prevent timing attacks
+        if (!constantTimeCompare(binding.fingerprint, currentFingerprint)) {
             return {
                 valid: false,
                 reason: 'fingerprint_mismatch'
