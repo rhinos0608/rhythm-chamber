@@ -26,6 +26,7 @@ import { safeJsonParse } from './utils/safe-json.js';
 import { ragChunkingService } from './rag/chunking-service.js';
 import { ragCheckpointManager } from './rag/checkpoint-manager.js';
 import { RAGWorkerPool } from './rag/rag-worker-pool.js';
+import { ragQueryService } from './rag/query-service.js';
 
 // Premium feature flag for semantic search
 const PREMIUM_RAG_ENABLED = false; // Set to true to enforce premium gate (disabled for testing)
@@ -487,19 +488,16 @@ async function updateManifestAfterEmbedding(embeddedChunks) {
 /**
  * Search for similar vectors (routes to local store)
  *
+ * Delegates to RAGQueryService for query orchestration.
+ *
  * @param {string} query - Search query text
  * @param {number} limit - Number of results to return
  * @param {AbortSignal} abortSignal - Optional abort signal for cancellation
  * @returns {Promise<Array>} Search results with payloads
  */
 async function search(query, limit = 5, abortSignal = null) {
-    // Check for cancellation
-    if (abortSignal?.aborted) {
-        throw new Error('Search cancelled');
-    }
-
-    // Always route to local mode in WASM-only architecture
-    return searchLocal(query, limit, abortSignal);
+    // Delegate to query service
+    return await ragQueryService.search(query, limit, abortSignal, false);
 }
 
 /**
@@ -686,17 +684,17 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abo
 
 /**
  * Search using local vector store
- * Uses async worker-based search for non-blocking UI during RAG queries
+ *
+ * Delegates to RAGQueryService for query orchestration.
+ * Premium quota gate is enforced at this level.
+ *
  * @param {string} query - Search query text
  * @param {number} limit - Number of results to return
+ * @param {AbortSignal} abortSignal - Optional abort signal
+ * @param {boolean} skipQuotaCheck - Skip premium quota check
  * @returns {Promise<Array>} Search results with payloads
  */
 async function searchLocal(query, limit = 5, abortSignal = null, skipQuotaCheck = false) {
-    // Check for cancellation before expensive operations
-    if (abortSignal?.aborted) {
-        throw new Error('Search cancelled');
-    }
-
     // PREMIUM GATE: Check quota first (unless explicitly skipped)
     if (!skipQuotaCheck) {
         try {
@@ -718,61 +716,8 @@ async function searchLocal(query, limit = 5, abortSignal = null, skipQuotaCheck 
         }
     }
 
-    // Check for cancellation again after quota check
-    if (abortSignal?.aborted) {
-        throw new Error('Search cancelled');
-    }
-
-    // Get modules - load on-demand if not available
-    let LocalEmbeddings = ModuleRegistry.getModuleSync('LocalEmbeddings');
-    let LocalVectorStore = ModuleRegistry.getModuleSync('LocalVectorStore');
-
-    if (!LocalEmbeddings || !LocalVectorStore) {
-        // Preload dependencies
-        await ModuleRegistry.preloadModules(['LocalEmbeddings', 'LocalVectorStore']);
-        LocalEmbeddings = await ModuleRegistry.getModule('LocalEmbeddings');
-        LocalVectorStore = await ModuleRegistry.getModule('LocalVectorStore');
-    }
-
-    if (!LocalEmbeddings) {
-        throw new Error('LocalEmbeddings module not loaded. Check browser compatibility.');
-    }
-
-    if (!LocalVectorStore) {
-        throw new Error('LocalVectorStore module not loaded. Check browser compatibility.');
-    }
-
-    // Auto-initialize LocalEmbeddings if not ready (can happen after page reload)
-    // The model downloads and initializes, but embeddings data is in LocalVectorStore
-    if (!LocalEmbeddings.isReady()) {
-        console.log('[RAG] LocalEmbeddings not ready after page reload, initializing...');
-        await LocalEmbeddings.initialize(() => { });
-    }
-
-    // Auto-initialize LocalVectorStore if not ready (can happen after page reload)
-    // This loads the stored embeddings from IndexedDB
-    if (!LocalVectorStore.isReady()) {
-        console.log('[RAG] LocalVectorStore not ready after page reload, initializing...');
-        await LocalVectorStore.init();
-    }
-
-    // Check for cancellation before embedding generation (expensive)
-    if (abortSignal?.aborted) {
-        throw new Error('Search cancelled');
-    }
-
-    // Generate embedding for query
-    const queryVector = await LocalEmbeddings.getEmbedding(query);
-
-    // Use async search for non-blocking UI (falls back to sync if worker unavailable)
-    const results = await LocalVectorStore.searchAsync(queryVector, limit, 0.3);
-
-    // Transform to match Qdrant response format
-    return results.map(r => ({
-        id: r.id,
-        score: r.score,
-        payload: r.payload
-    }));
+    // Delegate to query service
+    return await ragQueryService.search(query, limit, abortSignal, true);
 }
 
 /**
@@ -804,28 +749,21 @@ async function clearLocalEmbeddings() {
 
 /**
  * Get semantic context for a chat query
- * Returns relevant chunks to inject into the system prompt
+ *
+ * Returns relevant chunks to inject into the system prompt.
+ * Delegates to RAGQueryService for context retrieval.
+ *
+ * @param {string} query - User query
+ * @param {number} limit - Maximum chunks to include
+ * @returns {Promise<string|null>} Formatted context or null
  */
 async function getSemanticContext(query, limit = 3) {
     if (!isConfigured()) {
         return null;
     }
 
-    // PREMIUM GATE: Check quota for semantic search (handled at searchLocal level, skipped here)
-    try {
-        const results = await searchLocal(query, limit, null, true);
-
-        if (results.length === 0) {
-            return null;
-        }
-
-        const context = results.map(r => r.payload.text).join('\n\n');
-        return `SEMANTIC SEARCH RESULTS:\n${context}`;
-
-    } catch (err) {
-        console.error('Semantic search error:', err);
-        return null;
-    }
+    // Delegate to query service
+    return await ragQueryService.getSemanticContext(query, limit);
 }
 
 // ES Module export
