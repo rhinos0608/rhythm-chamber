@@ -836,8 +836,12 @@ export const RAG = {
     isConfigured,
     hasCredentials,
     isStale,
-    getCheckpoint,
-    clearCheckpoint,
+
+    // Checkpoint management - delegate to checkpoint manager
+    getCheckpoint: () => ragCheckpointManager.getCheckpoint(),
+    saveCheckpoint: (data) => ragCheckpointManager.saveCheckpoint(data),
+    clearCheckpoint: () => ragCheckpointManager.clearCheckpoint(),
+
     search,
     generateEmbeddings,
     clearEmbeddings,
