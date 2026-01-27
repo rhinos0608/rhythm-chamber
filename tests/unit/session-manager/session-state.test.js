@@ -25,43 +25,19 @@ const mockAppState = {
     update: vi.fn()
 };
 
-// Create a proper class mock for Mutex that actually serializes operations
-// This is critical for testing concurrent access patterns
-let operationQueue = Promise.resolve();
-const mockRunExclusive = vi.fn((fn) => {
-    // Chain operations to ensure they run sequentially, not concurrently
-    // This simulates real mutex behavior
-    const result = operationQueue.then(() => fn());
-    // Continue queue even if an operation fails
-    operationQueue = result.catch(() => {});
-    return result;
-});
-
-class MockMutex {
-    constructor() {
-        this.runExclusive = mockRunExclusive;
-    }
-}
-
 // Mock modules before importing
+// NOTE: We use the REAL Mutex class, not a mock, to test actual concurrent behavior
+// The fake serialization mock was preventing real race condition testing
 vi.mock('../../../js/services/data-version.js', () => ({ DataVersion: mockDataVersion }));
 vi.mock('../../../js/state/app-state.js', () => ({ AppState: mockAppState }));
-vi.mock('../../../js/utils/concurrency/mutex.js', () => ({
-    Mutex: MockMutex
-}));
+
+// Import the real Mutex to test actual concurrent behavior
+import { Mutex } from '../../../js/utils/concurrency/mutex.js';
 
 // Helper to reset all mocks
 function resetMocks() {
     mockDataVersion.tagMessage.mockReset();
     mockAppState.update.mockReset();
-    mockRunExclusive.mockReset();
-    // Reset operation queue and re-apply serialization implementation
-    operationQueue = Promise.resolve();
-    mockRunExclusive.mockImplementation((fn) => {
-        const result = operationQueue.then(() => fn());
-        operationQueue = result.catch(() => {});
-        return result;
-    });
 }
 
 // Mock window for legacy compatibility
@@ -217,13 +193,16 @@ describe('SessionState Session Data', () => {
         });
         const data = SessionState.getSessionData();
 
-        // Attempting to mutate frozen data should throw (or silently fail in non-strict mode)
+        // Attempting to mutate frozen data should throw in strict mode
+        // The important thing is the data is actually frozen and cannot be modified
         expect(() => {
             data.id = 'modified';
-        }).not.toThrow();  // In non-strict mode, Object.freeze silently fails
+        }).toThrow();  // Object.freeze prevents mutation
 
-        // But the data should not actually be modified
-        expect(data.id).toBe('test-id');
+        // Even if we try to modify, the original data should not be changed
+        // (get a fresh snapshot to verify)
+        const freshData = SessionState.getSessionData();
+        expect(freshData.id).toBe('test-id');
     });
 
     it('should set session data with deep cloning', () => {
@@ -275,9 +254,29 @@ describe('SessionState Atomic Updates', () => {
     });
 
     it('should use mutex for concurrent updates', async () => {
-        await SessionState.updateSessionData(() => ({}));
+        // This test verifies that the mutex serializes operations correctly
+        SessionState.setSessionData({
+            id: 'test-id',
+            messages: []
+        });
 
-        expect(mockRunExclusive).toHaveBeenCalled();
+        // Start multiple updates concurrently
+        const promises = [];
+        for (let i = 0; i < 5; i++) {
+            promises.push(
+                SessionState.updateSessionData((data) => ({
+                    ...data,
+                    messages: [...data.messages, { role: 'user', content: `Update ${i}` }]
+                }))
+            );
+        }
+
+        await Promise.all(promises);
+
+        // All updates should be applied sequentially via mutex
+        const result = SessionState.getSessionData();
+        expect(result.messages).toHaveLength(5);
+        expect(result._version).toBe(5);
     });
 
     it('should sync to window after update', async () => {
@@ -288,8 +287,12 @@ describe('SessionState Atomic Updates', () => {
 
         await SessionState.updateSessionData((data) => data);
 
-        expect(global.window._sessionData).toBeDefined();
-        expect(global.window._sessionData.id).toBe('test-id');
+        // SessionState no longer uses window._sessionData
+        // It uses ES module exports instead
+        // Verify session data is accessible via getSessionData
+        const data = SessionState.getSessionData();
+        expect(data.id).toBe('test-id');
+        expect(data.messages).toHaveLength(1);
     });
 
     it('should handle updater function returning frozen data', async () => {
@@ -666,13 +669,15 @@ describe('SessionState AppState Sync', () => {
 // ==========================================
 
 describe('SessionState Concurrency', () => {
-    it('should handle concurrent updates via mutex', async () => {
+    beforeEach(() => {
         SessionState.setSessionData({
             id: 'test',
             messages: []
         });
+    });
 
-        // Simulate concurrent updates
+    it('should serialize concurrent updates via mutex', async () => {
+        // Simulate concurrent updates with Promise.all
         const updates = [];
         for (let i = 0; i < 10; i++) {
             updates.push(
@@ -690,9 +695,10 @@ describe('SessionState Concurrency', () => {
         expect(history.length).toBe(10);
     });
 
-    it('should prevent race conditions in addMessageToHistory', async () => {
+    it('should handle rapid concurrent message additions', async () => {
+        // Create 50 concurrent add operations
         const promises = [];
-        for (let i = 0; i < 20; i++) {
+        for (let i = 0; i < 50; i++) {
             promises.push(
                 SessionState.addMessageToHistory({ role: 'user', content: `Msg ${i}` })
             );
@@ -701,18 +707,20 @@ describe('SessionState Concurrency', () => {
         await Promise.all(promises);
 
         const history = SessionState.getHistory();
-        expect(history.length).toBe(20);
+        expect(history.length).toBe(50);
     });
 
-    it('should serialize mutex operations via mock', async () => {
-        // This test verifies that the mock actually serializes operations
-        // rather than letting them run concurrently
+    it('should serialize real Mutex operations', async () => {
+        // Verify the real Mutex class serializes operations correctly
+        // This test uses the actual Mutex, not a mock
         let concurrentCount = 0;
         let maxConcurrent = 0;
         const executionOrder = [];
 
+        const mutex = new Mutex();
+
         const operations = Array.from({ length: 10 }, async (_, i) => {
-            return mockRunExclusive(async () => {
+            return mutex.runExclusive(async () => {
                 concurrentCount++;
                 if (concurrentCount > maxConcurrent) {
                     maxConcurrent = concurrentCount;
@@ -739,11 +747,12 @@ describe('SessionState Concurrency', () => {
         });
     });
 
-    it('should maintain FIFO order with mutex serialization', async () => {
+    it('should maintain FIFO order with real Mutex', async () => {
         const results = [];
+        const mutex = new Mutex();
 
         const operations = [1, 2, 3, 4, 5].map(async (val) => {
-            return mockRunExclusive(async () => {
+            return mutex.runExclusive(async () => {
                 await Promise.resolve();
                 results.push(val);
             });
@@ -753,6 +762,112 @@ describe('SessionState Concurrency', () => {
 
         // Should maintain submission order
         expect(results).toEqual([1, 2, 3, 4, 5]);
+    });
+
+    it('should create true race condition with setTimeout', async () => {
+        // This test creates a REAL race condition by having two operations
+        // read the same version, then both try to update simultaneously
+        const data = SessionState.getSessionData();
+        const initialVersion = data._version;
+
+        // Create two promises that both read the same version
+        // but will execute at slightly different times
+        let firstFinished = false;
+        let secondFinished = false;
+
+        const update1 = SessionState.updateSessionData({
+            updaterFn: (d) => ({
+                ...d,
+                messages: [...d.messages, { role: 'user', content: 'First' }]
+            }),
+            expectedVersion: initialVersion
+        }).then((result) => {
+            firstFinished = true;
+            return result;
+        });
+
+        // Use setTimeout to ensure the second update is created AFTER
+        // the first one has entered the mutex queue
+        await new Promise(resolve => setImmediate(resolve));
+
+        // At this point, update1 is pending but hasn't executed yet
+        // So update2 still sees the same version
+        const update2 = SessionState.updateSessionData({
+            updaterFn: (d) => ({
+                ...d,
+                messages: [...d.messages, { role: 'user', content: 'Second' }]
+            }),
+            expectedVersion: initialVersion
+        }).then((result) => {
+            secondFinished = true;
+            return result;
+        });
+
+        const [result1, result2] = await Promise.all([update1, update2]);
+
+        // Exactly one should succeed, one should fail
+        // The mutex serializes them, so the second sees the stale version
+        expect(result1.success !== result2.success).toBe(true);
+
+        // Only one message should be added
+        const finalData = SessionState.getSessionData();
+        expect(finalData.messages.length).toBe(1);
+    });
+
+    it('should handle overlapping read-modify-write operations', async () => {
+        // Test multiple overlapping operations that all read the same state
+        const snapshot = SessionState.getSessionData();
+        const baseVersion = snapshot._version;
+
+        // Start 5 updates all based on the same snapshot
+        // This simulates a true race condition where multiple clients
+        // read the same data and try to update simultaneously
+        const updates = [1, 2, 3, 4, 5].map((id) => {
+            return SessionState.updateSessionData({
+                updaterFn: (data) => ({
+                    ...data,
+                    messages: [...data.messages, { role: 'user', content: `Update ${id}` }]
+                }),
+                expectedVersion: baseVersion
+            });
+        });
+
+        const results = await Promise.all(updates);
+
+        // Only ONE should succeed - the first one through the mutex
+        // All others should fail with version mismatch
+        const successCount = results.filter(r => r.success).length;
+        const failureCount = results.filter(r => !r.success).length;
+
+        expect(successCount).toBe(1);
+        expect(failureCount).toBe(4);
+
+        // Only one message should be in the final state
+        const finalData = SessionState.getSessionData();
+        expect(finalData.messages.length).toBe(1);
+    });
+
+    it('should serialize mix of add and remove operations', async () => {
+        // Add initial messages
+        await SessionState.addMessageToHistory({ role: 'user', content: 'M1' });
+        await SessionState.addMessageToHistory({ role: 'user', content: 'M2' });
+        await SessionState.addMessageToHistory({ role: 'user', content: 'M3' });
+
+        // Run concurrent removes and adds
+        const promises = [
+            SessionState.removeMessageFromHistory(0),
+            SessionState.addMessageToHistory({ role: 'user', content: 'M4' }),
+            SessionState.removeMessageFromHistory(1),
+            SessionState.addMessageToHistory({ role: 'user', content: 'M5' })
+        ];
+
+        await Promise.all(promises);
+
+        // Verify final state is consistent
+        const history = SessionState.getHistory();
+        // The exact count depends on serialization order
+        expect(history.length).toBeGreaterThan(0);
+        expect(history.length).toBeLessThan(5);
     });
 });
 
@@ -921,35 +1036,51 @@ describe('SessionState Versioning', () => {
     });
 
     it('should handle concurrent updates with versioning correctly', async () => {
-        // Simulate a race condition scenario
-        const snapshot1 = SessionState.getSessionData();
-        const version1 = snapshot1._version;
+        // This test creates a TRUE race condition by having two updates
+        // both read the same version before either completes
+        const snapshot = SessionState.getSessionData();
+        const baseVersion = snapshot._version;
 
-        // First update starts
+        // Start two updates with the SAME expected version
+        // This simulates two clients reading the same state simultaneously
         const update1 = SessionState.updateSessionData({
             updaterFn: (data) => ({
                 ...data,
                 messages: [...data.messages, { role: 'user', content: 'Update 1' }]
             }),
-            expectedVersion: version1
+            expectedVersion: baseVersion
         });
 
-        // Second update starts with the same snapshot (simulating concurrent read)
         const update2 = SessionState.updateSessionData({
             updaterFn: (data) => ({
                 ...data,
                 messages: [...data.messages, { role: 'user', content: 'Update 2' }]
             }),
-            expectedVersion: version1
+            expectedVersion: baseVersion
         });
 
         const [result1, result2] = await Promise.all([update1, update2]);
 
-        // One should succeed, the other should fail due to version mismatch
-        expect(result1.success || result2.success).toBe(true);
-        // At least one should fail if they both used the same version
-        // (The mutex serializes them, so second sees stale version)
-        expect(result1.success !== result2.success || result1.version !== result2.version).toBe(true);
+        // With the real Mutex serializing operations:
+        // - First update wins (success=true, version=baseVersion+1)
+        // - Second update fails (success=false, version=baseVersion+1 - the current version)
+        const successResults = [result1, result2].filter(r => r.success);
+        const failureResults = [result1, result2].filter(r => !r.success);
+
+        // Exactly ONE should succeed
+        expect(successResults.length).toBe(1);
+        expect(failureResults.length).toBe(1);
+
+        // The successful one should have incremented the version
+        expect(successResults[0].version).toBe(baseVersion + 1);
+
+        // The failed one should see the current version (not the stale one)
+        expect(failureResults[0].version).toBe(baseVersion + 1);
+
+        // Only ONE message should be in the final state
+        const finalData = SessionState.getSessionData();
+        expect(finalData.messages.length).toBe(1);
+        expect(finalData._version).toBe(baseVersion + 1);
     });
 
     it('should reset version when setSessionData is called', async () => {
@@ -1003,9 +1134,10 @@ describe('SessionState Versioning', () => {
     it('should include version in frozen session data', () => {
         const data = SessionState.getSessionData();
 
-        // In non-strict mode, Object.freeze silently fails
-        // The important thing is the data doesn't actually change
-        data._version = 999;  // This will silently fail
+        // Attempting to mutate frozen data should throw
+        expect(() => {
+            data._version = 999;  // This should throw due to Object.freeze
+        }).toThrow();
 
         // Version should not have changed in the actual state
         const data2 = SessionState.getSessionData();
