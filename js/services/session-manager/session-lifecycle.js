@@ -9,9 +9,14 @@
  *
  * Responsibilities:
  * - Session CRUD operations (Create, Read, Update, Delete)
- * - Session state management and transitions
+ * - Session state transitions via injected state interface
  * - Session cleanup and recovery
  * - Event emission for lifecycle changes
+ *
+ * Architecture Note:
+ * This module does NOT directly import session-state.js to avoid circular dependencies.
+ * Instead, it uses an injected state accessor interface passed through initialize().
+ * This follows the Facade pattern where state operations go through the index.js coordinator.
  *
  * @module services/session-manager/session-lifecycle
  */
@@ -21,9 +26,9 @@
 import { EventBus } from '../event-bus.js';
 import { Storage } from '../../storage.js';
 import { STORAGE_KEYS } from '../../storage/keys.js';
-import * as SessionState from './session-state.js';
 import lockManager from '../session-lock-manager.js';
 import { AppState } from '../../state/app-state.js';
+import * as SessionPersistence from './session-persistence.js';
 
 // ==========================================
 // Event Schemas for EventBus Registration
@@ -68,7 +73,35 @@ const BASE_RETRY_DELAY_MS = 100;
 
 let hasWarnedAboutMessageLimit = false;
 let previousSessionId = null;
-let autoSaveTimeoutId = null;
+
+// ==========================================
+// State Accessor Interface (Dependency Injection)
+// ==========================================
+
+/**
+ * State accessor interface to avoid circular dependency with session-state.js
+ * This is injected via initialize() to maintain facade pattern compliance.
+ * @type {Object|null}
+ */
+let stateAccessor = null;
+
+/**
+ * Initialize the lifecycle module with state accessor interface
+ * This follows dependency injection pattern to avoid circular imports.
+ * @param {Object} accessor - State accessor object with get/set/update methods
+ */
+export function initialize(accessor) {
+    stateAccessor = accessor;
+}
+
+/**
+ * Reset the state accessor (mainly for testing)
+ */
+export function reset() {
+    stateAccessor = null;
+    hasWarnedAboutMessageLimit = false;
+    previousSessionId = null;
+}
 
 // ==========================================
 // UUID Utilities
@@ -137,13 +170,36 @@ function generateSessionTitle(messages) {
 
 /**
  * Notify session update via EventBus
+ * Uses state accessor to get current session ID without circular dependency.
+ * Tracks event emission for cleanup purposes.
  * @param {string} [eventType='session:updated'] - Event type for EventBus
  * @param {Object} [eventPayload={}] - Additional event payload
  * @returns {void}
  */
 function notifySessionUpdate(eventType = 'session:updated', eventPayload = {}) {
+    // Use state accessor to get current session ID (no circular import)
+    // Only add sessionId if not already in eventPayload (for events like session:switched)
+    if (!eventPayload.sessionId) {
+        const currentSessionId = stateAccessor?.getCurrentSessionId?.() ?? null;
+        eventPayload = { sessionId: currentSessionId, ...eventPayload };
+    }
     // Emit via centralized EventBus - no legacy listeners
-    EventBus.emit(eventType, { sessionId: SessionState.getCurrentSessionId(), ...eventPayload });
+    EventBus.emit(eventType, eventPayload);
+}
+
+/**
+ * Cleanup resources for a specific session
+ * Called when switching away from a session to prevent memory leaks
+ * @param {string} sessionId - Session ID to cleanup
+ * @returns {void}
+ */
+function cleanupSessionResources(sessionId) {
+    // Cancel any pending operations for this session
+    // Event listeners are handled by EventBus which doesn't require manual cleanup
+    // State references are cleaned up when switching to new session
+    if (previousSessionId === sessionId) {
+        previousSessionId = null;
+    }
 }
 
 /**
@@ -159,73 +215,6 @@ async function acquireProcessingLock(expectedSessionId) {
     return lockManager.acquireProcessingLock(expectedSessionId);
 }
 
-/**
- * Save current session to IndexedDB immediately
- * EDGE CASE FIX: Preserves system prompts during truncation
- * HIGH PRIORITY FIX: Returns boolean indicating success for caller error handling
- * @returns {Promise<boolean>} True if save succeeded, false otherwise
- */
-async function saveCurrentSession() {
-    const currentSessionId = SessionState.getCurrentSessionId();
-    if (!currentSessionId || !Storage.saveSession) {
-        return false;
-    }
-
-    // Get messages from module-local memory (thread-safe access)
-    const sessionData = SessionState.getSessionData();
-    const messages = sessionData.messages || [];
-    const messageCount = messages.length;
-    const currentSessionCreatedAt = SessionState.getCurrentSessionCreatedAt();
-
-    // Warn when approaching message limit (DATA LOSS WARNING)
-    if (messageCount >= MESSAGE_LIMIT_WARNING_THRESHOLD && !hasWarnedAboutMessageLimit) {
-        hasWarnedAboutMessageLimit = true;
-        console.warn(`[SessionLifecycle] Approaching message limit: ${messageCount}/${MAX_SAVED_MESSAGES}`);
-    }
-
-    try {
-        // EDGE CASE FIX: Preserve system prompts during truncation
-        // System prompts are critical for LLM behavior - they should not be truncated
-        const systemMessages = messages.filter(m => m.role === 'system');
-        const nonSystemMessages = messages.filter(m => m.role !== 'system');
-        const messagesToSave = messageCount > MAX_SAVED_MESSAGES
-            ? [...systemMessages, ...nonSystemMessages.slice(-(MAX_SAVED_MESSAGES - systemMessages.length))]
-            : messages;
-
-        // Get personality from AppState (ES module, not global)
-        const personality = AppState.get('data.personality') || {};
-        const isLiteMode = AppState.get('lite.isLiteMode') || false;
-
-        const session = {
-            id: currentSessionId,
-            title: generateSessionTitle(messages),
-            createdAt: currentSessionCreatedAt,
-            messages: messagesToSave,
-            metadata: {
-                personalityName: personality.name || 'Unknown',
-                personalityEmoji: personality.emoji || '🎵',
-                isLiteMode
-            }
-        };
-
-        // Log warning when messages are actually truncated (DATA LOSS WARNING)
-        if (messageCount > MAX_SAVED_MESSAGES) {
-            const truncatedCount = messageCount - messagesToSave.length;
-            console.warn(`[SessionLifecycle] Truncated ${truncatedCount} old messages (kept ${systemMessages.length} system prompts + ${MAX_SAVED_MESSAGES - systemMessages.length} most recent)`);
-        }
-
-        await Storage.saveSession(session);
-        console.log('[SessionLifecycle] Session saved:', currentSessionId);
-        notifySessionUpdate('session:updated', { sessionId: currentSessionId, field: 'messages' });
-        return true;
-    } catch (e) {
-        console.error('[SessionLifecycle] Failed to save session:', e);
-        // HIGH PRIORITY FIX: Notify user of save failure - this is a data loss risk
-        console.warn('[SessionLifecycle] Failed to save conversation. Data may be lost on refresh.');
-        return false;
-    }
-}
-
 // ==========================================
 // Session Creation
 // ==========================================
@@ -237,10 +226,7 @@ async function saveCurrentSession() {
  */
 export async function createSession(initialMessages = []) {
     // Flush any pending saves for previous session
-    if (autoSaveTimeoutId) {
-        clearTimeout(autoSaveTimeoutId);
-        await saveCurrentSession();
-    }
+    await SessionPersistence.flushPendingSaveAsync();
 
     // Reset message limit warning flag for new session (DATA LOSS WARNING)
     hasWarnedAboutMessageLimit = false;
@@ -248,18 +234,16 @@ export async function createSession(initialMessages = []) {
     const currentSessionId = generateUUID();
     const currentSessionCreatedAt = new Date().toISOString();
 
-    // Update session state
-    SessionState.setCurrentSessionId(currentSessionId);
-    SessionState.setCurrentSessionCreatedAt(currentSessionCreatedAt);
-
-    // Sync to AppState for centralized state management
-    SessionState.syncSessionIdToAppState(currentSessionId);
-
-    // Store session data in module-local memory (protected from external mutations)
-    SessionState.setSessionData({
-        id: currentSessionId,
-        messages: initialMessages
-    });
+    // Update session state via state accessor (no circular import)
+    if (stateAccessor) {
+        stateAccessor.setCurrentSessionId?.(currentSessionId);
+        stateAccessor.setCurrentSessionCreatedAt?.(currentSessionCreatedAt);
+        stateAccessor.syncSessionIdToAppState?.(currentSessionId);
+        stateAccessor.setSessionData?.({
+            id: currentSessionId,
+            messages: initialMessages
+        });
+    }
 
     // Save current session ID to unified storage and localStorage
     if (Storage.setConfig) {
@@ -277,9 +261,9 @@ export async function createSession(initialMessages = []) {
         console.warn('[SessionLifecycle] Session may not be remembered on reload due to storage issues.');
     }
 
-    // Save immediately if we have messages
+    // Save immediately if we have messages - use SessionPersistence module
     if (initialMessages.length > 0) {
-        await saveCurrentSession();
+        await SessionPersistence.saveCurrentSession();
     }
 
     console.log('[SessionLifecycle] Created new session:', currentSessionId);
@@ -335,18 +319,18 @@ async function loadSession(sessionId) {
             return null;
         }
 
-        // Update module-level state
-        SessionState.setCurrentSessionId(session.id);
-        SessionState.setCurrentSessionCreatedAt(session.createdAt);
+        // Update module-level state via state accessor (no circular import)
+        if (stateAccessor) {
+            stateAccessor.setCurrentSessionId?.(session.id);
+            stateAccessor.setCurrentSessionCreatedAt?.(session.createdAt);
+            stateAccessor.syncSessionIdToAppState?.(session.id);
 
-        // Sync to AppState for centralized state management
-        SessionState.syncSessionIdToAppState(session.id);
-
-        // HIGH PRIORITY FIX: Use updateSessionData mutex to prevent race conditions
-        await SessionState.updateSessionData(() => ({
-            id: session.id,
-            messages: session.messages || []
-        }));
+            // HIGH PRIORITY FIX: Use updateSessionData mutex to prevent race conditions
+            await stateAccessor.updateSessionData?.(() => ({
+                id: session.id,
+                messages: session.messages || []
+            }));
+        }
 
         // Save current session ID to unified storage and localStorage
         if (Storage.setConfig) {
@@ -383,7 +367,7 @@ async function loadSession(sessionId) {
  * @returns {Promise<boolean>} Success status
  */
 export async function switchSession(sessionId) {
-    const currentSessionId = SessionState.getCurrentSessionId();
+    const currentSessionId = stateAccessor?.getCurrentSessionId?.() ?? null;
 
     // Acquire the lock (not just check it)
     // Hold lock through the save operation to prevent race conditions
@@ -407,12 +391,9 @@ export async function switchSession(sessionId) {
         // CRITICAL FIX: Always save current session before switching
         // Previous conditional (only if autoSaveTimeoutId) created data loss window
         if (currentSessionId) {
-            // Cancel any pending save and save immediately
-            if (autoSaveTimeoutId) {
-                clearTimeout(autoSaveTimeoutId);
-                autoSaveTimeoutId = null;
-            }
-            await saveCurrentSession();
+            // Use SessionPersistence to flush and save
+            await SessionPersistence.flushPendingSaveAsync();
+            await SessionPersistence.saveCurrentSession();
         }
 
         // Track the previous session ID before switching
@@ -421,6 +402,10 @@ export async function switchSession(sessionId) {
         const session = await loadSession(sessionId);
         if (session) {
             notifySessionUpdate('session:switched', { fromSessionId: previousSessionId, toSessionId: sessionId });
+            // Cleanup resources for previous session AFTER event is emitted to prevent memory leaks
+            if (previousSessionId) {
+                cleanupSessionResources(previousSessionId);
+            }
             return true;
         }
         return false;
@@ -457,7 +442,7 @@ export async function deleteSession(sessionId) {
         await Storage.deleteSession(sessionId);
 
         // If we deleted the current session, create a new one
-        const currentSessionId = SessionState.getCurrentSessionId();
+        const currentSessionId = stateAccessor?.getCurrentSessionId?.() ?? null;
         if (sessionId === currentSessionId) {
             await createSession();
         }
@@ -517,18 +502,17 @@ export async function renameSession(sessionId, newTitle) {
  */
 export async function clearAllSessions() {
     // CRITICAL FIX: Save current session before clearing to prevent data loss
-    const currentSessionId = SessionState.getCurrentSessionId();
+    const currentSessionId = stateAccessor?.getCurrentSessionId?.() ?? null;
     if (currentSessionId) {
-        // Cancel any pending save and save immediately
-        if (autoSaveTimeoutId) {
-            clearTimeout(autoSaveTimeoutId);
-            autoSaveTimeoutId = null;
-        }
-        await saveCurrentSession();
+        // Use SessionPersistence to flush and save
+        await SessionPersistence.flushPendingSaveAsync();
+        await SessionPersistence.saveCurrentSession();
     }
 
-    // Clear module-local state
-    SessionState.setSessionData({ id: null, messages: [] });
+    // Clear module-local state via state accessor
+    if (stateAccessor) {
+        stateAccessor.setSessionData?.({ id: null, messages: [] });
+    }
 
     await createSession();
 }

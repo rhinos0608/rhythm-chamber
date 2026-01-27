@@ -24,7 +24,8 @@ import {
     ANOMALY_THRESHOLD,
     PERCENTAGE_MULTIPLIER,
     SCORE_PRECISION,
-    COVERAGE_LEVELS
+    COVERAGE_LEVELS,
+    TELEMETRY_LIMITS
 } from './percentages.js';
 import SESSION from '../constants/session.js';
 
@@ -37,7 +38,8 @@ export {
     ANOMALY_THRESHOLD,
     PERCENTAGE_MULTIPLIER,
     SCORE_PRECISION,
-    COVERAGE_LEVELS
+    COVERAGE_LEVELS,
+    TELEMETRY_LIMITS
 } from './percentages.js';
 export { SESSION } from '../constants/session.js';
 
@@ -70,6 +72,7 @@ const Constants = {
     PERCENTAGE_MULTIPLIER,
     SCORE_PRECISION,
     COVERAGE_LEVELS,
+    TELEMETRY_LIMITS,
 
     // Session
     SESSION,

@@ -11,7 +11,7 @@
  * @module services/wave-telemetry
  */
 
-import { LIMITS, ANOMALY_THRESHOLD, PERCENTAGE_MULTIPLIER } from '../constants/percentages.js';
+import { TELEMETRY_LIMITS, ANOMALY_THRESHOLD, PERCENTAGE_MULTIPLIER } from '../constants/percentages.js';
 import { DELAYS } from '../constants/delays.js';
 
 // ==========================================
@@ -66,8 +66,8 @@ function record(metric, actualMs) {
     const data = metrics.get(metric);
     data.samples.push(actualMs);
 
-    // Keep only last LIMITS.MAX_SAMPLES samples
-    if (data.samples.length > LIMITS.MAX_SAMPLES) {
+    // Keep only last TELEMETRY_LIMITS.MAX_SAMPLES samples
+    if (data.samples.length > TELEMETRY_LIMITS.MAX_SAMPLES) {
         data.samples.shift();
     }
 }
@@ -214,10 +214,10 @@ function _touchWave(waveId) {
  */
 function startWave(origin) {
     // Check if at capacity and evict oldest (LRU)
-    if (waves.size >= LIMITS.MAX_WAVES) {
+    if (waves.size >= TELEMETRY_LIMITS.MAX_WAVES) {
         const oldestKey = waves.keys().next().value;
         waves.delete(oldestKey);
-        console.warn(`[WaveTelemetry] LRU eviction: removed oldest wave ${oldestKey} (max ${LIMITS.MAX_WAVES} waves reached)`);
+        console.warn(`[WaveTelemetry] LRU eviction: removed oldest wave ${oldestKey} (max ${TELEMETRY_LIMITS.MAX_WAVES} waves reached)`);
     }
 
     const waveId = generateUUID();
@@ -418,8 +418,8 @@ export const WaveTelemetry = {
 
     // Configuration (read-only) - for backwards compatibility
     ANOMALY_THRESHOLD: ANOMALY_THRESHOLD.DEFAULT,
-    MAX_SAMPLES: LIMITS.MAX_SAMPLES,
-    MAX_WAVES: LIMITS.MAX_WAVES,
+    MAX_SAMPLES: TELEMETRY_LIMITS.MAX_SAMPLES,
+    MAX_WAVES: TELEMETRY_LIMITS.MAX_WAVES,
     DEFAULT_MAX_AGE_MS
 };
 
