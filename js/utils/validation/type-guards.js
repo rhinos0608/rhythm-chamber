@@ -1,0 +1,127 @@
+/**
+ * Type Guards Module
+ *
+ * Provides type checking utilities for runtime type validation.
+ * These functions help determine the type of values at runtime,
+ * which is essential for validation, error handling, and type safety.
+ *
+ * @module validation/type-guards
+ */
+
+// ==========================================
+// Type Guards
+// ==========================================
+
+/**
+ * Check if a value is a non-null object
+ * @param {*} value - Value to check
+ * @returns {boolean} True if value is a non-null object
+ *
+ * @example
+ * if (isObject(data)) {
+ *   console.log(data.property);
+ * }
+ */
+export function isObject(value) {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Check if a value is a plain object (not null, not array, not a special object)
+ * @param {*} value - Value to check
+ * @returns {boolean} True if value is a plain object
+ *
+ * @example
+ * if (isPlainObject(config)) {
+ *   // Safe to mutate
+ *   config.newProperty = 'value';
+ * }
+ */
+export function isPlainObject(value) {
+    if (!isObject(value)) return false;
+    const proto = Object.getPrototypeOf(value);
+    return proto === null || proto === Object.prototype;
+}
+
+/**
+ * Check if a value is an array
+ * @param {*} value - Value to check
+ * @returns {boolean} True if value is an array
+ *
+ * @example
+ * if (isArray(items)) {
+ *   items.forEach(item => console.log(item));
+ * }
+ */
+export function isArray(value) {
+    return Array.isArray(value);
+}
+
+/**
+ * Check if a value is a non-empty string
+ * @param {*} value - Value to check
+ * @returns {boolean} True if value is a non-empty string
+ *
+ * @example
+ * if (isNonEmptyString(input)) {
+ *   processInput(input);
+ * }
+ */
+export function isNonEmptyString(value) {
+    return typeof value === 'string' && value.trim().length > 0;
+}
+
+/**
+ * Check if a value is a function
+ * @param {*} value - Value to check
+ * @returns {boolean} True if value is a function
+ *
+ * @example
+ * if (isFunction(callback)) {
+ *   callback();
+ * }
+ */
+export function isFunction(value) {
+    return typeof value === 'function';
+}
+
+/**
+ * Check if a value is a promise
+ * @param {*} value - Value to check
+ * @returns {boolean} True if value is a promise
+ *
+ * @example
+ * if (isPromise(result)) {
+ *   await result;
+ * }
+ */
+export function isPromise(value) {
+    return isObject(value) && isFunction(value.then);
+}
+
+// ==========================================
+// Utilities
+// ==========================================
+
+/**
+ * Ensure value is a number with fallback
+ * @param {*} value - Value to convert
+ * @param {number} [fallback=0] - Fallback value if conversion fails
+ * @returns {number} Parsed number or fallback
+ *
+ * @example
+ * const count = ensureNumber(userInput, 0);
+ * const size = ensureNumber(config.size, 10);
+ */
+export function ensureNumber(value, fallback = 0) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+    }
+    if (typeof value === 'string') {
+        const parsed = Number(value);
+        if (!Number.isNaN(parsed) && Number.isFinite(parsed)) {
+            return parsed;
+        }
+    }
+    return fallback;
+}
