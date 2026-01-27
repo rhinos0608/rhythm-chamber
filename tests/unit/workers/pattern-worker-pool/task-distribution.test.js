@@ -245,9 +245,10 @@ describe('task-distribution', () => {
 
         it('should handle final result', async () => {
             const reqId = 'test_result_1';
+            const resolveMock = vi.fn();
 
             mockState.pendingRequests.set(reqId, {
-                resolve: vi.fn(),
+                resolve: resolveMock,
                 reject: vi.fn(),
                 onProgress: null,
                 results: [],
@@ -286,17 +287,20 @@ describe('task-distribution', () => {
                 }
             });
 
-            const request = mockState.pendingRequests.get(reqId);
-            expect(request?.results).toHaveLength(1);
+            // Request should be deleted after completion
+            expect(mockState.pendingRequests.has(reqId)).toBe(false);
+            // Resolve should be called with results
+            expect(resolveMock).toHaveBeenCalledWith([{ pattern1: 'result1' }]);
             expect(workerInfo.busy).toBe(false);
         });
 
         it('should handle worker error', async () => {
             const reqId = 'test_error_1';
+            const rejectMock = vi.fn();
 
             mockState.pendingRequests.set(reqId, {
                 resolve: vi.fn(),
-                reject: vi.fn(),
+                reject: rejectMock,
                 onProgress: null,
                 results: [],
                 errors: [],
@@ -325,7 +329,7 @@ describe('task-distribution', () => {
                             if (request.partialResults && Object.keys(request.partialResults).length > 0) {
                                 request.resolve(request.partialResults);
                             } else if (request.results.length > 0) {
-                                request.resolve(request.results);
+                                request.resolve(this.results);
                             } else {
                                 request.reject(new Error(`All workers failed: ${request.errors.join(', ')}`));
                             }
@@ -342,8 +346,11 @@ describe('task-distribution', () => {
                 }
             });
 
-            const request = mockState.pendingRequests.get(reqId);
-            expect(request?.errors).toContain('Test worker error');
+            // Request should be deleted after completion
+            expect(mockState.pendingRequests.has(reqId)).toBe(false);
+            // Reject should be called with error message
+            expect(rejectMock).toHaveBeenCalledWith(new Error('All workers failed: Test worker error'));
+            expect(workerInfo.busy).toBe(false);
         });
     });
 
