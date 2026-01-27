@@ -14,6 +14,7 @@
 import * as SessionState from './session-state.js';
 import * as SessionLifecycle from './session-lifecycle.js';
 import * as SessionPersistence from './session-persistence.js';
+import { Storage } from '../../storage.js';
 
 // Re-export all module exports for internal use
 export * from './session-state.js';
@@ -66,12 +67,20 @@ export function createManager() {
 
         // Create new session
         async createSession(title, personality) {
-            return await this.lifecycle.createSession(title, personality);
+            // Note: title and personality are currently not used by lifecycle.createSession
+            // The lifecycle layer expects initialMessages array
+            const sessionId = await this.lifecycle.createSession([]);
+            // Update manager's currentSession reference
+            this.currentSession = SessionState.getSessionData();
+            return this.currentSession;
         },
 
         // Activate session
         async activateSession(sessionId) {
-            return await this.lifecycle.activateSession(sessionId);
+            const session = await this.lifecycle.activateSession(sessionId);
+            // Update manager's currentSession reference
+            this.currentSession = SessionState.getSessionData();
+            return this.currentSession;
         },
 
         // Get current session
@@ -188,8 +197,15 @@ export function resetManager() {
  * @returns {Promise<Array>} All sessions
  */
 export async function getAllSessions() {
-    const manager = getSessionManager();
-    return await SessionState.getAllSessions();
+    if (!Storage.getAllSessions) {
+        return [];
+    }
+    try {
+        return await Storage.getAllSessions();
+    } catch (e) {
+        console.error('[SessionManager] Failed to get all sessions:', e);
+        return [];
+    }
 }
 
 /**
@@ -199,12 +215,35 @@ export async function getAllSessions() {
 export async function clearAllSessions() {
     const manager = getSessionManager();
     // Delete all sessions and clear current
-    const sessions = await SessionState.getAllSessions();
-    for (const session of sessions) {
-        await SessionLifecycle.deleteSession(session.id);
+    try {
+        const sessions = await Storage.getAllSessions();
+        for (const session of sessions) {
+            await SessionLifecycle.deleteSession(session.id);
+        }
+    } catch (e) {
+        console.error('[SessionManager] Failed to delete sessions:', e);
     }
     manager.currentSession = null;
+
+    // Create a new session and update manager reference
+    const sessionId = await SessionLifecycle.createSession([]);
+    manager.currentSession = SessionState.getSessionData();
     return true;
+}
+
+/**
+ * Switch to a different session
+ * @param {string} sessionId - Session ID to switch to
+ * @returns {Promise<boolean>} Success status
+ */
+export async function switchSession(sessionId) {
+    const result = await SessionLifecycle.switchSession(sessionId);
+    // Update manager's currentSession reference after successful switch
+    if (result) {
+        const manager = getSessionManager();
+        manager.currentSession = SessionState.getSessionData();
+    }
+    return result;
 }
 
 /**
@@ -213,7 +252,10 @@ export async function clearAllSessions() {
  * @returns {Promise<Object>} Session data
  */
 export async function getSession(sessionId) {
-    return await SessionState.getSession(sessionId);
+    if (!Storage.getSession) {
+        return null;
+    }
+    return await Storage.getSession(sessionId);
 }
 
 /**

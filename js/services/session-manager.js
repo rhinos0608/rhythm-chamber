@@ -138,6 +138,16 @@ export class SessionManager {
     }
 
     /**
+     * Switch to a different session
+     * @public
+     * @param {string} sessionId - Session ID to switch to
+     * @returns {Promise<boolean>} Success status
+     */
+    static async switchSession(sessionId) {
+        return await Internal.switchSession(sessionId);
+    }
+
+    /**
      * Get current session
      * @public
      * @returns {Object|null} Current session
