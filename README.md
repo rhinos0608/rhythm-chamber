@@ -71,7 +71,7 @@ Plus: Your AI notices your patterns and writes personalized narratives about you
 | [Troubleshooting](TROUBLESHOOTING.md) | Common issues and solutions |
 | [Changelog](CHANGELOG.md) | Version history and changes |
 | [Code of Conduct](CODE_OF_CONDUCT.md) | Community guidelines |
-| [Technical Debt](docs/plans/TECHNICAL_DEBT.md) | Known issues and remediation plan |
+| [Technical Debt](docs/plans/TECHNICAL_DEBT.md) | ✅ All 20 items resolved - see remediation report |
 
 ### Development Tools
 
