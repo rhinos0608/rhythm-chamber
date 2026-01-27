@@ -71,7 +71,8 @@ describe('SessionLifecycle Module', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    testSessionId = 'test-session-123';
+    // Use valid UUID v4 format for tests
+    testSessionId = '8f4eee4b-a7e0-477f-a3fe-6cd1d3aa821a';
 
     // Setup basic Storage mocks
     Storage.setConfig.mockResolvedValue(undefined);
@@ -290,7 +291,7 @@ describe('SessionLifecycle Module', () => {
   describe('switchSession', () => {
     it('should switch to different session', async () => {
       const currentId = await SessionLifecycle.createSession();
-      const targetId = 'target-session-456';
+      const targetId = '9f4eee4b-a7e0-477f-a3fe-6cd1d3aa821b';
 
       const mockTargetSession = {
         id: targetId,
@@ -311,7 +312,7 @@ describe('SessionLifecycle Module', () => {
       const currentId = await SessionLifecycle.createSession([
         { role: 'user', content: 'Current session' }
       ]);
-      const targetId = 'target-session-456';
+      const targetId = '9f4eee4b-a7e0-477f-a3fe-6cd1d3aa821b';
 
       const mockTargetSession = {
         id: targetId,
@@ -330,7 +331,7 @@ describe('SessionLifecycle Module', () => {
 
     it('should emit session:switched event', async () => {
       const currentId = await SessionLifecycle.createSession();
-      const targetId = 'target-session-456';
+      const targetId = '9f4eee4b-a7e0-477f-a3fe-6cd1d3aa821b';
 
       const mockTargetSession = {
         id: targetId,
@@ -375,7 +376,7 @@ describe('SessionLifecycle Module', () => {
       const currentId = await SessionLifecycle.createSession([
         { role: 'user', content: 'Test' }
       ]);
-      const targetId = 'target-session-456';
+      const targetId = '9f4eee4b-a7e0-477f-a3fe-6cd1d3aa821b';
 
       Storage.saveSession.mockRejectedValue(new Error('Save failed'));
 
@@ -429,7 +430,7 @@ describe('SessionLifecycle Module', () => {
 
     it('should not create new session if deleting other session', async () => {
       const currentId = await SessionLifecycle.createSession();
-      const otherId = 'other-session-789';
+      const otherId = 'af4eee4b-a7e0-477f-a3fe-6cd1d3aa821c';
 
       Storage.deleteSession.mockResolvedValue(undefined);
 
@@ -628,7 +629,7 @@ describe('SessionLifecycle Module', () => {
         { role: 'user', content: 'Session 1' }
       ]);
 
-      const session2Id = 'session-2';
+      const session2Id = 'bf4eee4b-a7e0-477f-a3fe-6cd1d3aa821d';
       const mockSession2 = {
         id: session2Id,
         title: 'Session 2',
