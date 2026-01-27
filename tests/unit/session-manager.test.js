@@ -566,6 +566,20 @@ describe('SessionManager Listing', () => {
         expect(sessions).toEqual([]);
     });
 
+    it('should return empty array when getAllSessions is not a function', async () => {
+        // Save the original mock
+        const originalMock = mockStorage.getAllSessions;
+
+        // Set getAllSessions to a non-function value
+        mockStorage.getAllSessions = 'not-a-function';
+
+        const sessions = await SessionManager.getAllSessions();
+        expect(sessions).toEqual([]);
+
+        // Restore the mock for other tests
+        mockStorage.getAllSessions = originalMock;
+    });
+
     it('should return all sessions from storage', async () => {
         const mockSessions = [
             createMockSession('id-1'),

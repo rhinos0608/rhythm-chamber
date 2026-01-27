@@ -308,13 +308,24 @@ export async function addMessagesToHistory(messages) {
 /**
  * Remove message from history at index
  * HIGH PRIORITY FIX: Now uses mutex protection via updateSessionData
+ * TD-7: Added comprehensive array bounds validation including type checking
  * @param {number} index - Index to remove
  * @returns {Promise<boolean>} Success status
  */
 export async function removeMessageFromHistory(index) {
     let success = false;
     await updateSessionData((currentData) => {
-        if (currentData.messages && index >= 0 && index < currentData.messages.length) {
+        // TD-7: Comprehensive bounds checking
+        // 1. Check messages array exists
+        // 2. Check index is a valid number (not NaN, null, undefined)
+        // 3. Check index is within array bounds [0, length)
+        // Note: Number.isInteger() handles null, undefined, NaN, floats correctly
+        const isValidIndex = currentData.messages &&
+                             Number.isInteger(index) &&
+                             index >= 0 &&
+                             index < currentData.messages.length;
+
+        if (isValidIndex) {
             // Create new array without the removed item (cannot mutate frozen currentData)
             const newMessages = [...currentData.messages];
             newMessages.splice(index, 1);

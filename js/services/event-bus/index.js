@@ -175,7 +175,8 @@ function on(eventType, handler, options = {}) {
         id: ++subscriptionSeq,
         handler,
         once: false,
-        priority: options.priority ?? PRIORITY.NORMAL
+        priority: options.priority ?? PRIORITY.NORMAL,
+        eventType: eventType  // Store original event type for proper unsubscription
     };
 
     if (eventType === '*') {
@@ -393,7 +394,7 @@ async function emitAndAwait(eventType, payload = {}, options = {}) {
         } catch (e) {
             console.error('[EventBus] Handler error:', e);
         } finally {
-            if (sub.once) off(eventType === '*' ? '*' : eventType, sub.handler);
+            if (sub.once) off(sub.eventType, sub.handler);
         }
     }
     return called > 0;
@@ -425,9 +426,9 @@ async function emitParallel(eventType, payload = {}, options = {}) {
         try {
             await sub.handler(payload, meta);
         } catch (e) {
-            console.error('[EventBus] Handler error:', e);
+            console.error('[EventBus] Parallel handler error:', e);
         } finally {
-            if (sub.once) off(eventType === '*' ? '*' : eventType, sub.handler);
+            if (sub.once) off(sub.eventType, sub.handler);
         }
     }));
 
