@@ -108,7 +108,7 @@ export function isValidUUID(sessionId) {
  * @param {Object} session - Session object to validate
  * @returns {boolean} True if session has valid structure
  */
-function validateSession(session) {
+export function validateSession(session) {
     return session
         && typeof session.id === 'string'
         && Array.isArray(session.messages)
