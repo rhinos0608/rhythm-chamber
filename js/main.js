@@ -569,11 +569,43 @@ async function bootstrap() {
         const { init } = await import('./app.js');
         await init({ safeModeReason, securityReport });
 
+        // Setup keyboard shortcuts for developer features
+        setupKeyboardShortcuts();
+
         logger.info('Application initialized successfully');
     } catch (error) {
         logger.error('Failed to initialize application:', error);
         showLoadingError(error);
     }
+}
+
+// ==========================================
+// Developer Mode
+// ==========================================
+
+import { DevPanel } from './controllers/dev-panel-controller.js';
+
+/**
+ * Setup keyboard shortcuts for developer features
+ * @private
+ */
+function setupKeyboardShortcuts() {
+    /**
+     * Handle keyboard shortcuts
+     * @param {KeyboardEvent} e
+     * @private
+     */
+    function handleKeyDown(e) {
+        // Ctrl+Shift+D or Cmd+Shift+D for Dev Panel
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'd') {
+            e.preventDefault();
+            DevPanel.toggle();
+        }
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    logger.debug('Keyboard shortcuts registered: Ctrl+Shift+D → Dev Panel');
 }
 
 // ==========================================
