@@ -44,6 +44,39 @@ export class SessionManager {
     static async initialize() {
         const manager = Internal.getSessionManager();
         await manager.initialize();
+        await this.recoverEmergencyBackup();
+        this.registerEventListeners();
+    }
+
+    /**
+     * Register browser event listeners for auto-save behavior
+     * @public
+     * @static
+     */
+    static registerEventListeners() {
+        if (this.eventListenersRegistered) {
+            console.warn('[SessionManager] Event listeners already registered');
+            return;
+        }
+        if (typeof window === 'undefined') {
+            return; // Not in browser environment
+        }
+        // Async save when tab goes hidden
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                this.flushPendingSaveAsync();
+            }
+        });
+        // Sync backup when tab is closing
+        window.addEventListener('beforeunload', () => {
+            this.emergencyBackupSync();
+        });
+        // Mobile Safari compatibility
+        window.addEventListener('pagehide', () => {
+            this.emergencyBackupSync();
+        });
+        this.eventListenersRegistered = true;
+        console.log('[SessionManager] Event listeners registered');
     }
 
     /**
