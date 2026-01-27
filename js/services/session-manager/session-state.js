@@ -35,7 +35,7 @@ let currentSessionId = null;
 let currentSessionCreatedAt = null;
 
 // In-memory session data with mutex protection
-let _sessionData = { id: null, messages: [] };
+let _sessionData = { id: null, messages: [], _version: 0 };
 const _sessionDataMutex = new Mutex();
 
 // ==========================================
@@ -72,13 +72,14 @@ export function deepCloneMessages(messages) {
 /**
  * Get session data safely (returns a deep copy snapshot)
  * HNW: Returns frozen deep copy to prevent external mutations
- * @returns {Object} Deep copy of session data
+ * @returns {Object} Deep copy of session data with _version field for stale data detection
  */
 export function getSessionData() {
     // Return a deep copy to prevent external mutations
     const snapshot = {
         id: _sessionData.id,
-        messages: deepCloneMessages(_sessionData.messages)
+        messages: deepCloneMessages(_sessionData.messages),
+        _version: _sessionData._version
     };
     // Freeze the snapshot to prevent any mutations
     return Object.freeze(snapshot);
@@ -92,7 +93,8 @@ export function getSessionData() {
 export function setSessionData(data) {
     _sessionData = {
         id: data.id || null,
-        messages: deepCloneMessages(data.messages)
+        messages: deepCloneMessages(data.messages),
+        _version: 0  // Reset version on direct set
     };
     // Also update current session ID for consistency
     currentSessionId = data.id || null;
@@ -118,23 +120,44 @@ export function syncSessionIdToAppState(sessionId) {
  * This prevents lost update races when multiple async operations
  * try to modify session data concurrently within the same tab.
  * HNW: Uses deep cloning to prevent external mutations
+ * HNW: Uses state versioning to detect and reject stale updates
  *
- * @param {Function} updaterFn - Function that receives current data and returns new data
- * @returns {Promise<void>}
+ * @param {Function|Object} options - Either an updater function or options object
+ * @param {Function} options.updaterFn - Function that receives current data and returns new data
+ * @param {number} [options.expectedVersion] - Expected version for optimistic locking
+ * @returns {Promise<{success: boolean, version: number}>} Result with success status and new version
  */
-export async function updateSessionData(updaterFn) {
+export async function updateSessionData(options) {
+    // Support both old API (updaterFn function) and new API (options object)
+    const updaterFn = typeof options === 'function' ? options : options.updaterFn;
+    const expectedVersion = typeof options === 'object' && options?.expectedVersion;
+
     return _sessionDataMutex.runExclusive(async () => {
         const currentData = getSessionData();
+
+        // State versioning check: reject if expected version doesn't match
+        // This prevents stale updates from overwriting newer state
+        if (expectedVersion !== undefined && currentData._version !== expectedVersion) {
+            console.warn(
+                `[SessionState] Version mismatch: expected ${expectedVersion}, got ${currentData._version}. ` +
+                `Update rejected to prevent lost data.`
+            );
+            return { success: false, version: currentData._version };
+        }
+
         const newData = updaterFn(currentData);
+        const newVersion = currentData._version + 1;
+
         _sessionData = {
             id: newData.id || null,
-            messages: deepCloneMessages(newData.messages)
+            messages: deepCloneMessages(newData.messages),
+            _version: newVersion
         };
 
-        // Sync to window for legacy compatibility (read-only)
-        if (typeof window !== 'undefined') {
-            window._sessionData = getSessionData();
-        }
+        // Session data is now only available via ES module exports
+        // Use: import { getSessionData } from './session-state.js'
+
+        return { success: true, version: newVersion };
     });
 }
 

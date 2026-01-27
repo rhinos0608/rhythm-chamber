@@ -27,23 +27,14 @@ let _EventBus = null;
  * Get EventBus instance with fallback
  * @returns {Object|null} EventBus instance or null if unavailable
  */
-function getEventBus() {
+async function getEventBus() {
     if (_EventBus) return _EventBus;
 
-    // Try to get from window (global) first
-    if (typeof window !== 'undefined' && window.EventBus) {
-        _EventBus = window.EventBus;
-        return _EventBus;
-    }
-
-    // Try dynamic import as fallback
+    // Import EventBus via ES module
     try {
-        // Using indirect eval to avoid strict mode issues
-        const module = window.EventBus;
-        if (module) {
-            _EventBus = module;
-            return _EventBus;
-        }
+        const { EventBus } = await import('../services/event-bus.js');
+        _EventBus = EventBus;
+        return _EventBus;
     } catch (e) {
         console.warn('[DemoController] EventBus not available:', e.message);
     }

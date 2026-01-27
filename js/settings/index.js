@@ -353,6 +353,5 @@ export const Settings = {
     DEFAULT_ENDPOINTS
 };
 
-if (typeof window !== 'undefined') {
-    window.Settings = Settings;
-}
+// Settings is exported as an ES module - no global window assignment
+// Use: import { Settings } from './js/settings/index.js'

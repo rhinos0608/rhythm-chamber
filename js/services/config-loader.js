@@ -849,23 +849,12 @@ function installWindowProxy() {
         return;
     }
 
-    // Create a proxy that provides access via window.Config
-    Object.defineProperty(window, 'Config', {
-        get() {
-            if (!loadedConfig) {
-                logger.warn('Accessed window.Config before load() completed');
-                return CRITICAL_DEFAULTS;
-            }
-            return loadedConfig;
-        },
-        set(value) {
-            // Allow setting for tests or runtime overrides
-            if (value && typeof value === 'object') {
-                loadedConfig = deepMerge(loadedConfig || CRITICAL_DEFAULTS, value);
-            }
-        },
-        configurable: true
-    });
+    // DEPRECATED: window.Config proxy is no longer installed
+    // Use ES module imports instead:
+    //   import { ConfigLoader } from './config-loader.js';
+    //   const config = await ConfigLoader.load();
+    //   const value = ConfigLoader.get('path.to.value');
+    logger.warn('installWindowProxy() is deprecated. Use ES module imports instead: import { ConfigLoader } from "./config-loader.js"');
 }
 
 // ==========================================

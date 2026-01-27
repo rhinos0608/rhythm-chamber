@@ -308,6 +308,12 @@ function broadcastToAll(message, excludePortId = null) {
 }
 
 /**
+ * Interval ID for stale connection cleanup
+ * @type {number|null}
+ */
+let cleanupIntervalId = null;
+
+/**
  * Periodic cleanup of stale connections
  */
 function cleanupStaleConnections() {
@@ -328,7 +334,36 @@ function cleanupStaleConnections() {
     }
 }
 
-// Run cleanup every 10 seconds (2x heartbeat interval)
-setInterval(cleanupStaleConnections, WORKER_TIMEOUTS.HEARTBEAT_INTERVAL_MS * 2);
+/**
+ * Start the cleanup interval for stale connections
+ * Called automatically when the worker loads.
+ * @private
+ */
+function startCleanupInterval() {
+    if (cleanupIntervalId) {
+        clearInterval(cleanupIntervalId);
+    }
+    // Run cleanup every 10 seconds (2x heartbeat interval)
+    cleanupIntervalId = setInterval(cleanupStaleConnections, WORKER_TIMEOUTS.HEARTBEAT_INTERVAL_MS * 2);
+}
+
+/**
+ * Cleanup function to stop the shared worker
+ * Clears the cleanup interval to prevent memory leaks.
+ * Note: SharedWorkers typically run until all connected tabs are closed,
+ * but this can be used for testing or graceful shutdown scenarios.
+ */
+function cleanupSharedWorker() {
+    if (cleanupIntervalId) {
+        clearInterval(cleanupIntervalId);
+        cleanupIntervalId = null;
+    }
+}
+
+// Start the cleanup interval when the worker loads
+startCleanupInterval();
 
 console.log('[SharedWorker] Cross-tab coordination worker initialized');
+
+// Export cleanup function for testing or manual shutdown scenarios
+self.cleanupSharedWorker = cleanupSharedWorker;

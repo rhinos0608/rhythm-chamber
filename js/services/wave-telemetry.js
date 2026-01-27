@@ -18,6 +18,18 @@
 const ANOMALY_THRESHOLD = 0.20; // 20% variance triggers anomaly
 const MAX_SAMPLES = 100;        // Keep last 100 samples per metric
 
+/**
+ * Maximum number of waves to keep in memory before LRU eviction
+ * @type {number}
+ */
+const MAX_WAVES = 1000;
+
+/**
+ * Default maximum age in milliseconds for wave cleanup
+ * @type {number}
+ */
+const DEFAULT_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes
+
 // ==========================================
 // State
 // ==========================================
@@ -25,7 +37,11 @@ const MAX_SAMPLES = 100;        // Keep last 100 samples per metric
 /** @type {Map<string, { samples: number[], expected: number | null }>} */
 const metrics = new Map();
 
-/** @type {Map<string, { id: string, origin: string, startTime: number, endTime: number | null, chain: Array<{ node: string, parent: string | null, timestamp: number }> }>} */
+/**
+ * Map of active waves. Uses Map to preserve insertion order for LRU eviction.
+ * When max size is reached, oldest entries (least recently used) are removed.
+ * @type {Map<string, { id: string, origin: string, startTime: number, endTime: number | null, chain: Array<{ node: string, parent: string | null, timestamp: number }> }>}
+ */
 const waves = new Map();
 
 /** @type {string[]} */
@@ -176,11 +192,37 @@ function generateUUID() {
 }
 
 /**
+ * Internal helper to get a wave and mark it as recently used (LRU)
+ * This re-inserts the wave to move it to the end of the Map (most recent)
+ * @param {string} waveId - The wave ID
+ * @returns {Object | undefined} The wave object or undefined if not found
+ * @private
+ */
+function _touchWave(waveId) {
+    const wave = waves.get(waveId);
+    if (wave) {
+        // Delete and re-insert to mark as most recently used
+        // Map preserves insertion order, so this moves it to the end
+        waves.delete(waveId);
+        waves.set(waveId, wave);
+    }
+    return wave;
+}
+
+/**
  * Start a new wave context with a unique ID and origin
+ * Implements LRU eviction when MAX_WAVES limit is reached
  * @param {string} origin - The origin of the wave (e.g., 'user:upload_file')
  * @returns {string} The wave ID (UUID)
  */
 function startWave(origin) {
+    // Check if at capacity and evict oldest (LRU)
+    if (waves.size >= MAX_WAVES) {
+        const oldestKey = waves.keys().next().value;
+        waves.delete(oldestKey);
+        console.warn(`[WaveTelemetry] LRU eviction: removed oldest wave ${oldestKey} (max ${MAX_WAVES} waves reached)`);
+    }
+
     const waveId = generateUUID();
     waves.set(waveId, {
         id: waveId,
@@ -194,11 +236,12 @@ function startWave(origin) {
 
 /**
  * Record a node in the wave chain with parent reference
+ * Marks the wave as recently used (LRU)
  * @param {string} nodeName - The name of the node (e.g., 'event:test_event')
  * @param {string} waveId - The wave ID to add the node to
  */
 function recordNode(nodeName, waveId) {
-    const wave = waves.get(waveId);
+    const wave = _touchWave(waveId);
     if (!wave) {
         console.warn(`[WaveTelemetry] Wave not found: ${waveId}`);
         return;
@@ -214,11 +257,12 @@ function recordNode(nodeName, waveId) {
 
 /**
  * End a wave and calculate total latency and bottlenecks
+ * Marks the wave as recently used (LRU)
  * @param {string} waveId - The wave ID to end
  * @returns {{ totalLatency: number, bottlenecks: Array<{ node: string, latency: number }> } | null}
  */
 function endWave(waveId) {
-    const wave = waves.get(waveId);
+    const wave = _touchWave(waveId);
     if (!wave) {
         console.warn(`[WaveTelemetry] Wave not found: ${waveId}`);
         return null;
@@ -270,11 +314,48 @@ function endWave(waveId) {
 
 /**
  * Get a wave by ID
+ * Marks the wave as recently used (LRU)
  * @param {string} waveId - The wave ID
  * @returns {Object | undefined} The wave object or undefined if not found
  */
 function getWave(waveId) {
-    return waves.get(waveId);
+    return _touchWave(waveId);
+}
+
+/**
+ * Clean up old waves based on age
+ * Removes waves that are older than the specified max age
+ * @param {number} [maxAgeMs] - Maximum age in milliseconds (default: 5 minutes)
+ * @returns {{ removed: number, remaining: number }} Number of waves removed and remaining
+ */
+function cleanupOldWaves(maxAgeMs = DEFAULT_MAX_AGE_MS) {
+    if (!Number.isFinite(maxAgeMs) || maxAgeMs <= 0) {
+        console.warn(`[WaveTelemetry] Invalid maxAgeMs: ${maxAgeMs}`);
+        return { removed: 0, remaining: waves.size };
+    }
+
+    const now = Date.now();
+    const toRemove = [];
+
+    for (const [waveId, wave] of waves) {
+        const age = now - wave.startTime;
+        if (age > maxAgeMs) {
+            toRemove.push(waveId);
+        }
+    }
+
+    for (const waveId of toRemove) {
+        waves.delete(waveId);
+    }
+
+    if (toRemove.length > 0) {
+        console.log(`[WaveTelemetry] Cleaned up ${toRemove.length} old waves (>${maxAgeMs}ms)`);
+    }
+
+    return {
+        removed: toRemove.length,
+        remaining: waves.size
+    };
 }
 
 /**
@@ -335,11 +416,14 @@ export const WaveTelemetry = {
     setCriticalEvents,
     getCriticalEvents,
     isCriticalEvent,
+    cleanupOldWaves,
     _clearWaves: clearWaves,
 
     // Configuration (read-only)
     ANOMALY_THRESHOLD,
-    MAX_SAMPLES
+    MAX_SAMPLES,
+    MAX_WAVES,
+    DEFAULT_MAX_AGE_MS
 };
 
 console.log('[WaveTelemetry] Wave timing instrumentation loaded');

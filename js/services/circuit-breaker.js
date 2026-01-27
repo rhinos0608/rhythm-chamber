@@ -198,34 +198,25 @@ async function execute(functionName, fn) {
 
     recordCall();
     const startTime = Date.now();
-    let timeoutId = null;
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(`Timeout after ${TIMEOUT_MS}ms`)), TIMEOUT_MS);
+    });
 
     try {
         // Execute with timeout
-        const result = await Promise.race([
-            fn(),
-            new Promise((_, reject) => {
-                timeoutId = setTimeout(
-                    () => reject(new Error(`Timeout after ${TIMEOUT_MS}ms`)),
-                    TIMEOUT_MS
-                );
-            })
-        ]);
+        const result = await Promise.race([fn(), timeoutPromise]);
+        clearTimeout(timeoutId);
 
         const duration = Date.now() - startTime;
         recordSuccess(functionName, duration);
 
         return { success: true, result, durationMs: duration };
     } catch (error) {
+        clearTimeout(timeoutId);
         const message = error instanceof Error ? error.message : String(error);
         recordFailure(functionName, message);
         return { success: false, error: message };
-    } finally {
-        // CRITICAL: Clear timeout to prevent memory leak
-        // Rejected promises in race hold reference to timeout
-        if (timeoutId !== null) {
-            clearTimeout(timeoutId);
-        }
     }
 }
 

@@ -18,6 +18,7 @@ import { PremiumGatekeeper } from '../services/premium-gatekeeper.js';
 import { createFocusTrap } from '../utils/focus-trap.js';
 import { LemonSqueezyService } from '../services/lemon-squeezy-service.js';
 import { escapeHtml } from '../utils/html-escape.js';
+import { Settings } from '../settings/index.js';
 
 // ==========================================
 // Premium Controller
@@ -102,18 +103,14 @@ const PremiumController = {
                         const result = await LemonSqueezyService.activateLicense(data.licenseKey);
                         if (result.success) {
                             // Show success message
-                            if (typeof window.showToast === 'function') {
-                                window.showToast('Premium activated! Enjoy unlimited playlists.', 'success', 5000);
-                            }
+                            Settings.showToast('Premium activated! Enjoy unlimited playlists.', 5000);
                             // Refresh UI to show premium features
                             setTimeout(() => {
                                 window.location.reload();
                             }, 1500);
                         } else {
                             // Show activation error
-                            if (typeof window.showToast === 'function') {
-                                window.showToast(`Activation failed: ${result.message || 'Unknown error'}`, 'error', 5000);
-                            }
+                            Settings.showToast(`Activation failed: ${result.message || 'Unknown error'}`, 5000);
                         }
                     }
                 },
@@ -200,10 +197,8 @@ const PremiumController = {
 
         if (!result.success) {
             // Show error message
-            if (typeof window.showToast === 'function') {
-                const errorMsg = result.message || 'Failed to open checkout';
-                window.showToast(errorMsg, 'error', 4000);
-            }
+            const errorMsg = result.message || 'Failed to open checkout';
+            Settings.showToast(errorMsg, 4000);
         }
     },
 
