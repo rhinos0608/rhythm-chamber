@@ -1,0 +1,61 @@
+{
+  "task": "Extract recovery-lock-manager.js from error-recovery-coordinator.js",
+  "timestamp": "2026-01-27T12:00:00Z",
+  "status": "in_progress",
+  "phase": "test_driven_development",
+  "progress": {
+    "completed": [
+      "recovery-strategies.js (228 lines, 27/27 tests passing)",
+      "recovery-orchestration.js (361 lines, 24/24 tests passing)"
+    ],
+    "in_progress": [
+      "recovery-lock-manager.js tests",
+      "recovery-lock-manager.js module",
+      "error-recovery-coordinator.js facade"
+    ],
+    "pending": [
+      "Backward compatibility verification",
+      "All tests passing (70+ tests)"
+    ]
+  },
+  "modules": {
+    "recovery-lock-manager": {
+      "purpose": "Lock acquisition, validation, and cross-tab coordination for recovery operations",
+      "estimated_lines": 300,
+      "functions_to_extract": [
+        "_acquireRecoveryLock",
+        "_validateRecoveryState",
+        "_coordinateRecoveryTabs",
+        "broadcastRecoveryRequest",
+        "_handleDelegatedRecovery",
+        "_monitorTabLeadership",
+        "_setupRecoveryDelegationListener"
+      ],
+      "test_target": "40+ tests covering lock acquisition, delegation, tab coordination"
+    },
+    "facade": {
+      "purpose": "Re-export all 3 modules for backward compatibility",
+      "estimated_lines": 200,
+      "exports": [
+        "RecoveryStrategies",
+        "RecoveryOrchestration",
+        "RecoveryLockManager",
+        "ErrorRecoveryCoordinator (legacy namespace)",
+        "Enums: RecoveryPriority, RecoveryDomain, RecoveryState"
+      ]
+    }
+  },
+  "acceptance_criteria": [
+    "All tests pass (70+ tests total)",
+    "Backward compatibility maintained",
+    "All existing imports work without changes",
+    "4 modules: 3 focused + 1 facade",
+    "Test coverage: 40+ tests for lock-manager"
+  ],
+  "next_steps": [
+    "Write recovery-lock-manager.test.js (40+ tests)",
+    "Extract recovery-lock-manager.js module",
+    "Create error-recovery-coordinator.js facade",
+    "Run all tests and verify backward compatibility"
+  ]
+}

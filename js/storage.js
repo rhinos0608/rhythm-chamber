@@ -9,7 +9,7 @@
  * @module storage
  */
 
-import { StorageTransaction } from './storage/transaction.js';
+import { StorageTransaction } from './storage/transaction/index.js';
 import { StorageMigration } from './storage/migration.js';
 import { ModuleRegistry } from './module-registry.js';
 import { EventBus } from './services/event-bus.js';
