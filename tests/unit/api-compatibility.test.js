@@ -25,7 +25,7 @@ import { ErrorRecoveryCoordinator, RecoveryDomain, RecoveryState } from '../../j
 import { StorageDegradationManager, DegradationTier } from '../../js/services/storage-degradation-manager.js';
 
 // SessionManager - direct import
-import { SessionManager } from '../../js/services/session-manager.js';
+import { SessionManager, SESSION_EVENT_SCHEMAS } from '../../js/services/session-manager.js';
 
 // PatternWorkerPool - direct import
 import { PatternWorkerPool } from '../../js/workers/pattern-worker-pool.js';
@@ -240,6 +240,47 @@ describe('SessionManager - API Compatibility', () => {
             // In Node env, just verify the method exists and doesn't throw
             expect(SessionManager.eventListenersRegistered).toBe(originalValue);
         }
+    });
+});
+
+// ==========================================
+// Session Event Schemas Tests
+// ==========================================
+
+describe('SESSION_EVENT_SCHEMAS - API Compatibility', () => {
+    it('should export SESSION_EVENT_SCHEMAS', () => {
+        expect(SESSION_EVENT_SCHEMAS).toBeDefined();
+        expect(typeof SESSION_EVENT_SCHEMAS).toBe('object');
+    });
+
+    it('should have session:created schema', () => {
+        expect(SESSION_EVENT_SCHEMAS['session:created']).toBeDefined();
+        expect(SESSION_EVENT_SCHEMAS['session:created'].description).toBe('New session created');
+        expect(SESSION_EVENT_SCHEMAS['session:created'].payload).toEqual({ sessionId: 'string', title: 'string' });
+    });
+
+    it('should have session:loaded schema', () => {
+        expect(SESSION_EVENT_SCHEMAS['session:loaded']).toBeDefined();
+        expect(SESSION_EVENT_SCHEMAS['session:loaded'].description).toBe('Session loaded from storage');
+        expect(SESSION_EVENT_SCHEMAS['session:loaded'].payload).toEqual({ sessionId: 'string', messageCount: 'number' });
+    });
+
+    it('should have session:switched schema', () => {
+        expect(SESSION_EVENT_SCHEMAS['session:switched']).toBeDefined();
+        expect(SESSION_EVENT_SCHEMAS['session:switched'].description).toBe('Switched to different session');
+        expect(SESSION_EVENT_SCHEMAS['session:switched'].payload).toEqual({ fromSessionId: 'string|null', toSessionId: 'string' });
+    });
+
+    it('should have session:deleted schema', () => {
+        expect(SESSION_EVENT_SCHEMAS['session:deleted']).toBeDefined();
+        expect(SESSION_EVENT_SCHEMAS['session:deleted'].description).toBe('Session deleted');
+        expect(SESSION_EVENT_SCHEMAS['session:deleted'].payload).toEqual({ sessionId: 'string' });
+    });
+
+    it('should have session:updated schema', () => {
+        expect(SESSION_EVENT_SCHEMAS['session:updated']).toBeDefined();
+        expect(SESSION_EVENT_SCHEMAS['session:updated'].description).toBe('Session data updated');
+        expect(SESSION_EVENT_SCHEMAS['session:updated'].payload).toEqual({ sessionId: 'string', field: 'string' });
     });
 });
 

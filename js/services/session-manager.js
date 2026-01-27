@@ -17,6 +17,8 @@
 
 // Import internal coordinator
 import * as Internal from './session-manager/index.js';
+import { EventBus } from './event-bus.js';
+import { SESSION_EVENT_SCHEMAS } from './session-manager/session-lifecycle.js';
 
 // ==========================================
 // SessionManager Class (Backward Compatible)
@@ -42,6 +44,9 @@ export class SessionManager {
      * @returns {Promise<void>}
      */
     static async initialize() {
+        // Register event schemas for decentralized event management
+        EventBus.registerSchemas(SESSION_EVENT_SCHEMAS);
+
         const manager = Internal.getSessionManager();
         await manager.initialize();
         await this.recoverEmergencyBackup();
@@ -344,3 +349,6 @@ export async function renameSession(sessionId, newTitle) {
 // ==========================================
 
 export * from './session-manager/index.js';
+
+// Re-export session event schemas for external use
+export { SESSION_EVENT_SCHEMAS };

@@ -25,6 +25,38 @@ import * as SessionState from './session-state.js';
 import lockManager from '../session-lock-manager.js';
 
 // ==========================================
+// Event Schemas for EventBus Registration
+// ==========================================
+
+/**
+ * Session event schemas for decentralized event management
+ * These schemas are registered with EventBus to enable type-safe event handling
+ * and provide documentation for available session events.
+ */
+export const SESSION_EVENT_SCHEMAS = {
+    'session:created': {
+        description: 'New session created',
+        payload: { sessionId: 'string', title: 'string' }
+    },
+    'session:loaded': {
+        description: 'Session loaded from storage',
+        payload: { sessionId: 'string', messageCount: 'number' }
+    },
+    'session:switched': {
+        description: 'Switched to different session',
+        payload: { fromSessionId: 'string|null', toSessionId: 'string' }
+    },
+    'session:deleted': {
+        description: 'Session deleted',
+        payload: { sessionId: 'string' }
+    },
+    'session:updated': {
+        description: 'Session data updated',
+        payload: { sessionId: 'string', field: 'string' }
+    }
+};
+
+// ==========================================
 // Constants
 // ==========================================
 
