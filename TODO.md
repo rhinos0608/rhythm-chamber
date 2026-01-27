@@ -234,30 +234,31 @@ These can be added later to enhance the dev panel tabs. Current implementation s
 
 ### Original Technical Debt Items
 
-#### Critical Issues (5) - Sprint 1
-- [x] ~~**TD-1:** Fix SessionManager race condition in `updateSessionData()` (4h)~~ - Version tracking added
-- [ ] **TD-2:** Fix EventBus `emitParallel` unhandled promise rejection (2h)
-- [ ] **TD-3:** Address Service Layer God Object anti-pattern (8h)
-- [ ] **TD-4:** Eliminate global state pollution (6h)
-- [x] ~~**TD-5:** Fix TurnQueue race condition in `processNext()` (2h)~~ - Atomic check-and-set fixed
+#### Critical Issues (5) - Sprint 1 ✅ COMPLETE
+- [x] **TD-1:** Fix SessionManager race condition - Version tracking added
+- [x] **TD-2:** Fix EventBus `emitParallel` - try-catch wrapper, 8 tests (commit ad5b0af)
+- [x] **TD-3:** Address Service Layer God Object - SessionManager refactored
+- [x] **TD-4:** Eliminate global state pollution - ES module imports (commit d2e8ff1)
+- [x] **TD-5:** Fix TurnQueue race condition - Atomic check-and-set fixed
 
-#### High Priority (7) - Sprint 2
-- [ ] **TD-6:** Fix memory leak in StreamingMessageHandler timeout cleanup (2h)
-- [x] ~~**TD-7:** Add array bounds checking to `removeMessageFromHistory()` (1h)~~ - Completed with Number.isInteger() validation
-- [ ] **TD-8:** Add null check to `getAllSessions()` (1h)
-- [ ] **TD-9:** Refactor SidebarController God Object (724 lines) (12h)
-- [ ] **TD-10:** Simplify over-engineered Event System (8h)
-- [ ] **TD-11:** Implement error boundaries for critical paths (4h)
-- [ ] **TD-12:** Improve DI Container coupling (6h)
+#### High Priority (7) - Sprint 2 ✅ COMPLETE
+- [x] **TD-6:** Fix memory leak in StreamingMessageHandler - cleanupStreamingHandler() (commit ad5b0af)
+- [x] **TD-7:** Add array bounds checking - Number.isInteger() validation (commit ad5b0af)
+- [x] **TD-8:** Add null check to getAllSessions() - Storage type check (commit ad5b0af)
+- [x] **TD-9:** Refactor SidebarController - 4 focused controllers, 134 tests (commit c7b75b6)
+- [x] **TD-10:** Simplify Event System - Removed circuit breakers, -100 lines (commit c7b75b6)
+- [x] **TD-11:** Implement error boundaries - 53 tests for critical paths (commit ad5b0af)
+- [x] **TD-12:** Improve DI Container - Explicit deps, circular detection (commit c7b75b6)
 
 #### Medium Priority (8) - Sprint 3
-- [x] ~~**TD-13:** Add error handling to ProviderHealthMonitor interval (1h)~~ - Fixed
+- [x] **TD-13:** Add error handling to ProviderHealthMonitor - Fixed
 - [ ] **TD-14:** Implement localStorage quota checking (4h)
 - [ ] **TD-15:** Improve network timeout error messages (2h)
 - [ ] **TD-16:** Consolidate magic numbers to configuration (4h)
 - [ ] **TD-17:** Fix inconsistent abstraction levels (8h)
-- [ ] **TD-18:** Fix SidebarController event listener memory leaks (3h)
-- [x] ~~**TD-19:** Add hard limits to message array growth (2h)~~ - LRU implemented
+- [x] **TD-18:** Fix SidebarController memory leaks - Cleanup implemented (commit c7b75b6)
+- [x] **TD-19:** Add hard limits to message array growth - LRU implemented
 - [ ] **TD-20:** Standardize error handling patterns (6h)
 
-**Total Remaining Debt:** ~60 hours | See [TECHNICAL_DEBT.md](docs/plans/TECHNICAL_DEBT.md) for details
+**Progress:** 12/20 TD items complete (60%)
+**Remaining Debt:** ~24 hours | See [TECHNICAL_DEBT.md](docs/plans/TECHNICAL_DEBT.md) for details
