@@ -1,0 +1,248 @@
+{
+  "timestamp": "2026-01-27T13:47:53.917Z",
+  "facades": {
+    "session-manager": {
+      "path": "services/session-manager.js",
+      "lines": 365,
+      "size": 10421
+    },
+    "storage-degradation-manager": {
+      "path": "services/storage-degradation-manager.js",
+      "lines": 197,
+      "size": 5522
+    },
+    "error-recovery-coordinator": {
+      "path": "services/error-recovery-coordinator.js",
+      "lines": 172,
+      "size": 5440
+    },
+    "worker-coordinator": {
+      "path": "services/worker-coordinator.js",
+      "lines": 585,
+      "size": 15545
+    },
+    "wave-telemetry": {
+      "path": "services/wave-telemetry.js",
+      "lines": 346,
+      "size": 9695
+    }
+  },
+  "internalModules": {
+    "session-manager": {
+      "totalLines": 1439,
+      "totalFiles": 4,
+      "files": [
+        {
+          "path": "services/session-manager/session-lifecycle.js",
+          "lines": 548,
+          "size": 20461
+        },
+        {
+          "path": "services/session-manager/session-state.js",
+          "lines": 345,
+          "size": 11594
+        },
+        {
+          "path": "services/session-manager/index.js",
+          "lines": 279,
+          "size": 8004
+        },
+        {
+          "path": "services/session-manager/session-persistence.js",
+          "lines": 267,
+          "size": 8543
+        }
+      ]
+    },
+    "storage-degradation": {
+      "totalLines": 1861,
+      "totalFiles": 4,
+      "files": [
+        {
+          "path": "services/storage-degradation/cleanup-strategies.js",
+          "lines": 608,
+          "size": 20608
+        },
+        {
+          "path": "services/storage-degradation/tier-handlers.js",
+          "lines": 534,
+          "size": 15917
+        },
+        {
+          "path": "services/storage-degradation/index.js",
+          "lines": 423,
+          "size": 14000
+        },
+        {
+          "path": "services/storage-degradation/degradation-detector.js",
+          "lines": 296,
+          "size": 8375
+        }
+      ]
+    },
+    "error-recovery": {
+      "totalLines": 1295,
+      "totalFiles": 5,
+      "files": [
+        {
+          "path": "services/error-recovery/recovery-orchestration.js",
+          "lines": 487,
+          "size": 15106
+        },
+        {
+          "path": "services/error-recovery/recovery-lock-manager.js",
+          "lines": 328,
+          "size": 10698
+        },
+        {
+          "path": "services/error-recovery/recovery-strategies.js",
+          "lines": 230,
+          "size": 6408
+        },
+        {
+          "path": "services/error-recovery/index.js",
+          "lines": 189,
+          "size": 6042
+        },
+        {
+          "path": "services/error-recovery/constants.js",
+          "lines": 61,
+          "size": 1298
+        }
+      ]
+    },
+    "event-bus": {
+      "totalLines": 564,
+      "totalFiles": 1,
+      "files": [
+        {
+          "path": "services/event-bus/index.js",
+          "lines": 564,
+          "size": 15505
+        }
+      ]
+    },
+    "tab-coordination": {
+      "totalLines": 1440,
+      "totalFiles": 4,
+      "files": [
+        {
+          "path": "services/tab-coordination/index.js",
+          "lines": 882,
+          "size": 27509
+        },
+        {
+          "path": "services/tab-coordination/message-guards.js",
+          "lines": 360,
+          "size": 10826
+        },
+        {
+          "path": "services/tab-coordination/timing.js",
+          "lines": 133,
+          "size": 3773
+        },
+        {
+          "path": "services/tab-coordination/constants.js",
+          "lines": 65,
+          "size": 2005
+        }
+      ]
+    }
+  },
+  "tests": {
+    "session-manager": {
+      "totalTests": 247,
+      "totalFiles": 5,
+      "files": [
+        {
+          "path": "tests/unit/session-manager/session-lifecycle.test.js",
+          "tests": 55,
+          "lines": 724
+        },
+        {
+          "path": "tests/unit/session-manager/session-state.test.js",
+          "tests": 50,
+          "lines": 574
+        },
+        {
+          "path": "tests/unit/session-manager-facade.test.js",
+          "tests": 54,
+          "lines": 433
+        },
+        {
+          "path": "tests/unit/session-manager-integration.test.js",
+          "tests": 29,
+          "lines": 624
+        },
+        {
+          "path": "tests/unit/session-manager.test.js",
+          "tests": 59,
+          "lines": 713
+        }
+      ]
+    },
+    "api-compatibility": {
+      "totalTests": 65,
+      "totalFiles": 1,
+      "files": [
+        {
+          "path": "tests/unit/api-compatibility.test.js",
+          "tests": 65,
+          "lines": 408
+        }
+      ]
+    },
+    "wave-telemetry": {
+      "totalTests": 5,
+      "totalFiles": 1,
+      "files": [
+        {
+          "path": "tests/unit/wave-telemetry.test.js",
+          "tests": 5,
+          "lines": 68
+        }
+      ]
+    },
+    "wave-visualizer": {
+      "totalTests": 7,
+      "totalFiles": 1,
+      "files": [
+        {
+          "path": "tests/unit/wave-visualizer.test.js",
+          "tests": 7,
+          "lines": 94
+        }
+      ]
+    },
+    "premium-gatekeeper": {
+      "totalTests": 11,
+      "totalFiles": 1,
+      "files": [
+        {
+          "path": "tests/unit/premium-gatekeeper.test.js",
+          "tests": 11,
+          "lines": 111
+        }
+      ]
+    },
+    "playlist-service": {
+      "totalTests": 57,
+      "totalFiles": 1,
+      "files": [
+        {
+          "path": "tests/unit/playlist-service.test.js",
+          "tests": 57,
+          "lines": 748
+        }
+      ]
+    }
+  },
+  "summary": {
+    "totalFacadeLines": 1665,
+    "totalInternalLines": 6599,
+    "totalTestFiles": 114,
+    "totalTests": 3752,
+    "totalSourceFiles": 251,
+    "totalSourceLines": 96872
+  }
+}

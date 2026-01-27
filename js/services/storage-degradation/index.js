@@ -93,12 +93,7 @@ export class StorageDegradationManager {
         const { eventBus = null, autoCleanupEnabled = true, checkIntervalMs = 30000 } = options;
         this._eventBus = eventBus;
 
-        // Initialize modules
-        this._detector = new DegradationDetector({
-            eventBus,
-            checkIntervalMs
-        });
-
+        // Initialize cleanup and handlers first (before detector)
         this._cleanup = new CleanupStrategies({
             eventBus,
             storage: null // Will use default Storage import
@@ -110,19 +105,35 @@ export class StorageDegradationManager {
             autoCleanupEnabled
         });
 
-        // Wire up tier changes from detector to handlers
+        // Wire up tier changes from detector to handlers BEFORE creating detector
+        // This ensures the initial tier change event is captured
         if (eventBus) {
             eventBus.on('STORAGE:TIER_CHANGE', async (event, data) => {
+                // Only handle quota_check events to avoid duplication
                 if (data.reason === 'quota_check') {
                     // Sync cleanup strategies with new tier
                     this._cleanup.setCurrentTier(data.newTier);
                     this._cleanup.setCurrentMetrics(data.metrics);
 
-                    // Let handlers manage the transition
+                    // Sync handler's tier state
+                    this._handlers.setCurrentTier(data.newTier);
+
+                    // Let handlers manage the transition (without re-emitting event)
                     await this._handlers.transitionTo(data.newTier);
                 }
             });
+
+            // Monitor quota changes for immediate checks
+            eventBus.on('STORAGE:QUOTA_CHANGE', async () => {
+                await this._detector.checkQuotaNow();
+            });
         }
+
+        // Now initialize detector - its initial check will be captured by the listener above
+        this._detector = new DegradationDetector({
+            eventBus,
+            checkIntervalMs
+        });
 
         performance.mark('storage-degradation-manager-init');
     }
@@ -211,6 +222,15 @@ export class StorageDegradationManager {
         return await this._cleanup.triggerCleanup(priority);
     }
 
+    /**
+     * Manually trigger emergency cleanup
+     * @public
+     * @returns {Promise<CleanupResult>} Cleanup result
+     */
+    async triggerEmergencyCleanup() {
+        return await this._cleanup.triggerEmergencyCleanup();
+    }
+
     // ==========================================
     // Utility Methods
     // ==========================================
@@ -221,7 +241,7 @@ export class StorageDegradationManager {
      * @returns {Promise<Blob>} Exported data as blob
      */
     async exportStorageData() {
-        const { Storage } = await import('../storage.js');
+        const { Storage } = await import('../../storage.js');
         const data = {
             personality: await Storage.getPersonalityResult(),
             sessions: await Storage.getAllChatSessions(),
@@ -244,52 +264,11 @@ export class StorageDegradationManager {
     async clearAllData() {
         performance.mark('storage-clear-all-start');
 
-        try {
-            let bytesFreed = 0;
-            let itemsDeleted = 0;
-            const operations = [];
+        const result = await this._cleanup.performFullCleanup();
 
-            // Trigger all cleanup strategies
-            const sessionResult = await this._cleanup._cleanupOldSessions();
-            bytesFreed += sessionResult.bytesFreed;
-            itemsDeleted += sessionResult.itemsDeleted;
-            operations.push(...sessionResult.operations);
+        performance.measure('storage-clear-all', 'storage-clear-all-start');
 
-            const embedResult = await this._cleanup._clearEmbeddings();
-            bytesFreed += embedResult.bytesFreed;
-            itemsDeleted += embedResult.itemsDeleted;
-            operations.push(...embedResult.operations);
-
-            const chunkResult = await this._cleanup._cleanupOldChunks();
-            bytesFreed += chunkResult.bytesFreed;
-            itemsDeleted += chunkResult.itemsDeleted;
-            operations.push(...chunkResult.operations);
-
-            const streamResult = await this._cleanup._cleanupOldStreams();
-            bytesFreed += streamResult.bytesFreed;
-            itemsDeleted += streamResult.itemsDeleted;
-            operations.push(...streamResult.operations);
-
-            performance.measure('storage-clear-all', 'storage-clear-all-start');
-
-            return {
-                success: true,
-                bytesFreed,
-                itemsDeleted,
-                operations,
-                error: null
-            };
-
-        } catch (error) {
-            console.error('[StorageDegradationManager] Failed to clear all data:', error);
-            return {
-                success: false,
-                bytesFreed: 0,
-                itemsDeleted: 0,
-                operations: [],
-                error
-            };
-        }
+        return result;
     }
 
     // ==========================================
@@ -361,7 +340,7 @@ export class StorageDegradationManager {
         };
 
         try {
-            const { Storage } = await import('../storage.js');
+            const { Storage } = await import('../../storage.js');
 
             // Sessions
             const sessions = await Storage.getAllChatSessions?.() || [];
@@ -392,7 +371,7 @@ export class StorageDegradationManager {
 
             // Embeddings - estimate from LRU cache if available
             try {
-                const { LocalVectorStore } = await import('../local-vector-store.js');
+                const { LocalVectorStore } = await import('../../local-vector-store.js');
                 if (LocalVectorStore?.getStats) {
                     const stats = LocalVectorStore.getStats();
                     breakdown.embeddings.count = stats.vectorCount || 0;
