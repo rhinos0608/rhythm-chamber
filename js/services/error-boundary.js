@@ -299,6 +299,154 @@ export class ErrorBoundary {
 }
 
 // ==========================================
+// Static Service Wrapper (for non-DOM operations)
+// ==========================================
+
+/**
+ * Wrap an async service operation with error boundary protection
+ * This is a static method for service-level operations that don't require DOM containers
+ *
+ * @param {Function} operation - Async function to execute
+ * @param {Object} options - Configuration options
+ * @param {*} options.fallback - Fallback value to return on error (or function that receives error)
+ * @param {string} options.context - Context name for error reporting
+ * @param {Function} options.onError - Custom error handler (receives error and context)
+ * @param {boolean} options.rethrow - Whether to re-throw after logging (default: true)
+ * @param {Object} options.telemetry - Telemetry service with record() method
+ * @returns {Promise<*>} Operation result or fallback value
+ */
+ErrorBoundary.wrap = async function(operation, options = {}) {
+    const {
+        fallback = null,
+        context = 'unknown',
+        onError = null,
+        rethrow = true,
+        telemetry = null
+    } = options;
+
+    try {
+        return await operation();
+    } catch (error) {
+        // Build full context object
+        const errorContext = {
+            context,
+            timestamp: Date.now(),
+            ...options
+        };
+
+        // Log error with context
+        const logMessage = `[ErrorBoundary] Error in ${context}`;
+        console.error(logMessage, error, errorContext);
+
+        // Call custom error handler if provided
+        if (onError) {
+            try {
+                onError(error, errorContext);
+            } catch (handlerError) {
+                console.error('[ErrorBoundary] Error handler failed:', handlerError);
+            }
+        }
+
+        // Record telemetry if provided
+        if (telemetry?.record) {
+            try {
+                telemetry.record('error_boundary_caught', {
+                    context,
+                    error: error.message,
+                    errorType: error.constructor.name
+                });
+            } catch (telemetryError) {
+                console.warn('[ErrorBoundary] Failed to record telemetry:', telemetryError);
+            }
+        }
+
+        // Handle fallback
+        if (fallback !== undefined && fallback !== null) {
+            if (typeof fallback === 'function') {
+                return fallback(error);
+            }
+            return fallback;
+        }
+
+        // Re-throw if requested or no fallback
+        if (rethrow) {
+            throw error;
+        }
+
+        return null;
+    }
+};
+
+/**
+ * Wrap a sync service operation with error boundary protection
+ *
+ * @param {Function} operation - Sync function to execute
+ * @param {Object} options - Configuration options (same as wrap)
+ * @returns {*} Operation result or fallback value
+ */
+ErrorBoundary.wrapSync = function(operation, options = {}) {
+    const {
+        fallback = null,
+        context = 'unknown',
+        onError = null,
+        rethrow = true,
+        telemetry = null
+    } = options;
+
+    try {
+        return operation();
+    } catch (error) {
+        // Build full context object
+        const errorContext = {
+            context,
+            timestamp: Date.now(),
+            ...options
+        };
+
+        // Log error with context
+        const logMessage = `[ErrorBoundary] Error in ${context}`;
+        console.error(logMessage, error, errorContext);
+
+        // Call custom error handler if provided
+        if (onError) {
+            try {
+                onError(error, errorContext);
+            } catch (handlerError) {
+                console.error('[ErrorBoundary] Error handler failed:', handlerError);
+            }
+        }
+
+        // Record telemetry if provided
+        if (telemetry?.record) {
+            try {
+                telemetry.record('error_boundary_caught', {
+                    context,
+                    error: error.message,
+                    errorType: error.constructor.name
+                });
+            } catch (telemetryError) {
+                console.warn('[ErrorBoundary] Failed to record telemetry:', telemetryError);
+            }
+        }
+
+        // Handle fallback
+        if (fallback !== undefined && fallback !== null) {
+            if (typeof fallback === 'function') {
+                return fallback(error);
+            }
+            return fallback;
+        }
+
+        // Re-throw if requested or no fallback
+        if (rethrow) {
+            throw error;
+        }
+
+        return null;
+    }
+};
+
+// ==========================================
 // Pre-configured Widget Boundaries
 // ==========================================
 

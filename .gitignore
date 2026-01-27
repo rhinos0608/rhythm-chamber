@@ -2,6 +2,9 @@
 js/config.js
 backend/.env
 
+# License Keys (Private key must never be committed)
+.license-keys/private.pem
+
 # OS Files
 .DS_Store
 Thumbs.db

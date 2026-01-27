@@ -364,3 +364,168 @@ describe('EventBus Wave Integration', () => {
         expect(receivedWaveId).toBeUndefined();
     });
 });
+
+// ==========================================
+// emitParallel Error Handling Tests (TD-2)
+// ==========================================
+
+describe('EventBus emitParallel Error Handling', () => {
+    it('should continue calling other handlers when one handler throws synchronously', async () => {
+        const handler1 = vi.fn(() => { throw new Error('Handler 1 error'); });
+        const handler2 = vi.fn();
+        const handler3 = vi.fn();
+
+        EventBus.on('parallel:sync-error', handler1);
+        EventBus.on('parallel:sync-error', handler2);
+        EventBus.on('parallel:sync-error', handler3);
+
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+
+        const result = await EventBus.emitParallel('parallel:sync-error', {});
+
+        expect(handler1).toHaveBeenCalled();
+        expect(handler2).toHaveBeenCalled();
+        expect(handler3).toHaveBeenCalled();
+        expect(result).toBe(true);
+        expect(errorSpy).toHaveBeenCalledWith(
+            '[EventBus] Parallel handler error:',
+            expect.any(Error)
+        );
+
+        errorSpy.mockRestore();
+    });
+
+    it('should continue calling other handlers when one handler rejects a promise', async () => {
+        const handler1 = vi.fn(async () => {
+            await Promise.reject(new Error('Async handler 1 rejection'));
+        });
+        const handler2 = vi.fn(async () => {
+            await new Promise(resolve => setTimeout(resolve, 10));
+            return 'handler2-success';
+        });
+        const handler3 = vi.fn(() => 'handler3-success');
+
+        EventBus.on('parallel:async-error', handler1);
+        EventBus.on('parallel:async-error', handler2);
+        EventBus.on('parallel:async-error', handler3);
+
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+
+        const result = await EventBus.emitParallel('parallel:async-error', {});
+
+        expect(handler1).toHaveBeenCalled();
+        expect(handler2).toHaveBeenCalled();
+        expect(handler3).toHaveBeenCalled();
+        expect(result).toBe(true);
+        expect(errorSpy).toHaveBeenCalledWith(
+            '[EventBus] Parallel handler error:',
+            expect.any(Error)
+        );
+
+        errorSpy.mockRestore();
+    });
+
+    it('should continue when multiple handlers throw errors', async () => {
+        const handler1 = vi.fn(() => { throw new Error('Error 1'); });
+        const handler2 = vi.fn(() => { throw new Error('Error 2'); });
+        const handler3 = vi.fn(() => { throw new Error('Error 3'); });
+
+        EventBus.on('parallel:multiple-errors', handler1);
+        EventBus.on('parallel:multiple-errors', handler2);
+        EventBus.on('parallel:multiple-errors', handler3);
+
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => { }).mockClear();
+
+        const result = await EventBus.emitParallel('parallel:multiple-errors', {});
+
+        expect(handler1).toHaveBeenCalled();
+        expect(handler2).toHaveBeenCalled();
+        expect(handler3).toHaveBeenCalled();
+        expect(result).toBe(true);
+        expect(errorSpy).toHaveBeenCalledTimes(3);
+
+        errorSpy.mockRestore();
+    });
+
+    it('should unsubscribe once handlers even when they throw errors', async () => {
+        const handler = vi.fn(() => { throw new Error('Once handler error'); });
+
+        EventBus.once('parallel:once-error', handler);
+
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+
+        await EventBus.emitParallel('parallel:once-error', {});
+
+        expect(handler).toHaveBeenCalledTimes(1);
+
+        // Second emit should not call the handler because it was unsubscribed
+        await EventBus.emitParallel('parallel:once-error', {});
+
+        expect(handler).toHaveBeenCalledTimes(1);
+        expect(EventBus.getSubscriberCount('parallel:once-error')).toBe(0);
+
+        errorSpy.mockRestore();
+    });
+
+    it('should handle mix of successful and failing async handlers', async () => {
+        const callOrder = [];
+
+        const handler1 = async () => {
+            callOrder.push('handler1-start');
+            await new Promise(resolve => setTimeout(resolve, 5));
+            callOrder.push('handler1-end');
+        };
+
+        const handler2 = async () => {
+            callOrder.push('handler2-start');
+            await Promise.reject(new Error('Handler 2 failed'));
+        };
+
+        const handler3 = async () => {
+            callOrder.push('handler3-start');
+            await new Promise(resolve => setTimeout(resolve, 5));
+            callOrder.push('handler3-end');
+        };
+
+        EventBus.on('parallel:mixed-async', handler1);
+        EventBus.on('parallel:mixed-async', handler2);
+        EventBus.on('parallel:mixed-async', handler3);
+
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+
+        const result = await EventBus.emitParallel('parallel:mixed-async', {});
+
+        expect(result).toBe(true);
+        expect(callOrder).toContain('handler1-start');
+        expect(callOrder).toContain('handler1-end');
+        expect(callOrder).toContain('handler2-start');
+        expect(callOrder).toContain('handler3-start');
+        expect(callOrder).toContain('handler3-end');
+
+        errorSpy.mockRestore();
+    });
+
+    it('should return false when no handlers are registered', async () => {
+        const result = await EventBus.emitParallel('parallel:no-handlers', {});
+        expect(result).toBe(false);
+    });
+
+    it('should properly unsubscribe wildcard once handlers that throw errors', async () => {
+        const handler = vi.fn(() => { throw new Error('Wildcard error'); });
+
+        EventBus.once('*', handler);
+
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+
+        await EventBus.emitParallel('test:event', {});
+
+        expect(handler).toHaveBeenCalledTimes(1);
+
+        // Second emit should not call the handler
+        await EventBus.emitParallel('test:event2', {});
+
+        expect(handler).toHaveBeenCalledTimes(1);
+
+        errorSpy.mockRestore();
+    });
+});

@@ -353,6 +353,118 @@ describe('SessionState Message History', () => {
         expect(removed).toBe(false);
     });
 
+    // TD-7: Array bounds checking tests
+    it('should return false when removing with negative index', async () => {
+        await SessionState.addMessageToHistory({ role: 'user', content: 'Test' });
+
+        const removed = await SessionState.removeMessageFromHistory(-1);
+        expect(removed).toBe(false);
+
+        const history = SessionState.getHistory();
+        expect(history).toHaveLength(1);
+    });
+
+    it('should return false when removing with index at array length', async () => {
+        await SessionState.addMessageToHistory({ role: 'user', content: 'Test' });
+
+        const removed = await SessionState.removeMessageFromHistory(1);
+        expect(removed).toBe(false);
+
+        const history = SessionState.getHistory();
+        expect(history).toHaveLength(1);
+    });
+
+    it('should return false when removing from empty history', async () => {
+        const removed = await SessionState.removeMessageFromHistory(0);
+        expect(removed).toBe(false);
+    });
+
+    it('should handle undefined index gracefully', async () => {
+        await SessionState.addMessageToHistory({ role: 'user', content: 'Test' });
+
+        const removed = await SessionState.removeMessageFromHistory(undefined);
+        expect(removed).toBe(false);
+
+        const history = SessionState.getHistory();
+        expect(history).toHaveLength(1);
+    });
+
+    it('should handle null index gracefully', async () => {
+        await SessionState.addMessageToHistory({ role: 'user', content: 'Test' });
+
+        const removed = await SessionState.removeMessageFromHistory(null);
+        expect(removed).toBe(false);
+
+        const history = SessionState.getHistory();
+        expect(history).toHaveLength(1);
+    });
+
+    it('should handle NaN index gracefully', async () => {
+        await SessionState.addMessageToHistory({ role: 'user', content: 'Test' });
+
+        const removed = await SessionState.removeMessageFromHistory(NaN);
+        expect(removed).toBe(false);
+
+        const history = SessionState.getHistory();
+        expect(history).toHaveLength(1);
+    });
+
+    it('should handle very large positive index gracefully', async () => {
+        await SessionState.addMessageToHistory({ role: 'user', content: 'Test' });
+
+        const removed = await SessionState.removeMessageFromHistory(Number.MAX_SAFE_INTEGER);
+        expect(removed).toBe(false);
+
+        const history = SessionState.getHistory();
+        expect(history).toHaveLength(1);
+    });
+
+    it('should handle very large negative index gracefully', async () => {
+        await SessionState.addMessageToHistory({ role: 'user', content: 'Test' });
+
+        const removed = await SessionState.removeMessageFromHistory(Number.MIN_SAFE_INTEGER);
+        expect(removed).toBe(false);
+
+        const history = SessionState.getHistory();
+        expect(history).toHaveLength(1);
+    });
+
+    it('should handle float index gracefully', async () => {
+        await SessionState.addMessageToHistory({ role: 'user', content: 'Test' });
+
+        const removed = await SessionState.removeMessageFromHistory(1.5);
+        expect(removed).toBe(false);
+
+        const history = SessionState.getHistory();
+        expect(history).toHaveLength(1);
+    });
+
+    it('should handle zero index correctly', async () => {
+        await SessionState.addMessageToHistory({ role: 'user', content: 'First' });
+        await SessionState.addMessageToHistory({ role: 'assistant', content: 'Second' });
+
+        const removed = await SessionState.removeMessageFromHistory(0);
+        expect(removed).toBe(true);
+
+        const history = SessionState.getHistory();
+        expect(history).toHaveLength(1);
+        expect(history[0].content).toBe('Second');
+    });
+
+    it('should remove last message by index', async () => {
+        await SessionState.addMessageToHistory({ role: 'user', content: 'First' });
+        await SessionState.addMessageToHistory({ role: 'assistant', content: 'Second' });
+        await SessionState.addMessageToHistory({ role: 'user', content: 'Third' });
+
+        const removed = await SessionState.removeMessageFromHistory(2);
+        expect(removed).toBe(true);
+
+        const history = SessionState.getHistory();
+        expect(history).toHaveLength(2);
+        expect(history[0].content).toBe('First');
+        expect(history[1].content).toBe('Second');
+    });
+
     it('should truncate history to specified length', async () => {
         for (let i = 0; i < 10; i++) {
             await SessionState.addMessageToHistory({ role: 'user', content: `Message ${i}` });

@@ -174,27 +174,53 @@ function cleanup() {
 
 ---
 
-### 7. Array Bounds Checking Missing
+### 7. ~~Array Bounds Checking Missing~~ **RESOLVED**
 
-**File:** `js/controllers/streaming-message-handler.js:293-307`
+**File:** `js/services/session-manager/session-state.js:315-341`
 
 **Issue:** `removeMessageFromHistory()` doesn't validate array bounds before accessing.
 
 **Impact:** Runtime exceptions, undefined behavior
 
-**Remediation:**
+**Resolution:** [TD-7] Enhanced array bounds validation with comprehensive type checking:
+
 ```javascript
 export async function removeMessageFromHistory(index) {
     let success = false;
     await updateSessionData((currentData) => {
-        if (currentData.messages && index >= 0 && index < currentData.messages.length) {
-            // ... process removal
+        // TD-7: Comprehensive bounds checking
+        // 1. Check messages array exists
+        // 2. Check index is a valid number (not NaN, null, undefined)
+        // 3. Check index is within array bounds [0, length)
+        // Note: Number.isInteger() handles null, undefined, NaN, floats correctly
+        const isValidIndex = currentData.messages &&
+                             Number.isInteger(index) &&
+                             index >= 0 &&
+                             index < currentData.messages.length;
+
+        if (isValidIndex) {
+            // Create new array without the removed item
+            const newMessages = [...currentData.messages];
+            newMessages.splice(index, 1);
+            success = true;
+            return { id: currentData.id, messages: newMessages };
         }
         return currentData;
     });
     return success;
 }
 ```
+
+**Tests Added:**
+- Negative index validation
+- Null/undefined index validation
+- NaN index validation
+- Float index validation (e.g., 1.5)
+- Very large positive/negative indices
+- Empty array handling
+- Boundary edge cases (0, length-1, length)
+
+**Status:** Completed 2026-01-27
 
 **Estimated Effort:** 1 hour
 

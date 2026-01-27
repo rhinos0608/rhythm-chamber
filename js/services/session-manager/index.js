@@ -15,6 +15,7 @@ import * as SessionState from './session-state.js';
 import * as SessionLifecycle from './session-lifecycle.js';
 import * as SessionPersistence from './session-persistence.js';
 import { Storage } from '../../storage.js';
+import { ErrorBoundary } from '../error-boundary.js';
 
 // Re-export all module exports for internal use
 export * from './session-state.js';
@@ -99,23 +100,75 @@ export function createManager() {
         // ==========================================
 
         async saveCurrentSession() {
-            return await SessionPersistence.saveCurrentSession();
+            return await ErrorBoundary.wrap(
+                async () => SessionPersistence.saveCurrentSession(),
+                {
+                    context: 'sessionSave',
+                    fallback: false,
+                    rethrow: false,
+                    onError: (error) => {
+                        console.error('[SessionManager] Failed to save current session:', error);
+                    }
+                }
+            );
         },
 
         saveConversation(delayMs) {
-            SessionPersistence.saveConversation(delayMs);
+            // Sync operation - use wrapSync
+            ErrorBoundary.wrapSync(
+                () => SessionPersistence.saveConversation(delayMs),
+                {
+                    context: 'sessionSaveConversation',
+                    fallback: null,
+                    rethrow: false,
+                    onError: (error) => {
+                        console.error('[SessionManager] Failed to save conversation:', error);
+                    }
+                }
+            );
         },
 
         async flushPendingSaveAsync() {
-            return await SessionPersistence.flushPendingSaveAsync();
+            return await ErrorBoundary.wrap(
+                async () => SessionPersistence.flushPendingSaveAsync(),
+                {
+                    context: 'sessionFlushPending',
+                    fallback: false,
+                    rethrow: false,
+                    onError: (error) => {
+                        console.error('[SessionManager] Failed to flush pending save:', error);
+                    }
+                }
+            );
         },
 
         emergencyBackupSync() {
-            SessionPersistence.emergencyBackupSync();
+            // Sync operation - use wrapSync, best-effort only
+            ErrorBoundary.wrapSync(
+                () => SessionPersistence.emergencyBackupSync(),
+                {
+                    context: 'sessionEmergencyBackup',
+                    fallback: null,
+                    rethrow: false,
+                    onError: (error) => {
+                        console.warn('[SessionManager] Emergency backup failed:', error);
+                    }
+                }
+            );
         },
 
         async recoverEmergencyBackup() {
-            return await SessionPersistence.recoverEmergencyBackup();
+            return await ErrorBoundary.wrap(
+                async () => SessionPersistence.recoverEmergencyBackup(),
+                {
+                    context: 'sessionRecoverBackup',
+                    fallback: null,
+                    rethrow: false,
+                    onError: (error) => {
+                        console.error('[SessionManager] Failed to recover emergency backup:', error);
+                    }
+                }
+            );
         },
 
         // ==========================================
@@ -127,7 +180,18 @@ export function createManager() {
          * @returns {Array} Copy of message history
          */
         getHistory() {
-            return SessionState.getHistory();
+            // Safe sync operation - return empty array on error
+            return ErrorBoundary.wrapSync(
+                () => SessionState.getHistory(),
+                {
+                    context: 'sessionGetHistory',
+                    fallback: [],
+                    rethrow: false,
+                    onError: (error) => {
+                        console.error('[SessionManager] Failed to get history:', error);
+                    }
+                }
+            );
         },
 
         /**
@@ -136,7 +200,17 @@ export function createManager() {
          * @returns {Promise<void>}
          */
         async addMessageToHistory(message) {
-            return await SessionState.addMessageToHistory(message);
+            return await ErrorBoundary.wrap(
+                async () => SessionState.addMessageToHistory(message),
+                {
+                    context: 'sessionAddMessage',
+                    fallback: false,
+                    rethrow: true,
+                    onError: (error) => {
+                        console.error('[SessionManager] Failed to add message to history:', error);
+                    }
+                }
+            );
         },
 
         /**
@@ -145,7 +219,17 @@ export function createManager() {
          * @returns {Promise<void>}
          */
         async addMessagesToHistory(messages) {
-            return await SessionState.addMessagesToHistory(messages);
+            return await ErrorBoundary.wrap(
+                async () => SessionState.addMessagesToHistory(messages),
+                {
+                    context: 'sessionAddMessages',
+                    fallback: false,
+                    rethrow: true,
+                    onError: (error) => {
+                        console.error('[SessionManager] Failed to add messages to history:', error);
+                    }
+                }
+            );
         },
 
         /**
@@ -154,7 +238,17 @@ export function createManager() {
          * @returns {Promise<void>}
          */
         async truncateHistory(length) {
-            return await SessionState.truncateHistory(length);
+            return await ErrorBoundary.wrap(
+                async () => SessionState.truncateHistory(length),
+                {
+                    context: 'sessionTruncate',
+                    fallback: false,
+                    rethrow: true,
+                    onError: (error) => {
+                        console.error('[SessionManager] Failed to truncate history:', error);
+                    }
+                }
+            );
         },
 
         /**
@@ -163,7 +257,17 @@ export function createManager() {
          * @returns {Promise<boolean>} Success status
          */
         async removeMessageFromHistory(index) {
-            return await SessionState.removeMessageFromHistory(index);
+            return await ErrorBoundary.wrap(
+                async () => SessionState.removeMessageFromHistory(index),
+                {
+                    context: 'sessionRemoveMessage',
+                    fallback: false,
+                    rethrow: true,
+                    onError: (error) => {
+                        console.error('[SessionManager] Failed to remove message from history:', error);
+                    }
+                }
+            );
         },
 
         /**
@@ -171,7 +275,17 @@ export function createManager() {
          * @returns {Promise<void>}
          */
         async clearConversation() {
-            return await SessionLifecycle.clearAllSessions();
+            return await ErrorBoundary.wrap(
+                async () => SessionLifecycle.clearAllSessions(),
+                {
+                    context: 'sessionClear',
+                    fallback: false,
+                    rethrow: true,
+                    onError: (error) => {
+                        console.error('[SessionManager] Failed to clear conversation:', error);
+                    }
+                }
+            );
         }
     };
 
@@ -197,7 +311,8 @@ export function resetManager() {
  * @returns {Promise<Array>} All sessions
  */
 export async function getAllSessions() {
-    if (!Storage.getAllSessions) {
+    if (!Storage || typeof Storage.getAllSessions !== 'function') {
+        console.warn('[SessionManager] Storage not available');
         return [];
     }
     try {

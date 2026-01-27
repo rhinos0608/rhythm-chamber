@@ -26,6 +26,7 @@ import { MessageValidator } from './message-validator.js';
 import { MessageErrorHandler } from './message-error-handler.js';
 import { LLMApiOrchestrator } from './llm-api-orchestrator.js';
 import { StreamProcessor } from './stream-processor.js';
+import { ErrorBoundary } from './error-boundary.js';
 
 // ==========================================
 // Event Schemas (decentralized registration)
@@ -61,6 +62,7 @@ let _Settings = null;
 let _Config = null;
 let _Functions = null;
 let _MessageOperations = null;
+let _WaveTelemetry = null;
 
 // Initialization state flag
 let _isInitialized = false;
@@ -133,6 +135,7 @@ function init(dependencies) {
         _Config = dependencies.Config;
         _Functions = dependencies.Functions;
         _MessageOperations = dependencies.MessageOperations;
+        _WaveTelemetry = dependencies.WaveTelemetry;
 
         // Validate required dependencies
         const requiredDeps = ['SessionManager', 'ConversationOrchestrator', 'ToolCallHandlingService',
@@ -279,13 +282,19 @@ async function processMessage(message, optionsOrKey = null) {
         let semanticContext = null;
         const RAG = _ModuleRegistry?.getModuleSync('RAG');
         if (RAG?.isConfigured()) {
-            try {
-                semanticContext = await RAG.getSemanticContext(message, 3);
-                if (semanticContext) {
-                    console.log('[MessageLifecycleCoordinator] Semantic context retrieved from RAG');
+            semanticContext = await ErrorBoundary.wrap(
+                async () => RAG.getSemanticContext(message, 3),
+                {
+                    context: 'ragSemanticSearch',
+                    fallback: null,
+                    rethrow: false,
+                    onError: (err) => {
+                        console.warn('[MessageLifecycleCoordinator] RAG semantic search failed:', err.message);
+                    }
                 }
-            } catch (err) {
-                console.warn('[MessageLifecycleCoordinator] RAG semantic search failed:', err.message);
+            );
+            if (semanticContext) {
+                console.log('[MessageLifecycleCoordinator] Semantic context retrieved from RAG');
             }
         }
 
@@ -410,14 +419,35 @@ async function processMessage(message, optionsOrKey = null) {
             let apiMessages = messages;
             let apiTools = useTools ? tools : undefined;
 
-            // Use LLMApiOrchestrator for LLM API call
-            let response = await LLMApiOrchestrator.callLLM(
-                providerConfig,
-                key,
-                apiMessages,
-                apiTools,
-                LLMApiOrchestrator.isLocalProvider(provider) ? onProgress : null,
-                turnBudget.signal
+            // Wrap LLM API call with error boundary for graceful failure
+            let response = await ErrorBoundary.wrap(
+                async () => LLMApiOrchestrator.callLLM(
+                    providerConfig,
+                    key,
+                    apiMessages,
+                    apiTools,
+                    LLMApiOrchestrator.isLocalProvider(provider) ? onProgress : null,
+                    turnBudget.signal
+                ),
+                {
+                    context: 'llmApiCall',
+                    telemetry: _WaveTelemetry,
+                    onError: (error) => {
+                        // Log detailed error for debugging
+                        console.error('[MessageLifecycleCoordinator] LLM API call failed:', {
+                            provider: providerConfig.provider,
+                            model: providerConfig.model,
+                            error: error.message,
+                            timestamp: new Date().toISOString()
+                        });
+                        // Emit event for UI notification
+                        EventBus.emit('chat:error', {
+                            error: error.message,
+                            recoverable: true,
+                            context: 'llm_api_call'
+                        });
+                    }
+                }
             );
 
             // Use MessageErrorHandler for response validation

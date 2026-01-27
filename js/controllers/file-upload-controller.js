@@ -1,13 +1,16 @@
 /**
  * File Upload Controller
- * 
+ *
  * Handles file upload processing with Web Worker orchestration.
  * Extracted from app.js to separate file processing concerns.
- * 
+ *
  * @module controllers/file-upload-controller
  */
 
 'use strict';
+
+// Import ErrorBoundary for error handling
+import { ErrorBoundary } from '../services/error-boundary.js';
 
 // ==========================================
 // Dependencies (injected via init)
@@ -20,6 +23,7 @@ let _Patterns = null;
 let _Personality = null;
 let _ViewController = null;
 let _showToast = null;
+let _WaveTelemetry = null;
 
 // ==========================================
 // State Management
@@ -45,6 +49,7 @@ function init(dependencies) {
     _Personality = dependencies.Personality;
     _ViewController = dependencies.ViewController;
     _showToast = dependencies.showToast;
+    _WaveTelemetry = dependencies.WaveTelemetry;
 
     console.log('[FileUploadController] Initialized with dependencies');
 }
@@ -315,69 +320,93 @@ function handleMemoryResumed() {
  * Handle partial save of streams
  */
 async function handlePartialSave(partialStreams, fileIndex, totalFiles, streamCount) {
-    try {
-        if (_Storage) {
-            await _Storage.appendStreams(partialStreams);
+    await ErrorBoundary.wrap(
+        async () => {
+            if (_Storage) {
+                await _Storage.appendStreams(partialStreams);
+            }
+            if (_ViewController) {
+                _ViewController.updateProgress(`Parsing file ${fileIndex}/${totalFiles}... (${streamCount.toLocaleString()} streams)`);
+            }
+        },
+        {
+            context: 'fileUploadPartialSave',
+            fallback: null,
+            rethrow: false,
+            telemetry: _WaveTelemetry,
+            onError: (err) => {
+                console.warn('[FileUploadController] Failed to save partial streams:', err);
+            }
         }
-        if (_ViewController) {
-            _ViewController.updateProgress(`Parsing file ${fileIndex}/${totalFiles}... (${streamCount.toLocaleString()} streams)`);
-        }
-    } catch (err) {
-        console.warn('[FileUploadController] Failed to save partial streams:', err);
-    }
+    );
 }
 
 /**
  * Handle final processing completion
  */
 async function handleProcessingComplete(streams, chunks) {
-    // Update app state
-    if (_AppState) {
-        _AppState.update('data', {
-            streams: streams,
-            chunks: chunks
-        });
-    }
+    // Wrap entire completion handling with error boundary
+    await ErrorBoundary.wrap(
+        async () => {
+            // Update app state
+            if (_AppState) {
+                _AppState.update('data', {
+                    streams: streams,
+                    chunks: chunks
+                });
+            }
 
-    // Show progress
-    if (_ViewController) {
-        _ViewController.updateProgress('Detecting behavioral patterns...');
-    }
-    await new Promise(r => setTimeout(r, 10)); // Let UI update
+            // Show progress
+            if (_ViewController) {
+                _ViewController.updateProgress('Detecting behavioral patterns...');
+            }
+            await new Promise(r => setTimeout(r, 10)); // Let UI update
 
-    // Detect patterns
-    const patterns = _Patterns.detectAllPatterns(streams, chunks);
-    if (_AppState) {
-        _AppState.setPatterns(patterns);
-    }
+            // Detect patterns
+            const patterns = _Patterns.detectAllPatterns(streams, chunks);
+            if (_AppState) {
+                _AppState.setPatterns(patterns);
+            }
 
-    // Classify personality
-    if (_ViewController) {
-        _ViewController.updateProgress('Classifying personality...');
-    }
-    await new Promise(r => setTimeout(r, 10));
+            // Classify personality
+            if (_ViewController) {
+                _ViewController.updateProgress('Classifying personality...');
+            }
+            await new Promise(r => setTimeout(r, 10));
 
-    const personality = _Personality.classifyPersonality(patterns);
-    personality.summary = patterns.summary;
-    if (_AppState) {
-        _AppState.setPersonality(personality);
-    }
+            const personality = _Personality.classifyPersonality(patterns);
+            personality.summary = patterns.summary;
+            if (_AppState) {
+                _AppState.setPersonality(personality);
+            }
 
-    // Save final complete data to IndexedDB
-    if (_ViewController) {
-        _ViewController.updateProgress('Saving...');
-    }
+            // Save final complete data to IndexedDB
+            if (_ViewController) {
+                _ViewController.updateProgress('Saving...');
+            }
 
-    if (_Storage) {
-        await _Storage.saveStreams(streams);
-        await _Storage.saveChunks(chunks);
-        await _Storage.savePersonality(personality);
-    }
+            if (_Storage) {
+                await _Storage.saveStreams(streams);
+                await _Storage.saveChunks(chunks);
+                await _Storage.savePersonality(personality);
+            }
 
-    // Show reveal
-    if (_ViewController) {
-        _ViewController.showReveal();
-    }
+            // Show reveal
+            if (_ViewController) {
+                _ViewController.showReveal();
+            }
+        },
+        {
+            context: 'fileUploadProcessingComplete',
+            fallback: null,
+            rethrow: true,
+            telemetry: _WaveTelemetry,
+            onError: (error) => {
+                console.error('[FileUploadController] Processing completion failed:', error);
+                _showToast('Failed to complete file processing. Please try again.');
+            }
+        }
+    );
 }
 
 /**

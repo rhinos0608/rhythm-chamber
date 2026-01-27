@@ -385,6 +385,32 @@ function createMessageElement(text, role, isError = false) {
     return div;
 }
 
+/**
+ * Cleanup function to clear active timeout and reset buffer
+ * Call this when component unmounts or when streams are canceled
+ * Prevents memory leaks from orphaned timeouts
+ *
+ * @example
+ *   // On component unmount
+ *   onUnmount(() => {
+ *       StreamingMessageHandler.cleanupStreamingHandler();
+ *   });
+ *
+ *   // On stream cancel
+ *   function cancelStream() {
+ *       StreamingMessageHandler.cleanupStreamingHandler();
+ *   }
+ */
+function cleanupStreamingHandler() {
+    // Clear any active timeout to prevent memory leak
+    if (activeTimeout) {
+        clearTimeout(activeTimeout);
+        activeTimeout = null;
+    }
+    // Reset buffer to clear any pending data
+    streamBuffer.reset();
+}
+
 // ==========================================
 // Public API
 // ==========================================
@@ -396,7 +422,8 @@ export const StreamingMessageHandler = {
     finalizeStreamedMessage,
     processSequencedChunk,
     resetSequenceBuffer,
-    getSequenceBufferStatus
+    getSequenceBufferStatus,
+    cleanupStreamingHandler
 };
 
 console.log('[StreamingMessageHandler] Module loaded');
