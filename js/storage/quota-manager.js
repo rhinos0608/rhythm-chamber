@@ -1,37 +1,40 @@
 /**
  * QuotaManager - Storage Quota Monitoring Service
- * 
+ *
  * Monitors IndexedDB storage quota and emits events at defined thresholds.
  * Works with StorageDegradationManager for tier-based degradation.
- * 
+ *
  * HNW Hierarchy: Reports quota status to StorageDegradationManager for policy decisions
  * HNW Network: Emits events via EventBus for UI and other services to consume
  * HNW Wave: Polls periodically with option for on-demand checks after large writes
- * 
+ *
  * @module storage/quota-manager
  */
 
 import { EventBus } from '../services/event-bus.js';
+import { QUOTA_THRESHOLDS } from '../constants/limits.js';
+import { POLL_INTERVALS } from '../constants/delays.js';
+import { API_TIME_TO_LIVE } from '../constants/api.js';
 
 // ==========================================
 // Quota Thresholds Configuration
 // ==========================================
 
 const DEFAULT_QUOTA_CONFIG = Object.freeze({
-    // Warning threshold (80% of quota)
-    warningThreshold: 0.80,
+    // Warning threshold from constants
+    warningThreshold: QUOTA_THRESHOLDS.WARNING_THRESHOLD,
 
-    // Critical threshold (95% of quota) - writes may be blocked
-    criticalThreshold: 0.95,
+    // Critical threshold from constants
+    criticalThreshold: QUOTA_THRESHOLDS.CRITICAL_THRESHOLD,
 
-    // Polling interval in milliseconds (60 seconds)
-    pollIntervalMs: 60000,
+    // Polling interval from constants
+    pollIntervalMs: POLL_INTERVALS.QUOTA_CHECK_MS,
 
-    // Minimum bytes written to trigger post-write check
-    largeWriteThresholdBytes: 1024 * 1024, // 1MB
+    // Large write threshold from constants
+    largeWriteThresholdBytes: QUOTA_THRESHOLDS.LARGE_WRITE_THRESHOLD_BYTES,
 
-    // Default quota if navigator.storage.estimate() fails (50MB)
-    fallbackQuotaBytes: 50 * 1024 * 1024
+    // Fallback quota from constants
+    fallbackQuotaBytes: QUOTA_THRESHOLDS.FALLBACK_QUOTA_BYTES
 });
 
 // Mutable config that can be modified
@@ -68,7 +71,7 @@ let isInitialized = false;
  * Reservations are automatically released after a timeout to prevent stale locks.
  */
 const pendingReservations = new Map(); // reservationId -> { size, timestamp }
-const RESERVATION_TIMEOUT_MS = 30000; // 30 seconds - auto-release stale reservations
+const RESERVATION_TIMEOUT_MS = API_TIME_TO_LIVE.RESERVATION_TIMEOUT_MS; // 30 seconds - auto-release stale reservations
 let reservationIdCounter = 0;
 
 /**
@@ -346,16 +349,19 @@ function isWriteBlocked() {
  * Notify QuotaManager of a large write for immediate quota check
  * Should be called after writes larger than largeWriteThresholdBytes
  * CRITICAL FIX for High Issue #12: Pre-flight quota check before large writes
+ * TD-14: Returns status for caller to check
  *
  * @param {number} bytesWritten - Number of bytes written
  * @param {number} [pendingBytes=0] - Additional pending bytes to account for
+ * @returns {Promise<QuotaStatus|undefined>} Status if check was triggered, undefined otherwise
  */
 async function notifyLargeWrite(bytesWritten, pendingBytes = 0) {
     if (bytesWritten >= QUOTA_CONFIG.largeWriteThresholdBytes) {
         console.log('[QuotaManager] Large write detected, checking quota');
         // Include any pending bytes in the quota check
-        await checkNow(pendingBytes);
+        return await checkNow(pendingBytes);
     }
+    return undefined;
 }
 
 /**

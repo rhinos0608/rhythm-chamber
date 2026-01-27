@@ -10,10 +10,18 @@
  * - Handle API responses and errors
  * - Coordinate with token counting service
  *
+ * TD-15: Enhanced timeout error handling with user-friendly messages
+ *
  * @module services/llm-api-orchestrator
  */
 
 'use strict';
+
+// ==========================================
+// Dependencies
+// ==========================================
+
+import { TimeoutError, TimeoutType, isTimeoutError, getUserMessage } from './timeout-error.js';
 
 // ==========================================
 // Dependencies (injected via init)
@@ -142,39 +150,94 @@ function getRecommendedTokenAction(tokenInfo) {
 // ==========================================
 
 /**
- * Execute LLM API call
+ * Default timeout for LLM API calls (ms)
+ */
+const DEFAULT_LLM_TIMEOUT = 60000;
+
+/**
+ * Execute LLM API call with enhanced timeout error handling
  * @param {Object} providerConfig - Provider configuration
  * @param {string} apiKey - API key
  * @param {Array} messages - Message array
  * @param {Array} tools - Optional tools array
  * @param {Function} onProgress - Progress callback
  * @param {AbortSignal} signal - Abort signal for timeout
+ * @param {Object} options - Additional options
+ * @param {number} [options.timeout] - Custom timeout in milliseconds
  * @returns {Promise<Object>} LLM response
+ * @throws {TimeoutError} When the LLM call times out
  */
-async function callLLM(providerConfig, apiKey, messages, tools, onProgress, signal) {
+async function callLLM(providerConfig, apiKey, messages, tools, onProgress, signal, options = {}) {
     if (!_LLMProviderRoutingService?.callLLM) {
         throw new Error('LLMProviderRoutingService not loaded. Ensure provider modules are included before chat initialization.');
     }
 
-    const llmCallStart = Date.now();
-    const response = await _LLMProviderRoutingService.callLLM(
-        providerConfig,
-        apiKey,
-        messages,
-        tools,
-        onProgress,
-        signal
-    );
-    const llmCallDuration = Date.now() - llmCallStart;
-
-    // Record telemetry
     const provider = providerConfig.provider || 'unknown';
-    const telemetryMetric = isLocalProvider(provider) ? 'local_llm_call' : 'cloud_llm_call';
-    _WaveTelemetry?.record(telemetryMetric, llmCallDuration);
+    const timeout = options.timeout || DEFAULT_LLM_TIMEOUT;
+    const llmCallStart = Date.now();
 
-    console.log(`[LLMApiOrchestrator] LLM call completed in ${llmCallDuration}ms`);
+    // Set up timeout if not using abort signal
+    let timeoutId;
+    let timeoutPromise;
+    if (!signal) {
+        timeoutPromise = new Promise((_, reject) => {
+            timeoutId = setTimeout(() => {
+                reject(new TimeoutError('LLM API call timed out', {
+                    timeout,
+                    operation: 'callLLM',
+                    provider,
+                    timeoutType: TimeoutType.READ,
+                    retryable: true,
+                    retryAfter: 2000,
+                    isLocalProvider: isLocalProvider(provider)
+                }));
+            }, timeout);
+        });
+    }
 
-    return response;
+    try {
+        // Race between LLM call and timeout
+        const response = timeoutPromise
+            ? await Promise.race([
+                _LLMProviderRoutingService.callLLM(providerConfig, apiKey, messages, tools, onProgress, signal),
+                timeoutPromise
+            ])
+            : await _LLMProviderRoutingService.callLLM(providerConfig, apiKey, messages, tools, onProgress, signal);
+
+        if (timeoutId) clearTimeout(timeoutId);
+
+        const llmCallDuration = Date.now() - llmCallStart;
+
+        // Record telemetry
+        const telemetryMetric = isLocalProvider(provider) ? 'local_llm_call' : 'cloud_llm_call';
+        _WaveTelemetry?.record(telemetryMetric, llmCallDuration);
+
+        console.log(`[LLMApiOrchestrator] LLM call completed in ${llmCallDuration}ms`);
+
+        return response;
+    } catch (error) {
+        if (timeoutId) clearTimeout(timeoutId);
+
+        // Re-throw TimeoutError as-is
+        if (isTimeoutError(error)) {
+            throw error;
+        }
+
+        // Wrap other errors with additional context if they appear to be timeout-related
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.toLowerCase().includes('timeout') || errorMessage.toLowerCase().includes('timed out')) {
+            throw new TimeoutError('LLM API call timed out', {
+                timeout: Date.now() - llmCallStart,
+                operation: 'callLLM',
+                provider,
+                timeoutType: TimeoutType.READ,
+                retryable: true,
+                retryAfter: 2000
+            });
+        }
+
+        throw error;
+    }
 }
 
 // ==========================================
@@ -230,7 +293,13 @@ const LLMApiOrchestrator = {
     callLLM,
     shouldUseFallback,
     showFallbackNotification,
-    resetFallbackNotification
+    resetFallbackNotification,
+    // Re-export timeout error utilities for consumers
+    TimeoutError,
+    TimeoutType,
+    isTimeoutError,
+    getUserMessage,
+    DEFAULT_LLM_TIMEOUT
 };
 
 // ES Module export

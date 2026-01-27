@@ -11,6 +11,8 @@
  */
 
 import { Chat } from '../chat.js';
+import { CACHE_SIZES } from '../constants/limits.js';
+import { DELAYS } from '../constants/delays.js';
 
 // ==========================================
 // Queue State
@@ -47,8 +49,8 @@ const listeners = [];
  * Configuration for metrics and observability
  */
 const METRICS_CONFIG = {
-    historySize: 100,           // Keep last N completed turns for analysis
-    warningThresholdMs: 500     // Emit warning if avgWaitTime exceeds this
+    historySize: CACHE_SIZES.METRICS_HISTORY_SIZE,     // Keep last N completed turns for analysis
+    warningThresholdMs: DELAYS.TOAST_SHORT_MS          // Emit warning if avgWaitTime exceeds this
 };
 
 /**
@@ -62,7 +64,6 @@ const turnHistory = [];
  * @type {Array<{timestamp: number, depth: number}>}
  */
 const depthSamples = [];
-const MAX_DEPTH_SAMPLES = 100;
 
 /**
  * Metrics counters
@@ -391,7 +392,7 @@ function recordDepthSample() {
     });
 
     // Trim old samples
-    while (depthSamples.length > MAX_DEPTH_SAMPLES) {
+    while (depthSamples.length > CACHE_SIZES.DEPTH_SAMPLES_SIZE) {
         depthSamples.shift();
     }
 }

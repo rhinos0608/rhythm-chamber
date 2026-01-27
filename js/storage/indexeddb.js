@@ -16,6 +16,7 @@ import { TabCoordinator } from '../services/tab-coordination.js';
 import { VectorClock } from '../services/vector-clock.js';
 import { EventBus } from '../services/event-bus.js';
 import { FallbackBackend } from './fallback-backend.js';
+import { QuotaManager } from './quota-manager.js';
 
 // Module-level VectorClock for write tracking
 const writeVectorClock = new VectorClock();
@@ -130,6 +131,46 @@ function checkWriteAuthority(storeName, operation) {
 // ==========================================
 // Connection Management
 // ==========================================
+
+/**
+ * TD-14: Estimate the byte size of data for quota checking
+ * Uses Blob API to get accurate UTF-8 byte size
+ * @param {any} data - Data to estimate
+ * @returns {number} Estimated size in bytes
+ */
+function estimateDataSize(data) {
+    try {
+        const jsonString = JSON.stringify(data);
+        return new Blob([jsonString]).size;
+    } catch (e) {
+        // Fallback estimation: 2 bytes per char (UTF-16)
+        return JSON.stringify(data).length * 2;
+    }
+}
+
+/**
+ * TD-14: Check if write would exceed quota before attempting
+ * Returns reservation ID if write should proceed
+ * @param {any} data - Data to write
+ * @returns {Promise<{canWrite: boolean, reservationId?: string, reason?: string}>}
+ */
+async function checkWriteQuota(data) {
+    const dataSize = estimateDataSize(data);
+
+    const quotaCheck = await QuotaManager.checkWriteFits(dataSize);
+
+    if (!quotaCheck.fits) {
+        return {
+            canWrite: false,
+            reason: `Insufficient quota: ${quotaCheck.currentStatus.availableBytes} bytes available, ${dataSize} bytes required`
+        };
+    }
+
+    return {
+        canWrite: true,
+        reservationId: quotaCheck.reservationId
+    };
+}
 
 /**
  * Initialize the IndexedDB database connection
@@ -940,13 +981,16 @@ function cleanupTransactionPool() {
  * Put (insert or update) a record
  * FALLBACK: Uses FallbackBackend when IndexedDB is unavailable
  * CRITICAL FIX for Issue #1: Uses explicit transaction with proper locking
+ * TD-14: Checks quota before write to prevent silent failures
  *
  * @param {string} storeName - Store name
  * @param {object} data - Data to store
  * @param {Object} [options] - Options
  * @param {boolean} [options.bypassAuthority] - Skip write authority check
  * @param {IDBTransaction} [options.transaction] - Explicit transaction to use
+ * @param {boolean} [options.skipQuotaCheck] - Skip quota checking (for internal operations)
  * @returns {Promise<IDBValidKey>} The key of the stored record
+ * @throws {Error} If quota is exceeded or write is denied
  */
 async function put(storeName, data, options = {}) {
     // Use fallback if active
@@ -961,6 +1005,19 @@ async function put(storeName, data, options = {}) {
         } else {
             return; // No-op in non-strict mode
         }
+    }
+
+    // TD-14: Check quota before write (unless explicitly skipped)
+    let reservationId;
+    if (!options.skipQuotaCheck) {
+        const quotaCheck = await checkWriteQuota(data);
+        if (!quotaCheck.canWrite) {
+            const error = new Error(quotaCheck.reason);
+            error.name = 'QuotaExceededError';
+            error.code = 'QUOTA_EXCEEDED';
+            throw error;
+        }
+        reservationId = quotaCheck.reservationId;
     }
 
     // Add VectorClock timestamp for dual-write protection and conflict detection
@@ -1007,8 +1064,22 @@ async function put(storeName, data, options = {}) {
             });
         }
 
+        // TD-14: Release the reservation after successful write
+        if (reservationId) {
+            QuotaManager.releaseReservation(reservationId);
+        }
+
+        // TD-14: Notify QuotaManager of large writes
+        const dataSize = estimateDataSize(data);
+        await QuotaManager.notifyLargeWrite(dataSize);
+
         return result;
     } catch (error) {
+        // TD-14: Release reservation on error
+        if (reservationId) {
+            QuotaManager.releaseReservation(reservationId);
+        }
+
         // On error, try falling back if not already
         if (!usingFallback) {
             console.warn('[IndexedDB] Put failed, trying fallback:', error.message);
@@ -1476,6 +1547,9 @@ export const STORES = INDEXEDDB_STORES;
 export const DB_NAME = INDEXEDDB_NAME;
 export const DB_VERSION = INDEXEDDB_VERSION;
 
+// TD-14: Export quota-related utilities
+export { estimateDataSize, checkWriteQuota };
+
 // IndexedDBCore object for grouped exports
 export const IndexedDBCore = {
     // Connection management
@@ -1509,6 +1583,10 @@ export const IndexedDBCore = {
 
     // Conflict detection
     detectWriteConflict,
+
+    // TD-14: Quota utilities
+    estimateDataSize,
+    checkWriteQuota,
 
     // Testing and debugging
     cleanupTransactionPool,

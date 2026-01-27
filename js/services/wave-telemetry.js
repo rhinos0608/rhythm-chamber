@@ -1,34 +1,31 @@
 /**
  * Wave Telemetry Service
- * 
+ *
  * Instruments actual timing of wave-based operations and detects anomalies.
  * Used for monitoring heartbeat intervals, event loop timing, and other
  * periodic operations.
- * 
+ *
  * HNW Wave: Provides visibility into timing patterns and variance
  * to detect scheduling issues and performance degradation.
- * 
+ *
  * @module services/wave-telemetry
  */
+
+import { LIMITS, ANOMALY_THRESHOLD, PERCENTAGE_MULTIPLIER } from '../constants/percentages.js';
+import { DELAYS } from '../constants/delays.js';
 
 // ==========================================
 // Configuration
 // ==========================================
 
-const ANOMALY_THRESHOLD = 0.20; // 20% variance triggers anomaly
-const MAX_SAMPLES = 100;        // Keep last 100 samples per metric
+// Minimum samples needed for anomaly detection
+const MIN_SAMPLES_FOR_ANOMALY = 10;
 
-/**
- * Maximum number of waves to keep in memory before LRU eviction
- * @type {number}
- */
-const MAX_WAVES = 1000;
+// Bottleneck detection threshold (ms)
+const BOTTLENECK_THRESHOLD_MS = 100;
 
-/**
- * Default maximum age in milliseconds for wave cleanup
- * @type {number}
- */
-const DEFAULT_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes
+// Default max age for wave cleanup (5 minutes)
+const DEFAULT_MAX_AGE_MS = 5 * 60 * 1000;
 
 // ==========================================
 // State
@@ -69,8 +66,8 @@ function record(metric, actualMs) {
     const data = metrics.get(metric);
     data.samples.push(actualMs);
 
-    // Keep only last MAX_SAMPLES samples
-    if (data.samples.length > MAX_SAMPLES) {
+    // Keep only last LIMITS.MAX_SAMPLES samples
+    if (data.samples.length > LIMITS.MAX_SAMPLES) {
         data.samples.shift();
     }
 }
@@ -102,21 +99,21 @@ function detectAnomalies() {
 
     for (const [metric, data] of metrics) {
         // Need expected value and sufficient samples
-        if (data.expected === null || data.samples.length < 10) {
+        if (data.expected === null || data.samples.length < MIN_SAMPLES_FOR_ANOMALY) {
             continue;
         }
 
         const avg = data.samples.reduce((a, b) => a + b, 0) / data.samples.length;
         const variance = Math.abs(avg - data.expected) / data.expected;
 
-        if (variance > ANOMALY_THRESHOLD) {
+        if (variance > ANOMALY_THRESHOLD.DEFAULT) {
             anomalies.push({
                 metric,
                 expected: data.expected,
                 actual: Math.round(avg * 10) / 10,
-                variance: (variance * 100).toFixed(1) + '%'
+                variance: (variance * PERCENTAGE_MULTIPLIER).toFixed(1) + '%'
             });
-            console.warn(`[WaveTelemetry] Anomaly detected for ${metric}: expected ${data.expected}ms, actual ${avg.toFixed(1)}ms (${(variance * 100).toFixed(1)}% variance)`);
+            console.warn(`[WaveTelemetry] Anomaly detected for ${metric}: expected ${data.expected}ms, actual ${avg.toFixed(1)}ms (${(variance * PERCENTAGE_MULTIPLIER).toFixed(1)}% variance)`);
         }
     }
 
@@ -145,7 +142,7 @@ function getStatus() {
             min: min !== null ? Math.round(min * 10) / 10 : null,
             max: max !== null ? Math.round(max * 10) / 10 : null,
             variance: (data.expected && avg)
-                ? ((Math.abs(avg - data.expected) / data.expected) * 100).toFixed(1) + '%'
+                ? ((Math.abs(avg - data.expected) / data.expected) * PERCENTAGE_MULTIPLIER).toFixed(1) + '%'
                 : null
         };
     }
@@ -217,10 +214,10 @@ function _touchWave(waveId) {
  */
 function startWave(origin) {
     // Check if at capacity and evict oldest (LRU)
-    if (waves.size >= MAX_WAVES) {
+    if (waves.size >= LIMITS.MAX_WAVES) {
         const oldestKey = waves.keys().next().value;
         waves.delete(oldestKey);
-        console.warn(`[WaveTelemetry] LRU eviction: removed oldest wave ${oldestKey} (max ${MAX_WAVES} waves reached)`);
+        console.warn(`[WaveTelemetry] LRU eviction: removed oldest wave ${oldestKey} (max ${LIMITS.MAX_WAVES} waves reached)`);
     }
 
     const waveId = generateUUID();
@@ -281,7 +278,7 @@ function endWave(waveId) {
         totalLatency = wave.endTime - wave.startTime;
     }
 
-    // Calculate bottlenecks (nodes with latency > 100ms)
+    // Calculate bottlenecks (nodes with latency > BOTTLENECK_THRESHOLD_MS)
     const bottlenecks = [];
     for (let i = 0; i < wave.chain.length; i++) {
         const node = wave.chain[i];
@@ -295,7 +292,7 @@ function endWave(waveId) {
             latency = node.timestamp - wave.chain[i - 1].timestamp;
         }
 
-        if (latency > 100) {
+        if (latency > BOTTLENECK_THRESHOLD_MS) {
             bottlenecks.push({
                 node: node.node,
                 latency
@@ -419,10 +416,10 @@ export const WaveTelemetry = {
     cleanupOldWaves,
     _clearWaves: clearWaves,
 
-    // Configuration (read-only)
-    ANOMALY_THRESHOLD,
-    MAX_SAMPLES,
-    MAX_WAVES,
+    // Configuration (read-only) - for backwards compatibility
+    ANOMALY_THRESHOLD: ANOMALY_THRESHOLD.DEFAULT,
+    MAX_SAMPLES: LIMITS.MAX_SAMPLES,
+    MAX_WAVES: LIMITS.MAX_WAVES,
     DEFAULT_MAX_AGE_MS
 };
 

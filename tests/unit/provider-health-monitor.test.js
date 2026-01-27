@@ -297,4 +297,131 @@ describe('ProviderHealthMonitor', () => {
             expect(monitor._uiCallbacks).not.toBe(monitor.getHealthSnapshot());
         });
     });
+
+    describe('TD-15: Timeout Error Handling', () => {
+        let TimeoutError;
+
+        beforeEach(async () => {
+            // Import TimeoutError for testing
+            const module = await import('../../js/services/timeout-error.js');
+            TimeoutError = module.TimeoutError;
+        });
+
+        it('should get timeout action for retryable timeout', () => {
+            const error = new TimeoutError('Request timed out', {
+                timeout: 60000,
+                timeoutType: 'read',
+                retryable: true,
+                retryAfter: 2000
+            });
+
+            const action = monitor.getTimeoutAction(error, 'openrouter');
+
+            expect(action.action).toBe('retry');
+            expect(action.canRetry).toBe(true);
+            expect(action.retryAfter).toBe(2000);
+            expect(action.timeoutType).toBe('read');
+            expect(action.message).toBeTruthy();
+        });
+
+        it('should get timeout action for non-retryable timeout', () => {
+            const error = new TimeoutError('Request timed out', {
+                timeout: 60000,
+                timeoutType: 'connection',
+                retryable: false
+            });
+
+            const action = monitor.getTimeoutAction(error, 'ollama');
+
+            expect(action.action).toBe('contact_support');
+            expect(action.canRetry).toBe(false);
+        });
+
+        it('should handle generic timeout-related errors', () => {
+            const error = new Error('Request timed out after 30s');
+
+            const action = monitor.getTimeoutAction(error, 'lmstudio');
+
+            expect(action.action).toBe('retry');
+            expect(action.canRetry).toBe(true);
+            expect(action.message).toContain('lmstudio');
+            expect(action.message).toContain('timed out');
+        });
+
+        it('should handle non-timeout errors', () => {
+            const error = new Error('Something went wrong');
+
+            const action = monitor.getTimeoutAction(error, 'fallback');
+
+            expect(action.action).toBe('none');
+            expect(action.canRetry).toBe(false);
+            expect(action.message).toContain('Something went wrong');
+        });
+
+        it('should record timeout error for provider', () => {
+            const error = new TimeoutError('Request timed out', {
+                timeout: 60000,
+                timeoutType: 'read',
+                retryable: true
+            });
+
+            monitor.recordTimeoutError('openrouter', error);
+
+            const health = monitor.getProviderHealth('openrouter');
+            expect(health.failureCount).toBeGreaterThan(0);
+            expect(health.lastFailureTime).toBeGreaterThan(0);
+        });
+
+        it('should mark provider as unhealthy after non-retryable timeout', () => {
+            const error = new TimeoutError('Request timed out', {
+                timeout: 60000,
+                timeoutType: 'connection',
+                retryable: false
+            });
+
+            monitor.recordTimeoutError('ollama', error);
+
+            const health = monitor.getProviderHealth('ollama');
+            expect(health.status).toBe(HealthStatus.UNHEALTHY);
+        });
+
+        it('should mark provider as degraded after multiple retryable timeouts', () => {
+            const error = new TimeoutError('Request timed out', {
+                timeout: 60000,
+                timeoutType: 'read',
+                retryable: true
+            });
+
+            // Record 3 timeouts
+            monitor.recordTimeoutError('lmstudio', error);
+            monitor.recordTimeoutError('lmstudio', error);
+            monitor.recordTimeoutError('lmstudio', error);
+
+            const health = monitor.getProviderHealth('lmstudio');
+            expect(health.status).toBe(HealthStatus.DEGRADED);
+        });
+
+        it('should emit PROVIDER:TIMEOUT event when recording timeout', async () => {
+            const { EventBus } = await import('../../js/services/event-bus.js');
+            const emitSpy = vi.fn();
+            EventBus.emit = emitSpy;
+
+            const error = new TimeoutError('Request timed out', {
+                timeout: 60000,
+                timeoutType: 'connection',
+                retryable: true,
+                retryAfter: 2000
+            });
+
+            monitor.recordTimeoutError('openrouter', error);
+
+            expect(emitSpy).toHaveBeenCalledWith('PROVIDER:TIMEOUT', {
+                provider: 'openrouter',
+                timeoutType: 'connection',
+                timeout: 60000,
+                retryable: true,
+                retryAfter: 2000
+            });
+        });
+    });
 });
