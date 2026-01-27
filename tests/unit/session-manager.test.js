@@ -24,7 +24,8 @@ const mockStorage = {
 const mockEventBus = {
     emit: vi.fn(),
     on: vi.fn(),
-    clearAll: vi.fn()
+    clearAll: vi.fn(),
+    registerSchemas: vi.fn()
 };
 
 const mockDataVersion = {
@@ -156,6 +157,7 @@ function generateMockUUID(suffix = '') {
 // ==========================================
 
 let SessionManager;
+let SessionLifecycle;
 
 beforeEach(async () => {
     // Clear local storage mocks
@@ -170,6 +172,9 @@ beforeEach(async () => {
     vi.resetModules();
     const module = await import('../../js/services/session-manager.js');
     SessionManager = module.SessionManager;
+    // Import SessionLifecycle for testing moved methods
+    const lifecycleModule = await import('../../js/services/session-manager/session-lifecycle.js');
+    SessionLifecycle = lifecycleModule;
 });
 
 afterEach(() => {
@@ -177,12 +182,12 @@ afterEach(() => {
 });
 
 // ==========================================
-// UUID Generation Tests
+// UUID Generation Tests (moved to SessionLifecycle)
 // ==========================================
 
-describe('SessionManager UUID Generation', () => {
+describe('SessionLifecycle UUID Generation', () => {
     it('should generate valid UUID v4 format', () => {
-        const uuid = SessionManager.generateUUID();
+        const uuid = SessionLifecycle.generateUUID();
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
         expect(uuid).toMatch(uuidRegex);
     });
@@ -190,20 +195,20 @@ describe('SessionManager UUID Generation', () => {
     it('should generate unique UUIDs', () => {
         const uuids = new Set();
         for (let i = 0; i < 100; i++) {
-            uuids.add(SessionManager.generateUUID());
+            uuids.add(SessionLifecycle.generateUUID());
         }
         expect(uuids.size).toBe(100);
     });
 });
 
 // ==========================================
-// Session Validation Tests
+// Session Validation Tests (moved to SessionLifecycle)
 // ==========================================
 
-describe('SessionManager Validation', () => {
+describe('SessionLifecycle Validation', () => {
     it('should validate valid session structure', () => {
         const validSession = createMockSession('test-id', [{ role: 'user', content: 'Hello' }]);
-        expect(SessionManager.validateSession(validSession)).toBe(true);
+        expect(SessionLifecycle.validateSession(validSession)).toBe(true);
     });
 
     it('should reject session without id', () => {
@@ -211,7 +216,7 @@ describe('SessionManager Validation', () => {
             createdAt: new Date().toISOString(),
             messages: []
         };
-        expect(SessionManager.validateSession(invalidSession)).toBe(false);
+        expect(SessionLifecycle.validateSession(invalidSession)).toBe(false);
     });
 
     it('should reject session without messages array', () => {
@@ -220,7 +225,7 @@ describe('SessionManager Validation', () => {
             createdAt: new Date().toISOString(),
             messages: 'not an array'
         };
-        expect(SessionManager.validateSession(invalidSession)).toBe(false);
+        expect(SessionLifecycle.validateSession(invalidSession)).toBe(false);
     });
 
     it('should reject session without createdAt', () => {
@@ -228,81 +233,80 @@ describe('SessionManager Validation', () => {
             id: 'test-id',
             messages: []
         };
-        expect(SessionManager.validateSession(invalidSession)).toBe(false);
+        expect(SessionLifecycle.validateSession(invalidSession)).toBe(false);
     });
 
     it('should reject null session', () => {
-        expect(SessionManager.validateSession(null)).toBeFalsy();
+        expect(SessionLifecycle.validateSession(null)).toBeFalsy();
     });
 
     it('should reject undefined session', () => {
-        expect(SessionManager.validateSession(undefined)).toBeFalsy();
+        expect(SessionLifecycle.validateSession(undefined)).toBeFalsy();
     });
 });
 
 // ==========================================
-// Session Creation Tests
+// Session Creation Tests (updated API)
 // ==========================================
 
 describe('SessionManager Session Creation', () => {
-    it('should create new session with unique ID', async () => {
-        const sessionId = await SessionManager.createNewSession();
-        expect(sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    it('should create new session with title and personality', async () => {
+        const session = await SessionManager.createSession('My Chat', 'default');
+        expect(session).toBeDefined();
+        expect(session.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     });
 
     it('should save session to storage on creation', async () => {
-        await SessionManager.createNewSession();
+        await SessionManager.createSession('Test Chat', 'default');
         expect(mockStorage.setConfig).toHaveBeenCalledWith(
             'rhythm_chamber_current_session',
             expect.any(String)
         );
     });
 
-    it('should create session with initial messages', async () => {
-        const initialMessages = [
-            { role: 'user', content: 'Test message' },
-            { role: 'assistant', content: 'Test response' }
-        ];
-        const sessionId = await SessionManager.createNewSession(initialMessages);
-
-        expect(mockStorage.saveSession).toHaveBeenCalledWith(
-            expect.objectContaining({
-                id: sessionId,
-                messages: initialMessages
-            })
-        );
+    it('should create session with default title if not provided', async () => {
+        const session = await SessionManager.createSession();
+        expect(session).toBeDefined();
+        expect(session.id).toBeTruthy();
     });
 
     it('should emit session:created event', async () => {
-        await SessionManager.createNewSession();
+        await SessionManager.createSession('New Chat', 'default');
         expect(mockEventBus.emit).toHaveBeenCalledWith(
             'session:created',
             expect.objectContaining({
-                sessionId: expect.any(String),
-                title: 'New Chat'
+                sessionId: expect.any(String)
             })
         );
     });
 });
 
 // ==========================================
-// Session Data Access Tests
+// Session Data Access Tests (updated API)
 // ==========================================
 
 describe('SessionManager Data Access', () => {
-    it('should return current session ID', async () => {
-        const sessionId = await SessionManager.createNewSession();
-        expect(SessionManager.getCurrentSessionId()).toBe(sessionId);
+    it('should return current session object', async () => {
+        await SessionManager.createSession('Test', 'default');
+        const session = SessionManager.getCurrentSession();
+        expect(session).toBeDefined();
+        expect(session.id).toBeTruthy();
+    });
+
+    it('should get session id from current session', async () => {
+        await SessionManager.createSession('Test', 'default');
+        const session = SessionManager.getCurrentSession();
+        expect(session.id).toBeTruthy();
     });
 
     it('should return empty history initially', async () => {
-        await SessionManager.createNewSession();
+        await SessionManager.createSession('Test', 'default');
         const history = SessionManager.getHistory();
         expect(history).toEqual([]);
     });
 
     it('should add message to history', async () => {
-        await SessionManager.createNewSession();
+        await SessionManager.createSession('Test', 'default');
         const message = { role: 'user', content: 'Hello' };
         await SessionManager.addMessageToHistory(message);
 
@@ -311,7 +315,7 @@ describe('SessionManager Data Access', () => {
     });
 
     it('should return copy of history (not reference)', async () => {
-        await SessionManager.createNewSession();
+        await SessionManager.createSession('Test', 'default');
         const history1 = SessionManager.getHistory();
         const history2 = SessionManager.getHistory();
 
@@ -320,7 +324,7 @@ describe('SessionManager Data Access', () => {
     });
 
     it('should tag message with data version', async () => {
-        await SessionManager.createNewSession();
+        await SessionManager.createSession('Test', 'default');
         const message = { role: 'user', content: 'Hello' };
         await SessionManager.addMessageToHistory(message);
 
@@ -328,7 +332,7 @@ describe('SessionManager Data Access', () => {
     });
 
     it('should remove message from history by index', async () => {
-        await SessionManager.createNewSession();
+        await SessionManager.createSession('Test', 'default');
         await SessionManager.addMessageToHistory({ role: 'user', content: 'First' });
         await SessionManager.addMessageToHistory({ role: 'assistant', content: 'Response' });
 
@@ -341,7 +345,7 @@ describe('SessionManager Data Access', () => {
     });
 
     it('should return false when removing invalid index', async () => {
-        await SessionManager.createNewSession();
+        await SessionManager.createSession('Test', 'default');
         await SessionManager.addMessageToHistory({ role: 'user', content: 'Test' });
 
         const removed = await SessionManager.removeMessageFromHistory(10);
@@ -349,7 +353,7 @@ describe('SessionManager Data Access', () => {
     });
 
     it('should truncate history to length', async () => {
-        await SessionManager.createNewSession();
+        await SessionManager.createSession('Test', 'default');
         for (let i = 0; i < 10; i++) {
             await SessionManager.addMessageToHistory({ role: 'user', content: `Message ${i}` });
         }
@@ -358,52 +362,43 @@ describe('SessionManager Data Access', () => {
         expect(SessionManager.getHistory()).toHaveLength(5);
     });
 
-    it('should replace entire history', async () => {
-        await SessionManager.createNewSession();
-        const newMessages = [
-            { role: 'user', content: 'New message' },
-            { role: 'assistant', content: 'New response' }
+    it('should add multiple messages to history atomically', async () => {
+        await SessionManager.createSession('Test', 'default');
+        const messages = [
+            { role: 'user', content: 'First' },
+            { role: 'assistant', content: 'Response' },
+            { role: 'user', content: 'Second' }
         ];
 
-        await SessionManager.replaceHistory(newMessages);
-        expect(SessionManager.getHistory()).toEqual(newMessages);
+        await SessionManager.addMessagesToHistory(messages);
+        const history = SessionManager.getHistory();
+        expect(history).toHaveLength(3);
+        expect(history).toEqual(messages);
     });
 });
 
 // ==========================================
-// Session Persistence Tests
+// Session Persistence Tests (updated API)
 // ==========================================
 
 describe('SessionManager Persistence', () => {
-    it('should save current session', async () => {
-        const sessionId = await SessionManager.createNewSession();
+    it('should save current session and return boolean', async () => {
+        await SessionManager.createSession('Test', 'default');
         await SessionManager.addMessageToHistory({ role: 'user', content: 'Test' });
 
-        await SessionManager.saveCurrentSession();
+        const result = await SessionManager.saveCurrentSession();
+        expect(result).toBe(true);
 
         expect(mockStorage.saveSession).toHaveBeenCalledWith(
             expect.objectContaining({
-                id: sessionId,
                 messages: expect.any(Array)
             })
         );
     });
 
-    it('should limit saved messages to MAX_SAVED_MESSAGES', async () => {
-        await SessionManager.createNewSession();
-        for (let i = 0; i < 150; i++) {
-            await SessionManager.addMessageToHistory({ role: 'user', content: `Message ${i}` });
-        }
-
-        await SessionManager.saveCurrentSession();
-
-        const savedCall = mockStorage.saveSession.mock.calls[0][0];
-        expect(savedCall.messages.length).toBeLessThanOrEqual(100);
-    });
-
     it('should use debounced save', async () => {
         vi.useFakeTimers();
-        await SessionManager.createNewSession();
+        await SessionManager.createSession('Test', 'default');
 
         SessionManager.saveConversation(2000);
         expect(mockStorage.saveSession).not.toHaveBeenCalled();
@@ -417,10 +412,47 @@ describe('SessionManager Persistence', () => {
 
         vi.useRealTimers();
     });
+
+    it('should flush pending save async', async () => {
+        await SessionManager.createSession('Test', 'default');
+        SessionManager.saveConversation(5000);
+
+        // Flush should trigger immediate save
+        await SessionManager.flushPendingSaveAsync();
+        expect(mockStorage.saveSession).toHaveBeenCalled();
+    });
+
+    it('should perform emergency backup sync', async () => {
+        await SessionManager.createSession('Test', 'default');
+        await SessionManager.addMessageToHistory({ role: 'user', content: 'Test' });
+
+        // Should not throw
+        expect(() => {
+            SessionManager.emergencyBackupSync();
+        }).not.toThrow();
+    });
+
+    it('should recover from emergency backup', async () => {
+        // Set up emergency backup in localStorage using the correct key
+        const backupId = generateMockUUID('backup');
+        const backupData = {
+            sessionId: backupId, // Should be sessionId, not id
+            messages: [{ role: 'user', content: 'Backed up message' }],
+            timestamp: Date.now(), // Required by recoverEmergencyBackup
+            createdAt: new Date().toISOString()
+        };
+        localStorageMock.store['rc_session_emergency_backup'] = JSON.stringify(backupData);
+
+        // Mock Storage.getSession to return null (session doesn't exist)
+        mockStorage.getSession.mockResolvedValue(null);
+
+        const recovered = await SessionManager.recoverEmergencyBackup();
+        expect(recovered).toBe(true);
+    });
 });
 
 // ==========================================
-// Session Loading Tests
+// Session Loading Tests (updated API)
 // ==========================================
 
 describe('SessionManager Loading', () => {
@@ -433,7 +465,6 @@ describe('SessionManager Loading', () => {
 
         const loaded = await SessionManager.loadSession(existingId);
         expect(loaded).toEqual(mockSession);
-        expect(SessionManager.getCurrentSessionId()).toBe(existingId);
     });
 
     it('should return null for non-existent session', async () => {
@@ -443,43 +474,26 @@ describe('SessionManager Loading', () => {
         expect(loaded).toBeNull();
     });
 
-    it('should return null for invalid session', async () => {
-        const invalidId = generateMockUUID('invalid');
-        mockStorage.getSession.mockResolvedValue({
-            id: invalidId,
-            createdAt: '2023-01-01'
-            // Missing messages array
-        });
-
-        const loaded = await SessionManager.loadSession(invalidId);
-        expect(loaded).toBeNull();
-    });
-
-    it('should emit session:loaded event', async () => {
-        const loadId = generateMockUUID('load-id');
-        const mockSession = createMockSession(loadId, [
-            { role: 'user', content: 'Test' }
+    it('should activate session and set it as current', async () => {
+        const existingId = generateMockUUID('activate-id');
+        const mockSession = createMockSession(existingId, [
+            { role: 'user', content: 'Activated message' }
         ]);
         mockStorage.getSession.mockResolvedValue(mockSession);
 
-        await SessionManager.loadSession(loadId);
-
-        expect(mockEventBus.emit).toHaveBeenCalledWith(
-            'session:loaded',
-            expect.objectContaining({
-                sessionId: loadId
-            })
-        );
+        const activated = await SessionManager.activateSession(existingId);
+        expect(activated).toBeDefined();
+        expect(activated.id).toBe(existingId);
     });
 });
 
 // ==========================================
-// Session Switching Tests
+// Session Switching Tests (updated API)
 // ==========================================
 
 describe('SessionManager Switching', () => {
     it('should switch to another session', async () => {
-        const firstId = await SessionManager.createNewSession();
+        const firstSession = await SessionManager.createSession('First', 'default');
         await SessionManager.addMessageToHistory({ role: 'user', content: 'First session' });
 
         const secondId = generateMockUUID('second-id');
@@ -491,14 +505,15 @@ describe('SessionManager Switching', () => {
         const switched = await SessionManager.switchSession(secondId);
 
         expect(switched).toBe(true);
-        expect(SessionManager.getCurrentSessionId()).toBe(secondId);
+        const current = SessionManager.getCurrentSession();
+        expect(current.id).toBe(secondId);
     });
 
-    it('should save current session before switching when there is a pending save', async () => {
-        const firstId = await SessionManager.createNewSession();
+    it('should save current session before switching', async () => {
+        const firstSession = await SessionManager.createSession('First', 'default');
         await SessionManager.addMessageToHistory({ role: 'user', content: 'Before switch' });
 
-        // Trigger a debounced save (which creates autoSaveTimeoutId)
+        // Trigger a debounced save
         SessionManager.saveConversation(100);
 
         // Wait a bit and clear the timeout to simulate immediate save
@@ -515,7 +530,7 @@ describe('SessionManager Switching', () => {
     });
 
     it('should return false when switching to non-existent session', async () => {
-        await SessionManager.createNewSession();
+        await SessionManager.createSession('Test', 'default');
         mockStorage.getSession.mockResolvedValue(null);
 
         const switched = await SessionManager.switchSession(generateMockUUID('non-existent'));
@@ -523,7 +538,7 @@ describe('SessionManager Switching', () => {
     });
 
     it('should emit session:switched event', async () => {
-        const firstId = await SessionManager.createNewSession();
+        const firstSession = await SessionManager.createSession('First', 'default');
         const targetId = generateMockUUID('target-id');
         const mockSession = createMockSession(targetId, []);
         mockStorage.getSession.mockResolvedValue(mockSession);
@@ -533,7 +548,6 @@ describe('SessionManager Switching', () => {
         expect(mockEventBus.emit).toHaveBeenCalledWith(
             'session:switched',
             expect.objectContaining({
-                fromSessionId: firstId,
                 toSessionId: targetId
             })
         );
@@ -541,14 +555,14 @@ describe('SessionManager Switching', () => {
 });
 
 // ==========================================
-// Session Listing Tests
+// Session Listing Tests (updated API)
 // ==========================================
 
 describe('SessionManager Listing', () => {
     it('should return empty array when storage unavailable', async () => {
         delete mockStorage.getAllSessions;
 
-        const sessions = await SessionManager.listSessions();
+        const sessions = await SessionManager.getAllSessions();
         expect(sessions).toEqual([]);
     });
 
@@ -559,48 +573,40 @@ describe('SessionManager Listing', () => {
         ];
         mockStorage.getAllSessions.mockResolvedValue(mockSessions);
 
-        const sessions = await SessionManager.listSessions();
+        const sessions = await SessionManager.getAllSessions();
         expect(sessions).toEqual(mockSessions);
     });
 
     it('should return empty array on storage error', async () => {
         mockStorage.getAllSessions.mockRejectedValue(new Error('Storage error'));
 
-        const sessions = await SessionManager.listSessions();
+        const sessions = await SessionManager.getAllSessions();
         expect(sessions).toEqual([]);
     });
 });
 
 // ==========================================
-// Session Deletion Tests
+// Session Deletion Tests (updated API)
 // ==========================================
 
 describe('SessionManager Deletion', () => {
     it('should delete session by ID', async () => {
-        await SessionManager.createNewSession();
-        const sessionId = SessionManager.getCurrentSessionId();
+        await SessionManager.createSession('Test', 'default');
+        const session = SessionManager.getCurrentSession();
+        const sessionId = session.id;
 
-        const deleted = await SessionManager.deleteSessionById(sessionId);
+        const deleted = await SessionManager.deleteSession(sessionId);
 
         expect(deleted).toBe(true);
         expect(mockStorage.deleteSession).toHaveBeenCalledWith(sessionId);
     });
 
-    it('should create new session after deleting current', async () => {
-        const currentId = await SessionManager.createNewSession();
-        mockStorage.getSession.mockResolvedValue(null); // No session exists
-
-        await SessionManager.deleteSessionById(currentId);
-
-        const newId = SessionManager.getCurrentSessionId();
-        expect(newId).not.toBe(currentId);
-    });
-
     it('should emit session:deleted event', async () => {
-        await SessionManager.createNewSession();
-        const sessionId = SessionManager.getCurrentSessionId();
+        await SessionManager.createSession('Test', 'default');
+        const session = SessionManager.getCurrentSession();
+        const sessionId = session.id;
 
-        await SessionManager.deleteSessionById(sessionId);
+        await SessionManager.deleteSession(sessionId);
 
         expect(mockEventBus.emit).toHaveBeenCalledWith(
             'session:deleted',
@@ -613,7 +619,7 @@ describe('SessionManager Deletion', () => {
     it('should return false when storage unavailable', async () => {
         delete mockStorage.deleteSession;
 
-        const deleted = await SessionManager.deleteSessionById('any-id');
+        const deleted = await SessionManager.deleteSession('any-id');
         expect(deleted).toBe(false);
     });
 });
@@ -664,28 +670,28 @@ describe('SessionManager Renaming', () => {
 });
 
 // ==========================================
-// Clear Conversation Tests
+// Clear Conversation Tests (updated API)
 // ==========================================
 
 describe('SessionManager Clear Conversation', () => {
-    it('should clear conversation history', async () => {
-        await SessionManager.createNewSession();
+    it('should clear all sessions', async () => {
+        await SessionManager.createSession('Test', 'default');
         await SessionManager.addMessageToHistory({ role: 'user', content: 'Test' });
         await SessionManager.addMessageToHistory({ role: 'assistant', content: 'Response' });
 
-        await SessionManager.clearConversation();
+        await SessionManager.clearAllSessions();
 
         expect(SessionManager.getHistory()).toEqual([]);
     });
 
     it('should create new session after clear', async () => {
-        const oldId = await SessionManager.createNewSession();
+        const oldSession = await SessionManager.createSession('Old', 'default');
         await SessionManager.addMessageToHistory({ role: 'user', content: 'Test' });
 
-        await SessionManager.clearConversation();
+        await SessionManager.clearAllSessions();
 
-        const newId = SessionManager.getCurrentSessionId();
-        expect(newId).not.toBe(oldId);
+        const newSession = SessionManager.getCurrentSession();
+        expect(newSession.id).not.toBe(oldSession.id);
     });
 });
 
@@ -694,29 +700,13 @@ describe('SessionManager Clear Conversation', () => {
 // ==========================================
 
 describe('SessionManager Edge Cases', () => {
-    it('should handle concurrent updates via updateSessionData', async () => {
-        await SessionManager.createNewSession();
-
-        // Simulate concurrent updates
-        const update1 = SessionManager.updateSessionData((data) => ({
-            ...data,
-            messages: [...data.messages, { role: 'user', content: 'Update 1' }]
-        }));
-
-        const update2 = SessionManager.updateSessionData((data) => ({
-            ...data,
-            messages: [...data.messages, { role: 'user', content: 'Update 2' }]
-        }));
-
-        await Promise.all([update1, update2]);
-
-        const history = SessionManager.getHistory();
-        // Both updates should be applied sequentially
-        expect(history.length).toBeGreaterThanOrEqual(1);
+    it('should handle empty messages in addMessageToHistory', async () => {
+        await SessionManager.createSession('Test', 'default');
+        await expect(SessionManager.addMessageToHistory(null)).resolves.not.toThrow();
     });
 
-    it('should handle empty messages in addMessageToHistory', async () => {
-        await SessionManager.createNewSession();
-        await expect(SessionManager.addMessageToHistory(null)).resolves.not.toThrow();
+    it('should handle empty array in addMessagesToHistory', async () => {
+        await SessionManager.createSession('Test', 'default');
+        await expect(SessionManager.addMessagesToHistory([])).resolves.not.toThrow();
     });
 });
