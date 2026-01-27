@@ -102,12 +102,6 @@ async function shareCard(personality, options = {}) {
     } catch (canvasError) {
         // Handle canvas generation errors (CANVAS TAINT FIX)
         console.error('[Cards] Canvas generation failed:', canvasError);
-        if (fallbackToDownload) {
-            // Show user-friendly error
-            if (window.showToast) {
-                window.showToast('Card generation is not available in this browser.', 4000);
-            }
-        }
         throw canvasError;
     }
 

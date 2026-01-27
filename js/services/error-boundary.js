@@ -340,13 +340,7 @@ export function createCardBoundary(options = {}) {
  * @param {string} message - Error message to display
  */
 function showErrorToast(message) {
-    // Try to use existing toast function if available
-    if (typeof window !== 'undefined' && window.showToast) {
-        window.showToast(message, 5000);
-        return;
-    }
-
-    // Fallback: create simple notification
+    // Create simple notification directly (no global window.showToast dependency)
     if (typeof document !== 'undefined') {
         const existing = document.getElementById('global-error-toast');
         if (existing) existing.remove();
