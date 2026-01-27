@@ -1,6 +1,6 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Status:** v2.0 Enhanced Architecture Complete — 53+ Components Enhanced
+> **Status:** v2.0 Enhanced Architecture Complete — 250+ Source Files
 > - **15 Controllers**: Modular UI components for focused functionality
 > - **25+ Services**: Comprehensive business logic with enhanced error handling
 > - **13+ Utilities**: Enhanced reliability and performance utilities
@@ -759,6 +759,197 @@ npx serve .
 
 ---
 
+---
+
+## Facade Pattern Architecture (Phase 3)
+
+Services use a three-layer facade pattern for modular, testable, and backward-compatible code:
+
+### Pattern Structure
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Facade Layer (Public API)                                  │
+│  - Backward compatibility                                   │
+│  - JSDoc documentation                                      │
+│  - Static methods / class interface                         │
+├─────────────────────────────────────────────────────────────┤
+│  Internal Index (Coordinator)                               │
+│  - Module orchestration                                     │
+│  - Instance management                                      │
+│  - Internal-only exports                                    │
+├─────────────────────────────────────────────────────────────┤
+│  Focused Modules                                            │
+│  - Single responsibility                                   │
+│  - Testable in isolation                                    │
+│  - No circular dependencies                                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Completed Facade Refactorings
+
+#### SessionManager (100% complete, 247 tests)
+- **Facade**: `js/services/session-manager.js` (365 lines)
+  - Public API: `initialize()`, `createSession()`, `deleteSession()`, `clearAllSessions()`, `getAllSessions()`
+  - Backward compatibility: `init()` alias, `setUserContext()` deprecated
+  - Event listener registration: `registerEventListeners()`
+- **Internal Index**: `js/services/session-manager/index.js`
+  - Singleton instance management
+  - Module coordination
+  - Convenience functions
+- **Modules** (3):
+  - `session-state.js` (344 lines) - Data management, mutex protection, message history
+  - `session-lifecycle.js` (547 lines) - CRUD operations, event emission, UUID utilities
+  - `session-persistence.js` (266 lines) - Auto-save, emergency backup, debounced writes
+
+#### StorageDegradationManager (facade complete)
+- **Facade**: `js/services/storage-degradation-manager.js`
+  - Public API: `checkQuotaNow()`, `getCurrentTier()`, `triggerCleanup()`
+- **Internal Modules**:
+  - `degradation-detector.js` - Quota monitoring, tier detection
+  - `cleanup-strategies.js` - Automatic cleanup strategies
+  - `tier-handlers.js` - Tier-specific behavior
+
+#### ErrorRecoveryCoordinator (facade complete)
+- **Facade**: `js/services/error-recovery-coordinator.js`
+  - Public API: `coordinateRecovery()`, `getTelemetry()`, `cleanup()`
+- **Internal Modules**:
+  - `recovery-strategies.js` - Domain-specific handlers
+  - `recovery-orchestration.js` - Core orchestration logic
+  - `recovery-lock-manager.js` - Cross-tab coordination
+
+#### PatternWorkerPool (facade complete)
+- **Facade**: `js/workers/pattern-worker-pool.js`
+  - Public API: `init()`, `detectAllPatterns()`, `terminate()`, `getStatus()`
+- **Internal Modules**:
+  - `worker-lifecycle.js` - Worker creation, termination, health
+  - `pool-management.js` - Optimal worker count, pool sizing
+  - `task-distribution.js` - Task scheduling, result aggregation
+
+---
+
+## Key Patterns
+
+### EventBus Schema Registration
+
+Services register event schemas during initialization for decentralized event management:
+
+```javascript
+// In session-lifecycle.js
+export const SESSION_EVENT_SCHEMAS = {
+    'session:created': {
+        description: 'New session created',
+        payload: { sessionId: 'string', title: 'string' }
+    },
+    'session:loaded': {
+        description: 'Session loaded from storage',
+        payload: { sessionId: 'string', messageCount: 'number' }
+    },
+    // ... more schemas
+};
+
+// In session-manager.js (facade)
+import { EventBus } from './event-bus.js';
+import { SESSION_EVENT_SCHEMAS } from './session-manager/session-lifecycle.js';
+
+static async initialize() {
+    EventBus.registerSchemas(SESSION_EVENT_SCHEMAS);
+    // ... rest of initialization
+}
+```
+
+**Benefits:**
+- Type-safe event handling
+- Self-documenting events
+- Schema validation available
+- Decentralized ownership (services own their schemas)
+
+### Event Listener Registration for Persistence
+
+Services register browser event listeners for automatic persistence:
+
+```javascript
+static registerEventListeners() {
+    if (this.eventListenersRegistered) return;
+
+    // Async save when tab goes hidden (non-blocking)
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+            this.flushPendingSaveAsync();
+        }
+    });
+
+    // Sync backup when tab is closing (best-effort)
+    window.addEventListener('beforeunload', () => {
+        this.emergencyBackupSync();
+    });
+
+    // Mobile Safari compatibility
+    window.addEventListener('pagehide', () => {
+        this.emergencyBackupSync();
+    });
+
+    this.eventListenersRegistered = true;
+}
+```
+
+**Pattern:**
+- `visibilitychange` → async flush (non-blocking)
+- `beforeunload`/`pagehide` → sync emergency backup (best-effort)
+
+---
+
+## Testing
+
+### API Compatibility Tests
+
+**Location**: `tests/unit/api-compatibility.test.js`
+
+**Purpose**: Verify facade methods exist and return correct types after refactoring
+
+**Count**: 59 tests (as of current version)
+
+**Run**: `npm run test:api`
+
+**Coverage**:
+- ErrorRecoveryCoordinator: 10 tests
+- StorageDegradationManager: 12 tests
+- SessionManager: 18 tests
+- SESSION_EVENT_SCHEMAS: 5 tests
+- PatternWorkerPool: 14 tests
+
+**What it checks**:
+1. Expected methods exist on facades
+2. Methods can be called without throwing
+3. Return types match expectations
+4. Enums are exported correctly
+
+---
+
+## Development Guidelines
+
+### When Adding New Features
+
+1. **Add focused module** under `js/services/` or `js/workers/`
+2. **Export through internal index** if using facade pattern
+3. **Add facade method** with JSDoc documentation
+4. **Add api-compatibility test** for public methods
+5. **Run tests**: `npm run test:api`
+6. **Update docs** with sync script: `npm run sync-docs:update`
+
+### Facade Pattern Checklist
+
+- [ ] Facade at root (e.g., `session-manager.js`)
+- [ ] Internal index in subdirectory (e.g., `session-manager/index.js`)
+- [ ] Focused modules for single responsibilities
+- [ ] No circular dependencies
+- [ ] JSDoc on all public methods
+- [ ] Event schemas exported if using EventBus
+- [ ] API compatibility tests added
+- [ ] Backward compatibility maintained (aliases, deprecated methods)
+
+---
+
 ## Instructions for Future Agents
 
 1. **Read this file first**
@@ -772,5 +963,6 @@ npx serve .
 9. **HNW patterns**: Follow Hierarchy, Network, Wave principles in all new code
 10. **Operation Lock Contract**: Always use try-catch with acquire()
 11. **Error Handling**: Use standardized LockAcquisitionError for diagnostics
+12. **Use facade pattern** for new services (see Phase 3 architecture above)
 
 ---
