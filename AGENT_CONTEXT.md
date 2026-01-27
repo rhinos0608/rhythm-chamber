@@ -970,28 +970,28 @@ static registerEventListeners() {
 ## Known Issues & Technical Debt
 
 > **Last Reviewed:** 2025-01-27 (Adversarial Architecture Review)
+> **Status:** ✅ ALL CRITICAL ISSUES RESOLVED
 > **Full Details:** [`docs/plans/TECHNICAL_DEBT.md`](docs/plans/TECHNICAL_DEBT.md)
 
-### Critical Issues (Do Not Ignore)
+### ✅ Critical Issues - ALL RESOLVED (2025-01-27)
 
-1. **SessionManager Race Condition** - `session-state.js:125-139`
-   - `updateSessionData()` mutex has window for stale reads
-   - Multiple async operations can read same snapshot
-   - Fix: Implement read-write locks with versioning
+**Commits:** `0d1e842`, `d2e8ff1`, `7ba97f9`, `409fd7c`
 
-2. **EventBus Promise Rejection** - `event-bus/index.js:424-435`
-   - `emitParallel` with `Promise.all` fails entirely if one handler throws
-   - Fix: Wrap individual handlers in try-catch
+All 11 critical issues from the adversarial review have been fixed:
 
-3. **Global State Pollution** - Multiple files
-   - `window.Settings`, `window.__COMPATIBILITY_PASSED__`, etc.
-   - Causes tight coupling and testing difficulties
-   - Fix: Use ES module exports + DI container
-
-4. **TurnQueue Race Condition** - `turn-queue.js:102-163`
-   - `isProcessing` flag check isn't atomic
-   - Rapid messages can bypass serialization
-   - Fix: Use atomic check-and-set pattern
+| Issue | Description | Fix |
+|-------|-------------|-----|
+| C1 | 2PC Commit Marker Storage | IndexedDB persistence |
+| C2 | License Verification Security | ECDSA asymmetric crypto |
+| C3 | Token Storage XSS Vulnerability | sessionStorage |
+| C4 | Uncleared Intervals | Cleanup methods added |
+| C5 | TurnQueue Race Condition | Atomic check-and-set |
+| C6 | Transaction Pool Race Condition | TransactionMutex |
+| C7 | Promise.race Timeout Leaks | Proper cleanup |
+| C8 | WaveTelemetry Unbounded Growth | LRU eviction |
+| C9 | Worker Error Boundary | try-catch wrapper |
+| C10 | Global State Pollution | ES module imports |
+| C11 | Infinite Reconnection Loop | Iterative while loop |
 
 ### High Priority Issues
 
