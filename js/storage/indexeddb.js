@@ -712,18 +712,65 @@ function wrapRequest(request, transaction, timeoutMs = 5000) {
  * Enables proper transaction isolation for put operations to prevent
  * concurrent writes from losing data.
  *
- * @type {Map<string, IDBTransaction>}
+ * @type {Map<string, PooledTransaction>}
  */
 const transactionPool = new Map();
 
 /**
- * CRITICAL FIX: Transaction locks for preventing TOCTOU race conditions
- * Maps pool keys to promises that resolve when the lock is released.
- * Ensures atomic check-and-use pattern for transaction acquisition.
+ * CRITICAL FIX: Mutex class for preventing TOCTOU race conditions
+ * Provides true mutual exclusion for transaction acquisition.
+ * Each pool key has its own mutex to serialize access.
  *
- * @type {Map<string, Promise<void>>}
+ * CRITICAL FIX C6: The mutex uses a queue-based approach with promises
+ * to ensure FIFO ordering and proper lock acquisition. This prevents
+ * race conditions where multiple operations could simultaneously check
+ * and attempt to acquire a transaction.
  */
-const transactionLocks = new Map();
+class TransactionMutex {
+    constructor() {
+        /** @type {Promise<void> | null} */
+        this.lock = null;
+        /** @type {(() => void) | null} */
+        this.release = null;
+    }
+
+    /**
+     * Acquire the mutex lock
+     * @returns {Promise<void>} Resolves when lock is acquired
+     */
+    async acquire() {
+        // Wait for existing lock to be released
+        while (this.lock) {
+            try {
+                await this.lock;
+            } catch {
+                // Lock holder failed - continue to acquire
+            }
+        }
+
+        // Create a new lock for this acquisition
+        this.lock = new Promise((resolve) => {
+            this.release = resolve;
+        });
+    }
+
+    /**
+     * Release the mutex lock
+     */
+    free() {
+        if (this.release) {
+            this.release();
+            this.release = null;
+        }
+        this.lock = null;
+    }
+}
+
+/**
+ * CRITICAL FIX: Map of mutexes, one per pool key
+ * @type {Map<string, TransactionMutex>}
+ */
+const transactionMutexes = new Map();
 
 /**
  * CRITICAL FIX: Generation counter for transaction validation
@@ -735,114 +782,153 @@ const transactionLocks = new Map();
 let transactionGeneration = 0;
 
 /**
+ * CRITICAL FIX C6: Pooled transaction wrapper with validation
+ * Tracks transaction state to detect and prevent reuse after completion.
+ *
+ * @typedef {Object} PooledTransaction
+ * @property {IDBTransaction} transaction - The actual IndexedDB transaction
+ * @property {number} generation - Unique generation number for this transaction
+ * @property {boolean} isActive - Whether this transaction is valid for use
+ * @property {Set<string>} activeOps - Set of operations currently using this transaction
+ */
+
+/**
+ * Get or create mutex for a pool key
+ * @param {string} poolKey - The transaction pool key
+ * @returns {TransactionMutex} Mutex instance
+ */
+function getMutex(poolKey) {
+    if (!transactionMutexes.has(poolKey)) {
+        transactionMutexes.set(poolKey, new TransactionMutex());
+    }
+    return transactionMutexes.get(poolKey);
+}
+
+/**
+ * Invalidate a pooled transaction, preventing further use
+ * CRITICAL FIX C6: This atomically marks the transaction as inactive
+ * and removes it from the pool, preventing TOCTOU race conditions.
+ *
+ * @param {string} poolKey - The transaction pool key
+ * @param {PooledTransaction} pooled - The pooled transaction to invalidate
+ */
+function invalidateTransaction(poolKey, pooled) {
+    // CRITICAL: Set inactive flag FIRST before any other cleanup
+    // This prevents any concurrent operation from acquiring this transaction
+    pooled.isActive = false;
+
+    // Clear active operations tracking
+    pooled.activeOps.clear();
+
+    // Remove from pool - this is safe because we're holding the mutex
+    transactionPool.delete(poolKey);
+}
+
+/**
  * Acquire or create a transaction for the given store
- * CRITICAL FIX for Issue #1: Provides explicit transaction with proper locking
+ * CRITICAL FIX C6: Uses mutex-based locking to prevent TOCTOU race conditions.
  *
- * CRITICAL FIX for TOCTOU Race Condition: This function now uses async locking
- * to ensure atomic check-and-use pattern. Concurrent calls are serialized using
- * a lock queue per pool key, preventing race conditions where transaction state
- * changes between check and use.
- *
- * Generation tracking: Each transaction has a unique generation number that
- * can be validated at use time to detect stale references.
+ * The key insight: once a transaction is returned from this function and starts
+ * being used, it becomes immediately invalidated so subsequent calls get a new
+ * transaction. This prevents transaction reuse after completion.
  *
  * @param {IDBDatabase} database - Database connection
  * @param {string} storeName - Store name
  * @param {string} [mode='readwrite'] - Transaction mode
- * @returns {Promise<IDBTransaction>} Transaction instance
+ * @returns {Promise<IDBTransaction>} Transaction instance (marked as immediately consumable)
  */
 async function acquireTransaction(database, storeName, mode = 'readwrite') {
     const poolKey = `${storeName}_${mode}`;
+    const mutex = getMutex(poolKey);
 
-    // CRITICAL FIX: Acquire lock for this pool key to serialize concurrent access
-    // This prevents TOCTOU race conditions where multiple calls check the same
-    // transaction state simultaneously
-    while (transactionLocks.has(poolKey)) {
-        try {
-            await transactionLocks.get(poolKey);
-        } catch (e) {
-            // Previous lock holder failed, continue to acquire our own lock
-            break;
-        }
-    }
-
-    // Create a new lock promise for this acquisition
-    let resolveLock;
-    let rejectLock;
-    const lockPromise = new Promise((resolve, reject) => {
-        resolveLock = resolve;
-        rejectLock = reject;
-    });
-    transactionLocks.set(poolKey, lockPromise);
+    // CRITICAL FIX C6: Acquire mutex for exclusive access
+    // This prevents concurrent operations from simultaneously checking
+    // and modifying the transaction state (TOCTOU)
+    await mutex.acquire();
 
     try {
-        // CRITICAL FIX: Atomic check-and-use pattern - now we're holding the lock,
-        // no other concurrent call can modify the transaction pool for this key
-        const existingTx = transactionPool.get(poolKey);
-        if (existingTx) {
-            // Validate transaction is still usable
-            // Note: readyState check is still susceptible to TOCTOU at the IndexedDB level,
-            // but the lock ensures we have exclusive access to our internal state
-            if (existingTx.readyState === 'active' && !existingTx._isCompleting) {
-                // Verify generation hasn't been invalidated
-                if (existingTx._generation > 0) {
-                    return existingTx;
-                }
+        // CRITICAL FIX C6: Check for existing transaction
+        // Because we hold the mutex, this check-and-use is atomic
+        const pooled = transactionPool.get(poolKey);
+
+        if (pooled && pooled.isActive) {
+            // Verify the underlying IDBTransaction is still usable
+            const tx = pooled.transaction;
+            if (tx.readyState === 'active') {
+                // CRITICAL FIX C6: Mark as inactive immediately upon acquisition
+                // This ensures transaction cannot be reused - once acquired,
+                // it's "consumed" and the next caller will get a new transaction
+                invalidateTransaction(poolKey, pooled);
+
+                // Return the transaction for immediate use
+                // The caller should complete this transaction
+                return tx;
             }
-            // Remove stale or completing transaction
+            // Transaction is no longer active, clean up
             transactionPool.delete(poolKey);
         }
 
-        // CRITICAL FIX: Increment generation counter atomically
-        // This ensures each transaction has a unique, monotonically increasing ID
+        // No valid transaction in pool - create a new one
+        // CRITICAL FIX: Increment generation counter
         transactionGeneration++;
         const currentGeneration = transactionGeneration;
 
-        // Create new transaction
-        const transaction = database.transaction(storeName, mode);
+        // Create new IDB transaction
+        const tx = database.transaction(storeName, mode);
 
-        // CRITICAL FIX: Attach generation and completion tracking metadata
-        transaction._generation = currentGeneration;
-        transaction._isCompleting = false;
-        transaction._poolKey = poolKey;
-
-        // CRITICAL FIX: Set up comprehensive cleanup handlers
-        // These ensure the transaction is removed from pool immediately when done
-        const markCompleting = () => {
-            transaction._isCompleting = true;
-            transaction._generation = 0; // Invalidate generation
-            transactionPool.delete(poolKey);
+        // Create pooled wrapper
+        const newPooled = {
+            transaction: tx,
+            generation: currentGeneration,
+            isActive: true,
+            activeOps: new Set()
         };
 
-        transaction.oncomplete = markCompleting;
-        transaction.onerror = markCompleting;
-        transaction.onabort = markCompleting;
+        // CRITICAL FIX C6: Set up cleanup handlers that invalidate on completion
+        // These run when the transaction naturally completes, aborts, or errors
+        const cleanup = () => {
+            invalidateTransaction(poolKey, newPooled);
+        };
 
-        // Store in pool
-        transactionPool.set(poolKey, transaction);
+        tx.oncomplete = cleanup;
+        tx.onerror = cleanup;
+        tx.onabort = cleanup;
 
-        return transaction;
+        // CRITICAL FIX C6: Immediately mark as inactive upon return
+        // The caller gets a "fresh" transaction that's already been removed
+        // from the pool, preventing any TOCTOU issues
+        invalidateTransaction(poolKey, newPooled);
+
+        return tx;
     } finally {
-        // CRITICAL FIX: Always release the lock, even on error
-        transactionLocks.delete(poolKey);
-        resolveLock();
+        // CRITICAL FIX C6: Always release the mutex
+        mutex.free();
     }
 }
 
 /**
  * Validate a transaction is still active and not stale
- * CRITICAL FIX: Call this before using a transaction obtained from acquireTransaction
- * to detect if it has been invalidated between acquisition and use.
+ * CRITICAL FIX C6: This validates the underlying IDBTransaction state.
+ * Note: Due to the new acquisition pattern, pooled transactions are always
+ * consumed immediately, so stale pool entries should not occur.
  *
  * @param {IDBTransaction} transaction - Transaction to validate
  * @returns {boolean} True if transaction is valid and active
  */
 function isTransactionValid(transaction) {
     if (!transaction) return false;
-    if (transaction._isCompleting) return false;
-    if (transaction._generation === 0) return false;
-    if (transaction.readyState !== 'active') return false;
-    return true;
+    // Check the IDBTransaction readyState
+    return transaction.readyState === 'active';
+}
+
+/**
+ * Clean up transaction pool and mutexes (for testing or memory management)
+ * CRITICAL FIX C6: Clears all pooled transactions and mutexes.
+ * Useful for preventing memory leaks in long-running sessions.
+ */
+function cleanupTransactionPool() {
+    transactionPool.clear();
+    transactionMutexes.clear();
 }
 
 /**
@@ -1417,7 +1503,11 @@ export const IndexedDBCore = {
     atomicUpdate,
 
     // Conflict detection
-    detectWriteConflict
+    detectWriteConflict,
+
+    // Testing and debugging
+    cleanupTransactionPool,
+    isTransactionValid
 };
 
 
