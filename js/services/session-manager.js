@@ -228,6 +228,74 @@ export class SessionManager {
     static async recoverEmergencyBackup() {
         return await Internal.recoverEmergencyBackup();
     }
+
+    // ==========================================
+    // Message History Management Methods
+    // ==========================================
+
+    /**
+     * Get conversation history
+     * @public
+     * @returns {Array} Copy of message history
+     */
+    static getHistory() {
+        const manager = Internal.getSessionManager();
+        return manager.getHistory();
+    }
+
+    /**
+     * Add a single message to history
+     * @public
+     * @param {Object} message - Message to add
+     * @returns {Promise<void>}
+     */
+    static async addMessageToHistory(message) {
+        const manager = Internal.getSessionManager();
+        return await manager.addMessageToHistory(message);
+    }
+
+    /**
+     * Add multiple messages to history atomically
+     * @public
+     * @param {Array} messages - Messages to add
+     * @returns {Promise<void>}
+     */
+    static async addMessagesToHistory(messages) {
+        const manager = Internal.getSessionManager();
+        return await manager.addMessagesToHistory(messages);
+    }
+
+    /**
+     * Truncate history to length
+     * @public
+     * @param {number} length - Target length
+     * @returns {Promise<void>}
+     */
+    static async truncateHistory(length) {
+        const manager = Internal.getSessionManager();
+        return await manager.truncateHistory(length);
+    }
+
+    /**
+     * Remove message from history at index
+     * @public
+     * @param {number} index - Index to remove
+     * @returns {Promise<boolean>} Success status
+     */
+    static async removeMessageFromHistory(index) {
+        const manager = Internal.getSessionManager();
+        return await manager.removeMessageFromHistory(index);
+    }
+
+    /**
+     * Clear conversation and create new session
+     * @public
+     * @returns {Promise<void>}
+     */
+    static async clearConversation() {
+        const manager = Internal.getSessionManager();
+        return await manager.clearConversation();
+    }
 }
 
 // ==========================================
