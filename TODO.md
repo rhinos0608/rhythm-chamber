@@ -197,16 +197,45 @@ These can be added later to enhance the dev panel tabs. Current implementation s
 
 ---
 
-## Technical Debt (Adversarial Review - 2025-01-27)
+## Technical Debt Remediation (2025-01-27)
 
-### Critical Issues (5) - Sprint 1
-- [ ] **TD-1:** Fix SessionManager race condition in `updateSessionData()` (4h)
+### Phase 1: Critical Fixes ✅ COMPLETE (2025-01-27)
+**Commit:** `0d1e842`
+
+**Fixed Issues:**
+- [x] **C1:** 2PC Commit Marker Storage - Transaction journal now persists to IndexedDB
+- [x] **C4:** Uncleared Intervals - Added cleanup methods for ProviderHealthMonitor, MessageGuards, SharedWorker
+- [x] **C5:** TurnQueue Race Condition - Atomic check-and-set pattern with try/finally
+- [x] **C7:** Promise.race Timeout Leaks - Clear timeoutId in both success and error paths
+- [x] **C8:** WaveTelemetry Unbounded Growth - LRU eviction with MAX_WAVES=1000
+- [x] **C9:** Worker Error Boundary - Wrapped onmessage in try-catch with error response
+- [x] **C11:** Infinite Reconnection Loop - Converted recursive to iterative while loop
+- [x] **Session State Versioning** - Added _version field for stale data detection
+
+**Files Modified:** 22 | **Lines Changed:** ~1000 | **Tests Added:** ~250 lines
+
+**See:** [REMEDIATION_PROGRESS.md](REMEDIATION_PROGRESS.md), [CODEBASE_REVIEW_REMEDIATION_PLAN.md](CODEBASE_REVIEW_REMEDIATION_PLAN.md)
+
+---
+
+### Phase 2: Remaining Critical Issues (In Progress)
+- [ ] **C2:** License verification security - Move to server-side or use asymmetric crypto (8h)
+- [ ] **C3:** Token storage vulnerability - Use sessionStorage instead of localStorage (4h)
+- [ ] **C6:** Transaction pool race condition - Add mutex or generation counter (4h)
+- [ ] **C10:** Global state pollution - Remove window.* assignments, use DI (6h)
+
+---
+
+### Original Technical Debt Items
+
+#### Critical Issues (5) - Sprint 1
+- [x] ~~**TD-1:** Fix SessionManager race condition in `updateSessionData()` (4h)~~ - Version tracking added
 - [ ] **TD-2:** Fix EventBus `emitParallel` unhandled promise rejection (2h)
 - [ ] **TD-3:** Address Service Layer God Object anti-pattern (8h)
 - [ ] **TD-4:** Eliminate global state pollution (6h)
-- [ ] **TD-5:** Fix TurnQueue race condition in `processNext()` (2h)
+- [x] ~~**TD-5:** Fix TurnQueue race condition in `processNext()` (2h)~~ - Atomic check-and-set fixed
 
-### High Priority (7) - Sprint 2
+#### High Priority (7) - Sprint 2
 - [ ] **TD-6:** Fix memory leak in StreamingMessageHandler timeout cleanup (2h)
 - [ ] **TD-7:** Add array bounds checking to `removeMessageFromHistory()` (1h)
 - [ ] **TD-8:** Add null check to `getAllSessions()` (1h)
@@ -215,14 +244,14 @@ These can be added later to enhance the dev panel tabs. Current implementation s
 - [ ] **TD-11:** Implement error boundaries for critical paths (4h)
 - [ ] **TD-12:** Improve DI Container coupling (6h)
 
-### Medium Priority (8) - Sprint 3
-- [ ] **TD-13:** Add error handling to ProviderHealthMonitor interval (1h)
+#### Medium Priority (8) - Sprint 3
+- [x] ~~**TD-13:** Add error handling to ProviderHealthMonitor interval (1h)~~ - Fixed
 - [ ] **TD-14:** Implement localStorage quota checking (4h)
 - [ ] **TD-15:** Improve network timeout error messages (2h)
 - [ ] **TD-16:** Consolidate magic numbers to configuration (4h)
 - [ ] **TD-17:** Fix inconsistent abstraction levels (8h)
 - [ ] **TD-18:** Fix SidebarController event listener memory leaks (3h)
-- [ ] **TD-19:** Add hard limits to message array growth (2h)
+- [x] ~~**TD-19:** Add hard limits to message array growth (2h)~~ - LRU implemented
 - [ ] **TD-20:** Standardize error handling patterns (6h)
 
-**Total Debt:** ~95 hours | See [TECHNICAL_DEBT.md](docs/plans/TECHNICAL_DEBT.md) for details
+**Total Remaining Debt:** ~60 hours | See [TECHNICAL_DEBT.md](docs/plans/TECHNICAL_DEBT.md) for details
