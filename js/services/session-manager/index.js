@@ -13,13 +13,15 @@
 // Import all sub-modules
 import * as SessionState from './session-state.js';
 import * as SessionLifecycle from './session-lifecycle.js';
+import * as SessionPersistence from './session-persistence.js';
 
 // Re-export all module exports for internal use
 export * from './session-state.js';
 export * from './session-lifecycle.js';
+export * from './session-persistence.js';
 
 // Re-export modules as named exports for convenience
-export { SessionState, SessionLifecycle };
+export { SessionState, SessionLifecycle, SessionPersistence };
 
 // ==========================================
 // State Management
@@ -50,13 +52,16 @@ export function createManager() {
         // Lifecycle management
         lifecycle: SessionLifecycle,
 
+        // Persistence management
+        persistence: SessionPersistence,
+
         // Current session
         currentSession: null,
 
         // Initialize
         async initialize() {
-            // Initialize state
-            await this.state.initialize();
+            // Initialize state (SessionState doesn't have initialize, so just set up)
+            // The state module is already initialized on import
         },
 
         // Create new session
@@ -78,6 +83,30 @@ export function createManager() {
         cleanup() {
             this.currentSession = null;
             managerInstance = null;
+        },
+
+        // ==========================================
+        // Persistence Methods
+        // ==========================================
+
+        async saveCurrentSession() {
+            return await SessionPersistence.saveCurrentSession();
+        },
+
+        saveConversation(delayMs) {
+            SessionPersistence.saveConversation(delayMs);
+        },
+
+        async flushPendingSaveAsync() {
+            return await SessionPersistence.flushPendingSaveAsync();
+        },
+
+        emergencyBackupSync() {
+            SessionPersistence.emergencyBackupSync();
+        },
+
+        async recoverEmergencyBackup() {
+            return await SessionPersistence.recoverEmergencyBackup();
         }
     };
 
@@ -105,6 +134,21 @@ export function resetManager() {
 export async function getAllSessions() {
     const manager = getSessionManager();
     return await SessionState.getAllSessions();
+}
+
+/**
+ * Clear all sessions
+ * @returns {Promise<boolean>} Success status
+ */
+export async function clearAllSessions() {
+    const manager = getSessionManager();
+    // Delete all sessions and clear current
+    const sessions = await SessionState.getAllSessions();
+    for (const session of sessions) {
+        await SessionLifecycle.deleteSession(session.id);
+    }
+    manager.currentSession = null;
+    return true;
 }
 
 /**
