@@ -9,6 +9,7 @@
 
 import { TransactionStateManager } from './transaction-state.js';
 import { CompensationLogger } from './compensation-logger.js';
+import { IndexedDBCore } from '../indexeddb.js';
 
 const MAX_OPERATIONS_PER_TRANSACTION = 100;
 const OPERATION_TIMEOUT_MS = 5000;
@@ -141,8 +142,21 @@ export class TwoPhaseCommitCoordinator {
     console.log(`[TwoPhaseCommit] Decision phase: ${context.id}`);
 
     // Write commit marker to durable storage
-    // TODO: Implement commit marker storage
-    context.journaled = true;
+    const commitMarker = {
+      id: context.id,
+      status: 'prepared',
+      timestamp: Date.now(),
+      operationCount: context.operations.length
+    };
+
+    try {
+      await IndexedDBCore.put('TRANSACTION_JOURNAL', commitMarker);
+      console.log(`[TwoPhaseCommit] Commit marker written: ${context.id}`);
+      context.journaled = true;
+    } catch (error) {
+      console.error(`[TwoPhaseCommit] Failed to write commit marker: ${error.message}`);
+      throw new Error(`Transaction ${context.id}: Failed to write commit marker - ${error.message}`);
+    }
   }
 
   /**
@@ -166,7 +180,14 @@ export class TwoPhaseCommitCoordinator {
       // Resources clean up their own pending data
     }
 
-    // TODO: Remove commit marker
+    // Remove commit marker from durable storage
+    try {
+      await IndexedDBCore.delete('TRANSACTION_JOURNAL', context.id);
+      console.log(`[TwoPhaseCommit] Commit marker removed: ${context.id}`);
+    } catch (error) {
+      console.warn(`[TwoPhaseCommit] Failed to remove commit marker: ${error.message}`);
+      // Non-fatal: cleanup failure doesn't affect transaction consistency
+    }
   }
 
   /**

@@ -98,24 +98,34 @@ function push(message, options = null) {
 
 /**
  * Process the next turn in the queue
+ *
+ * Uses atomic check-and-set pattern to prevent race conditions:
+ * 1. Check isProcessing and return early if already processing
+ * 2. Immediately set isProcessing = true (atomic in JS single-threaded execution)
+ * 3. Use try/finally to guarantee isProcessing is always reset
+ * 4. Call processNext() recursively in finally to continue queue processing
  */
 async function processNext() {
-    if (isProcessing || queue.length === 0) {
-        return;
-    }
+    // Check if already processing - atomic in JS single-threaded model
+    if (isProcessing) return;
 
+    // Check queue after acquiring the "lock"
+    if (queue.length === 0) return;
+
+    // Set processing flag BEFORE any async operations
     isProcessing = true;
-    currentTurn = queue.shift();
-    currentTurn.status = 'processing';
-    currentTurn.startedAt = Date.now();
-
-    // Record queue depth sample
-    recordDepthSample();
-
-    console.log(`[TurnQueue] Processing turn ${currentTurn.id}`);
-    notifyListeners('processing', currentTurn);
 
     try {
+        currentTurn = queue.shift();
+        currentTurn.status = 'processing';
+        currentTurn.startedAt = Date.now();
+
+        // Record queue depth sample
+        recordDepthSample();
+
+        console.log(`[TurnQueue] Processing turn ${currentTurn.id}`);
+        notifyListeners('processing', currentTurn);
+
         // Get Chat module
         const Chat = getChatModule();
 
@@ -154,11 +164,14 @@ async function processNext() {
 
         currentTurn.reject(error);
     } finally {
+        // Always reset processing flag, even if an error occurred
+        // This ensures the queue doesn't get stuck in a processing state
         currentTurn = null;
         isProcessing = false;
 
-        // Process next turn
-        processNext();
+        // Use setTimeout to break the call stack and allow other pending operations
+        // This prevents stack buildup and ensures proper queue continuation
+        setTimeout(processNext, 0);
     }
 }
 

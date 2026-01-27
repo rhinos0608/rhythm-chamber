@@ -19,6 +19,7 @@ import { AnalyticsQuerySchemas } from './schemas/analytics-queries.js';
 import { ArtifactQuerySchemas } from './schemas/artifact-queries.js';
 import { PlaylistQuerySchemas } from './schemas/playlist-queries.js';
 import { SemanticQuerySchemas } from './schemas/semantic-queries.js';
+import { Settings } from '../settings/index.js';
 
 // ==========================================
 // Private Helpers
@@ -72,21 +73,9 @@ export const SchemaRegistry = {
     getEnabledSchemas() {
         const allSchemas = getAllSchemas();
 
-        // Lazy import Settings to avoid circular dependency
-        // Import dynamically only when this method is called
-        try {
-            // Dynamic import to break circular dependency
-            const SettingsModule = import('../settings.js');
-            // Since this is async and we need sync, we'll use a different approach
-            // For now, return all schemas if Settings isn't available
-        } catch (e) {
-            // Module not available, return all schemas
-            return allSchemas;
-        }
-
-        // Try to access Settings globally if it's been loaded elsewhere
-        if (typeof window !== 'undefined' && window.Settings?.getEnabledTools) {
-            const enabledTools = window.Settings.getEnabledTools();
+        // Access Settings via ES module import (no window dependency)
+        if (Settings?.getEnabledTools) {
+            const enabledTools = Settings.getEnabledTools();
 
             // null means all tools are enabled
             if (enabledTools === null) {

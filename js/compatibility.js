@@ -23,7 +23,10 @@
 (function() {
     'use strict';
 
-    // Flag for main.js to check
+    // NOTE: This window assignment is necessary because compatibility.js is loaded
+    // as a regular (non-module) script before the ES module application.
+    // It provides a mechanism for the main app to verify compatibility passed.
+    // This is an exceptional case - regular modules should use ES exports.
     window.__COMPATIBILITY_PASSED__ = false;
 
     /**
@@ -196,7 +199,7 @@
         showBrowserUpgradeMessage(result.missing);
         // This line won't be reached due to the throw in showBrowserUpgradeMessage
     } else {
-        // Mark as passed for main.js to check
+        // Mark as passed for the main application to verify
         window.__COMPATIBILITY_PASSED__ = true;
         console.log('[Compatibility] All required features detected.');
     }

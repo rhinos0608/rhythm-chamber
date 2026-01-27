@@ -464,5 +464,19 @@ function getProviderHealthMonitor() {
     return providerHealthMonitorInstance;
 }
 
+/**
+ * Cleanup the provider health monitor singleton
+ * Stops monitoring and clears the interval to prevent memory leaks.
+ * Should be called on page unload or when the application is shutting down.
+ * @example
+ * window.addEventListener('beforeunload', cleanupProviderHealthMonitor);
+ */
+export function cleanupProviderHealthMonitor() {
+    if (providerHealthMonitorInstance) {
+        providerHealthMonitorInstance.stopMonitoring();
+        providerHealthMonitorInstance = null;
+    }
+}
+
 // Export the function, not the result, to avoid race conditions at module load time
 export default getProviderHealthMonitor;

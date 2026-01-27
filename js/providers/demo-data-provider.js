@@ -8,6 +8,7 @@
  */
 
 import { ProviderBase } from './provider-base.js';
+import { DemoData } from '../demo-data.js';
 
 // ==========================================
 // Demo Data Provider Implementation
@@ -18,10 +19,7 @@ import { ProviderBase } from './provider-base.js';
  * @returns {Object|null}
  */
 function getDemoData() {
-    if (typeof window !== 'undefined' && window.DemoData) {
-        return window.DemoData;
-    }
-    return null;
+    return DemoData || null;
 }
 
 /**

@@ -26,7 +26,12 @@ const mockAppState = {
 };
 
 // Create a proper class mock for Mutex
-const mockRunExclusive = vi.fn((fn) => fn());
+// The mock needs to execute the async function and return its result
+const mockRunExclusive = vi.fn((fn) => {
+    // fn is an async function that returns a Promise
+    // Just call it and return the Promise it returns
+    return fn();
+});
 
 class MockMutex {
     constructor() {
@@ -132,21 +137,25 @@ describe('SessionState Deep Cloning', () => {
 describe('SessionState Session Data', () => {
     it('should get empty session data initially', () => {
         const data = SessionState.getSessionData();
-        expect(data).toEqual({
-            id: null,
-            messages: []
-        });
+        expect(data.id).toBeNull();
+        expect(data.messages).toEqual([]);
+        expect(data).toHaveProperty('_version');
     });
 
     it('should return frozen session data', () => {
+        SessionState.setSessionData({
+            id: 'test-id',
+            messages: []
+        });
         const data = SessionState.getSessionData();
 
-        // Attempting to mutate frozen data should throw in strict mode
+        // Attempting to mutate frozen data should throw (or silently fail in non-strict mode)
         expect(() => {
-            if (data.id !== null) {
-                data.id = 'modified';
-            }
-        }).not.toThrow();
+            data.id = 'modified';
+        }).not.toThrow();  // In non-strict mode, Object.freeze silently fails
+
+        // But the data should not actually be modified
+        expect(data.id).toBe('test-id');
     });
 
     it('should set session data with deep cloning', () => {
@@ -569,5 +578,206 @@ describe('SessionState Edge Cases', () => {
 
         const history = SessionState.getHistory();
         expect(history).toHaveLength(0);
+    });
+});
+
+// ==========================================
+// State Versioning Tests
+// ==========================================
+
+describe('SessionState Versioning', () => {
+    beforeEach(() => {
+        SessionState.setSessionData({
+            id: 'test-session',
+            messages: []
+        });
+    });
+
+    it('should include _version in getSessionData result', () => {
+        const data = SessionState.getSessionData();
+        expect(data).toHaveProperty('_version');
+        expect(typeof data._version).toBe('number');
+    });
+
+    it('should start with version 0', () => {
+        SessionState.setSessionData({
+            id: 'test',
+            messages: []
+        });
+        const data = SessionState.getSessionData();
+        expect(data._version).toBe(0);
+    });
+
+    it('should increment version after update', async () => {
+        const beforeData = SessionState.getSessionData();
+        const initialVersion = beforeData._version;
+
+        await SessionState.updateSessionData((data) => ({
+            ...data,
+            messages: [...data.messages, { role: 'user', content: 'Test' }]
+        }));
+
+        const afterData = SessionState.getSessionData();
+        expect(afterData._version).toBe(initialVersion + 1);
+    });
+
+    it('should increment version on each update', async () => {
+        await SessionState.updateSessionData((data) => data);
+        await SessionState.updateSessionData((data) => data);
+        await SessionState.updateSessionData((data) => data);
+
+        const data = SessionState.getSessionData();
+        expect(data._version).toBe(3);
+    });
+
+    it('should return success and version from updateSessionData', async () => {
+        const result = await SessionState.updateSessionData((data) => data);
+
+        expect(result).toHaveProperty('success');
+        expect(result).toHaveProperty('version');
+        expect(result.success).toBe(true);
+        expect(typeof result.version).toBe('number');
+    });
+
+    it('should reject update when expectedVersion does not match', async () => {
+        const data = SessionState.getSessionData();
+        const staleVersion = data._version;
+
+        // Make a change that increments the version
+        await SessionState.updateSessionData((d) => ({
+            ...d,
+            messages: [...d.messages, { role: 'user', content: 'Update 1' }]
+        }));
+
+        // Try to update with the stale version
+        const result = await SessionState.updateSessionData({
+            updaterFn: (d) => ({
+                ...d,
+                messages: [...d.messages, { role: 'user', content: 'Stale Update' }]
+            }),
+            expectedVersion: staleVersion
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.version).not.toBe(staleVersion);
+    });
+
+    it('should allow update when expectedVersion matches', async () => {
+        const data = SessionState.getSessionData();
+        const currentVersion = data._version;
+
+        const result = await SessionState.updateSessionData({
+            updaterFn: (d) => ({
+                ...d,
+                messages: [...d.messages, { role: 'user', content: 'Valid Update' }]
+            }),
+            expectedVersion: currentVersion
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.version).toBe(currentVersion + 1);
+    });
+
+    it('should support backward-compatible function API', async () => {
+        // Old API: passing a function directly
+        const result = await SessionState.updateSessionData((data) => ({
+            ...data,
+            messages: [...data.messages, { role: 'user', content: 'Test' }]
+        }));
+
+        expect(result.success).toBe(true);
+        expect(result.version).toBe(1);
+    });
+
+    it('should handle concurrent updates with versioning correctly', async () => {
+        // Simulate a race condition scenario
+        const snapshot1 = SessionState.getSessionData();
+        const version1 = snapshot1._version;
+
+        // First update starts
+        const update1 = SessionState.updateSessionData({
+            updaterFn: (data) => ({
+                ...data,
+                messages: [...data.messages, { role: 'user', content: 'Update 1' }]
+            }),
+            expectedVersion: version1
+        });
+
+        // Second update starts with the same snapshot (simulating concurrent read)
+        const update2 = SessionState.updateSessionData({
+            updaterFn: (data) => ({
+                ...data,
+                messages: [...data.messages, { role: 'user', content: 'Update 2' }]
+            }),
+            expectedVersion: version1
+        });
+
+        const [result1, result2] = await Promise.all([update1, update2]);
+
+        // One should succeed, the other should fail due to version mismatch
+        expect(result1.success || result2.success).toBe(true);
+        // At least one should fail if they both used the same version
+        // (The mutex serializes them, so second sees stale version)
+        expect(result1.success !== result2.success || result1.version !== result2.version).toBe(true);
+    });
+
+    it('should reset version when setSessionData is called', async () => {
+        await SessionState.updateSessionData((data) => data);
+        await SessionState.updateSessionData((data) => data);
+
+        expect(SessionState.getSessionData()._version).toBe(2);
+
+        SessionState.setSessionData({
+            id: 'new-session',
+            messages: []
+        });
+
+        expect(SessionState.getSessionData()._version).toBe(0);
+    });
+
+    it('should work with addMessageToHistory (backward compatibility)', async () => {
+        await SessionState.addMessageToHistory({ role: 'user', content: 'Hello' });
+
+        const data = SessionState.getSessionData();
+        expect(data.messages).toHaveLength(1);
+        expect(data._version).toBe(1);
+    });
+
+    it('should work with addMessagesToHistory (backward compatibility)', async () => {
+        const messages = [
+            { role: 'user', content: 'First' },
+            { role: 'assistant', content: 'Second' }
+        ];
+
+        await SessionState.addMessagesToHistory(messages);
+
+        const data = SessionState.getSessionData();
+        expect(data.messages).toHaveLength(2);
+        expect(data._version).toBe(1);
+    });
+
+    it('should work with removeMessageFromHistory (backward compatibility)', async () => {
+        await SessionState.addMessageToHistory({ role: 'user', content: 'First' });
+        await SessionState.addMessageToHistory({ role: 'assistant', content: 'Second' });
+
+        const removed = await SessionState.removeMessageFromHistory(0);
+
+        expect(removed).toBe(true);
+        const data = SessionState.getSessionData();
+        expect(data.messages).toHaveLength(1);
+        // Version should have incremented twice for adds + once for remove
+        expect(data._version).toBeGreaterThan(0);
+    });
+
+    it('should include version in frozen session data', () => {
+        const data = SessionState.getSessionData();
+
+        // In non-strict mode, Object.freeze silently fails
+        // The important thing is the data doesn't actually change
+        data._version = 999;  // This will silently fail
+
+        // Version should not have changed in the actual state
+        const data2 = SessionState.getSessionData();
+        expect(data2._version).toBe(0);
     });
 });

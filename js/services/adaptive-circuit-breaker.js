@@ -313,15 +313,15 @@ export async function execute(circuitId, fn, config = {}) {
 
     const startTime = Date.now();
     const timeout = checkResult.timeout;
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(`Adaptive timeout after ${timeout}ms`)), timeout);
+    });
 
     try {
         // Execute with adaptive timeout
-        const result = await Promise.race([
-            fn(),
-            new Promise((_, reject) =>
-                setTimeout(() => reject(new Error(`Adaptive timeout after ${timeout}ms`)), timeout)
-            )
-        ]);
+        const result = await Promise.race([fn(), timeoutPromise]);
+        clearTimeout(timeoutId);
 
         const durationMs = Date.now() - startTime;
         recordSuccess(circuitId, durationMs, config);
@@ -334,6 +334,7 @@ export async function execute(circuitId, fn, config = {}) {
             adaptiveTimeout: timeout
         };
     } catch (error) {
+        clearTimeout(timeoutId);
         const durationMs = Date.now() - startTime;
         const message = error instanceof Error ? error.message : String(error);
 

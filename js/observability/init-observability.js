@@ -346,14 +346,7 @@ export function disableObservability() {
     console.log('[ObservabilityInit] Observability system disabled');
 }
 
-// Export for global access (if needed)
-if (typeof window !== 'undefined') {
-    window.ObservabilityInit = {
-        initObservability,
-        getObservability,
-        isObservabilityInitialized,
-        disableObservability
-    };
-}
+// ObservabilityInit functions are exported as ES modules - no global window assignment
+// Use: import { initObservability, getObservability, isObservabilityInitialized, disableObservability } from './js/observability/init-observability.js'
 
 console.log('[ObservabilityInit] Module loaded');

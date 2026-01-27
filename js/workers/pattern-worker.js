@@ -555,59 +555,69 @@ function detectAllPatterns(streams, chunks, onProgress = null, onPartial = null)
 let heartbeatPort = null;
 
 self.onmessage = function (e) {
-    const { type, requestId, streams, chunks, timestamp, port } = e.data;
+    try {
+        const { type, requestId, streams, chunks, timestamp, port } = e.data;
 
-    // Handle heartbeat channel setup (dedicated MessageChannel)
-    if (type === 'HEARTBEAT_CHANNEL') {
-        // Get port from e.ports[0] (transferred port), fallback to e.data.port
-        heartbeatPort = e.ports && e.ports[0] ? e.ports[0] : (e.data && e.data.port);
-        heartbeatPort.onmessage = function(event) {
-            if (event.data.type === 'HEARTBEAT') {
-                heartbeatPort.postMessage({
-                    type: 'HEARTBEAT_RESPONSE',
-                    timestamp: event.data.timestamp || Date.now()
-                });
-            }
-        };
-        console.log('[PatternWorker] Dedicated heartbeat channel established');
-        return;
-    }
-
-    // Handle legacy heartbeat request (fallback when MessageChannel unavailable)
-    if (type === 'HEARTBEAT') {
-        self.postMessage({
-            type: 'HEARTBEAT_RESPONSE',
-            timestamp
-        });
-        return;
-    }
-
-    // Handle both 'detect' (legacy) and 'DETECT_PATTERNS' (pool) message types
-    if (type === 'detect' || type === 'DETECT_PATTERNS') {
-        try {
-            // Progress callback
-            const onProgress = (current, total, message) => {
-                self.postMessage({ type: 'progress', requestId, current, total, message });
+        // Handle heartbeat channel setup (dedicated MessageChannel)
+        if (type === 'HEARTBEAT_CHANNEL') {
+            // Get port from e.ports[0] (transferred port), fallback to e.data.port
+            heartbeatPort = e.ports && e.ports[0] ? e.ports[0] : (e.data && e.data.port);
+            heartbeatPort.onmessage = function(event) {
+                if (event.data.type === 'HEARTBEAT') {
+                    heartbeatPort.postMessage({
+                        type: 'HEARTBEAT_RESPONSE',
+                        timestamp: event.data.timestamp || Date.now()
+                    });
+                }
             };
-
-            // Partial result callback - emit as each pattern completes
-            // HNW Wave: Allows saving work if worker is terminated
-            const onPartial = (patternName, result, progressPercent) => {
-                self.postMessage({
-                    type: 'partial',
-                    requestId,
-                    pattern: patternName,
-                    result,
-                    progress: progressPercent
-                });
-            };
-
-            const patterns = detectAllPatterns(streams, chunks, onProgress, onPartial);
-
-            self.postMessage({ type: 'complete', requestId, patterns });
-        } catch (error) {
-            self.postMessage({ type: 'error', requestId, error: error.message });
+            console.log('[PatternWorker] Dedicated heartbeat channel established');
+            return;
         }
+
+        // Handle legacy heartbeat request (fallback when MessageChannel unavailable)
+        if (type === 'HEARTBEAT') {
+            self.postMessage({
+                type: 'HEARTBEAT_RESPONSE',
+                timestamp
+            });
+            return;
+        }
+
+        // Handle both 'detect' (legacy) and 'DETECT_PATTERNS' (pool) message types
+        if (type === 'detect' || type === 'DETECT_PATTERNS') {
+            try {
+                // Progress callback
+                const onProgress = (current, total, message) => {
+                    self.postMessage({ type: 'progress', requestId, current, total, message });
+                };
+
+                // Partial result callback - emit as each pattern completes
+                // HNW Wave: Allows saving work if worker is terminated
+                const onPartial = (patternName, result, progressPercent) => {
+                    self.postMessage({
+                        type: 'partial',
+                        requestId,
+                        pattern: patternName,
+                        result,
+                        progress: progressPercent
+                    });
+                };
+
+                const patterns = detectAllPatterns(streams, chunks, onProgress, onPartial);
+
+                self.postMessage({ type: 'complete', requestId, patterns });
+            } catch (error) {
+                self.postMessage({ type: 'error', requestId, error: error.message });
+            }
+        }
+    } catch (error) {
+        console.error('[PatternWorker] Unhandled error:', error);
+        self.postMessage({
+            type: 'error',
+            error: error.message,
+            stack: error.stack,
+            requestId: e.data?.requestId
+        });
     }
 };
 

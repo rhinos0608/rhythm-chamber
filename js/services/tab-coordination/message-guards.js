@@ -239,28 +239,63 @@ const NONCE_EXPIRY_MS = 60000;
 const NONCE_CLEANUP_INTERVAL_MS = 30000;
 const CLEANUP_THRESHOLD = 500;
 
-setInterval(() => {
-    if (usedNonces.size > CLEANUP_THRESHOLD) {
-        const now = Date.now();
-        const expiredNonces = [];
-        let removedCount = 0;
+/**
+ * Interval ID for nonce cleanup
+ * @type {number|null}
+ */
+let nonceCleanupIntervalId = null;
 
-        for (const [nonce, timestamp] of usedNonces.entries()) {
-            if (now - timestamp > NONCE_EXPIRY_MS) {
-                expiredNonces.push(nonce);
+/**
+ * Start the nonce cleanup interval
+ * Called automatically when the module is loaded.
+ * @private
+ */
+function startNonceCleanupInterval() {
+    if (nonceCleanupIntervalId) {
+        clearInterval(nonceCleanupIntervalId);
+    }
+    nonceCleanupIntervalId = setInterval(() => {
+        if (usedNonces.size > CLEANUP_THRESHOLD) {
+            const now = Date.now();
+            const expiredNonces = [];
+            let removedCount = 0;
+
+            for (const [nonce, timestamp] of usedNonces.entries()) {
+                if (now - timestamp > NONCE_EXPIRY_MS) {
+                    expiredNonces.push(nonce);
+                }
+            }
+
+            for (const nonce of expiredNonces) {
+                usedNonces.delete(nonce);
+                removedCount++;
+            }
+
+            if (removedCount > 0) {
+                console.log(`[TabCoordination] Cleaned up ${removedCount} expired nonces (${usedNonces.size} remaining)`);
             }
         }
+    }, NONCE_CLEANUP_INTERVAL_MS);
+}
 
-        for (const nonce of expiredNonces) {
-            usedNonces.delete(nonce);
-            removedCount++;
-        }
-
-        if (removedCount > 0) {
-            console.log(`[TabCoordination] Cleaned up ${removedCount} expired nonces (${usedNonces.size} remaining)`);
-        }
+/**
+ * Cleanup function to stop the nonce cleanup interval
+ * Should be called on page unload or when the tab coordination is no longer needed
+ * to prevent memory leaks.
+ * @example
+ * window.addEventListener('beforeunload', cleanupMessageGuards);
+ */
+export function cleanupMessageGuards() {
+    if (nonceCleanupIntervalId) {
+        clearInterval(nonceCleanupIntervalId);
+        nonceCleanupIntervalId = null;
     }
-}, NONCE_CLEANUP_INTERVAL_MS);
+    // Also clear any stored state
+    usedNonces.clear();
+}
+
+// Start the cleanup interval when the module loads
+startNonceCleanupInterval();
 
 function isNonceFresh(nonce) {
     if (!nonce) return false;
@@ -348,6 +383,7 @@ export {
     MESSAGE_RATE_LIMITS,
     MESSAGE_SCHEMA,
     checkAndTrackSequence,
+    cleanupMessageGuards,
     getOutOfOrderCount,
     getRateTracking,
     getRemoteSequenceCount,

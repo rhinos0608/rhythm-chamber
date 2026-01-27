@@ -2,7 +2,7 @@
  * Cryptographic License Verifier for Rhythm Chamber
  *
  * Provides secure JWT-based license verification using Web Crypto API.
- * Prevents client-side bypass through signature verification.
+ * Supports server-side validation with offline fallback using PBKDF2 key derivation.
  *
  * @module security/license-verifier
  */
@@ -12,12 +12,22 @@ import { createLogger } from '../utils/logger.js';
 const logger = createLogger('LicenseVerifier');
 
 // ==========================================
-// Constants
+// Configuration Constants
 // ==========================================
 
 const LICENSE_CACHE_KEY = 'rhythm_chamber_license_cache';
 const LICENSE_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 const LICENSE_STORAGE_KEY = 'rhythm_chamber_license';
+
+// Server configuration
+const LICENSE_SERVER_URL = '/api/license/verify';
+const LICENSE_VERIFY_TIMEOUT = 10000; // 10 seconds
+
+// Offline key derivation configuration
+const PBKDF2_ITERATIONS = 100000;
+const PBKDF2_KEY_LENGTH = 256; // bits
+const PBKDF2_SALT_KEY = 'rhythm_chamber_license_salt';
+const OFFLINE_DERIVED_KEY_KEY = 'rhythm_chamber_offline_key';
 
 // Device fingerprint for license binding
 let _deviceFingerprint = null;
@@ -181,32 +191,292 @@ async function verifyHMAC(data, signature, secretHex) {
     }
 }
 
+// ==========================================
+// Server-Side License Verification
+// ==========================================
+
 /**
- * Derive verification secret from environment
- * Uses domain binding to prevent cross-origin use
- * @returns {Promise<string>} Derived secret as hex
+ * Verify license token with server
+ * @param {string} licenseToken - JWT license token
+ * @returns {Promise<Object>} Server verification response
  */
-async function deriveVerificationSecret() {
-    // Obfuscated base secret (XOR encoded for basic protection)
-    const OBF_SECRET_1 = [0x52, 0x43, 0x6c, 0x69, 0x63, 0x6e, 0x73, 0x65, 0x5f, 0x4b, 0x65, 0x79, 0x5f];
-    const OBF_SECRET_2 = [0x3f, 0x7c, 0x5f, 0x18, 0x0a, 0x03, 0x2c, 0x5e, 0x3f, 0x3c, 0x58, 0x0f, 0x3f];
-
-    // XOR decode
-    const baseSecret = new Uint8Array(OBF_SECRET_1.length);
-    for (let i = 0; i < OBF_SECRET_1.length; i++) {
-        baseSecret[i] = OBF_SECRET_1[i] ^ OBF_SECRET_2[i];
+async function verifyLicenseWithServer(licenseToken) {
+    const deviceFingerprint = await generateDeviceFingerprint();
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), LICENSE_VERIFY_TIMEOUT);
+    
+    try {
+        const response = await fetch(LICENSE_SERVER_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                token: licenseToken,
+                deviceFingerprint: deviceFingerprint,
+                origin: window.location.origin
+            }),
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            // Server returned error status
+            const errorData = await response.json().catch(() => ({}));
+            return {
+                valid: false,
+                error: 'SERVER_ERROR',
+                message: errorData.message || `Server error: ${response.status}`,
+                serverError: true,
+                statusCode: response.status
+            };
+        }
+        
+        const result = await response.json();
+        
+        return {
+            valid: result.valid === true,
+            tier: result.tier,
+            instanceId: result.instanceId || null,
+            activatedAt: result.activatedAt,
+            expiresAt: result.expiresAt,
+            features: result.features || [],
+            offlineMode: false,
+            serverVerified: true,
+            error: result.valid === true ? null : (result.error || 'SERVER_REJECTED'),
+            message: result.message
+        };
+        
+    } catch (error) {
+        clearTimeout(timeoutId);
+        
+        // Network error - signal to fallback to offline mode
+        if (error.name === 'AbortError' || error.name === 'TypeError' || error.message?.includes('fetch')) {
+            return {
+                valid: false,
+                error: 'NETWORK_ERROR',
+                message: 'Network unavailable, falling back to offline verification',
+                networkError: true,
+                offlineFallback: true
+            };
+        }
+        
+        return {
+            valid: false,
+            error: 'SERVER_VERIFICATION_FAILED',
+            message: error.message || 'Server verification failed',
+            serverError: true
+        };
     }
+}
 
-    // Add domain binding
-    const origin = new TextEncoder().encode(window.location.origin);
-    const combined = new Uint8Array(baseSecret.length + origin.length);
-    combined.set(baseSecret);
-    combined.set(origin, baseSecret.length);
+// ==========================================
+// Offline Key Derivation (PBKDF2)
+// ==========================================
 
-    // Hash to create final secret
-    const hash = await crypto.subtle.digest('SHA-256', combined);
-    const hashArray = Array.from(new Uint8Array(hash));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+/**
+ * Check if offline key has been configured
+ * @returns {boolean} True if offline key exists
+ */
+function hasOfflineKey() {
+    const derivedKey = localStorage.getItem(OFFLINE_DERIVED_KEY_KEY);
+    const salt = localStorage.getItem(PBKDF2_SALT_KEY);
+    return !!(derivedKey && salt);
+}
+
+/**
+ * Derive offline verification key using PBKDF2
+ * @param {string} passphrase - User-provided passphrase
+ * @param {Uint8Array} salt - Salt bytes (device fingerprint based)
+ * @returns {Promise<string>} Derived key as hex string
+ */
+async function deriveOfflineKey(passphrase, salt) {
+    const encoder = new TextEncoder();
+    const passphraseBytes = encoder.encode(passphrase);
+    
+    // Import passphrase as key material
+    const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        passphraseBytes,
+        'PBKDF2',
+        false,
+        ['deriveBits']
+    );
+    
+    // Derive key using PBKDF2
+    const derivedBits = await crypto.subtle.deriveBits(
+        {
+            name: 'PBKDF2',
+            salt: salt,
+            iterations: PBKDF2_ITERATIONS,
+            hash: 'SHA-256'
+        },
+        keyMaterial,
+        PBKDF2_KEY_LENGTH
+    );
+    
+    const derivedArray = Array.from(new Uint8Array(derivedBits));
+    return derivedArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Setup offline key with passphrase
+ * This should be called once when user configures offline mode
+ * @param {string} passphrase - User-provided passphrase
+ * @returns {Promise<boolean>} Success status
+ */
+async function setupOfflineKey(passphrase) {
+    try {
+        // Use device fingerprint as salt for binding
+        const deviceFingerprint = await generateDeviceFingerprint();
+        const encoder = new TextEncoder();
+        const salt = await crypto.subtle.digest('SHA-256', encoder.encode(deviceFingerprint));
+        
+        // Derive key from passphrase
+        const derivedKey = await deriveOfflineKey(passphrase, new Uint8Array(salt));
+        
+        // Store salt and derived key (never store the passphrase)
+        localStorage.setItem(PBKDF2_SALT_KEY, Array.from(new Uint8Array(salt)).map(b => b.toString(16).padStart(2, '0')).join(''));
+        localStorage.setItem(OFFLINE_DERIVED_KEY_KEY, derivedKey);
+        
+        logger.info('Offline key configured successfully');
+        return true;
+    } catch (e) {
+        logger.error('Failed to setup offline key:', e);
+        return false;
+    }
+}
+
+/**
+ * Get stored offline verification key
+ * @returns {Promise<string|null>} Stored derived key or null
+ */
+async function getOfflineVerificationKey() {
+    const derivedKey = localStorage.getItem(OFFLINE_DERIVED_KEY_KEY);
+    if (!derivedKey) {
+        return null;
+    }
+    return derivedKey;
+}
+
+/**
+ * Clear offline key (for logout/reset)
+ */
+function clearOfflineKey() {
+    localStorage.removeItem(PBKDF2_SALT_KEY);
+    localStorage.removeItem(OFFLINE_DERIVED_KEY_KEY);
+    logger.info('Offline key cleared');
+}
+
+/**
+ * Verify license in offline mode using PBKDF2-derived key
+ * @param {string} licenseToken - JWT license token
+ * @returns {Promise<Object>} Verification result
+ */
+async function verifyLicenseOffline(licenseToken) {
+    // Check if offline key is configured
+    const offlineKey = await getOfflineVerificationKey();
+    if (!offlineKey) {
+        return {
+            valid: false,
+            error: 'OFFLINE_KEY_NOT_CONFIGURED',
+            message: 'Offline verification not configured. Please connect to server first.',
+            offlineMode: true
+        };
+    }
+    
+    // Parse JWT
+    const jwt = parseJWT(licenseToken);
+    if (!jwt) {
+        return {
+            valid: false,
+            error: 'INVALID_FORMAT',
+            message: 'License token must be in JWT format (header.payload.signature)',
+            offlineMode: true
+        };
+    }
+    
+    // Verify header
+    if (jwt.header.alg !== 'HS256') {
+        return {
+            valid: false,
+            error: 'UNSUPPORTED_ALGORITHM',
+            message: `Unsupported algorithm: ${jwt.header.alg}. Expected HS256.`,
+            offlineMode: true
+        };
+    }
+    
+    // Verify signature using offline key
+    const signedData = licenseToken.split('.').slice(0, 2).join('.');
+    const signatureValid = await verifyHMAC(signedData, jwt.signature, offlineKey);
+    
+    if (!signatureValid) {
+        return {
+            valid: false,
+            error: 'INVALID_SIGNATURE',
+            message: 'License signature verification failed. Token may have been tampered with.',
+            offlineMode: true
+        };
+    }
+    
+    // Verify payload structure
+    const payload = jwt.payload;
+    if (!payload.tier || !['sovereign', 'chamber', 'curator'].includes(payload.tier)) {
+        return {
+            valid: false,
+            error: 'INVALID_TIER',
+            message: `Invalid tier: ${payload.tier}`,
+            offlineMode: true
+        };
+    }
+    
+    // Verify expiration
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp && payload.exp < now) {
+        return {
+            valid: false,
+            error: 'EXPIRED',
+            message: `License expired at ${new Date(payload.exp * 1000).toISOString()}`,
+            offlineMode: true
+        };
+    }
+    
+    // Verify not before
+    if (payload.nbf && payload.nbf > now) {
+        return {
+            valid: false,
+            error: 'NOT_YET_VALID',
+            message: `License not valid until ${new Date(payload.nbf * 1000).toISOString()}`,
+            offlineMode: true
+        };
+    }
+    
+    // Verify device binding if present
+    if (payload.deviceBinding) {
+        const deviceFingerprint = await generateDeviceFingerprint();
+        if (payload.deviceBinding !== deviceFingerprint) {
+            return {
+                valid: false,
+                error: 'DEVICE_MISMATCH',
+                message: 'License is bound to a different device',
+                offlineMode: true
+            };
+        }
+    }
+    
+    // License is valid in offline mode
+    return {
+        valid: true,
+        tier: payload.tier,
+        instanceId: payload.instanceId || null,
+        activatedAt: payload.iat ? new Date(payload.iat * 1000).toISOString() : null,
+        expiresAt: payload.exp ? new Date(payload.exp * 1000).toISOString() : null,
+        features: payload.features || [],
+        offlineMode: true,
+        serverVerified: false
+    };
 }
 
 // ==========================================
@@ -215,98 +485,50 @@ async function deriveVerificationSecret() {
 
 /**
  * Verify license token signature and validity
+ * First attempts server-side validation, falls back to offline mode
  * @param {string} licenseToken - JWT license token
  * @returns {Promise<Object>} Verification result
  */
 async function verifyLicense(licenseToken) {
-    // Parse JWT
-    const jwt = parseJWT(licenseToken);
-    if (!jwt) {
+    // First attempt: Server-side verification
+    const serverResult = await verifyLicenseWithServer(licenseToken);
+    
+    if (serverResult.valid) {
+        logger.info('License verified via server');
+        return serverResult;
+    }
+    
+    // If server returned a definitive invalid (not network error), don't fallback
+    if (serverResult.serverError && !serverResult.offlineFallback) {
+        logger.warn('Server rejected license:', serverResult.message);
         return {
             valid: false,
-            error: 'INVALID_FORMAT',
-            message: 'License token must be in JWT format (header.payload.signature)'
+            error: serverResult.error,
+            message: serverResult.message,
+            offlineMode: false,
+            serverVerified: false
         };
     }
-
-    // Verify header
-    if (jwt.header.alg !== 'HS256') {
-        return {
-            valid: false,
-            error: 'UNSUPPORTED_ALGORITHM',
-            message: `Unsupported algorithm: ${jwt.header.alg}. Expected HS256.`
-        };
+    
+    // Network error or server unavailable - fallback to offline verification
+    if (serverResult.offlineFallback || serverResult.networkError) {
+        logger.info('Falling back to offline license verification');
+        return verifyLicenseOffline(licenseToken);
     }
-    if (jwt.header.typ !== 'JWT') {
-        return {
-            valid: false,
-            error: 'INVALID_TYPE',
-            message: `Invalid type: ${jwt.header.typ}. Expected JWT.`
-        };
+    
+    // Server returned invalid but we should still try offline if configured
+    // (allows for grace period when server is having issues)
+    if (hasOfflineKey()) {
+        logger.info('Server unavailable, using offline verification');
+        return verifyLicenseOffline(licenseToken);
     }
-
-    // Verify signature
-    const secret = await deriveVerificationSecret();
-    const signedData = licenseToken.split('.').slice(0, 2).join('.');
-
-    const signatureValid = await verifyHMAC(signedData, jwt.signature, secret);
-    if (!signatureValid) {
-        return {
-            valid: false,
-            error: 'INVALID_SIGNATURE',
-            message: 'License signature verification failed. Token may have been tampered with.'
-        };
-    }
-
-    // Verify payload structure
-    const payload = jwt.payload;
-    if (!payload.tier || !['sovereign', 'chamber', 'curator'].includes(payload.tier)) {
-        return {
-            valid: false,
-            error: 'INVALID_TIER',
-            message: `Invalid tier: ${payload.tier}`
-        };
-    }
-
-    // Verify expiration
-    const now = Math.floor(Date.now() / 1000);
-    if (payload.exp && payload.exp < now) {
-        return {
-            valid: false,
-            error: 'EXPIRED',
-            message: `License expired at ${new Date(payload.exp * 1000).toISOString()}`
-        };
-    }
-
-    // Verify not before
-    if (payload.nbf && payload.nbf > now) {
-        return {
-            valid: false,
-            error: 'NOT_YET_VALID',
-            message: `License not valid until ${new Date(payload.nbf * 1000).toISOString()}`
-        };
-    }
-
-    // Verify device binding if present
-    if (payload.deviceBinding) {
-        const deviceFingerprint = await generateDeviceFingerprint();
-        if (payload.deviceBinding !== deviceFingerprint) {
-            return {
-                valid: false,
-                error: 'DEVICE_MISMATCH',
-                message: 'License is bound to a different device'
-            };
-        }
-    }
-
-    // License is valid
+    
     return {
-        valid: true,
-        tier: payload.tier,
-        instanceId: payload.instanceId || null,
-        activatedAt: payload.iat ? new Date(payload.iat * 1000).toISOString() : null,
-        expiresAt: payload.exp ? new Date(payload.exp * 1000).toISOString() : null,
-        features: payload.features || []
+        valid: false,
+        error: serverResult.error || 'VERIFICATION_FAILED',
+        message: serverResult.message || 'License verification failed',
+        offlineMode: false,
+        serverVerified: false
     };
 }
 
@@ -340,6 +562,8 @@ async function storeLicense(licenseToken, metadata = {}) {
             checksum,
             tier: verification.tier,
             storedAt: Date.now(),
+            offlineMode: verification.offlineMode || false,
+            serverVerified: verification.serverVerified || false,
             metadata
         };
 
@@ -423,6 +647,7 @@ function updateCache(verification) {
         valid: verification.valid,
         tier: verification.tier,
         expiresAt: verification.expiresAt,
+        offlineMode: verification.offlineMode || false,
         cachedAt: Date.now()
     };
     localStorage.setItem(LICENSE_CACHE_KEY, JSON.stringify(cache));
@@ -517,9 +742,16 @@ async function hasFeatureAccess(feature) {
 export const LicenseVerifier = {
     // Verification
     verifyLicense,
+    verifyLicenseWithServer,
+    verifyLicenseOffline,
     loadLicense,
     storeLicense,
     clearLicense,
+
+    // Offline key management
+    setupOfflineKey,
+    hasOfflineKey,
+    clearOfflineKey,
 
     // Status
     isPremium,
@@ -533,9 +765,10 @@ export const LicenseVerifier = {
     // Constants
     LICENSE_STORAGE_KEY,
     LICENSE_CACHE_KEY,
-    LICENSE_CACHE_DURATION
+    LICENSE_CACHE_DURATION,
+    LICENSE_SERVER_URL
 };
 
 export default LicenseVerifier;
 
-logger.info('Cryptographic license verifier loaded');
+logger.info('Cryptographic license verifier loaded (server+offline mode)');

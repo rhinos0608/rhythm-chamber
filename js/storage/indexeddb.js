@@ -717,56 +717,132 @@ function wrapRequest(request, transaction, timeoutMs = 5000) {
 const transactionPool = new Map();
 
 /**
+ * CRITICAL FIX: Transaction locks for preventing TOCTOU race conditions
+ * Maps pool keys to promises that resolve when the lock is released.
+ * Ensures atomic check-and-use pattern for transaction acquisition.
+ *
+ * @type {Map<string, Promise<void>>}
+ */
+const transactionLocks = new Map();
+
+/**
+ * CRITICAL FIX: Generation counter for transaction validation
+ * Monotonically increasing counter to detect stale transaction references.
+ * Each new transaction gets a unique generation number.
+ *
+ * @type {number}
+ */
+let transactionGeneration = 0;
+
+/**
  * Acquire or create a transaction for the given store
  * CRITICAL FIX for Issue #1: Provides explicit transaction with proper locking
  *
- * NOTE: Transaction state can change between readyState check and actual use.
- * To prevent race conditions, we now always create a fresh transaction rather
- * than reusing from pool when state is uncertain. Pool entries are only used
- * if they are confirmed 'active' AND have not been marked as completing.
+ * CRITICAL FIX for TOCTOU Race Condition: This function now uses async locking
+ * to ensure atomic check-and-use pattern. Concurrent calls are serialized using
+ * a lock queue per pool key, preventing race conditions where transaction state
+ * changes between check and use.
+ *
+ * Generation tracking: Each transaction has a unique generation number that
+ * can be validated at use time to detect stale references.
  *
  * @param {IDBDatabase} database - Database connection
  * @param {string} storeName - Store name
  * @param {string} [mode='readwrite'] - Transaction mode
- * @returns {IDBTransaction} Transaction instance
+ * @returns {Promise<IDBTransaction>} Transaction instance
  */
-function acquireTransaction(database, storeName, mode = 'readwrite') {
+async function acquireTransaction(database, storeName, mode = 'readwrite') {
     const poolKey = `${storeName}_${mode}`;
 
-    // Check if transaction exists and is not complete
-    const existingTx = transactionPool.get(poolKey);
-    if (existingTx) {
-        // CRITICAL FIX: Only reuse if state is 'active' - transaction can complete
-        // between this check and use, but we minimize the window by also checking
-        // that the transaction hasn't been marked as completing via our flag
-        if (existingTx.readyState === 'active' && !existingTx._isCompleting) {
-            return existingTx;
+    // CRITICAL FIX: Acquire lock for this pool key to serialize concurrent access
+    // This prevents TOCTOU race conditions where multiple calls check the same
+    // transaction state simultaneously
+    while (transactionLocks.has(poolKey)) {
+        try {
+            await transactionLocks.get(poolKey);
+        } catch (e) {
+            // Previous lock holder failed, continue to acquire our own lock
+            break;
         }
-        // Remove stale or completing transaction
-        transactionPool.delete(poolKey);
     }
 
-    // Create new transaction
-    const transaction = database.transaction(storeName, mode);
+    // Create a new lock promise for this acquisition
+    let resolveLock;
+    let rejectLock;
+    const lockPromise = new Promise((resolve, reject) => {
+        resolveLock = resolve;
+        rejectLock = reject;
+    });
+    transactionLocks.set(poolKey, lockPromise);
 
-    // CRITICAL FIX: Add flag to track when transaction starts completing
-    // This helps prevent race condition where readyState check passes
-    // but transaction completes before caller can use it
-    transaction._isCompleting = false;
+    try {
+        // CRITICAL FIX: Atomic check-and-use pattern - now we're holding the lock,
+        // no other concurrent call can modify the transaction pool for this key
+        const existingTx = transactionPool.get(poolKey);
+        if (existingTx) {
+            // Validate transaction is still usable
+            // Note: readyState check is still susceptible to TOCTOU at the IndexedDB level,
+            // but the lock ensures we have exclusive access to our internal state
+            if (existingTx.readyState === 'active' && !existingTx._isCompleting) {
+                // Verify generation hasn't been invalidated
+                if (existingTx._generation > 0) {
+                    return existingTx;
+                }
+            }
+            // Remove stale or completing transaction
+            transactionPool.delete(poolKey);
+        }
 
-    // Clean up pool when transaction completes
-    const markCompleting = () => {
-        transaction._isCompleting = true;
-        transactionPool.delete(poolKey);
-    };
-    transaction.oncomplete = markCompleting;
-    transaction.onerror = markCompleting;
-    transaction.onabort = markCompleting;
+        // CRITICAL FIX: Increment generation counter atomically
+        // This ensures each transaction has a unique, monotonically increasing ID
+        transactionGeneration++;
+        const currentGeneration = transactionGeneration;
 
-    // Store in pool
-    transactionPool.set(poolKey, transaction);
+        // Create new transaction
+        const transaction = database.transaction(storeName, mode);
 
-    return transaction;
+        // CRITICAL FIX: Attach generation and completion tracking metadata
+        transaction._generation = currentGeneration;
+        transaction._isCompleting = false;
+        transaction._poolKey = poolKey;
+
+        // CRITICAL FIX: Set up comprehensive cleanup handlers
+        // These ensure the transaction is removed from pool immediately when done
+        const markCompleting = () => {
+            transaction._isCompleting = true;
+            transaction._generation = 0; // Invalidate generation
+            transactionPool.delete(poolKey);
+        };
+
+        transaction.oncomplete = markCompleting;
+        transaction.onerror = markCompleting;
+        transaction.onabort = markCompleting;
+
+        // Store in pool
+        transactionPool.set(poolKey, transaction);
+
+        return transaction;
+    } finally {
+        // CRITICAL FIX: Always release the lock, even on error
+        transactionLocks.delete(poolKey);
+        resolveLock();
+    }
+}
+
+/**
+ * Validate a transaction is still active and not stale
+ * CRITICAL FIX: Call this before using a transaction obtained from acquireTransaction
+ * to detect if it has been invalidated between acquisition and use.
+ *
+ * @param {IDBTransaction} transaction - Transaction to validate
+ * @returns {boolean} True if transaction is valid and active
+ */
+function isTransactionValid(transaction) {
+    if (!transaction) return false;
+    if (transaction._isCompleting) return false;
+    if (transaction._generation === 0) return false;
+    if (transaction.readyState !== 'active') return false;
+    return true;
 }
 
 /**
@@ -814,7 +890,7 @@ async function put(storeName, data, options = {}) {
         let shouldComplete = false;
 
         if (!transaction) {
-            transaction = acquireTransaction(database, storeName, 'readwrite');
+            transaction = await acquireTransaction(database, storeName, 'readwrite');
             shouldComplete = true;
         }
 

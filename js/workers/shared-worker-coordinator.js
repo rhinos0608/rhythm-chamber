@@ -455,22 +455,21 @@ function handleWorkerError(error) {
  * Attempt to reconnect to the worker
  */
 async function attemptReconnect() {
-    if (reconnectAttempts >= WORKER_TIMEOUTS.MAX_RECONNECT_ATTEMPTS) {
-        console.error('[SharedWorkerCoordinator] Max reconnection attempts reached');
-        return;
+    while (reconnectAttempts < WORKER_TIMEOUTS.MAX_RECONNECT_ATTEMPTS) {
+        reconnectAttempts++;
+        console.log(`[SharedWorkerCoordinator] Reconnection attempt ${reconnectAttempts}/${WORKER_TIMEOUTS.MAX_RECONNECT_ATTEMPTS}`);
+
+        await new Promise(resolve => setTimeout(resolve, WORKER_TIMEOUTS.RECONNECT_DELAY_MS));
+
+        try {
+            await connect();
+            return; // Success - exit loop
+        } catch (error) {
+            console.error('[SharedWorkerCoordinator] Reconnection failed:', error);
+            // Continue to next attempt
+        }
     }
-
-    reconnectAttempts++;
-    console.log(`[SharedWorkerCoordinator] Reconnection attempt ${reconnectAttempts}/${WORKER_TIMEOUTS.MAX_RECONNECT_ATTEMPTS}`);
-
-    await new Promise(resolve => setTimeout(resolve, WORKER_TIMEOUTS.RECONNECT_DELAY_MS));
-
-    try {
-        await connect();
-    } catch (error) {
-        console.error('[SharedWorkerCoordinator] Reconnection failed:', error);
-        attemptReconnect();
-    }
+    console.error('[SharedWorkerCoordinator] Max reconnection attempts reached');
 }
 
 /**
