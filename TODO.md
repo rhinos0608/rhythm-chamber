@@ -193,3 +193,36 @@ These can be added later to enhance the dev panel tabs. Current implementation s
 
 - [`docs/plans/2025-01-24-architectural-improvements-design.md`](docs/plans/2025-01-24-architectural-improvements-design.md) - Architecture overview
 - [`docs/plans/2025-01-24-architectural-improvements.md`](docs/plans/2025-01-24-architectural-improvements.md) - Full implementation plan with TDD tasks
+- [`docs/plans/TECHNICAL_DEBT.md`](docs/plans/TECHNICAL_DEBT.md) - Technical debt register from adversarial review
+
+---
+
+## Technical Debt (Adversarial Review - 2025-01-27)
+
+### Critical Issues (5) - Sprint 1
+- [ ] **TD-1:** Fix SessionManager race condition in `updateSessionData()` (4h)
+- [ ] **TD-2:** Fix EventBus `emitParallel` unhandled promise rejection (2h)
+- [ ] **TD-3:** Address Service Layer God Object anti-pattern (8h)
+- [ ] **TD-4:** Eliminate global state pollution (6h)
+- [ ] **TD-5:** Fix TurnQueue race condition in `processNext()` (2h)
+
+### High Priority (7) - Sprint 2
+- [ ] **TD-6:** Fix memory leak in StreamingMessageHandler timeout cleanup (2h)
+- [ ] **TD-7:** Add array bounds checking to `removeMessageFromHistory()` (1h)
+- [ ] **TD-8:** Add null check to `getAllSessions()` (1h)
+- [ ] **TD-9:** Refactor SidebarController God Object (724 lines) (12h)
+- [ ] **TD-10:** Simplify over-engineered Event System (8h)
+- [ ] **TD-11:** Implement error boundaries for critical paths (4h)
+- [ ] **TD-12:** Improve DI Container coupling (6h)
+
+### Medium Priority (8) - Sprint 3
+- [ ] **TD-13:** Add error handling to ProviderHealthMonitor interval (1h)
+- [ ] **TD-14:** Implement localStorage quota checking (4h)
+- [ ] **TD-15:** Improve network timeout error messages (2h)
+- [ ] **TD-16:** Consolidate magic numbers to configuration (4h)
+- [ ] **TD-17:** Fix inconsistent abstraction levels (8h)
+- [ ] **TD-18:** Fix SidebarController event listener memory leaks (3h)
+- [ ] **TD-19:** Add hard limits to message array growth (2h)
+- [ ] **TD-20:** Standardize error handling patterns (6h)
+
+**Total Debt:** ~95 hours | See [TECHNICAL_DEBT.md](docs/plans/TECHNICAL_DEBT.md) for details

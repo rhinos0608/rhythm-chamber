@@ -966,3 +966,74 @@ static registerEventListeners() {
 12. **Use facade pattern** for new services (see Phase 3 architecture above)
 
 ---
+
+## Known Issues & Technical Debt
+
+> **Last Reviewed:** 2025-01-27 (Adversarial Architecture Review)
+> **Full Details:** [`docs/plans/TECHNICAL_DEBT.md`](docs/plans/TECHNICAL_DEBT.md)
+
+### Critical Issues (Do Not Ignore)
+
+1. **SessionManager Race Condition** - `session-state.js:125-139`
+   - `updateSessionData()` mutex has window for stale reads
+   - Multiple async operations can read same snapshot
+   - Fix: Implement read-write locks with versioning
+
+2. **EventBus Promise Rejection** - `event-bus/index.js:424-435`
+   - `emitParallel` with `Promise.all` fails entirely if one handler throws
+   - Fix: Wrap individual handlers in try-catch
+
+3. **Global State Pollution** - Multiple files
+   - `window.Settings`, `window.__COMPATIBILITY_PASSED__`, etc.
+   - Causes tight coupling and testing difficulties
+   - Fix: Use ES module exports + DI container
+
+4. **TurnQueue Race Condition** - `turn-queue.js:102-163`
+   - `isProcessing` flag check isn't atomic
+   - Rapid messages can bypass serialization
+   - Fix: Use atomic check-and-set pattern
+
+### High Priority Issues
+
+5. **Memory Leaks** - `streaming-message-handler.js:62-94`
+   - `activeTimeout` not cleared on unmount
+   - Event listeners not properly tracked
+
+6. **Missing Bounds Checking** - `streaming-message-handler.js:293-307`
+   - `removeMessageFromHistory()` doesn't validate array index
+
+7. **God Objects** - `sidebar-controller.js` (724 lines)
+   - 20+ methods, mixed responsibilities
+   - Difficult to test, high coupling
+
+8. **Over-Engineered EventBus**
+   - Circuit breakers, vector clocks for client-side operations
+   - Performance overhead, difficult to reason about
+
+### Anti-Patterns Identified
+
+| Pattern | Location | Impact |
+|---------|----------|--------|
+| God Object | SessionManager, SidebarController | Hard to test, tight coupling |
+| Global State | window.* assignments | Shared state, testing issues |
+| Magic Numbers | 274 occurrences in 107 files | Brittleness, unclear intent |
+| Tight Coupling | Manual DI Container | Difficult mocking |
+| Inconsistent Error Handling | Across services | Unpredictable APIs |
+
+### Development Guidelines Update
+
+**When modifying code in these areas:**
+- `session-state.js` - Add version tracking to prevent stale updates
+- `event-bus.js` - Wrap all async handlers in try-catch
+- `turn-queue.js` - Use atomic operations for flag checks
+- `sidebar-controller.js` - Plan for eventual split into smaller controllers
+- `streaming-message-handler.js` - Always cleanup timeouts and listeners
+
+**Before adding new features:**
+1. Check if you're introducing global state (use DI instead)
+2. Verify no new race conditions (test concurrent operations)
+3. Ensure proper cleanup (timeouts, listeners, subscriptions)
+4. Add bounds checking for all array/object access
+5. Use consistent error handling pattern
+
+---
