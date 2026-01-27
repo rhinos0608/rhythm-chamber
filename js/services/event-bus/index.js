@@ -1,6 +1,27 @@
-import { VectorClock } from '../vector-clock.js';
+/**
+ * EventBus - Simplified Event System
+ *
+ * Core pub/sub functionality with:
+ * - Priority-based dispatch (CRITICAL, HIGH, NORMAL, LOW)
+ * - Domain filtering
+ * - Wildcard subscriptions
+ * - Event tracing and validation
+ *
+ * TD-10: Removed over-engineered features:
+ * - Circuit breakers for non-network operations
+ * - Vector clocks (replaced with simple sequence counter)
+ * - Storm detection overhead
+ * - Unused health monitoring stubs
+ *
+ * @module services/event-bus
+ */
+
 import { WaveTelemetry } from '../wave-telemetry.js';
 import { EventLogStore } from '../../storage/event-log-store.js';
+
+// ==========================================
+// Constants
+// ==========================================
 
 const PRIORITY = Object.freeze({
     LOW: 0,
@@ -9,6 +30,9 @@ const PRIORITY = Object.freeze({
     CRITICAL: 3
 });
 
+const MAX_TRACE_SIZE = 100;
+
+// Predefined event schemas for validation
 const EVENT_SCHEMAS = {
     'storage:updated': {
         description: 'Data saved to storage',
@@ -20,52 +44,28 @@ const EVENT_SCHEMAS = {
     }
 };
 
-const _dynamicSchemas = new Map();
-
-let debugMode = false;
+// ==========================================
+// State
+// ==========================================
 
 const subscribers = new Map();
 const wildcardSubscribers = [];
 let subscriptionSeq = 0;
 
-const MAX_TRACE_SIZE = 100;
 const trace = [];
-
-const eventVectorClock = new VectorClock();
 let sequenceNumber = 0;
 let lastEventWatermark = -1;
+
+const _dynamicSchemas = new Map();
+let debugMode = false;
 
 let eventLogEnabled = false;
 let eventReplayInProgress = false;
 const failedPersistSequences = new Set();
 
-const circuitBreakerConfig = {
-    maxQueueSize: 1000,
-    stormWindowMs: 1000,
-    stormThreshold: 100,
-    backpressureWarningRatio: 0.8
-};
-
-let circuitWindowStart = Date.now();
-let eventsThisWindow = 0;
-let stormActive = false;
-let droppedCount = 0;
-const pendingEvents = [];
-
-const CIRCUIT_STATE = Object.freeze({
-    CLOSED: 'closed',
-    OPEN: 'open',
-    HALF_OPEN: 'half_open'
-});
-
-const HANDLER_CIRCUIT_CONFIG = Object.freeze({
-    failureThreshold: 5,
-    openMs: 5000
-});
-
-function setDebugMode(enabled) {
-    debugMode = !!enabled;
-}
+// ==========================================
+// Schema Management
+// ==========================================
 
 function registerSchema(eventType, schema) {
     if (!eventType || typeof eventType !== 'string') return false;
@@ -131,6 +131,10 @@ function validateAgainstSchema(eventType, payload) {
     return { valid: true };
 }
 
+// ==========================================
+// Tracing
+// ==========================================
+
 function redactSensitive(value) {
     if (!value || typeof value !== 'object') return value;
     const SENSITIVE_KEYS = new Set(['apiToken', 'apiKey', 'token', 'password', 'secret', 'authorization']);
@@ -166,6 +170,10 @@ function clearTrace() {
     trace.length = 0;
 }
 
+// ==========================================
+// Subscription Management
+// ==========================================
+
 function on(eventType, handler, options = {}) {
     if (!eventType || typeof handler !== 'function') {
         return () => {};
@@ -176,7 +184,7 @@ function on(eventType, handler, options = {}) {
         handler,
         once: false,
         priority: options.priority ?? PRIORITY.NORMAL,
-        eventType: eventType  // Store original event type for proper unsubscription
+        eventType: eventType
     };
 
     if (eventType === '*') {
@@ -221,11 +229,6 @@ function clearAll() {
     eventLogEnabled = false;
     eventReplayInProgress = false;
     failedPersistSequences.clear();
-    pendingEvents.length = 0;
-    droppedCount = 0;
-    stormActive = false;
-    circuitWindowStart = Date.now();
-    eventsThisWindow = 0;
 }
 
 function getRegisteredEvents() {
@@ -238,6 +241,10 @@ function getSubscriberCount(eventType) {
     return (subscribers.get(eventType) || []).length;
 }
 
+// ==========================================
+// Wave Telemetry Integration
+// ==========================================
+
 function computeWaveId(eventType) {
     const critical = WaveTelemetry.getCriticalEvents?.() || [];
     if (!critical.includes(eventType)) return undefined;
@@ -247,40 +254,18 @@ function computeWaveId(eventType) {
     return waveId;
 }
 
-function updateCircuitBreakerCounters() {
-    const now = Date.now();
-    if (now - circuitWindowStart > circuitBreakerConfig.stormWindowMs) {
-        stormActive = eventsThisWindow > circuitBreakerConfig.stormThreshold;
-        circuitWindowStart = now;
-        eventsThisWindow = 0;
-    }
-    eventsThisWindow++;
-}
-
-function getCircuitBreakerStatus() {
-    const pendingEventCount = pendingEvents.length;
-    const maxQueueSize = circuitBreakerConfig.maxQueueSize;
-    const queueUtilization = maxQueueSize > 0 ? pendingEventCount / maxQueueSize : 0;
-    return {
-        pendingEventCount,
-        maxQueueSize,
-        queueUtilization,
-        stormActive,
-        droppedCount
-    };
-}
-
-function configureCircuitBreaker(config = {}) {
-    Object.assign(circuitBreakerConfig, config);
-}
+// ==========================================
+// Event Persistence
+// ==========================================
 
 async function maybePersistEvent(eventType, payload, meta, options) {
     if (!eventLogEnabled || eventReplayInProgress || options.skipEventLog) return;
     try {
+        // Use simple sequence number instead of vector clock
         const stored = await EventLogStore.appendEvent(
             eventType,
             payload,
-            meta.vectorClock,
+            { sequence: meta.sequenceNumber },  // Simplified: just sequence number
             options.sourceTab || 'local',
             options.domain || 'global'
         );
@@ -291,148 +276,6 @@ async function maybePersistEvent(eventType, payload, meta, options) {
         failedPersistSequences.add(meta.sequenceNumber);
         EventBus.emit('event:persistence_failed', { eventType, error: e?.message || String(e) }, { skipEventLog: true });
     }
-}
-
-function dispatchHandlers(eventType, payload, meta) {
-    const list = (subscribers.get(eventType) || []).slice();
-    const wild = wildcardSubscribers.slice();
-    const combined = list.concat(wild);
-
-    combined.sort((a, b) => {
-        if (a.priority !== b.priority) return b.priority - a.priority;
-        return a.id - b.id;
-    });
-
-    let called = 0;
-    for (const sub of combined) {
-        try {
-            sub.handler(payload, meta);
-        } catch (e) {
-            console.error('[EventBus] Handler error:', e);
-        } finally {
-            called++;
-            if (sub.once) {
-                off(eventType === '*' ? '*' : eventType, sub.handler);
-            }
-        }
-    }
-
-    return called > 0;
-}
-
-function emit(eventType, payload = {}, options = {}) {
-    if (!eventType) return false;
-
-    updateCircuitBreakerCounters();
-
-    const hasAnyHandlers =
-        (subscribers.get(eventType)?.length || 0) > 0 || wildcardSubscribers.length > 0;
-
-    const waveId = computeWaveId(eventType);
-    const meta = {
-        type: eventType,
-        timestamp: Date.now(),
-        priority: options.priority ?? PRIORITY.NORMAL,
-        sequenceNumber: sequenceNumber++,
-        vectorClock: eventVectorClock.tick(),
-        isReplay: !!options.skipEventLog,
-        waveId
-    };
-
-    const validation = validateAgainstSchema(eventType, payload);
-    if (!validation.valid && debugMode) {
-        console.warn(`[EventBus] Invalid payload for ${eventType}: ${validation.error}`);
-    }
-
-    addTrace(eventType, payload, meta);
-    void maybePersistEvent(eventType, payload, meta, options);
-
-    if (meta.sequenceNumber > lastEventWatermark) {
-        lastEventWatermark = meta.sequenceNumber;
-    }
-
-    if (!hasAnyHandlers) {
-        return false;
-    }
-
-    return dispatchHandlers(eventType, payload, meta);
-}
-
-function emitAsync(eventType, payload = {}, options = {}) {
-    return new Promise(resolve => {
-        setTimeout(() => resolve(emit(eventType, payload, options)), 0);
-    });
-}
-
-async function emitAndAwait(eventType, payload = {}, options = {}) {
-    const handlers = (subscribers.get(eventType) || []).slice().concat(wildcardSubscribers.slice());
-    if (handlers.length === 0) return false;
-
-    const meta = {
-        type: eventType,
-        timestamp: Date.now(),
-        priority: options.priority ?? PRIORITY.NORMAL,
-        sequenceNumber: sequenceNumber++,
-        vectorClock: eventVectorClock.tick(),
-        isReplay: !!options.skipEventLog,
-        waveId: computeWaveId(eventType)
-    };
-
-    addTrace(eventType, payload, meta);
-    await maybePersistEvent(eventType, payload, meta, options);
-
-    const sorted = handlers.sort((a, b) => {
-        if (a.priority !== b.priority) return b.priority - a.priority;
-        return a.id - b.id;
-    });
-
-    let called = 0;
-    for (const sub of sorted) {
-        called++;
-        try {
-            await sub.handler(payload, meta);
-        } catch (e) {
-            console.error('[EventBus] Handler error:', e);
-        } finally {
-            if (sub.once) off(sub.eventType, sub.handler);
-        }
-    }
-    return called > 0;
-}
-
-async function emitParallel(eventType, payload = {}, options = {}) {
-    const handlers = (subscribers.get(eventType) || []).slice().concat(wildcardSubscribers.slice());
-    if (handlers.length === 0) return false;
-
-    const meta = {
-        type: eventType,
-        timestamp: Date.now(),
-        priority: options.priority ?? PRIORITY.NORMAL,
-        sequenceNumber: sequenceNumber++,
-        vectorClock: eventVectorClock.tick(),
-        isReplay: !!options.skipEventLog,
-        waveId: computeWaveId(eventType)
-    };
-
-    addTrace(eventType, payload, meta);
-    await maybePersistEvent(eventType, payload, meta, options);
-
-    const sorted = handlers.sort((a, b) => {
-        if (a.priority !== b.priority) return b.priority - a.priority;
-        return a.id - b.id;
-    });
-
-    await Promise.all(sorted.map(async (sub) => {
-        try {
-            await sub.handler(payload, meta);
-        } catch (e) {
-            console.error('[EventBus] Parallel handler error:', e);
-        } finally {
-            if (sub.once) off(sub.eventType, sub.handler);
-        }
-    }));
-
-    return true;
 }
 
 function enableEventLog(enabled) {
@@ -482,69 +325,197 @@ async function clearEventLog() {
     await EventLogStore.clearEventLog();
 }
 
+// ==========================================
+// Handler Dispatch
+// ==========================================
+
+function dispatchHandlers(eventType, payload, meta) {
+    const list = (subscribers.get(eventType) || []).slice();
+    const wild = wildcardSubscribers.slice();
+    const combined = list.concat(wild);
+
+    // Sort by priority (descending) then by id (ascending for stability)
+    combined.sort((a, b) => {
+        if (a.priority !== b.priority) return b.priority - a.priority;
+        return a.id - b.id;
+    });
+
+    let called = 0;
+    for (const sub of combined) {
+        try {
+            sub.handler(payload, meta);
+        } catch (e) {
+            console.error('[EventBus] Handler error:', e);
+        } finally {
+            called++;
+            if (sub.once) {
+                off(eventType === '*' ? '*' : eventType, sub.handler);
+            }
+        }
+    }
+
+    return called > 0;
+}
+
+// ==========================================
+// Emit Functions
+// ==========================================
+
+function emit(eventType, payload = {}, options = {}) {
+    if (!eventType) return false;
+
+    const hasAnyHandlers =
+        (subscribers.get(eventType)?.length || 0) > 0 || wildcardSubscribers.length > 0;
+
+    const waveId = computeWaveId(eventType);
+    const meta = {
+        type: eventType,
+        timestamp: Date.now(),
+        priority: options.priority ?? PRIORITY.NORMAL,
+        sequenceNumber: sequenceNumber++,
+        isReplay: !!options.skipEventLog,
+        waveId
+    };
+
+    const validation = validateAgainstSchema(eventType, payload);
+    if (!validation.valid && debugMode) {
+        console.warn(`[EventBus] Invalid payload for ${eventType}: ${validation.error}`);
+    }
+
+    addTrace(eventType, payload, meta);
+    void maybePersistEvent(eventType, payload, meta, options);
+
+    if (meta.sequenceNumber > lastEventWatermark) {
+        lastEventWatermark = meta.sequenceNumber;
+    }
+
+    if (!hasAnyHandlers) {
+        return false;
+    }
+
+    return dispatchHandlers(eventType, payload, meta);
+}
+
+function emitAsync(eventType, payload = {}, options = {}) {
+    return new Promise(resolve => {
+        setTimeout(() => resolve(emit(eventType, payload, options)), 0);
+    });
+}
+
+async function emitAndAwait(eventType, payload = {}, options = {}) {
+    const handlers = (subscribers.get(eventType) || []).slice().concat(wildcardSubscribers.slice());
+    if (handlers.length === 0) return false;
+
+    const meta = {
+        type: eventType,
+        timestamp: Date.now(),
+        priority: options.priority ?? PRIORITY.NORMAL,
+        sequenceNumber: sequenceNumber++,
+        isReplay: !!options.skipEventLog,
+        waveId: computeWaveId(eventType)
+    };
+
+    addTrace(eventType, payload, meta);
+    await maybePersistEvent(eventType, payload, meta, options);
+
+    const sorted = handlers.sort((a, b) => {
+        if (a.priority !== b.priority) return b.priority - a.priority;
+        return a.id - b.id;
+    });
+
+    let called = 0;
+    for (const sub of sorted) {
+        called++;
+        try {
+            await sub.handler(payload, meta);
+        } catch (e) {
+            console.error('[EventBus] Handler error:', e);
+        } finally {
+            if (sub.once) off(sub.eventType, sub.handler);
+        }
+    }
+    return called > 0;
+}
+
+async function emitParallel(eventType, payload = {}, options = {}) {
+    const handlers = (subscribers.get(eventType) || []).slice().concat(wildcardSubscribers.slice());
+    if (handlers.length === 0) return false;
+
+    const meta = {
+        type: eventType,
+        timestamp: Date.now(),
+        priority: options.priority ?? PRIORITY.NORMAL,
+        sequenceNumber: sequenceNumber++,
+        isReplay: !!options.skipEventLog,
+        waveId: computeWaveId(eventType)
+    };
+
+    addTrace(eventType, payload, meta);
+    await maybePersistEvent(eventType, payload, meta, options);
+
+    const sorted = handlers.sort((a, b) => {
+        if (a.priority !== b.priority) return b.priority - a.priority;
+        return a.id - b.id;
+    });
+
+    await Promise.all(sorted.map(async (sub) => {
+        try {
+            await sub.handler(payload, meta);
+        } catch (e) {
+            console.error('[EventBus] Parallel handler error:', e);
+        } finally {
+            if (sub.once) off(sub.eventType, sub.handler);
+        }
+    }));
+
+    return true;
+}
+
+// ==========================================
+// Debug and Diagnostics
+// ==========================================
+
+function setDebugMode(enabled) {
+    debugMode = !!enabled;
+}
+
 function getHealthStatus() {
     return { status: 'ok' };
 }
 
-function startHealthMonitoring() {}
-function stopHealthMonitoring() {}
-function resetHandler() {}
-function resetHealth() {}
-function configureHealth() {}
-
-function getHandlerCircuitState() {
-    return { state: CIRCUIT_STATE.CLOSED };
-}
-function resetHandlerCircuit() {}
-function getAllHandlerCircuitStates() {
-    return new Map();
-}
-
-function _getActiveWaves() {
-    return WaveTelemetry.getActiveWaves?.() || [];
-}
-
-function _clearWaves() {
-    WaveTelemetry._clearWaves?.();
-}
+// ==========================================
+// Public API
+// ==========================================
 
 export const EventBus = {
+    // Subscription
     on,
     once,
     off,
 
+    // Emit
     emit,
     emitAsync,
     emitAndAwait,
     emitParallel,
 
+    // Schema
     registerSchema,
     registerSchemas,
     getSchema,
     getSchemas,
 
+    // Debug
     setDebugMode,
     getTrace,
     clearTrace,
+
+    // Diagnostics
     getRegisteredEvents,
     getSubscriberCount,
-
-    getCircuitBreakerStatus,
-    configureCircuitBreaker,
-
     getHealthStatus,
-    startHealthMonitoring,
-    stopHealthMonitoring,
-    resetHandler,
-    resetHealth,
-    configureHealth,
 
-    getHandlerCircuitState,
-    resetHandlerCircuit,
-    getAllHandlerCircuitStates,
-    CIRCUIT_STATE,
-    HANDLER_CIRCUIT_CONFIG,
-
+    // Event persistence
     enableEventLog,
     isEventLogEnabled,
     getEventWatermark,
@@ -555,10 +526,14 @@ export const EventBus = {
     getFailedPersistSequences: () => new Set(failedPersistSequences),
     clearFailedPersistSequences: () => failedPersistSequences.clear(),
 
+    // Reset
     clearAll,
-    _getActiveWaves,
-    _clearWaves,
 
+    // Wave telemetry helpers
+    _getActiveWaves: () => WaveTelemetry.getActiveWaves?.() || [],
+    _clearWaves: () => WaveTelemetry._clearWaves?.(),
+
+    // Constants
     PRIORITY,
     EVENT_SCHEMAS
 };
