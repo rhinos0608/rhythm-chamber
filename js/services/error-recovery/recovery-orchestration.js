@@ -9,7 +9,7 @@
  * @version 1.0.0
  */
 
-import { RecoveryState } from '../error-recovery-coordinator.js';
+import { RecoveryState } from './constants.js';
 
 const RECOVERY_TTL_MS = 60000; // 60 seconds
 const MAX_DELEGATION_ATTEMPTS = 3;
