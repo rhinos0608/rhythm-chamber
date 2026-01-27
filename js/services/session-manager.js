@@ -28,6 +28,15 @@ import * as Internal from './session-manager/index.js';
  */
 export class SessionManager {
     /**
+     * Static property to track if event listeners have been registered
+     * This is used to prevent duplicate registration
+     * @public
+     * @static
+     * @type {boolean}
+     */
+    static eventListenersRegistered = false;
+
+    /**
      * Initialize the session manager
      * @public
      * @returns {Promise<void>}
@@ -35,6 +44,26 @@ export class SessionManager {
     static async initialize() {
         const manager = Internal.getSessionManager();
         await manager.initialize();
+    }
+
+    /**
+     * Initialize the session manager (backward compatible alias)
+     * @public
+     * @returns {Promise<void>}
+     */
+    static async init() {
+        return this.initialize();
+    }
+
+    /**
+     * Set user context/personality (backward compatible)
+     * NOTE: This method is deprecated and does nothing in the refactored version
+     * @public
+     * @param {Object} personality - Personality context
+     */
+    static setUserContext(personality) {
+        // Deprecated method - personality is now handled differently
+        console.warn('[SessionManager] setUserContext() is deprecated and has no effect');
     }
 
     /**
@@ -100,6 +129,15 @@ export class SessionManager {
     }
 
     /**
+     * Clear all sessions
+     * @public
+     * @returns {Promise<boolean>} Success status
+     */
+    static async clearAllSessions() {
+        return await Internal.clearAllSessions();
+    }
+
+    /**
      * Rename a session
      * @public
      * @param {string} sessionId - Session ID
@@ -108,6 +146,54 @@ export class SessionManager {
      */
     static async renameSession(sessionId, newTitle) {
         return await Internal.renameSession(sessionId, newTitle);
+    }
+
+    /**
+     * Save the current session immediately
+     * @public
+     * @returns {Promise<boolean>} Success status
+     */
+    static async saveCurrentSession() {
+        const manager = Internal.getSessionManager();
+        return await manager.saveCurrentSession();
+    }
+
+    /**
+     * Save the current conversation with debounce delay
+     * @public
+     * @param {number} delayMs - Delay in milliseconds before saving (default: 2000)
+     */
+    static saveConversation(delayMs = 2000) {
+        const manager = Internal.getSessionManager();
+        manager.saveConversation(delayMs);
+    }
+
+    /**
+     * Flush any pending save operations
+     * @public
+     * @returns {Promise<void>}
+     */
+    static async flushPendingSaveAsync() {
+        const manager = Internal.getSessionManager();
+        await manager.flushPendingSaveAsync();
+    }
+
+    /**
+     * Perform an emergency synchronous backup
+     * @public
+     */
+    static emergencyBackupSync() {
+        const manager = Internal.getSessionManager();
+        manager.emergencyBackupSync();
+    }
+
+    /**
+     * Recover from an emergency backup
+     * @public
+     * @returns {Promise<boolean>} Success status
+     */
+    static async recoverEmergencyBackup() {
+        return await Internal.recoverEmergencyBackup();
     }
 }
 
