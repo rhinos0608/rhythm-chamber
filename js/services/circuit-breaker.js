@@ -1,18 +1,26 @@
 /**
  * Circuit Breaker for Function Calling
- * 
+ *
  * Limits function calls per turn to prevent runaway tool execution.
  * Implements max 5 function calls per turn with 5s timeout per function.
- * 
+ *
  * HNW Considerations:
  * - Hierarchy: Single authority for function call limits
  * - Network: Prevents cascade failures from excessive tool calls
  * - Wave: Resets on each new message turn
- * 
+ *
+ * TD-15: Enhanced timeout error messages with detailed context
+ *
  * @module services/circuit-breaker
  */
 
 'use strict';
+
+// ==========================================
+// Dependencies
+// ==========================================
+
+import { TimeoutError, TimeoutType, isTimeoutError } from './timeout-error.js';
 
 // ==========================================
 // Constants
@@ -184,9 +192,12 @@ function getStatus() {
  * Execute a function with circuit breaker protection
  * @param {string} functionName - Name of the function
  * @param {Function} fn - Async function to execute
- * @returns {Promise<{ success: boolean, result?: any, error?: string }>}
+ * @param {Object} options - Execution options
+ * @param {string} [options.provider] - Provider name for error context
+ * @param {string} [options.timeoutType] - Timeout type (connection/read/write)
+ * @returns {Promise<{ success: boolean, result?: any, error?: string, isTimeout?: boolean }>}
  */
-async function execute(functionName, fn) {
+async function execute(functionName, fn, options = {}) {
     const checkResult = check();
     if (!checkResult.allowed) {
         return {
@@ -200,7 +211,16 @@ async function execute(functionName, fn) {
     const startTime = Date.now();
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error(`Timeout after ${TIMEOUT_MS}ms`)), TIMEOUT_MS);
+        timeoutId = setTimeout(() => {
+            reject(new TimeoutError('Function execution timed out', {
+                timeout: TIMEOUT_MS,
+                operation: functionName,
+                provider: options.provider || 'CircuitBreaker',
+                timeoutType: options.timeoutType || TimeoutType.GENERAL,
+                retryable: true,
+                retryAfter: COOLDOWN_MS
+            }));
+        }, TIMEOUT_MS);
     });
 
     try {
@@ -216,22 +236,41 @@ async function execute(functionName, fn) {
         clearTimeout(timeoutId);
         const message = error instanceof Error ? error.message : String(error);
         recordFailure(functionName, message);
-        return { success: false, error: message };
+        return {
+            success: false,
+            error: message,
+            isTimeout: isTimeoutError(error)
+        };
     }
 }
 
 /**
  * Get user-friendly error message for circuit breaker trips
- * @param {string} reason - Trip reason
+ * @param {string|Error} reason - Trip reason or error object
  * @returns {string}
  */
 function getErrorMessage(reason) {
-    switch (reason) {
-        case 'circuit_open':
-            return '⚠️ Function calling temporarily disabled. Please wait a moment and try again.';
-        default:
-            return `⚠️ Function calling unavailable: ${reason}`;
+    // Handle TimeoutError with enhanced messaging
+    if (isTimeoutError(reason)) {
+        return `⚠️ ${reason.message}`;
     }
+
+    // Handle string reasons
+    if (typeof reason === 'string') {
+        switch (reason) {
+            case 'circuit_open':
+                return '⚠️ Function calling temporarily disabled. Please wait a moment and try again.';
+            default:
+                return `⚠️ Function calling unavailable: ${reason}`;
+        }
+    }
+
+    // Handle generic Error
+    if (reason instanceof Error) {
+        return `⚠️ Function calling error: ${reason.message}`;
+    }
+
+    return `⚠️ Function calling unavailable: ${reason}`;
 }
 
 // ==========================================
@@ -261,7 +300,12 @@ export const CircuitBreaker = {
     execute,
 
     // Helpers
-    getErrorMessage
+    getErrorMessage,
+
+    // Re-export timeout error utilities for convenience
+    TimeoutError,
+    TimeoutType,
+    isTimeoutError
 };
 
 

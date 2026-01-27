@@ -13,6 +13,9 @@
 
 import { Storage } from './storage.js';
 import { createLogger } from './utils/logger.js';
+import { LIMITS } from './constants/limits.js';
+import { RATE_LIMITS, DELAYS } from './constants/delays.js';
+import { PERCENTAGE_MULTIPLIER, COVERAGE_LEVELS } from './constants/percentages.js';
 
 const logger = createLogger('GenreEnrichment');
 
@@ -52,7 +55,7 @@ async function showEnrichmentUpgradeModal() {
 
 // ==========================================
 // Static Artist-Genre Map (Top ~500 Artists)
-// Covers ~80% of typical listening history
+// Covers ~COVERAGE_LEVELS.HIGH (as %) of typical listening history
 // ==========================================
 
 const ARTIST_GENRE_MAP = {
@@ -433,7 +436,7 @@ function getTopGenres(streams, limit = 10) {
         .map(([genre, count]) => ({
             genre,
             count,
-            percentage: totalWithGenres > 0 ? Math.round((count / totalWithGenres) * 100) : 0
+            percentage: totalWithGenres > 0 ? Math.round((count / totalWithGenres) * PERCENTAGE_MULTIPLIER) : 0
         }));
 
     return sortedGenres;
@@ -505,7 +508,7 @@ async function enrichStreams(streams, options = {}) {
     return {
         enriched,
         total: streams.length,
-        coverage: Math.round((enriched / streams.length) * 100),
+        coverage: Math.round((enriched / streams.length) * PERCENTAGE_MULTIPLIER),
         premiumFeatures: premiumFeatures.length > 0 ? premiumFeatures : undefined
     };
 }
@@ -542,8 +545,8 @@ function getStaticMapSize() {
 
 const API_QUEUE = [];
 let apiProcessing = false;
-const API_RATE_LIMIT_MS = 1100; // Slightly over 1 second to be safe
-const MAX_ITERATIONS = 100; // Guard against infinite loops
+const API_RATE_LIMIT_MS = RATE_LIMITS.API_RATE_LIMIT_MS;
+const MAX_ITERATIONS = LIMITS.MAX_ITERATIONS; // Guard against infinite loops
 
 /**
  * Queue an artist for API enrichment (PREMIUM FEATURE)
@@ -782,13 +785,13 @@ async function fetchAudioFeaturesFromSpotify(trackIds, accessToken) {
                     tempo: Math.round(track.tempo), // BPM
                     key: spotifyKeyToName(track.key), // Convert 0-11 to note names
                     mode: track.mode === 1 ? 'major' : 'minor',
-                    danceability: Math.round(track.danceability * 100),
-                    energy: Math.round(track.energy * 100),
-                    valence: Math.round(track.valence * 100), // Positivity
-                    acousticness: Math.round(track.acousticness * 100),
-                    instrumentalness: Math.round(track.instrumentalness * 100),
-                    liveness: Math.round(track.liveness * 100),
-                    speechiness: Math.round(track.speechiness * 100),
+                    danceability: Math.round(track.danceability * PERCENTAGE_MULTIPLIER),
+                    energy: Math.round(track.energy * PERCENTAGE_MULTIPLIER),
+                    valence: Math.round(track.valence * PERCENTAGE_MULTIPLIER), // Positivity
+                    acousticness: Math.round(track.acousticness * PERCENTAGE_MULTIPLIER),
+                    instrumentalness: Math.round(track.instrumentalness * PERCENTAGE_MULTIPLIER),
+                    liveness: Math.round(track.liveness * PERCENTAGE_MULTIPLIER),
+                    speechiness: Math.round(track.speechiness * PERCENTAGE_MULTIPLIER),
                     loudness: Math.round(track.loudness * 10) / 10, // dB
                     durationMs: track.duration_ms,
                     timeSignature: track.time_signature
@@ -885,7 +888,7 @@ async function enrichAudioFeatures(streams) {
 
             // Rate limiting: wait between batches if needed
             if (i + batchSize < tracksToFetch.length) {
-                await new Promise(r => setTimeout(r, 100));
+                await new Promise(r => setTimeout(r, DELAYS.POLL_ITERATION_MS));
             }
 
         } catch (e) {

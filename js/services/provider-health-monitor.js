@@ -2,7 +2,7 @@
  * Provider Health Monitor Service
  *
  * Real-time provider health monitoring with UI integration.
- * 
+ *
  * REFACTORED: Now a thin adapter that delegates to ProviderHealthAuthority
  * (the single source of truth for provider health).
  *
@@ -10,15 +10,19 @@
  * - UI-friendly health data formatting
  * - Periodic polling for UI updates
  * - Recommended actions for degraded providers
+ * - Enhanced timeout error context for health status
+ *
+ * TD-15: Enhanced timeout error context integration
  *
  * @module services/provider-health-monitor
  */
 
 import { EventBus } from './event-bus.js';
-import { 
-    ProviderHealthAuthority, 
-    HealthStatus as AuthorityHealthStatus 
+import {
+    ProviderHealthAuthority,
+    HealthStatus as AuthorityHealthStatus
 } from './provider-health-authority.js';
+import { TimeoutError, TimeoutType, isTimeoutError, getUserMessage } from './timeout-error.js';
 
 /**
  * Health status levels for UI display
@@ -447,6 +451,82 @@ export class ProviderHealthMonitor {
                     canSwitch: false
                 };
         }
+    }
+
+    /**
+     * Get recommended action for a timeout error (TD-15)
+     * @param {Error|TimeoutError} error - The error that occurred
+     * @param {string} provider - Provider name
+     * @returns {Object} Recommended action with user-friendly message
+     */
+    getTimeoutAction(error, provider) {
+        if (isTimeoutError(error)) {
+            return {
+                action: error.retryable ? 'retry' : 'contact_support',
+                message: getUserMessage(error),
+                canRetry: error.retryable,
+                retryAfter: error.retryAfter,
+                timeoutType: error.timeoutType
+            };
+        }
+
+        // Handle generic errors that might be timeout-related
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const isTimeoutRelated = errorMessage.toLowerCase().includes('timeout') ||
+                               errorMessage.toLowerCase().includes('timed out');
+
+        if (isTimeoutRelated) {
+            return {
+                action: 'retry',
+                message: `${provider} request timed out. Please try again.`,
+                canRetry: true,
+                timeoutType: 'unknown'
+            };
+        }
+
+        return {
+            action: 'none',
+            message: errorMessage,
+            canRetry: false
+        };
+    }
+
+    /**
+     * Record a timeout error for a provider (TD-15)
+     * @param {string} provider - Provider name
+     * @param {TimeoutError|Error} error - The error that occurred
+     */
+    recordTimeoutError(provider, error) {
+        const health = this._healthData.get(provider);
+        if (!health) {
+            return;
+        }
+
+        // Update failure count
+        health.failureCount++;
+
+        if (isTimeoutError(error)) {
+            health.lastFailureTime = Date.now();
+
+            // Update status based on timeout type and retryability
+            if (!error.retryable) {
+                health.status = HealthStatus.UNHEALTHY;
+            } else if (health.failureCount >= 3) {
+                // Multiple timeouts indicate degradation
+                health.status = HealthStatus.DEGRADED;
+            }
+
+            // Emit timeout event for observability
+            this._eventBus.emit('PROVIDER:TIMEOUT', {
+                provider,
+                timeoutType: error.timeoutType,
+                timeout: error.timeout,
+                retryable: error.retryable,
+                retryAfter: error.retryAfter
+            });
+        }
+
+        this._notifyUI();
     }
 }
 

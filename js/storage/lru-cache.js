@@ -1,24 +1,26 @@
 /**
  * LRU Cache for Vector Store
- * 
+ *
  * Implements Least Recently Used (LRU) eviction policy to prevent
  * IndexedDB bloat when storing many embedding vectors.
- * 
+ *
  * Features:
  * - Configurable max size
  * - Access-based usage tracking (get() updates recency)
  * - Automatic eviction when at capacity
  * - Eviction statistics for monitoring
  * - Auto-scale option based on storage quota
- * 
+ *
  * @module storage/lru-cache
  */
+
+import { CACHE_SIZES } from '../constants/limits.js';
 
 // ==========================================
 // Constants
 // ==========================================
 
-const DEFAULT_MAX_SIZE = 5000;
+const DEFAULT_MAX_SIZE = CACHE_SIZES.DEFAULT_LRU_CACHE_SIZE;
 
 // ==========================================
 // LRU Cache Implementation

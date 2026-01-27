@@ -9,10 +9,13 @@
  * - Network: Prevents cascade failures and wasted time
  * - Wave: Adaptive timeouts based on historical performance percentiles
  *
+ * TD-15: Enhanced timeout error messages with detailed context
+ *
  * @module services/adaptive-circuit-breaker
  */
 
 import { EventBus } from './event-bus.js';
+import { TimeoutError, TimeoutType, isTimeoutError, getUserMessage } from './timeout-error.js';
 
 // ==========================================
 // Circuit Breaker States
@@ -292,9 +295,11 @@ export function recordFailure(circuitId, errorMessage = '', config = {}) {
  * @param {string} circuitId - Circuit identifier
  * @param {Function} fn - Async function to execute
  * @param {Object} config - Optional config override
- * @returns {Promise<{ success: boolean, result?: any, error?: string, blocked?: boolean, durationMs?: number }>}
+ * @param {Object} options - Execution options for timeout error
+ * @param {string} [options.timeoutType] - Type of timeout (connection/read/write)
+ * @returns {Promise<{ success: boolean, result?: any, error?: string, blocked?: boolean, durationMs?: number, isTimeout?: boolean, userMessage?: string }>}
  */
-export async function execute(circuitId, fn, config = {}) {
+export async function execute(circuitId, fn, config = {}, options = {}) {
     const checkResult = canExecute(circuitId, config);
 
     if (!checkResult.allowed) {
@@ -315,7 +320,16 @@ export async function execute(circuitId, fn, config = {}) {
     const timeout = checkResult.timeout;
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error(`Adaptive timeout after ${timeout}ms`)), timeout);
+        timeoutId = setTimeout(() => {
+            reject(new TimeoutError('Adaptive circuit timeout', {
+                timeout,
+                operation: circuitId,
+                provider: circuitId,
+                timeoutType: options.timeoutType || TimeoutType.GENERAL,
+                retryable: true,
+                retryAfter: circuit.config?.timeout || 60000
+            }));
+        }, timeout);
     });
 
     try {
@@ -336,13 +350,11 @@ export async function execute(circuitId, fn, config = {}) {
     } catch (error) {
         clearTimeout(timeoutId);
         const durationMs = Date.now() - startTime;
-        const message = error instanceof Error ? error.message : String(error);
+        const isTimeoutErrorInstance = isTimeoutError(error);
+        const message = isTimeoutErrorInstance ? error.message : (error instanceof Error ? error.message : String(error));
 
-        // Check if this was a timeout
-        const isTimeout = message.includes('timeout') || message.includes('timed out');
-
-        if (isTimeout) {
-            // Treat timeouts as failures
+        // Record failure
+        if (isTimeoutErrorInstance || message.includes('timeout') || message.includes('timed out')) {
             recordFailure(circuitId, `Timeout after ${durationMs}ms`, config);
         } else {
             recordFailure(circuitId, message, config);
@@ -353,7 +365,8 @@ export async function execute(circuitId, fn, config = {}) {
             error: message,
             state: circuit.state,
             durationMs,
-            isTimeout
+            isTimeout: isTimeoutErrorInstance || message.includes('timeout'),
+            userMessage: isTimeoutErrorInstance ? getUserMessage(error) : undefined
         };
     }
 }
@@ -488,7 +501,12 @@ export default {
     getAllStatus,
     reset,
     resetAll,
-    forceState
+    forceState,
+    // Re-export timeout error utilities
+    TimeoutError,
+    TimeoutType,
+    isTimeoutError,
+    getUserMessage
 };
 
 console.log('[AdaptiveCircuitBreaker] Module loaded with adaptive timeout support');
