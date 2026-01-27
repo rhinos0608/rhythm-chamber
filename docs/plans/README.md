@@ -48,10 +48,10 @@ This directory contains planning and documentation for completed and ongoing wor
 
 2. **session-manager.js** ✅ 100% (87/87 tests)
    - 1,130 → 160 lines (86% reduction)
-   - 2 focused modules
+   - 3 focused modules (including session-persistence)
 
 3. **error-recovery-coordinator.js** ✅ 100% (95/95 tests)
-   - 1,316 → 150 lines (89% reduction)
+   - 1,316 → 172 lines (87% reduction)
    - 5 focused modules
 
 4. **pattern-worker-pool.js** ⚠️ 97% (146/150 tests)
@@ -59,14 +59,14 @@ This directory contains planning and documentation for completed and ongoing wor
    - 4 focused modules
 
 5. **storage-degradation-manager.js** ⚠️ 97% (126/130 tests)
-   - 1,306 → 187 lines (86% reduction)
+   - 1,306 → 197 lines (85% reduction)
    - 4 focused modules
 
 6. **metrics-exporter.js** ⚠️ 74% (199/268 tests)
    - 1,140 → 210 lines (82% reduction)
    - 3 focused modules
 
-**Total:** 23 focused modules created, 86% average code reduction
+**Total:** 24 focused modules created, 86% average code reduction
 
 ### ✅ Phase 2A - Validation Module Decomposition
 
