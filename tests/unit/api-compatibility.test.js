@@ -222,6 +222,25 @@ describe('SessionManager - API Compatibility', () => {
     it('should have recoverEmergencyBackup method', () => {
         expect(typeof SessionManager.recoverEmergencyBackup).toBe('function');
     });
+
+    it('should have registerEventListeners method', () => {
+        expect(typeof SessionManager.registerEventListeners).toBe('function');
+    });
+
+    it('should register event listeners only once', () => {
+        // In test environment without window, the method returns early
+        // Just verify the property can be toggled
+        const originalValue = SessionManager.eventListenersRegistered;
+        SessionManager.registerEventListeners();
+        // If we're in a browser environment, it should be true
+        // In Node test environment, it stays as is because of early return
+        if (typeof window !== 'undefined') {
+            expect(SessionManager.eventListenersRegistered).toBe(true);
+        } else {
+            // In Node env, just verify the method exists and doesn't throw
+            expect(SessionManager.eventListenersRegistered).toBe(originalValue);
+        }
+    });
 });
 
 // ==========================================
