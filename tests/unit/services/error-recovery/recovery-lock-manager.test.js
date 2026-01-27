@@ -830,10 +830,13 @@ describe('RecoveryLockManager', () => {
 
     describe('Delegation Listener Setup', () => {
         it('should setup BroadcastChannel listener', () => {
-            global.BroadcastChannel = vi.fn(() => ({
-                onmessage: null,
-                close: vi.fn()
-            }));
+            // Use class constructor for BroadcastChannel mock
+            global.BroadcastChannel = class MockBroadcastChannel {
+                constructor() {
+                    this.onmessage = null;
+                }
+                close() {}
+            };
 
             lockManager.setupDelegationListener();
 
@@ -846,10 +849,13 @@ describe('RecoveryLockManager', () => {
         it('should log when listener is active', () => {
             const consoleSpy = vi.spyOn(console, 'log');
 
-            global.BroadcastChannel = vi.fn(() => ({
-                onmessage: null,
-                close: vi.fn()
-            }));
+            // Use class constructor for BroadcastChannel mock
+            global.BroadcastChannel = class MockBroadcastChannel {
+                constructor() {
+                    this.onmessage = null;
+                }
+                close() {}
+            };
 
             lockManager.setupDelegationListener();
 
@@ -873,7 +879,7 @@ describe('RecoveryLockManager', () => {
             expect(consoleSpy).toHaveBeenCalledWith(
                 '[RecoveryLockManager] BroadcastChannel not available, skipping delegation listener'
             );
-            expect(lockManager._recoveryChannel).toBeUndefined();
+            expect(lockManager._recoveryChannel).toBeNull(); // Changed from toBeUndefined to toBeNull
 
             global.BroadcastChannel = originalBC;
             consoleSpy.mockRestore();
@@ -882,9 +888,12 @@ describe('RecoveryLockManager', () => {
         it('should handle setup failure gracefully', () => {
             const consoleSpy = vi.spyOn(console, 'warn');
 
-            global.BroadcastChannel = vi.fn(() => {
-                throw new Error('Setup failed');
-            });
+            // Use class constructor that throws
+            global.BroadcastChannel = class MockBroadcastChannel {
+                constructor() {
+                    throw new Error('Setup failed');
+                }
+            };
 
             lockManager.setupDelegationListener();
 
@@ -899,12 +908,19 @@ describe('RecoveryLockManager', () => {
 
         it('should handle delegation messages', async () => {
             let messageHandler = null;
-            global.BroadcastChannel = vi.fn(() => ({
+            // Use class constructor with setter for onmessage
+            global.BroadcastChannel = class MockBroadcastChannel {
+                constructor() {
+                    this._onmessage = null;
+                }
                 set onmessage(handler) {
                     messageHandler = handler;
-                },
-                close: vi.fn()
-            }));
+                }
+                get onmessage() {
+                    return this._onmessage;
+                }
+                close() {}
+            };
 
             mockTabCoordinator.isPrimary.mockReturnValue(true);
             mockTabCoordinator.getVectorClock.mockReturnValue({ merge: vi.fn() });
@@ -941,7 +957,7 @@ describe('RecoveryLockManager', () => {
     });
 
     describe('Primary Tab Status', () => {
-        it('should return current primary tab status', () => {
+        it('should return current primary tab status', async () => {
             mockTabCoordinator.isPrimary.mockReturnValue(true);
 
             lockManager = new RecoveryLockManager({
@@ -950,6 +966,9 @@ describe('RecoveryLockManager', () => {
                 tabCoordinator: mockTabCoordinator,
                 stateMachine: mockStateMachine
             });
+
+            // Must call monitorTabLeadership to update _isPrimaryTab
+            await lockManager.monitorTabLeadership();
 
             expect(lockManager.isPrimaryTab()).toBe(true);
         });
