@@ -70,7 +70,7 @@ export const COVERAGE_LEVELS = Object.freeze({
  * Limits for telemetry storage
  * Used by WaveTelemetry to limit memory usage
  */
-export const LIMITS = Object.freeze({
+export const TELEMETRY_LIMITS = Object.freeze({
     /**
      * Maximum number of samples to keep per metric
      */
@@ -87,5 +87,5 @@ export default {
     PERCENTAGE_MULTIPLIER,
     SCORE_PRECISION,
     COVERAGE_LEVELS,
-    LIMITS,
+    TELEMETRY_LIMITS,
 };

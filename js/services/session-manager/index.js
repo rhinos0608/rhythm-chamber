@@ -17,6 +17,24 @@ import * as SessionPersistence from './session-persistence.js';
 import { Storage } from '../../storage.js';
 import { ErrorBoundary } from '../error-boundary.js';
 
+// ==========================================
+// Initialize Lifecycle Module with State Accessor
+// ==========================================
+
+// Initialize session-lifecycle with state accessor to avoid circular dependency
+// This follows the Facade pattern where lifecycle uses state through injected interface
+SessionLifecycle.initialize({
+    getCurrentSessionId: SessionState.getCurrentSessionId,
+    setCurrentSessionId: SessionState.setCurrentSessionId,
+    getCurrentSessionCreatedAt: SessionState.getCurrentSessionCreatedAt,
+    setCurrentSessionCreatedAt: SessionState.setCurrentSessionCreatedAt,
+    syncSessionIdToAppState: SessionState.syncSessionIdToAppState,
+    getSessionData: SessionState.getSessionData,
+    setSessionData: SessionState.setSessionData,
+    updateSessionData: SessionState.updateSessionData,
+    getHistory: SessionState.getHistory
+});
+
 // Re-export all module exports for internal use
 export * from './session-state.js';
 export * from './session-lifecycle.js';

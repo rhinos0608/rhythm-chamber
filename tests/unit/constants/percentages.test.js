@@ -10,7 +10,8 @@ import {
     ANOMALY_THRESHOLD,
     PERCENTAGE_MULTIPLIER,
     SCORE_PRECISION,
-    COVERAGE_LEVELS
+    COVERAGE_LEVELS,
+    TELEMETRY_LIMITS
 } from '../../../js/constants/percentages.js';
 
 describe('constants/percentages.js', () => {
@@ -92,6 +93,28 @@ describe('constants/percentages.js', () => {
 
             // Low coverage threshold
             expect(COVERAGE_LEVELS.LOW).toBe(0.25);
+        });
+    });
+
+    describe('TELEMETRY_LIMITS', () => {
+        it('should define MAX_SAMPLES', () => {
+            expect(TELEMETRY_LIMITS.MAX_SAMPLES).toBeDefined();
+            expect(typeof TELEMETRY_LIMITS.MAX_SAMPLES).toBe('number');
+            expect(TELEMETRY_LIMITS.MAX_SAMPLES).toBeGreaterThan(0);
+        });
+
+        it('should define MAX_WAVES', () => {
+            expect(TELEMETRY_LIMITS.MAX_WAVES).toBeDefined();
+            expect(typeof TELEMETRY_LIMITS.MAX_WAVES).toBe('number');
+            expect(TELEMETRY_LIMITS.MAX_WAVES).toBeGreaterThan(0);
+        });
+
+        it('should have documented values', () => {
+            // Maximum samples per metric for telemetry
+            expect(TELEMETRY_LIMITS.MAX_SAMPLES).toBe(1000);
+
+            // Maximum waves to track for telemetry
+            expect(TELEMETRY_LIMITS.MAX_WAVES).toBe(100);
         });
     });
 });

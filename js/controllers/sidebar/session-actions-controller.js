@@ -19,6 +19,7 @@ import { ChatUIController } from '../chat-ui-controller.js';
 import { TokenCounter } from '../../token-counter.js';
 import { AppState } from '../../state/app-state.js';
 import { SessionListController } from './session-list-controller.js';
+import { SidebarStateController } from './state-controller.js';
 import { escapeHtml } from '../../utils/html-escape.js';
 
 // State tracking
@@ -54,7 +55,6 @@ async function handleSessionClick(sessionId) {
 
     // Close sidebar on mobile
     if (window.innerWidth <= 768) {
-        const { SidebarStateController } = await import('./state-controller.js');
         SidebarStateController.close();
     }
 }
@@ -134,7 +134,6 @@ async function handleNewChat() {
 
     // Close sidebar on mobile
     if (window.innerWidth <= 768) {
-        const { SidebarStateController } = await import('./state-controller.js');
         SidebarStateController.close();
     }
 }
@@ -210,76 +209,89 @@ async function handleSessionRename(sessionId) {
         console.warn('[SessionActionsController] Rename already in progress, ignoring duplicate request');
         return;
     }
-    renameInProgress = true;
 
-    // Clean up any existing rename input listeners first (MEMORY LEAK FIX)
-    cleanupRenameInput();
+    // MEMORY LEAK FIX: Use try-finally to ensure cleanup happens even on error
+    try {
+        renameInProgress = true;
 
-    const sessionEl = SessionListController.getSessionElement(sessionId);
-    if (!sessionEl) {
-        // Reset flag if session not found (RENDER GUARD FIX)
-        renameInProgress = false;
-        return;
-    }
-
-    const titleEl = sessionEl.querySelector('.session-title');
-    const currentTitle = titleEl.textContent;
-
-    // Replace with input
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'session-title-input';
-    input.value = currentTitle;
-    titleEl.replaceWith(input);
-    input.focus();
-    input.select();
-
-    // Store reference for cleanup (MEMORY LEAK FIX)
-    currentRenameInput = input;
-
-    // Save on blur or enter
-    currentRenameBlurHandler = async () => {
-        const newTitle = input.value.trim() || 'New Chat';
-        try {
-            await Chat.renameSession(sessionId, newTitle);
-
-            // A11Y FIX: Update the session element's aria-label after successful rename
-            // This ensures screen readers announce the new name
-            const sessionEl = SessionListController.getSessionElement(sessionId);
-            if (sessionEl) {
-                const currentId = Chat.getCurrentSessionId();
-                const activeLabel = sessionId === currentId ? ' (current)' : '';
-                sessionEl.setAttribute('aria-label', `${newTitle}${activeLabel}`);
-            }
-        } catch (error) {
-            console.error('[SessionActionsController] Failed to rename session:', error);
-            // Revert to original title on error
-            input.value = currentTitle;
-        }
-        // Clean up listeners after save completes (MEMORY LEAK FIX)
+        // Clean up any existing rename input listeners first (MEMORY LEAK FIX)
         cleanupRenameInput();
-        // Reset render guard flag (RENDER GUARD FIX)
-        renameInProgress = false;
 
-        // Refresh session list to show updated title
-        await SessionListController.renderSessionList();
-    };
-
-    currentRenameKeydownHandler = (e) => {
-        if (e.key === 'Enter') {
-            input.blur();
-        } else if (e.key === 'Escape') {
-            input.value = currentTitle;
-            // Reset flag on cancel since blur won't fire (RENDER GUARD FIX)
-            renameInProgress = false;
-            cleanupRenameInput();
-            // Refresh to restore original title
-            SessionListController.renderSessionList();
+        const sessionEl = SessionListController.getSessionElement(sessionId);
+        if (!sessionEl) {
+            return;
         }
-    };
 
-    input.addEventListener('blur', currentRenameBlurHandler);
-    input.addEventListener('keydown', currentRenameKeydownHandler);
+        const titleEl = sessionEl.querySelector('.session-title');
+        const currentTitle = titleEl.textContent;
+
+        // Replace with input
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'session-title-input';
+        input.value = currentTitle;
+        titleEl.replaceWith(input);
+        input.focus();
+        input.select();
+
+        // Store reference for cleanup (MEMORY LEAK FIX)
+        currentRenameInput = input;
+
+        // Save on blur or enter
+        currentRenameBlurHandler = async () => {
+            const newTitle = input.value.trim() || 'New Chat';
+            try {
+                await Chat.renameSession(sessionId, newTitle);
+
+                // A11Y FIX: Update the session element's aria-label after successful rename
+                // This ensures screen readers announce the new name
+                const sessionEl = SessionListController.getSessionElement(sessionId);
+                if (sessionEl) {
+                    const currentId = Chat.getCurrentSessionId();
+                    const activeLabel = sessionId === currentId ? ' (current)' : '';
+                    sessionEl.setAttribute('aria-label', `${newTitle}${activeLabel}`);
+                }
+            } catch (error) {
+                console.error('[SessionActionsController] Failed to rename session:', error);
+                // Revert to original title on error
+                input.value = currentTitle;
+            }
+            // Clean up listeners after save completes (MEMORY LEAK FIX)
+            cleanupRenameInput();
+            // Reset render guard flag (RENDER GUARD FIX)
+            renameInProgress = false;
+
+            // Refresh session list to show updated title
+            await SessionListController.renderSessionList();
+        };
+
+        currentRenameKeydownHandler = (e) => {
+            if (e.key === 'Enter') {
+                input.blur();
+            } else if (e.key === 'Escape') {
+                input.value = currentTitle;
+                // Reset flag on cancel since blur won't fire (RENDER GUARD FIX)
+                renameInProgress = false;
+                cleanupRenameInput();
+                // Refresh to restore original title
+                SessionListController.renderSessionList();
+            }
+        };
+
+        input.addEventListener('blur', currentRenameBlurHandler);
+        input.addEventListener('keydown', currentRenameKeydownHandler);
+    } catch (error) {
+        // MEMORY LEAK FIX: Log error but don't propagate - ensure cleanup happens
+        console.error('[SessionActionsController] Error during rename setup:', error);
+    } finally {
+        // MEMORY LEAK FIX: Always reset flag, even if an error occurs
+        // This ensures renameInProgress is cleared if getSessionElement throws
+        // or any other error happens during the rename setup
+        if (!currentRenameInput) {
+            // If no input was created, reset the flag immediately
+            renameInProgress = false;
+        }
+    }
 }
 
 /**

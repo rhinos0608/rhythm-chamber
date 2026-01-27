@@ -2,14 +2,15 @@
  * Sidebar State Controller
  *
  * Manages sidebar collapse/expand state and visibility.
- * Handles persistence of sidebar preferences and mobile overlay.
+ * Handles persistence of sidebar preferences.
  *
- * Responsibilities:
+ * Responsibilities (Single Responsibility Principle):
  * - Toggle sidebar collapsed state
  * - Update sidebar visibility (collapsed/expanded classes)
- * - Show/hide mobile overlay
  * - Persist state to storage
  * - Hide sidebar for non-chat views
+ *
+ * Mobile-specific behavior is delegated to MobileResponsivityController.
  *
  * @module controllers/sidebar/state-controller
  */
@@ -17,6 +18,7 @@
 import { Storage } from '../../storage.js';
 import { AppState } from '../../state/app-state.js';
 import { STORAGE_KEYS } from '../../storage/keys.js';
+import { MobileResponsivityController } from './mobile-responsiveness.js';
 
 const SIDEBAR_STATE_KEY = STORAGE_KEYS.SIDEBAR_COLLAPSED;
 
@@ -90,7 +92,7 @@ function setupResizeHandler() {
 
 /**
  * Update sidebar visibility based on current state
- * Handles desktop collapse/expand and mobile overlay
+ * Handles desktop collapse/expand and delegates mobile overlay to MobileResponsivityController
  */
 function updateVisibility() {
     if (!chatSidebar) return;
@@ -104,14 +106,8 @@ function updateVisibility() {
         chatSidebar.classList.remove('collapsed');
     }
 
-    // Handle mobile overlay
-    if (sidebarOverlay) {
-        if (!uiState.sidebarCollapsed && window.innerWidth <= 768) {
-            sidebarOverlay.classList.add('visible');
-        } else {
-            sidebarOverlay.classList.remove('visible');
-        }
-    }
+    // Handle mobile overlay via MobileResponsivityController (SRP: separation of concerns)
+    MobileResponsivityController.updateOverlayVisibility(sidebarOverlay, uiState.sidebarCollapsed);
 }
 
 /**
@@ -132,14 +128,8 @@ function toggle() {
     }
     localStorage.setItem(SIDEBAR_STATE_KEY, newCollapsed.toString());
 
-    // Mobile: Toggle open class
-    if (window.innerWidth <= 768) {
-        if (newCollapsed) {
-            chatSidebar?.classList.remove('open');
-        } else {
-            chatSidebar?.classList.add('open');
-        }
-    }
+    // Mobile: Toggle open class via MobileResponsivityController (SRP: separation of concerns)
+    MobileResponsivityController.setMobileSidebarState(chatSidebar, !newCollapsed);
 
     // Update visibility
     updateVisibility();
@@ -147,7 +137,7 @@ function toggle() {
 
 /**
  * Close sidebar (mobile)
- * Collapses sidebar and removes open class
+ * Collapses sidebar and removes open class via MobileResponsivityController
  */
 function close() {
     // Update AppState
@@ -160,9 +150,8 @@ function close() {
     }
     localStorage.setItem(SIDEBAR_STATE_KEY, 'true');
 
-    if (chatSidebar) {
-        chatSidebar.classList.remove('open');
-    }
+    // Mobile: Close sidebar via MobileResponsivityController (SRP: separation of concerns)
+    MobileResponsivityController.closeMobileSidebar(chatSidebar);
 
     updateVisibility();
 }
