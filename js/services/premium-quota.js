@@ -257,11 +257,6 @@ async function getRemaining(feature) {
  * @param {number} remaining - Remaining count
  */
 function showQuotaToast(feature, remaining) {
-    if (!window.showToast) {
-        logger.info(`${feature}: ${remaining} remaining`);
-        return;
-    }
-
     const featureNames = {
         semantic_search: 'semantic search',
         playlist_generation: 'playlist generation'
@@ -269,9 +264,7 @@ function showQuotaToast(feature, remaining) {
 
     const featureName = featureNames[feature] || feature;
     const plural = remaining === 1 ? '' : 's';
-    const message = `${remaining} ${featureName}${plural} remaining`;
-
-    showToast(message, 'info');
+    logger.info(`${featureName}: ${remaining} ${plural} remaining`);
 }
 
 /**

@@ -78,10 +78,6 @@ function addAssistantMessageActions(messageEl, text) {
             console.error('[MessageActions] Failed to copy text:', err);
             copyBtn.innerHTML = '✗';
             setTimeout(() => { copyBtn.innerHTML = '📋'; }, 1500);
-            // Show toast for better visibility
-            if (window.showToast) {
-                window.showToast('Failed to copy to clipboard. Please copy manually.', 3000);
-            }
         });
     };
     actionsDiv.appendChild(copyBtn);
@@ -92,11 +88,9 @@ function addAssistantMessageActions(messageEl, text) {
     regenBtn.innerHTML = '↻';
     regenBtn.title = 'Regenerate';
     regenBtn.onclick = async () => {
-        if (window.processMessageResponse && Chat?.regenerateLastResponse) {
+        if (Chat?.regenerateLastResponse) {
             messageEl.remove();
-            await window.processMessageResponse((options) =>
-                Chat.regenerateLastResponse(options)
-            );
+            await Chat.regenerateLastResponse();
         }
     };
     actionsDiv.appendChild(regenBtn);
@@ -132,11 +126,9 @@ function addErrorMessageActions(messageEl) {
     retryBtn.innerHTML = '↻ Try Again';
     retryBtn.title = 'Try Again';
     retryBtn.onclick = async () => {
-        if (window.processMessageResponse && Chat?.regenerateLastResponse) {
+        if (Chat?.regenerateLastResponse) {
             messageEl.remove();
-            await window.processMessageResponse((options) =>
-                Chat.regenerateLastResponse(options)
-            );
+            await Chat.regenerateLastResponse();
         }
     };
     actionsDiv.appendChild(retryBtn);
@@ -205,17 +197,8 @@ function enableEditMode(messageEl, currentText) {
             messageEl.nextElementSibling.remove();
         }
 
-        // Use processMessageResponse to handle the edit with proper loading UI
-        // editMessage internally truncates history and calls sendMessage
-        if (window.processMessageResponse) {
-            await window.processMessageResponse((options) =>
-                Chat.editMessage(index, newText, options)
-            );
-        } else {
-            // Fallback: call editMessage directly without progress UI
-            console.warn('[MessageActions] processMessageResponse not available, using fallback');
-            await Chat.editMessage(index, newText);
-        }
+        // Call editMessage directly
+        await Chat.editMessage(index, newText);
 
         // FOCUS FIX: Return focus to chat input after successful edit
         restoreFocusToChatInput();

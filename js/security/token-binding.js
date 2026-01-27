@@ -227,7 +227,9 @@ async function createTokenBinding(token) {
         };
 
         const bindingKey = TOKEN_BINDING_PREFIX + token;
-        localStorage.setItem(bindingKey, JSON.stringify(binding));
+        // SECURITY FIX (C3): Use sessionStorage instead of localStorage to limit XSS exposure
+        // sessionStorage is cleared when tab closes, reducing token theft window
+        sessionStorage.setItem(bindingKey, JSON.stringify(binding));
 
         _lastFailure = null;
         return true;
@@ -258,7 +260,8 @@ async function verifyTokenBinding(token) {
 
     try {
         const bindingKey = TOKEN_BINDING_PREFIX + token;
-        const bindingJson = localStorage.getItem(bindingKey);
+        // SECURITY FIX (C3): Read from sessionStorage (matching write location)
+        const bindingJson = sessionStorage.getItem(bindingKey);
 
         if (!bindingJson) {
             return {
@@ -299,7 +302,8 @@ function clearTokenBinding(token) {
     }
 
     const bindingKey = TOKEN_BINDING_PREFIX + token;
-    localStorage.removeItem(bindingKey);
+    // SECURITY FIX (C3): Remove from sessionStorage (matching write location)
+    sessionStorage.removeItem(bindingKey);
     return true;
 }
 

@@ -3,6 +3,7 @@
 
 import * as SessionState from './session-state.js';
 import { Storage } from '../../storage.js';
+import { AppState } from '../../state/app-state.js';
 
 // ==========================================
 // Constants
@@ -81,15 +82,19 @@ export async function saveCurrentSession() {
             ? [...systemMessages, ...nonSystemMessages.slice(-(MAX_SAVED_MESSAGES - systemMessages.length))]
             : messages;
 
+        // Get personality from AppState (ES module, not global)
+        const personality = AppState.get('data.personality') || {};
+        const isLiteMode = AppState.get('lite.isLiteMode') || false;
+
         const session = {
             id: currentSessionId,
             title: generateSessionTitle(messages),
             createdAt: currentSessionCreatedAt,
             messages: messagesToSave,
             metadata: {
-                personalityName: window._userContext?.personality?.name || 'Unknown',
-                personalityEmoji: window._userContext?.personality?.emoji || '🎵',
-                isLiteMode: false
+                personalityName: personality.name || 'Unknown',
+                personalityEmoji: personality.emoji || '🎵',
+                isLiteMode
             }
         };
 

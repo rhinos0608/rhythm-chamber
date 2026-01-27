@@ -400,10 +400,6 @@ async function handleSessionClick(sessionId) {
         await Chat.switchSession(sessionId);
     } catch (error) {
         console.error('[SidebarController] Failed to switch session:', error);
-        // Show error to user
-        if (window.showToast) {
-            window.showToast('Failed to switch session. Please try again.', 4000);
-        }
         return;
     }
 
@@ -433,9 +429,6 @@ async function handleNewChat() {
         await Chat.createNewSession();
     } catch (error) {
         console.error('[SidebarController] Failed to create new session:', error);
-        if (window.showToast) {
-            window.showToast('Failed to create new chat. Please try again.', 4000);
-        }
         return;
     }
 
@@ -497,9 +490,6 @@ async function confirmDeleteChat() {
         const success = await Chat.deleteSessionById(sessionId);
         if (!success) {
             console.error('[SidebarController] Failed to delete session (returned false)');
-            if (window.showToast) {
-                window.showToast('Failed to delete chat. Please try again.', 4000);
-            }
             return;
         }
 
@@ -510,9 +500,6 @@ async function confirmDeleteChat() {
         }
     } catch (error) {
         console.error('[SidebarController] Failed to delete session:', error);
-        if (window.showToast) {
-            window.showToast('Failed to delete chat. Please try again.', 4000);
-        }
         return;
     }
 
@@ -577,9 +564,6 @@ async function handleSessionRename(sessionId) {
             console.error('[SidebarController] Failed to rename session:', error);
             // Revert to original title on error
             input.value = currentTitle;
-            if (window.showToast) {
-                window.showToast('Failed to rename chat. Please try again.', 4000);
-            }
         }
         // Clean up listeners after save completes (MEMORY LEAK FIX)
         cleanupRenameInput();

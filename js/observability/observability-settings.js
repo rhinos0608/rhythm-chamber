@@ -15,6 +15,7 @@ import { PerformanceProfiler } from '../services/performance-profiler.js';
 import { CoreWebVitalsTracker } from './core-web-vitals.js';
 import { MetricsExporter } from './metrics-exporter.js';
 import { escapeHtml } from '../utils/html-escape.js';
+import ObservabilityController from '../controllers/observability-controller.js';
 
 /**
  * Initialize observability settings in the settings modal
@@ -226,8 +227,8 @@ function calculatePerformanceScore(stats) {
  * Show observability dashboard
  */
 function showDashboard() {
-    if (window.ObservabilityController) {
-        window.ObservabilityController.showDashboard();
+    if (ObservabilityController) {
+        ObservabilityController.showDashboard();
     } else {
         console.error('[ObservabilitySettings] ObservabilityController not available');
     }
@@ -246,7 +247,7 @@ async function exportMetrics() {
     const format = formatSelect?.value || 'json';
 
     try {
-        await window.ObservabilityController.exportNow(format, {
+        await ObservabilityController.exportNow(format, {
             includeMemory: true,
             includeWebVitals: true
         });
@@ -311,9 +312,9 @@ function toggleMemoryProfiling(enabled) {
  * Set dashboard update interval
  */
 function setUpdateInterval(intervalMs) {
-    if (window.ObservabilityController) {
+    if (ObservabilityController) {
         // Update the controller's interval
-        window.ObservabilityController._updateInterval = parseInt(intervalMs);
+        ObservabilityController._updateInterval = parseInt(intervalMs);
     }
 
     // Save preference

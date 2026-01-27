@@ -614,11 +614,12 @@ function setupDemoChatSuggestions() {
                 input.value = question;
             }
 
-            // Trigger chat send via global handleChatSend if available
+            // Trigger chat send via Chat module
             // This avoids programmatic click() which can trigger duplicate listeners
-            // handleChatSend will clear the input after sending
-            if (window.handleChatSend && typeof window.handleChatSend === 'function') {
-                await window.handleChatSend();
+            if (Chat?.sendMessage && typeof Chat.sendMessage === 'function') {
+                await Chat.sendMessage(question);
+                // Clear input after sending
+                if (input) input.value = '';
             }
         };
         chip.addEventListener('click', handler);

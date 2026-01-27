@@ -41,11 +41,6 @@ export class DevPanelController {
      * @returns {boolean}
      */
     static isDevModeEnabled() {
-        // Production check
-        if (window.__BUILD__ === 'production') {
-            return false;
-        }
-
         // Check localStorage
         try {
             if (localStorage.getItem(DEV_MODE_KEY) === 'true') {

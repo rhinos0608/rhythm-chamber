@@ -23,6 +23,7 @@ import { Storage } from '../../storage.js';
 import { STORAGE_KEYS } from '../../storage/keys.js';
 import * as SessionState from './session-state.js';
 import lockManager from '../session-lock-manager.js';
+import { AppState } from '../../state/app-state.js';
 
 // ==========================================
 // Event Schemas for EventBus Registration
@@ -179,12 +180,6 @@ async function saveCurrentSession() {
     // Warn when approaching message limit (DATA LOSS WARNING)
     if (messageCount >= MESSAGE_LIMIT_WARNING_THRESHOLD && !hasWarnedAboutMessageLimit) {
         hasWarnedAboutMessageLimit = true;
-        if (typeof window !== 'undefined' && window.showToast) {
-            window.showToast(
-                `You have ${messageCount} messages in this chat. Only the most recent ${MAX_SAVED_MESSAGES} messages will be saved permanently.`,
-                6000
-            );
-        }
         console.warn(`[SessionLifecycle] Approaching message limit: ${messageCount}/${MAX_SAVED_MESSAGES}`);
     }
 
@@ -197,15 +192,19 @@ async function saveCurrentSession() {
             ? [...systemMessages, ...nonSystemMessages.slice(-(MAX_SAVED_MESSAGES - systemMessages.length))]
             : messages;
 
+        // Get personality from AppState (ES module, not global)
+        const personality = AppState.get('data.personality') || {};
+        const isLiteMode = AppState.get('lite.isLiteMode') || false;
+
         const session = {
             id: currentSessionId,
             title: generateSessionTitle(messages),
             createdAt: currentSessionCreatedAt,
             messages: messagesToSave,
             metadata: {
-                personalityName: window._userContext?.personality?.name || 'Unknown',
-                personalityEmoji: window._userContext?.personality?.emoji || '🎵',
-                isLiteMode: false
+                personalityName: personality.name || 'Unknown',
+                personalityEmoji: personality.emoji || '🎵',
+                isLiteMode
             }
         };
 
@@ -222,9 +221,7 @@ async function saveCurrentSession() {
     } catch (e) {
         console.error('[SessionLifecycle] Failed to save session:', e);
         // HIGH PRIORITY FIX: Notify user of save failure - this is a data loss risk
-        if (typeof window !== 'undefined' && window.showToast) {
-            window.showToast('Warning: Failed to save conversation. Data may be lost on refresh.', 5000);
-        }
+        console.warn('[SessionLifecycle] Failed to save conversation. Data may be lost on refresh.');
         return false;
     }
 }
@@ -268,20 +265,16 @@ export async function createSession(initialMessages = []) {
     if (Storage.setConfig) {
         Storage.setConfig(SESSION_CURRENT_SESSION_KEY, currentSessionId).catch(e => {
             console.error('[SessionLifecycle] Failed to save session ID to unified storage:', e);
-            // Notify user if toast available - this is a critical data persistence issue
-            if (typeof window !== 'undefined' && window.showToast) {
-                window.showToast('Warning: Session may not be remembered on reload due to storage issues.', 4000);
-            }
+            // Log warning - toast notification removed (no global window.showToast)
+            console.warn('[SessionLifecycle] Session may not be remembered on reload due to storage issues.');
         });
     }
     try {
         localStorage.setItem(SESSION_CURRENT_SESSION_KEY, currentSessionId);
     } catch (e) {
         console.error('[SessionLifecycle] Failed to set current session ID in localStorage:', e);
-        // Notify user - this is a critical data persistence issue
-        if (typeof window !== 'undefined' && window.showToast) {
-            window.showToast('Warning: Session may not be remembered on reload due to storage issues.', 4000);
-        }
+        // Log warning - toast notification removed (no global window.showToast)
+        console.warn('[SessionLifecycle] Session may not be remembered on reload due to storage issues.');
     }
 
     // Save immediately if we have messages
@@ -359,18 +352,14 @@ async function loadSession(sessionId) {
         if (Storage.setConfig) {
             Storage.setConfig(SESSION_CURRENT_SESSION_KEY, session.id).catch(e => {
                 console.error('[SessionLifecycle] Failed to save session ID to unified storage:', e);
-                if (typeof window !== 'undefined' && window.showToast) {
-                    window.showToast('Warning: Session may not be remembered on reload due to storage issues.', 4000);
-                }
+                console.warn('[SessionLifecycle] Session may not be remembered on reload due to storage issues.');
             });
         }
         try {
             localStorage.setItem(SESSION_CURRENT_SESSION_KEY, session.id);
         } catch (e) {
             console.error('[SessionLifecycle] Failed to set current session ID in localStorage:', e);
-            if (typeof window !== 'undefined' && window.showToast) {
-                window.showToast('Warning: Session may not be remembered on reload due to storage issues.', 4000);
-            }
+            console.warn('[SessionLifecycle] Session may not be remembered on reload due to storage issues.');
         }
 
         console.log('[SessionLifecycle] Loaded session:', sessionId, 'with', (session.messages || []).length, 'messages');
