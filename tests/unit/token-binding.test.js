@@ -67,7 +67,8 @@ describe('TokenBinding', () => {
         sessionStorage.removeItem('rhythm_chamber_session_salt');
 
         const fingerprint = await TokenBinding.generateDeviceFingerprint();
-        expect(fingerprint).toHaveLength(16);
+        // SECURITY FIX (C1): Full SHA-256 output is 64 hex chars (256 bits)
+        expect(fingerprint).toHaveLength(64);
         expect(sessionStorage.getItem('rhythm_chamber_session_salt')).not.toBeNull();
     });
 
@@ -194,6 +195,93 @@ describe('TokenBinding', () => {
             const verification = await TokenBinding.verifyTokenBinding(testToken);
             expect(verification.valid).toBe(false);
             expect(verification.reason).toBe('no_binding');
+        });
+    });
+
+    // SECURITY FIX (C1): Tests for full 256-bit device fingerprint
+    describe('Device Fingerprint Full 256-bit (C1 Fix)', () => {
+        beforeEach(async () => {
+            // Setup secure crypto stub
+            const digestBuffer = new Uint8Array(32).fill(0xAB);
+            stubCrypto({
+                getRandomValues: (array) => {
+                    array.fill(7);
+                    return array;
+                },
+                subtle: {
+                    digest: vi.fn(async () => digestBuffer)
+                }
+            });
+
+            // Ensure secure context
+            Object.defineProperty(window, 'isSecureContext', {
+                value: true,
+                configurable: true
+            });
+        });
+
+        it('generates 64-character hex string (256 bits) for device fingerprint', async () => {
+            const TokenBinding = await import('../../js/security/token-binding.js');
+            const fingerprint = await TokenBinding.generateDeviceFingerprint();
+
+            // SHA-256 produces 32 bytes = 64 hex characters (256 bits)
+            expect(fingerprint).toHaveLength(64);
+            expect(fingerprint).toMatch(/^[0-9a-f]{64}$/);
+        });
+
+        it('does NOT truncate fingerprint to 16 characters', async () => {
+            const TokenBinding = await import('../../js/security/token-binding.js');
+            const fingerprint = await TokenBinding.generateDeviceFingerprint();
+
+            // Before fix: fingerprint was truncated to 16 chars (64 bits)
+            // After fix: fingerprint is full 64 chars (256 bits)
+            expect(fingerprint.length).toBeGreaterThan(16);
+            expect(fingerprint).toHaveLength(64);
+        });
+
+        it('stores full 256-bit fingerprint in token binding', async () => {
+            const TokenBinding = await import('../../js/security/token-binding.js');
+            const testToken = 'full-fingerprint-token';
+
+            await TokenBinding.createTokenBinding(testToken);
+
+            const sessionKey = 'rhythm_chamber_token_binding_' + testToken;
+            const bindingJson = sessionStorage.getItem(sessionKey);
+            expect(bindingJson).not.toBeNull();
+
+            const binding = JSON.parse(bindingJson);
+            expect(binding.fingerprint).toHaveLength(64);
+            expect(binding.fingerprint).toMatch(/^[0-9a-f]{64}$/);
+        });
+
+        it('verifies token binding using full 256-bit fingerprint', async () => {
+            const TokenBinding = await import('../../js/security/token-binding.js');
+            const testToken = 'verify-full-fp-token';
+
+            await TokenBinding.createTokenBinding(testToken);
+            const verification = await TokenBinding.verifyTokenBinding(testToken);
+
+            expect(verification.valid).toBe(true);
+        });
+
+        it('rejects token binding when fingerprint does not match full 256 bits', async () => {
+            const TokenBinding = await import('../../js/security/token-binding.js');
+            const testToken = 'mismatch-fp-token';
+
+            await TokenBinding.createTokenBinding(testToken);
+
+            const sessionKey = 'rhythm_chamber_token_binding_' + testToken;
+            const bindingJson = sessionStorage.getItem(sessionKey);
+            const binding = JSON.parse(bindingJson);
+
+            // Tamper with the fingerprint by changing one character
+            const tamperedFingerprint = binding.fingerprint.substring(0, 63) + '0';
+            binding.fingerprint = tamperedFingerprint;
+            sessionStorage.setItem(sessionKey, JSON.stringify(binding));
+
+            const verification = await TokenBinding.verifyTokenBinding(testToken);
+            expect(verification.valid).toBe(false);
+            expect(verification.reason).toBe('fingerprint_mismatch');
         });
     });
 });

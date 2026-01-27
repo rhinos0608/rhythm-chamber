@@ -639,7 +639,9 @@ describe('EventBus emitParallel Error Handling', () => {
         expect(handler1).toHaveBeenCalled();
         expect(handler2).toHaveBeenCalled();
         expect(handler3).toHaveBeenCalled();
-        expect(result).toBe(true);
+        expect(result.success).toBe(false);
+        expect(result.total).toBe(3);
+        expect(result.failed).toBe(1);
         expect(errorSpy).toHaveBeenCalledWith(
             '[EventBus] Parallel handler error:',
             expect.any(Error)
@@ -669,7 +671,9 @@ describe('EventBus emitParallel Error Handling', () => {
         expect(handler1).toHaveBeenCalled();
         expect(handler2).toHaveBeenCalled();
         expect(handler3).toHaveBeenCalled();
-        expect(result).toBe(true);
+        expect(result.success).toBe(false);
+        expect(result.total).toBe(3);
+        expect(result.failed).toBe(1);
         expect(errorSpy).toHaveBeenCalledWith(
             '[EventBus] Parallel handler error:',
             expect.any(Error)
@@ -694,7 +698,9 @@ describe('EventBus emitParallel Error Handling', () => {
         expect(handler1).toHaveBeenCalled();
         expect(handler2).toHaveBeenCalled();
         expect(handler3).toHaveBeenCalled();
-        expect(result).toBe(true);
+        expect(result.success).toBe(false);
+        expect(result.total).toBe(3);
+        expect(result.failed).toBe(3);
         expect(errorSpy).toHaveBeenCalledTimes(3);
 
         errorSpy.mockRestore();
@@ -748,7 +754,9 @@ describe('EventBus emitParallel Error Handling', () => {
 
         const result = await EventBus.emitParallel('parallel:mixed-async', {});
 
-        expect(result).toBe(true);
+        expect(result.success).toBe(false);
+        expect(result.total).toBe(3);
+        expect(result.failed).toBe(1);
         expect(callOrder).toContain('handler1-start');
         expect(callOrder).toContain('handler1-end');
         expect(callOrder).toContain('handler2-start');
@@ -760,7 +768,9 @@ describe('EventBus emitParallel Error Handling', () => {
 
     it('should return false when no handlers are registered', async () => {
         const result = await EventBus.emitParallel('parallel:no-handlers', {});
-        expect(result).toBe(false);
+        expect(result.success).toBe(false);
+        expect(result.reason).toBe('no-handlers');
+        expect(result.results).toEqual([]);
     });
 
     it('should properly unsubscribe wildcard once handlers that throw errors', async () => {
@@ -778,6 +788,196 @@ describe('EventBus emitParallel Error Handling', () => {
         await EventBus.emitParallel('test:event2', {});
 
         expect(handler).toHaveBeenCalledTimes(1);
+
+        errorSpy.mockRestore();
+    });
+});
+
+// ==========================================
+// emitParallel Return Format Tests (TD-2)
+// ==========================================
+
+describe('EventBus emitParallel Return Format', () => {
+    beforeEach(() => {
+        EventBus.clearAll();
+    });
+
+    it('should return result object with no-handlers reason when no handlers exist', async () => {
+        const result = await EventBus.emitParallel('parallel:no-handlers', {});
+
+        expect(result).toEqual({
+            success: false,
+            reason: 'no-handlers',
+            results: []
+        });
+    });
+
+    it('should return success result when all handlers complete successfully', async () => {
+        const handler1 = vi.fn(async () => 'result1');
+        const handler2 = vi.fn(() => 'result2');
+
+        EventBus.on('parallel:success', handler1);
+        EventBus.on('parallel:success', handler2);
+
+        const result = await EventBus.emitParallel('parallel:success', { data: 'test' });
+
+        expect(result.success).toBe(true);
+        expect(result.total).toBe(2);
+        expect(result.failed).toBe(0);
+        expect(result.results).toHaveLength(2);
+        // vitest's vi.fn() creates functions with inferred names
+        expect(result.results[0]).toMatchObject({
+            success: true,
+            result: 'result1'
+        });
+        expect(result.results[0].handler).toEqual(expect.any(String));
+        expect(result.results[1]).toMatchObject({
+            success: true,
+            result: 'result2'
+        });
+        expect(result.results[1].handler).toEqual(expect.any(String));
+    });
+
+    it('should return failure result with error details when handlers fail', async () => {
+        const handler1 = vi.fn(async () => 'success');
+        const handler2 = vi.fn(async () => { throw new Error('Handler 2 failed'); });
+        const handler3 = vi.fn(() => 'also success');
+
+        EventBus.on('parallel:mixed', handler1);
+        EventBus.on('parallel:mixed', handler2);
+        EventBus.on('parallel:mixed', handler3);
+
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+
+        const result = await EventBus.emitParallel('parallel:mixed', {});
+
+        expect(result.success).toBe(false);
+        expect(result.total).toBe(3);
+        expect(result.failed).toBe(1);
+        expect(result.results).toHaveLength(3);
+
+        // First handler succeeded
+        expect(result.results[0].success).toBe(true);
+        expect(result.results[0].result).toBe('success');
+
+        // Second handler failed
+        expect(result.results[1].success).toBe(false);
+        expect(result.results[1].error).toBeInstanceOf(Error);
+        expect(result.results[1].error.message).toBe('Handler 2 failed');
+
+        // Third handler succeeded
+        expect(result.results[2].success).toBe(true);
+        expect(result.results[2].result).toBe('also success');
+
+        errorSpy.mockRestore();
+    });
+
+    it('should return failure result when all handlers fail', async () => {
+        const handler1 = vi.fn(() => { throw new Error('Error 1'); });
+        const handler2 = vi.fn(async () => { throw new Error('Error 2'); });
+
+        EventBus.on('parallel:all-fail', handler1);
+        EventBus.on('parallel:all-fail', handler2);
+
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+
+        const result = await EventBus.emitParallel('parallel:all-fail', {});
+
+        expect(result.success).toBe(false);
+        expect(result.total).toBe(2);
+        expect(result.failed).toBe(2);
+        expect(result.results[0].success).toBe(false);
+        expect(result.results[0].error.message).toBe('Error 1');
+        expect(result.results[1].success).toBe(false);
+        expect(result.results[1].error.message).toBe('Error 2');
+
+        errorSpy.mockRestore();
+    });
+
+    it('should include handler identifier in results', async () => {
+        const namedHandler = function myHandler() { return 'named'; };
+        // Arrow functions assigned to const get their name inferred
+        const arrowHandler = () => 'anonymous';
+
+        EventBus.on('parallel:names', namedHandler);
+        EventBus.on('parallel:names', arrowHandler);
+
+        const result = await EventBus.emitParallel('parallel:names', {});
+
+        // Both named function and arrow function have inferred names
+        expect(result.results[0].handler).toBe('myHandler');
+        expect(result.results[1].handler).toBe('arrowHandler');
+    });
+
+    it('should handle once handlers and mark them in results', async () => {
+        const handler = vi.fn(() => 'once-result');
+
+        EventBus.once('parallel:once-result', handler);
+
+        const result = await EventBus.emitParallel('parallel:once-result', {});
+
+        expect(result.success).toBe(true);
+        expect(result.total).toBe(1);
+        expect(result.failed).toBe(0);
+
+        // Handler should be unsubscribed after first call
+        expect(EventBus.getSubscriberCount('parallel:once-result')).toBe(0);
+    });
+
+    it('should preserve priority ordering in results', async () => {
+        const callOrder = [];
+        const handler1 = async () => { callOrder.push(1); return 'low'; };
+        const handler2 = async () => { callOrder.push(2); return 'critical'; };
+        const handler3 = async () => { callOrder.push(3); return 'high'; };
+
+        EventBus.on('parallel:priority', handler1, { priority: EventBus.PRIORITY.LOW });
+        EventBus.on('parallel:priority', handler2, { priority: EventBus.PRIORITY.CRITICAL });
+        EventBus.on('parallel:priority', handler3, { priority: EventBus.PRIORITY.HIGH });
+
+        const result = await EventBus.emitParallel('parallel:priority', {});
+
+        expect(result.total).toBe(3);
+        // All should complete, but order is not guaranteed with Promise.all
+        expect(result.results).toHaveLength(3);
+    });
+
+    it('should include wildcard subscribers in results', async () => {
+        const wildcardHandler = vi.fn(() => 'wildcard');
+        const specificHandler = vi.fn(() => 'specific');
+
+        EventBus.on('*', wildcardHandler);
+        EventBus.on('test:event', specificHandler);
+
+        const result = await EventBus.emitParallel('test:event', {});
+
+        expect(result.total).toBe(2);
+        expect(result.failed).toBe(0);
+    });
+
+    it('should handle async errors properly in results', async () => {
+        const asyncRejectHandler = vi.fn(async () => {
+            await new Promise(resolve => setTimeout(resolve, 5));
+            throw new Error('Async rejection');
+        });
+        const asyncSuccessHandler = vi.fn(async () => {
+            await new Promise(resolve => setTimeout(resolve, 10));
+            return 'Async success';
+        });
+
+        EventBus.on('parallel:async-error', asyncRejectHandler);
+        EventBus.on('parallel:async-error', asyncSuccessHandler);
+
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+
+        const result = await EventBus.emitParallel('parallel:async-error', {});
+
+        expect(result.success).toBe(false);
+        expect(result.total).toBe(2);
+        expect(result.failed).toBe(1);
+        expect(result.results[0].success).toBe(false);
+        expect(result.results[0].error.message).toBe('Async rejection');
+        expect(result.results[1].success).toBe(true);
+        expect(result.results[1].result).toBe('Async success');
 
         errorSpy.mockRestore();
     });

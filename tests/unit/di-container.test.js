@@ -327,6 +327,77 @@ describe('DIContainer', () => {
                 expect(service.b.c).toBeDefined();
             }).not.toThrow();
         });
+
+        // M5: Test circular dependency detection involving controllers
+        it('should detect circular dependency between factory and controller', () => {
+            // Factory depends on controller, controller depends on factory
+            container.registerFactory('ServiceA', class ServiceA {
+                constructor({ ControllerB }) {
+                    this.controllerB = ControllerB;
+                }
+            }, ['ControllerB']);
+
+            // Register controller (service instances that factories can depend on)
+            const controllerB = { name: 'ControllerB' };
+            container.registerInstance('ControllerB', controllerB);
+
+            // Track that controller has a dependency on ServiceA
+            container._dependencyGraph.controllers['ControllerB'] = ['ServiceA'];
+
+            expect(() => {
+                container.create('ServiceA');
+            }).toThrow(/circular dependency/i);
+        });
+
+        it('should detect circular dependency between controllers', () => {
+            // Register two controllers with mutual dependencies
+            const controllerA = { name: 'ControllerA' };
+            const controllerB = { name: 'ControllerB' };
+
+            container.registerController('ControllerA', controllerA);
+            container.registerController('ControllerB', controllerB);
+
+            // Track mutual dependencies
+            container._dependencyGraph.controllers['ControllerA'] = ['ControllerB'];
+            container._dependencyGraph.controllers['ControllerB'] = ['ControllerA'];
+
+            // Create a factory that depends on ControllerA to trigger the check
+            container.registerFactory('TriggerFactory', class TriggerFactory {
+                constructor({ ControllerA }) {
+                    this.controllerA = ControllerA;
+                }
+            }, ['ControllerA']);
+
+            expect(() => {
+                container.create('TriggerFactory');
+            }).toThrow(/circular dependency/i);
+        });
+
+        it('should detect indirect circular dependency through mixed types', () => {
+            // Factory -> Controller -> Factory -> (back to first)
+            container.registerFactory('FactoryA', class FactoryA {
+                constructor({ ControllerB }) {
+                    this.controllerB = ControllerB;
+                }
+            }, ['ControllerB']);
+
+            // Register controller instance
+            const controllerB = { name: 'ControllerB' };
+            container.registerInstance('ControllerB', controllerB);
+
+            // Track that controller depends on FactoryC
+            container._dependencyGraph.controllers['ControllerB'] = ['FactoryC'];
+
+            container.registerFactory('FactoryC', class FactoryC {
+                constructor({ FactoryA }) {
+                    this.factoryA = FactoryA;
+                }
+            }, ['FactoryA']);
+
+            expect(() => {
+                container.create('FactoryA');
+            }).toThrow(/circular dependency/i);
+        });
     });
 
     describe('Explicit Dependency Declarations', () => {

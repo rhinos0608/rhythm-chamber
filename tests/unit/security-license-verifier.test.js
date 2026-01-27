@@ -877,4 +877,229 @@ describe('License Verifier Module', () => {
             expect(loaded.features).toEqual([]);
         });
     });
+
+    // ========================================================================
+    // SECTION: H3 Fix - Offline Bypass Prevention
+    // ========================================================================
+    describe('Offline Bypass Prevention (H3 Fix)', () => {
+        let originalFetch;
+
+        beforeEach(async () => {
+            originalFetch = globalThis.fetch;
+            vi.resetModules();
+            localStorageMock.clear();
+            setupMocks(true);
+
+            const module = await import('../../js/security/license-verifier.js');
+            LicenseVerifier = module.default || module.LicenseVerifier;
+        });
+
+        afterEach(() => {
+            if (originalFetch) {
+                globalThis.fetch = originalFetch;
+            }
+            restoreOriginals();
+        });
+
+        it('should fallback to offline on network error (TypeError)', async () => {
+            // Mock fetch to simulate network failure
+            globalThis.fetch = vi.fn(() => {
+                return Promise.reject(new TypeError('Failed to fetch'));
+            });
+
+            const token = createTestJWT({ tier: 'chamber' });
+            const result = await LicenseVerifier.verifyLicense(token);
+
+            // Should fallback to offline verification
+            expect(result.valid).toBe(true);
+            expect(result.offlineMode).toBe(true);
+        });
+
+        it('should fallback to offline on AbortError (timeout)', async () => {
+            globalThis.fetch = vi.fn(() => {
+                return Promise.reject(new DOMException('Aborted', 'AbortError'));
+            });
+
+            const token = createTestJWT({ tier: 'chamber' });
+            const result = await LicenseVerifier.verifyLicense(token);
+
+            // Should fallback to offline verification
+            expect(result.valid).toBe(true);
+            expect(result.offlineMode).toBe(true);
+        });
+
+        it('should NOT fallback when server explicitly rejects with 401', async () => {
+            globalThis.fetch = vi.fn(() => {
+                return Promise.resolve({
+                    ok: false,
+                    status: 401,
+                    json: async () => ({ message: 'License revoked' })
+                });
+            });
+
+            const token = createTestJWT({ tier: 'chamber' });
+            const result = await LicenseVerifier.verifyLicense(token);
+
+            // Should NOT fallback - server explicitly rejected
+            expect(result.valid).toBe(false);
+            expect(result.offlineMode).toBe(false);
+            expect(result.error).toBe('SERVER_ERROR');
+        });
+
+        it('should NOT fallback when server explicitly rejects with 403', async () => {
+            globalThis.fetch = vi.fn(() => {
+                return Promise.resolve({
+                    ok: false,
+                    status: 403,
+                    json: async () => ({ message: 'License suspended' })
+                });
+            });
+
+            const token = createTestJWT({ tier: 'chamber' });
+            const result = await LicenseVerifier.verifyLicense(token);
+
+            // Should NOT fallback - server explicitly rejected
+            expect(result.valid).toBe(false);
+            expect(result.offlineMode).toBe(false);
+            expect(result.error).toBe('SERVER_ERROR');
+        });
+
+        it('should NOT fallback when server returns valid:false with explicit rejection', async () => {
+            globalThis.fetch = vi.fn(() => {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: async () => ({
+                        valid: false,
+                        error: 'LICENSE_REVOKED',
+                        message: 'License has been revoked'
+                    })
+                });
+            });
+
+            const token = createTestJWT({ tier: 'chamber' });
+            const result = await LicenseVerifier.verifyLicense(token);
+
+            // Server said valid:false - should NOT fallback
+            expect(result.valid).toBe(false);
+            expect(result.offlineMode).toBe(false);
+            // Should preserve the server's error code (LICENSE_REVOKED)
+            expect(result.error).toBe('LICENSE_REVOKED');
+            expect(result.serverRejected).toBe(true);
+        });
+
+        it('should accept when server returns valid:true', async () => {
+            globalThis.fetch = vi.fn(() => {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: async () => ({
+                        valid: true,
+                        tier: 'chamber',
+                        instanceId: 'test-instance',
+                        features: ['all']
+                    })
+                });
+            });
+
+            const token = createTestJWT({ tier: 'chamber' });
+            const result = await LicenseVerifier.verifyLicense(token);
+
+            expect(result.valid).toBe(true);
+            expect(result.tier).toBe('chamber');
+            expect(result.offlineMode).toBe(false);
+            expect(result.serverVerified).toBe(true);
+        });
+
+        it('should distinguish between network errors and server rejection', async () => {
+            // First, test with explicit server rejection
+            globalThis.fetch = vi.fn(() => {
+                return Promise.resolve({
+                    ok: false,
+                    status: 401,
+                    json: async () => ({ message: 'Unauthorized' })
+                });
+            });
+
+            const token1 = createTestJWT({ tier: 'chamber' });
+            const result1 = await LicenseVerifier.verifyLicense(token1);
+
+            expect(result1.valid).toBe(false);
+            expect(result1.offlineMode).toBe(false);
+            expect(result1.serverError).toBe(true);
+
+            // Now test with actual network error
+            globalThis.fetch = vi.fn(() => {
+                return Promise.reject(new TypeError('Network error'));
+            });
+
+            const token2 = createTestJWT({ tier: 'chamber' });
+            const result2 = await LicenseVerifier.verifyLicense(token2);
+
+            // This should fallback to offline
+            expect(result2.offlineMode).toBe(true);
+        });
+    });
+
+    // ========================================================================
+    // SECTION: M2 Fix - Key Rotation Support
+    // ========================================================================
+    describe('Key Rotation Support (M2 Fix)', () => {
+        beforeEach(async () => {
+            vi.resetModules();
+            localStorageMock.clear();
+            setupMocks(true);
+
+            const module = await import('../../js/security/license-verifier.js');
+            LicenseVerifier = module.default || module.LicenseVerifier;
+        });
+
+        afterEach(() => {
+            restoreOriginals();
+        });
+
+        it('should export PUBLIC_KEYS object with version support', () => {
+            expect(LicenseVerifier.PUBLIC_KEYS).toBeDefined();
+            expect(typeof LicenseVerifier.PUBLIC_KEYS).toBe('object');
+        });
+
+        it('should export ACTIVE_KEY_VERSION', () => {
+            expect(LicenseVerifier.ACTIVE_KEY_VERSION).toBeDefined();
+            expect(typeof LicenseVerifier.ACTIVE_KEY_VERSION).toBe('string');
+        });
+
+        it('should have v1 key defined in PUBLIC_KEYS', () => {
+            expect(LicenseVerifier.PUBLIC_KEYS.v1).toBeDefined();
+            expect(typeof LicenseVerifier.PUBLIC_KEYS.v1).toBe('string');
+            expect(LicenseVerifier.PUBLIC_KEYS.v1).toMatch(/^[A-Za-z0-9_-]+$/);
+        });
+
+        it('should have ACTIVE_KEY_VERSION set to v1', () => {
+            expect(LicenseVerifier.ACTIVE_KEY_VERSION).toBe('v1');
+        });
+
+        it('should support placeholder for future v2 key', () => {
+            // v2 should exist but may be null (for future rotation)
+            expect(LicenseVerifier.PUBLIC_KEYS.hasOwnProperty('v2')).toBe(true);
+        });
+
+        it('should use active key for verification', async () => {
+            // The active key should be used for importing
+            const activeKey = LicenseVerifier.PUBLIC_KEYS[LicenseVerifier.ACTIVE_KEY_VERSION];
+            expect(activeKey).toBeDefined();
+            expect(activeKey).toBeTruthy();
+        });
+
+        it('should allow adding new key versions without breaking existing code', () => {
+            // This test verifies the structure supports adding v3, v4, etc.
+            const keys = LicenseVerifier.PUBLIC_KEYS;
+            const currentVersion = LicenseVerifier.ACTIVE_KEY_VERSION;
+
+            // Structure should support:
+            // 1. Adding new versions
+            // 2. Switching active version
+            expect(typeof keys[currentVersion]).toBe('string');
+            expect(keys.hasOwnProperty(currentVersion)).toBe(true);
+        });
+    });
 });

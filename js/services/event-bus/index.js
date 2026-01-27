@@ -439,7 +439,9 @@ async function emitAndAwait(eventType, payload = {}, options = {}) {
 
 async function emitParallel(eventType, payload = {}, options = {}) {
     const handlers = (subscribers.get(eventType) || []).slice().concat(wildcardSubscribers.slice());
-    if (handlers.length === 0) return false;
+    if (handlers.length === 0) {
+        return { success: false, reason: 'no-handlers', results: [] };
+    }
 
     const meta = {
         type: eventType,
@@ -458,17 +460,25 @@ async function emitParallel(eventType, payload = {}, options = {}) {
         return a.id - b.id;
     });
 
-    await Promise.all(sorted.map(async (sub) => {
+    const results = await Promise.allSettled(sorted.map(async (sub) => {
         try {
-            await sub.handler(payload, meta);
+            const result = await sub.handler(payload, meta);
+            if (sub.once) off(sub.eventType, sub.handler);
+            return { success: true, result, handler: sub.handler.name || '' };
         } catch (e) {
             console.error('[EventBus] Parallel handler error:', e);
-        } finally {
             if (sub.once) off(sub.eventType, sub.handler);
+            return { success: false, error: e, handler: sub.handler.name || '' };
         }
     }));
 
-    return true;
+    const failures = results.filter(r => r.status === 'rejected' || (r.value && !r.value.success));
+    return {
+        success: failures.length === 0,
+        total: results.length,
+        failed: failures.length,
+        results: results.map(r => r.value || { success: false, error: r.reason, handler: '' })
+    };
 }
 
 // ==========================================

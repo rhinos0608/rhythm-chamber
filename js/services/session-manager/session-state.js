@@ -19,12 +19,14 @@
 import { DataVersion } from '../data-version.js';
 import { AppState } from '../../state/app-state.js';
 import { Mutex } from '../../utils/concurrency/mutex.js';
+import { SESSION } from '../../constants/session.js';
 
 // ==========================================
 // Constants
 // ==========================================
 
-const MAX_SAVED_MESSAGES = 100;  // Maximum messages saved per session
+// L2: Use shared constants instead of duplicated values
+const MAX_SAVED_MESSAGES = SESSION.MAX_SAVED_MESSAGES;  // Maximum messages saved per session
 const IN_MEMORY_MAX = MAX_SAVED_MESSAGES * 2;  // In-memory limit (2x for better UX)
 
 // ==========================================
@@ -44,15 +46,41 @@ const _sessionDataMutex = new Mutex();
 
 /**
  * Deep clone a message object to prevent external mutations
+ * M1 FIX: Now uses actual deep cloning via structuredClone with JSON fallback
  * HNW: Ensures message objects cannot be modified from outside
  * @param {Object} msg - Message object to clone
  * @returns {Object} Deep cloned message
  */
 export function deepCloneMessage(msg) {
     if (!msg) return msg;
-    // Shallow copy is sufficient for message objects (no nested objects)
-    // Messages have: role, content, timestamp, dataVersion, etc.
-    return { ...msg };
+    // Use structuredClone if available (modern browsers, Node 17+)
+    // Falls back to JSON.parse/stringify for older environments
+    // Note: JSON approach converts Date to string, undefined to null, drops functions
+    if (typeof structuredClone === 'function') {
+        try {
+            return structuredClone(msg);
+        } catch (e) {
+            // structuredClone throws on circular references, functions, etc.
+            // Fall back to JSON approach
+            return fallbackClone(msg);
+        }
+    }
+    return fallbackClone(msg);
+}
+
+/**
+ * Fallback deep clone using JSON.parse/stringify
+ * @param {Object} msg - Message object to clone
+ * @returns {Object} Deep cloned message
+ * @private
+ */
+function fallbackClone(msg) {
+    try {
+        return JSON.parse(JSON.stringify(msg));
+    } catch (e) {
+        // If JSON fails (circular refs), return shallow copy as last resort
+        return { ...msg };
+    }
 }
 
 /**
@@ -130,7 +158,9 @@ export function syncSessionIdToAppState(sessionId) {
 export async function updateSessionData(options) {
     // Support both old API (updaterFn function) and new API (options object)
     const updaterFn = typeof options === 'function' ? options : options.updaterFn;
-    const expectedVersion = typeof options === 'object' && options?.expectedVersion;
+    const expectedVersion = (typeof options === 'object' && options !== null && 'expectedVersion' in options)
+        ? options.expectedVersion
+        : undefined;
 
     return _sessionDataMutex.runExclusive(async () => {
         const currentData = getSessionData();

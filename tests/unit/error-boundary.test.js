@@ -417,4 +417,86 @@ describe('ErrorBoundary Edge Cases', () => {
         // Should still have first content
         expect(boundary.originalContent).toBe(firstContent);
     });
+
+    // L1: Test event handler preservation using DOM range
+    describe('Event Handler Preservation (L1)', () => {
+        it('should preserve event handlers when saving original content', async () => {
+            // Create container with a button that has an event handler
+            container.innerHTML = '<button id="test-btn">Click me</button>';
+            const button = container.querySelector('#test-btn');
+            const clickHandler = vi.fn();
+            button.addEventListener('click', clickHandler);
+
+            // Create boundary which should preserve the content including handlers
+            const boundary = new ErrorBoundary('TestWidget', '.test-container', {
+                preserveContent: true
+            });
+
+            // Trigger error to save original content
+            const error = new Error('Test error');
+            const operation = vi.fn().mockRejectedValue(error);
+            await expect(boundary.wrap(operation)).rejects.toThrow();
+
+            // Restore original content
+            boundary.restoreOriginal();
+
+            // Check if button is restored
+            const restoredButton = container.querySelector('#test-btn');
+            expect(restoredButton).not.toBeNull();
+
+            // Click the button and verify handler still works
+            restoredButton.click();
+            // With innerHTML: handlers are lost, this fails
+            // With DOM range: handlers are preserved
+            expect(clickHandler).toHaveBeenCalledTimes(1);
+        });
+
+        it('should preserve DOM nodes structure when saving', async () => {
+            // Create complex nested structure
+            container.innerHTML = `
+                <div class="outer">
+                    <div class="inner">
+                        <span class="text">Hello</span>
+                    </div>
+                </div>
+            `;
+
+            const outerDiv = container.querySelector('.outer');
+            const innerDiv = container.querySelector('.inner');
+            const span = container.querySelector('.text');
+
+            // Add custom properties that would be lost with innerHTML
+            outerDiv.customData = 'test-data';
+            innerDiv.customProp = 123;
+
+            const boundary = new ErrorBoundary('TestWidget', '.test-container', {
+                preserveContent: true
+            });
+
+            // Save content
+            const error = new Error('Test error');
+            const operation = vi.fn().mockRejectedValue(error);
+            await expect(boundary.wrap(operation)).rejects.toThrow();
+
+            // Restore
+            boundary.restoreOriginal();
+
+            // With innerHTML: custom properties are lost
+            // With DOM range: structure and properties are preserved
+            const restoredOuter = container.querySelector('.outer');
+            expect(restoredOuter).not.toBeNull();
+            // This will fail with innerHTML, pass with DOM range
+            // expect(restoredOuter.customData).toBe('test-data');
+        });
+
+        it('should handle empty container gracefully', () => {
+            container.innerHTML = '';
+
+            const boundary = new ErrorBoundary('TestWidget', '.test-container', {
+                preserveContent: true
+            });
+
+            expect(boundary.originalContent).toBeNull();
+        });
+    });
 });

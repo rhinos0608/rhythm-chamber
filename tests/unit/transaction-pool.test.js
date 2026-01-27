@@ -66,6 +66,147 @@ describe('Transaction Pool Race Condition (C6)', () => {
             // All operations should complete
             expect(results).toHaveLength(3);
         });
+
+        it('should guarantee mutual exclusion under concurrent acquire calls', async () => {
+            // This test demonstrates the race condition in the current implementation
+            // The check-then-set pattern (while loop + Promise creation) is NOT atomic
+            // Multiple coroutines can pass the while check before setting lock
+
+            class FlawedMutex {
+                constructor() {
+                    this.lock = null;
+                    this.release = null;
+                }
+
+                async acquire() {
+                    // DANGER: Check-then-set is NOT atomic!
+                    while (this.lock) {
+                        try {
+                            await this.lock;
+                        } catch {
+                            // Continue
+                        }
+                    }
+                    // Race condition window: multiple awaiters can reach here
+                    this.lock = new Promise((resolve) => {
+                        this.release = resolve;
+                    });
+                }
+
+                free() {
+                    if (this.release) {
+                        this.release();
+                        this.release = null;
+                    }
+                    this.lock = null;
+                }
+            }
+
+            const mutex = new FlawedMutex();
+            let concurrentCount = 0;
+            let maxConcurrent = 0;
+            const criticalSectionEntries = [];
+
+            // Try to acquire from multiple "threads" simultaneously
+            const racers = Array.from({ length: 10 }, async (_, i) => {
+                // All racers start at nearly the same time
+                await mutex.acquire();
+
+                // Critical section
+                concurrentCount++;
+                if (concurrentCount > maxConcurrent) {
+                    maxConcurrent = concurrentCount;
+                }
+                criticalSectionEntries.push({
+                    id: i,
+                    count: concurrentCount,
+                    timestamp: Date.now()
+                });
+
+                // Simulate some work
+                await Promise.resolve();
+
+                concurrentCount--;
+                mutex.free();
+            });
+
+            await Promise.all(racers);
+
+            // With proper mutex, maxConcurrent should be 1
+            // With the flawed implementation, it may be > 1
+            // This test documents the expected behavior after fix
+            expect(maxConcurrent).toBe(1);
+            expect(criticalSectionEntries).toHaveLength(10);
+
+            // Verify that no two entries overlap in time
+            // (each critical section should be fully complete before next starts)
+            for (let i = 1; i < criticalSectionEntries.length; i++) {
+                const prev = criticalSectionEntries[i - 1];
+                const curr = criticalSectionEntries[i];
+                // Current entry should have count of 1 (only itself in critical section)
+                expect(curr.count).toBe(1);
+            }
+        });
+
+        it('should serialize operations using Promise chaining (fixed implementation)', async () => {
+            // This demonstrates the fixed implementation using Promise chaining
+
+            class FixedMutex {
+                constructor() {
+                    this._lock = Promise.resolve();
+                    this._release = null;
+                }
+
+                async acquire() {
+                    // Chain off previous lock instead of while loop
+                    const previousLock = this._lock;
+                    let release;
+                    this._lock = new Promise(resolve => { release = resolve; });
+                    await previousLock; // This ensures serialization
+                    this._release = release;
+                }
+
+                free() {
+                    if (this._release) {
+                        this._release();
+                        this._release = null;
+                    }
+                }
+            }
+
+            const mutex = new FixedMutex();
+            let concurrentCount = 0;
+            let maxConcurrent = 0;
+            const results = [];
+
+            const racers = Array.from({ length: 20 }, async (_, i) => {
+                await mutex.acquire();
+
+                concurrentCount++;
+                if (concurrentCount > maxConcurrent) {
+                    maxConcurrent = concurrentCount;
+                }
+                results.push({ id: i, count: concurrentCount });
+
+                // Simulate async work
+                await Promise.resolve();
+                await Promise.resolve();
+
+                concurrentCount--;
+                mutex.free();
+            });
+
+            await Promise.all(racers);
+
+            // With fixed implementation, maxConcurrent MUST be 1
+            expect(maxConcurrent).toBe(1);
+            expect(results).toHaveLength(20);
+
+            // Each result should have count of exactly 1
+            results.forEach(r => {
+                expect(r.count).toBe(1);
+            });
+        });
     });
 
     describe('Transaction Validation', () => {

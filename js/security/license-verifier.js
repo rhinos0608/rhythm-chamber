@@ -57,10 +57,29 @@ const LICENSE_VERIFY_TIMEOUT = 10000; // 10 seconds
 // // Keep privateKey secure on server, embed publicKeyB64 in client code
 // ```
 //
-// Current public key for Rhythm Chamber production licenses:
-const PUBLIC_KEY_SPKI = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE' +
-    '0qC6PgZMlZoAPsKP7dZBE8c7ey-OGBsyUkuhUUofAJG0imK28WHuY3BMQ' +
-    'cVbXUFH74PUzIdyx6wlez4YQ9MFAQ';
+// SECURITY FIX (M2): Key rotation support
+// Multiple public key versions are supported to enable seamless key rotation.
+// When rotating keys:
+// 1. Generate new key pair on server
+// 2. Add new version to PUBLIC_KEYS object (e.g., 'v2': 'new-key-here')
+// 3. Update ACTIVE_KEY_VERSION to new version
+// 4. Old keys remain for verifying licenses signed with previous keys
+//
+const PUBLIC_KEYS = {
+    // Current production key (v1)
+    'v1': 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE' +
+          '0qC6PgZMlZoAPsKP7dZBE8c7ey-OGBsyUkuhUUofAJG0imK28WHuY3BMQ' +
+          'cVbXUFH74PUzIdyx6wlez4YQ9MFAQ',
+    // Placeholder for v2 key (future rotation)
+    // When rotating: generate new key, update 'v2', then change ACTIVE_KEY_VERSION
+    'v2': null
+};
+
+// The active key version used for verification
+const ACTIVE_KEY_VERSION = 'v1';
+
+// For backward compatibility, export the active key
+const PUBLIC_KEY_SPKI = PUBLIC_KEYS[ACTIVE_KEY_VERSION];
 
 // Device fingerprint for license binding
 let _deviceFingerprint = null;
@@ -467,44 +486,51 @@ async function verifyLicenseOffline(licenseToken) {
 
 /**
  * Verify license token signature and validity
- * First attempts server-side validation, falls back to offline mode
+ * First attempts server-side validation, falls back to offline mode ONLY on network errors
+ *
+ * SECURITY FIX (H3): Offline bypass prevention
+ * - Only fallback to offline mode on actual network errors (TypeError, AbortError)
+ * - When server explicitly rejects (valid=false, 401, 403), do NOT fallback
+ * - This prevents attackers from blocking server responses to bypass license checks
+ *
  * @param {string} licenseToken - JWT license token
  * @returns {Promise<Object>} Verification result
  */
 async function verifyLicense(licenseToken) {
     // First attempt: Server-side verification
     const serverResult = await verifyLicenseWithServer(licenseToken);
-    
+
+    // If server verified successfully, return immediately
     if (serverResult.valid) {
         logger.info('License verified via server');
         return serverResult;
     }
-    
-    // If server returned a definitive invalid (not network error), don't fallback
-    if (serverResult.serverError && !serverResult.offlineFallback) {
-        logger.warn('Server rejected license:', serverResult.message);
-        return {
-            valid: false,
-            error: serverResult.error,
-            message: serverResult.message,
-            offlineMode: false,
-            serverVerified: false
-        };
-    }
-    
-    // Network error or server unavailable - fallback to offline verification
+
+    // SECURITY FIX (H3): Only fallback on actual network errors, not server rejection
+    // Network errors have: offlineFallback=true or networkError=true
+    // Server rejection has: serverError=true BUT offlineFallback=false
     if (serverResult.offlineFallback || serverResult.networkError) {
-        logger.info('Falling back to offline license verification');
+        logger.info('Network error detected, falling back to offline verification');
         return verifyLicenseOffline(licenseToken);
     }
 
-    // If we have a cached license, try offline verification
-    // (allows for grace period when server is having issues)
-    if (hasCachedLicense()) {
-        logger.info('Server unavailable, using offline verification');
-        return verifyLicenseOffline(licenseToken);
+    // Server explicitly rejected the license - do NOT fallback
+    // This happens when:
+    // 1. HTTP error status (401, 403, etc.) - serverError=true
+    // 2. HTTP 200 but valid=false - server reached and explicitly rejected
+    // This prevents bypassing server revocation by going offline
+    if (serverResult.serverError || (serverResult.serverVerified && !serverResult.valid)) {
+        logger.warn('Server explicitly rejected license:', serverResult.message);
+        // Return the serverResult directly to preserve the server's error code
+        // Just add the serverRejected flag
+        return {
+            ...serverResult,
+            offlineMode: false,
+            serverRejected: true
+        };
     }
-    
+
+    // Any other case - verification failed
     return {
         valid: false,
         error: serverResult.error || 'VERIFICATION_FAILED',
@@ -746,9 +772,13 @@ export const LicenseVerifier = {
     LICENSE_STORAGE_KEY,
     LICENSE_CACHE_KEY,
     LICENSE_CACHE_DURATION,
-    LICENSE_SERVER_URL
+    LICENSE_SERVER_URL,
+
+    // Key rotation support (M2 Fix)
+    PUBLIC_KEYS,
+    ACTIVE_KEY_VERSION
 };
 
 export default LicenseVerifier;
 
-logger.info('Cryptographic license verifier loaded (ECDSA with server+offline mode)');
+logger.info('Cryptographic license verifier loaded (ECDSA with server+offline mode, key rotation support)');

@@ -262,6 +262,7 @@ export class DIContainer {
 
     /**
      * Check for circular dependencies in a dependency chain
+     * M5 FIX: Now checks ALL dependency types (factories AND controllers)
      * @param {string} name - Service name
      * @param {Array<string>} dependencies - Dependencies of the service
      * @param {Array<string>} chain - Current dependency chain
@@ -280,9 +281,17 @@ export class DIContainer {
                 throw new Error(`Circular dependency detected: ${cycle}`);
             }
 
+            // Check if dependency is a factory
             const depFactory = this._factories.get(dep);
             if (depFactory) {
                 this._checkCircularDependencies(dep, depFactory.dependencies, newChain);
+                continue;
+            }
+
+            // M5 FIX: Also check if dependency is a controller with tracked dependencies
+            const controllerDeps = this._dependencyGraph.controllers[dep];
+            if (controllerDeps && controllerDeps.length > 0) {
+                this._checkCircularDependencies(dep, controllerDeps, newChain);
             }
         }
     }

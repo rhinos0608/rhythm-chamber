@@ -169,9 +169,11 @@ async function processNext() {
         currentTurn = null;
         isProcessing = false;
 
-        // Use setTimeout to break the call stack and allow other pending operations
-        // This prevents stack buildup and ensures proper queue continuation
-        setTimeout(processNext, 0);
+        // FIX M3: Direct call instead of setTimeout
+        // The isProcessing check at the top of processNext() prevents re-entry race conditions
+        // This ensures deterministic sequencing without setTimeout's timing uncertainty
+        // Error handling is done by the promise chain of each individual turn
+        processNext().catch(e => console.error('[TurnQueue] Next turn failed:', e));
     }
 }
 

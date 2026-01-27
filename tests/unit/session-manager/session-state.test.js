@@ -25,12 +25,16 @@ const mockAppState = {
     update: vi.fn()
 };
 
-// Create a proper class mock for Mutex
-// The mock needs to execute the async function and return its result
+// Create a proper class mock for Mutex that actually serializes operations
+// This is critical for testing concurrent access patterns
+let operationQueue = Promise.resolve();
 const mockRunExclusive = vi.fn((fn) => {
-    // fn is an async function that returns a Promise
-    // Just call it and return the Promise it returns
-    return fn();
+    // Chain operations to ensure they run sequentially, not concurrently
+    // This simulates real mutex behavior
+    const result = operationQueue.then(() => fn());
+    // Continue queue even if an operation fails
+    operationQueue = result.catch(() => {});
+    return result;
 });
 
 class MockMutex {
@@ -51,7 +55,13 @@ function resetMocks() {
     mockDataVersion.tagMessage.mockReset();
     mockAppState.update.mockReset();
     mockRunExclusive.mockReset();
-    mockRunExclusive.mockImplementation((fn) => fn());
+    // Reset operation queue and re-apply serialization implementation
+    operationQueue = Promise.resolve();
+    mockRunExclusive.mockImplementation((fn) => {
+        const result = operationQueue.then(() => fn());
+        operationQueue = result.catch(() => {});
+        return result;
+    });
 }
 
 // Mock window for legacy compatibility
@@ -127,6 +137,64 @@ describe('SessionState Deep Cloning', () => {
         cloned[0].content = 'Modified';
 
         expect(original[0].content).toBe('Test');
+    });
+
+    // M1: Test actual deep cloning with nested objects
+    it('should deep clone messages with nested objects', () => {
+        const message = {
+            role: 'user',
+            content: 'Test',
+            metadata: {
+                timestamp: Date.now(),
+                nested: { value: 'deep' }
+            }
+        };
+        const cloned = SessionState.deepCloneMessage(message);
+
+        // Modifying nested object in clone should not affect original
+        cloned.metadata.nested.value = 'modified';
+        cloned.metadata.timestamp = 999;
+
+        expect(message.metadata.nested.value).toBe('deep');
+        expect(message.metadata.timestamp).not.toBe(999);
+    });
+
+    it('should deep clone messages with array properties', () => {
+        const message = {
+            role: 'user',
+            content: 'Test',
+            tokens: [1, 2, 3],
+            tags: ['tag1', 'tag2']
+        };
+        const cloned = SessionState.deepCloneMessage(message);
+
+        // Modifying arrays in clone should not affect original
+        cloned.tokens.push(4);
+        cloned.tags[0] = 'modified';
+
+        expect(message.tokens).toEqual([1, 2, 3]);
+        expect(message.tags[0]).toBe('tag1');
+    });
+
+    it('should handle messages with Date objects', () => {
+        const date = new Date('2024-01-01');
+        const message = { role: 'user', timestamp: date };
+        const cloned = SessionState.deepCloneMessage(message);
+
+        // Date should be cloned (not same reference for structuredClone)
+        // Note: JSON.stringify converts Date to ISO string, structuredClone keeps it as Date
+        expect(cloned).toBeDefined();
+        expect(cloned.role).toBe('user');
+        // Verify timestamp is preserved in some form
+        expect(cloned.timestamp).toBeDefined();
+    });
+
+    it('should clone simple flat messages correctly', () => {
+        const message = { role: 'user', content: 'Test', timestamp: 12345 };
+        const cloned = SessionState.deepCloneMessage(message);
+
+        expect(cloned).toEqual(message);
+        expect(cloned).not.toBe(message);
     });
 });
 
@@ -634,6 +702,57 @@ describe('SessionState Concurrency', () => {
 
         const history = SessionState.getHistory();
         expect(history.length).toBe(20);
+    });
+
+    it('should serialize mutex operations via mock', async () => {
+        // This test verifies that the mock actually serializes operations
+        // rather than letting them run concurrently
+        let concurrentCount = 0;
+        let maxConcurrent = 0;
+        const executionOrder = [];
+
+        const operations = Array.from({ length: 10 }, async (_, i) => {
+            return mockRunExclusive(async () => {
+                concurrentCount++;
+                if (concurrentCount > maxConcurrent) {
+                    maxConcurrent = concurrentCount;
+                }
+                executionOrder.push({ id: i, count: concurrentCount });
+
+                // Simulate async work
+                await Promise.resolve();
+                await Promise.resolve();
+
+                concurrentCount--;
+            });
+        });
+
+        await Promise.all(operations);
+
+        // With proper serialization, maxConcurrent should be 1
+        expect(maxConcurrent).toBe(1);
+        expect(executionOrder).toHaveLength(10);
+
+        // Verify each operation ran with only itself in the critical section
+        executionOrder.forEach(entry => {
+            expect(entry.count).toBe(1);
+        });
+    });
+
+    it('should maintain FIFO order with mutex serialization', async () => {
+        const results = [];
+
+        const operations = [1, 2, 3, 4, 5].map(async (val) => {
+            return mockRunExclusive(async () => {
+                await Promise.resolve();
+                results.push(val);
+            });
+        });
+
+        await Promise.all(operations);
+
+        // Should maintain submission order
+        expect(results).toEqual([1, 2, 3, 4, 5]);
     });
 });
 
