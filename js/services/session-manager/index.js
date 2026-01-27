@@ -107,6 +107,62 @@ export function createManager() {
 
         async recoverEmergencyBackup() {
             return await SessionPersistence.recoverEmergencyBackup();
+        },
+
+        // ==========================================
+        // Message History Management Methods
+        // ==========================================
+
+        /**
+         * Get conversation history
+         * @returns {Array} Copy of message history
+         */
+        getHistory() {
+            return SessionState.getHistory();
+        },
+
+        /**
+         * Add a single message to history
+         * @param {Object} message - Message to add
+         * @returns {Promise<void>}
+         */
+        async addMessageToHistory(message) {
+            return await SessionState.addMessageToHistory(message);
+        },
+
+        /**
+         * Add multiple messages to history atomically
+         * @param {Array} messages - Messages to add
+         * @returns {Promise<void>}
+         */
+        async addMessagesToHistory(messages) {
+            return await SessionState.addMessagesToHistory(messages);
+        },
+
+        /**
+         * Truncate history to length
+         * @param {number} length - Target length
+         * @returns {Promise<void>}
+         */
+        async truncateHistory(length) {
+            return await SessionState.truncateHistory(length);
+        },
+
+        /**
+         * Remove message from history at index
+         * @param {number} index - Index to remove
+         * @returns {Promise<boolean>} Success status
+         */
+        async removeMessageFromHistory(index) {
+            return await SessionState.removeMessageFromHistory(index);
+        },
+
+        /**
+         * Clear conversation and create new session
+         * @returns {Promise<void>}
+         */
+        async clearConversation() {
+            return await SessionLifecycle.clearAllSessions();
         }
     };
 
