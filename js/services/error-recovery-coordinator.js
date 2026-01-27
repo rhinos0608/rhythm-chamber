@@ -26,7 +26,7 @@ import { EventBus } from './event-bus.js';
 // Re-export Enums and Constants
 // ==========================================
 
-export { RecoveryPriority, RecoveryDomain, RecoveryState } from './error-recovery/recovery-strategies.js';
+export { RecoveryPriority, RecoveryDomain, RecoveryState } from './error-recovery/constants.js';
 
 // ==========================================
 // ErrorRecoveryCoordinator Class (Backward Compatible)

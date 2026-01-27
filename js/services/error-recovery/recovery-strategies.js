@@ -9,7 +9,7 @@
  * @version 1.0.0
  */
 
-import { RecoveryDomain } from '../error-recovery-coordinator.js';
+import { RecoveryDomain } from './constants.js';
 
 /**
  * RecoveryStrategies Class
