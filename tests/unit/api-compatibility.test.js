@@ -359,19 +359,49 @@ describe('PatternWorkerPool - API Compatibility', () => {
 
 describe('API Breaking Changes - Documentation', () => {
     it('should document SessionManager breaking changes', () => {
-        // This test serves as documentation for breaking changes
         const breakingChanges = {
             'init()': 'initialize() - Has alias for backward compatibility',
-            'createNewSession()': 'createSession() - Renamed',
-            'deleteSessionById()': 'deleteSession() - Renamed',
-            'clearConversation()': 'clearAllSessions() - Renamed',
-            'listSessions()': 'getAllSessions() - Renamed',
-            'setUserContext()': 'Removed - Deprecated, now no-op'
+            'createNewSession()': 'createSession() - Use new name',
+            'deleteSessionById()': 'deleteSession() - Use new name',
+            'clearConversation()': 'clearAllSessions() - Use new name',
+            'listSessions()': 'getAllSessions() - Use new name',
+            'setUserContext()': 'Deprecated - Still exists as no-op with warning',
+            'onSessionUpdate()': 'Removed - Use EventBus.on("session:*") instead',
+            'switchSession()': 'Still available - Moved to internal module',
+            'loadSession()': 'Still available - Use activateSession() or loadSession()',
+            // Persistence methods
+            'saveConversation()': 'Available - Added back in refactoring',
+            'flushPendingSaveAsync()': 'Available - Added back in refactoring',
+            'emergencyBackupSync()': 'Available - Added back in refactoring',
+            'recoverEmergencyBackup()': 'Available - Added back in refactoring',
+            // State methods
+            'getHistory()': 'Available - Exposed via facade',
+            'addMessageToHistory()': 'Available - Exposed via facade',
+            'addMessagesToHistory()': 'Available - Exposed via facade',
+            'truncateHistory()': 'Available - Exposed via facade',
+            'removeMessageFromHistory()': 'Available - Exposed via facade',
+            'clearConversation()': 'Available - Alias for clearAllSessions'
         };
 
-        // Verify backward compatibility aliases exist
+        // Verify backward compatibility - initialization methods
         expect(typeof SessionManager.init).toBe('function');
         expect(typeof SessionManager.initialize).toBe('function');
+
+        // Verify persistence methods are available
+        expect(typeof SessionManager.saveConversation).toBe('function');
+        expect(typeof SessionManager.flushPendingSaveAsync).toBe('function');
+        expect(typeof SessionManager.emergencyBackupSync).toBe('function');
+        expect(typeof SessionManager.recoverEmergencyBackup).toBe('function');
+
+        // Verify state methods are exposed via facade
+        expect(typeof SessionManager.getHistory).toBe('function');
+        expect(typeof SessionManager.addMessageToHistory).toBe('function');
+        expect(typeof SessionManager.addMessagesToHistory).toBe('function');
+        expect(typeof SessionManager.truncateHistory).toBe('function');
+        expect(typeof SessionManager.removeMessageFromHistory).toBe('function');
+        expect(typeof SessionManager.clearConversation).toBe('function');
+
+        // Verify deprecated method still exists
         expect(typeof SessionManager.setUserContext).toBe('function');
     });
 });
