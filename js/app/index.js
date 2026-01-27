@@ -38,35 +38,36 @@ import { ProfileSynthesizer } from '../profile-synthesizer.js';
 
 import { LemonSqueezyService } from '../services/lemon-squeezy-service.js';
 
-const Container = {
-    _services: new Map(),
-    _controllers: new Map(),
-    registerInstance(name, instance) {
-        this._services.set(name, instance);
-    },
-    registerController(name, controller) {
-        this._controllers.set(name, controller);
-    },
-    has(name) {
-        return this._services.has(name) || this._controllers.has(name);
-    },
-    get(name) {
-        return this._services.get(name) || this._controllers.get(name) || null;
-    },
-    initController(controllerName, depNames) {
-        const controller = this._controllers.get(controllerName);
-        if (!controller || typeof controller.init !== 'function') {
-            throw new Error(`Controller '${controllerName}' is not initializable`);
-        }
-        const dependencies = {};
-        for (const name of depNames) {
-            const dep = this.get(name);
-            if (!dep) throw new Error(`Dependency '${name}' not found for controller '${controllerName}'`);
-            dependencies[name] = dep;
-        }
-        controller.init(dependencies);
-    }
-};
+/**
+ * DI Container - Improved Dependency Injection Container
+ *
+ * Provides:
+ * - Explicit dependency declarations
+ * - Constructor injection support
+ * - Circular dependency detection
+ * - Dependency graph visualization
+ *
+ * The legacy interface is preserved for backward compatibility.
+ */
+import { DIContainer } from './di-container.js';
+
+/**
+ * DI Container - Improved Dependency Injection Container
+ *
+ * Provides:
+ * - Explicit dependency declarations
+ * - Constructor injection support
+ * - Circular dependency detection
+ * - Dependency graph visualization
+ *
+ * The legacy interface is preserved for backward compatibility.
+ */
+const Container = new DIContainer();
+
+// Export Container for use in other modules (after function declarations)
+if (typeof window !== 'undefined') {
+    window.Container = Container;
+}
 
 function showToast(message, type = 'info', duration = 3000) {
     if (typeof document === 'undefined') return;
@@ -121,19 +122,49 @@ function registerContainerServices() {
     Container.registerController('MessageOperations', MessageOperations);
 }
 
+/**
+ * Explicit controller dependency declarations
+ * Each controller declares its dependencies for better clarity
+ */
+const CONTROLLER_DEPENDENCIES = Object.freeze({
+    FileUploadController: ['Storage', 'AppState', 'OperationLock', 'Patterns', 'Personality', 'ViewController', 'showToast'],
+    SpotifyController: ['Storage', 'AppState', 'Spotify', 'Patterns', 'Personality', 'ViewController', 'showToast'],
+    DemoController: ['AppState', 'DemoData', 'ViewController', 'Patterns', 'showToast'],
+    ResetController: ['Storage', 'AppState', 'Spotify', 'Chat', 'OperationLock', 'ViewController', 'showToast', 'FileUploadController'],
+    SidebarController: ['AppState', 'Storage', 'ViewController', 'showToast'],
+    ChatUIController: ['AppState', 'Storage', 'ViewController', 'showToast'],
+    MessageOperations: ['DataQuery', 'TokenCounter', 'Functions']
+});
+
 function initializeControllers() {
-    const controllerDependencies = {
-        FileUploadController: ['Storage', 'AppState', 'OperationLock', 'Patterns', 'Personality', 'ViewController', 'showToast'],
-        SpotifyController: ['Storage', 'AppState', 'Spotify', 'Patterns', 'Personality', 'ViewController', 'showToast'],
-        DemoController: ['AppState', 'DemoData', 'ViewController', 'Patterns', 'showToast'],
-        ResetController: ['Storage', 'AppState', 'Spotify', 'Chat', 'OperationLock', 'ViewController', 'showToast', 'FileUploadController'],
-        SidebarController: ['AppState', 'Storage', 'ViewController', 'showToast'],
-        ChatUIController: ['AppState', 'Storage', 'ViewController', 'showToast'],
-        MessageOperations: ['DataQuery', 'TokenCounter', 'Functions']
-    };
-    for (const [controllerName, deps] of Object.entries(controllerDependencies)) {
+    for (const [controllerName, deps] of Object.entries(CONTROLLER_DEPENDENCIES)) {
         Container.initController(controllerName, deps);
     }
+}
+
+/**
+ * Get the dependency graph for debugging
+ * Useful for visualizing the application's dependency structure
+ * @returns {Object} Dependency graph
+ */
+function getDependencyGraph() {
+    return Container.getDependencyGraph();
+}
+
+/**
+ * Get container status for health checks
+ * @returns {Object} Container status
+ */
+function getContainerStatus() {
+    return Container.getStatus();
+}
+
+/**
+ * Generate DOT format graph for visualization tools
+ * @returns {string} DOT format graph
+ */
+function getDependencyGraphDot() {
+    return Container.toDotFormat();
 }
 
 function bindSettingsButtons() {
@@ -236,5 +267,13 @@ if (typeof document !== 'undefined') {
             showToast('App failed to start', 'error', 6000);
         });
     });
+}
+
+// Expose debugging helpers in development
+if (typeof window !== 'undefined') {
+    window.getDependencyGraph = getDependencyGraph;
+    window.getContainerStatus = getContainerStatus;
+    window.getDependencyGraphDot = getDependencyGraphDot;
+    window.CONTROLLER_DEPENDENCIES = CONTROLLER_DEPENDENCIES;
 }
 

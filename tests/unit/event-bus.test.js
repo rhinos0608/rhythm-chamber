@@ -366,6 +366,259 @@ describe('EventBus Wave Integration', () => {
 });
 
 // ==========================================
+// Event Metadata Tests (TD-10)
+// ==========================================
+
+describe('EventBus Event Metadata', () => {
+    it('should include sequence number in event metadata', () => {
+        let receivedMeta = null;
+        const handler = (data, meta) => {
+            receivedMeta = meta;
+        };
+        EventBus.on('meta:test', handler);
+        EventBus.emit('meta:test', {});
+
+        expect(receivedMeta).toBeDefined();
+        expect(receivedMeta.sequenceNumber).toBeDefined();
+        expect(typeof receivedMeta.sequenceNumber).toBe('number');
+        expect(receivedMeta.sequenceNumber).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should increment sequence numbers for each event', () => {
+        const sequenceNumbers = [];
+        const handler = (data, meta) => {
+            sequenceNumbers.push(meta.sequenceNumber);
+        };
+        EventBus.on('seq:test', handler);
+
+        EventBus.emit('seq:test', {});
+        EventBus.emit('seq:test', {});
+        EventBus.emit('seq:test', {});
+
+        expect(sequenceNumbers).toEqual([0, 1, 2]);
+    });
+
+    it('should include timestamp in event metadata', () => {
+        let receivedTimestamp = null;
+        const beforeTime = Date.now();
+        const handler = (data, meta) => {
+            receivedTimestamp = meta.timestamp;
+        };
+        EventBus.on('time:test', handler);
+        EventBus.emit('time:test', {});
+
+        expect(receivedTimestamp).toBeDefined();
+        expect(receivedTimestamp).toBeGreaterThanOrEqual(beforeTime);
+        expect(receivedTimestamp).toBeLessThanOrEqual(Date.now());
+    });
+
+    it('should include event type in metadata', () => {
+        let receivedType = null;
+        const handler = (data, meta) => {
+            receivedType = meta.type;
+        };
+        EventBus.on('type:test', handler);
+        EventBus.emit('type:test', {});
+
+        expect(receivedType).toBe('type:test');
+    });
+
+    it('should include priority from emit options in metadata', () => {
+        let receivedPriority = null;
+        const handler = (data, meta) => {
+            receivedPriority = meta.priority;
+        };
+        EventBus.on('priority:meta', handler);
+        EventBus.emit('priority:meta', {}, { priority: EventBus.PRIORITY.HIGH });
+
+        expect(receivedPriority).toBe(EventBus.PRIORITY.HIGH);
+    });
+
+    it('should handle custom priority in emit options', () => {
+        let receivedPriority = null;
+        const handler = (data, meta) => {
+            receivedPriority = meta.priority;
+        };
+        EventBus.on('custom:priority', handler);
+        EventBus.emit('custom:priority', {}, { priority: EventBus.PRIORITY.CRITICAL });
+
+        expect(receivedPriority).toBe(EventBus.PRIORITY.CRITICAL);
+    });
+
+    it('should maintain PRIORITY constants', () => {
+        expect(EventBus.PRIORITY).toBeDefined();
+        expect(EventBus.PRIORITY.LOW).toBe(0);
+        expect(EventBus.PRIORITY.NORMAL).toBe(1);
+        expect(EventBus.PRIORITY.HIGH).toBe(2);
+        expect(EventBus.PRIORITY.CRITICAL).toBe(3);
+    });
+});
+
+// ==========================================
+// Schema Registration Tests (TD-10)
+// ==========================================
+
+describe('EventBus Schema Registration', () => {
+    it('should register dynamic schema', () => {
+        const result = EventBus.registerSchema('custom:event', {
+            description: 'Custom event',
+            payload: { id: 'string', name: 'string?' }
+        });
+
+        expect(result).toBe(true);
+
+        const schema = EventBus.getSchema('custom:event');
+        expect(schema).toBeDefined();
+        expect(schema.description).toBe('Custom event');
+    });
+
+    it('should register multiple schemas', () => {
+        const count = EventBus.registerSchemas({
+            'event:a': { description: 'Event A', payload: {} },
+            'event:b': { description: 'Event B', payload: {} },
+            'event:c': { description: 'Event C', payload: {} }
+        });
+
+        expect(count).toBe(3);
+
+        const schemas = EventBus.getSchemas();
+        expect(schemas).toHaveProperty('event:a');
+        expect(schemas).toHaveProperty('event:b');
+        expect(schemas).toHaveProperty('event:c');
+    });
+
+    it('should include both static and dynamic schemas in getSchemas', () => {
+        EventBus.registerSchema('dynamic:event', { description: 'Dynamic', payload: {} });
+
+        const schemas = EventBus.getSchemas();
+
+        // Static schemas from EVENT_SCHEMAS
+        expect(schemas).toHaveProperty('storage:updated');
+        expect(schemas).toHaveProperty('session:created');
+        // Dynamic schema
+        expect(schemas).toHaveProperty('dynamic:event');
+    });
+});
+
+// ==========================================
+// clearAll Tests (TD-10)
+// ==========================================
+
+describe('EventBus clearAll', () => {
+    it('should clear all subscribers', () => {
+        EventBus.on('event:a', () => {});
+        EventBus.on('event:b', () => {});
+        EventBus.on('*', () => {});
+
+        expect(EventBus.getSubscriberCount('event:a')).toBe(1);
+        expect(EventBus.getSubscriberCount('event:b')).toBe(1);
+        expect(EventBus.getSubscriberCount('*')).toBe(1);
+
+        EventBus.clearAll();
+
+        expect(EventBus.getSubscriberCount('event:a')).toBe(0);
+        expect(EventBus.getSubscriberCount('event:b')).toBe(0);
+        expect(EventBus.getSubscriberCount('*')).toBe(0);
+    });
+
+    it('should clear trace', () => {
+        EventBus.on('trace:event', () => {});
+        EventBus.emit('trace:event', {});
+
+        expect(EventBus.getTrace().length).toBeGreaterThan(0);
+
+        EventBus.clearAll();
+
+        expect(EventBus.getTrace().length).toBe(0);
+    });
+
+    it('should clear dynamic schemas', () => {
+        EventBus.registerSchema('test:event', { description: 'Test', payload: {} });
+        expect(EventBus.getSchema('test:event')).toBeDefined();
+
+        EventBus.clearAll();
+
+        expect(EventBus.getSchema('test:event')).toBeUndefined();
+    });
+
+    it('should reset sequence numbers', () => {
+        let firstSeq;
+        let secondSeq;
+
+        // First batch - get initial sequence
+        const handler1 = (data, meta) => {
+            firstSeq = meta.sequenceNumber;
+        };
+        EventBus.on('seq:reset', handler1);
+        EventBus.emit('seq:reset', {});
+        const firstSeqValue = firstSeq;
+
+        // Clear everything
+        EventBus.clearAll();
+
+        // Second batch - should start from 0 again
+        const handler2 = (data, meta) => {
+            secondSeq = meta.sequenceNumber;
+        };
+        EventBus.on('seq:reset', handler2);
+        EventBus.emit('seq:reset', {});
+
+        // After clearAll, the sequence should be reset to 0
+        expect(secondSeq).toBe(0);
+    });
+});
+
+// ==========================================
+// emitAndAwait Tests (TD-10)
+// ==========================================
+
+describe('EventBus emitAndAwait', () => {
+    it('should await all handlers', async () => {
+        const callOrder = [];
+        const handler1 = async () => {
+            callOrder.push('handler1');
+            await new Promise(resolve => setTimeout(resolve, 10));
+        };
+        const handler2 = async () => {
+            callOrder.push('handler2');
+            await new Promise(resolve => setTimeout(resolve, 5));
+        };
+
+        EventBus.on('await:test', handler1);
+        EventBus.on('await:test', handler2);
+
+        await EventBus.emitAndAwait('await:test', {});
+
+        expect(callOrder).toEqual(['handler1', 'handler2']);
+    });
+
+    it('should return false when no handlers', async () => {
+        const result = await EventBus.emitAndAwait('no:handlers', {});
+        expect(result).toBe(false);
+    });
+
+    it('should return true when handlers complete', async () => {
+        EventBus.on('await:handlers', async () => {});
+        const result = await EventBus.emitAndAwait('await:handlers', {});
+        expect(result).toBe(true);
+    });
+
+    it('should handle handler errors and continue', async () => {
+        const handler2 = vi.fn();
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        EventBus.on('await:error', async () => { throw new Error('Handler error'); });
+        EventBus.on('await:error', handler2);
+
+        await EventBus.emitAndAwait('await:error', {});
+
+        expect(handler2).toHaveBeenCalled();
+
+        errorSpy.mockRestore();
+    });
+});
+
+// ==========================================
 // emitParallel Error Handling Tests (TD-2)
 // ==========================================
 

@@ -209,73 +209,56 @@ describe('CascadingAbort', () => {
 });
 
 // ==========================================
-// EventBus Circuit Breaker Tests
+// EventBus Health Status Tests (TD-10)
 // ==========================================
 
-describe('EventBus Circuit Breaker', () => {
+describe('EventBus Health Status', () => {
     beforeEach(() => {
         EventBus.clearAll();
         EventBus.setDebugMode(false);
     });
 
-    describe('getCircuitBreakerStatus', () => {
-        it('should return status object', () => {
-            const status = EventBus.getCircuitBreakerStatus();
-            expect(status).toHaveProperty('pendingEventCount');
-            expect(status).toHaveProperty('maxQueueSize');
-            expect(status).toHaveProperty('queueUtilization');
-            expect(status).toHaveProperty('stormActive');
-            expect(status).toHaveProperty('droppedCount');
+    describe('getHealthStatus', () => {
+        it('should return ok status', () => {
+            const status = EventBus.getHealthStatus();
+            expect(status).toHaveProperty('status');
+            expect(status.status).toBe('ok');
         });
     });
 
-    describe('configureCircuitBreaker', () => {
-        it('should update configuration', () => {
-            EventBus.configureCircuitBreaker({ maxQueueSize: 500 });
-            const status = EventBus.getCircuitBreakerStatus();
-            expect(status.maxQueueSize).toBe(500);
-
-            // Reset to default
-            EventBus.configureCircuitBreaker({ maxQueueSize: 1000 });
-        });
-    });
-
-    describe('queue overflow', () => {
-        it('should track dropped events when queue overflows', () => {
-            // Configure a small max queue for testing
-            EventBus.configureCircuitBreaker({ maxQueueSize: 5 });
-
-            // The pendingEvents queue only fills during queueing operations
-            // For normal emit, events are processed immediately
-            // This test verifies the status structure is correct
-            const status = EventBus.getCircuitBreakerStatus();
-            expect(status.pendingEventCount).toBe(0); // Queue should be empty for sync events
-            expect(status.maxQueueSize).toBe(5);
-
-            // Reset config
-            EventBus.configureCircuitBreaker({ maxQueueSize: 1000 });
-        });
-    });
-
-    describe('storm detection', () => {
-        it('should track events per window for storm detection', () => {
-            // Note: Storm detection triggers when window resets and threshold was exceeded
-            // The eventsThisWindow counter tracks events, stormActive flag is set on window reset
+    describe('core event functionality', () => {
+        it('should publish and subscribe to events', () => {
             const handler = vi.fn();
             EventBus.on('test:event', handler);
+            EventBus.emit('test:event', { data: 'test' });
 
-            // Emit events
-            for (let i = 0; i < 50; i++) {
-                EventBus.emit('test:event', { i });
-            }
+            expect(handler).toHaveBeenCalledTimes(1);
+            expect(handler).toHaveBeenCalledWith(
+                { data: 'test' },
+                expect.objectContaining({ type: 'test:event' })
+            );
+        });
 
-            // All events should be processed
-            expect(handler).toHaveBeenCalledTimes(50);
+        it('should respect priority dispatch order', () => {
+            const callOrder = [];
 
-            // Verify status structure exists
-            const status = EventBus.getCircuitBreakerStatus();
-            expect(status).toHaveProperty('stormActive');
-            expect(status).toHaveProperty('droppedCount');
+            EventBus.on('priority:test', () => callOrder.push('normal'), { priority: EventBus.PRIORITY.NORMAL });
+            EventBus.on('priority:test', () => callOrder.push('critical'), { priority: EventBus.PRIORITY.CRITICAL });
+            EventBus.on('priority:test', () => callOrder.push('low'), { priority: EventBus.PRIORITY.LOW });
+
+            EventBus.emit('priority:test', {});
+
+            expect(callOrder).toEqual(['critical', 'normal', 'low']);
+        });
+
+        it('should support wildcard subscriptions', () => {
+            const handler = vi.fn();
+            EventBus.on('*', handler);
+
+            EventBus.emit('event:one', { a: 1 });
+            EventBus.emit('event:two', { b: 2 });
+
+            expect(handler).toHaveBeenCalledTimes(2);
         });
     });
 });
