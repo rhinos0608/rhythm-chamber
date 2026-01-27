@@ -29,7 +29,7 @@ const localStorageMock = {
 };
 
 /**
- * Create a crypto mock that supports HMAC verification
+ * Create a crypto mock that supports ECDSA verification
  */
 function createLicenseCryptoMock(verifyResult = true) {
     const keyStore = new Map();
@@ -52,7 +52,7 @@ function createLicenseCryptoMock(verifyResult = true) {
 
             verify: async (algorithm, key, signature, data) => {
                 // For testing, always return the configured result
-                // The real HMAC verification is complex, we just need to simulate success/failure
+                // The real ECDSA verification is complex, we just need to simulate success/failure
                 return verifyResult;
             },
 
@@ -172,9 +172,10 @@ function restoreOriginals() {
 
 /**
  * Helper: Create a valid JWT token for testing
+ * Note: Uses ES256 (ECDSA with P-256) to match the new security implementation
  */
 function createTestJWT(overrides = {}) {
-    const header = { alg: 'HS256', typ: 'JWT' };
+    const header = { alg: 'ES256', typ: 'JWT' };
     const now = Math.floor(Date.now() / 1000);
     const payload = {
         tier: 'sovereign',
@@ -236,7 +237,7 @@ describe('License Verifier Module', () => {
             const token = createTestJWT();
             const parsed = LicenseVerifier.parseJWT(token);
 
-            expect(parsed.header.alg).toBe('HS256');
+            expect(parsed.header.alg).toBe('ES256');
             expect(parsed.header.typ).toBe('JWT');
         });
 
@@ -346,9 +347,9 @@ describe('License Verifier Module', () => {
         });
 
         it('should reject license with unsupported algorithm', async () => {
-            // Create JWT with RS256 algorithm
+            // Create JWT with HS256 algorithm (old HMAC-based)
             const b64url = (str) => btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-            const header = b64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+            const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
             const payload = b64url(JSON.stringify({ tier: 'sovereign' }));
             const token = `${header}.${payload}.sig`;
 
@@ -356,12 +357,12 @@ describe('License Verifier Module', () => {
 
             expect(result.valid).toBe(false);
             expect(result.error).toBe('UNSUPPORTED_ALGORITHM');
-            expect(result.message).toContain('RS256');
+            expect(result.message).toContain('HS256');
         });
 
         it('should reject license with invalid type', async () => {
             const b64url = (str) => btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-            const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWE' })); // JWE instead of JWT
+            const header = b64url(JSON.stringify({ alg: 'ES256', typ: 'JWE' })); // JWE instead of JWT
             const payload = b64url(JSON.stringify({ tier: 'sovereign' }));
             const token = `${header}.${payload}.sig`;
 
@@ -848,7 +849,7 @@ describe('License Verifier Module', () => {
         it('should handle license with minimal payload', async () => {
             // Create a minimal valid JWT payload (without undefined fields)
             const b64url = (str) => btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-            const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+            const header = b64url(JSON.stringify({ alg: 'ES256', typ: 'JWT' }));
             const payload = b64url(JSON.stringify({ tier: 'sovereign' }));
             const signature = b64url('valid-signature');
             const token = `${header}.${payload}.${signature}`;

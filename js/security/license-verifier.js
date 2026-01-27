@@ -1,8 +1,19 @@
 /**
  * Cryptographic License Verifier for Rhythm Chamber
  *
- * Provides secure JWT-based license verification using Web Crypto API.
- * Supports server-side validation with offline fallback using PBKDF2 key derivation.
+ * Provides secure JWT-based license verification using Web Crypto API with
+ * ECDSA (Elliptic Curve Digital Signature Algorithm) asymmetric cryptography.
+ *
+ * Security Architecture:
+ * - Private key: NEVER exposed to client, kept secure on license server
+ * - Public key: Embedded in client code, used only for signature verification
+ * - Licenses: Signed by server using ECDSA-P256 (secp256r1 curve)
+ * - Offline mode: Verifies signatures using public key (no secrets in client)
+ *
+ * The use of asymmetric cryptography eliminates the vulnerability where
+ * a secret key could be extracted from client code to forge licenses.
+ * Even with full access to client code, an attacker cannot forge valid
+ * license signatures without the private key.
  *
  * @module security/license-verifier
  */
@@ -23,14 +34,39 @@ const LICENSE_STORAGE_KEY = 'rhythm_chamber_license';
 const LICENSE_SERVER_URL = '/api/license/verify';
 const LICENSE_VERIFY_TIMEOUT = 10000; // 10 seconds
 
-// Offline key derivation configuration
-const PBKDF2_ITERATIONS = 100000;
-const PBKDF2_KEY_LENGTH = 256; // bits
-const PBKDF2_SALT_KEY = 'rhythm_chamber_license_salt';
-const OFFLINE_DERIVED_KEY_KEY = 'rhythm_chamber_offline_key';
+// ==========================================
+// ECDSA Public Key for Signature Verification
+// ==========================================
+//
+// SECURITY NOTE: This is the PUBLIC KEY only. It cannot be used to sign licenses,
+// only to verify signatures. The private key is kept secure on the license server.
+//
+// The public key is in SPKI (SubjectPublicKeyInfo) format encoded as base64URL.
+// This is generated using ECDSA with the P-256 curve (secp256r1).
+//
+// To generate a new key pair (server-side only):
+// ```javascript
+// const keyPair = await crypto.subtle.generateKey(
+//     { name: 'ECDSA', namedCurve: 'P-256' },
+//     true,
+//     ['sign', 'verify']
+// );
+// const publicKeySpki = await crypto.subtle.exportKey('spki', keyPair.publicKey);
+// const publicKeyB64 = btoa(String.fromCharCode(...new Uint8Array(publicKeySpki)))
+//     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+// // Keep privateKey secure on server, embed publicKeyB64 in client code
+// ```
+//
+// Current public key for Rhythm Chamber production licenses:
+const PUBLIC_KEY_SPKI = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE' +
+    '0qC6PgZMlZoAPsKP7dZBE8c7ey-OGBsyUkuhUUofAJG0imK28WHuY3BMQ' +
+    'cVbXUFH74PUzIdyx6wlez4YQ9MFAQ';
 
 // Device fingerprint for license binding
 let _deviceFingerprint = null;
+
+// Cached imported public key (to avoid re-importing)
+let _importedPublicKey = null;
 
 // ==========================================
 // Device Fingerprinting
@@ -145,48 +181,77 @@ function parseJWT(token) {
 }
 
 // ==========================================
-// Signature Verification
+// ECDSA Signature Verification
 // ==========================================
 
 /**
- * Import HMAC key for verification
- * @param {string} secret - Secret key as hex string
- * @returns {Promise<CryptoKey>} Imported key
+ * Import the ECDSA public key for signature verification
+ * The public key is cached to avoid repeated imports
+ * @returns {Promise<CryptoKey>} Imported public key
  */
-async function importHMACKey(secret) {
-    const secretBytes = new Uint8Array(
-        secret.match(/[\da-f]{2}/gi)?.map(h => parseInt(h, 16)) || []
-    );
+async function importPublicKey() {
+    if (_importedPublicKey) {
+        return _importedPublicKey;
+    }
 
-    return crypto.subtle.importKey(
-        'raw',
-        secretBytes,
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['verify']
-    );
+    try {
+        // Decode base64URL public key to raw bytes
+        const base64UrlToBase64 = (str) => {
+            return str.replace(/-/g, '+').replace(/_/g, '/');
+        };
+        const base64PublicKey = base64UrlToBase64(PUBLIC_KEY_SPKI);
+        const publicKeyBytes = Uint8Array.from(atob(base64PublicKey), c => c.charCodeAt(0));
+
+        // Import the public key in SPKI format
+        _importedPublicKey = await crypto.subtle.importKey(
+            'spki',
+            publicKeyBytes,
+            {
+                name: 'ECDSA',
+                namedCurve: 'P-256'
+            },
+            false, // Not extractable (security)
+            ['verify']
+        );
+
+        logger.info('ECDSA public key imported successfully');
+        return _importedPublicKey;
+    } catch (e) {
+        logger.error('Failed to import ECDSA public key:', e);
+        throw new Error('PUBLIC_KEY_IMPORT_FAILED');
+    }
 }
 
 /**
- * Verify HMAC-SHA256 signature
- * @param {string} data - Data that was signed
- * @param {string} signature - Base64URL signature
- * @param {string} secretHex - Secret key as hex
- * @returns {Promise<boolean>} True if signature valid
+ * Verify ECDSA signature on JWT token
+ * @param {string} data - The data that was signed (header.payload)
+ * @param {string} signature - Base64URL encoded signature
+ * @returns {Promise<boolean>} True if signature is valid
  */
-async function verifyHMAC(data, signature, secretHex) {
+async function verifyECDSA(data, signature) {
     try {
-        const key = await importHMACKey(secretHex);
+        const key = await importPublicKey();
 
-        // Decode signature - base64UrlDecodeToBytes returns raw bytes
+        // Decode signature from base64URL to raw bytes
         const sigBytes = base64UrlDecodeToBytes(signature);
 
-        // Create data to verify (header.payload)
+        // Create data bytes for verification
         const dataBytes = new TextEncoder().encode(data);
 
-        return await crypto.subtle.verify('HMAC', key, sigBytes, dataBytes);
+        // Verify signature using ECDSA with SHA-256 hash
+        const isValid = await crypto.subtle.verify(
+            {
+                name: 'ECDSA',
+                hash: { name: 'SHA-256' }
+            },
+            key,
+            sigBytes,
+            dataBytes
+        );
+
+        return isValid;
     } catch (e) {
-        logger.error('HMAC verification failed:', e);
+        logger.error('ECDSA verification failed:', e);
         return false;
     }
 }
@@ -273,120 +338,27 @@ async function verifyLicenseWithServer(licenseToken) {
 }
 
 // ==========================================
-// Offline Key Derivation (PBKDF2)
+// Offline License Verification (ECDSA)
 // ==========================================
 
 /**
- * Check if offline key has been configured
- * @returns {boolean} True if offline key exists
+ * Check if previously verified license is cached for offline use
+ * @returns {boolean} True if cached license exists
  */
-function hasOfflineKey() {
-    const derivedKey = localStorage.getItem(OFFLINE_DERIVED_KEY_KEY);
-    const salt = localStorage.getItem(PBKDF2_SALT_KEY);
-    return !!(derivedKey && salt);
+function hasCachedLicense() {
+    const cached = localStorage.getItem(LICENSE_STORAGE_KEY);
+    return !!cached;
 }
 
 /**
- * Derive offline verification key using PBKDF2
- * @param {string} passphrase - User-provided passphrase
- * @param {Uint8Array} salt - Salt bytes (device fingerprint based)
- * @returns {Promise<string>} Derived key as hex string
- */
-async function deriveOfflineKey(passphrase, salt) {
-    const encoder = new TextEncoder();
-    const passphraseBytes = encoder.encode(passphrase);
-    
-    // Import passphrase as key material
-    const keyMaterial = await crypto.subtle.importKey(
-        'raw',
-        passphraseBytes,
-        'PBKDF2',
-        false,
-        ['deriveBits']
-    );
-    
-    // Derive key using PBKDF2
-    const derivedBits = await crypto.subtle.deriveBits(
-        {
-            name: 'PBKDF2',
-            salt: salt,
-            iterations: PBKDF2_ITERATIONS,
-            hash: 'SHA-256'
-        },
-        keyMaterial,
-        PBKDF2_KEY_LENGTH
-    );
-    
-    const derivedArray = Array.from(new Uint8Array(derivedBits));
-    return derivedArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-/**
- * Setup offline key with passphrase
- * This should be called once when user configures offline mode
- * @param {string} passphrase - User-provided passphrase
- * @returns {Promise<boolean>} Success status
- */
-async function setupOfflineKey(passphrase) {
-    try {
-        // Use device fingerprint as salt for binding
-        const deviceFingerprint = await generateDeviceFingerprint();
-        const encoder = new TextEncoder();
-        const salt = await crypto.subtle.digest('SHA-256', encoder.encode(deviceFingerprint));
-        
-        // Derive key from passphrase
-        const derivedKey = await deriveOfflineKey(passphrase, new Uint8Array(salt));
-        
-        // Store salt and derived key (never store the passphrase)
-        localStorage.setItem(PBKDF2_SALT_KEY, Array.from(new Uint8Array(salt)).map(b => b.toString(16).padStart(2, '0')).join(''));
-        localStorage.setItem(OFFLINE_DERIVED_KEY_KEY, derivedKey);
-        
-        logger.info('Offline key configured successfully');
-        return true;
-    } catch (e) {
-        logger.error('Failed to setup offline key:', e);
-        return false;
-    }
-}
-
-/**
- * Get stored offline verification key
- * @returns {Promise<string|null>} Stored derived key or null
- */
-async function getOfflineVerificationKey() {
-    const derivedKey = localStorage.getItem(OFFLINE_DERIVED_KEY_KEY);
-    if (!derivedKey) {
-        return null;
-    }
-    return derivedKey;
-}
-
-/**
- * Clear offline key (for logout/reset)
- */
-function clearOfflineKey() {
-    localStorage.removeItem(PBKDF2_SALT_KEY);
-    localStorage.removeItem(OFFLINE_DERIVED_KEY_KEY);
-    logger.info('Offline key cleared');
-}
-
-/**
- * Verify license in offline mode using PBKDF2-derived key
+ * Verify license in offline mode using ECDSA public key
+ * This allows the app to function without server connectivity while
+ * maintaining security - no secrets are stored in client code.
+ *
  * @param {string} licenseToken - JWT license token
  * @returns {Promise<Object>} Verification result
  */
 async function verifyLicenseOffline(licenseToken) {
-    // Check if offline key is configured
-    const offlineKey = await getOfflineVerificationKey();
-    if (!offlineKey) {
-        return {
-            valid: false,
-            error: 'OFFLINE_KEY_NOT_CONFIGURED',
-            message: 'Offline verification not configured. Please connect to server first.',
-            offlineMode: true
-        };
-    }
-    
     // Parse JWT
     const jwt = parseJWT(licenseToken);
     if (!jwt) {
@@ -397,30 +369,40 @@ async function verifyLicenseOffline(licenseToken) {
             offlineMode: true
         };
     }
-    
-    // Verify header
-    if (jwt.header.alg !== 'HS256') {
+
+    // Verify header - must use ES256 (ECDSA with P-256)
+    if (jwt.header.alg !== 'ES256') {
         return {
             valid: false,
             error: 'UNSUPPORTED_ALGORITHM',
-            message: `Unsupported algorithm: ${jwt.header.alg}. Expected HS256.`,
+            message: `Unsupported algorithm: ${jwt.header.alg}. Expected ES256.`,
             offlineMode: true
         };
     }
-    
-    // Verify signature using offline key
+
+    // Verify header type
+    if (jwt.header.typ !== 'JWT') {
+        return {
+            valid: false,
+            error: 'INVALID_TYPE',
+            message: `Invalid token type: ${jwt.header.typ}. Expected JWT.`,
+            offlineMode: true
+        };
+    }
+
+    // Verify signature using ECDSA public key
     const signedData = licenseToken.split('.').slice(0, 2).join('.');
-    const signatureValid = await verifyHMAC(signedData, jwt.signature, offlineKey);
-    
+    const signatureValid = await verifyECDSA(signedData, jwt.signature);
+
     if (!signatureValid) {
         return {
             valid: false,
             error: 'INVALID_SIGNATURE',
-            message: 'License signature verification failed. Token may have been tampered with.',
+            message: 'License signature verification failed. Token may have been tampered with or forged.',
             offlineMode: true
         };
     }
-    
+
     // Verify payload structure
     const payload = jwt.payload;
     if (!payload.tier || !['sovereign', 'chamber', 'curator'].includes(payload.tier)) {
@@ -431,7 +413,7 @@ async function verifyLicenseOffline(licenseToken) {
             offlineMode: true
         };
     }
-    
+
     // Verify expiration
     const now = Math.floor(Date.now() / 1000);
     if (payload.exp && payload.exp < now) {
@@ -515,10 +497,10 @@ async function verifyLicense(licenseToken) {
         logger.info('Falling back to offline license verification');
         return verifyLicenseOffline(licenseToken);
     }
-    
-    // Server returned invalid but we should still try offline if configured
+
+    // If we have a cached license, try offline verification
     // (allows for grace period when server is having issues)
-    if (hasOfflineKey()) {
+    if (hasCachedLicense()) {
         logger.info('Server unavailable, using offline verification');
         return verifyLicenseOffline(licenseToken);
     }
@@ -748,10 +730,8 @@ export const LicenseVerifier = {
     storeLicense,
     clearLicense,
 
-    // Offline key management
-    setupOfflineKey,
-    hasOfflineKey,
-    clearOfflineKey,
+    // Cache management (replaces offline key management)
+    hasCachedLicense,
 
     // Status
     isPremium,
@@ -771,4 +751,4 @@ export const LicenseVerifier = {
 
 export default LicenseVerifier;
 
-logger.info('Cryptographic license verifier loaded (server+offline mode)');
+logger.info('Cryptographic license verifier loaded (ECDSA with server+offline mode)');
