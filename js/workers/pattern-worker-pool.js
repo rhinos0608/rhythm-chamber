@@ -42,12 +42,13 @@ export const PatternWorkerPool = {
 
     /**
      * Detect all patterns using parallel workers
-     * @param {Object} data - Streaming history data
-     * @param {Object} options - Detection options
+     * @param {Array} streams - Streaming history data
+     * @param {Array} chunks - Weekly/monthly chunks
+     * @param {Function} onProgress - Progress callback
      * @returns {Promise<Object>} Detected patterns
      */
-    detectAllPatterns: (data, options) =>
-        Internal.detectAllPatterns(data, options),
+    detectAllPatterns: (streams, chunks, onProgress) =>
+        Internal.detectAllPatterns(streams, chunks, onProgress),
 
     /**
      * Terminate all workers
@@ -63,9 +64,66 @@ export const PatternWorkerPool = {
     /**
      * Resize the pool
      * @param {number} newWorkerCount - New worker count
-     * @returns {Promise<void>}
+     * @returns {number} New worker count
      */
-    resize: (newWorkerCount) => Internal.resizePool(newWorkerCount)
+    resize: (newWorkerCount) => Internal.resizePool(newWorkerCount),
+
+    /**
+     * Get speedup factor
+     * @param {number} activeWorkers - Number of active workers
+     * @returns {number} Speedup factor
+     */
+    getSpeedupFactor: (activeWorkers) =>
+        PoolManagement.getSpeedupFactor(activeWorkers),
+
+    /**
+     * Check if paused due to backpressure
+     * @returns {boolean} True if paused
+     */
+    isPaused: () => {
+        const state = Internal.getPoolStatus();
+        return state.paused || false;
+    },
+
+    /**
+     * Register callback for backpressure events
+     * @param {Function} callback - Callback function
+     */
+    onBackpressure: (callback) =>
+        TaskDistribution.onBackpressure(callback),
+
+    /**
+     * Register callback for result consumption
+     * @param {Function} callback - Callback function
+     */
+    onResultConsumed: (callback) =>
+        TaskDistribution.onResultConsumed(callback),
+
+    /**
+     * Get memory configuration
+     * @returns {Object} Memory config
+     */
+    getMemoryConfig: () =>
+        PoolManagement.getMemoryConfig(Internal.getPoolStatus().workerCount),
+
+    /**
+     * Partition data for workers
+     * @param {Array} data - Data to partition
+     * @param {number} numPartitions - Number of partitions
+     * @returns {Array} Partitioned data
+     */
+    partitionData: (data, numPartitions) =>
+        PoolManagement.partitionData(data, numPartitions),
+
+    /**
+     * Pattern groups for worker distribution
+     */
+    PATTERN_GROUPS: TaskDistribution.PATTERN_GROUPS,
+
+    /**
+     * Whether SharedArrayBuffer is available
+     */
+    SHARED_MEMORY_AVAILABLE: PoolManagement.SHARED_MEMORY_AVAILABLE
 };
 
 // ==========================================
@@ -75,8 +133,7 @@ export const PatternWorkerPool = {
 // Worker Lifecycle exports
 export {
     createWorker,
-    terminateWorker,
-    terminateAllWorkers,
+    terminate,
     restartWorker,
     checkStaleWorkers,
     startHeartbeat,
@@ -116,27 +173,17 @@ export {
 // Re-export constants
 // ==========================================
 
-// Worker Lifecycle constants
-export const {
-    HEARTBEAT_INTERVAL,
-    HEARTBEAT_TIMEOUT,
-    WORKER_TIMEOUT,
-    MAX_RESTART_ATTEMPTS
-} = WorkerLifecycle;
-
 // Pool Management constants
-export const {
-    DEFAULT_WORKER_COUNT,
-    SHARED_MEMORY_AVAILABLE,
-    MEMORY_CONFIG
-} = PoolManagement;
+export { DEFAULT_WORKER_COUNT, SHARED_MEMORY_AVAILABLE, MEMORY_CONFIG } from './pattern-worker-pool/pool-management.js';
 
 // Task Distribution constants
-export const {
-    BACKPRESSURE_THRESHOLD,
-    BACKPRESSURE_RESUME_THRESHOLD,
-    MAX_PENDING_REQUESTS
-} = TaskDistribution;
+export { PATTERN_GROUPS } from './pattern-worker-pool/task-distribution.js';
+
+// Task Distribution threshold constants (with CONST suffix)
+export {
+    BACKPRESSURE_THRESHOLD_CONST as BACKPRESSURE_THRESHOLD,
+    BACKPRESSURE_RESUME_THRESHOLD_CONST as BACKPRESSURE_RESUME_THRESHOLD
+} from './pattern-worker-pool/task-distribution.js';
 
 // ==========================================
 // Re-export modules for advanced usage

@@ -10,15 +10,17 @@
  * @module services/error-recovery/index
  */
 
-// Import all sub-modules
-import * as RecoveryStrategies from './recovery-strategies.js';
-import * as RecoveryOrchestration from './recovery-orchestration.js';
-import * as RecoveryLockManager from './recovery-lock-manager.js';
+// Import classes and functions from sub-modules
+import { RecoveryStrategies } from './recovery-strategies.js';
+import { RecoveryOrchestration, determineRecoveryDomain, determineRecoveryPriority, shouldHandleRecovery, hasConflictingRecovery as hasConflictingRecoveryStatic } from './recovery-orchestration.js';
+import { RecoveryLockManager } from './recovery-lock-manager.js';
+import { RecoveryDomain, RecoveryPriority, RecoveryState } from './constants.js';
 
 // Re-export all module exports for internal use
 export * from './recovery-strategies.js';
 export * from './recovery-orchestration.js';
 export * from './recovery-lock-manager.js';
+export * from './constants.js';
 
 // Re-export modules as named exports for convenience
 export { RecoveryStrategies, RecoveryOrchestration, RecoveryLockManager };
@@ -45,57 +47,85 @@ export function getCoordinator() {
  * @returns {Object} New coordinator instance
  */
 export function createCoordinator() {
+    // EventBus will be passed in or obtained from the facade
+    // For now, use null - it will be set by the facade
+    const eventBus = null;
+
+    // Create actual class instances instead of a plain object
+    const strategies = new RecoveryStrategies(eventBus);
+    const lockManager = new RecoveryLockManager({ eventBus });
+    const orchestration = new RecoveryOrchestration({
+        eventBus,
+        strategies,
+        lockManager
+    });
+
     const instance = {
+        _strategies: strategies,
+        _lockManager: lockManager,
+        _orchestration: orchestration,
         _activeRecoveries: new Map(),
         _recoveryPlans: new Map(),
-        _recoveryHandlers: new Map(),
+        _recoveryHandlers: strategies.getHandlers(),
         _maxQueueDepth: 10,
         _queueTimeoutMs: 30000,
+        _currentState: RecoveryState.IDLE,
 
-        // Initialize strategies
-        _initializeRecoveryHandlers() {
-            RecoveryStrategies.initializeStrategies(this._recoveryHandlers);
-        },
-
-        // Coordinate recovery
+        // Coordinate recovery - delegate to orchestration instance
         async coordinateRecovery(request) {
-            return RecoveryOrchestration.coordinateRecovery(request, this);
+            return this._orchestration.coordinateRecovery(request);
         },
 
-        // Lock management
+        // Lock management - use correct method names
         async _acquireRecoveryLock(lockName) {
-            return RecoveryLockManager.acquireLock(lockName);
+            return this._lockManager.acquireRecoveryLock(lockName);
         },
 
         async _validateRecoveryState(request) {
-            return RecoveryLockManager.validateState(request);
+            return this._lockManager.validateRecoveryState(request);
         },
 
-        // Tab coordination
+        // Tab coordination - use correct method names
         async _coordinateRecoveryTabs(request) {
-            return RecoveryLockManager.coordinateTabs(request);
+            return this._lockManager.coordinateRecoveryTabs(request);
         },
 
-        // Broadcast management
+        // Broadcast management - use correct method names
         async broadcastRecoveryRequest(request) {
-            return RecoveryLockManager.broadcastRequest(request);
+            return this._lockManager.broadcastRecoveryRequest(request);
         },
 
-        // Handle delegated recovery
+        // Handle delegated recovery - use correct method names
         async _handleDelegatedRecovery(message) {
-            return RecoveryLockManager.handleDelegation(message, this);
+            return this._lockManager.handleDelegatedRecovery(message, this);
+        },
+
+        // Get current state
+        getCurrentState() {
+            return this._orchestration.getCurrentState();
+        },
+
+        // Get active recoveries
+        getActiveRecoveries() {
+            return this._orchestration.getActiveRecoveries();
+        },
+
+        // Cancel recovery
+        cancelRecovery(recoveryId) {
+            return this._orchestration.cancelRecovery(recoveryId);
         },
 
         // Cleanup
         cleanup() {
             this._activeRecoveries.clear();
             this._recoveryPlans.clear();
+            this._lockManager.destroy();
             coordinatorInstance = null;
         }
     };
 
-    // Initialize strategies
-    instance._initializeRecoveryHandlers();
+    // Sync state with orchestration
+    instance._activeRecoveries = orchestration._activeRecoveries;
 
     return instance;
 }
@@ -122,11 +152,11 @@ export function resetCoordinator() {
  */
 export async function processErrorEvent(event, data) {
     const coordinator = getCoordinator();
-    const domain = RecoveryOrchestration.determineRecoveryDomain(event, data);
-    const priority = RecoveryOrchestration.determineRecoveryPriority(data);
+    const domain = determineRecoveryDomain(event, data);
+    const priority = determineRecoveryPriority(data);
 
-    if (RecoveryOrchestration.shouldHandleRecovery({ domain, priority, ...data })) {
-        const request = await RecoveryOrchestration.createRecoveryRequest(domain, priority, data);
+    if (shouldHandleRecovery({ domain, priority, ...data })) {
+        const request = await coordinator._orchestration.createRecoveryRequest(domain, priority, data);
         return coordinator.coordinateRecovery(request);
     }
 
@@ -140,7 +170,7 @@ export async function processErrorEvent(event, data) {
  */
 export function hasConflicts(request) {
     const coordinator = getCoordinator();
-    return RecoveryOrchestration.hasConflictingRecovery(request, coordinator._activeRecoveries);
+    return hasConflictingRecoveryStatic(request, coordinator._activeRecoveries);
 }
 
 /**
@@ -152,6 +182,7 @@ export function getRecoveryStatus() {
     return {
         activeRecoveries: coordinator._activeRecoveries.size,
         queuedPlans: coordinator._recoveryPlans.size,
-        registeredHandlers: coordinator._recoveryHandlers.size
+        registeredHandlers: coordinator._recoveryHandlers.size,
+        currentState: coordinator.getCurrentState()
     };
 }

@@ -13,7 +13,7 @@
  * @version 1.0.0
  */
 
-import { Storage } from '../storage.js';
+import { Storage } from '../../storage.js';
 import { DegradationTier } from './degradation-detector.js';
 
 /**
@@ -109,7 +109,7 @@ export class CleanupStrategies {
      */
     _initializeItemRegistry() {
         // Import STORAGE_KEYS
-        import('../storage/keys.js').then(({ STORAGE_KEYS }) => {
+        import('../../storage/keys.js').then(({ STORAGE_KEYS }) => {
             // Critical data - never delete
             this._registerItem(STORAGE_KEYS.PERSONALITY_RESULT, {
                 priority: CleanupPriority.NEVER_DELETE,
@@ -395,7 +395,7 @@ export class CleanupStrategies {
     async _clearEmbeddings() {
         try {
             // Clear LRU cache
-            const { VectorLRUCache } = await import('../storage/lru-cache.js');
+            const { VectorLRUCache } = await import('../../storage/lru-cache.js');
             const cache = VectorLRUCache;
             const beforeSize = cache.size();
 
@@ -553,5 +553,55 @@ export class CleanupStrategies {
      */
     async triggerEmergencyCleanup() {
         return await this._performEmergencyCleanup();
+    }
+
+    /**
+     * Perform full cleanup of all data except critical
+     * @public
+     * @returns {Promise<CleanupResult>} Cleanup result
+     */
+    async performFullCleanup() {
+        let bytesFreed = 0;
+        let itemsDeleted = 0;
+        const operations = [];
+
+        try {
+            // Cleanup all categories
+            const sessionResult = await this._cleanupOldSessions();
+            bytesFreed += sessionResult.bytesFreed;
+            itemsDeleted += sessionResult.itemsDeleted;
+            operations.push(...sessionResult.operations);
+
+            const embedResult = await this._clearEmbeddings();
+            bytesFreed += embedResult.bytesFreed;
+            itemsDeleted += embedResult.itemsDeleted;
+            operations.push(...embedResult.operations);
+
+            const chunkResult = await this._cleanupOldChunks();
+            bytesFreed += chunkResult.bytesFreed;
+            itemsDeleted += chunkResult.itemsDeleted;
+            operations.push(...chunkResult.operations);
+
+            const streamResult = await this._cleanupOldStreams();
+            bytesFreed += streamResult.bytesFreed;
+            itemsDeleted += streamResult.itemsDeleted;
+            operations.push(...streamResult.operations);
+
+            return {
+                success: true,
+                bytesFreed,
+                itemsDeleted,
+                operations,
+                error: null
+            };
+        } catch (error) {
+            return {
+                success: false,
+                bytesFreed,
+                itemsDeleted,
+                operations,
+                error
+            };
+        }
     }
 }

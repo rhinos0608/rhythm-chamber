@@ -9,10 +9,87 @@
  * @version 1.0.0
  */
 
-import { RecoveryState } from './constants.js';
+import { RecoveryDomain, RecoveryPriority, RecoveryState } from './constants.js';
 
 const RECOVERY_TTL_MS = 60000; // 60 seconds
 const MAX_DELEGATION_ATTEMPTS = 3;
+
+// ==========================================
+// Static Helper Functions
+// These are called by the index.js processErrorEvent function
+// ==========================================
+
+/**
+ * Determine recovery domain from event
+ * @public
+ * @static
+ * @param {string} event - Event type
+ * @param {Object} data - Event data
+ * @returns {string} Recovery domain
+ */
+export function determineRecoveryDomain(event, data) {
+    const eventLower = event.toLowerCase();
+
+    if (eventLower.includes('security') || eventLower.includes('auth') || data?.domain === 'security') {
+        return RecoveryDomain.SECURITY;
+    }
+    if (eventLower.includes('storage') || eventLower.includes('indexeddb') || data?.domain === 'storage') {
+        return RecoveryDomain.STORAGE;
+    }
+    if (eventLower.includes('network') || eventLower.includes('fetch') || data?.domain === 'network') {
+        return RecoveryDomain.NETWORK;
+    }
+    if (eventLower.includes('provider') || eventLower.includes('ai') || data?.domain === 'provider') {
+        return RecoveryDomain.PROVIDER;
+    }
+    if (eventLower.includes('ui') || eventLower.includes('widget') || data?.domain === 'ui') {
+        return RecoveryDomain.UI;
+    }
+    return RecoveryDomain.OPERATIONAL;
+}
+
+/**
+ * Determine recovery priority from error data
+ * @public
+ * @static
+ * @param {Object} data - Error data
+ * @returns {string} Recovery priority
+ */
+export function determineRecoveryPriority(data) {
+    if (data?.critical) return RecoveryPriority.CRITICAL;
+    if (data?.high) return RecoveryPriority.HIGH;
+    if (data?.low) return RecoveryPriority.LOW;
+    return RecoveryPriority.MEDIUM;
+}
+
+/**
+ * Check if recovery should be handled
+ * @public
+ * @static
+ * @param {Object} request - Recovery request
+ * @returns {boolean} True if recovery should be handled
+ */
+export function shouldHandleRecovery(request) {
+    // Always handle recovery if we have a valid domain
+    return Object.values(RecoveryDomain).includes(request.domain);
+}
+
+/**
+ * Check for conflicting recoveries
+ * @public
+ * @static
+ * @param {Object} request - Recovery request
+ * @param {Map} activeRecoveries - Active recoveries map
+ * @returns {boolean} True if conflicting recovery exists
+ */
+export function hasConflictingRecovery(request, activeRecoveries) {
+    for (const [id, active] of activeRecoveries) {
+        if (active.domain === request.domain && active.priority >= request.priority) {
+            return true;
+        }
+    }
+    return false;
+}
 
 /**
  * RecoveryOrchestration Class

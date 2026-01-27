@@ -90,14 +90,64 @@ export function terminatePool() {
     // Stop heartbeat
     WorkerLifecycle.stopHeartbeat();
 
-    // Terminate all workers
-    WorkerLifecycle.terminateAllWorkers();
+    // Terminate all workers (use terminate(), not terminateAllWorkers)
+    WorkerLifecycle.terminate();
 
     // Clear workers array
     workers = [];
     initialized = false;
 
     console.log('[PatternWorkerPool] Terminated all workers');
+}
+
+/**
+ * Resize the pool to a new worker count
+ * This is called by the facade's resize() function
+ *
+ * @param {number} newWorkerCount - Target worker count
+ * @returns {number} New worker count
+ */
+export function resizePool(newWorkerCount) {
+    if (!initialized) {
+        console.warn('[PatternWorkerPool] Cannot resize pool: not initialized');
+        return 0;
+    }
+
+    const currentCount = workers.length;
+
+    if (newWorkerCount === currentCount) {
+        return currentCount;
+    }
+
+    if (newWorkerCount > currentCount) {
+        // Add workers
+        const workersToAdd = newWorkerCount - currentCount;
+        for (let i = 0; i < workersToAdd; i++) {
+            const workerIndex = currentCount + i;
+            const workerInfo = WorkerLifecycle.createWorker(workerIndex);
+            workers.push(workerInfo);
+
+            // Setup message handlers for new worker
+            workerInfo.worker.onmessage = TaskDistribution.handleWorkerMessage;
+            workerInfo.worker.onerror = TaskDistribution.handleWorkerError;
+        }
+        console.log(`[PatternWorkerPool] Added ${workersToAdd} workers (total: ${newWorkerCount})`);
+    } else {
+        // Remove workers (remove from end to minimize disruption)
+        const workersToRemove = currentCount - newWorkerCount;
+        for (let i = 0; i < workersToRemove; i++) {
+            const workerInfo = workers.pop();
+            if (workerInfo && workerInfo.worker) {
+                workerInfo.worker.terminate();
+            }
+        }
+        console.log(`[PatternWorkerPool] Removed ${workersToRemove} workers (total: ${newWorkerCount})`);
+    }
+
+    // Update task distribution with new worker count
+    TaskDistribution.initializeTaskDistribution(workers, true);
+
+    return newWorkerCount;
 }
 
 /**
@@ -133,4 +183,22 @@ export function getWorkers() {
  */
 export function isInitialized() {
     return initialized;
+}
+
+/**
+ * Detect all patterns using parallel workers
+ * Delegates to task distribution module
+ *
+ * @param {Array} streams - Streaming history data
+ * @param {Array} chunks - Weekly/monthly chunks
+ * @param {Function} onProgress - Progress callback
+ * @returns {Promise<Object>} Detected patterns
+ */
+export async function detectAllPatterns(streams, chunks, onProgress = null) {
+    if (!initialized) {
+        console.warn('[PatternWorkerPool] Not initialized, using fallback');
+        return TaskDistribution.fallbackToSync(streams);
+    }
+
+    return TaskDistribution.detectAllPatterns(streams, chunks, onProgress);
 }

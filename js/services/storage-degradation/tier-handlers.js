@@ -15,7 +15,7 @@
 
 import { DegradationTier } from './degradation-detector.js';
 import { CleanupPriority } from './cleanup-strategies.js';
-import { STORAGE_KEYS } from '../storage/keys.js';
+import { STORAGE_KEYS } from '../../storage/keys.js';
 
 /**
  * TierHandlers Class
@@ -274,8 +274,9 @@ export class TierHandlers {
      * @private
      * @param {DegradationTier} newTier - New degradation tier
      * @param {DegradationTier} oldTier - Old degradation tier
+     * @param {boolean} emitEvent - Whether to emit tier change event (default: false to prevent infinite loop)
      */
-    async _transitionToTier(newTier, oldTier) {
+    async _transitionToTier(newTier, oldTier, emitEvent = false) {
         this._currentTier = newTier;
 
         console.log(`[TierHandlers] Transitioning from ${oldTier} to ${newTier}`);
@@ -308,13 +309,14 @@ export class TierHandlers {
             console.error(`[TierHandlers] Error handling tier ${newTier}:`, error);
         }
 
-        // Emit tier transition event
-        if (this._eventBus) {
+        // Emit tier transition event with different reason to prevent infinite loop
+        // Only emit if explicitly requested (e.g., for direct transitions not from quota check)
+        if (this._eventBus && emitEvent) {
             this._eventBus.emit('STORAGE:TIER_CHANGE', {
                 oldTier,
                 newTier,
                 metrics: null,
-                reason: 'quota_check'
+                reason: 'tier_transition'
             });
         }
 

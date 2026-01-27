@@ -86,8 +86,9 @@ export class ErrorRecoveryCoordinator {
      * @returns {Object} Telemetry data
      */
     getTelemetry() {
+        const activeRecoveries = this._internal.getActiveRecoveries();
         return {
-            history: this._internal._activeRecoveries,
+            history: Array.from(activeRecoveries.values()),
             domainCounts: new Map(),
             errorCounts: new Map(),
             totalRecoveryTimeMs: 0,
@@ -101,7 +102,26 @@ export class ErrorRecoveryCoordinator {
      * @returns {string} Current recovery state
      */
     getState() {
-        return Internal.RecoveryState.IDLE;
+        return this._internal.getCurrentState();
+    }
+
+    /**
+     * Get active recoveries
+     * @public
+     * @returns {Map} Active recoveries
+     */
+    getActiveRecoveries() {
+        return this._internal.getActiveRecoveries();
+    }
+
+    /**
+     * Cancel a recovery by ID
+     * @public
+     * @param {string} recoveryId - Recovery ID to cancel
+     * @returns {boolean} True if cancelled
+     */
+    cancelRecovery(recoveryId) {
+        return this._internal.cancelRecovery(recoveryId);
     }
 
     /**

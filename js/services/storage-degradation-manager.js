@@ -126,6 +126,15 @@ export class StorageDegradationManager {
         return await this._internal.triggerCleanup(priority);
     }
 
+    /**
+     * Manually trigger emergency cleanup
+     * @public
+     * @returns {Promise<Object>} Cleanup result
+     */
+    async triggerEmergencyCleanup() {
+        return await this._internal.triggerEmergencyCleanup();
+    }
+
     // ==========================================
     // Utility Methods
     // ==========================================

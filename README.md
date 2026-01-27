@@ -72,6 +72,31 @@ Plus: Your AI notices your patterns and writes personalized narratives about you
 | [Changelog](CHANGELOG.md) | Version history and changes |
 | [Code of Conduct](CODE_OF_CONDUCT.md) | Community guidelines |
 
+### Development Tools
+
+#### Documentation Sync Script
+
+Keep documentation synchronized with actual code using the automated sync script:
+
+```bash
+# Preview changes without writing
+npm run sync-docs
+
+# Actually update documentation files
+npm run sync-docs:update
+
+# Full output with JSON
+node scripts/sync-documentation.mjs --verbose
+```
+
+The sync script tracks:
+- Facade file line counts
+- Internal module line counts
+- Test counts per suite
+- Total source statistics
+
+Run `npm run sync-docs:update` after making significant changes to keep docs accurate.
+
 ---
 
 ## Core Flow
