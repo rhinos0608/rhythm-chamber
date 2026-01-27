@@ -16,6 +16,7 @@
 
 import { Chat } from '../../chat.js';
 import { escapeHtml } from '../../utils/html-escape.js';
+import { SESSION } from '../../constants/session.js';
 
 // DOM element reference (cached)
 let sidebarSessions = null;
@@ -53,15 +54,21 @@ function formatRelativeDate(date) {
 
 /**
  * Validate session ID format to prevent injection attacks
+ * M6 FIX: Now uses shared SESSION constants with proper length limits
  * @param {string} id - Session ID to validate
  * @returns {boolean} True if valid format
  */
 function isValidSessionId(id) {
-    // Check for null/undefined first (test() would convert "null" to string)
+    // Check for null/undefined and type first
     if (id == null || typeof id !== 'string') {
         return false;
     }
-    return /^[a-z0-9\-_]+$/i.test(id);
+    // Check length limits (M6: 1 < length <= 64)
+    if (id.length === 0 || id.length > SESSION.MAX_ID_LENGTH) {
+        return false;
+    }
+    // Use shared constant pattern for validation
+    return SESSION.ID_PATTERN.test(id);
 }
 
 /**

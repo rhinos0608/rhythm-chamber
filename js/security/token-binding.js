@@ -132,7 +132,7 @@ function getSessionSalt() {
 
 /**
  * Generate a stable device fingerprint using a stored UUID.
- * @returns {Promise<string|null>} SHA-256 hash of the stable device UUID (truncated to 16 chars), or null if unavailable
+ * @returns {Promise<string|null>} SHA-256 hash of the stable device UUID (64 hex chars = 256 bits), or null if unavailable
  */
 async function generateDeviceFingerprint() {
     const context = ensureSecureContextChecked();
@@ -169,9 +169,10 @@ async function generateDeviceFingerprint() {
         const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
         const hashArray = Array.from(new Uint8Array(hashBuffer));
 
-        // Return as hex string, truncated to 16 characters for compatibility
+        // SECURITY FIX (C1): Return full 256-bit hash (64 hex chars)
+        // Previously truncated to 16 chars (64 bits) which is insufficient for security
         const fingerprint = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        return fingerprint.substring(0, 16);
+        return fingerprint;
     } catch (error) {
         _lastFailure = {
             code: 'FINGERPRINT_FAILED',

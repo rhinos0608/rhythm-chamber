@@ -69,6 +69,7 @@ export class ErrorBoundary {
         this.lastError = null;
         this.lastContext = null;
         this.originalContent = null;
+        this.originalNodes = null;  // L1 FIX: Store DOM nodes to preserve event handlers
         this.retryFn = null;
 
         // Unique ID for this boundary
@@ -97,10 +98,19 @@ export class ErrorBoundary {
             this.retryFn = () => this.wrap(operation, context);
 
             // Save original content if not already saved
-            if (this.preserveContent && !this.originalContent) {
+            if (this.preserveContent && !this.originalNodes) {
                 const container = this.getContainer();
                 if (container) {
+                    // L1 FIX: Use DOM range to preserve event handlers
+                    // First save HTML string before extraction (for backward compatibility)
                     this.originalContent = container.innerHTML;
+                    try {
+                        const range = document.createRange();
+                        range.selectNodeContents(container);
+                        this.originalNodes = range.extractContents();
+                    } catch (e) {
+                        // If range extraction fails, we still have originalContent as fallback
+                    }
                 }
             }
 
@@ -254,11 +264,21 @@ export class ErrorBoundary {
 
     /**
      * Restore original container content
+     * L1 FIX: Restores DOM nodes to preserve event handlers
      */
     restoreOriginal() {
         const container = this.getContainer();
-        if (container && this.originalContent !== null) {
-            container.innerHTML = this.originalContent;
+        if (container) {
+            container.innerHTML = '';
+            if (this.originalNodes) {
+                // L1 FIX: Append the actual nodes (not clone) to preserve event handlers
+                container.appendChild(this.originalNodes);
+                // Clear reference so we don't reuse moved nodes
+                this.originalNodes = null;
+            } else if (this.originalContent !== null) {
+                // Fallback to HTML string
+                container.innerHTML = this.originalContent;
+            }
         }
     }
 

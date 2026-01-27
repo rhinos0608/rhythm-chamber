@@ -306,12 +306,22 @@ const result = await EventBus.emitAndAwait('session:loaded', { sessionId: 'abc' 
 
 #### `EventBus.emitParallel(eventType, payload, options)`
 
-Emit an event and run all async handlers in parallel.
+Emit an event and run all async handlers in parallel. Returns detailed results including success/failure status.
 
 ```javascript
-const result = await EventBus.emitParallel('pattern:detected', patternData, {
-    timeoutMs: 30000
-});
+const result = await EventBus.emitParallel('pattern:detected', patternData);
+// Returns: {
+//   success: boolean,      // true if all handlers succeeded
+//   total: number,         // total number of handlers
+//   failed: number,        // number of handlers that failed
+//   results: Array<{       // per-handler results
+//     success: boolean,
+//     result?: any,        // handler return value (if successful)
+//     error?: Error,       // error (if failed)
+//     handler: string      // handler name/identifier
+//   }>
+// }
+// Or when no handlers: { success: false, reason: 'no-handlers', results: [] }
 ```
 
 ---

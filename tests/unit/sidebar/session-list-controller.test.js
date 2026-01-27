@@ -124,6 +124,50 @@ describe('SessionListController', () => {
             expect(SessionListController.isValidSessionId('"; DROP TABLE;--')).toBe(false);
             expect(SessionListController.isValidSessionId('"><script>')).toBe(false);
         });
+
+        // M6: Test length validation
+        it('should reject empty string', () => {
+            expect(SessionListController.isValidSessionId('')).toBe(false);
+        });
+
+        it('should reject single character IDs', () => {
+            expect(SessionListController.isValidSessionId('a')).toBe(false);
+            expect(SessionListController.isValidSessionId('1')).toBe(false);
+        });
+
+        it('should accept two character IDs', () => {
+            expect(SessionListController.isValidSessionId('a1')).toBe(true);
+            expect(SessionListController.isValidSessionId('ab')).toBe(true);
+        });
+
+        it('should reject IDs starting with special character', () => {
+            expect(SessionListController.isValidSessionId('-session')).toBe(false);
+            expect(SessionListController.isValidSessionId('_session')).toBe(false);
+        });
+
+        it('should reject IDs ending with special character', () => {
+            expect(SessionListController.isValidSessionId('session-')).toBe(false);
+            expect(SessionListController.isValidSessionId('session_')).toBe(false);
+        });
+
+        it('should reject IDs over max length (64 characters)', () => {
+            const tooLongId = 'a'.repeat(65);
+            expect(SessionListController.isValidSessionId(tooLongId)).toBe(false);
+        });
+
+        it('should accept IDs at max length boundary (64 characters)', () => {
+            const maxId = 'a' + 'b'.repeat(62) + 'c';
+            expect(maxId.length).toBe(64);
+            expect(SessionListController.isValidSessionId(maxId)).toBe(true);
+        });
+
+        it('should reject non-string types', () => {
+            expect(SessionListController.isValidSessionId(null)).toBe(false);
+            expect(SessionListController.isValidSessionId(undefined)).toBe(false);
+            expect(SessionListController.isValidSessionId(123)).toBe(false);
+            expect(SessionListController.isValidSessionId({})).toBe(false);
+            expect(SessionListController.isValidSessionId([])).toBe(false);
+        });
     });
 
     describe('renderEmptyState', () => {

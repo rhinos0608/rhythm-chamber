@@ -725,13 +725,18 @@ const transactionPool = new Map();
  * to ensure FIFO ordering and proper lock acquisition. This prevents
  * race conditions where multiple operations could simultaneously check
  * and attempt to acquire a transaction.
+ *
+ * FIX H1: Uses Promise chaining instead of check-then-set pattern.
+ * The previous while loop implementation was NOT atomic - multiple
+ * coroutines could pass the while check before setting the lock.
+ * The new implementation chains promises to guarantee serialization.
  */
 class TransactionMutex {
     constructor() {
-        /** @type {Promise<void> | null} */
-        this.lock = null;
+        /** @type {Promise<void>} */
+        this._lock = Promise.resolve();
         /** @type {(() => void) | null} */
-        this.release = null;
+        this._release = null;
     }
 
     /**
@@ -739,30 +744,30 @@ class TransactionMutex {
      * @returns {Promise<void>} Resolves when lock is acquired
      */
     async acquire() {
-        // Wait for existing lock to be released
-        while (this.lock) {
-            try {
-                await this.lock;
-            } catch {
-                // Lock holder failed - continue to acquire
-            }
-        }
-
-        // Create a new lock for this acquisition
-        this.lock = new Promise((resolve) => {
-            this.release = resolve;
-        });
+        // CRITICAL: Use Promise chaining for atomicity
+        // 1. Capture the previous lock (could be resolved, or pending)
+        // 2. Create a new lock promise (this becomes the "current" lock)
+        // 3. Await the previous lock - this ensures we wait for all prior acquisitions
+        //
+        // This pattern ensures that even if multiple acquire() calls are made
+        // concurrently, each one waits for its predecessor in the chain.
+        const previousLock = this._lock;
+        let release;
+        this._lock = new Promise(resolve => { release = resolve; });
+        await previousLock; // This ensures serialization
+        this._release = release;
     }
 
     /**
      * Release the mutex lock
      */
     free() {
-        if (this.release) {
-            this.release();
-            this.release = null;
+        if (this._release) {
+            this._release();
+            this._release = null;
         }
-        this.lock = null;
+        // Note: We do NOT set this._lock = null here
+        // The lock promise is part of the chain and resolves when free is called
     }
 }
 
