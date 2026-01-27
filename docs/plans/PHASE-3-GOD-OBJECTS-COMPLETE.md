@@ -14,8 +14,8 @@
 | Metric | Achievement |
 |--------|-------------|
 | **God Objects Refactored** | 6 of 6 (100%) |
-| **Total Code Reduction** | 5,822 lines (63% via facades) |
-| **Focused Modules Created** | 23 focused modules |
+| **Total Code Reduction** | 6,083 lines (83% via facades) |
+| **Focused Modules Created** | 24 focused modules |
 | **Backward Compatibility** | 100% maintained |
 | **Architecture Pattern** | Facade + Internal Coordinator ✅ |
 
@@ -92,17 +92,29 @@
 
 | Module | Lines | Tests | Purpose |
 |--------|-------|-------|---------|
-| session-state.js | 290 | 42/42 ✅ | Session data management |
-| session-lifecycle.js | 516 | 45/45 ✅ | Session lifecycle |
+| session-state.js | 344 | 80/80 ✅ | Session data management |
+| session-lifecycle.js | 547 | 85/85 ✅ | Session lifecycle |
+| session-persistence.js | 266 | 82/82 ✅ | Persistence layer |
 | index.js | 200 | - | Internal coordinator |
-| session-manager.js (facade) | 160 | - | Thin facade |
+| session-manager.js (facade) | 365 | - | Thin facade |
 
-**Total:** 1,166 lines across 3 modules + facade
-**Tests:** 87/87 passing (100%) ✅
-**Code Reduction:** 1,130 → 160 lines (86%)
+**Total:** 1,722 lines across 4 modules + facade
+**Internal Total:** 1,357 lines (3 modules + coordinator)
+**Tests:** 247/247 passing (100%) ✅
+**Code Reduction:** 1,130 → 365 lines (68%)
 **Issues:** None! All tests passing!
 
-**Key Achievement:** **CRITICAL FIX:** Fixed UUID validation in tests, all 45 lifecycle tests passing!
+**Key Achievement:** **CRITICAL FIX:** Fixed UUID validation in tests, all 247 tests passing!
+
+**Event Listener Registration:**
+- `visibilitychange` - Detects tab visibility changes
+- `beforeunload` - Handles page unload events
+- `pagehide` - Handles page hide events (bfcache)
+
+**EventBus Schema Registration:**
+- `session:created` - Fired when a new session is created
+- `session:updated` - Fired when session data changes
+- `session:terminated` - Fired when a session is terminated
 
 ---
 
@@ -240,10 +252,10 @@ module.js → constants.js
 | error-handling.js | 1,287 | 152 | 4 | 88% | 100% ✅ |
 | pattern-worker-pool.js | 1,122 | 154 | 3 | 86% | 97% |
 | error-recovery-coordinator.js | 1,316 | 150 | 4 | 89% | 84% |
-| session-manager.js | 1,130 | 160 | 2 | 86% | 100% ✅ |
+| session-manager.js | 1,130 | 365 | 3 | 68% | 100% ✅ |
 | metrics-exporter.js | 1,140 | 210 | 3 | 82% | 74% |
 | storage-degradation-manager.js | 1,306 | 187 | 3 | 86% | 97% |
-| **TOTAL** | **7,301** | **1,013** | **19** | **86%** | **90%** |
+| **TOTAL** | **7,301** | **1,218** | **20** | **83%** | **90%** |
 
 ### Test Coverage
 
@@ -349,9 +361,9 @@ a8709ef - fix(tests): use valid UUID v4 format in session-lifecycle tests
 ### Achieved ✅
 
 - ✅ **6 God Objects with Facades** (100% of Phase 3)
-- ✅ **5,822 lines eliminated** (63% code reduction via facades)
-- ✅ **23 focused modules created**
-- ✅ **2,399/2,555 tests passing** (94% pass rate)
+- ✅ **6,083 lines eliminated** (83% code reduction via facades)
+- ✅ **24 focused modules created**
+- ✅ **2,559/2,715 tests passing** (94% pass rate)
 - ✅ **2 modules 100% complete** (error-handling, session-manager)
 - ✅ **All 6 God Objects converted to facades**
 - ✅ **Clear path to 100%** (2-4 hours remaining)
@@ -365,7 +377,7 @@ a8709ef - fix(tests): use valid UUID v4 format in session-lifecycle tests
 ### Target 🎯
 
 - 🎯 **All 6 God Objects 100% complete**
-- 🎯 **All 2,555+ tests passing**
+- 🎯 **All 2,715+ tests passing**
 - 🎯 **All facades production-ready**
 - 🎯 **Zero technical debt from refactored modules**
 
@@ -402,8 +414,8 @@ a8709ef - fix(tests): use valid UUID v4 format in session-lifecycle tests
 
 **Achievement:**
 - Successfully created facades for all 6 God Objects
-- Eliminated 5,822 lines of code (86% average reduction)
-- Increased test pass rate to 94% (2,399 of 2,555 tests)
+- Eliminated 6,083 lines of code (83% average reduction)
+- Increased test pass rate to 94% (2,559 of 2,715 tests)
 - Established clear path to 100% test completion
 
 **Overall Phase 3 Status:**
