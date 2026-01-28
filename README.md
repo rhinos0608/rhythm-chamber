@@ -12,6 +12,19 @@ Plus: Your AI notices your patterns and writes personalized narratives about you
 
 ---
 
+## Table of Contents
+
+- [The Three-Layer Value Stack](#the-three-layer-value-stack)
+- [Key Differentiators](#key-differentiators)
+- [Getting Started](#getting-started)
+- [Documentation](#documentation)
+- [Development](#development)
+- [Browser Compatibility](#browser-compatibility)
+- [Project Status](#project-status)
+- [Pricing & Licensing](#pricing--licensing)
+
+---
+
 ## The Three-Layer Value Stack
 
 ### Layer 1: Emotional Value
@@ -105,7 +118,6 @@ Run `npm run sync-docs:update` after making significant changes to keep docs acc
 ```
 Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 ```
-
 ## Key Differentiators
 
 1. **Chat-First Interface** — Natural language queries, not dashboard clicks
@@ -116,41 +128,13 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 6. **Power User Focus** — If you can set up an API key, you can use Rhythm Chamber
 7. **Provider Health Monitoring** — Real-time AI provider status with automatic fallback and smart error guidance
 
-## Enhanced Features & Reliability
+### Enhanced Features
 
-### 🚀 Advanced Error Handling & Recovery
-- **Intelligent Error Classification** — Automatic categorization of errors (network, API, validation, user input)
-- **Adaptive Circuit Breaker** — Prevents cascade failures with smart threshold management
-- **Exponential Backoff Retry** — Sophisticated retry patterns with jitter and recovery
-- **Graceful Degradation** — Fallback responses when services are unavailable
-- **User-Friendly Error Messages** — Context-aware error guidance with actionable suggestions
-
-### 🔄 Enhanced Streaming & Real-Time Processing
-- **Real-time Message Streaming** — Smooth streaming responses with proper buffering
-- **Advanced Message Rendering** — Markdown support with data visualization and artifacts
-- **Stream Processing** — Incremental parsing and real-time data handling
-- **Message Actions** — Advanced interactions (regenerate, edit, delete, query context)
-- **Artifact Visualization** — Intelligent charts and data visualization in chat
-
-### 🛡️ Improved Reliability & Performance
-- **Adaptive Rate Limiting** — Dynamic rate adjustment based on system conditions
-- **Service Health Monitoring** — Real-time provider health with automatic fallback
+- **Intelligent Error Handling** — Automatic error classification with adaptive circuit breaker
+- **Real-time Streaming** — Smooth streaming responses with proper buffering
+- **Advanced UI Components** — 15 controllers, 25+ services, 13+ utilities
 - **Cross-Tab Coordination** — Seamless session sharing across browser tabs
-- **Enhanced Validation** — Advanced input validation and security scanning
-- **Performance Optimization** — Smart caching and optimization strategies
-
-### 🎯 Advanced UI Components
-- **15 Controllers** — Modular UI components for focused functionality
-- **25+ Services** — Comprehensive business logic layer
-- **13+ Utilities** — Common functionality for enhanced reliability
-- **Error Boundaries** — Graceful error handling and recovery
-- **Analytics Tracking** — User behavior insights and performance monitoring
-
-### 🔒 Enhanced Security
-- **Message Validation** — Advanced content sanitization and security scanning
-- **Rate Limiting** — Protection against abuse and DDoS
-- **Error Recovery** — Automatic recovery from common failure scenarios
-- **Data Protection** — Enhanced encryption and privacy controls
+- **Security Hardening** — Content sanitization, rate limiting, data protection
 
 ### What Stats.fm Can't Match
 
@@ -160,72 +144,7 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 - **"Try before you upload"** — Demo mode ships with a full sample persona, isolated from real data
 - **"Template & Synth profiles"** — Generate synthetic profiles for comparison via the profile synthesizer
 - **"Identity over statistics"** — "You're an Emotional Archaeologist" vs "Top Artists: A, B, C"
-- **"Self-healing AI providers"** — Automatic fallback when providers fail, with real-time health monitoring and smart troubleshooting guidance
-
----
-
-## Browser Compatibility
-
-Rhythm Chamber is built for **modern browsers** and uses contemporary web platform APIs that are not compatible with legacy browsers like Internet Explorer 11.
-
-### Supported Browsers
-
-| Browser | Minimum Version | Status |
-|---------|----------------|--------|
-| Chrome | 90+ | Fully Supported |
-| Edge | 90+ | Fully Supported |
-| Firefox | 90+ | Fully Supported |
-| Safari | 14.5+ | Fully Supported |
-| iOS Safari | 14.5+ | Fully Supported |
-| Android Chrome | 90+ | Fully Supported |
-
-### Required Features
-
-The application requires these browser features:
-
-- **ES Modules** - For code organization
-- **Web Crypto API** - For client-side encryption
-- **IndexedDB** - For local data storage
-- **Async/await** - For asynchronous operations
-- **BroadcastChannel** - For cross-tab communication
-- **CSS Grid & Custom Properties** - For modern layouts
-
-### Not Supported
-
-- Internet Explorer 11 (no Web Crypto, no ES modules)
-- Firefox < 90 (no optional chaining, no SharedWorker fallback)
-- Safari < 14.5 (no optional chaining, no BroadcastChannel)
-- Android browser < Chrome 90
-
-A friendly upgrade message will be displayed if your browser doesn't support required features.
-
----
-
-### Why This Works
-
-**Power users WANT control:**
-- Already exporting data (privacy-conscious)
-- Understand API keys (technical)
-- Appreciate transparency (no black box)
-- Willing to pay for their own infrastructure (sovereignty)
-
-### Enhanced Capabilities
-
-The application now features advanced reliability patterns including:
-- **Self-healing AI providers** — Automatic fallback with real-time health monitoring
-- **Robust error handling** — Intelligent recovery from network and API failures
-- **Seamless streaming** — Real-time responses with proper error recovery
-- **Cross-tab synchronization** — Seamless session sharing across browser tabs
-- **Enhanced security** — Advanced validation and protection mechanisms
-
----
-
-## Project Status
-
-✅ **Complete** — Core analytics engine, local AI processing, premium integration
-✅ **Complete** — Zero-backend architecture with client-side security
-✅ **Complete** — BYOI (Bring Your Own Intelligence) provider support
-🔄 **Active** — Feature refinement and user experience improvements
+- **"Self-healing AI providers"** — Automatic fallback when providers fail, with real-time health monitoring
 
 ---
 
@@ -252,6 +171,44 @@ The application now features advanced reliability patterns including:
 
 ---
 
+## Documentation
+
+### Core Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](ARCHITECTURE.md) | System design, modules, data flow, zero-backend architecture |
+| [API Reference](API.md) | Complete API documentation for all modules |
+| [Testing Guide](TESTING.md) | Running and writing tests, test methodologies |
+| [Security Model](SECURITY.md) | Comprehensive security model, threat analysis, audit results |
+
+### Development Guides
+
+| Document | Description |
+|----------|-------------|
+| [Contributing](CONTRIBUTING.md) | Development setup, patterns, guidelines |
+| [Deployment](DEPLOYMENT.md) | Build process, deployment to Vercel/Netlify, COOP/COEP headers |
+| [Refactoring](REFACTORING.md) | Refactoring history, patterns, characterization testing methodology |
+| [Troubleshooting](TROUBLESHOOTING.md) | Common issues and solutions |
+| [Changelog](CHANGELOG.md) | Version history and breaking changes |
+
+### Decision Records
+
+| Document | Description |
+|----------|-------------|
+| [ADR Index](docs/ADR/README.md) | Architecture Decision Records index |
+| [Testing Methodology](docs/ADR/001-testing-methodology.md) | Characterization testing and worker mock architecture |
+| [Architecture Decisions](docs/ADR/002-architecture-decisions.md) | IndexedDB structure, facade pattern, sub-agent execution |
+
+### Additional Resources
+
+| Document | Description |
+|----------|-------------|
+| [Agent Reference](AGENT_CONTEXT.md) | Technical documentation for AI agents |
+| [Code of Conduct](CODE_OF_CONDUCT.md) | Community guidelines |
+
+---
+
 ## Development
 
 ### Setup
@@ -275,11 +232,47 @@ npm run test:unit:watch  # Watch mode for TDD
 
 ---
 
-**Rhythm Chamber is for power users who want to understand themselves through their music data.**
+## Browser Compatibility
 
-We're not building a better stats.fm. We're building the next evolution of music self-discovery.
+Rhythm Chamber is built for **modern browsers** and uses contemporary web platform APIs.
 
-**Your data. Your intelligence. Your control. Your insights.**
+### Supported Browsers
+
+| Browser | Minimum Version | Status |
+|---------|----------------|--------|
+| Chrome | 90+ | Fully Supported |
+| Edge | 90+ | Fully Supported |
+| Firefox | 90+ | Fully Supported |
+| Safari | 14.5+ | Fully Supported |
+| iOS Safari | 14.5+ | Fully Supported |
+| Android Chrome | 90+ | Fully Supported |
+
+### Required Features
+
+- **ES Modules** - For code organization
+- **Web Crypto API** - For client-side encryption
+- **IndexedDB** - For local data storage
+- **Async/await** - For asynchronous operations
+- **BroadcastChannel** - For cross-tab communication
+- **CSS Grid & Custom Properties** - For modern layouts
+
+### Not Supported
+
+- Internet Explorer 11 (no Web Crypto, no ES modules)
+- Firefox < 90 (no optional chaining, no SharedWorker fallback)
+- Safari < 14.5 (no optional chaining, no BroadcastChannel)
+- Android browser < Chrome 90
+
+A friendly upgrade message will be displayed if your browser doesn't support required features.
+
+---
+
+## Project Status
+
+✅ **Complete** — Core analytics engine, local AI processing, premium integration
+✅ **Complete** — Zero-backend architecture with client-side security
+✅ **Complete** — BYOI (Bring Your Own Intelligence) provider support
+🔄 **Active** — Feature refinement and user experience improvements
 
 ---
 
@@ -308,9 +301,8 @@ Rhythm Chamber offers a simple two-tier pricing model:
 
 ---
 
-## Target Audience
+**Rhythm Chamber is for power users who want to understand themselves through their music data.**
 
-**New framing:** Everyone who screenshots Wrapped (~100M+) + quantified-self enthusiasts + relationship-focused users
+We're not building a better stats.fm. We're building the next evolution of music self-discovery.
 
-The data export friction is real, but the payoff is self-discovery and deeper connections, not just stats.
-
+**Your data. Your intelligence. Your control. Your insights.**

@@ -1,19 +1,93 @@
 # Rhythm Chamber Deployment Guide
 
-This guide covers deploying Rhythm Chamber with proper configuration for optimal performance, including SharedArrayBuffer support for enhanced vector search operations.
+This guide covers building and deploying Rhythm Chamber with proper configuration for optimal performance.
 
-## Overview
+## Table of Contents
 
-Rhythm Chamber is a **100% client-side** application that can be deployed to any static hosting service. The app uses:
+- [Build Process](#build-process)
+- [Performance Optimization](#performance-optimization)
+- [Platform-Specific Deployment](#platform-specific-deployment)
+- [Deployment Verification](#deployment-verification)
+- [Troubleshooting](#troubleshooting)
 
-- **IndexedDB** for persistent storage
-- **Web Workers** for parallel processing
-- **WebAssembly (WASM)** for local embeddings and semantic search
-- **SharedArrayBuffer** (optional) for zero-copy worker communication
+---
 
-## Performance Optimization: SharedArrayBuffer
+## Build Process
 
-### What is SharedArrayBuffer?
+### Overview
+
+Rhythm Chamber uses a minimal build pipeline to optimize production assets. The build process:
+
+1. **Minifies JavaScript** with esbuild (removes whitespace, renames variables, removes console.log)
+2. **Minifies CSS** (removes comments and unnecessary whitespace)
+3. **Copies static files** to a `dist/` directory ready for deployment
+
+### Quick Start
+
+```bash
+# Install dependencies
+npm install
+
+# Build for production
+npm run build
+
+# Test the build locally
+npm run dev:dist
+```
+
+The built files will be in the `dist/` directory.
+
+### Build Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run build` | Build production assets to `dist/` |
+| `npm run build:dev` | Alias for `npm run build` |
+| `npm run dev:dist` | Serve the `dist/` directory locally on port 8080 |
+| `npm run dev` | Serve source files (development mode) |
+| `npm run dev:coop-coep` | Serve with COOP/COEP headers (SharedArrayBuffer support) |
+
+### Build Output
+
+After running `npm run build`:
+
+```
+dist/
+├── index.html          # Landing page
+├── app.html            # Main application
+├── css/
+│   └── styles.css      # Minified CSS
+├── js/
+│   ├── main.js         # Minified entry point
+│   └── workers/        # Minified worker files
+├── netlify.toml        # Netlify config
+├── vercel.json         # Vercel config
+└── .htaccess           # Apache config
+```
+
+### Build Performance
+
+The build process provides approximately:
+
+- **JavaScript**: 55-80% size reduction via minification
+- **CSS**: 20-25% size reduction via minification
+- **Console removal**: 5-10% additional savings
+
+#### Before vs After
+
+| Asset | Original | Minified | Reduction |
+|-------|----------|----------|-----------|
+| main.js | 20.3 KB | 5.8 KB | 71.7% |
+| pattern-worker-pool.js | 27.3 KB | 6.4 KB | 76.7% |
+| styles.css | 96.4 KB | 73.5 KB | 23.8% |
+
+---
+
+## Performance Optimization
+
+### SharedArrayBuffer Support
+
+#### What is SharedArrayBuffer?
 
 SharedArrayBuffer enables zero-copy data transfer between the main thread and Web Workers, significantly improving performance for:
 
@@ -26,7 +100,7 @@ SharedArrayBuffer enables zero-copy data transfer between the main thread and We
 - **With SharedArrayBuffer**: Zero-copy memory access (~5-20ms per operation)
 - **Dataset size matters**: Benefits increase with larger datasets (500+ vectors)
 
-### COOP/COEP Requirements
+#### COOP/COEP Requirements
 
 SharedArrayBuffer requires specific HTTP security headers:
 
@@ -36,6 +110,8 @@ Cross-Origin-Embedder-Policy: require-corp
 ```
 
 **Security Context**: These headers isolate your page from other cross-origin windows, preventing certain types of attacks but also restricting some cross-origin features.
+
+---
 
 ## Platform-Specific Deployment
 
@@ -141,7 +217,7 @@ server {
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
-        # Re-add COOP/COEP headers for cached assets (add_header overrides parents)
+        # Re-add COOP/COEP headers for cached assets
         add_header Cross-Origin-Embedder-Policy "require-corp" always;
         add_header Cross-Origin-Opener-Policy "same-origin" always;
     }
@@ -180,29 +256,7 @@ server {
 - SharedArrayBuffer works once headers are added
 - Excellent global CDN performance
 
-## Local Development
-
-### Standard Development Server
-
-For basic development without SharedArrayBuffer:
-
-```bash
-npm run dev
-```
-
-This uses `http-server` without COOP/COEP headers.
-
-### COOP/COEP Development Server
-
-For testing SharedArrayBuffer features locally:
-
-```bash
-npm run dev:coop-coep
-```
-
-This starts a custom Node.js server with COOP/COEP headers enabled.
-
-**Note**: Local development (localhost) automatically allows SharedArrayBuffer without COOP/COEP headers, but the custom server ensures production parity.
+---
 
 ## Deployment Verification
 
@@ -233,7 +287,21 @@ const stats = LocalVectorStore.getStats();
 console.log('SharedArrayBuffer enabled:', stats.sharedMemoryEnabled);
 ```
 
+---
+
 ## Troubleshooting
+
+### Build Fails
+
+1. Ensure esbuild is installed: `npm install`
+2. Check Node.js version (requires Node 18+)
+3. Check file permissions on `scripts/build.mjs`
+
+### dist/ Directory Not Created
+
+1. Check for write permissions in project directory
+2. Ensure no file named `dist` exists (remove it if it's a file, not directory)
+3. Run `rm -rf dist && npm run build`
 
 ### SharedArrayBuffer Undefined
 
@@ -255,7 +323,7 @@ console.log('SharedArrayBuffer enabled:', stats.sharedMemoryEnabled);
 - ✅ Edge 92+ (Desktop)
 - ✅ Firefox 89+ (Desktop)
 - ✅ Safari 15.2+ (requires COOP/COEP headers)
-- ⚠️ Mobile browsers (Limited support, varies by platform and COOP/COEP configuration)
+- ⚠️ Mobile browsers (Limited support, varies by platform)
 
 **Graceful Fallback**: Rhythm Chamber automatically detects SharedArrayBuffer availability and falls back to structured clone mode if unavailable.
 
@@ -275,53 +343,32 @@ Cross-origin embedder policy requires 'corp'
 
 **Solution**: Ensure all resources are loaded via HTTPS when deployed to HTTPS.
 
-## Performance Monitoring
+---
 
-### Production Monitoring
+## Advanced Configuration
 
-Monitor SharedArrayBuffer usage in production:
+### Enabling Source Maps
 
+Edit `scripts/build.mjs`:
 ```javascript
-// Check if SharedArrayBuffer is available
-const hasSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined';
-
-// Track performance difference
-if (hasSharedArrayBuffer) {
-  console.log('✓ SharedArrayBuffer enabled - Optimal performance');
-} else {
-  console.log('⚠ SharedArrayBuffer disabled - Using fallback mode');
-}
+sourcemap: true,  // Change from false
 ```
 
-### Expected Performance Metrics
+### Keeping Console Logs
 
-**With SharedArrayBuffer** (500 vectors):
-- Search latency: ~20-50ms
-- Memory overhead: Minimal (zero-copy)
+Edit `scripts/build.mjs`:
+```javascript
+drop: [],  // Remove 'console', 'debugger' from drop array
+```
 
-**Without SharedArrayBuffer** (500 vectors):
-- Search latency: ~100-300ms
-- Memory overhead: Moderate (structured clone)
+### Adjusting Target Browsers
 
-## Security Considerations
+Edit `scripts/build.mjs`:
+```javascript
+target: 'es2020',  // Change to 'es2015', 'esnext', etc.
+```
 
-### COOP/COEP Impact
-
-**Enabled** (SharedArrayBuffer working):
-- ✅ Enhanced isolation from cross-origin attacks
-- ❌ Cannot embed in cross-origin iframes
-- ❌ Cannot open cross-origin windows with `window.open()`
-
-**Disabled** (SharedArrayBuffer not working):
-- ✅ Full cross-origin capabilities
-- ❌ Reduced isolation guarantees
-
-### Recommendation
-
-For a music analytics app like Rhythm Chamber:
-- **COOP/COEP recommended** - The app doesn't need cross-origin iframes or windows
-- **Performance benefits** outweigh the restrictions
-- **Security improvement** is valuable for user data
+---
 
 ## Continuous Deployment
 
@@ -350,6 +397,8 @@ jobs:
 - Connect repository to Netlify
 - Auto-deploys on push to main branch
 - No configuration needed
+
+---
 
 ## Support
 
