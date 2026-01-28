@@ -793,8 +793,14 @@ export class ObservabilityController {
         const scheduledList = this._container.querySelector('#scheduled-exports-list');
 
         if (scheduledJobs.length === 0) {
+            // security-validated: Static HTML only, no dynamic content
             scheduledList.innerHTML = '<div class="no-scheduled">No scheduled exports</div>';
         } else {
+            // security-validated: Uses this._escapeHtml() which wraps escapeHtml() from js/utils/html-escape.js
+            // Escaping method: DOM-based textContent assignment
+            // Data flow: job object (internal state) → this._escapeHtml() → innerHTML insertion
+            // All dynamic fields are escaped: job.id, job.name, job.config.format, job.config.schedule, job.status
+            // Review date: 2026-01-28
             scheduledList.innerHTML = scheduledJobs.map(job => `
                 <div class="scheduled-job" data-job-id="${this._escapeHtml(job.id)}">
                     <div class="job-name">${this._escapeHtml(job.name)}</div>
@@ -816,8 +822,14 @@ export class ObservabilityController {
         const servicesList = this._container.querySelector('#external-services-list');
 
         if (services.length === 0) {
+            // security-validated: Static HTML only, no dynamic content
             servicesList.innerHTML = '<div class="no-services">No external services configured</div>';
         } else {
+            // security-validated: Uses this._escapeHtml() which wraps escapeHtml() from js/utils/html-escape.js
+            // Escaping method: DOM-based textContent assignment
+            // Data flow: service object (internal state) → this._escapeHtml() → innerHTML insertion
+            // All dynamic fields are escaped: service.endpoint, service.service
+            // Review date: 2026-01-28
             servicesList.innerHTML = services.map(service => `
                 <div class="service-config" data-endpoint="${this._escapeHtml(service.endpoint)}">
                     <div class="service-name">${this._escapeHtml(service.service)}</div>
@@ -839,11 +851,17 @@ export class ObservabilityController {
         const alertsList = this._container.querySelector('#alerts-list');
 
         if (alerts.length === 0) {
+            // security-validated: Static HTML only, no dynamic content
             alertsList.innerHTML = '<div class="no-alerts">No recent alerts</div>';
             return;
         }
 
         const recentAlerts = alerts.slice(-10).reverse();
+        // security-validated: Uses this._escapeHtml() which wraps escapeHtml() from js/utils/html-escape.js
+        // Escaping method: DOM-based textContent assignment
+        // Data flow: alert object (internal state) → this._escapeHtml() → innerHTML insertion
+        // All dynamic fields are escaped: alert.severity, alert.message, alert.category
+        // Review date: 2026-01-28
         alertsList.innerHTML = recentAlerts.map(alert => `
             <div class="alert-item ${this._escapeHtml(alert.severity)}">
                 <div class="alert-message">${this._escapeHtml(alert.message)}</div>

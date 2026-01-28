@@ -237,8 +237,12 @@ const PremiumController = {
 
         const content = this._getModalContent(type, data);
 
-        // SAFE: Escape all dynamic content before inserting into innerHTML
+        // security-validated: Uses escapeHtml() from js/utils/html-escape.js
+        // Escaping method: DOM-based textContent assignment
+        // Data flow: content.title (internal state) → escapeHtml() → innerHTML insertion
         // Static HTML structure is preserved, dynamic content is escaped
+        // content.body is generated internally from static templates
+        // Review date: 2026-01-28
         modal.innerHTML = `
             <div class="modal-overlay-bg" data-action="hide-upgrade-modal"></div>
             <div class="modal-content" role="dialog" aria-labelledby="upgrade-modal-title" aria-modal="true">

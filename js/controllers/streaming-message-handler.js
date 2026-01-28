@@ -159,6 +159,11 @@ function updateLoadingMessage(id, state) {
             el.className = 'message tool-execution';
             // SECURITY: Validate tool name against whitelist before display
             const startToolName = isValidToolName(state.tool) ? state.tool : 'tool';
+            // security-validated: Uses escapeHtml() from js/utils/html-escape.js
+            // Escaping method: DOM-based textContent assignment
+            // Data flow: state.tool → whitelist validation → escapeHtml() → innerHTML insertion
+            // Additional security: Tool names validated against VALID_TOOL_NAMES whitelist
+            // Review date: 2026-01-28
             el.innerHTML = `<span class="icon">⚡</span> Analyzing data with ${escapeHtml(startToolName)}...`;
             break;
 
@@ -169,6 +174,11 @@ function updateLoadingMessage(id, state) {
             const errorMsg = state.error || state.result?.error;
             const statusIcon = errorMsg ? '⚠️' : '✅';
             const statusText = errorMsg ? 'failed' : 'finished';
+            // security-validated: Uses escapeHtml() from js/utils/html-escape.js
+            // Escaping method: DOM-based textContent assignment
+            // Data flow: state.tool, errorMsg → whitelist validation → escapeHtml() → innerHTML insertion
+            // Additional security: Tool names validated against VALID_TOOL_NAMES whitelist
+            // Review date: 2026-01-28
             el.innerHTML = `
                 <div class="tool-status ${errorMsg ? 'error' : 'success'}">
                     ${statusIcon} ${escapeHtml(toolName)} ${statusText}
@@ -184,7 +194,9 @@ function updateLoadingMessage(id, state) {
                 if (!thinkingEl) {
                     thinkingEl = document.createElement('details');
                     thinkingEl.className = 'thinking-block';
-                    // SAFE: Static HTML template
+                    // security-validated: Static HTML only, no dynamic content
+                    // Template structure is hardcoded with no user input
+                    // Review date: 2026-01-28
                     thinkingEl.innerHTML = '<summary>💭 Model reasoning</summary><div class="thinking-content"></div>';
                     el.insertBefore(thinkingEl, el.firstChild);
                 }
@@ -193,7 +205,9 @@ function updateLoadingMessage(id, state) {
             } else if (!el.dataset.streaming) {
                 // Reset to thinking indicator
                 el.className = 'message assistant loading';
-                // SAFE: Static HTML template
+                // security-validated: Static HTML only, no dynamic content
+                // Template structure is hardcoded with no user input
+                // Review date: 2026-01-28
                 el.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
             }
             break;
@@ -204,14 +218,20 @@ function updateLoadingMessage(id, state) {
                 // First token - switch to streaming mode
                 el.dataset.streaming = 'true';
                 el.className = 'message assistant streaming';
-                // SAFE: Static HTML template structure
+                // security-validated: Static HTML only, no dynamic content
+                // Template structure is hardcoded with no user input
                 // I18N FIX: Add dir="auto" to support bidirectional text (RTL/LTR)
+                // Review date: 2026-01-28
                 el.innerHTML = '<div class="message-content streaming-content" dir="auto"></div>';
             }
             const contentEl = el.querySelector('.streaming-content');
             if (contentEl && state.token) {
                 // Escape and append token
-                // SAFE: state.token is from AI response and is escaped before insertion
+                // security-validated: Uses escapeHtml() from js/utils/html-escape.js
+                // Escaping method: DOM-based textContent assignment
+                // Data flow: state.token (from AI response) → escapeHtml() → innerHTML insertion
+                // Line breaks converted to <br> AFTER escaping (safe order)
+                // Review date: 2026-01-28
                 const escaped = escapeHtml(state.token).replace(/\n/g, '<br>');
                 contentEl.innerHTML += escaped;
 

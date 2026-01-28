@@ -1,10 +1,10 @@
 /**
- * Sidebar Controller (Backward Compatibility Entry Point)
+ * Sidebar Controller - Backward Compatibility Layer
  *
- * This file maintains backward compatibility by re-exporting from
- * the refactored modular structure.
+ * This file serves as a backward compatibility facade that re-exports functionality
+ * from the new modular sidebar controller structure.
  *
- * The actual implementation has been split into:
+ * The sidebar controller has been refactored into focused modules:
  * - js/controllers/sidebar/index.js (main coordinator)
  * - js/controllers/sidebar/state-controller.js (collapse/expand state)
  * - js/controllers/sidebar/session-list-controller.js (session list rendering)
