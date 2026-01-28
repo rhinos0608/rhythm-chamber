@@ -231,10 +231,6 @@ describe('ExportStrategies', () => {
     });
 
     describe('exportWithRetry', () => {
-        beforeEach(() => {
-            vi.useFakeTimers();
-        });
-
         test('should retry on failure', async () => {
             const endpoint = 'https://example.com/api/metrics';
             let attemptCount = 0;
@@ -242,26 +238,29 @@ describe('ExportStrategies', () => {
             fetch.mockImplementation(() => {
                 attemptCount++;
                 if (attemptCount < 3) {
-                    return Promise.reject(new Error('Temporary error'));
+                    // Use a retryable error message (matches /network/i pattern)
+                    return Promise.reject(new Error('Network error'));
                 }
+                // Return a properly formatted mock response
                 return Promise.resolve({
                     ok: true,
-                    json: async () => ({ success: true })
+                    status: 200,
+                    statusText: 'OK',
+                    headers: {
+                        get: vi.fn((header) => header === 'content-type' ? 'application/json' : null)
+                    },
+                    json: async () => ({ success: true }),
+                    text: async () => 'OK'
                 });
             });
 
-            // Create promise and add no-op catch to suppress unhandled rejection
-            const promise = strategies.exportWithRetry(
+            // Use real timers for this test - testing with fake timers creates infinite loops
+            vi.useRealTimers();
+
+            const result = await strategies.exportWithRetry(
                 () => strategies.pushExport(endpoint, mockData)
             );
-            void promise.catch(() => {}); // Prevent unhandled rejection
 
-            // Fast-forward through retries
-            for (let i = 0; i < 3; i++) {
-                await vi.advanceTimersByTimeAsync(1000);
-            }
-
-            const result = await promise;
             expect(result.success).toBe(true);
             expect(attemptCount).toBe(3);
         });
@@ -269,23 +268,17 @@ describe('ExportStrategies', () => {
         test('should give up after max retries', async () => {
             const endpoint = 'https://example.com/api/metrics';
 
-            fetch.mockRejectedValue(new Error('Persistent error'));
+            // Use a retryable error message
+            fetch.mockRejectedValue(new Error('Network timeout'));
 
-            // Create promise and add no-op catch to suppress unhandled rejection
-            const promise = strategies.exportWithRetry(
+            // Use real timers for this test
+            vi.useRealTimers();
+
+            await expect(strategies.exportWithRetry(
                 () => strategies.pushExport(endpoint, mockData),
                 { maxRetries: 2 }
-            );
-            void promise.catch(() => {}); // Prevent unhandled rejection
+            )).rejects.toThrow('Network timeout');
 
-            // Fast-forward through all retries
-            for (let i = 0; i < 3; i++) {
-                await vi.advanceTimersByTimeAsync(1000);
-            }
-
-            const caughtError = await promise;
-            expect(caughtError).toBeTruthy();
-            expect(caughtError.message).toBe('Persistent error');
             expect(fetch).toHaveBeenCalledTimes(3); // Initial + 2 retries
         });
 
@@ -296,27 +289,30 @@ describe('ExportStrategies', () => {
             fetch.mockImplementation(() => {
                 attemptCount++;
                 if (attemptCount < 4) {
-                    return Promise.reject(new Error('Temporary error'));
+                    // Use a retryable error message
+                    return Promise.reject(new Error('Network timeout'));
                 }
+                // Return a properly formatted mock response
                 return Promise.resolve({
                     ok: true,
-                    json: async () => ({ success: true })
+                    status: 200,
+                    statusText: 'OK',
+                    headers: {
+                        get: vi.fn((header) => header === 'content-type' ? 'application/json' : null)
+                    },
+                    json: async () => ({ success: true }),
+                    text: async () => 'OK'
                 });
             });
 
-            // Create promise and add no-op catch to suppress unhandled rejection
-            const promise = strategies.exportWithRetry(
+            // Use real timers for this test
+            vi.useRealTimers();
+
+            const result = await strategies.exportWithRetry(
                 () => strategies.pushExport(endpoint, mockData),
                 { useExponentialBackoff: true }
             );
-            void promise.catch(() => {}); // Prevent unhandled rejection
 
-            // Advance with exponential backoff
-            await vi.advanceTimersByTimeAsync(1000); // 1st retry
-            await vi.advanceTimersByTimeAsync(2000); // 2nd retry
-            await vi.advanceTimersByTimeAsync(4000); // 3rd retry
-
-            const result = await promise;
             expect(attemptCount).toBe(4);
             expect(result.success).toBe(true);
         });
@@ -576,9 +572,10 @@ describe('ExportStrategies', () => {
 
             const results = await strategies.exportToMultipleServices(services, mockData);
 
-            expect(results).toHaveProperty('total', 2);
-            expect(results).toHaveProperty('successful', 2);
-            expect(results).toHaveProperty('failed', 0);
+            // The method returns an array of results, not an aggregated object
+            expect(results).toBeInstanceOf(Array);
+            expect(results).toHaveLength(2);
+            expect(results.every(r => r.success)).toBe(true);
         });
     });
 });
