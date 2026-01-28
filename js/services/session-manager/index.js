@@ -102,6 +102,11 @@ export function createManager() {
             return this.currentSession;
         },
 
+        // Load session
+        async loadSession(sessionId) {
+            return await this.lifecycle.loadSession(sessionId);
+        },
+
         // Get current session
         getCurrentSession() {
             return this.currentSession;
@@ -389,6 +394,16 @@ export async function getSession(sessionId) {
         return null;
     }
     return await Storage.getSession(sessionId);
+}
+
+/**
+ * Load session by ID (activates the session)
+ * @param {string} sessionId - Session ID
+ * @returns {Promise<Object>} Session data
+ */
+export async function loadSession(sessionId) {
+    const manager = getSessionManager();
+    return await manager.loadSession(sessionId);
 }
 
 /**

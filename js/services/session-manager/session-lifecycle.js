@@ -293,7 +293,7 @@ export async function activateSession(sessionId) {
  * @param {string} sessionId - Session ID to load
  * @returns {Promise<Object|null>} Session object or null if not found/invalid
  */
-async function loadSession(sessionId) {
+export async function loadSession(sessionId) {
     if (!Storage.getSession) {
         console.warn('[SessionLifecycle] Storage not available');
         return null;
