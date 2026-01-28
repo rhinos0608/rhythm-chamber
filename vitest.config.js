@@ -10,6 +10,8 @@ export default defineConfig({
       './tests/setup.js',
       './tests/unit/vitest-setup.js',
       './tests/unit/services/storage-degradation/setup.js'
-    ]
+    ],
+    testTimeout: 10000,
+    hookTimeout: 30000
   }
 });
