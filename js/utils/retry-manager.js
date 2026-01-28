@@ -462,12 +462,38 @@ export function retryAlways() {
 export async function withTimeout(fn, timeoutMs, message = `Operation timed out after ${timeoutMs}ms`) {
     // CRIT-003: Fix memory leak - clear timeout after operation completes
     let timeoutId;
+    let settled = false;
+
     const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+        timeoutId = setTimeout(() => {
+            if (!settled) {
+                settled = true;
+                // Swallow the rejection if already settled
+                try {
+                    reject(new Error(message));
+                } catch (e) {
+                    // Ignore - promise already settled
+                }
+            }
+        }, timeoutMs);
     });
 
+    // Create a wrapper for the operation promise
+    const operationPromise = (async () => {
+        try {
+            return await fn();
+        } finally {
+            // Mark as settled to prevent timeout from rejecting
+            settled = true;
+        }
+    })();
+
     try {
-        return await Promise.race([fn(), timeoutPromise]);
+        return await Promise.race([operationPromise, timeoutPromise]);
+    } catch (error) {
+        // Mark as settled to prevent timeout from rejecting
+        settled = true;
+        throw error;
     } finally {
         // Always clear timeout to prevent memory leak
         if (timeoutId) {

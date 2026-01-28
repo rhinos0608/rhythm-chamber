@@ -354,8 +354,6 @@ describe('Promise Rejection Handling', () => {
 
         const result2 = operationWithTimeout(slowOperation, 1000);
 
-        await vi.advanceTimersByTimeAsync(1500);
-
         // Handle rejection to avoid unhandled rejection
         let error2 = null;
         try {
@@ -363,9 +361,16 @@ describe('Promise Rejection Handling', () => {
         } catch (e) {
             error2 = e;
         }
+
+        // Advance timers past timeout
+        await vi.advanceTimersByTimeAsync(1500);
+
         expect(error2).toBeTruthy();
         expect(error2.message).toBe('Operation timed out after 1000ms');
         expect(timeoutResolved).toBe(true);
+
+        // Wait for the slow operation to complete to avoid unhandled rejections
+        await vi.advanceTimersByTimeAsync(500);
 
         vi.useRealTimers();
     });

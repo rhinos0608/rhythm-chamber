@@ -231,6 +231,9 @@ describe('RetryManager Critical Fixes', () => {
             expect(caughtError.message).toBe('Operation failed');
             expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
 
+            // Run all pending timers to ensure they're all processed
+            await vi.runAllTimersAsync();
+
             vi.useRealTimers();
         });
 
@@ -294,6 +297,9 @@ describe('RetryManager Critical Fixes', () => {
 
             // Timeout should also be cleared
             expect(clearTimeoutSpy).toHaveBeenCalled();
+
+            // Run all remaining timers
+            await vi.runAllTimersAsync();
 
             vi.useRealTimers();
         });
