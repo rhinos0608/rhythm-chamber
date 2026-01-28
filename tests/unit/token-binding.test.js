@@ -46,8 +46,7 @@ describe('TokenBinding', () => {
         expect(result).toBe(false);
         const failure = TokenBinding.getTokenBindingFailure();
         expect(failure).toBeTruthy();
-        // Error message should indicate secure context is needed
-        expect(failure.userMessage).toMatch(/secure|Cryptographic|unavailable/i);
+        expect(failure.userMessage).toMatch(/HTTPS|localhost|Cryptographic/i);
     });
 
     it('initializes session salt when generating fingerprint', async () => {
