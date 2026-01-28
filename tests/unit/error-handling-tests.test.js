@@ -148,11 +148,12 @@ describe('Circuit Breaker Pattern', () => {
         let failureCount = 0;
         let lastFailureTime = null;
         let halfOpenCalls = 0;
+        let currentTime = 0; // Mock time that respects fake timers
 
         async function executeWithCircuitBreaker(fn) {
             // Check if circuit is open
             if (state === 'OPEN') {
-                const timeSinceFailure = Date.now() - lastFailureTime;
+                const timeSinceFailure = currentTime - lastFailureTime;
 
                 if (timeSinceFailure < config.resetTimeoutMs) {
                     throw new Error('Circuit breaker is OPEN');
@@ -180,7 +181,7 @@ describe('Circuit Breaker Pattern', () => {
                 return result;
             } catch (error) {
                 failureCount++;
-                lastFailureTime = Date.now();
+                lastFailureTime = currentTime;
 
                 if (failureCount >= config.failureThreshold) {
                     state = 'OPEN';
@@ -190,7 +191,7 @@ describe('Circuit Breaker Pattern', () => {
             }
         }
 
-        vi.useFakeTimers();
+        vi.useFakeTimers().setSystemTime(0);
 
         // First few calls succeed
         await expect(executeWithCircuitBreaker(async () => 'ok')).resolves.toBe('ok');
@@ -216,14 +217,11 @@ describe('Circuit Breaker Pattern', () => {
             .rejects.toThrow('Circuit breaker is OPEN');
 
         // Wait for reset timeout
+        currentTime += 1100;
         await vi.advanceTimersByTimeAsync(1100);
 
-        // Circuit should be half-open
-        expect(state).toBe('HALF_OPEN');
-
-        // Successful call should close circuit
+        // Next call should transition to half-open and then close on success
         await expect(executeWithCircuitBreaker(async () => 'ok')).resolves.toBe('ok');
-
         expect(state).toBe('CLOSED');
         expect(failureCount).toBe(0);
 
