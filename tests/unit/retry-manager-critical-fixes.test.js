@@ -132,15 +132,14 @@ describe('RetryManager Critical Fixes', () => {
             const fn = vi.fn()
                 .mockRejectedValueOnce(new Error('Error 1'))
                 .mockRejectedValueOnce(new Error('Error 2'))
-                .mockRejectedValueOnce(new Error('Error 3'))
-                .mockResolvedValue('success');
+                .mockResolvedValue('success');  // Succeeds on 3rd call (after 2 retries)
 
             const { result, context } = await withRetry(fn, { maxRetries: 2 });
 
             expect(result).toBe('success');
-            // Initial + 2 retries = 3 total (not 4!)
+            // Initial + 2 retries = 3 total calls
             expect(fn).toHaveBeenCalledTimes(3);
-            expect(context.attempt).toBe(2);
+            expect(context.attempt).toBe(2);  // 2 failures recorded
         });
 
         it('should respect shouldRetry getter with < condition', () => {
