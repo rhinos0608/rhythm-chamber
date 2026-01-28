@@ -151,7 +151,7 @@ beforeEach(async () => {
     mockIndexedDBCore._clearMockData();
 
     // Import modules after mocks are set up
-    StorageTransaction = (await import('../../js/storage/transaction.js')).StorageTransaction;
+    StorageTransaction = (await import('../../js/storage/transaction/index.js')).StorageTransaction;
     Storage = (await import('../../js/storage.js')).Storage;
 });
 
