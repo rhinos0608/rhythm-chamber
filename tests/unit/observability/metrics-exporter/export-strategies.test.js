@@ -377,7 +377,9 @@ describe('ExportStrategies', () => {
 
             await strategies.downloadExport(mockData, 'csv', 'test-job');
 
-            expect(mockLink.download).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+            // Filename format: rhythm-chamber-metrics-test-job-TIMESTAMP.csv
+            expect(mockLink.download).toMatch(/rhythm-chamber-metrics-test-job-/);
+            expect(mockLink.download).toMatch(/\d{4}-\d{2}-\d{2}T/);  // Contains timestamp
             expect(mockLink.download).toMatch(/\.csv$/);
         });
     });
@@ -454,7 +456,7 @@ describe('ExportStrategies', () => {
             };
 
             await expect(strategies.handleResponse(response))
-                .rejects.toThrow('Service returned 500: Internal Server Error');
+                .rejects.toThrow('Export failed: 500 Internal Server Error');
         });
 
         test('should parse response JSON', async () => {
