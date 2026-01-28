@@ -1,0 +1,656 @@
+{
+  "cycle": 3,
+  "timestamp": 1769634552,
+  "date": "2025-01-29",
+  "target_pass_rate": "98%",
+  "target_passing_tests": 2954,
+  "current_status": {
+    "passing": 2938,
+    "failing": 82,
+    "skipped": 7,
+    "total": 3027,
+    "pass_rate": "97.1%"
+  },
+  "gap": {
+    "needed": 16,
+    "current_fixed": 0,
+    "note": "12 additional tests uncovered by import fixes"
+  },
+  "failing_tests": [
+    {
+      "file": "tests/unit/storage-transaction.test.js",
+      "test": "entire file",
+      "category": "import_error",
+      "effort": "quick",
+      "issue": "Missing file js/storage/transaction.js",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/storage/indexeddb-core/characterization-tests.test.js",
+      "test": "entire file",
+      "category": "import_error",
+      "effort": "quick",
+      "issue": "Wrong import path for indexeddb.js",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/observability/metrics-exporter/export-strategies.test.js",
+      "test": "should retry on failure",
+      "category": "mock_issue",
+      "effort": "quick",
+      "issue": "Unhandled promise rejection in test",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/observability/metrics-exporter/export-strategies.test.js",
+      "test": "should give up after max retries",
+      "category": "mock_issue",
+      "effort": "quick",
+      "issue": "Unhandled promise rejection in test",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/observability/metrics-exporter/export-strategies.test.js",
+      "test": "should use exponential backoff",
+      "category": "mock_issue",
+      "effort": "quick",
+      "issue": "Unhandled promise rejection in test",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/observability/metrics-exporter/export-strategies.test.js",
+      "test": "should generate filename with timestamp",
+      "category": "test_bug",
+      "effort": "quick",
+      "issue": "Likely assertion error",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/observability/metrics-exporter/export-strategies.test.js",
+      "test": "should handle failed response",
+      "category": "test_bug",
+      "effort": "quick",
+      "issue": "Likely assertion error",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/observability/metrics-exporter/export-strategies.test.js",
+      "test": "should use base delay for first retry",
+      "category": "test_bug",
+      "effort": "quick",
+      "issue": "Likely assertion error",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/observability/metrics-exporter/export-strategies.test.js",
+      "test": "should use exponential backoff when enabled",
+      "category": "test_bug",
+      "effort": "quick",
+      "issue": "Likely assertion error",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/observability/metrics-exporter/export-strategies.test.js",
+      "test": "should return aggregated results",
+      "category": "test_bug",
+      "effort": "quick",
+      "issue": "Likely assertion error",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/observability/metrics-exporter/metrics-aggregator.test.js",
+      "test": "aggregateByTimeWindow (multiple tests)",
+      "category": "test_bug",
+      "effort": "quick",
+      "issue": "Assertion error at line 151, 155",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/observability/metrics-exporter/metrics-aggregator.test.js",
+      "test": "bufferMetrics (multiple tests)",
+      "category": "test_bug",
+      "effort": "quick",
+      "issue": "Assertion error at line 302, 306",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/observability/metrics-exporter/metrics-aggregator.test.js",
+      "test": "should handle empty metrics",
+      "category": "test_bug",
+      "effort": "quick",
+      "issue": "Assertion error",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/observability/metrics-exporter/metrics-aggregator.test.js",
+      "test": "should calculate percentiles",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Percentile calculation wrong at line 113",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/observability/metrics-exporter/metrics-aggregator.test.js",
+      "test": "should calculate 95th percentile",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Percentile calculation wrong at line 384",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/observability/metrics-exporter/metrics-aggregator.test.js",
+      "test": "should calculate 99th percentile",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Percentile calculation wrong at line 391",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/observability/metrics-exporter/metrics-aggregator.test.js",
+      "test": "should format aggregated metrics for export",
+      "category": "test_bug",
+      "effort": "quick",
+      "issue": "Assertion error",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/cross-tab-communication-tests.test.js",
+      "test": "should validate message structure",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Validation logic issue",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/cross-tab-communication-tests.test.js",
+      "test": "should handle malformed messages gracefully",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Error handling issue",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/cross-tab-communication-tests.test.js",
+      "test": "should route messages by type",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Routing logic issue",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/cross-tab-communication-tests.test.js",
+      "test": "should handle unknown message types",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Error handling issue",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/cross-tab-communication-tests.test.js",
+      "test": "should notify tabs of authority changes",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Authority notification at line 521",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/cross-tab-communication-tests.test.js",
+      "test": "should emit tab:authority_changed event with correct payload",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Event emission issue",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/error-handling-tests.test.js",
+      "test": "should open circuit after consecutive failures",
+      "category": "test_bug",
+      "effort": "quick",
+      "issue": "Circuit breaker assertion",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/error-handling-tests.test.js",
+      "test": "should keep changedArray immutable and consistent for all subscribers",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Array immutability at line 341",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/error-handling-tests.test.js",
+      "test": "should retry transaction on transient failure",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Transaction retry at line 378",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/error-handling-tests.test.js",
+      "test": "should check transaction state before completion",
+      "category": "mock_issue",
+      "effort": "quick",
+      "issue": "Unhandled rejection in test",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/hnw-structural.test.js",
+      "test": "should expose core API methods",
+      "category": "test_bug",
+      "effort": "quick",
+      "issue": "API method assertion",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/hnw-structural.test.js",
+      "test": "should dispatch work and track completions",
+      "category": "test_bug",
+      "effort": "quick",
+      "issue": "Work dispatch assertion",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/memory-leak-tests.test.js",
+      "test": "should detect uncleared setTimeout",
+      "category": "mock_issue",
+      "effort": "quick",
+      "issue": "Timer mock setup",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/memory-leak-tests.test.js",
+      "test": "should detect uncleared setInterval",
+      "category": "mock_issue",
+      "effort": "quick",
+      "issue": "Timer mock setup",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/memory-leak-tests.test.js",
+      "test": "should properly clear timers in cleanup function",
+      "category": "mock_issue",
+      "effort": "quick",
+      "issue": "Timer mock setup",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/memory-leak-tests.test.js",
+      "test": "should handle debounced save cleanup",
+      "category": "mock_issue",
+      "effort": "quick",
+      "issue": "Timer mock setup",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/memory-leak-tests.test.js",
+      "test": "should handle Promise.race cancellation",
+      "category": "mock_issue",
+      "effort": "quick",
+      "issue": "Unhandled rejection at line 444",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/race-condition-tests.test.js",
+      "test": "should re-validate currentSessionId after acquiring lock",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Lock validation logic",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/race-condition-tests.test.js",
+      "test": "should always call handleSecondaryMode when receiving CLAIM_PRIMARY",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Secondary mode handling",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/retry-manager-critical-fixes.test.js",
+      "test": "should throw error for undefined maxRetries",
+      "category": "test_bug",
+      "effort": "quick",
+      "issue": "Error handling assertion",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/retry-manager-critical-fixes.test.js",
+      "test": "should not allow extra retry beyond maxRetries",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Retry count off-by-one at line 135",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/retry-manager-critical-fixes.test.js",
+      "test": "should prioritize name over message in all cases",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "AbortError classification",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/retry-manager-critical-fixes.test.js",
+      "test": "should handle valid retries with proper counting and cleanup",
+      "category": "mock_issue",
+      "effort": "quick",
+      "issue": "Unhandled rejection at line 441",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/retry-manager-critical-fixes.test.js",
+      "test": "should handle AbortError correctly during retry",
+      "category": "mock_issue",
+      "effort": "quick",
+      "issue": "Unhandled rejection at line 485",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/retry-manager-critical-fixes.test.js",
+      "test": "should timeout if operation takes too long",
+      "category": "mock_issue",
+      "effort": "quick",
+      "issue": "Unhandled rejection - timeout error",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/retry-manager-critical-fixes.test.js",
+      "test": "should clear timeout after failed operation",
+      "category": "mock_issue",
+      "effort": "quick",
+      "issue": "Unhandled rejection - operation failed",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/session-lock-manager.test.js",
+      "test": "should fail to acquire lock for different session with timeout",
+      "category": "mock_issue",
+      "effort": "quick",
+      "issue": "Timer/mock setup",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/session-lock-manager.test.js",
+      "test": "should handle session switching while waiting",
+      "category": "mock_issue",
+      "effort": "quick",
+      "issue": "Timer/mock setup",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/session-lock-manager.test.js",
+      "test": "should handle retry logic with exponential backoff",
+      "category": "mock_issue",
+      "effort": "quick",
+      "issue": "Timer/mock setup",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/session-lock-manager.test.js",
+      "test": "should fail immediately on session switch detection",
+      "category": "mock_issue",
+      "effort": "quick",
+      "issue": "Timer/mock setup",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/session-lock-manager.test.js",
+      "test": "should detect simple circular wait between two sessions BEFORE acquisition",
+      "category": "implementation_bug",
+      "effort": "complex",
+      "issue": "Circular wait detection logic",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/session-lock-manager.test.js",
+      "test": "should detect circular wait in three-session chain BEFORE acquisition",
+      "category": "implementation_bug",
+      "effort": "complex",
+      "issue": "Circular wait detection logic",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/session-lock-manager.test.js",
+      "test": "should handle complex wait-for graph with multiple waiting sessions",
+      "category": "implementation_bug",
+      "effort": "complex",
+      "issue": "Circular wait detection logic",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/token-binding.test.js",
+      "test": "soft fails with guidance when crypto is unavailable",
+      "category": "test_bug",
+      "effort": "quick",
+      "issue": "Crypto unavailability assertion",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/validation-tests.test.js",
+      "test": "should validate session structure",
+      "category": "test_bug",
+      "effort": "quick",
+      "issue": "Session validation assertion",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/validation-tests.test.js",
+      "test": "should validate UUID format",
+      "category": "test_bug",
+      "effort": "quick",
+      "issue": "UUID validation assertion",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/validation-utils-fixes-corrected.test.js",
+      "test": "should escape HTML entities correctly",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "HTML escaping logic",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/cleanup-strategies.test.js",
+      "test": "entire file",
+      "category": "missing_implementation",
+      "effort": "complex",
+      "issue": "File fails to load",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/tier-handlers.test.js",
+      "test": "entire file",
+      "category": "missing_implementation",
+      "effort": "complex",
+      "issue": "File fails to load",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/degradation-detector.test.js",
+      "test": "should return updated tier after quota check",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Quota check logic",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/degradation-detector.test.js",
+      "test": "should return null initially",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Initial metrics return",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/degradation-detector.test.js",
+      "test": "should return metrics with usage and quota",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Storage metrics calculation",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/degradation-detector.test.js",
+      "test": "should fallback to IndexedDB estimation when navigator.storage unavailable",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Fallback logic at line 141",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/degradation-detector.test.js",
+      "test": "should estimate storage from IndexedDB",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "IndexedDB estimation at line 250",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/degradation-detector.test.js",
+      "test": "should calculate size from object store counts",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Database size calculation at line 325",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/degradation-detector.test.js",
+      "test": "should update metrics on check",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Metrics update on quota check",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/degradation-detector.test.js",
+      "test": "should emit QUOTA_STATUS event",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Event emission",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/degradation-detector.test.js",
+      "test": "should handle errors gracefully",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Error handling",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/degradation-detector.test.js",
+      "test": "should not emit tier change if tier unchanged",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Tier change logic at line 367",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/degradation-detector.test.js",
+      "test": "should start quota monitoring on initialization",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Monitoring initialization",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/degradation-detector.test.js",
+      "test": "should check quota at specified interval",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Interval checking",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/degradation-detector.test.js",
+      "test": "should stop quota monitoring when requested",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Monitoring stop",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/degradation-detector.test.js",
+      "test": "should clear existing interval when starting new one",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Interval clearing at line 420",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/degradation-detector.test.js",
+      "test": "should handle extremely large quota values",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Large quota handling at line 482",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/degradation-detector.test.js",
+      "test": "should handle very small quota values",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Small quota handling at line 494",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/degradation-detector.test.js",
+      "test": "should handle negative values gracefully",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Negative value handling at line 505",
+      "status": "pending"
+    },
+    {
+      "file": "tests/unit/services/storage-degradation/degradation-detector.test.js",
+      "test": "should handle quota of 1 (fallback)",
+      "category": "implementation_bug",
+      "effort": "medium",
+      "issue": "Fallback quota value",
+      "status": "pending"
+    }
+  ],
+  "categories": {
+    "import_error": {
+      "count": 2,
+      "effort": "quick",
+      "description": "Missing or incorrect import paths"
+    },
+    "mock_issue": {
+      "count": 24,
+      "effort": "quick",
+      "description": "Unhandled promise rejections, timer setup issues"
+    },
+    "test_bug": {
+      "count": 14,
+      "effort": "quick",
+      "description": "Wrong test expectations, assertions"
+    },
+    "implementation_bug": {
+      "count": 26,
+      "effort": "medium",
+      "description": "Code logic errors"
+    },
+    "missing_implementation": {
+      "count": 2,
+      "effort": "complex",
+      "description": "Files fail to load entirely"
+    },
+    "complex": {
+      "count": 4,
+      "effort": "complex",
+      "description": "Circular wait detection, complex logic"
+    }
+  },
+  "priority_order": [
+    "import_error",
+    "mock_issue",
+    "test_bug",
+    "implementation_bug",
+    "missing_implementation",
+    "complex"
+  ],
+  "quick_wins_target": 40,
+  "medium_effort_target": 26,
+  "complex_deferred": 4
+}

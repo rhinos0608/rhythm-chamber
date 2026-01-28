@@ -452,7 +452,6 @@ describe('IndexedDB Transaction Retry (abec63d)', () => {
         // Transaction becomes inactive before completion
         const promise2 = transactionWithStateCheck();
         transactionState = 'aborted';
-        await vi.advanceTimersByTimeAsync(100);
 
         // Handle rejection to avoid unhandled rejection
         let error2 = null;
@@ -461,6 +460,10 @@ describe('IndexedDB Transaction Retry (abec63d)', () => {
         } catch (e) {
             error2 = e;
         }
+
+        // Advance timers to ensure all promises complete
+        await vi.advanceTimersByTimeAsync(100);
+
         expect(error2).toBeTruthy();
         expect(error2.message).toBe('Transaction is not active, cannot commit');
         expect(commitCalled).toBe(false);
