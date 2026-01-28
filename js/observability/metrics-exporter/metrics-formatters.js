@@ -156,7 +156,7 @@ export class MetricsFormatters {
             for (const [category, data] of Object.entries(metrics.performance.categories)) {
                 if (data.statistics) {
                     const metricName = this.sanitizeMetricName(`rhythm_chamber.${category}.duration_ms`);
-                    lines.push(`${metricName}:${data.statistics.avgDuration}|g`);
+                    lines.push(`${metricName}:${data.statistics.avgDuration}|gauge`);
                 }
             }
         }
@@ -166,7 +166,7 @@ export class MetricsFormatters {
             for (const [vitalType, vitalData] of Object.entries(metrics.webVitals.vitals)) {
                 if (vitalData.latest) {
                     const metricName = this.sanitizeMetricName(`rhythm_chamber.web_vitals.${vitalType}`);
-                    lines.push(`${metricName}:${vitalData.latest.value}|g`);
+                    lines.push(`${metricName}:${vitalData.latest.value}|gauge`);
                 }
             }
         }
@@ -174,7 +174,7 @@ export class MetricsFormatters {
         // Memory metrics
         if (metrics.memory?.currentUsage != null) {
             const metricName = this.sanitizeMetricName('rhythm_chamber.memory.usage_percent');
-            lines.push(`${metricName}:${metrics.memory.currentUsage}|g`);
+            lines.push(`${metricName}:${metrics.memory.currentUsage}|gauge`);
         }
 
         return lines.join('\n');

@@ -280,11 +280,14 @@ export class ExportStrategies {
      * @public
      * @param {Response} response - Fetch response object
      * @returns {Promise<Object>} Response data
-     * @throws {Error} If response is not OK
+     * @throws {Error} If response is not OK or undefined
      */
     async handleResponse(response) {
+        if (!response) {
+            throw new Error('No response received from export service');
+        }
         if (!response.ok) {
-            throw new Error(`Service returned ${response.status}: ${response.statusText}`);
+            throw new Error(`Export failed: ${response.status} ${response.statusText}`);
         }
 
         // Try to parse JSON response

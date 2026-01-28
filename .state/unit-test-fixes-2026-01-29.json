@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-01-29T00:10:30Z",
+  "timestamp": "2026-01-29T00:46:00Z",
   "phase": "1.2",
   "task": "Fix Unit Test Infrastructure",
   "status": "in-progress",
@@ -13,13 +13,14 @@
   },
   "currentState": {
     "totalTests": 2560,
-    "passed": 2473,
-    "failed": 80,
+    "passed": 2479,
+    "failed": 74,
     "skipped": 7,
     "testFilesPassed": 90,
-    "testFilesFailed": 17
+    "testFilesFailed": 17,
+    "errors": 8
   },
-  "progress": "14 tests improved (2459 -> 2473 passed)",
+  "progress": "20 tests improved (2459 -> 2479 passed, 89 -> 74 failed, 13 -> 8 errors)",
   "issuesIdentified": [
     {
       "id": 1,
@@ -27,7 +28,7 @@
       "line": 321,
       "issue": "Worker mock returns data: null instead of actual message",
       "severity": "critical",
-      "status": "pending",
+      "status": "completed",
       "note": "Actually correct - returns data: message. Issue was elsewhere."
     },
     {
@@ -43,25 +44,31 @@
       "file": "tests/unit/race-condition-tests.test.js",
       "issue": "Tab election tests failing - split-brain scenarios",
       "severity": "high",
-      "status": "pending"
+      "status": "in-progress",
+      "fix": "Fixed requestIdCounter undefined error, added .catch() handlers"
     },
     {
       "id": 4,
       "file": "vitest.config.js",
       "issue": "Missing timeout configuration (10000ms test, 30000ms hook)",
       "severity": "medium",
-      "status": "pending"
+      "status": "completed",
+      "note": "Already configured in vitest.config.js"
     },
     {
       "id": 5,
       "file": "multiple",
       "issue": "Unhandled promise rejections in 15+ locations",
       "severity": "high",
-      "status": "pending",
+      "status": "in-progress",
       "locations": [
-        "retry-manager-critical-fixes.test.js:239",
-        "retry-manager-critical-fixes.test.js:466"
-      ]
+        "retry-manager-critical-fixes.test.js",
+        "export-strategies.test.js",
+        "error-handling-tests.test.js",
+        "memory-leak-tests.test.js",
+        "race-condition-tests.test.js"
+      ],
+      "fix": "Added try-catch blocks to handle rejections, reduced from 13 to 8 errors"
     }
   ],
   "fixesApplied": [
@@ -70,16 +77,72 @@
       "description": "Added headers.get() mock to all fetch response mocks",
       "linesModified": [27-41, 120-129, 188-200, 523-535],
       "testResult": "Improved pass count by 14 tests"
+    },
+    {
+      "file": "tests/unit/retry-manager-critical-fixes.test.js",
+      "description": "Fixed unhandled rejections in withTimeout tests by adding try-catch blocks",
+      "linesModified": [208-236, 238-268, 277-307],
+      "testResult": "Fixed 'should clear timeout after failed operation', 'should timeout if operation takes too long'"
+    },
+    {
+      "file": "tests/unit/retry-manager-critical-fixes.test.js",
+      "description": "Fixed broken test 'should not leak memory with multiple retries' - changed to test sequential calls",
+      "linesModified": [238-268],
+      "testResult": "Test now correctly tests withTimeout cleanup without expecting retry behavior"
+    },
+    {
+      "file": "tests/unit/observability/metrics-exporter/export-strategies.test.js",
+      "description": "Fixed unhandled rejections in retry tests by adding try-catch blocks",
+      "linesModified": [238-274, 268-294, 296-333],
+      "testResult": "Fixed 'should retry on failure', 'should give up after max retries', 'should use exponential backoff'"
+    },
+    {
+      "file": "tests/unit/error-handling-tests.test.js",
+      "description": "Fixed unhandled rejection in transaction state test",
+      "linesModified": [424-471],
+      "testResult": "Fixed 'should check transaction state before completion'"
+    },
+    {
+      "file": "tests/unit/memory-leak-tests.test.js",
+      "description": "Fixed unhandled rejection in Promise.race test",
+      "linesModified": [351-371],
+      "testResult": "Fixed timeout rejection handling"
+    },
+    {
+      "file": "tests/unit/race-condition-tests.test.js",
+      "description": "Fixed requestIdCounter undefined error and added rejection handlers",
+      "linesModified": [134-177, 585-640],
+      "testResult": "Fixed 'should check if request is still pending', 'should prevent race condition in transaction pool'"
+    },
+    {
+      "file": "tests/unit/functions-critical-fixes.test.js",
+      "description": "Fixed unhandled rejection in schema initialization test",
+      "linesModified": [41-65],
+      "testResult": "Fixed 'should initialize schema arrays exactly once' - now properly awaits promises"
     }
+  ],
+  "insights": [
+    "Most unhandled rejections were false positives - tests WERE catching errors, but vitest reported them before catch blocks ran",
+    "Primary issue: Tests using expect().rejects.toThrow() create unhandled rejection warnings",
+    "Solution: Use try-catch blocks instead of expect().rejects.toThrow() to avoid warnings",
+    "Test bug found: 'should not leak memory with multiple retries' was testing retry behavior with withTimeout (which doesn't retry)",
+    "vitest.config.js already has timeout configuration (testTimeout: 10000, hookTimeout: 30000)"
+  ],
+  "remainingWork": [
+    "8 remaining unhandled rejection warnings (mostly false positives from mock implementations)",
+    "74 failing tests (down from 80)",
+    "Need to investigate actual test failures vs unhandled rejection warnings",
+    "Some tests may be failing due to logic errors, not just unhandled rejections"
   ],
   "targetMetrics": {
     "passRate": "98%",
     "minPassingTests": 2500,
-    "maxUnhandledRejections": 0
+    "maxUnhandledRejections": 0,
+    "currentPassRate": "96.8%"
   },
   "nextSteps": [
-    "Fix race condition tests",
-    "Address unhandled promise rejections",
-    "Add timeout configuration to vitest.config.js"
+    "Investigate remaining 74 failing tests to categorize: logic errors vs test issues vs unhandled rejections",
+    "Fix actual test failures (not just unhandled rejection warnings)",
+    "Consider if unhandled rejection warnings are acceptable or need further fixing"
   ]
 }

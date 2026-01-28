@@ -73,6 +73,7 @@ const BASE_RETRY_DELAY_MS = 100;
 
 let hasWarnedAboutMessageLimit = false;
 let previousSessionId = null;
+let autoSaveTimeoutId = null;
 
 // ==========================================
 // State Accessor Interface (Dependency Injection)
@@ -213,6 +214,95 @@ function cleanupSessionResources(sessionId) {
  */
 async function acquireProcessingLock(expectedSessionId) {
     return lockManager.acquireProcessingLock(expectedSessionId);
+}
+
+/**
+ * Schedule a debounced save of the current session
+ * This prevents excessive saves during rapid message additions
+ * @param {number} delayMs - Delay in milliseconds before saving (default: 2000)
+ */
+export function saveConversation(delayMs = 2000) {
+    // Cancel any pending save
+    if (autoSaveTimeoutId) {
+        clearTimeout(autoSaveTimeoutId);
+    }
+
+    // Debounce the save
+    autoSaveTimeoutId = setTimeout(async () => {
+        await saveCurrentSession();
+        autoSaveTimeoutId = null;
+    }, delayMs);
+}
+
+/**
+ * Save current session to IndexedDB immediately
+ * EDGE CASE FIX: Preserves system prompts during truncation
+ * HIGH PRIORITY FIX: Returns boolean indicating success for caller error handling
+ * @returns {Promise<boolean>} True if save succeeded, false otherwise
+ */
+export async function saveCurrentSession() {
+    const currentSessionId = SessionState.getCurrentSessionId();
+    if (!currentSessionId || !Storage.saveSession) {
+        return false;
+    }
+
+    // Get messages from module-local memory (thread-safe access)
+    const sessionData = SessionState.getSessionData();
+    const messages = sessionData.messages || [];
+    const messageCount = messages.length;
+    const currentSessionCreatedAt = SessionState.getCurrentSessionCreatedAt();
+
+    // Warn when approaching message limit (DATA LOSS WARNING)
+    if (messageCount >= MESSAGE_LIMIT_WARNING_THRESHOLD && !hasWarnedAboutMessageLimit) {
+        hasWarnedAboutMessageLimit = true;
+        if (typeof window !== 'undefined' && window.showToast) {
+            window.showToast(
+                `You have ${messageCount} messages in this chat. Only the most recent ${MAX_SAVED_MESSAGES} messages will be saved permanently.`,
+                6000
+            );
+        }
+        console.warn(`[SessionLifecycle] Approaching message limit: ${messageCount}/${MAX_SAVED_MESSAGES}`);
+    }
+
+    try {
+        // EDGE CASE FIX: Preserve system prompts during truncation
+        // System prompts are critical for LLM behavior - they should not be truncated
+        const systemMessages = messages.filter(m => m.role === 'system');
+        const nonSystemMessages = messages.filter(m => m.role !== 'system');
+        const messagesToSave = messageCount > MAX_SAVED_MESSAGES
+            ? [...systemMessages, ...nonSystemMessages.slice(-(MAX_SAVED_MESSAGES - systemMessages.length))]
+            : messages;
+
+        const session = {
+            id: currentSessionId,
+            title: generateSessionTitle(messages),
+            createdAt: currentSessionCreatedAt,
+            messages: messagesToSave,
+            metadata: {
+                personalityName: window._userContext?.personality?.name || 'Unknown',
+                personalityEmoji: window._userContext?.personality?.emoji || '🎵',
+                isLiteMode: false
+            }
+        };
+
+        // Log warning when messages are actually truncated (DATA LOSS WARNING)
+        if (messageCount > MAX_SAVED_MESSAGES) {
+            const truncatedCount = messageCount - messagesToSave.length;
+            console.warn(`[SessionLifecycle] Truncated ${truncatedCount} old messages (kept ${systemMessages.length} system prompts + ${MAX_SAVED_MESSAGES - systemMessages.length} most recent)`);
+        }
+
+        await Storage.saveSession(session);
+        console.log('[SessionLifecycle] Session saved:', currentSessionId);
+        notifySessionUpdate('session:updated', { sessionId: currentSessionId, field: 'messages' });
+        return true;
+    } catch (e) {
+        console.error('[SessionLifecycle] Failed to save session:', e);
+        // HIGH PRIORITY FIX: Notify user of save failure - this is a data loss risk
+        if (typeof window !== 'undefined' && window.showToast) {
+            window.showToast('Warning: Failed to save conversation. Data may be lost on refresh.', 5000);
+        }
+        return false;
+    }
 }
 
 // ==========================================
