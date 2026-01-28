@@ -1,0 +1,52 @@
+{
+  "phase": "2.3",
+  "task": "provider-interface-refactor",
+  "startedAt": "2026-01-28T14:01:52Z",
+  "startEpoch": 1769608912,
+  "sourceFile": "js/providers/provider-interface.js",
+  "sourceLines": 1102,
+  "targetStructure": {
+    "directory": "js/providers/interface/",
+    "modules": [
+      "config.js",
+      "retry.js",
+      "routing.js",
+      "errors.js",
+      "health-checks.js",
+      "availability.js",
+      "index.js"
+    ]
+  },
+  "status": "characterization-testing",
+  "completed": [],
+  "currentStep": "Writing comprehensive characterization tests",
+  "dependencies": [
+    "fallback-chain-refactor"
+  ],
+  "dependentModules": [
+    "js/services/fallback/execution.js",
+    "js/chat.js",
+    "js/main.js",
+    "js/services/profile-description-generator.js",
+    "js/services/profile-sharing.js"
+  ],
+  "publicAPI": {
+    "functions": [
+      "buildProviderConfig",
+      "callProvider",
+      "isProviderAvailable",
+      "getAvailableProviders",
+      "getProviderModule",
+      "checkHealth",
+      "checkOpenRouterHealth",
+      "checkOllamaHealth",
+      "checkLMStudioHealth",
+      "checkGeminiHealth",
+      "checkOpenAICompatibleHealth",
+      "normalizeProviderError"
+    ],
+    "constants": [
+      "TIMEOUTS"
+    ]
+  }
+}
