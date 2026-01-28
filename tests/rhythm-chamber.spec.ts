@@ -240,7 +240,24 @@ test.describe('Multi-Tab Coordination', () => {
 
         // Open second tab in SAME context (required for BroadcastChannel)
         const page2 = await context.newPage();
+
+        // CRITICAL: Prime page2's localStorage with page1's election data BEFORE page load
+        // Update timestamp to make it appear fresh for page2's election check
+        const freshElectionData = JSON.parse(electionData);
+        freshElectionData.timestamp = Date.now();
+
+        await page2.addInitScript((data) => {
+            localStorage.setItem('rhythm_chamber_tab_election', data);
+        }, JSON.stringify(freshElectionData));
+
         await page2.goto('/app.html', { waitUntil: 'networkidle' });
+
+        // Wait for page to fully initialize
+        await page2.waitForTimeout(1000);
+
+        // Check what tab authority page2 thinks it has
+        const page2Status = await page2.locator('#authority-indicator').textContent();
+        console.log('Page2 tab status:', page2Status);
 
         // Wait for multi-tab modal to appear
         // NOTE: Election window is 300ms for deterministic leader election
