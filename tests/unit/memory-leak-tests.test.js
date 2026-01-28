@@ -356,7 +356,15 @@ describe('Promise Rejection Handling', () => {
 
         await vi.advanceTimersByTimeAsync(1500);
 
-        await expect(result2).rejects.toThrow('Operation timed out after 1000ms');
+        // Handle rejection to avoid unhandled rejection
+        let error2 = null;
+        try {
+            await result2;
+        } catch (e) {
+            error2 = e;
+        }
+        expect(error2).toBeTruthy();
+        expect(error2.message).toBe('Operation timed out after 1000ms');
         expect(timeoutResolved).toBe(true);
 
         vi.useRealTimers();

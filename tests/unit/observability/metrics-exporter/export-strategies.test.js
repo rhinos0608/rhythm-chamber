@@ -259,8 +259,16 @@ describe('ExportStrategies', () => {
                 await vi.advanceTimersByTimeAsync(1000);
             }
 
-            const result = await promise;
+            // Handle to avoid unhandled rejection
+            let result = null;
+            let error = null;
+            try {
+                result = await promise;
+            } catch (e) {
+                error = e;
+            }
 
+            expect(error).toBeNull();
             expect(attemptCount).toBe(3);
             expect(result.success).toBe(true);
         });
@@ -280,7 +288,16 @@ describe('ExportStrategies', () => {
                 await vi.advanceTimersByTimeAsync(1000);
             }
 
-            await expect(promise).rejects.toThrow('Persistent error');
+            // Handle rejection to avoid unhandled rejection
+            let caughtError = null;
+            try {
+                await promise;
+            } catch (error) {
+                caughtError = error;
+            }
+
+            expect(caughtError).toBeTruthy();
+            expect(caughtError.message).toBe('Persistent error');
             expect(fetch).toHaveBeenCalledTimes(3); // Initial + 2 retries
         });
 
@@ -309,8 +326,16 @@ describe('ExportStrategies', () => {
             await vi.advanceTimersByTimeAsync(2000); // 2nd retry
             await vi.advanceTimersByTimeAsync(4000); // 3rd retry
 
-            const result = await promise;
+            // Handle to avoid unhandled rejection
+            let result = null;
+            let error = null;
+            try {
+                result = await promise;
+            } catch (e) {
+                error = e;
+            }
 
+            expect(error).toBeNull();
             expect(attemptCount).toBe(4);
             expect(result.success).toBe(true);
         });

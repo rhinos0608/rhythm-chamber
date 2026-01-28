@@ -443,7 +443,8 @@ describe('IndexedDB Transaction Retry (abec63d)', () => {
         // Transaction completes normally
         const promise1 = transactionWithStateCheck();
         await vi.advanceTimersByTimeAsync(100);
-        await expect(promise1).resolves.toEqual({ success: true });
+        const result1 = await promise1;
+        expect(result1).toEqual({ success: true });
         expect(commitCalled).toBe(true);
 
         // Reset
@@ -454,7 +455,16 @@ describe('IndexedDB Transaction Retry (abec63d)', () => {
         const promise2 = transactionWithStateCheck();
         transactionState = 'aborted';
         await vi.advanceTimersByTimeAsync(100);
-        await expect(promise2).rejects.toThrow('Transaction is not active');
+
+        // Handle rejection to avoid unhandled rejection
+        let error2 = null;
+        try {
+            await promise2;
+        } catch (e) {
+            error2 = e;
+        }
+        expect(error2).toBeTruthy();
+        expect(error2.message).toBe('Transaction is not active, cannot commit');
         expect(commitCalled).toBe(false);
 
         vi.useRealTimers();

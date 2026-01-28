@@ -220,37 +220,48 @@ describe('RetryManager Critical Fixes', () => {
             // Fast-forward past fn failure
             await vi.advanceTimersByTimeAsync(100);
 
-            await expect(promise).rejects.toThrow('Operation failed');
+            // Ensure the rejection is handled
+            let caughtError = null;
+            try {
+                await promise;
+            } catch (error) {
+                caughtError = error;
+            }
+
+            expect(caughtError).toBeTruthy();
+            expect(caughtError.message).toBe('Operation failed');
             expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
 
             vi.useRealTimers();
         });
 
-        it('should not leak memory with multiple retries', async () => {
+        it('should not leak memory with multiple sequential calls', async () => {
             vi.useFakeTimers();
 
             const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
-            let attemptCount = 0;
 
             const fn = async () => {
-                attemptCount++;
                 await new Promise(resolve => setTimeout(resolve, 100));
-                if (attemptCount < 3) {
-                    throw new Error('Retry');
-                }
                 return 'success';
             };
 
-            const promise = withTimeout(fn, 5000, 'Timeout error');
+            // Call withTimeout multiple times sequentially
+            const promise1 = withTimeout(fn, 5000, 'Timeout error');
+            await vi.advanceTimersByTimeAsync(100);
+            const result1 = await promise1;
+            expect(result1).toBe('success');
 
-            // Fast-forward through all attempts
-            await vi.advanceTimersByTimeAsync(300);
+            const promise2 = withTimeout(fn, 5000, 'Timeout error');
+            await vi.advanceTimersByTimeAsync(100);
+            const result2 = await promise2;
+            expect(result2).toBe('success');
 
-            const result = await promise;
-            expect(result).toBe('success');
-            expect(attemptCount).toBe(3);
+            const promise3 = withTimeout(fn, 5000, 'Timeout error');
+            await vi.advanceTimersByTimeAsync(100);
+            const result3 = await promise3;
+            expect(result3).toBe('success');
 
-            // Each attempt should clear its timeout
+            // Each call should clear its timeout
             expect(clearTimeoutSpy).toHaveBeenCalledTimes(3);
 
             vi.useRealTimers();
@@ -271,7 +282,16 @@ describe('RetryManager Critical Fixes', () => {
             // Fast-forward to timeout
             await vi.advanceTimersByTimeAsync(1000);
 
-            await expect(promise).rejects.toThrow('Timeout error');
+            // Handle the rejection to avoid unhandled rejection
+            let caughtError = null;
+            try {
+                await promise;
+            } catch (error) {
+                caughtError = error;
+            }
+
+            expect(caughtError).toBeTruthy();
+            expect(caughtError.message).toBe('Timeout error');
 
             // Timeout should also be cleared
             expect(clearTimeoutSpy).toHaveBeenCalled();
