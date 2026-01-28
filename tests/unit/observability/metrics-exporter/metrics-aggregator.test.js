@@ -148,11 +148,11 @@ describe('MetricsAggregator', () => {
 
     describe('aggregateByTimeWindow', () => {
         beforeAll(() => {
-            jest.useFakeTimers();
+            vi.useFakeTimers();
         });
 
         afterAll(() => {
-            jest.useRealTimers();
+            vi.useRealTimers();
         });
 
         test('should aggregate metrics within time window', () => {
@@ -299,11 +299,11 @@ describe('MetricsAggregator', () => {
 
     describe('bufferMetrics', () => {
         beforeAll(() => {
-            jest.useFakeTimers();
+            vi.useFakeTimers();
         });
 
         afterAll(() => {
-            jest.useRealTimers();
+            vi.useRealTimers();
         });
 
         test('should add metrics to buffer', () => {
