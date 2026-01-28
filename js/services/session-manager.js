@@ -119,10 +119,30 @@ export class SessionManager {
     /**
      * Create a new session (backward compatibility alias)
      * @public
+     * @param {Array} initialMessages - Optional initial messages
      * @returns {Promise<string>} Session ID
      */
-    static async createNewSession() {
-        const session = await this.createSession('New Chat', 'default');
+    static async createNewSession(initialMessages) {
+        const manager = Internal.getSessionManager();
+
+        // Create the session lifecycle with initial messages
+        const sessionId = await Internal.createSession(initialMessages || []);
+
+        // Create session object with metadata
+        const session = {
+            id: sessionId,
+            title: 'New Chat',
+            personality: 'default',
+            createdAt: new Date().toISOString(),
+            messages: initialMessages || [],
+            metadata: {
+                personality: 'default'
+            }
+        };
+
+        // Update session data with full session object
+        Internal.setSessionData(session);
+
         return session.id;
     }
 
@@ -133,7 +153,7 @@ export class SessionManager {
      * @returns {Promise<Object>} Loaded session
      */
     static async loadSession(sessionId) {
-        return await Internal.getSession(sessionId);
+        return await Internal.loadSession(sessionId);
     }
 
     /**
@@ -319,6 +339,26 @@ export class SessionManager {
     }
 
     /**
+     * Replace entire history
+     * @public
+     * @param {Array} messages - New messages
+     * @returns {Promise<boolean>} Success status
+     */
+    static async replaceHistory(messages) {
+        return await Internal.replaceHistory(messages);
+    }
+
+    /**
+     * Update session data with function
+     * @public
+     * @param {Function} updaterFn - Update function
+     * @returns {Promise<boolean>} Success status
+     */
+    static async updateSessionData(updaterFn) {
+        return await Internal.updateSessionData(updaterFn);
+    }
+
+    /**
      * Clear conversation and create new session
      * @public
      * @returns {Promise<void>}
@@ -326,6 +366,44 @@ export class SessionManager {
     static async clearConversation() {
         const manager = Internal.getSessionManager();
         return await manager.clearConversation();
+    }
+
+    /**
+     * Delete session by ID (alias for deleteSession)
+     * @public
+     * @param {string} sessionId - Session ID
+     * @returns {Promise<boolean>} Success status
+     */
+    static async deleteSessionById(sessionId) {
+        return await Internal.deleteSession(sessionId);
+    }
+
+    /**
+     * List all sessions (alias for getAllSessions)
+     * @public
+     * @returns {Promise<Array>} All sessions
+     */
+    static async listSessions() {
+        return await Internal.getAllSessions();
+    }
+
+    /**
+     * Generate a UUID v4 for session IDs
+     * @public
+     * @returns {string} A randomly generated UUID
+     */
+    static generateUUID() {
+        return Internal.generateUUID();
+    }
+
+    /**
+     * Validate session structure
+     * @public
+     * @param {Object} session - Session object to validate
+     * @returns {boolean} True if session has valid structure
+     */
+    static validateSession(session) {
+        return Internal.validateSession(session);
     }
 }
 
