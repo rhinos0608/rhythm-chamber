@@ -117,6 +117,16 @@ export class SessionManager {
     }
 
     /**
+     * Create a new session (backward compatibility alias)
+     * @public
+     * @returns {Promise<string>} Session ID
+     */
+    static async createNewSession() {
+        const session = await this.createSession('New Chat', 'default');
+        return session.id;
+    }
+
+    /**
      * Load a session by ID
      * @public
      * @param {string} sessionId - Session ID
@@ -197,7 +207,17 @@ export class SessionManager {
     }
 
     /**
-     * Save the current session immediately
+     * Switch to a different session
+     * @public
+     * @param {string} sessionId - Session ID to switch to
+     * @returns {Promise<boolean>} Success status
+     */
+    static async switchSession(sessionId) {
+        return await Internal.switchSession(sessionId);
+    }
+
+    /**
+     * Save current session
      * @public
      * @returns {Promise<boolean>} Success status
      */
@@ -236,22 +256,18 @@ export class SessionManager {
     }
 
     /**
-     * Recover from an emergency backup
+     * Get current session ID
      * @public
-     * @returns {Promise<boolean>} Success status
+     * @returns {string} Current session ID
      */
-    static async recoverEmergencyBackup() {
-        return await Internal.recoverEmergencyBackup();
+    static getCurrentSessionId() {
+        return Internal.getCurrentSessionId();
     }
 
-    // ==========================================
-    // Message History Management Methods
-    // ==========================================
-
     /**
-     * Get conversation history
+     * Get message history
      * @public
-     * @returns {Array} Copy of message history
+     * @returns {Array} Message history
      */
     static getHistory() {
         const manager = Internal.getSessionManager();
@@ -281,7 +297,18 @@ export class SessionManager {
     }
 
     /**
-     * Truncate history to length
+     * Remove message from history by index
+     * @public
+     * @param {number} index - Message index
+     * @returns {Promise<boolean>} Success status
+     */
+    static async removeMessageFromHistory(index) {
+        const manager = Internal.getSessionManager();
+        return await manager.removeMessageFromHistory(index);
+    }
+
+    /**
+     * Truncate history to specified length
      * @public
      * @param {number} length - Target length
      * @returns {Promise<void>}
@@ -289,17 +316,6 @@ export class SessionManager {
     static async truncateHistory(length) {
         const manager = Internal.getSessionManager();
         return await manager.truncateHistory(length);
-    }
-
-    /**
-     * Remove message from history at index
-     * @public
-     * @param {number} index - Index to remove
-     * @returns {Promise<boolean>} Success status
-     */
-    static async removeMessageFromHistory(index) {
-        const manager = Internal.getSessionManager();
-        return await manager.removeMessageFromHistory(index);
     }
 
     /**
