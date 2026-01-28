@@ -12,7 +12,13 @@ import { vi } from 'vitest';
 // Create a storage mock that survives test reassignments
 let storageEstimateMock = vi.fn().mockResolvedValue({
     usage: 50 * 1024 * 1024,      // 50 MB
-    quota: 100 * 1024 * 1024      // 100 MB
+    quota: 100 * 1024 * 1024,     // 100 MB
+    usageDetails: {
+        indexedDB: 30 * 1024 * 1024,      // 30 MB
+        serviceWorkers: 5 * 1024 * 1024,  // 5 MB
+        cacheStorage: 10 * 1024 * 1024,   // 10 MB
+        other: 5 * 1024 * 1024            // 5 MB
+    }
 });
 
 // Initialize navigator if not present
@@ -41,21 +47,42 @@ global.navigator.storage = {
 };
 
 // ==========================================
-// BroadcastChannel Mock
+// BroadcastChannel Mock (Enhanced)
 // ==========================================
+
+// Track all channel instances for cross-tab simulation
+const broadcastChannelInstances = new Map();
 
 global.BroadcastChannel = class BroadcastChannel {
     constructor(name) {
         this.name = name;
         this.listeners = [];
+        this.messageHistory = [];
+        this._closed = false;
+
+        // Register instance
+        if (!broadcastChannelInstances.has(name)) {
+            broadcastChannelInstances.set(name, []);
+        }
+        broadcastChannelInstances.get(name).push(this);
     }
 
     postMessage(message) {
-        // Simulate async message delivery
+        if (this._closed) {
+            throw new Error('BroadcastChannel is closed');
+        }
+
+        // Track message for test verification
+        this.messageHistory.push({
+            message,
+            timestamp: Date.now()
+        });
+
+        // Simulate async message delivery to all listeners on this channel
         setTimeout(() => {
             this.listeners.forEach(listener => {
                 try {
-                    listener({ data: message, type: 'message' });
+                    listener({ data: message, type: 'message', target: this });
                 } catch (error) {
                     console.error('[BroadcastChannel] Error in listener:', error);
                 }
@@ -64,6 +91,11 @@ global.BroadcastChannel = class BroadcastChannel {
     }
 
     addEventListener(type, listener) {
+        if (this._closed) {
+            console.warn('[BroadcastChannel] Cannot add listener to closed channel');
+            return;
+        }
+
         if (type === 'message') {
             this.listeners.push(listener);
         }
@@ -79,7 +111,32 @@ global.BroadcastChannel = class BroadcastChannel {
     }
 
     close() {
+        this._closed = true;
         this.listeners = [];
+
+        // Unregister instance
+        const instances = broadcastChannelInstances.get(this.name);
+        if (instances) {
+            const index = instances.indexOf(this);
+            if (index > -1) {
+                instances.splice(index, 1);
+            }
+        }
+    }
+
+    // Helper method for tests to verify messages were sent
+    getMessageHistory() {
+        return this.messageHistory;
+    }
+
+    // Helper method for tests to clear history
+    clearMessageHistory() {
+        this.messageHistory = [];
+    }
+
+    // Helper method for tests to get listener count
+    getListenerCount() {
+        return this.listeners.length;
     }
 };
 
@@ -261,7 +318,7 @@ global.Worker = class Worker {
         // Simulate async message handling
         setTimeout(() => {
             if (this.onmessage) {
-                this.onmessage({ data: null, type: 'message' });
+                this.onmessage({ data: message, type: 'message' });
             }
         }, 0);
     }
@@ -270,5 +327,30 @@ global.Worker = class Worker {
         // Cleanup
     }
 };
+
+// ==========================================
+// Fetch API Mock
+// ==========================================
+
+global.fetch = vi.fn(() =>
+    Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+            get: vi.fn((header) => {
+                if (header === 'content-type') {
+                    return 'application/json';
+                }
+                return null;
+            })
+        },
+        json: async () => ({ success: true }),
+        text: async () => 'OK',
+        blob: async () => new Blob(['OK']),
+        arrayBuffer: async () => new ArrayBuffer(0),
+        clone: function() { return { ...this }; }
+    })
+);
 
 console.log('[Test Setup] All browser API mocks initialized');
