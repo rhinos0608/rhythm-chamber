@@ -655,6 +655,244 @@ export class MetricsExporter {
     async _downloadExport(data, format, jobName) {
         return this._strategies.downloadExport(data, format, jobName);
     }
+
+    // ==========================================
+    // SCHEDULED EXPORT METHODS
+    // ==========================================
+
+    /**
+     * Create a new scheduled export job
+     * @public
+     * @param {string} name - Unique name for the job
+     * @param {Object} config - Export configuration
+     * @param {string} config.format - Export format
+     * @param {string} config.schedule - Schedule type
+     * @param {boolean} config.includeMemory - Include memory metrics
+     * @param {boolean} config.includeWebVitals - Include web vitals
+     * @param {Array<string>} config.categories - Metric categories to include
+     * @returns {Promise<string>} Job ID
+     */
+    async createScheduledExport(name, config) {
+        if (!name || typeof name !== 'string') {
+            throw new Error('Job name must be a non-empty string');
+        }
+        if (!config || typeof config !== 'object') {
+            throw new Error('Config must be an object');
+        }
+
+        const jobId = `export_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const nextRun = await this._calculateNextRun(config.schedule);
+
+        const job = {
+            id: jobId,
+            name,
+            config,
+            status: 'active',
+            createdAt: new Date().toISOString(),
+            nextRun: nextRun.toISOString(),
+            lastRun: null,
+            runCount: 0
+        };
+
+        this._scheduledJobs.set(jobId, job);
+        await this._saveConfiguration();
+
+        return jobId;
+    }
+
+    /**
+     * Pause a scheduled export job
+     * @public
+     * @param {string} jobId - Job ID to pause
+     * @returns {Promise<void>}
+     */
+    async pauseJob(jobId) {
+        const job = this._scheduledJobs.get(jobId);
+        if (!job) {
+            throw new Error(`Job not found: ${jobId}`);
+        }
+
+        job.status = 'paused';
+        await this._saveConfiguration();
+    }
+
+    /**
+     * Resume a paused scheduled export job
+     * @public
+     * @param {string} jobId - Job ID to resume
+     * @returns {Promise<void>}
+     */
+    async resumeJob(jobId) {
+        const job = this._scheduledJobs.get(jobId);
+        if (!job) {
+            throw new Error(`Job not found: ${jobId}`);
+        }
+
+        job.status = 'active';
+        const nextRun = await this._calculateNextRun(job.config.schedule);
+        job.nextRun = nextRun.toISOString();
+        await this._saveConfiguration();
+    }
+
+    /**
+     * Delete a scheduled export job
+     * @public
+     * @param {string} jobId - Job ID to delete
+     * @returns {Promise<void>}
+     */
+    async deleteJob(jobId) {
+        if (!this._scheduledJobs.has(jobId)) {
+            throw new Error(`Job not found: ${jobId}`);
+        }
+
+        this._scheduledJobs.delete(jobId);
+        await this._saveConfiguration();
+    }
+
+    // ==========================================
+    // EXTERNAL SERVICE METHODS
+    // ==========================================
+
+    /**
+     * Add an external service integration
+     * @public
+     * @param {Object} serviceConfig - Service configuration
+     * @param {string} serviceConfig.service - Service type
+     * @param {string} serviceConfig.endpoint - API endpoint
+     * @param {Object} serviceConfig.credentials - API credentials
+     * @param {Object} serviceConfig.headers - HTTP headers
+     * @param {number} serviceConfig.timeout - Request timeout
+     * @returns {Promise<void>}
+     */
+    async addExternalService(serviceConfig) {
+        if (!serviceConfig || typeof serviceConfig !== 'object') {
+            throw new Error('Service config must be an object');
+        }
+        if (!serviceConfig.service || !serviceConfig.endpoint) {
+            throw new Error('Service config must include service and endpoint');
+        }
+
+        // Check for duplicates
+        const exists = this._externalServices.some(s => s.endpoint === serviceConfig.endpoint);
+        if (exists) {
+            throw new Error(`Service already exists for endpoint: ${serviceConfig.endpoint}`);
+        }
+
+        this._externalServices.push({
+            ...serviceConfig,
+            addedAt: new Date().toISOString(),
+            lastUsed: null
+        });
+
+        await this._saveConfiguration();
+    }
+
+    /**
+     * Remove an external service integration
+     * @public
+     * @param {string} endpoint - Service endpoint to remove
+     * @returns {Promise<void>}
+     */
+    async removeExternalService(endpoint) {
+        const index = this._externalServices.findIndex(s => s.endpoint === endpoint);
+        if (index === -1) {
+            throw new Error(`Service not found for endpoint: ${endpoint}`);
+        }
+
+        this._externalServices.splice(index, 1);
+        await this._saveConfiguration();
+    }
+
+    /**
+     * Format metrics data for a specific external service
+     * @private
+     * @param {string} data - Metrics data as JSON string
+     * @param {string} service - Service type
+     * @param {Object} options - Formatting options
+     * @returns {Object} Formatted data for the service
+     */
+    _formatForService(data, service, options = {}) {
+        let metrics;
+        try {
+            metrics = typeof data === 'string' ? JSON.parse(data) : data;
+        } catch (e) {
+            throw new Error('Invalid JSON data');
+        }
+
+        switch (service) {
+            case ExternalService.DATADOG:
+                return this._formatForDataDog(metrics, options);
+            case ExternalService.NEWRELIC:
+                return this._formatForNewRelic(metrics, options);
+            case ExternalService.PROMETHEUS_PUSHGATEWAY:
+                return this._formatForPrometheus(metrics, options);
+            case ExternalService.CUSTOM_ENDPOINT:
+                return metrics;
+            default:
+                throw new Error(`Unsupported service: ${service}`);
+        }
+    }
+
+    /**
+     * Format metrics for DataDog
+     * @private
+     * @param {Object} metrics - Metrics object
+     * @param {Object} options - Formatting options
+     * @returns {Object} DataDog-formatted metrics
+     */
+    _formatForDataDog(metrics, options) {
+        // DataDog expects series format
+        const series = [];
+
+        for (const [key, value] of Object.entries(metrics)) {
+            if (typeof value === 'number') {
+                series.push({
+                    metric: key,
+                    points: [[Date.now(), value]],
+                    type: 'gauge'
+                });
+            }
+        }
+
+        return { series };
+    }
+
+    /**
+     * Format metrics for New Relic
+     * @private
+     * @param {Object} metrics - Metrics object
+     * @param {Object} options - Formatting options
+     * @returns {Object} New Relic-formatted metrics
+     */
+    _formatForNewRelic(metrics, options) {
+        // New Relic expects metric data in their specific format
+        const metricData = [];
+
+        for (const [key, value] of Object.entries(metrics)) {
+            if (typeof value === 'number') {
+                metricData.push({
+                    name: key,
+                    value: value,
+                    timestamp: Date.now(),
+                    'interval.type': 'cumulative'
+                });
+            }
+        }
+
+        return { metrics: metricData };
+    }
+
+    /**
+     * Format metrics for Prometheus Pushgateway
+     * @private
+     * @param {Object} metrics - Metrics object
+     * @param {Object} options - Formatting options
+     * @returns {string} Prometheus exposition format
+     */
+    _formatForPrometheus(metrics, options) {
+        // This would use the MetricsFormatters module
+        return this._formatters.formatAsPrometheus(metrics);
+    }
 }
 
 // ============================================================================
