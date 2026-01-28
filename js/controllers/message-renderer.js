@@ -33,8 +33,14 @@ function createMessageElement(text, role, isError = false) {
     div.className = `message ${role}${isError ? ' error' : ''}`;
 
     // Parse markdown for assistant messages, escape user messages
-    // SAFE: content is escaped via escapeHtml() (assistant) or parseMarkdown() (which also escapes)
+    // security-validated: Uses escapeHtml() from js/utils/html-escape.js
+    // Escaping method: DOM-based textContent assignment
+    // Data flow: text parameter → escapeHtml() or parseMarkdown() (which also escapes) → innerHTML insertion
+    // User messages: Direct HTML escaping
+    // Assistant messages: Markdown parsing with internal escaping
     // The final insertion into innerHTML is safe because all data has been escaped
+    // I18N FIX: Add dir="auto" to support bidirectional text (RTL/LTR)
+    // Review date: 2026-01-28
     const content = role === 'assistant' ? parseMarkdown(text) : escapeHtml(text);
     // I18N FIX: Add dir="auto" to support bidirectional text (RTL/LTR)
     div.innerHTML = `<div class="message-content" dir="auto">${content}</div>`;

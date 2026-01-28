@@ -462,6 +462,11 @@ function showSafeModeWarningFromRemote(reason) {
         banner = document.createElement('div');
         banner.id = 'safe-mode-remote-banner';
         banner.className = 'safe-mode-banner';
+        // security-validated: Uses escapeHtml() from js/utils/html-escape.js
+        // Escaping method: DOM-based textContent assignment
+        // Data flow: reason parameter → escapeHtml() → innerHTML insertion
+        // Context: Safe mode activation reason from inter-tab communication
+        // Review date: 2026-01-28
         banner.innerHTML = `
             <span class="safe-mode-icon">⚠️</span>
             <span class="safe-mode-message">Safe Mode activated in another tab: <strong>${escapeHtml(reason || 'Unknown reason')}</strong></span>
@@ -475,6 +480,11 @@ function showSafeModeWarningFromRemote(reason) {
     } else {
         const msgEl = banner.querySelector('.safe-mode-message');
         if (msgEl) {
+            // security-validated: Uses escapeHtml() from js/utils/html-escape.js
+            // Escaping method: DOM-based textContent assignment
+            // Data flow: reason parameter → escapeHtml() → innerHTML insertion
+            // Context: Updating existing banner with new reason
+            // Review date: 2026-01-28
             msgEl.innerHTML = `Safe Mode activated in another tab: <strong>${escapeHtml(reason || 'Unknown reason')}</strong>`;
         }
         banner.style.display = 'flex';
