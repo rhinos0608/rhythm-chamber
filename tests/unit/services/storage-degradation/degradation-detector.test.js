@@ -92,9 +92,20 @@ describe('DegradationDetector', () => {
     });
 
     describe('_getStorageMetrics', () => {
+        let originalStorage;
+
         beforeEach(() => {
+            // Save original storage
+            originalStorage = global.navigator.storage;
             // Mock navigator.storage.estimate
             global.navigator.storage.estimate = vi.fn();
+        });
+
+        afterEach(() => {
+            // Restore storage if it was deleted
+            if (!global.navigator.storage && originalStorage) {
+                global.navigator.storage = originalStorage;
+            }
         });
 
         it('should return metrics with usage and quota', async () => {
