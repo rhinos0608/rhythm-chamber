@@ -264,8 +264,8 @@ describe('Validation Utils - Security Fixes (Corrected)', () => {
             const input = '<script>alert("XSS")</script>';
             const escaped = escapeHTMLEntities(input);
 
-            // Browser's textContent escapes < and > but not quotes
-            expect(escaped).toBe('&lt;script&gt;alert("XSS")&lt;/script&gt;');
+            // Should escape <, >, and quotes for safe use in HTML attributes
+            expect(escaped).toBe('&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;');
         });
 
         it('should escape ampersands', () => {
