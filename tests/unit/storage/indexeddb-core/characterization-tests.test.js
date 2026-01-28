@@ -24,10 +24,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
-import { IndexedDBCore, STORES, DB_NAME, DB_VERSION } from '../../../js/storage/indexeddb.js';
-import { EventBus } from '../../../js/services/event-bus.js';
-import { TabCoordinator } from '../../../js/services/tab-coordination.js';
-import { VectorClock } from '../../../js/services/vector-clock.js';
+import { IndexedDBCore, STORES, DB_NAME, DB_VERSION } from '../../../../js/storage/indexeddb.js';
+import { EventBus } from '../../../../js/services/event-bus.js';
+import { TabCoordinator } from '../../../../js/services/tab-coordination.js';
+import { VectorClock } from '../../../../js/services/vector-clock.js';
 
 describe('IndexedDB Core - Characterization Tests', () => {
     let mockIndexedDB;
