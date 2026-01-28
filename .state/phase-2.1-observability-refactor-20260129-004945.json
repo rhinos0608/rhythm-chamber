@@ -20,13 +20,34 @@
     }
   },
   "steps": [
-    {"name": "write_characterization_tests", "status": "complete"},
-    {"name": "establish_baseline", "status": "complete"},
-    {"name": "create_ui_modules", "status": "pending"},
-    {"name": "create_update_modules", "status": "pending"},
-    {"name": "refactor_facade", "status": "pending"},
-    {"name": "verify_backward_compatibility", "status": "pending"},
-    {"name": "add_unit_tests", "status": "pending"}
+    {
+      "name": "write_characterization_tests",
+      "status": "complete"
+    },
+    {
+      "name": "establish_baseline",
+      "status": "complete"
+    },
+    {
+      "name": "create_ui_modules",
+      "status": "complete"
+    },
+    {
+      "name": "create_update_modules",
+      "status": "complete"
+    },
+    {
+      "name": "refactor_facade",
+      "status": "complete"
+    },
+    {
+      "name": "verify_backward_compatibility",
+      "status": "complete"
+    },
+    {
+      "name": "add_unit_tests",
+      "status": "complete"
+    }
   ],
   "deviations": [],
   "decisions": []
