@@ -71,7 +71,7 @@ export {
 export {
     put,
     clear,
-    delete as deleteRecord
+    deleteRecord as delete
 } from './indexeddb/operations/write.js';
 
 // ==========================================

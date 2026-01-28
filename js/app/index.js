@@ -195,12 +195,45 @@ function bindAuthorityUI() {
     if (typeof document === 'undefined') return;
     TabCoordinator.onAuthorityChange((authority) => {
         const isPrimary = authority.level === 'primary';
+        console.log('[App] Authority changed:', authority.level, isPrimary ? 'primary' : 'secondary');
         document.body.classList.toggle('read-only-mode', !isPrimary);
+
+        // Immediately disable/enable upload zone based on authority
+        const uploadZone = document.getElementById('upload-zone');
+        if (uploadZone) {
+            if (!isPrimary) {
+                uploadZone.style.pointerEvents = 'none';
+                uploadZone.style.opacity = '0.5';
+            } else {
+                uploadZone.style.pointerEvents = '';
+                uploadZone.style.opacity = '';
+            }
+        }
+
+        // Force a reflow to ensure the CSS takes effect immediately
+        void document.body.offsetHeight;
     });
 }
 
 function bindFileUpload() {
     if (typeof document === 'undefined') return;
+
+    // Helper function to render a user message directly to the DOM
+    function renderUserMessage(message) {
+        const chatMessages = document.getElementById('chat-messages');
+        if (!chatMessages) {
+            console.warn('[App] Chat messages container not found');
+            return;
+        }
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message user';
+        messageDiv.textContent = message;
+        chatMessages.appendChild(messageDiv);
+
+        // Auto-scroll to bottom
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
 
     // Set up file input change listener
     const fileInput = document.getElementById('file-input');
@@ -274,9 +307,24 @@ function bindFileUpload() {
     if (chatSend && chatInput) {
         const sendChatMessage = async () => {
             const message = chatInput.value.trim();
-            if (message && typeof Chat !== 'undefined' && Chat.sendMessage) {
-                chatInput.value = '';
-                await Chat.sendMessage(message);
+            console.log('[App] Send button clicked, message:', message);
+            console.log('[App] Chat object:', typeof Chat, Chat ? 'defined' : 'undefined');
+            if (message) {
+                if (typeof Chat !== 'undefined' && Chat.sendMessage) {
+                    chatInput.value = '';
+                    console.log('[App] Calling Chat.sendMessage...');
+                    try {
+                        await Chat.sendMessage(message);
+                        console.log('[App] Chat.sendMessage returned');
+                    } catch (e) {
+                        console.error('[App] Chat.sendMessage error:', e);
+                        // Still show the message even if there's an error
+                        renderUserMessage(message);
+                    }
+                } else {
+                    console.warn('[App] Chat not available, rendering message directly');
+                    renderUserMessage(message);
+                }
             }
         };
 
@@ -405,6 +453,47 @@ function bindFileUpload() {
             }
         });
     }
+
+    // Set up close settings modal buttons
+    const closeSettingsBtns = document.querySelectorAll('[data-action="close-settings-modal"]');
+    closeSettingsBtns.forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const { Settings } = await import('../settings.js');
+            Settings.hideSettingsModal?.();
+        });
+    });
+    console.log('[App] Settings modal close listeners bound');
+
+    // Set up save settings button
+    const saveSettingsBtn = document.querySelector('[data-action="save-settings"]');
+    if (saveSettingsBtn) {
+        saveSettingsBtn.addEventListener('click', async () => {
+            // Get the max tokens value
+            const maxTokensInput = document.getElementById('setting-max-tokens');
+            if (maxTokensInput) {
+                const { Settings } = await import('../settings.js');
+                const settings = await Settings.getSettingsAsync();
+                settings.llm.maxTokens = parseInt(maxTokensInput.value, 10) || 4500;
+                await Settings.saveSettings(settings);
+                Settings.showToast('Settings saved');
+                Settings.hideSettingsModal?.();
+            }
+        });
+        console.log('[App] Settings save listener bound');
+    }
+
+    // Populate settings modal when opened
+    const settingsBtn = document.getElementById('settings-btn');
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', async () => {
+            const { Settings } = await import('../settings.js');
+            const settings = await Settings.getSettingsAsync();
+            const maxTokensInput = document.getElementById('setting-max-tokens');
+            if (maxTokensInput && settings?.llm?.maxTokens) {
+                maxTokensInput.value = settings.llm.maxTokens;
+            }
+        }, { once: false }); // Allow multiple opens
+    }
 }
 
 async function validateExistingLicense() {
@@ -420,6 +509,94 @@ async function validateExistingLicense() {
         }
     } catch (e) {
         void e;
+    }
+}
+
+/**
+ * Load saved settings from localStorage into AppState
+ * Ensures user preferences (max tokens, etc.) are applied on startup
+ */
+async function loadSavedSettings() {
+    try {
+        const saved = localStorage.getItem('rhythm_chamber_settings');
+        if (!saved) {
+            console.log('[App] No saved settings found, using defaults');
+            return;
+        }
+
+        const settings = JSON.parse(saved);
+        console.log('[App] Loading saved settings:', settings);
+
+        // Update AppState with loaded settings
+        if (typeof AppState !== 'undefined') {
+            AppState.update('config', settings);
+            console.log('[App] Settings loaded into AppState');
+        }
+
+        // Update input elements to reflect loaded values
+        if (settings.maxTokens) {
+            const maxTokensInput = document.getElementById('setting-max-tokens');
+            if (maxTokensInput) {
+                maxTokensInput.value = settings.maxTokens;
+            }
+        }
+    } catch (e) {
+        console.error('[App] Failed to load saved settings:', e);
+        // Don't block app startup on settings load failure
+    }
+}
+
+/**
+ * Restore view state from persisted data
+ * Checks if personality data exists and restores the appropriate view
+ */
+async function restoreViewState() {
+    try {
+        // Check if we have persisted personality data
+        const personality = await Storage.getPersonality?.();
+        if (!personality) {
+            console.log('[App] No persisted personality data found, showing upload view');
+            return;
+        }
+
+        // We have personality data, restore the reveal view
+        console.log('[App] Restoring view from persisted data:', personality);
+
+        // Update AppState with the persisted personality
+        // Include ALL fields needed by ViewController.showReveal()
+        if (typeof AppState !== 'undefined') {
+            const personalityData = {
+                type: personality.type,
+                name: personality.name,
+                emoji: personality.emoji,
+                tagline: personality.tagline,
+                description: personality.description,
+                evidence: personality.evidence,
+                allEvidence: personality.allEvidence,
+                score: personality.score,
+                confidence: personality.confidence,
+                secondaryType: personality.secondaryType
+            };
+
+            AppState.update('data', { personality: personalityData });
+            AppState.update('view', { current: 'reveal' });
+
+            console.log('[App] AppState updated with personality');
+        }
+
+        // Wait for next tick to ensure AppState updates propagate
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        // Show the reveal section
+        if (typeof ViewController !== 'undefined' && ViewController.showReveal) {
+            ViewController.showReveal();
+            console.log('[App] ViewController.showReveal() called');
+        }
+
+        console.log('[App] View restored successfully');
+    } catch (e) {
+        console.error('[App] Failed to restore view state:', e);
+        // Don't block app startup on restoration failure
     }
 }
 
@@ -461,6 +638,12 @@ async function init() {
     bindSettingsButtons();
     bindAuthorityUI();
     bindFileUpload();
+
+    // Load saved settings into AppState
+    await loadSavedSettings();
+
+    // Restore view state from persisted data
+    await restoreViewState();
 
     await validateExistingLicense();
 

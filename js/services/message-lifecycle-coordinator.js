@@ -76,6 +76,42 @@ function getMessageHash(message) {
 }
 
 /**
+ * Render messages to the chat DOM
+ * This ensures user messages are visible immediately in the UI
+ * @param {Array} messages - Array of message objects with role and content
+ */
+function renderMessagesToDOM(messages) {
+    console.log('[MessageLifecycleCoordinator] renderMessagesToDOM called with:', messages);
+    if (typeof document === 'undefined') return;
+
+    const chatMessagesContainer = document.getElementById('chat-messages');
+    if (!chatMessagesContainer) {
+        console.warn('[MessageLifecycleCoordinator] Chat messages container not found');
+        return;
+    }
+
+    console.log('[MessageLifecycleCoordinator] Found chat container, adding', messages.length, 'messages');
+    messages.forEach(msg => {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${msg.role}`;
+
+        // For markdown content (assistant messages), we'll render as text for now
+        // A full implementation would use a markdown library
+        if (msg.role === 'assistant' && typeof window !== 'undefined' && window.marked) {
+            messageDiv.innerHTML = window.marked.parse(msg.content);
+        } else {
+            messageDiv.textContent = msg.content;
+        }
+
+        chatMessagesContainer.appendChild(messageDiv);
+        console.log('[MessageLifecycleCoordinator] Added message:', msg.role, msg.content.substring(0, 50));
+    });
+
+    // Auto-scroll to bottom
+    chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+}
+
+/**
  * Check if service is initialized
  * @returns {boolean} True if initialized
  */
@@ -338,6 +374,9 @@ async function processMessage(message, optionsOrKey = null) {
             await _SessionManager.addMessagesToHistory(messagesToAdd);
             userMessageCommitted = true;
 
+            // CRITICAL: Render messages to DOM
+            renderMessagesToDOM(messagesToAdd);
+
             // Show subtle fallback notification once per session
             LLMApiOrchestrator.showFallbackNotification(_Settings?.showToast);
 
@@ -492,9 +531,13 @@ async function processMessage(message, optionsOrKey = null) {
                     try {
                         if (messagesToAdd.length > 1) {
                             await _SessionManager.addMessagesToHistory(messagesToAdd);
+                            // Render messages to DOM
+                            renderMessagesToDOM(messagesToAdd);
                             MessageValidator.trackProcessedMessage(message);
                         } else {
                             await _SessionManager.addMessageToHistory(messagesToAdd[0]);
+                            // Render message to DOM
+                            renderMessagesToDOM([messagesToAdd[0]]);
                             MessageValidator.trackProcessedMessage(message);
                         }
                         userMessageCommitted = true;
@@ -534,15 +577,20 @@ async function processMessage(message, optionsOrKey = null) {
                     { role: 'assistant', content: assistantContent }
                 ];
                 await _SessionManager.addMessagesToHistory(messagesToAdd);
+                // Render messages to DOM
+                renderMessagesToDOM(messagesToAdd);
                 userMessageCommitted = true;
                 MessageValidator.trackProcessedMessage(message);
             } else {
                 // User message was already committed (e.g., during tool call handling)
                 // Only add the assistant response
-                await _SessionManager.addMessageToHistory({
+                const assistantMsg = {
                     role: 'assistant',
                     content: assistantContent
-                });
+                };
+                await _SessionManager.addMessageToHistory(assistantMsg);
+                // Render assistant message to DOM
+                renderMessagesToDOM([assistantMsg]);
             }
 
             _SessionManager.saveConversation();
