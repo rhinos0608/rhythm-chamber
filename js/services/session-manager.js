@@ -49,7 +49,15 @@ export class SessionManager {
 
         const manager = Internal.getSessionManager();
         await manager.initialize();
-        await this.recoverEmergencyBackup();
+        // Attempt to recover emergency backup if one exists
+        // This handles crash recovery scenarios
+        try {
+            await this.recoverEmergencyBackup();
+        } catch (error) {
+            console.error('[SessionManager] Emergency backup recovery failed:', error);
+            // Don't fail initialization if backup recovery fails
+        }
+
         this.registerEventListeners();
     }
 
@@ -404,6 +412,77 @@ export class SessionManager {
      */
     static validateSession(session) {
         return Internal.validateSession(session);
+    }
+
+    /**
+     * Recover emergency backup from localStorage
+     * This is called when the app starts to check if there's an emergency backup
+     * that needs to be recovered (e.g., from a crash)
+     * @public
+     * @returns {Promise<Object|null>} Recovered session data or null if no backup
+     */
+    static async recoverEmergencyBackup() {
+        console.log('[SessionManager] recoverEmergencyBackup called');
+        try {
+            if (typeof localStorage === 'undefined') {
+                console.log('[SessionManager] localStorage not available');
+                return null;
+            }
+
+            const backupData = localStorage.getItem('rhythm_chamber_emergency_backup');
+            console.log('[SessionManager] Backup data:', backupData ? 'found' : 'not found');
+            if (!backupData) {
+                return null;
+            }
+
+            const backup = JSON.parse(backupData);
+            console.log('[SessionManager] Parsed backup:', backup);
+
+            // Validate backup structure
+            if (!backup.sessionId || !backup.messages || !Array.isArray(backup.messages)) {
+                console.warn('[SessionManager] Invalid emergency backup structure');
+                return null;
+            }
+
+            // Check if backup is too old (older than 24 hours)
+            // Security: Reject invalid or manipulated timestamps
+            const now = Date.now();
+            const MAX_BACKUP_AGE = 24 * 60 * 60 * 1000; // 24 hours
+
+            // Validate timestamp exists and is within acceptable bounds
+            if (!backup.timestamp || backup.timestamp > now || backup.timestamp < (now - MAX_BACKUP_AGE)) {
+                console.warn('[SessionManager] Emergency backup timestamp invalid or out of range, ignoring');
+                // Clear invalid backup
+                localStorage.removeItem('rhythm_chamber_emergency_backup');
+                return null;
+            }
+
+            console.log('[SessionManager] Recovering emergency backup:', backup.sessionId);
+
+            // Create a new session with the backup data
+            const sessionId = backup.sessionId;
+            const messages = backup.messages;
+
+            // Initialize session with backup data
+            await Internal.initialize();
+            await Internal.addMessagesToHistory(messages);
+            Internal.setCurrentSessionId(sessionId);
+
+            // Clear the emergency backup after successful recovery
+            localStorage.removeItem('rhythm_chamber_emergency_backup');
+            console.log('[SessionManager] Emergency backup recovered and cleared');
+
+            return backup;
+        } catch (error) {
+            console.error('[SessionManager] Failed to recover emergency backup:', error);
+            // Try to clear corrupted backup
+            try {
+                localStorage.removeItem('rhythm_chamber_emergency_backup');
+            } catch (e) {
+                // Ignore
+            }
+            return null;
+        }
     }
 }
 

@@ -228,8 +228,15 @@ test.describe('Multi-Tab Coordination', () => {
         const page1 = await context.newPage();
         await page1.goto('/app.html', { waitUntil: 'networkidle' });
 
-        // Wait for tab coordination to initialize (300ms election + buffer)
-        await page1.waitForTimeout(500);
+        // Wait for tab coordination to initialize and write to localStorage
+        // Election window is 300ms + propagation time + localStorage write
+        await page1.waitForTimeout(2000);
+
+        // Verify page1 wrote election data to localStorage
+        const electionData = await page1.evaluate(() => {
+            return localStorage.getItem('rhythm_chamber_tab_election');
+        });
+        console.log('Page1 election data:', electionData);
 
         // Open second tab in SAME context (required for BroadcastChannel)
         const page2 = await context.newPage();

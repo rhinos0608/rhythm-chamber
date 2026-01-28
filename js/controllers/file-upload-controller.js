@@ -22,6 +22,7 @@ let _OperationLock = null;
 let _Patterns = null;
 let _Personality = null;
 let _ViewController = null;
+let _SessionManager = null;
 let _showToast = null;
 let _WaveTelemetry = null;
 
@@ -48,6 +49,7 @@ function init(dependencies) {
     _Patterns = dependencies.Patterns;
     _Personality = dependencies.Personality;
     _ViewController = dependencies.ViewController;
+    _SessionManager = dependencies.SessionManager;
     _showToast = dependencies.showToast;
     _WaveTelemetry = dependencies.WaveTelemetry;
 
@@ -407,6 +409,28 @@ async function handleProcessingComplete(streams, chunks) {
             }
         }
     );
+}
+
+/**
+ * Process uploaded file data
+ * @param {Object} fileData - Parsed file data with chunks and personality
+ * @returns {Promise<void>}
+ */
+async function processFile(fileData) {
+    // Attempt to recover emergency backup if one exists
+    // This handles the case where a backup was created before file upload
+    if (_SessionManager && _SessionManager.recoverEmergencyBackup) {
+        try {
+            await _SessionManager.recoverEmergencyBackup();
+        } catch (e) {
+            console.warn('[FileUploadController] Emergency backup recovery failed:', e);
+        }
+    }
+
+    // Show reveal
+    if (_ViewController) {
+        _ViewController.showReveal();
+    }
 }
 
 /**

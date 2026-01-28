@@ -239,6 +239,18 @@ function claimPrimary() {
     isPrimaryTab = true;
     hasCalledSecondaryMode = false;
     sendMessage({ type: MESSAGE_TYPES.CLAIM_PRIMARY, tabId: TAB_ID }, true);
+
+    // Immediately write to localStorage for late-joining tabs to detect
+    try {
+        localStorage.setItem('rhythm_chamber_tab_election', JSON.stringify({
+            tabId: TAB_ID,
+            timestamp: Date.now(),
+            isPrimary: true
+        }));
+    } catch (e) {
+        // localStorage might not be available
+    }
+
     notifyAuthorityChange();
     EventBus.emit('tab:primary_claimed', { tabId: TAB_ID });
 }
@@ -619,6 +631,14 @@ function createMessageHandler() {
                     if (!isPrimaryTab && tabId !== TAB_ID) {
                         lastLeaderHeartbeat = Date.now();
                         lastLeaderVectorClock = remoteClock || lastLeaderVectorClock;
+                    } else if (isPrimaryTab && tabId !== TAB_ID) {
+                        // Another tab is sending heartbeats as if it's primary
+                        // Assert our primacy to prevent split-brain
+                        await sendMessage({
+                            type: MESSAGE_TYPES.CLAIM_PRIMARY,
+                            tabId: TAB_ID,
+                            vectorClock: vectorClock.tick()
+                        }, true);
                     }
                     break;
                 }
@@ -714,6 +734,31 @@ async function init() {
     hasCalledSecondaryMode = false;
     hasConcededLeadership = false;
 
+    // Check localStorage for existing primary BEFORE sending candidate message
+    // This handles late-joiner scenario in testing environments
+    try {
+        const existingPrimary = localStorage.getItem('rhythm_chamber_tab_election');
+        if (existingPrimary) {
+            try {
+                const data = JSON.parse(existingPrimary);
+                // Only use this if it's recent (within 5 seconds)
+                if (Date.now() - data.timestamp < 5000 && data.tabId !== TAB_ID && data.isPrimary) {
+                    console.log('[TabCoordination] Detected existing primary via localStorage, going directly to secondary');
+                    isPrimaryTab = false;
+                    hasCalledSecondaryMode = true;
+                    handleSecondaryMode();
+                    hasConcededLeadership = true;
+                    electionAborted = true;
+                    return false; // Don't participate in election
+                }
+            } catch (e) {
+                // Ignore parse errors, proceed with election
+            }
+        }
+    } catch (e) {
+        // localStorage might not be available, proceed normally
+    }
+
     await sendMessage({ type: MESSAGE_TYPES.CANDIDATE, tabId: TAB_ID });
 
     await new Promise(resolve => {
@@ -742,6 +787,54 @@ async function init() {
     visibilityMonitorCleanup = DeviceDetection.startVisibilityMonitoring?.() || null;
     networkMonitorCleanup = setupNetworkMonitoring();
     wakeFromSleepCleanup = setupWakeFromSleepDetection();
+
+    // Delayed re-check for late-joining tabs
+    // If we think we're primary but there might be another primary, re-evaluate
+    setTimeout(async () => {
+        if (isPrimaryTab) {
+            // Send a CLAIM_PRIMARY to assert our primacy
+            // If another tab is actually primary, it will respond with CLAIM_PRIMARY
+            // and we'll receive it in the message handler and concede
+            await sendMessage({
+                type: MESSAGE_TYPES.CLAIM_PRIMARY,
+                tabId: TAB_ID,
+                vectorClock: vectorClock.tick()
+            }, true); // Send with high priority
+
+            // Also use localStorage as a fallback for testing environments
+            // where BroadcastChannel might not work between pages
+            try {
+                localStorage.setItem('rhythm_chamber_tab_election', JSON.stringify({
+                    tabId: TAB_ID,
+                    timestamp: Date.now(),
+                    isPrimary: true
+                }));
+            } catch (e) {
+                // localStorage might not be available
+            }
+        }
+    }, 100); // Check 100ms after election completes for late joiners
+
+    // Listen for localStorage events from other tabs
+    window.addEventListener('storage', (e) => {
+        if (e.key === 'rhythm_chamber_tab_election' && e.newValue && isPrimaryTab) {
+            try {
+                const data = JSON.parse(e.newValue);
+                if (data.tabId !== TAB_ID && data.isPrimary) {
+                    // Another tab is claiming primary, concede
+                    console.log('[TabCoordination] Detected primary via localStorage, conceding');
+                    if (isPrimaryTab && !hasConcededLeadership) {
+                        isPrimaryTab = false;
+                        hasCalledSecondaryMode = true;
+                        handleSecondaryMode();
+                        hasConcededLeadership = true;
+                    }
+                }
+            } catch (parseError) {
+                // Ignore parse errors
+            }
+        }
+    });
 
     processMessageQueue().catch(() => {});
 
