@@ -363,8 +363,7 @@ describe('Session Validation (a3be695)', () => {
             { id: 123, createdAt: new Date().toISOString(), messages: [] },
             { id: '550e8400-e29b-41d4-a716-446655440000', messages: [] },
             { id: '550e8400-e29b-41d4-a716-446655440000', createdAt: new Date().toISOString(), messages: 'not array' },
-            { id: 'invalid-uuid', createdAt: new Date().toISOString(), messages: [] },
-            { id: '550e8400-e29b-41d4-a716-446655440000', createdAt: new Date().toISOString(), messages: [] }
+            { id: 'invalid-uuid', createdAt: new Date().toISOString(), messages: [] }
         ];
 
         invalidSessions.forEach(session => {
@@ -471,10 +470,10 @@ describe('UUID Generation and Validation', () => {
             return uuidRegex.test(uuid);
         }
 
-        // Valid UUIDs
+        // Valid UUIDs (version 4)
         expect(isValidUUID('550e8400-e29b-41d4-a716-446655440000')).toBe(true);
-        expect(isValidUUID('6ba7b810-9dad-11d1-80b4-00c04fd430c8')).toBe(true);
-        expect(isValidUUID('6ba7b811-9dad-11d1-80b4-00c04fd430c8')).toBe(true);
+        expect(isValidUUID('6ba7b810-9dad-41d1-80b4-00c04fd430c8')).toBe(true); // Fixed version to 4
+        expect(isValidUUID('6ba7b811-9dad-41d1-80b4-00c04fd430c8')).toBe(true); // Fixed version to 4
 
         // Invalid UUIDs
         expect(isValidUUID('not-a-uuid')).toBe(false);
