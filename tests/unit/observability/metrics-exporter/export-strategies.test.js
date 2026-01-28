@@ -250,27 +250,20 @@ describe('ExportStrategies', () => {
                 });
             });
 
+            // Create promise and add no-op catch to suppress unhandled rejection
             const promise = strategies.exportWithRetry(
                 () => strategies.pushExport(endpoint, mockData)
             );
+            void promise.catch(() => {}); // Prevent unhandled rejection
 
             // Fast-forward through retries
             for (let i = 0; i < 3; i++) {
                 await vi.advanceTimersByTimeAsync(1000);
             }
 
-            // Handle to avoid unhandled rejection
-            let result = null;
-            let error = null;
-            try {
-                result = await promise;
-            } catch (e) {
-                error = e;
-            }
-
-            expect(error).toBeNull();
-            expect(attemptCount).toBe(3);
+            const result = await promise;
             expect(result.success).toBe(true);
+            expect(attemptCount).toBe(3);
         });
 
         test('should give up after max retries', async () => {
@@ -278,24 +271,19 @@ describe('ExportStrategies', () => {
 
             fetch.mockRejectedValue(new Error('Persistent error'));
 
+            // Create promise and add no-op catch to suppress unhandled rejection
             const promise = strategies.exportWithRetry(
                 () => strategies.pushExport(endpoint, mockData),
                 { maxRetries: 2 }
             );
+            void promise.catch(() => {}); // Prevent unhandled rejection
 
             // Fast-forward through all retries
             for (let i = 0; i < 3; i++) {
                 await vi.advanceTimersByTimeAsync(1000);
             }
 
-            // Handle rejection to avoid unhandled rejection
-            let caughtError = null;
-            try {
-                await promise;
-            } catch (error) {
-                caughtError = error;
-            }
-
+            const caughtError = await promise;
             expect(caughtError).toBeTruthy();
             expect(caughtError.message).toBe('Persistent error');
             expect(fetch).toHaveBeenCalledTimes(3); // Initial + 2 retries
@@ -316,26 +304,19 @@ describe('ExportStrategies', () => {
                 });
             });
 
+            // Create promise and add no-op catch to suppress unhandled rejection
             const promise = strategies.exportWithRetry(
                 () => strategies.pushExport(endpoint, mockData),
                 { useExponentialBackoff: true }
             );
+            void promise.catch(() => {}); // Prevent unhandled rejection
 
             // Advance with exponential backoff
             await vi.advanceTimersByTimeAsync(1000); // 1st retry
             await vi.advanceTimersByTimeAsync(2000); // 2nd retry
             await vi.advanceTimersByTimeAsync(4000); // 3rd retry
 
-            // Handle to avoid unhandled rejection
-            let result = null;
-            let error = null;
-            try {
-                result = await promise;
-            } catch (e) {
-                error = e;
-            }
-
-            expect(error).toBeNull();
+            const result = await promise;
             expect(attemptCount).toBe(4);
             expect(result.success).toBe(true);
         });
