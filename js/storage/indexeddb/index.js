@@ -29,7 +29,7 @@ export {
     CONNECTION_CONFIG,
     AUTHORITY_CONFIG,
     REQUEST_CONFIG
-} from './indexeddb/config.js';
+} from './config.js';
 
 // ==========================================
 // CONNECTION MANAGEMENT
@@ -42,7 +42,7 @@ export {
     getConnection,
     resetConnectionState,
     getConnectionStatus
-} from './indexeddb/connection.js';
+} from './connection.js';
 
 // ==========================================
 // FALLBACK MANAGEMENT
@@ -52,7 +52,7 @@ export {
     isUsingFallback,
     getStorageBackend,
     activateFallback
-} from './indexeddb/connection.js';
+} from './connection.js';
 
 // ==========================================
 // PRIMITIVE OPERATIONS - READ
@@ -62,7 +62,7 @@ export {
     get,
     getAll,
     count
-} from './indexeddb/operations/read.js';
+} from './operations/read.js';
 
 // ==========================================
 // PRIMITIVE OPERATIONS - WRITE
@@ -72,7 +72,7 @@ export {
     put,
     clear,
     delete as deleteRecord
-} from './indexeddb/operations/write.js';
+} from './operations/write.js';
 
 // ==========================================
 // ADVANCED OPERATIONS
@@ -82,7 +82,7 @@ export {
     getAllByIndex,
     atomicUpdate,
     transaction
-} from './indexeddb/indexing.js';
+} from './indexing.js';
 
 // ==========================================
 // CONFLICT DETECTION
@@ -90,7 +90,7 @@ export {
 
 export {
     detectWriteConflict
-} from './indexeddb/conflict.js';
+} from './conflict.js';
 
 // ==========================================
 // PUBLIC API (FACADE)
@@ -106,35 +106,35 @@ import {
     isUsingFallback,
     getStorageBackend,
     activateFallback
-} from './indexeddb/connection.js';
+} from './connection.js';
 
 import {
     get,
     getAll,
     count
-} from './indexeddb/operations/read.js';
+} from './operations/read.js';
 
 import {
     put,
     clear,
     deleteRecord
-} from './indexeddb/operations/write.js';
+} from './operations/write.js';
 
 import {
     getAllByIndex,
     atomicUpdate,
     transaction
-} from './indexeddb/indexing.js';
+} from './indexing.js';
 
 import {
     detectWriteConflict
-} from './indexeddb/conflict.js';
+} from './conflict.js';
 
 import {
     INDEXEDDB_NAME,
     INDEXEDDB_VERSION,
     INDEXEDDB_STORES
-} from './indexeddb/config.js';
+} from './config.js';
 
 // Export IndexedDBCore object for grouped exports (backward compatibility)
 export const IndexedDBCore = {
