@@ -480,15 +480,15 @@ describe('ExportStrategies', () => {
 
     describe('calculateRetryDelay', () => {
         test('should use base delay for first retry', () => {
-            const delay = strategies.calculateRetryDelay(1, false);
+            const delay = strategies.calculateRetryDelay(1, false, 0);  // Disable jitter
 
             expect(delay).toBe(1000);
         });
 
         test('should use exponential backoff when enabled', () => {
-            const delay1 = strategies.calculateRetryDelay(1, true);
-            const delay2 = strategies.calculateRetryDelay(2, true);
-            const delay3 = strategies.calculateRetryDelay(3, true);
+            const delay1 = strategies.calculateRetryDelay(1, true, 0);  // Disable jitter
+            const delay2 = strategies.calculateRetryDelay(2, true, 0);
+            const delay3 = strategies.calculateRetryDelay(3, true, 0);
 
             expect(delay1).toBe(1000);
             expect(delay2).toBe(2000);
