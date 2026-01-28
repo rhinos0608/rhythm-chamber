@@ -199,6 +199,214 @@ function bindAuthorityUI() {
     });
 }
 
+function bindFileUpload() {
+    if (typeof document === 'undefined') return;
+
+    // Set up file input change listener
+    const fileInput = document.getElementById('file-input');
+    if (fileInput) {
+        fileInput.addEventListener('change', async (event) => {
+            const file = event.target.files?.[0];
+            if (file) {
+                await FileUploadController.handleFileUpload(file);
+            }
+        });
+        console.log('[App] File input listener bound');
+    }
+
+    // Set up "Choose File" button click listener
+    const chooseFileBtn = document.querySelector('[data-action="trigger-file-select"]');
+    if (chooseFileBtn) {
+        chooseFileBtn.addEventListener('click', () => {
+            fileInput?.click();
+        });
+        console.log('[App] Choose File button listener bound');
+    }
+
+    // Set up drag-and-drop on upload zone
+    const uploadZone = document.getElementById('upload-zone');
+    if (uploadZone) {
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('drag-over');
+        });
+
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('drag-over');
+        });
+
+        uploadZone.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('drag-over');
+            const file = e.dataTransfer?.files?.[0];
+            if (file) {
+                await FileUploadController.handleFileUpload(file);
+            }
+        });
+        console.log('[App] Drag-and-drop listeners bound');
+    }
+
+    // Set up "Explore in Chat" button
+    const exploreChatBtn = document.getElementById('explore-chat-btn');
+    if (exploreChatBtn) {
+        exploreChatBtn.addEventListener('click', () => {
+            if (ViewController && ViewController.showChat) {
+                ViewController.showChat();
+            }
+        });
+        console.log('[App] Explore Chat button listener bound');
+    }
+
+    // Set up "Share Card" button
+    const shareCardBtn = document.getElementById('share-card-btn');
+    if (shareCardBtn) {
+        shareCardBtn.addEventListener('click', () => {
+            if (typeof Cards !== 'undefined' && Cards.shareCard) {
+                Cards.shareCard();
+            }
+        });
+        console.log('[App] Share Card button listener bound');
+    }
+
+    // Set up chat send button
+    const chatSend = document.getElementById('chat-send');
+    const chatInput = document.getElementById('chat-input');
+    if (chatSend && chatInput) {
+        const sendChatMessage = async () => {
+            const message = chatInput.value.trim();
+            if (message && typeof Chat !== 'undefined' && Chat.sendMessage) {
+                chatInput.value = '';
+                await Chat.sendMessage(message);
+            }
+        };
+
+        chatSend.addEventListener('click', sendChatMessage);
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendChatMessage();
+            }
+        });
+        console.log('[App] Chat send listeners bound');
+    }
+
+    // Set up sidebar toggle
+    const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
+    if (sidebarToggleBtn) {
+        sidebarToggleBtn.addEventListener('click', () => {
+            document.body.classList.toggle('sidebar-collapsed');
+        });
+        console.log('[App] Sidebar toggle listener bound');
+    }
+
+    // Set up sidebar collapse button
+    const sidebarCollapseBtn = document.getElementById('sidebar-collapse-btn');
+    if (sidebarCollapseBtn) {
+        sidebarCollapseBtn.addEventListener('click', () => {
+            document.body.classList.toggle('sidebar-collapsed');
+        });
+        console.log('[App] Sidebar collapse listener bound');
+    }
+
+    // Set up new chat button
+    const newChatBtn = document.getElementById('new-chat-btn');
+    if (newChatBtn) {
+        newChatBtn.addEventListener('click', async () => {
+            if (typeof SessionManager !== 'undefined' && SessionManager.createNewSession) {
+                await SessionManager.createNewSession();
+            }
+        });
+        console.log('[App] New chat button listener bound');
+    }
+
+    // Set up reset button
+    const resetBtn = document.getElementById('reset-btn');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            const modal = document.getElementById('reset-confirm-modal');
+            if (modal) {
+                modal.style.display = 'flex';
+            }
+        });
+        console.log('[App] Reset button listener bound');
+    }
+
+    // Set up reset confirm button
+    const resetConfirmBtn = document.getElementById('reset-confirm-btn');
+    const resetConfirmInput = document.getElementById('reset-confirm-input');
+    if (resetConfirmBtn && resetConfirmInput) {
+        resetConfirmInput.addEventListener('input', (e) => {
+            resetConfirmBtn.disabled = e.target.value !== 'DELETE';
+        });
+
+        resetConfirmBtn.addEventListener('click', async () => {
+            if (resetConfirmInput.value === 'DELETE') {
+                if (typeof ResetController !== 'undefined' && ResetController.executeReset) {
+                    await ResetController.executeReset();
+                }
+                const modal = document.getElementById('reset-confirm-modal');
+                if (modal) {
+                    modal.style.display = 'none';
+                }
+            }
+        });
+        console.log('[App] Reset confirm listeners bound');
+    }
+
+    // Set up cancel buttons for modals
+    const cancelBtns = document.querySelectorAll('[data-action="hide-reset-modal"], [data-action="hide-delete-modal"]');
+    cancelBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const modal = btn.closest('.modal-overlay');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        });
+    });
+    console.log('[App] Modal cancel listeners bound');
+
+    // Set up privacy dashboard button
+    const privacyDashboardBtn = document.getElementById('privacy-dashboard-btn');
+    if (privacyDashboardBtn) {
+        privacyDashboardBtn.addEventListener('click', () => {
+            const modal = document.getElementById('privacy-dashboard-modal');
+            if (modal) {
+                modal.style.display = 'flex';
+                // Populate privacy data
+                if (typeof Storage !== 'undefined') {
+                    const rawStreams = Storage.getStreams();
+                    const rawCount = rawStreams ? rawStreams.length : 0;
+                    const countEl = document.getElementById('raw-streams-count');
+                    if (countEl) countEl.textContent = rawCount;
+                }
+            }
+        });
+        console.log('[App] Privacy dashboard button listener bound');
+    }
+
+    // Set up close privacy dashboard button
+    const closePrivacyBtns = document.querySelectorAll('[data-action="close-privacy-modal"]');
+    closePrivacyBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const modal = document.getElementById('privacy-dashboard-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        });
+    });
+
+    // Set up clear sensitive data button
+    const clearSensitiveBtn = document.querySelector('[data-action="clear-sensitive-data"]');
+    if (clearSensitiveBtn) {
+        clearSensitiveBtn.addEventListener('click', async () => {
+            if (typeof Storage !== 'undefined' && Storage.clearRawData) {
+                await Storage.clearRawData();
+                showToast('Raw data cleared');
+            }
+        });
+    }
+}
+
 async function validateExistingLicense() {
     try {
         const licenseData = localStorage.getItem('rhythm_chamber_license');
@@ -252,6 +460,7 @@ async function init() {
 
     bindSettingsButtons();
     bindAuthorityUI();
+    bindFileUpload();
 
     await validateExistingLicense();
 
@@ -277,3 +486,5 @@ if (typeof window !== 'undefined') {
     window.CONTROLLER_DEPENDENCIES = CONTROLLER_DEPENDENCIES;
 }
 
+export { init };
+export default { init };

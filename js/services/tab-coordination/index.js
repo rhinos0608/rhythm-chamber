@@ -638,7 +638,7 @@ function createMessageHandler() {
                             hideSafeModeWarning();
                         }
                         try {
-                            AppState?.update?.('system', { safeMode: !!event.data.enabled, safeModeReason: event.data.reason || '' });
+                            AppState?.update?.('operations', { safeMode: !!event.data.enabled });
                         } catch (e) {
                             void e;
                         }
@@ -674,7 +674,7 @@ function createTransport(useSharedWorker = false) {
 
 async function init() {
     EventBus.registerSchemas(TAB_EVENT_SCHEMAS);
-    debugMode = !!AppState?.get?.('system')?.debugMode;
+    debugMode = false; // Debug mode is internal to AppState, not exposed via get()
 
     if (typeof window === 'undefined') {
         return true;

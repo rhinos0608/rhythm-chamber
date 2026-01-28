@@ -14,11 +14,33 @@ import { ArtifactRenderer } from './artifact-renderer.js';
 import { ChatInputManager } from './chat-input-manager.js';
 
 // ==========================================
+// Controller Initialization
+// ==========================================
+
+/**
+ * Initialize ChatUIController with dependencies
+ * @param {Object} dependencies - Injected dependencies
+ * @param {Object} dependencies.AppState - Application state manager
+ * @param {Object} dependencies.Storage - Storage service
+ * @param {Object} dependencies.ViewController - View controller
+ * @param {Function} dependencies.showToast - Toast notification function
+ */
+function init(dependencies) {
+    // ChatUIController is a facade that re-exports functionality from specialized modules
+    // The init method is called by the container but doesn't need to do anything
+    // since the underlying modules are self-contained
+    console.log('[ChatUIController] Initialized (facade mode)');
+}
+
+// ==========================================
 // Public API
 // ==========================================
 
 // ES Module export - maintains backward compatibility
 export const ChatUIController = {
+    // Initialization
+    init,
+
     // Message rendering
     parseMarkdown: MessageRenderer.parseMarkdown,
     createMessageElement: MessageRenderer.createMessageElement,

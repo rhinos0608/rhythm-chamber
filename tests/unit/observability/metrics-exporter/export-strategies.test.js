@@ -26,7 +26,18 @@ describe('ExportStrategies', () => {
         fetch.mockClear();
         fetch.mockResolvedValue({
             ok: true,
-            json: async () => ({ success: true })
+            status: 200,
+            statusText: 'OK',
+            headers: {
+                get: vi.fn((header) => {
+                    if (header === 'content-type') {
+                        return 'application/json';
+                    }
+                    return null;
+                })
+            },
+            json: async () => ({ success: true }),
+            text: async () => 'OK'
         });
     });
 
@@ -108,7 +119,13 @@ describe('ExportStrategies', () => {
 
             fetch.mockResolvedValueOnce({
                 ok: true,
-                json: async () => responseData
+                status: 200,
+                statusText: 'OK',
+                headers: {
+                    get: vi.fn((header) => header === 'content-type' ? 'application/json' : null)
+                },
+                json: async () => responseData,
+                text: async () => 'OK'
             });
 
             const result = await strategies.pullExport(endpoint);
@@ -174,9 +191,19 @@ describe('ExportStrategies', () => {
             ];
 
             // Fail second batch
-            fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ success: true }) });
+            const mockResponse = {
+                ok: true,
+                status: 200,
+                statusText: 'OK',
+                headers: {
+                    get: vi.fn((header) => header === 'content-type' ? 'application/json' : null)
+                },
+                json: async () => ({ success: true }),
+                text: async () => 'OK'
+            };
+            fetch.mockResolvedValueOnce(mockResponse);
             fetch.mockRejectedValueOnce(new Error('Batch failed'));
-            fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ success: true }) });
+            fetch.mockResolvedValueOnce(mockResponse);
 
             const results = await strategies.batchExport(endpoint, data, {
                 batchSize: 1,
@@ -192,7 +219,7 @@ describe('ExportStrategies', () => {
         test('should call batch formatter', async () => {
             const endpoint = 'https://example.com/api/metrics';
             const data = [{ id: 1 }, { id: 2 }];
-            const formatBatch = jest.fn((batch) => JSON.stringify(batch));
+            const formatBatch = vi.fn((batch) => JSON.stringify(batch));
 
             await strategies.batchExport(endpoint, data, {
                 batchSize: 2,
@@ -300,18 +327,18 @@ describe('ExportStrategies', () => {
                 }
             };
 
-            global.URL.createObjectURL = jest.fn(() => 'blob:https://example.com/blob');
-            global.URL.revokeObjectURL = jest.fn();
+            global.URL.createObjectURL = vi.fn(() => 'blob:https://example.com/blob');
+            global.URL.revokeObjectURL = vi.fn();
 
             const mockLink = {
                 href: '',
                 download: '',
-                click: jest.fn()
+                click: vi.fn()
             };
 
-            document.createElement = jest.fn(() => mockLink);
-            document.body.appendChild = jest.fn();
-            document.body.removeChild = jest.fn();
+            document.createElement = vi.fn(() => mockLink);
+            document.body.appendChild = vi.fn();
+            document.body.removeChild = vi.fn();
 
             await strategies.downloadExport(mockData, 'json', 'test-job');
 
@@ -329,18 +356,18 @@ describe('ExportStrategies', () => {
                 constructor(data) { this.data = data; }
             };
 
-            global.URL.createObjectURL = jest.fn(() => 'blob:url');
-            global.URL.revokeObjectURL = jest.fn();
+            global.URL.createObjectURL = vi.fn(() => 'blob:url');
+            global.URL.revokeObjectURL = vi.fn();
 
             const mockLink = {
                 href: '',
                 download: '',
-                click: jest.fn()
+                click: vi.fn()
             };
 
-            document.createElement = jest.fn(() => mockLink);
-            document.body.appendChild = jest.fn();
-            document.body.removeChild = jest.fn();
+            document.createElement = vi.fn(() => mockLink);
+            document.body.appendChild = vi.fn();
+            document.body.removeChild = vi.fn();
 
             await strategies.downloadExport(mockData, 'csv', 'test-job');
 
@@ -379,7 +406,7 @@ describe('ExportStrategies', () => {
 
         test('should use custom formatter', () => {
             const data = { key: 'value' };
-            const formatter = jest.fn(() => 'custom-format');
+            const formatter = vi.fn(() => 'custom-format');
 
             const formatted = strategies.formatRequestData(data, { formatter });
 
@@ -398,7 +425,13 @@ describe('ExportStrategies', () => {
         test('should handle successful response', async () => {
             const response = {
                 ok: true,
-                json: async () => ({ success: true })
+                status: 200,
+                statusText: 'OK',
+                headers: {
+                    get: vi.fn((header) => header === 'content-type' ? 'application/json' : null)
+                },
+                json: async () => ({ success: true }),
+                text: async () => 'OK'
             };
 
             const result = await strategies.handleResponse(response);
@@ -422,7 +455,13 @@ describe('ExportStrategies', () => {
             const responseData = { metrics: [] };
             const response = {
                 ok: true,
-                json: async () => responseData
+                status: 200,
+                statusText: 'OK',
+                headers: {
+                    get: vi.fn((header) => header === 'content-type' ? 'application/json' : null)
+                },
+                json: async () => responseData,
+                text: async () => 'OK'
             };
 
             const result = await strategies.handleResponse(response);
@@ -499,9 +538,19 @@ describe('ExportStrategies', () => {
             ];
 
             // Fail second service
-            fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ success: true }) });
+            const mockResponse = {
+                ok: true,
+                status: 200,
+                statusText: 'OK',
+                headers: {
+                    get: vi.fn((header) => header === 'content-type' ? 'application/json' : null)
+                },
+                json: async () => ({ success: true }),
+                text: async () => 'OK'
+            };
+            fetch.mockResolvedValueOnce(mockResponse);
             fetch.mockRejectedValueOnce(new Error('Service 2 failed'));
-            fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ success: true }) });
+            fetch.mockResolvedValueOnce(mockResponse);
 
             const results = await strategies.exportToMultipleServices(services, mockData);
 
