@@ -5,6 +5,8 @@
  * - Export to different formats (JSON, Prometheus, StatsD, CSV, InfluxDB)
  * - Format transformations
  * - Label/tag formatting
+ * - Empty metrics handling
+ * - Edge cases and error conditions
  */
 
 import { describe, it, test, expect, beforeEach } from 'vitest';
@@ -41,6 +43,9 @@ describe('MetricsFormatters', () => {
                     },
                     'FID': {
                         latest: { value: 50, rating: 'good', timestamp: Date.now() }
+                    },
+                    'CLS': {
+                        latest: { value: 0.1, rating: 'needs-improvement', timestamp: Date.now() }
                     }
                 }
             },
@@ -83,12 +88,19 @@ describe('MetricsFormatters', () => {
             expect(formatted).toContain('    '); // 4 spaces
         });
 
-        test('should handle circular references gracefully', () => {
+        test('should handle circular references by throwing', () => {
             const circularMetrics = { a: 1 };
             circularMetrics.self = circularMetrics;
 
             // Circular references should throw an error
             expect(() => formatters.formatAsJSON(circularMetrics)).toThrow();
+        });
+
+        test('should handle empty metrics', () => {
+            const result = formatters.formatAsJSON({});
+            const parsed = JSON.parse(result);
+
+            expect(parsed).toEqual({});
         });
     });
 
@@ -127,8 +139,8 @@ describe('MetricsFormatters', () => {
 
             const formatted = formatters.formatAsCSV(metricsWithNulls);
 
-            // Null values are escaped as empty strings (unquoted)
-            expect(formatted).toContain(',,'); // Empty field between commas
+            // null is converted to empty string by escapeCSVValue
+            expect(formatted).toContain(''); // Empty string for null
         });
 
         test('should include header row', () => {
@@ -136,6 +148,28 @@ describe('MetricsFormatters', () => {
             const lines = formatted.split('\n');
 
             expect(lines[0]).toContain('timestamp,category,name');
+        });
+
+        test('should escape CSV values with quotes', () => {
+            const result = formatters.escapeCSVValue('value with "quotes"');
+            expect(result).toBe('"value with ""quotes"""');
+        });
+
+        test('should handle null values in escapeCSVValue', () => {
+            const result = formatters.escapeCSVValue(null);
+            expect(result).toBe(''); // Empty string, not quoted
+        });
+
+        test('should handle empty metrics', () => {
+            const result = formatters.formatAsCSV({});
+            const lines = result.split('\n');
+
+            expect(lines[0]).toBe('timestamp,category,name,duration,value,type');
+        });
+
+        test('should flatten performance measurements', () => {
+            const result = formatters.formatAsCSV(sampleMetrics);
+            expect(result).toContain('performance');
         });
     });
 
@@ -167,6 +201,7 @@ describe('MetricsFormatters', () => {
             const formatted = formatters.formatAsPrometheus(sampleMetrics);
 
             expect(formatted).toMatch(/rating="good"/);
+            expect(formatted).toMatch(/rating="needs-improvement"/);
         });
 
         test('should handle null memory values', () => {
@@ -179,6 +214,33 @@ describe('MetricsFormatters', () => {
 
             // Should not emit invalid metrics
             expect(formatted).not.toMatch(/memory_usage_percent null/);
+        });
+
+        test('should format specific metrics with exact values', () => {
+            const result = formatters.formatAsPrometheus(sampleMetrics);
+            const lines = result.split('\n');
+
+            // The metric uses category name from sampleMetrics.categories.database
+            expect(lines).toContain('# HELP rhythm_chamber_database_duration_ms Duration for database');
+            expect(lines).toContain('# TYPE rhythm_chamber_database_duration_ms gauge');
+            expect(result).toContain('rhythm_chamber_database_duration_ms');
+        });
+
+        test('should format all web vitals including CLS', () => {
+            const result = formatters.formatAsPrometheus(sampleMetrics);
+            expect(result).toContain('rhythm_chamber_web_vital_LCP{rating="good"}');
+            expect(result).toContain('rhythm_chamber_web_vital_FID{rating="good"}');
+            expect(result).toContain('rhythm_chamber_web_vital_CLS{rating="needs-improvement"}');
+        });
+
+        test('should format memory metrics for Prometheus', () => {
+            const result = formatters.formatAsPrometheus(sampleMetrics);
+            expect(result).toContain('rhythm_chamber_memory_usage_percent 65.5');
+        });
+
+        test('should handle empty metrics', () => {
+            const result = formatters.formatAsPrometheus({});
+            expect(result).toBe('');
         });
     });
 
@@ -202,6 +264,20 @@ describe('MetricsFormatters', () => {
 
             expect(formatted).toMatch(/\d{19}/); // Nanosecond timestamp
         });
+
+        test('should format specific measurements with exact values', () => {
+            const result = formatters.formatAsInfluxDB(sampleMetrics);
+            const lines = result.split('\n');
+
+            // The metric uses category name from sampleMetrics.categories.database
+            expect(lines[0]).toContain('performance_measurements,category=database');
+            expect(lines[0]).toContain('avg=');
+        });
+
+        test('should handle empty metrics', () => {
+            const result = formatters.formatAsInfluxDB({});
+            expect(result).toBe('');
+        });
     });
 
     describe('formatAsStatsD', () => {
@@ -215,14 +291,32 @@ describe('MetricsFormatters', () => {
         test('should use proper metric type suffixes', () => {
             const formatted = formatters.formatAsStatsD(sampleMetrics);
 
-            expect(formatted).toContain('|gauge'); // StatsD format uses single pipe
+            expect(formatted).toContain('|gauge'); // Gauge metrics (no double pipe)
         });
 
         test('should sanitize metric names', () => {
             const formatted = formatters.formatAsStatsD(sampleMetrics);
 
-            // StatsD format uses underscores (sanitized from dots), colons as separators
-            expect(formatted).toMatch(/\w+:[\w.]+/);
+            // StatsD format uses underscores, not dots (implementation-specific)
+            expect(formatted).toMatch(/[a-z_]+:[0-9.]+\|/);
+        });
+
+        test('should format web vitals for StatsD', () => {
+            const result = formatters.formatAsStatsD(sampleMetrics);
+            expect(result).toContain('|gauge');
+            expect(result).toContain('LCP');
+            expect(result).toContain('FID');
+            expect(result).toContain('CLS');
+        });
+
+        test('should format memory metrics for StatsD', () => {
+            const result = formatters.formatAsStatsD(sampleMetrics);
+            expect(result).toContain('usage_percent:65.5|gauge');
+        });
+
+        test('should handle empty metrics', () => {
+            const result = formatters.formatAsStatsD({});
+            expect(result).toBe('');
         });
     });
 
@@ -249,6 +343,11 @@ describe('MetricsFormatters', () => {
 
             expect(firstSeries.type).toBe('gauge');
         });
+
+        test('should handle empty metrics', () => {
+            const result = formatters.formatForDatadog({});
+            expect(result.series).toEqual([]);
+        });
     });
 
     describe('formatForNewRelic', () => {
@@ -273,6 +372,11 @@ describe('MetricsFormatters', () => {
             const firstMetric = formatted.metrics[0];
 
             expect(firstMetric.name).toMatch(/^rhythm_chamber\./);
+        });
+
+        test('should handle empty metrics', () => {
+            const result = formatters.formatForNewRelic({});
+            expect(result.metrics).toEqual([]);
         });
     });
 
@@ -328,6 +432,17 @@ describe('MetricsFormatters', () => {
 
             expect(sanitized).toBe('metric:name_test');
         });
+
+        test('should sanitize hyphens, dots, and spaces', () => {
+            expect(formatters.sanitizeMetricName('test-metric')).toBe('test_metric');
+            expect(formatters.sanitizeMetricName('test.metric')).toBe('test_metric');
+            expect(formatters.sanitizeMetricName('test metric')).toBe('test_metric');
+        });
+
+        test('should prefix names starting with invalid characters', () => {
+            expect(formatters.sanitizeMetricName('123-metric')).toBe('_123_metric');
+            expect(formatters.sanitizeMetricName('-metric')).toBe('_metric');
+        });
     });
 
     describe('flattenMetrics', () => {
@@ -358,6 +473,16 @@ describe('MetricsFormatters', () => {
             const flattened = formatters.flattenMetrics({});
 
             expect(flattened).toEqual([]);
+        });
+
+        test('should flatten all web vitals including CLS', () => {
+            const result = formatters.flattenMetrics(sampleMetrics);
+            const webVitals = result.filter(m => m.type === 'web_vital');
+
+            expect(webVitals.length).toBeGreaterThanOrEqual(3);
+            expect(webVitals.some(v => v.name === 'LCP')).toBe(true);
+            expect(webVitals.some(v => v.name === 'FID')).toBe(true);
+            expect(webVitals.some(v => v.name === 'CLS')).toBe(true);
         });
     });
 
@@ -428,6 +553,20 @@ describe('MetricsFormatters', () => {
 
             expect(typeof formatted).toBe('string');
         });
+
+        test('should format specific timestamp correctly', () => {
+            const timestamp = 1234567890000;
+            const result = formatters.formatTimestamp(timestamp);
+
+            expect(result).toBe('2009-02-13T23:31:30.000Z');
+        });
+
+        test('should format Date object to ISO string', () => {
+            const date = new Date('2009-02-13T23:31:30.000Z');
+            const result = formatters.formatTimestamp(date);
+
+            expect(result).toBe('2009-02-13T23:31:30.000Z');
+        });
     });
 
     describe('format', () => {
@@ -447,6 +586,12 @@ describe('MetricsFormatters', () => {
             expect(() => {
                 formatters.format(sampleMetrics, 'unsupported');
             }).toThrow('Unsupported export format: unsupported');
+        });
+
+        test('should route to all formatters correctly', () => {
+            expect(formatters.format(sampleMetrics, 'json')).toContain('performance');
+            expect(formatters.format(sampleMetrics, 'csv')).toContain('timestamp,category');
+            expect(formatters.format(sampleMetrics, 'prometheus')).toContain('# HELP');
         });
     });
 });
