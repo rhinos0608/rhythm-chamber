@@ -1,0 +1,164 @@
+{
+  "cycle": "Cycle 2",
+  "objective": "Add Missing Unit Tests for Refactored Modules",
+  "startedAt": "2025-01-29T00:00:00Z",
+  "baseline": {
+    "passing": 2857,
+    "total": 2938,
+    "percentage": 97.2,
+    "target": 98,
+    "targetPassing": 2879,
+    "gap": 22
+  },
+  "modulesNeedingTests": {
+    "vectorStore": {
+      "priority": "HIGH",
+      "modules": [
+        {
+          "file": "js/vector-store/cache.js",
+          "complexity": "LOW",
+          "estimatedTests": 8,
+          "publicMethods": ["get", "set", "has", "delete", "clear", "size", "entries", "keys", "values", "pin", "unpin", "getStats", "initialize", "getPendingEvictions"],
+          "dependencies": ["../storage/lru-cache.js"],
+          "status": "pending"
+        },
+        {
+          "file": "js/vector-store/retry-queue.js",
+          "complexity": "MEDIUM",
+          "estimatedTests": 12,
+          "publicMethods": ["processRetries", "addFailure", "removeEntry", "clear", "getMetrics", "size"],
+          "dependencies": ["./config.js"],
+          "status": "pending"
+        },
+        {
+          "file": "js/vector-store/persistence.js",
+          "complexity": "MEDIUM",
+          "estimatedTests": 15,
+          "publicMethods": ["TBD after reading"],
+          "dependencies": ["TBD"],
+          "status": "pending"
+        },
+        {
+          "file": "js/vector-store/search.js",
+          "complexity": "MEDIUM",
+          "estimatedTests": 10,
+          "publicMethods": ["TBD after reading"],
+          "dependencies": ["TBD"],
+          "status": "pending"
+        },
+        {
+          "file": "js/vector-store/search-async.js",
+          "complexity": "HIGH",
+          "estimatedTests": 12,
+          "publicMethods": ["TBD after reading"],
+          "dependencies": ["TBD", "Worker API"],
+          "status": "pending"
+        },
+        {
+          "file": "js/vector-store/worker.js",
+          "complexity": "HIGH",
+          "estimatedTests": 15,
+          "publicMethods": ["TBD after reading"],
+          "dependencies": ["Worker API", "Web Workers"],
+          "status": "pending"
+        }
+      ],
+      "totalEstimatedTests": 72
+    },
+    "fallbackChain": {
+      "priority": "HIGH",
+      "modules": [
+        {
+          "file": "js/services/fallback/execution.js",
+          "complexity": "MEDIUM",
+          "estimatedTests": 10,
+          "publicMethods": ["TBD after reading"],
+          "dependencies": ["TBD"],
+          "status": "pending"
+        },
+        {
+          "file": "js/services/fallback/fallback-response.js",
+          "complexity": "LOW",
+          "estimatedTests": 6,
+          "publicMethods": ["TBD after reading"],
+          "dependencies": ["TBD"],
+          "status": "pending"
+        },
+        {
+          "file": "js/services/fallback/index.js",
+          "complexity": "LOW",
+          "estimatedTests": 5,
+          "publicMethods": ["TBD after reading"],
+          "dependencies": ["TBD"],
+          "status": "pending"
+        }
+      ],
+      "totalEstimatedTests": 21
+    },
+    "observability": {
+      "priority": "MEDIUM",
+      "modules": [
+        {
+          "file": "js/observability/metrics-exporter/config.js",
+          "complexity": "LOW",
+          "estimatedTests": 6,
+          "publicMethods": ["TBD after reading"],
+          "dependencies": ["TBD"],
+          "status": "pending"
+        },
+        {
+          "file": "js/observability/metrics-exporter/formatters.js",
+          "complexity": "LOW",
+          "estimatedTests": 8,
+          "publicMethods": ["TBD after reading"],
+          "dependencies": ["TBD"],
+          "status": "pending"
+        },
+        {
+          "file": "js/observability/metrics-exporter/export-strategies.js",
+          "complexity": "MEDIUM",
+          "estimatedTests": 10,
+          "publicMethods": ["TBD after reading"],
+          "dependencies": ["TBD"],
+          "status": "pending"
+        },
+        {
+          "file": "js/observability/controller.js",
+          "complexity": "MEDIUM",
+          "estimatedTests": 12,
+          "publicMethods": ["TBD after reading"],
+          "dependencies": ["TBD"],
+          "status": "pending"
+        }
+      ],
+      "totalEstimatedTests": 36
+    }
+  },
+  "executionOrder": [
+    "js/vector-store/cache.js (LOW - 8 tests)",
+    "js/services/fallback/fallback-response.js (LOW - 6 tests)",
+    "js/services/fallback/index.js (LOW - 5 tests)",
+    "js/observability/metrics-exporter/config.js (LOW - 6 tests)",
+    "js/observability/metrics-exporter/formatters.js (LOW - 8 tests)",
+    "js/vector-store/retry-queue.js (MEDIUM - 12 tests)",
+    "js/services/fallback/execution.js (MEDIUM - 10 tests)",
+    "js/vector-store/persistence.js (MEDIUM - 15 tests)",
+    "js/vector-store/search.js (MEDIUM - 10 tests)",
+    "js/observability/metrics-exporter/export-strategies.js (MEDIUM - 10 tests)",
+    "js/observability/controller.js (MEDIUM - 12 tests)",
+    "js/vector-store/search-async.js (HIGH - 12 tests)",
+    "js/vector-store/worker.js (HIGH - 15 tests)"
+  ],
+  "progress": {
+    "completedModules": [],
+    "testsAdded": 0,
+    "testsPassing": 0,
+    "currentPassingRate": 97.2
+  },
+  "successCriteria": {
+    "targetPassingRate": 98,
+    "targetPassingCount": 2879,
+    "allHighPriorityModulesTested": true,
+    "noNewFailures": true
+  }
+}
