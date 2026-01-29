@@ -13,8 +13,18 @@
  * @module utils/retry-manager/retry-monitoring
  */
 
-import { EventBus } from '../../services/event-bus.js';
 import { classifyError, ErrorType } from './retry-config.js';
+
+// Default EventBus instance (fallback if not injected)
+let defaultEventBus = null;
+
+/**
+ * Set the default EventBus for this module
+ * @param {Object} eventBus - EventBus instance
+ */
+export function setDefaultEventBus(eventBus) {
+    defaultEventBus = eventBus;
+}
 
 // ==========================================
 // Retry Statistics Tracker
@@ -103,20 +113,25 @@ const retryStatistics = new RetryStatistics();
 /**
  * Enable automatic retry monitoring via EventBus
  * Listens to retry:attempt events and tracks statistics
+ * @param {Object} eventBus - Optional EventBus instance (HNW compliance)
  */
-export function enableRetryMonitoring() {
-    EventBus.on('retry:attempt', (data) => {
+export function enableRetryMonitoring(eventBus = defaultEventBus) {
+    const DEBUG = globalThis.DEBUG ?? false;
+    eventBus?.on('retry:attempt', (data) => {
         // Auto-record retry attempts
         // Can be extended with more sophisticated monitoring
-        console.debug('[RetryMonitor] Retry attempt detected:', data);
+        if (DEBUG) {
+            console.debug('[RetryMonitor] Retry attempt detected:', data);
+        }
     }, { domain: 'retry' });
 }
 
 /**
  * Disable automatic retry monitoring
+ * @param {Object} eventBus - Optional EventBus instance (HNW compliance)
  */
-export function disableRetryMonitoring() {
-    EventBus.off('retry:attempt', null, { domain: 'retry' });
+export function disableRetryMonitoring(eventBus = defaultEventBus) {
+    eventBus?.off('retry:attempt', null, { domain: 'retry' });
 }
 
 // ==========================================
@@ -198,13 +213,16 @@ export function calculatePerformanceMetrics(contexts) {
 export function logRetrySummary(context, operationName = 'Operation') {
     const summary = context.getSummary();
 
-    console.log(`[RetryMonitor] ${operationName} Summary:`, {
-        attempts: summary.attempts,
-        succeeded: summary.succeeded,
-        elapsedTime: summary.elapsedTime + 'ms',
-        totalDelayTime: summary.totalDelayTime + 'ms',
-        errors: summary.errors.length
-    });
+    const DEBUG = globalThis.DEBUG ?? false;
+    if (DEBUG) {
+        console.log(`[RetryMonitor] ${operationName} Summary:`, {
+            attempts: summary.attempts,
+            succeeded: summary.succeeded,
+            elapsedTime: summary.elapsedTime + 'ms',
+            totalDelayTime: summary.totalDelayTime + 'ms',
+            errors: summary.errors.length
+        });
+    }
 
     if (summary.errors.length > 0) {
         console.warn('[RetryMonitor] Errors encountered:', summary.errors.map(e => ({
@@ -217,21 +235,29 @@ export function logRetrySummary(context, operationName = 'Operation') {
 /**
  * Create a retry logger that logs to EventBus
  * @param {string} domain - Domain for logging
+ * @param {Object} eventBus - Optional EventBus instance (HNW compliance)
  * @returns {Object} Logger with log, warn, error methods
  */
-export function createRetryLogger(domain) {
+export function createRetryLogger(domain, eventBus = defaultEventBus) {
+    const DEBUG = globalThis.DEBUG ?? false;
     return {
         log: (message, data) => {
-            EventBus.emit('retry:log', { level: 'info', message, data }, { domain });
-            console.log(`[Retry:${domain}] ${message}`, data);
+            eventBus?.emit('retry:log', { level: 'info', message, data }, { domain });
+            if (DEBUG) {
+                console.log(`[Retry:${domain}] ${message}`, data);
+            }
         },
         warn: (message, data) => {
-            EventBus.emit('retry:log', { level: 'warn', message, data }, { domain });
-            console.warn(`[Retry:${domain}] ${message}`, data);
+            eventBus?.emit('retry:log', { level: 'warn', message, data }, { domain });
+            if (DEBUG) {
+                console.warn(`[Retry:${domain}] ${message}`, data);
+            }
         },
         error: (message, data) => {
-            EventBus.emit('retry:log', { level: 'error', message, data }, { domain });
-            console.error(`[Retry:${domain}] ${message}`, data);
+            eventBus?.emit('retry:log', { level: 'error', message, data }, { domain });
+            if (DEBUG) {
+                console.error(`[Retry:${domain}] ${message}`, data);
+            }
         }
     };
 }

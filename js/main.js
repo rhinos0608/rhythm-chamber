@@ -154,6 +154,9 @@ import { ProfileSynthesizer, ProfileSynthesizerClass } from './profile-synthesiz
 import { OperationLock } from './operation-lock.js';
 import { Payments } from './payments.js';
 import { Pricing } from './pricing.js';
+import { setDefaultEventBus as setRetryExecutorEventBus } from './utils/retry-manager/retry-executor-core.js';
+import { setDefaultEventBus as setRetryMonitoringEventBus } from './utils/retry-manager/retry-monitoring.js';
+import { setDefaultEventBus as setAdaptiveRateLimiterEventBus } from './utils/adaptive-rate-limiter.js';
 
 // Premium controller (lazy import - only loaded when needed for upgrade modals)
 
@@ -509,6 +512,14 @@ async function bootstrap() {
     try {
         // Initialize wave telemetry with critical events
         initializeWaveTelemetry();
+
+        // Initialize EventBus for utility modules (HNW compliance)
+        // This ensures retry-manager and adaptive-rate-limiter use injected EventBus
+        // instead of direct imports, following the Hierarchy principle
+        setRetryExecutorEventBus(EventBus);
+        setRetryMonitoringEventBus(EventBus);
+        setAdaptiveRateLimiterEventBus(EventBus);
+        logger.debug('EventBus injected into utility modules');
 
         // Load configuration with retry logic (replaces fragile <script src="config.js">)
         logger.debug('Loading configuration...');

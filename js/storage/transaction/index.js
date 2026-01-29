@@ -227,6 +227,147 @@ export class StorageTransaction {
       NestedTransactionGuard.exitTransaction(context.id);
     }
   }
+
+  /**
+   * BACKWARD COMPATIBILITY: Static transaction method
+   *
+   * This method provides backward compatibility with the old API.
+   * It creates a new instance and calls the run() method.
+   *
+   * @deprecated Use new StorageTransaction().run(callback, resources) instead
+   * @param {Function} callback - Async function receiving TransactionContext
+   * @returns {Promise<{success: boolean, operationsCommitted: number, transactionId: string, durationMs: number}>}
+   */
+  static async transaction(callback) {
+    const instance = new StorageTransaction();
+    return instance.run(callback, []);
+  }
+
+  /**
+   * BACKWARD COMPATIBILITY: Static isFatalState method
+   *
+   * @deprecated Use isFatalState() function from module instead
+   * @returns {boolean} True if in fatal state
+   */
+  static isFatalState() {
+    return TransactionStateManager.isFatalState();
+  }
+
+  /**
+   * BACKWARD COMPATIBILITY: Static getFatalState method
+   *
+   * @deprecated Use getFatalState() function from module instead
+   * @returns {Object|null} Fatal state or null if not fatal
+   */
+  static getFatalState() {
+    return TransactionStateManager.getFatalState();
+  }
+
+  /**
+   * BACKWARD COMPATIBILITY: Static clearFatalState method
+   *
+   * @deprecated Use clearFatalState(reason) function from module instead
+   * @param {string} [reason] - Reason for clearing
+   */
+  static clearFatalState(reason = 'Manual recovery') {
+    TransactionStateManager.clearFatalState(reason);
+  }
+
+  /**
+   * BACKWARD COMPATIBILITY: Static getCompensationLogs method
+   *
+   * @deprecated Use getCompensationLogs() function from module instead
+   * @returns {Promise<Array>} Array of compensation log entries
+   */
+  static async getCompensationLogs() {
+    return compensationLogger.getAllCompensationLogs();
+  }
+
+  /**
+   * BACKWARD COMPATIBILITY: FATAL_STATE property getter
+   *
+   * @deprecated Use getFatalState() instead
+   * @returns {Object|null} Fatal state object
+   */
+  static get FATAL_STATE() {
+    return TransactionStateManager.getFatalState();
+  }
+
+  /**
+   * BACKWARD COMPATIBILITY: FATAL_STATE property setter
+   *
+   * @deprecated Use TransactionStateManager.setFatalState() for testing only
+   * @param {Object} value - Fatal state value to set
+   */
+  static set FATAL_STATE(value) {
+    if (value && value.isFatal) {
+      TransactionStateManager.setFatalState(value.reason || 'Test fatal state', value);
+    } else {
+      TransactionStateManager.clearFatalState('Test cleanup');
+    }
+  }
+
+  /**
+   * BACKWARD COMPATIBILITY: Access to compensation logger methods
+   *
+   * @deprecated Use module-level functions instead
+   * @returns {CompensationLogger} The compensation logger instance
+   */
+  static get _compensationLogger() {
+    return compensationLogger;
+  }
+
+  /**
+   * BACKWARD COMPATIBILITY: addInMemoryCompensationLog
+   *
+   * @deprecated Use compensation logger directly
+   * @param {string} transactionId - Transaction ID
+   * @param {Array} entries - Compensation log entries
+   */
+  static addInMemoryCompensationLog(transactionId, entries) {
+    compensationLogger.addInMemoryCompensationLog(transactionId, entries);
+  }
+
+  /**
+   * BACKWARD COMPATIBILITY: getAllInMemoryCompensationLogs
+   *
+   * @deprecated Use compensation logger directly
+   * @returns {Array} Array of in-memory log entries
+   */
+  static getAllInMemoryCompensationLogs() {
+    return compensationLogger.getAllInMemoryCompensationLogs();
+  }
+
+  /**
+   * BACKWARD COMPATIBILITY: clearInMemoryCompensationLog
+   *
+   * @deprecated Use compensation logger directly
+   * @param {string} transactionId - Transaction ID
+   */
+  static clearInMemoryCompensationLog(transactionId) {
+    compensationLogger.clearInMemoryCompensationLog(transactionId);
+  }
+
+  /**
+   * BACKWARD COMPATIBILITY: resolveCompensationLog
+   *
+   * @deprecated Use compensation logger directly
+   * @param {string} transactionId - Transaction ID
+   * @returns {Promise<boolean>} True if log was resolved
+   */
+  static async resolveCompensationLog(transactionId) {
+    return compensationLogger.resolveCompensationLog(transactionId);
+  }
+
+  /**
+   * BACKWARD COMPATIBILITY: clearResolvedCompensationLogs
+   *
+   * @deprecated Use compensation logger directly
+   * @returns {Promise<number>} Number of logs cleared
+   */
+  static async clearResolvedCompensationLogs() {
+    return compensationLogger.clearResolvedCompensationLogs();
+  }
 }
 
 // ==========================================

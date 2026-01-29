@@ -12,7 +12,16 @@
  * @module utils/adaptive-rate-limiter
  */
 
-import { EventBus } from '../services/event-bus.js';
+// Default EventBus instance (fallback if not injected)
+let defaultEventBus = null;
+
+/**
+ * Set the default EventBus for this module
+ * @param {Object} eventBus - EventBus instance
+ */
+export function setDefaultEventBus(eventBus) {
+    defaultEventBus = eventBus;
+}
 
 // ==========================================
 // Rate Limiter Configuration
@@ -104,7 +113,10 @@ export function createRateLimiter(name, config = {}) {
             config: cfg
         });
 
-        console.log(`[AdaptiveRateLimiter] Rate limiter created: ${name} (max: ${cfg.maxEventsPerSecond} events/sec)`);
+        const DEBUG = globalThis.DEBUG ?? false;
+        if (DEBUG) {
+            console.log(`[AdaptiveRateLimiter] Rate limiter created: ${name} (max: ${cfg.maxEventsPerSecond} events/sec)`);
+        }
     }
 
     return limiters.get(name);
@@ -173,8 +185,9 @@ export function recordLatency(name, latencyMs) {
  * Adjust rate based on system performance
  *
  * @param {RateLimiterInstance} limiter - Rate limiter instance
+ * @param {Object} eventBus - Optional EventBus instance (HNW compliance)
  */
-function adjustRate(limiter) {
+function adjustRate(limiter, eventBus = defaultEventBus) {
     const cfg = limiter.config;
     const now = Date.now();
 
@@ -222,14 +235,17 @@ function adjustRate(limiter) {
     // Log significant rate changes
     if (Math.abs(limiter.currentRate - oldRate) > 5) {
         const action = limiter.currentRate < oldRate ? 'decreased' : 'increased';
-        console.log(
-            `[AdaptiveRateLimiter] ${limiter.name}: Rate ${action} ` +
-            `${oldRate} → ${limiter.currentRate} events/sec ` +
-            `(target: ${Math.round(limiter.targetRate)}, avg latency: ${Math.round(avgLatency)}ms)`
-        );
+        const DEBUG = globalThis.DEBUG ?? false;
+        if (DEBUG) {
+            console.log(
+                `[AdaptiveRateLimiter] ${limiter.name}: Rate ${action} ` +
+                `${oldRate} → ${limiter.currentRate} events/sec ` +
+                `(target: ${Math.round(limiter.targetRate)}, avg latency: ${Math.round(avgLatency)}ms)`
+            );
+        }
 
         // Emit rate adjustment event
-        EventBus.emit('ratelimit:adjustment', {
+        eventBus?.emit('ratelimit:adjustment', {
             limiter: limiter.name,
             oldRate,
             newRate: limiter.currentRate,
@@ -321,7 +337,10 @@ export function reset(name) {
         limiter.eventCount = 0;
         limiter.windowStart = Date.now();
         limiter.latencySamples = [];
-        console.log(`[AdaptiveRateLimiter] ${name}: Rate limiter reset`);
+        const DEBUG = globalThis.DEBUG ?? false;
+        if (DEBUG) {
+            console.log(`[AdaptiveRateLimiter] ${name}: Rate limiter reset`);
+        }
     }
 }
 
@@ -332,7 +351,10 @@ export function reset(name) {
  */
 export function remove(name) {
     limiters.delete(name);
-    console.log(`[AdaptiveRateLimiter] ${name}: Rate limiter removed`);
+    const DEBUG = globalThis.DEBUG ?? false;
+    if (DEBUG) {
+        console.log(`[AdaptiveRateLimiter] ${name}: Rate limiter removed`);
+    }
 }
 
 /**
@@ -358,4 +380,7 @@ export default {
     getSystemMetrics
 };
 
-console.log('[AdaptiveRateLimiter] Module loaded with adaptive rate limiting');
+const DEBUG = globalThis.DEBUG ?? false;
+if (DEBUG) {
+    console.log('[AdaptiveRateLimiter] Module loaded with adaptive rate limiting');
+}

@@ -10,7 +10,7 @@
 export const INDEXEDDB_NAME = 'rhythm-chamber';
 
 // Current database version
-export const INDEXEDDB_VERSION = 6;
+export const INDEXEDDB_VERSION = 7;
 
 // Object store names
 export const INDEXEDDB_STORES = {
