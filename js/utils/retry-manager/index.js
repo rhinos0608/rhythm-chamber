@@ -190,5 +190,8 @@ export const RetryManager = {
 // Default export for backward compatibility
 export default RetryManager;
 
-// Module loaded notification
-console.log('[RetryManager] Unified retry utility loaded (modular)');
+// Module loaded notification (only in debug mode)
+const DEBUG = globalThis.DEBUG ?? false;
+if (DEBUG) {
+    console.log('[RetryManager] Unified retry utility loaded (modular)');
+}

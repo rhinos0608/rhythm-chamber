@@ -14,9 +14,19 @@
  * @module utils/retry-manager/retry-executor-core
  */
 
-import { EventBus } from '../../services/event-bus.js';
 import { DEFAULT_RETRY_CONFIG, classifyError, isRetryable } from './retry-config.js';
 import { calculateBackoffForError, calculateExponentialBackoff, delay } from './retry-strategies.js';
+
+// Default EventBus instance (fallback if not injected)
+let defaultEventBus = null;
+
+/**
+ * Set the default EventBus for this module
+ * @param {Object} eventBus - EventBus instance
+ */
+export function setDefaultEventBus(eventBus) {
+    defaultEventBus = eventBus;
+}
 
 // ==========================================
 // Timeout Wrapper
@@ -125,6 +135,7 @@ export class RetryContext {
  * @param {AbortSignal} options.abortSignal - Optional abort signal for cancellation
  * @param {number} options.timeoutMs - Optional timeout for each attempt
  * @param {boolean} options.useJitter - Whether to add jitter (default: true)
+ * @param {Object} options.eventBus - Optional EventBus instance (HNW compliance)
  * @returns {Promise<{ result: any, context: RetryContext }>} Result with retry context
  */
 export async function withRetry(fn, options = {}) {
@@ -137,7 +148,8 @@ export async function withRetry(fn, options = {}) {
         onFailure = null,
         abortSignal = null,
         timeoutMs = null,
-        useJitter = true
+        useJitter = true,
+        eventBus = defaultEventBus
     } = options;
 
     // CRIT-001: Validate maxRetries to prevent infinite loop
@@ -156,7 +168,19 @@ export async function withRetry(fn, options = {}) {
             error.name = 'AbortError';
             context.recordAttempt(error);
             if (onFailure) {
-                try { onFailure(error, context); } catch (e) { /* ignore */ }
+                try {
+                    onFailure(error, context);
+                } catch (callbackError) {
+                    // Emit error event for monitoring
+                    eventBus?.emit('callback:error', {
+                        callback: 'onFailure',
+                        error: callbackError,
+                        originalError: error,
+                        context
+                    });
+                    // Re-throw to surface callback errors
+                    throw callbackError;
+                }
             }
             throw error;
         }
@@ -174,7 +198,15 @@ export async function withRetry(fn, options = {}) {
                 try {
                     onSuccess(result, context);
                 } catch (callbackError) {
-                    console.warn('[RetryManager] Success callback error:', callbackError);
+                    // Emit error event for monitoring
+                    eventBus?.emit('callback:error', {
+                        callback: 'onSuccess',
+                        error: callbackError,
+                        result,
+                        context
+                    });
+                    // Re-throw to surface callback errors
+                    throw callbackError;
                 }
             }
 
@@ -185,7 +217,19 @@ export async function withRetry(fn, options = {}) {
             // Check custom retry predicate
             if (shouldRetry && !shouldRetry(error, context.attempt)) {
                 if (onFailure) {
-                    try { onFailure(error, context); } catch (e) { /* ignore */ }
+                    try {
+                        onFailure(error, context);
+                    } catch (callbackError) {
+                        // Emit error event for monitoring
+                        eventBus?.emit('callback:error', {
+                            callback: 'onFailure',
+                            error: callbackError,
+                            originalError: error,
+                            context
+                        });
+                        // Re-throw to surface callback errors
+                        throw callbackError;
+                    }
                 }
                 throw error;
             }
@@ -193,7 +237,19 @@ export async function withRetry(fn, options = {}) {
             // Check if we should retry
             if (!context.shouldRetry) {
                 if (onFailure) {
-                    try { onFailure(error, context); } catch (e) { /* ignore */ }
+                    try {
+                        onFailure(error, context);
+                    } catch (callbackError) {
+                        // Emit error event for monitoring
+                        eventBus?.emit('callback:error', {
+                            callback: 'onFailure',
+                            error: callbackError,
+                            originalError: error,
+                            context
+                        });
+                        // Re-throw to surface callback errors
+                        throw callbackError;
+                    }
                 }
                 throw error;
             }
@@ -210,19 +266,30 @@ export async function withRetry(fn, options = {}) {
                 try {
                     onRetry(error, context.attempt, backoff, context);
                 } catch (callbackError) {
-                    console.warn('[RetryManager] Retry callback error:', callbackError);
+                    // Emit error event for monitoring
+                    eventBus?.emit('callback:error', {
+                        callback: 'onRetry',
+                        error: callbackError,
+                        originalError: error,
+                        context
+                    });
+                    // Re-throw to surface callback errors
+                    throw callbackError;
                 }
             }
 
             // Log retry attempt
             const errorType = classifyError(error);
-            console.log(
-                `[RetryManager] Retry ${context.attempt}/${maxRetries} after ${backoff}ms ` +
-                `(type: ${errorType}, elapsed: ${context.elapsedTime}ms)`
-            );
+            const DEBUG = globalThis.DEBUG ?? false;
+            if (DEBUG) {
+                console.log(
+                    `[RetryManager] Retry ${context.attempt}/${maxRetries} after ${backoff}ms ` +
+                    `(type: ${errorType}, elapsed: ${context.elapsedTime}ms)`
+                );
+            }
 
             // Emit retry event
-            EventBus.emit('retry:attempt', {
+            eventBus?.emit('retry:attempt', {
                 attempt: context.attempt,
                 maxRetries,
                 delay: backoff,

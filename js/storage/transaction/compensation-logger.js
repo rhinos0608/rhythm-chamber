@@ -235,4 +235,108 @@ export class CompensationLogger {
       storage: 'memory'
     });
   }
+
+  // ==========================================
+  // BACKWARD COMPATIBILITY: Test Helper Methods
+  // ==========================================
+
+  /**
+   * Add an in-memory compensation log entry (for testing)
+   *
+   * @param {string} transactionId - Transaction ID
+   * @param {Array} entries - Compensation log entries
+   */
+  addInMemoryCompensationLog(transactionId, entries) {
+    this._logToMemory(transactionId, {
+      id: transactionId,
+      entries,
+      timestamp: Date.now(),
+      resolved: false,
+      storage: 'memory'
+    });
+  }
+
+  /**
+   * Get all in-memory compensation logs (for testing)
+   *
+   * @returns {Array} Array of in-memory log entries
+   */
+  getAllInMemoryCompensationLogs() {
+    return Array.from(this.memoryLogs.values());
+  }
+
+  /**
+   * Clear an in-memory compensation log (for testing)
+   *
+   * @param {string} transactionId - Transaction ID
+   */
+  clearInMemoryCompensationLog(transactionId) {
+    this.memoryLogs.delete(transactionId);
+  }
+
+  /**
+   * Mark a compensation log as resolved (for testing)
+   *
+   * @param {string} transactionId - Transaction ID
+   * @returns {Promise<boolean>} True if log was found and resolved
+   */
+  async resolveCompensationLog(transactionId) {
+    // Check memory first
+    if (this.memoryLogs.has(transactionId)) {
+      const log = this.memoryLogs.get(transactionId);
+      log.resolved = true;
+      log.resolvedAt = Date.now();
+      return true;
+    }
+
+    // Check other storage tiers
+    const log = await this.getCompensationLog(transactionId);
+    if (log) {
+      log.resolved = true;
+      log.resolvedAt = Date.now();
+
+      // Update in persistent storage
+      try {
+        await this._logToIndexedDB(transactionId, log);
+      } catch {
+        this._logToLocalStorage(transactionId, log);
+      }
+
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Clear all resolved compensation logs (for testing)
+   *
+   * @returns {Promise<number>} Number of logs cleared
+   */
+  async clearResolvedCompensationLogs() {
+    let clearedCount = 0;
+
+    // Clear resolved from memory
+    for (const [transactionId, log] of this.memoryLogs.entries()) {
+      if (log.resolved) {
+        this.memoryLogs.delete(transactionId);
+        clearedCount++;
+      }
+    }
+
+    // Clear resolved from persistent storage
+    try {
+      const allLogs = await this.getAllCompensationLogs();
+      for (const log of allLogs) {
+        if (log.resolved) {
+          await this.clearCompensationLog(log.id);
+          clearedCount++;
+        }
+      }
+    } catch (error) {
+      console.warn(`[CompensationLogger] Failed to clear resolved logs: ${error.message}`);
+    }
+
+    return clearedCount;
+  }
 }

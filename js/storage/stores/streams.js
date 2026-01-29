@@ -8,23 +8,9 @@
  */
 
 import { IndexedDBCore } from '../indexeddb.js';
-import { Crypto } from '../../security/crypto.js';
+import { assertWriteAllowed } from '../security.js';
 import { queuedOperation } from '../operations/queue.js';
 import { STORES } from './registry.js';
-
-/**
- * Security enforcement - check if writes are allowed
- * @param {string} operation - Operation name for error message
- * @throws {Error} If not in secure context
- */
-function assertWriteAllowed(operation) {
-    if (!Crypto.isSecureContext()) {
-        throw new Error(
-            `[Storage] Write blocked: not in secure context. ` +
-            `Operation '${operation}' requires HTTPS or localhost.`
-        );
-    }
-}
 
 /**
  * Save all streams to storage

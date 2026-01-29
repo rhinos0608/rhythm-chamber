@@ -60,7 +60,10 @@ export async function retryLinear(fn, options = {}) {
             const backoff = calculateLinearBackoff(attempt, config);
             const delayWithJitter = addJitter(backoff, config);
 
-            console.log(`[RetryManager] Linear retry ${attempt + 1}/${maxRetries} after ${delayWithJitter}ms`);
+            const DEBUG = globalThis.DEBUG ?? false;
+            if (DEBUG) {
+                console.log(`[RetryManager] Linear retry ${attempt + 1}/${maxRetries} after ${delayWithJitter}ms`);
+            }
             await delay(delayWithJitter);
         }
     }
@@ -90,7 +93,10 @@ export async function retryCustom(fn, backoffFn, options = {}) {
             const backoff = calculateCustomBackoff(attempt, backoffFn, config);
             const delayWithJitter = addJitter(backoff, config);
 
-            console.log(`[RetryManager] Custom retry ${attempt + 1}/${maxRetries} after ${delayWithJitter}ms`);
+            const DEBUG = globalThis.DEBUG ?? false;
+            if (DEBUG) {
+                console.log(`[RetryManager] Custom retry ${attempt + 1}/${maxRetries} after ${delayWithJitter}ms`);
+            }
             await delay(delayWithJitter);
         }
     }
@@ -142,7 +148,13 @@ export async function withFallback(fns, options = {}) {
                 try {
                     onFallback(error, i);
                 } catch (callbackError) {
+                    // Emit error event for monitoring
+                    // Note: withFallback doesn't have EventBus imported, so we use console.warn
+                    // to maintain backward compatibility. In production, this should be replaced
+                    // with proper event emission.
                     console.warn('[RetryManager] Fallback callback error:', callbackError);
+                    // Re-throw to surface callback errors
+                    throw callbackError;
                 }
             }
 

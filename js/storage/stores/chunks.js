@@ -93,10 +93,28 @@ export async function hasChunks() {
 
 /**
  * Get chunks by stream ID (if chunks have streamId property)
+ * Uses IndexedDB index for efficient filtering (V7 migration)
  * @param {string} streamId - Stream ID to filter by
  * @returns {Promise<Array>} Array of chunks for the stream
  */
 export async function getChunksByStream(streamId) {
-    const chunks = await getChunks();
-    return chunks.filter(chunk => chunk.streamId === streamId);
+    // Use indexed query for better performance
+    // Requires V7 migration which adds streamId index
+    const db = await IndexedDBCore.getConnection();
+    const tx = db.transaction(['CHUNKS'], 'readonly');
+    const store = tx.objectStore('CHUNKS');
+    const index = store.index('streamId');
+    const request = index.getAll(streamId);
+
+    return new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => {
+            // Fallback to full scan for databases without the index
+            // This maintains backward compatibility with older databases
+            console.warn('[Chunks] Index query failed, falling back to full scan:', request.error?.message);
+            getChunks().then(chunks => {
+                resolve(chunks.filter(chunk => chunk.streamId === streamId));
+            }).catch(reject);
+        };
+    });
 }

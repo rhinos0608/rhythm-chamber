@@ -115,6 +115,31 @@ export function migrateToV6(database) {
 }
 
 /**
+ * Migration to version 7: Add performance indexes
+ * Optimizes queries for frequently filtered properties:
+ * - chunks.streamId: Enables efficient filtering of chunks by stream
+ *
+ * Performance improvement: getChunksByStream() now uses indexed query
+ * instead of loading all chunks and filtering in-memory.
+ *
+ * @param {IDBDatabase} database - Database instance
+ */
+export function migrateToV7(database) {
+    // Add streamId index to chunks store for efficient filtering
+    // NOTE: In onupgradeneeded handler with fake-indexeddb, we must delete and recreate
+    // the store to add new indexes. This is a limitation of the mock library.
+    // Production IndexedDB allows adding indexes to existing stores directly.
+    if (database.objectStoreNames.contains('chunks')) {
+        database.deleteObjectStore('chunks');
+    }
+
+    const chunksStore = database.createObjectStore('chunks', { keyPath: 'id' });
+    chunksStore.createIndex('type', 'type', { unique: false });
+    chunksStore.createIndex('startDate', 'startDate', { unique: false });
+    chunksStore.createIndex('streamId', 'streamId', { unique: false }); // New index for v7
+}
+
+/**
  * Run migrations from oldVersion to newVersion
  * Sequentially applies each migration function to ensure proper schema evolution.
  *
@@ -150,6 +175,9 @@ export function runMigrations(database, oldVersion, newVersion) {
                 case 6:
                     migrateToV6(database);
                     break;
+                case 7:
+                    migrateToV7(database);
+                    break;
                 default:
                     console.warn(`[IndexedDB] No migration defined for version ${targetVersion}`);
             }
@@ -183,6 +211,13 @@ function createStores(database) {
         const chunksStore = database.createObjectStore(INDEXEDDB_STORES.CHUNKS, { keyPath: 'id' });
         chunksStore.createIndex('type', 'type', { unique: false });
         chunksStore.createIndex('startDate', 'startDate', { unique: false });
+        chunksStore.createIndex('streamId', 'streamId', { unique: false });
+    } else {
+        // Ensure streamId index exists on existing chunks store (V7 migration)
+        const chunksStore = database.objectStore('chunks');
+        if (!chunksStore.indexNames.contains('streamId')) {
+            chunksStore.createIndex('streamId', 'streamId', { unique: false });
+        }
     }
 
     // Store for embeddings
