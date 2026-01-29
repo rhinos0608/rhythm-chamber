@@ -55,6 +55,8 @@ vi.mock('../../../js/storage.js', () => ({
 
 vi.mock('../../../js/state/app-state.js', () => ({
   AppState: {
+    get: vi.fn(),
+    set: vi.fn(),
     update: vi.fn()
   }
 }));

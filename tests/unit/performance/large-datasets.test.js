@@ -26,6 +26,8 @@ const mockDataVersion = {
 };
 
 const mockAppState = {
+    get: vi.fn(),
+    set: vi.fn(),
     update: vi.fn()
 };
 
