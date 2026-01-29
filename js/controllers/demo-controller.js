@@ -16,6 +16,8 @@ import { Chat } from '../chat.js';
 
 // Import OperationLock for concurrent operation protection
 import { OperationLock } from '../operation-lock.js';
+// Import VersionSource contract to register as implementation
+import { registerVersionSource, clearVersionSource } from '../contracts/version-source.js';
 
 // Define demo load operation name for locking
 const DEMO_LOAD_OPERATION = 'demo_load';
@@ -280,7 +282,11 @@ function init(dependencies) {
     _showToast = dependencies.showToast;
     _Patterns = dependencies.Patterns;
 
-    console.log('[DemoController] Initialized with dependencies');
+    // Register this controller as a VersionSource implementation
+    // This allows services (data-version) to access data without importing the controller
+    registerVersionSource(DemoController);
+
+    console.log('[DemoController] Initialized with dependencies and registered as VersionSource');
 }
 
 /**
@@ -756,6 +762,9 @@ async function exitDemoMode() {
 
     // Show upload view
     _ViewController.showUpload();
+
+    // Unregister from VersionSource contract
+    clearVersionSource();
 
     console.log('[DemoController] Exited demo mode');
 }

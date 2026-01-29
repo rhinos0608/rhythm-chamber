@@ -191,12 +191,33 @@ function bindSettingsButtons() {
     }
 }
 
+/**
+ * Bind UI elements to tab authority changes from TabCoordinator
+ *
+ * Updates the following when tab authority changes:
+ * - Authority indicator (class and text)
+ * - Upload zone (enabled/disabled state)
+ * - Body class (read-only-mode)
+ *
+ * @listens tab:authority_changed
+ * @see TabCoordinator.onAuthorityChange
+ */
 function bindAuthorityUI() {
     if (typeof document === 'undefined') return;
     TabCoordinator.onAuthorityChange((authority) => {
         const isPrimary = authority.level === 'primary';
         console.log('[App] Authority changed:', authority.level, isPrimary ? 'primary' : 'secondary');
         document.body.classList.toggle('read-only-mode', !isPrimary);
+
+        // Update authority indicator element
+        const indicator = document.getElementById('authority-indicator');
+        if (indicator) {
+            // Remove both classes first, then add the correct one
+            indicator.classList.remove('primary', 'secondary');
+            indicator.classList.add(authority.level);
+            // Update text content
+            indicator.textContent = isPrimary ? 'Primary' : 'Secondary';
+        }
 
         // Immediately disable/enable upload zone based on authority
         const uploadZone = document.getElementById('upload-zone');

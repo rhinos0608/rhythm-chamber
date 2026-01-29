@@ -23,6 +23,8 @@
 
 import { EventBus } from './services/event-bus.js';
 import PerformanceProfiler, { PerformanceCategory } from './services/performance-profiler.js';
+import { OperationLock } from './operation-lock.js';
+import { OPERATIONS } from './utils/concurrency/lock-manager.js';
 
 // ==========================================
 // Event Schemas (decentralized registration)
@@ -235,105 +237,124 @@ async function initialize(onProgress = () => { }) {
     // Register embedding event schemas with EventBus (decentralized schema management)
     EventBus.registerSchemas(EMBEDDING_EVENT_SCHEMAS);
 
+    // Fast path: already initialized
     if (isInitialized && pipeline) {
         onProgress(100);
         return true;
     }
 
-    if (isLoading) {
-        // Already loading, wait for it
-        return new Promise((resolve) => {
-            const checkInterval = setInterval(() => {
-                if (!isLoading) {
-                    clearInterval(checkInterval);
-                    resolve(isInitialized);
-                }
-            }, 100);
-        });
+    // Acquire lock to prevent concurrent initialization
+    // Use acquireWithTimeout to avoid indefinite blocking with proper error handling
+    let lockId;
+    try {
+        lockId = await OperationLock.acquireWithTimeout(OPERATIONS.EMBEDDING_GENERATION, 60000);
+    } catch (lockError) {
+        if (lockError.code === 'LOCK_TIMEOUT') {
+            console.warn('[LocalEmbeddings] Timeout acquiring initialization lock, another initialization may be in progress');
+            // Wait a bit and check if initialization completed
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            if (isInitialized && pipeline) {
+                onProgress(100);
+                return true;
+            }
+            throw new Error('Embedding initialization timeout - another initialization may be in progress');
+        }
+        throw lockError;
     }
 
-    isLoading = true;
-    loadProgress = 0;
-    loadError = null;
-
-    // Start performance tracking
-    const stopInitTimer = PerformanceProfiler.startOperation('embedding_initialize', {
-        category: PerformanceCategory.EMBEDDING_INITIALIZATION
-    });
-    const startTime = performance.now();
-
     try {
-        onProgress(5);
+        // Double-check after acquiring lock (another call may have initialized)
+        if (isInitialized && pipeline) {
+            onProgress(100);
+            return true;
+        }
 
-        // Load Transformers.js
-        const transformers = await loadTransformersJS();
-        onProgress(15);
+        isLoading = true;
+        loadProgress = 0;
+        loadError = null;
 
-        // Configure WASM path to use local files (CSP compliance)
-        // This prevents Transformers.js from fetching WASM from jsDelivr CDN
-        transformers.env.backends.onnx.wasm.wasmPaths = './js/vendor/';
-        console.log('[LocalEmbeddings] Configured local WASM path: ./js/vendor/');
+        // Start performance tracking
+        const stopInitTimer = PerformanceProfiler.startOperation('embedding_initialize', {
+            category: PerformanceCategory.EMBEDDING_INITIALIZATION
+        });
+        const startTime = performance.now();
 
-        // Check for WebGPU (faster) or fall back to WASM
-        const webGPUCheck = await checkWebGPUSupport();
-        const device = webGPUCheck.supported ? 'webgpu' : 'wasm';
-        currentBackend = device;
+        try {
+            onProgress(5);
 
-        console.log(`[LocalEmbeddings] Using ${device} backend`);
-        onProgress(20);
+            // Load Transformers.js (now protected by lock)
+            const transformers = await loadTransformersJS();
+            onProgress(15);
 
-        // Create feature extraction pipeline
-        // With INT8 quantization: ~6MB download (was ~22MB with fp32)
-        pipeline = await transformers.pipeline('feature-extraction', MODEL_NAME, {
-            device,
-            quantized: QUANTIZATION_CONFIG.enabled,
-            dtype: QUANTIZATION_CONFIG.dtype,
-            progress_callback: (progress) => {
-                if (progress.status === 'progress') {
-                    // Model download progress (20-90%)
-                    const pct = 20 + Math.round(progress.progress * 0.7);
-                    loadProgress = pct;
-                    onProgress(pct);
-                } else if (progress.status === 'done') {
-                    onProgress(95);
+            // Configure WASM path to use local files (CSP compliance)
+            // This prevents Transformers.js from fetching WASM from jsDelivr CDN
+            transformers.env.backends.onnx.wasm.wasmPaths = './js/vendor/';
+            console.log('[LocalEmbeddings] Configured local WASM path: ./js/vendor/');
+
+            // Check for WebGPU (faster) or fall back to WASM
+            const webGPUCheck = await checkWebGPUSupport();
+            const device = webGPUCheck.supported ? 'webgpu' : 'wasm';
+            currentBackend = device;
+
+            console.log(`[LocalEmbeddings] Using ${device} backend`);
+            onProgress(20);
+
+            // Create feature extraction pipeline
+            // With INT8 quantization: ~6MB download (was ~22MB with fp32)
+            pipeline = await transformers.pipeline('feature-extraction', MODEL_NAME, {
+                device,
+                quantized: QUANTIZATION_CONFIG.enabled,
+                dtype: QUANTIZATION_CONFIG.dtype,
+                progress_callback: (progress) => {
+                    if (progress.status === 'progress') {
+                        // Model download progress (20-90%)
+                        const pct = 20 + Math.round(progress.progress * 0.7);
+                        loadProgress = pct;
+                        onProgress(pct);
+                    } else if (progress.status === 'done') {
+                        onProgress(95);
+                    }
                 }
-            }
-        });
+            });
 
-        onProgress(100);
-        isInitialized = true;
-        isLoading = false;
+            onProgress(100);
+            isInitialized = true;
+            isLoading = false;
 
-        // Stop performance timer
-        const measurement = stopInitTimer();
-        const loadTimeMs = performance.now() - startTime;
+            // Stop performance timer
+            const measurement = stopInitTimer();
+            const loadTimeMs = performance.now() - startTime;
 
-        // Emit model loaded event
-        EventBus.emit('embedding:model_loaded', {
-            model: MODEL_NAME,
-            backend: device,
-            quantization: QUANTIZATION_CONFIG.dtype,
-            loadTimeMs: Math.round(loadTimeMs)
-        });
+            // Emit model loaded event
+            EventBus.emit('embedding:model_loaded', {
+                model: MODEL_NAME,
+                backend: device,
+                quantization: QUANTIZATION_CONFIG.dtype,
+                loadTimeMs: Math.round(loadTimeMs)
+            });
 
-        console.log(`[LocalEmbeddings] Model loaded successfully in ${Math.round(loadTimeMs)}ms`);
-        return true;
+            console.log(`[LocalEmbeddings] Model loaded successfully in ${Math.round(loadTimeMs)}ms`);
+            return true;
 
-    } catch (e) {
-        console.error('[LocalEmbeddings] Initialization failed:', e);
-        loadError = e.message;
-        isLoading = false;
-        isInitialized = false;
+        } catch (e) {
+            console.error('[LocalEmbeddings] Initialization failed:', e);
+            loadError = e.message;
+            isLoading = false;
+            isInitialized = false;
 
-        // Emit error event
-        EventBus.emit('embedding:error', {
-            error: e.message,
-            context: 'initialization'
-        });
+            // Emit error event
+            EventBus.emit('embedding:error', {
+                error: e.message,
+                context: 'initialization'
+            });
 
-        // Stop timer even on failure
-        stopInitTimer();
-        throw e;
+            // Stop timer even on failure
+            stopInitTimer();
+            throw e;
+        }
+    } finally {
+        // Always release the lock
+        OperationLock.release(OPERATIONS.EMBEDDING_GENERATION, lockId);
     }
 }
 
