@@ -285,7 +285,7 @@ function startNonceCleanupInterval() {
  * @example
  * window.addEventListener('beforeunload', cleanupMessageGuards);
  */
-export function cleanupMessageGuards() {
+function cleanupMessageGuards() {
     if (nonceCleanupIntervalId) {
         clearInterval(nonceCleanupIntervalId);
         nonceCleanupIntervalId = null;

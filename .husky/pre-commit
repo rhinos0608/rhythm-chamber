@@ -1,6 +1,3 @@
-#!/usr/bin/env sh
-. "$(dirname "$0")/_/husky.sh"
-
 # Check if documentation is synchronized
 node scripts/docs-sync/orchestrator.js --mode=hook
 
