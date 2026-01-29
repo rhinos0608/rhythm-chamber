@@ -55,6 +55,9 @@ Thank you for your interest in contributing to Rhythm Chamber! This document pro
 | `npm run test:unit:watch` | Run unit tests in watch mode |
 | `npm run test:ui` | Run Playwright tests with UI |
 | `npm run lint:globals` | Check for accidental window globals |
+| `npm run docs:sync` | Update architecture documentation from code analysis |
+| `npm run docs:watch` | Watch mode for continuous documentation updates |
+| `npm run docs:validate` | Check if documentation is current |
 
 ## Development Workflow
 
@@ -81,17 +84,56 @@ Thank you for your interest in contributing to Rhythm Chamber! This document pro
    npm test
    ```
 
-4. Commit your changes with clear messages:
+4. **Update documentation** (required for code changes):
    ```bash
+   npm run docs:sync
+   ```
+   This automatically updates architecture documentation (AGENT_CONTEXT.md, ARCHITECTURE.md, API.md, etc.) based on your code changes.
+
+5. Commit your changes with clear messages:
+   ```bash
+   git add .
    git commit -m "feat: add new provider support"
    ```
+   > **Note**: The pre-commit hook will check if documentation is current. If it fails, run `npm run docs:sync` to update.
 
-5. Push to your fork:
+6. Push to your fork:
    ```bash
    git push origin feature/your-feature-name
    ```
 
-6. Create a pull request
+7. Create a pull request
+
+### Documentation Synchronization
+
+Rhythm Chamber uses an automated documentation sync system that keeps architecture documentation aligned with the codebase.
+
+**How it works:**
+- **AST Analysis**: Parses JavaScript files to extract metrics (line counts, modules, dependencies)
+- **Git History**: Tracks timestamps and versions from git
+- **Auto-Updates**: Updates documentation headers with current metrics
+
+**When to use:**
+- After modifying code in `js/` directory
+- Before committing changes
+- When adding new controllers, services, or utilities
+- After structural refactoring
+
+**Commands:**
+```bash
+npm run docs:sync           # Update documentation once
+npm run docs:watch          # Continuous monitoring while developing
+npm run docs:validate       # Check if docs are current
+```
+
+**If pre-commit hook fails:**
+```
+✗ Documentation is outdated
+ℹ  Run: npm run docs:sync
+   Or bypass with: git commit --no-verify
+```
+
+See [Documentation Synchronization Tooling](AGENT_CONTEXT.md#documentation-synchronization-tooling) for detailed information.
 
 ## Testing
 

@@ -35,3 +35,6 @@ build/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Working state and temporary files
+.state/

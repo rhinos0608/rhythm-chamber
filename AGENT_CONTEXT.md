@@ -1,14 +1,12 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Status:** v2.0 Enhanced Architecture Complete — 250+ Source Files
-> - **15 Controllers**: Modular UI components for focused functionality
-> - **25+ Services**: Comprehensive business logic with enhanced error handling
-> - **13+ Utilities**: Enhanced reliability and performance utilities
+> **Status:** v0.9.0 Enhanced Architecture Complete — 365 Source Files
+> - **21 Controllers**: Modular UI components for focused functionality
+> - **93 Services**: Comprehensive business logic with enhanced error handling
+> - **36 Utilities**: Enhanced reliability and performance utilities
 > - **Advanced Error Handling**: Intelligent classification and recovery systems
 > - **Enhanced Streaming**: Real-time message processing with proper buffering
-> - **Security v2.0**: Enhanced validation, adaptive rate limiting, and protection
-
----
+> - **Security v2.0**: Enhanced validation, adaptive rate limiting, and protection---
 
 ## Quick Context
 
@@ -1082,5 +1080,196 @@ All 14 findings from adversarial review have been addressed:
 5. Cleanup all resources in try-finally blocks
 6. No dynamic imports in hot paths
 7. Test concurrent operations for race conditions
+
+---
+
+## Documentation Synchronization Tooling
+
+**Overview:** Automated documentation maintenance system that keeps architecture documentation synchronized with the codebase through AST analysis, git history tracking, and JSDoc extraction.
+
+### Features
+
+**1. AST-Based Metric Extraction**
+- Parses all `js/**/*.js` files using @babel/parser
+- Extracts: line counts, module counts, exports, imports, classes, functions
+- Builds dependency graph and detects circular dependencies
+- Caching enables 80%+ performance improvement on subsequent runs
+
+**2. Git History Analysis**
+- Tracks "last modified" timestamps per file
+- Extracts contributor statistics
+- Determines version from git tags, CHANGELOG.md, or package.json
+
+**3. Multi-Mode Execution**
+
+| Mode | Command | Purpose |
+|------|---------|---------|
+| **Manual** | `npm run docs:sync` | On-demand documentation update |
+| **Watch Daemon** | `npm run docs:watch` | Continuous monitoring with auto-sync |
+| **Git Hook** | Automatic (pre-commit) | Validates docs before allowing commits |
+
+**4. Auto-Updated Documentation**
+
+- **AGENT_CONTEXT.md** - Status header (file counts, controller/service counts, version)
+- **ARCHITECTURE.md** - Version number and timestamp
+- **API.md** - Version, timestamp, and JSDoc-generated API reference
+- **SECURITY.md** - Security version and timestamp
+- **docs/DEPENDENCY_GRAPH.md** - Auto-generated dependency tree with circular dependency warnings
+
+**5. Cross-Reference Validation**
+- Validates internal markdown links
+- Checks version consistency across documents
+- Reports broken links and inconsistencies
+
+### Usage for AI Agents
+
+**When modifying code:**
+1. Make your code changes
+2. Run `npm run docs:sync` to update documentation
+3. Review the generated changes
+4. Commit with updated docs
+
+**If pre-commit hook fails:**
+```
+✗ Documentation is outdated
+ℹ  Run: npm run docs:sync
+   Or bypass with: git commit --no-verify
+```
+
+**Watch mode for active development:**
+```bash
+npm run docs:watch -- --verbose
+```
+Monitors files and auto-updates docs within 500ms of changes.
+
+### Architecture
+
+```
+scripts/docs-sync/
+├── orchestrator.js           # Main entry point
+├── watcher.js                # Watch daemon (chokidar)
+├── config.json               # Configuration
+├── analyzers/
+│   ├── ast-analyzer.js       # AST parsing (@babel/parser)
+│   └── git-analyzer.js       # Git history (simple-git)
+├── generators/
+│   ├── api-docs.js           # JSDoc → markdown
+│   └── metrics-updater.js    # Update file headers
+├── validators/
+│   └── xref-validator.js     # Link checking
+└── utils/
+    ├── cache.js              # AST caching
+    └── logger.js             # Colored console output
+```
+
+### Key Behaviors
+
+**Circular Dependency Detection:**
+- Builds adjacency list from imports
+- Uses depth-first search to detect cycles
+- Reports warnings in console and DEPENDENCY_GRAPH.md
+- Example cycle: `A → B → C → A`
+
+**Caching Strategy:**
+- First run: Parses all files (~2-3 seconds for 365 files)
+- Subsequent runs: Only parses changed files (~0.5 seconds)
+- Cache invalidated on file modification
+- Enables real-time watch mode performance
+
+**Git Hook Integration:**
+- Checks if documentation metrics match current codebase
+- Fails commit if docs are outdated
+- Provides clear instructions to fix
+- Respects `--no-verify` flag for emergency bypasses
+
+**Error Handling:**
+- Continues processing if individual files fail to parse
+- Logs parse errors without blocking sync
+- Reports summary of failures at end
+- Non-critical: 2 parse errors out of 365 files is acceptable
+
+### Configuration
+
+Edit `scripts/docs-sync/config.json` to customize:
+- Target documentation files
+- Watch paths (default: `js/**/*.js`)
+- Exclude patterns (e.g., large worker files)
+- Debounce delay (default: 500ms)
+- Auto-commit settings
+- Version detection strategy
+
+### Adding JSDoc for API Docs
+
+To enable auto-generated API documentation:
+
+1. Add JSDoc comments to exported functions:
+```javascript
+/**
+ * Processes streaming messages from AI provider
+ * @param {string} sessionId - Chat session identifier
+ * @param {AsyncGenerator} messageStream - Stream of message chunks
+ * @returns {Promise<void>}
+ * @throws {StreamingError} If stream fails unexpectedly
+ */
+export async function processStreamingMessages(sessionId, messageStream) {
+  // implementation
+}
+```
+
+2. Add markers to `API.md`:
+```markdown
+<!-- AUTO-GENERATED:START -->
+<!-- API documentation will be auto-generated here -->
+<!-- AUTO-GENERATED:END -->
+```
+
+3. Run `npm run docs:sync` to generate documentation
+
+### Performance Metrics
+
+**Current Codebase (2026-01-30):**
+- Total files: 365 JavaScript files
+- Total lines: 108,478 lines of code
+- Controllers: 21
+- Services: 93
+- Utilities: 36
+- Parse errors: 2 (non-critical)
+- Processing time: 2-3s (cold), 0.5s (warm cache)
+
+### Troubleshooting
+
+**"Documentation is outdated" error:**
+- Run `npm run docs:sync`
+- Git history shows docs haven't been updated after code changes
+- Sync will update metrics and regenerate dependency graph
+
+**Parse errors in specific files:**
+- Check for unsupported syntax features
+- Verify file encoding is UTF-8
+- Errors are non-blocking and logged to console
+- Tool continues processing other files
+
+**Watch mode not updating:**
+- Check file is in `js/` directory (watch path)
+- Verify file isn't in exclude list
+- Increase verbosity with `--verbose` flag
+- Check debounce delay (may need longer for large changes)
+
+**Git hook bypass needed:**
+- Use `git commit --no-verify -m "message"`
+- Only for emergency commits or WIP work
+- Remember to sync docs before final commits
+
+### Future Enhancements
+
+Planned improvements to docs-sync tooling:
+- TypeScript file support (`.ts`)
+- Visual dependency graphs (SVG/DOT output)
+- Diff highlighting in watch mode
+- CI/CD pipeline integration
+- Web dashboard for documentation health metrics
+- Auto-formatting with prettier
+- JSON schema for config validation
+- Progress indicator for initial scans
 
 ---

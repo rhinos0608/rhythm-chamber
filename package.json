@@ -21,7 +21,12 @@
     "lint:globals": "node scripts/lint-window-globals.mjs",
     "test:report": "npx playwright show-report",
     "analyze:deps": "node scripts/analyze-deps-simple.js",
-    "test:architecture": "vitest run tests/architecture/"
+    "test:architecture": "vitest run tests/architecture/",
+    "docs:sync": "node scripts/docs-sync/orchestrator.js --mode=manual",
+    "docs:sync:commit": "node scripts/docs-sync/orchestrator.js --mode=manual --commit",
+    "docs:watch": "node scripts/docs-sync/watcher.js",
+    "docs:validate": "node scripts/docs-sync/orchestrator.js --mode=hook",
+    "prepare": "husky"
   },
   "repository": {
     "type": "git",
@@ -50,12 +55,20 @@
     "marked": "^12.0.2"
   },
   "devDependencies": {
+    "@babel/parser": "^7.28.6",
+    "@babel/traverse": "^7.28.6",
+    "@babel/types": "^7.28.6",
     "@playwright/test": "^1.57.0",
     "@types/node": "^25.0.6",
+    "chokidar": "^5.0.0",
+    "doctrine": "^3.0.0",
     "esbuild": "^0.24.0",
     "fake-indexeddb": "^6.2.5",
+    "glob": "^13.0.0",
     "happy-dom": "^20.3.1",
     "http-server": "^14.1.1",
+    "husky": "^9.1.7",
+    "simple-git": "^3.30.0",
     "vitest": "^4.0.17"
   }
 }

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { TabCoordinator } from '../../js/services/tab-coordination.js';
+import { TabCoordinator } from '../../js/services/tab-coordination/index.js';
 
 // Mock BroadcastChannel for testing
 global.BroadcastChannel = class MockBroadcastChannel {

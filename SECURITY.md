@@ -1,7 +1,7 @@
 # Rhythm Chamber Security Documentation
 
-**Version:** 2.0
-**Last Updated:** 2025-01-29
+**Version:** 0.9.0
+**Last Updated:** 2026-01-29
 **Status:** Comprehensive Security Reference
 
 ---
