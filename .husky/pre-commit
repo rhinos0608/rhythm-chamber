@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Check if documentation is synchronized
+node scripts/docs-sync/orchestrator.js --mode=hook
+
+# If docs are outdated, this will fail the commit
+# To bypass this check, use: git commit --no-verify -m "message"

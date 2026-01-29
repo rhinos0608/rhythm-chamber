@@ -1793,5 +1793,5 @@ Specialized semantic query execution.
 
 ---
 
-**Last Updated:** 2026-01-26
-**API Version:** v2.0
+**Last Updated:** 2026-01-29
+**API Version:** v0.9.0

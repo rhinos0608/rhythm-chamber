@@ -23,7 +23,12 @@ const mockCleanupStrategies = {
     setCurrentMetrics: vi.fn(),
     _performCleanup: vi.fn(),
     _performEmergencyCleanup: vi.fn(),
-    triggerCleanup: vi.fn()
+    triggerCleanup: vi.fn(),
+    triggerEmergencyCleanup: vi.fn().mockResolvedValue({
+        success: true,
+        bytesFreed: 1000,
+        itemsDeleted: 1
+    })
 };
 
 describe('TierHandlers', () => {

@@ -26,7 +26,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { IndexedDBCore, STORES, DB_NAME, DB_VERSION } from '../../../../js/storage/indexeddb.js';
 import { EventBus } from '../../../../js/services/event-bus.js';
-import { TabCoordinator } from '../../../../js/services/tab-coordination.js';
+import { TabCoordinator } from '../../../../js/services/tab-coordination/index.js';
 import { VectorClock } from '../../../../js/services/vector-clock.js';
 
 describe('IndexedDB Core - Characterization Tests', () => {
@@ -209,7 +209,7 @@ describe('IndexedDB Core - Characterization Tests', () => {
             return Promise.resolve(key);
         };
 
-        const delete = (key) => {
+        const deleteItem = (key) => {
             data.delete(key);
             return Promise.resolve();
         };
@@ -275,7 +275,7 @@ describe('IndexedDB Core - Characterization Tests', () => {
             get,
             getAll,
             put,
-            delete,
+            delete: deleteItem,
             clear,
             count,
             openCursor,
@@ -301,7 +301,7 @@ describe('IndexedDB Core - Characterization Tests', () => {
                 get: (key) => store.get(key),
                 getAll: () => store.getAll(),
                 put: (value) => store.put(value),
-                delete: (key) => store.delete(key),
+                'delete': (key) => store.deleteItem(key),
                 clear: () => store.clear(),
                 count: () => store.count(),
                 openCursor: (key, direction) => store.openCursor(key, direction),

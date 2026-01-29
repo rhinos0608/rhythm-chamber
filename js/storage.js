@@ -33,7 +33,7 @@ import {
     setPendingReload as setQueuePendingReload,
     isReloadPending
 } from './storage/operations/queue.js';
-import { assertWriteAllowed } from './storage/stores/streams.js';
+import { assertWriteAllowed } from './storage/security.js';
 
 // ==========================================
 // Privacy Controls

@@ -88,28 +88,27 @@ Plus: Your AI notices your patterns and writes personalized narratives about you
 
 ### Development Tools
 
-#### Documentation Sync Script
+#### Documentation Synchronization
 
-Keep documentation synchronized with actual code using the automated sync script:
+Keep architecture documentation synchronized with the codebase using automated AST analysis:
 
 ```bash
-# Preview changes without writing
-npm run sync-docs
+# Update documentation from code analysis
+npm run docs:sync
 
-# Actually update documentation files
-npm run sync-docs:update
+# Watch mode for continuous updates
+npm run docs:watch
 
-# Full output with JSON
-node scripts/sync-documentation.mjs --verbose
+# Validate if docs are current
+npm run docs:validate
 ```
 
-The sync script tracks:
-- Facade file line counts
-- Internal module line counts
-- Test counts per suite
-- Total source statistics
-
-Run `npm run sync-docs:update` after making significant changes to keep docs accurate.
+**Features:**
+- Automatic metric extraction (file counts, line counts, module counts)
+- Dependency graph generation with circular dependency detection
+- Git history tracking (timestamps, versions)
+- Pre-commit hook ensures docs stay current
+- See [Documentation Sync Tooling](scripts/docs-sync/README.md) for details
 
 ---
 
@@ -118,6 +117,7 @@ Run `npm run sync-docs:update` after making significant changes to keep docs acc
 ```
 Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 ```
+
 ## Key Differentiators
 
 1. **Chat-First Interface** — Natural language queries, not dashboard clicks

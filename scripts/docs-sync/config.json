@@ -1,0 +1,23 @@
+{
+  "targetFiles": {
+    "metrics": ["AGENT_CONTEXT.md", "ARCHITECTURE.md"],
+    "apiDocs": "API.md",
+    "security": "SECURITY.md",
+    "crossRefs": ["*.md", "docs/**/*.md"]
+  },
+  "watchPaths": ["js/**/*.js"],
+  "excludePaths": ["js/workers/embed-worker.js"],
+  "debounceMs": 500,
+  "markers": {
+    "start": "<!-- AUTO-GENERATED:START -->",
+    "end": "<!-- AUTO-GENERATED:END -->"
+  },
+  "versioning": {
+    "source": "git",
+    "fallback": "package.json"
+  },
+  "git": {
+    "autoCommit": false,
+    "commitMessage": "docs: sync documentation from code analysis"
+  }
+}
