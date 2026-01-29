@@ -104,6 +104,7 @@ js/
 - **[AGENT_CONTEXT.md](AGENT_CONTEXT.md)** - Complete technical architecture (777 lines)
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - Development workflow, testing, PR process
 - **[SECURITY.md](SECURITY.md)** - Security model and threat analysis
+- **[REFACTORING.md](REFACTORING.md)** - Refactoring history with honest metrics
 - **[docs/INDEX.md](docs/INDEX.md)** - Documentation index (if it exists)
 
 ---

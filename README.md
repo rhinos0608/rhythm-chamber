@@ -132,9 +132,10 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 
 - **Intelligent Error Handling** — Automatic error classification with adaptive circuit breaker
 - **Real-time Streaming** — Smooth streaming responses with proper buffering
-- **Advanced UI Components** — 15 controllers, 25+ services, 13+ utilities
+- **Modular Architecture** — 15 controllers, 25+ services, 13+ utilities with focused modules
 - **Cross-Tab Coordination** — Seamless session sharing across browser tabs
 - **Security Hardening** — Content sanitization, rate limiting, data protection
+- **Refactored Core** — Write-ahead log refactored from 1,016-line god object into 11 focused modules (largest 254 lines)
 
 ### What Stats.fm Can't Match
 
