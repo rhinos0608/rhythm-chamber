@@ -33,10 +33,17 @@ const mockDataVersion = {
     tagMessage: vi.fn()
 };
 
+const mockAppState = {
+    get: vi.fn(),
+    set: vi.fn(),
+    update: vi.fn()
+};
+
 // Mock modules before importing
 vi.mock('../../js/storage.js', () => ({ Storage: mockStorage }));
 vi.mock('../../js/services/event-bus.js', () => ({ EventBus: mockEventBus }));
 vi.mock('../../js/services/data-version.js', () => ({ DataVersion: mockDataVersion }));
+vi.mock('../../js/state/app-state.js', () => ({ AppState: mockAppState }));
 
 // Mock localStorage
 const localStorageMock = {
