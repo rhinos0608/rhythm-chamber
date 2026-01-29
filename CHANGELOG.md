@@ -27,6 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated user experience documentation with inline visualization examples
 - Expanded AGENT_CONTEXT.md with artifact function schemas
 
+### Fixed
+- **Documentation Metrics** - Corrected exaggerated claims with honest metrics
+  - Documentation consolidation: Actually 81 → 26 files (68% reduction, not 82 → 13)
+  - WAL refactoring: 1,016 lines → 11 modules (largest 254 lines, 75% reduction)
+  - Total test count: 574 tests across all refactoring phases
+  - Methodology: Characterization testing + facade pattern documented
+  - All metrics now verified against actual git history and file counts
+
 ---
 
 ## [0.9.0] - 2026-01-21
