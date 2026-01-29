@@ -85,8 +85,4 @@ export {
     RetryManager as default
 } from './retry-manager/index.js';
 
-// Re-export default for backward compatibility
-import RetryManager from './retry-manager/index.js';
-export default RetryManager;
-
 console.log('[RetryManager] Unified retry utility loaded (modular architecture)');
