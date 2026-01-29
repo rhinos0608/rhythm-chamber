@@ -13,7 +13,7 @@ import { StorageTransaction } from './storage/transaction/index.js';
 import { StorageMigration } from './storage/migration.js';
 import { ModuleRegistry } from './module-registry.js';
 import { EventBus } from './services/event-bus.js';
-import { WriteAheadLog, WalPriority } from './storage/write-ahead-log.js';
+import { WriteAheadLog, WalPriority } from './storage/write-ahead-log/index.js';
 import { ArchiveService } from './storage/archive-service.js';
 import { QuotaManager } from './storage/quota-manager.js';
 import { IndexedDBCore, STORES as INDEXEDDB_STORES } from './storage/indexeddb.js';
@@ -25,24 +25,15 @@ import { Crypto } from './security/crypto.js';
 import { STORAGE_EVENT_SCHEMAS } from './storage/storage-event-schemas.js';
 import { AutoRepairService } from './storage/auto-repair.js';
 
-// ==========================================
-// Security Enforcement
-// ==========================================
-
-/**
- * Check if writes are allowed (secure context required)
- * @param {string} operation - Operation name for error message
- * @throws {Error} If not in secure context
- */
-function assertWriteAllowed(operation) {
-  // Check if running in secure context
-  if (!Crypto.isSecureContext()) {
-    throw new Error(
-      `[Storage] Write blocked: not in secure context. ` +
-      `Operation '${operation}' requires HTTPS or localhost.`
-    );
-  }
-}
+// Import extracted store modules
+import * as Stores from './storage/stores/index.js';
+import {
+    queuedOperation,
+    isCriticalOperationInProgress,
+    setPendingReload as setQueuePendingReload,
+    isReloadPending
+} from './storage/operations/queue.js';
+import { assertWriteAllowed } from './storage/stores/streams.js';
 
 // ==========================================
 // Privacy Controls
@@ -153,54 +144,15 @@ function clearRepairLog() {
   console.log('[Storage] Repair log cleared');
 }
 
-// Operation queue for critical operations
-const storageQueue = [];
-let isQueueProcessing = false;
-let criticalOperationInProgress = false;
-let pendingReload = false;
+// ==========================================
+// Pending Reload Management
+// ==========================================
 
 /**
- * Queue an async operation to run sequentially
- * @param {Function} fn - Async function to queue
- * @param {boolean} isCritical - Block version changes during critical ops
- * @returns {Promise<*>}
+ * Set pending reload flag (delegates to operation queue)
  */
-async function queuedOperation(fn, isCritical = false) {
-  return new Promise((resolve, reject) => {
-    storageQueue.push({ fn, resolve, reject, isCritical });
-    processQueue();
-  });
-}
-
-async function processQueue() {
-  if (isQueueProcessing || storageQueue.length === 0) return;
-  isQueueProcessing = true;
-
-  while (storageQueue.length > 0) {
-    const { fn, resolve, reject, isCritical } = storageQueue.shift();
-    if (isCritical) {
-      criticalOperationInProgress = true;
-    }
-
-    try {
-      const result = await fn();
-      resolve(result);
-    } catch (err) {
-      reject(err);
-    } finally {
-      if (isCritical) {
-        const hasPendingCritical = storageQueue.some((item) => item.isCritical);
-        criticalOperationInProgress = hasPendingCritical;
-      }
-    }
-  }
-
-  isQueueProcessing = false;
-
-  if (pendingReload && storageQueue.length === 0) {
-    console.log('[Storage] Executing deferred reload');
-    window.location.reload();
-  }
+function setPendingReload() {
+  setQueuePendingReload(true);
 }
 
 // ==========================================
@@ -239,9 +191,9 @@ const Storage = {
       // Initialize IndexedDB
       await IndexedDBCore.initDatabaseWithRetry({
         onVersionChange: () => {
-          if (criticalOperationInProgress) {
+          if (isCriticalOperationInProgress()) {
             console.warn('[Storage] Version change deferred - critical operation in progress');
-            pendingReload = true;
+            setQueuePendingReload(true);
           } else {
             console.log('[Storage] Database version change detected');
             IndexedDBCore.closeDatabase();
@@ -278,55 +230,26 @@ const Storage = {
   },
 
   // ==========================================
-  // Streams
+  // Streams (delegated to stores/streams.js)
   // ==========================================
 
   async saveStreams(streams) {
-    assertWriteAllowed('saveStreams');
-    return queuedOperation(async () => {
-      const result = await IndexedDBCore.put(STORES.STREAMS, {
-        id: 'all',
-        data: streams,
-        savedAt: new Date().toISOString()
-      });
-      this._notifyUpdate('streams', streams.length);
-      return result;
-    }, true);
+    const result = await Stores.saveStreams(streams);
+    this._notifyUpdate('streams', streams.length);
+    return result;
   },
 
-  async getStreams() {
-    const result = await IndexedDBCore.get(STORES.STREAMS, 'all');
-    return result?.data || null;
-  },
+  getStreams: () => Stores.getStreams(),
 
   async appendStreams(newStreams) {
-    assertWriteAllowed('appendStreams');
-    return queuedOperation(async () => {
-      // Use atomic update to prevent race conditions
-      const result = await IndexedDBCore.atomicUpdate(
-        STORES.STREAMS,
-        'all',
-        (currentValue) => {
-          const existing = currentValue?.data || [];
-          const merged = [...existing, ...newStreams];
-          return {
-            id: 'all',
-            data: merged,
-            savedAt: new Date().toISOString()
-          };
-        }
-      );
-      this._notifyUpdate('streams', result.data.length);
-      return result;
-    }, true);
+    const result = await Stores.appendStreams(newStreams);
+    this._notifyUpdate('streams', result.data.length);
+    return result;
   },
 
   async clearStreams() {
-    assertWriteAllowed('clearStreams');
-    return queuedOperation(async () => {
-      await IndexedDBCore.clear(STORES.STREAMS);
-      this._notifyUpdate('streams', 0);
-    }, true);
+    await Stores.clearStreams();
+    this._notifyUpdate('streams', 0);
   },
 
   // ==========================================
@@ -376,115 +299,47 @@ const Storage = {
   },
 
   // ==========================================
-  // Chunks
+  // Chunks (delegated to stores/chunks.js)
   // ==========================================
 
-  async saveChunks(chunks) {
-    return queuedOperation(async () => {
-      await IndexedDBCore.transaction(STORES.CHUNKS, 'readwrite', (store) => {
-        for (const chunk of chunks) {
-          store.put(chunk);
-        }
-      });
-    }, true);
-  },
-
-  async getChunks() {
-    return IndexedDBCore.getAll(STORES.CHUNKS);
-  },
+  saveChunks: (chunks) => Stores.saveChunks(chunks),
+  getChunks: () => Stores.getChunks(),
 
   // ==========================================
-  // Personality
+  // Personality & Settings (delegated to stores/artifacts.js)
   // ==========================================
 
-  async savePersonality(personality) {
-    return queuedOperation(async () => {
-      return IndexedDBCore.put(STORES.PERSONALITY, {
-        id: 'result',
-        ...personality,
-        savedAt: new Date().toISOString()
-      });
-    }, true);
-  },
-
-  async getPersonality() {
-    return IndexedDBCore.get(STORES.PERSONALITY, 'result');
-  },
+  savePersonality: (personality) => Stores.savePersonality(personality),
+  getPersonality: () => Stores.getPersonality(),
+  saveSetting: (key, value) => Stores.saveSetting(key, value),
+  getSetting: (key) => Stores.getSetting(key),
 
   // ==========================================
-  // Settings
-  // ==========================================
-
-  async saveSetting(key, value) {
-    return queuedOperation(async () => {
-      return IndexedDBCore.put(STORES.SETTINGS, { key, value });
-    });
-  },
-
-  async getSetting(key) {
-    const result = await IndexedDBCore.get(STORES.SETTINGS, key);
-    return result?.value;
-  },
-
-  // ==========================================
-  // Chat Sessions
+  // Chat Sessions (delegated to stores/sessions.js)
   // ==========================================
 
   async saveSession(session) {
-    return queuedOperation(async () => {
-      if (!session.id) throw new Error('Session must have an id');
-
-      const now = new Date().toISOString();
-      const data = {
-        ...session,
-        updatedAt: now,
-        createdAt: session.createdAt || now,
-        messageCount: session.messages?.length || 0
-      };
-      const result = await IndexedDBCore.put(STORES.CHAT_SESSIONS, data);
-      this._notifyUpdate('session', 1);
-      return result;
-    });
+    const result = await Stores.saveSession(session);
+    this._notifyUpdate('session', 1);
+    return result;
   },
 
-  async getSession(id) {
-    return IndexedDBCore.get(STORES.CHAT_SESSIONS, id);
-  },
-
-  async getAllSessions() {
-    return IndexedDBCore.getAllByIndex(STORES.CHAT_SESSIONS, 'updatedAt', 'prev');
-  },
+  getSession: (id) => Stores.getSession(id),
+  getAllSessions: () => Stores.getAllSessions(),
 
   async deleteSession(id) {
-    await IndexedDBCore.delete(STORES.CHAT_SESSIONS, id);
+    await Stores.deleteSession(id);
     this._notifyUpdate('session', -1);
   },
 
-  async getSessionCount() {
-    return IndexedDBCore.count(STORES.CHAT_SESSIONS);
-  },
+  getSessionCount: () => Stores.getSessionCount(),
 
   async clearAllSessions() {
-    await IndexedDBCore.clear(STORES.CHAT_SESSIONS);
+    await Stores.clearAllSessions();
     this._notifyUpdate('session', 0);
   },
 
-  async clearExpiredSessions(maxAgeMs = 30 * 24 * 60 * 60 * 1000) {
-    const sessions = await this.getAllSessions();
-    if (!sessions || sessions.length === 0) return { deleted: 0 };
-
-    const cutoffDate = new Date(Date.now() - maxAgeMs);
-    let deletedCount = 0;
-
-    for (const session of sessions) {
-      if (new Date(session.updatedAt) < cutoffDate) {
-        await this.deleteSession(session.id);
-        deletedCount++;
-      }
-    }
-
-    return { deleted: deletedCount };
-  },
+  clearExpiredSessions: (maxAgeMs) => Stores.clearExpiredSessions(maxAgeMs),
 
   // ==========================================
   // Profiles (delegate to ProfileStorage)
@@ -678,18 +533,11 @@ const Storage = {
   },
 
   async hasData() {
-    const streams = await this.getStreams();
-    return streams !== null && streams.length > 0;
+    return Stores.hasStreams();
   },
 
   async getDataHash() {
-    const streams = await this.getStreams();
-    if (!streams || streams.length === 0) return null;
-
-    const count = streams.length;
-    const firstTs = streams[0]?.ts || '';
-    const lastTs = streams[streams.length - 1]?.ts || '';
-    return `${count}-${firstTs.slice(0, 10)}-${lastTs.slice(0, 10)}`;
+    return Stores.getStreamsHash();
   },
 
   // ==========================================
@@ -747,10 +595,10 @@ const Storage = {
   },
 
   async getDataSummary() {
-    const streams = await this.getStreams();
-    const chunks = await this.getChunks();
-    const personality = await this.getPersonality();
-    const sessionCount = await this.getSessionCount();
+    const streams = await Stores.getStreams();
+    const chunks = await Stores.getChunks();
+    const personality = await Stores.getPersonality();
+    const sessionCount = await Stores.getSessionCount();
 
     return {
       hasRawStreams: !!(streams && streams.length > 0),
@@ -797,7 +645,8 @@ const Storage = {
   },
 
   async runAutoRepair(issues = {}) {
-    if (!autoRepairConfig.enabled) {
+    const config = autoRepairService.getAutoRepairConfig();
+    if (!config.enabled) {
       return { repaired: false, reason: 'disabled', issues };
     }
     return { repaired: false, reason: 'not_implemented', issues };
@@ -807,9 +656,9 @@ const Storage = {
     const warnings = [];
     const fixes = [];
     try {
-      const streams = await this.getStreams();
-      const personality = await this.getPersonality();
-      const chunks = await this.getChunks();
+      const streams = await Stores.getStreams();
+      const personality = await Stores.getPersonality();
+      const chunks = await Stores.getChunks();
 
       const issues = {};
       if (personality && (!streams || streams.length === 0)) {
@@ -821,6 +670,7 @@ const Storage = {
         issues.chunksWithoutStreams = true;
       }
 
+      const config = autoRepairService.getAutoRepairConfig();
       return {
         valid: warnings.length === 0,
         warnings,
@@ -829,15 +679,16 @@ const Storage = {
         hasPersonality: !!personality,
         issues,
         repairResults: null,
-        autoRepairEnabled: autoRepairConfig.enabled
+        autoRepairEnabled: config.enabled
       };
     } catch (err) {
+      const config = autoRepairService.getAutoRepairConfig();
       return {
         valid: false,
         warnings: [err.message],
         fixes,
         error: err.message,
-        autoRepairEnabled: autoRepairConfig.enabled
+        autoRepairEnabled: config.enabled
       };
     }
   },
@@ -953,7 +804,7 @@ const Storage = {
    */
   async getHealthReport() {
     const validation = await this.validateConsistency({ autoRepair: false });
-    const recentRepairs = getRepairLog({ limit: 10 });
+    const repairLog = getRepairLog({ limit: 10 });
     const config = getAutoRepairConfig();
 
     return {
@@ -961,7 +812,7 @@ const Storage = {
       issues: validation.warnings,
       autoRepair: {
         enabled: config.enabled,
-        recentRepairs,
+        recentRepairs: repairLog,
         repairCount: repairLog.length
       },
       storage: {

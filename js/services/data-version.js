@@ -14,7 +14,7 @@
 
 'use strict';
 
-import { DemoController } from '../controllers/demo-controller.js';
+import { getVersionSource } from '../contracts/version-source.js';
 import { AppState } from '../state/app-state.js';
 
 // ==========================================
@@ -26,12 +26,13 @@ import { AppState } from '../state/app-state.js';
  * @returns {{ streamCount: number, lastStreamDate: string|null, generatedAt: string, hash: string } | null}
  */
 function generate() {
-    // Get current data from AppState or DemoController
+    // Get current data from AppState or VersionSource contract
     let data = null;
 
-    // Try DemoController first for active data
-    if (DemoController.getActiveData) {
-        const activeData = DemoController.getActiveData();
+    // Try VersionSource contract first (implemented by DemoController)
+    const versionSource = getVersionSource();
+    if (versionSource && versionSource.getActiveData) {
+        const activeData = versionSource.getActiveData();
         // Guard against falsy returns
         const safeActive = activeData || {};
         data = {

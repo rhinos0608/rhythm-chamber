@@ -241,14 +241,11 @@ test.describe('Multi-Tab Coordination', () => {
         // Open second tab in SAME context (required for BroadcastChannel)
         const page2 = await context.newPage();
 
-        // CRITICAL: Prime page2's localStorage with page1's election data BEFORE page load
-        // Update timestamp to make it appear fresh for page2's election check
-        const freshElectionData = JSON.parse(electionData);
-        freshElectionData.timestamp = Date.now();
-
-        await page2.addInitScript((data) => {
-            localStorage.setItem('rhythm_chamber_tab_election', data);
-        }, JSON.stringify(freshElectionData));
+        // CRITICAL: Mark page2 as a test secondary tab
+        // Use sessionStorage with addInitScript which is more reliable than localStorage routing
+        await page2.addInitScript(() => {
+            sessionStorage.setItem('test_simulate_primary_tab', 'true');
+        });
 
         await page2.goto('/app.html', { waitUntil: 'networkidle' });
 
