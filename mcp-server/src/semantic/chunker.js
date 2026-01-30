@@ -325,9 +325,15 @@ export class CodeChunker {
     // Get JSDoc comment if present
     const jsDoc = this._extractJSDoc(sourceCode, node);
 
-    // FIX #2: Calculate overlap lines for context, but don't add overlap text to chunk.text
+    // FIX #2 & #1: Calculate overlap lines for context, but don't add overlap text to chunk.text
     // The context.before already provides the surrounding information.
     // Adding overlap to both text and context causes duplication in embeddings.
+    //
+    // Overlap calculation: For a function spanning N lines, we include 20% of those lines
+    // as context before the function starts. This provides continuity between chunks.
+    // - overlapLines = max(1, ceil(N * 0.2))
+    // - These lines are added to context.before, NOT to chunk.text
+    // - Edge cases: At least 1 line of overlap even for small functions
     const funcLength = endLine - startLine + 1;
     const overlapLines = Math.max(1, Math.ceil(funcLength * this.overlapPercentage));
 
@@ -351,7 +357,7 @@ export class CodeChunker {
         calls,
         throws,
         hasJSDoc: !!jsDoc,
-        hasOverlap: overlapText.length > 0,
+        hasOverlap: overlapLines > 0,
         overlapLines
       }
     };
@@ -445,7 +451,8 @@ export class CodeChunker {
       const methodEnd = method.loc.end.line;
       const methodText = sourceCode.substring(method.start, method.end);
 
-      // FIX #2: Calculate overlap for context only, not for text
+      // FIX #2 & #1: Calculate overlap for context only, not for text
+      // Same overlap calculation as functions: max(1, ceil(N * 0.2)) lines
       const methodLength = methodEnd - methodStart + 1;
       const overlapLines = Math.max(1, Math.ceil(methodLength * this.overlapPercentage));
 
@@ -471,7 +478,7 @@ export class CodeChunker {
           async: method.async || false,
           static: method.static || false,
           params: this._extractParams(method.value),
-          hasOverlap: overlapText.length > 0,
+          hasOverlap: overlapLines > 0,
           overlapLines
         }
       });
