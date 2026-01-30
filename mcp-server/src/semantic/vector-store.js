@@ -186,11 +186,134 @@ export class VectorStore {
   }
 
   /**
+   * Extract meaningful terms from query text
+   * Identifies code identifiers, camelCase words, and quoted strings
+   *
+   * @param {string} queryText - The query text to analyze
+   * @returns {string[]} Array of extracted terms
+   */
+  _extractQueryTerms(queryText) {
+    if (!queryText) return [];
+
+    const terms = [];
+
+    // Extract identifiers (camelCase, snake_case, etc.)
+    const identifierRegex = /\b[a-zA-Z_][a-zA-Z0-9_]*\b/g;
+    const identifiers = queryText.match(identifierRegex) || [];
+    terms.push(...identifiers);
+
+    // Extract quoted strings
+    const quotedRegex = /['"]([^'"]+)['"]/g;
+    let match;
+    while ((match = quotedRegex.exec(queryText)) !== null) {
+      terms.push(match[1]);
+    }
+
+    // Extract words from camelCase (e.g., "getChunkById" -> ["get", "Chunk", "By", "Id"])
+    for (const id of identifiers) {
+      const camelWords = id
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .replace(/[_-]+/g, ' ')
+        .toLowerCase()
+        .split(/\s+/);
+      terms.push(...camelWords.filter(w => w.length > 2));
+    }
+
+    // Return unique, non-empty terms
+    return [...new Set(terms.filter(t => t && t.length > 1))];
+  }
+
+  /**
+   * Calculate name match score for query terms
+   * Checks for exact matches and partial matches with symbol names
+   *
+   * @param {string[]} queryTerms - Extracted query terms
+   * @param {string} symbolName - The symbol name to compare against
+   * @returns {number} Match score from 0 to 1
+   */
+  _calculateNameMatch(queryTerms, symbolName) {
+    if (!queryTerms.length || !symbolName) return 0;
+
+    const nameLower = symbolName.toLowerCase();
+    let maxScore = 0;
+
+    for (const term of queryTerms) {
+      const termLower = term.toLowerCase();
+
+      // Exact match
+      if (termLower === nameLower) {
+        return 1.0;
+      }
+
+      // Prefix match (e.g., "get" matches "getChunk")
+      if (nameLower.startsWith(termLower)) {
+        maxScore = Math.max(maxScore, 0.8);
+      }
+
+      // Contains match
+      if (nameLower.includes(termLower) || termLower.includes(nameLower)) {
+        maxScore = Math.max(maxScore, 0.5);
+      }
+
+      // Check camelCase components
+      const camelWords = symbolName
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .replace(/[_-]+/g, ' ')
+        .toLowerCase()
+        .split(/\s+/);
+
+      for (const word of camelWords) {
+        if (word === termLower) {
+          maxScore = Math.max(maxScore, 0.7);
+        }
+      }
+    }
+
+    return maxScore;
+  }
+
+  /**
    * Search by text (requires embedding provider)
+   * Now supports symbol name boosting for better relevance
    */
   async searchByText(query, embeddings, options = {}) {
+    const {
+      queryText = null,
+      ...remainingOptions
+    } = options;
+
     const queryEmbedding = await embeddings.getEmbedding(query);
-    return this.search(queryEmbedding, options);
+    const results = this.search(queryEmbedding, remainingOptions);
+
+    // Apply symbol name boost if query text is provided
+    if (queryText) {
+      const queryTerms = this._extractQueryTerms(queryText);
+
+      if (queryTerms.length > 0) {
+        // Boost results with matching symbol names by 0.15
+        const NAME_BOOST = 0.15;
+
+        const boosted = results.map(r => {
+          const nameMatch = this._calculateNameMatch(queryTerms, r.metadata?.name || '');
+
+          if (nameMatch > 0) {
+            return {
+              ...r,
+              similarity: Math.min(1.0, r.similarity + (nameMatch * NAME_BOOST)),
+              nameMatchBoost: nameMatch * NAME_BOOST
+            };
+          }
+
+          return r;
+        });
+
+        // Re-sort after boosting
+        boosted.sort((a, b) => b.similarity - a.similarity);
+        return boosted;
+      }
+    }
+
+    return results;
   }
 
   /**
