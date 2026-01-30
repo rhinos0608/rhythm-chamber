@@ -113,7 +113,9 @@ export class MetricsUpdater {
       let content = readFileSync(filepath, 'utf-8');
 
       // Update status header (lines 3-9)
-      const headerPattern = /> \*\*Status:\*\* v[0-9.]+.*\n(>.*\n)*/;
+      // Match exactly the status header block: starts with "> **Status:**" and ends with "Security v2.0" line
+      // This prevents accidentally capturing other lines that start with ">"
+      const headerPattern = /> \*\*Status:\*\* v[0-9.]+.*[\s\S]*?Security v[0-9.]+\*: Enhanced validation, adaptive rate limiting, and protection\n>/;
 
       const newHeader = `> **Status:** ${version} Enhanced Architecture Complete — ${metrics.summary.totalFiles} Source Files
 > - **${metrics.summary.controllers} Controllers**: Modular UI components for focused functionality
