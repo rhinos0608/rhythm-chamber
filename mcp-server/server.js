@@ -274,10 +274,6 @@ class RhythmChamberMCPServer {
     this._indexingInProgress = true;
     this._indexingError = null;
 
-    // Also set indexer flags for consistency
-    this.semanticIndexer._indexingInProgress = true;
-    this.semanticIndexer._indexingError = null;
-
     console.error(`[Rhythm Chamber MCP] Starting background indexing...`);
 
     // Store promise so shutdown can wait for it
@@ -297,7 +293,7 @@ class RhythmChamberMCPServer {
         this.semanticIndexer._indexingError = error;
       } finally {
         this._indexingInProgress = false;
-        this.semanticIndexer._indexingInProgress = false;
+        // Note: semanticIndexer._indexingInProgress is managed by indexAll() itself
       }
     })();
 

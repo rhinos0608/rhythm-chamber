@@ -96,6 +96,10 @@ export class CodeChunker {
       const classes = this._extractClasses(ast, sourceCode, lines, filePath);
       chunks.push(...classes);
 
+      // Collect object literal methods
+      const objMethods = this._extractObjectMethods(ast, sourceCode, lines, filePath);
+      chunks.push(...objMethods);
+
       // Collect variable declarations (top-level only)
       const variables = this._extractVariables(ast, sourceCode, lines, filePath);
       chunks.push(...variables);
@@ -266,7 +270,7 @@ export class CodeChunker {
   }
 
   /**
-   * Extract function declarations
+   * Extract function declarations, arrow functions, and methods
    */
   _extractFunctions(ast, sourceCode, lines, filePath) {
     const chunks = [];
@@ -295,8 +299,23 @@ export class CodeChunker {
             generator: node.generator
           });
         }
+      },
+      // Capture arrow functions (most common pattern in modern JS)
+      ArrowFunctionExpression(node) {
+        // Generate a name based on location since arrow functions are usually anonymous
+        functions.push({
+          name: `arrow_${node.loc.start.line}`,
+          node,
+          isArrow: true,
+          async: node.async,
+          generator: false
+        });
       }
     });
+
+    // Also capture variables that contain functions (const foo = () => {})
+    const variableFunctions = this._extractVariableFunctions(ast);
+    functions.push(...variableFunctions);
 
     for (const func of functions) {
       const functionChunks = this._createFunctionChunk(
@@ -311,6 +330,52 @@ export class CodeChunker {
     }
 
     return chunks;
+  }
+
+  /**
+   * Extract variable declarations that contain functions
+   * Captures patterns like: const foo = () => {}, const bar = function() {}
+   */
+  _extractVariableFunctions(ast) {
+    const functions = [];
+
+    walk(ast, {
+      VariableDeclaration(node) {
+        if (node.kind === 'const' || node.kind === 'let') {
+          for (const declarator of node.declarations) {
+            if (declarator.id && declarator.id.type === 'Identifier') {
+              const varName = declarator.id.name;
+
+              // Check if this is an arrow function
+              if (declarator.init &&
+                  declarator.init.type === 'ArrowFunctionExpression') {
+                functions.push({
+                  name: varName,
+                  node: declarator.init,
+                  isArrow: true,
+                  isVariable: true,
+                  async: declarator.init.async,
+                  generator: false
+                });
+              }
+              // Check if this is a function expression
+              else if (declarator.init &&
+                       declarator.init.type === 'FunctionExpression') {
+                functions.push({
+                  name: varName,
+                  node: declarator.init,
+                  isVariable: true,
+                  async: declarator.init.async,
+                  generator: declarator.init.generator
+                });
+              }
+            }
+          }
+        }
+      }
+    });
+
+    return functions;
   }
 
   /**
@@ -464,6 +529,94 @@ export class CodeChunker {
     }
 
     return chunks;
+  }
+
+  /**
+   * Extract object literal methods
+   * Captures methods in object literals like: const obj = { method() {} }
+   */
+  _extractObjectMethods(ast, sourceCode, lines, filePath) {
+    const chunks = [];
+    const methods = [];
+
+    walk(ast, {
+      // Look for object expressions that might contain methods
+      ObjectExpression(node) {
+        // Check if this object has method definitions
+        const methodProperties = node.properties.filter(
+          prop => prop.type === 'Property' &&
+                  prop.kind === 'init' &&
+                  prop.value.type === 'FunctionExpression'
+        );
+
+        if (methodProperties.length > 0) {
+          // Try to get a name for this object from its parent context
+          const objName = this._getObjectName(node, sourceCode);
+
+          for (const prop of methodProperties) {
+            if (prop.key && (prop.key.type === 'Identifier' || prop.key.type === 'Literal')) {
+              const methodName = prop.key.type === 'Identifier'
+                ? prop.key.name
+                : String(prop.key.value);
+
+              methods.push({
+                name: objName ? `${objName}.${methodName}` : methodName,
+                node: prop.value,
+                isObjectMethod: true,
+                objectName: objName,
+                propertyName: methodName,
+                async: prop.value.async,
+                generator: prop.value.generator
+              });
+            }
+          }
+        }
+      }
+    });
+
+    for (const method of methods) {
+      const methodChunks = this._createFunctionChunk(
+        method.node,
+        sourceCode,
+        lines,
+        filePath,
+        method.async,
+        method.generator
+      );
+
+      // Update metadata to mark as object method
+      for (const chunk of methodChunks) {
+        chunk.metadata.isObjectMethod = true;
+        if (method.objectName) {
+          chunk.metadata.objectName = method.objectName;
+        }
+        if (method.propertyName) {
+          chunk.metadata.propertyName = method.propertyName;
+        }
+      }
+
+      chunks.push(...methodChunks);
+    }
+
+    return chunks;
+  }
+
+  /**
+   * Attempt to get the name of an object from its context
+   * Checks if this object is assigned to a variable
+   */
+  _getObjectName(node, sourceCode) {
+    // Look backwards to find variable assignment
+    const searchStart = Math.max(0, node.start - 200);
+    const before = sourceCode.substring(searchStart, node.start);
+
+    // Match patterns like: const foo = {, const bar = {
+    const match = before.match(/(?:const|let|var)\s+(\w+)\s*=\s*\{?$/);
+    if (match) {
+      return match[1];
+    }
+
+    return null;
   }
 
   /**

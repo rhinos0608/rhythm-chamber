@@ -75,7 +75,6 @@ export class CodeIndexer {
     this.indexed = false;
     this.watcher = null;  // File watcher instance
     this._reindexLock = null;  // Concurrency control for reindexFiles()
-    this._cacheSaveLock = false;  // CRITICAL FIX #3: Prevent concurrent cache saves
     this._indexingInProgress = false;  // Track if indexing is currently running
     this._indexingError = null;  // Track any indexing errors
     this._indexingPromise = null;  // Track current indexing operation
@@ -85,6 +84,8 @@ export class CodeIndexer {
       filesSkipped: 0,
       filesFromCache: 0,
       chunksIndexed: 0,
+      cacheFailures: 0,  // Track cache storage failures
+      lastCacheFailureTime: null,  // Track when last cache failure occurred
       embeddingSource: 'unknown',
       indexTime: 0,
       lastIndexed: null
@@ -173,65 +174,116 @@ export class CodeIndexer {
    * Index all discovered files
    */
   async indexAll(options = {}) {
+    // CRITICAL: Prevent concurrent indexing
+    if (this._indexingInProgress) {
+      console.error('[Indexer] Indexing already in progress, ignoring duplicate request');
+      // Return the existing promise if available
+      if (this._indexingPromise) {
+        return this._indexingPromise;
+      }
+      throw new Error('Indexing already in progress');
+    }
+
     const startTime = Date.now();
     const force = options.force || false;
 
     console.error('[Indexer] Starting indexing...');
 
-    // Discover files
-    const files = await this.discoverFiles();
-    this.stats.filesDiscovered = files.length;
+    // Set indexing flags
+    this._indexingInProgress = true;
+    this._indexingError = null;
 
-    // Check cache validity
-    const validFiles = force ? new Map() : await this.cache.checkFilesValid(
-      files.map(f => relative(this.projectRoot, f))
-    );
+    // Create indexing promise
+    const indexPromise = (async () => {
+      try {
+        // Discover files
+        const files = await this.discoverFiles();
+        this.stats.filesDiscovered = files.length;
 
-    // Separate files to index vs cached
-    const toIndex = [];
-    const fromCache = [];
+        // Check cache validity
+        const validFiles = force ? new Map() : await this.cache.checkFilesValid(
+          files.map(f => relative(this.projectRoot, f))
+        );
 
-    for (const absPath of files) {
-      const relPath = relative(this.projectRoot, absPath);
-      const isValid = validFiles.get(relPath);
+        // Separate files to index vs cached
+        const toIndex = [];
+        const fromCache = [];
 
-      if (isValid) {
-        fromCache.push(relPath);
-      } else {
-        toIndex.push(absPath);
+        for (const absPath of files) {
+          const relPath = relative(this.projectRoot, absPath);
+          const isValid = validFiles.get(relPath);
+
+          if (isValid) {
+            fromCache.push(relPath);
+          } else {
+            toIndex.push(absPath);
+          }
+        }
+
+        console.error(`[Indexer] ${toIndex.length} files to index, ${fromCache.length} from cache`);
+
+        // Load cached chunks
+        await this._loadCachedChunks(fromCache);
+
+        // Index new/modified files (with stop checking and progress)
+        let indexedCount = 0;
+        const totalToIndex = toIndex.length;
+
+        // Skip progress logging if no files to index
+        if (totalToIndex === 0) {
+          console.error('[Indexer] No new files to index (all files cached)');
+        } else {
+          const progressInterval = Math.max(1, Math.floor(totalToIndex / 10)); // Log ~10 progress updates
+          let lastProgressLog = 0;
+
+          for (const filePath of toIndex) {
+            // Check if we should stop
+            if (!this._indexingInProgress) {
+              console.error('[Indexer] Indexing stopped by user request');
+              break;
+            }
+
+            // Index the file FIRST
+            await this._indexFile(filePath);
+
+            // THEN report progress
+            indexedCount++;
+            if (indexedCount - lastProgressLog >= progressInterval || indexedCount === totalToIndex) {
+              const progress = ((indexedCount / totalToIndex) * 100).toFixed(1);
+              console.error(`[Indexer] Progress: ${indexedCount}/${totalToIndex} files (${progress}%)`);
+              lastProgressLog = indexedCount;
+            }
+          }
+        }
+
+        // Finalize
+        this.stats.indexTime = Date.now() - startTime;
+        this.stats.lastIndexed = new Date().toISOString();
+        this.stats.filesIndexed = indexedCount;
+        this.stats.filesFromCache = fromCache.length;
+        this.indexed = true;
+
+        // Save cache
+        await this._saveCache();
+
+        console.error('[Indexer] Indexing complete:', this._formatStats());
+
+        return this.stats;
+      } catch (error) {
+        console.error('[Indexer] Indexing failed:', error);
+        this._indexingError = error.message || String(error);
+        throw error;
+      } finally {
+        // Always clear indexing flag
+        this._indexingInProgress = false;
+        this._indexingPromise = null;
       }
-    }
+    })();
 
-    console.error(`[Indexer] ${toIndex.length} files to index, ${fromCache.length} from cache`);
+    // Store promise for concurrent request detection
+    this._indexingPromise = indexPromise;
 
-    // Load cached chunks
-    await this._loadCachedChunks(fromCache);
-
-    // Index new/modified files (with stop checking)
-    let indexedCount = 0;
-    for (const filePath of toIndex) {
-      // Check if we should stop
-      if (!this._indexingInProgress) {
-        console.error('[Indexer] Indexing stopped by user request');
-        break;
-      }
-      await this._indexFile(filePath);
-      indexedCount++;
-    }
-
-    // Finalize
-    this.stats.indexTime = Date.now() - startTime;
-    this.stats.lastIndexed = new Date().toISOString();
-    this.stats.filesIndexed = indexedCount;
-    this.stats.filesFromCache = fromCache.length;
-    this.indexed = true;
-
-    // Save cache
-    await this._saveCache();
-
-    console.error('[Indexer] Indexing complete:', this._formatStats());
-
-    return this.stats;
+    return indexPromise;
   }
 
   /**
@@ -279,41 +331,154 @@ export class CodeIndexer {
       const texts = chunks.map(c => c.text);
       const embeddings = await this.embeddings.getBatchEmbeddings(texts);
 
-      // Store in vector store and dependency graph
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        const embedding = embeddings[i];
-
-        // Add file path to chunk metadata
-        chunk.metadata.file = relPath;
-
-        // CRITICAL: Store chunk text and name in metadata for retrieval
-        // This ensures get_chunk_details can return the actual source code
-        chunk.metadata.text = chunk.text;
-        chunk.metadata.name = chunk.name;
-        chunk.metadata.type = chunk.type;
-
-        // Store context in metadata for retrieval
-        if (chunk.context) {
-          chunk.metadata.contextBefore = chunk.context.before;
-          chunk.metadata.contextAfter = chunk.context.after;
-        }
-
-        // Store in vector store
-        this.vectorStore.upsert(chunk.id, embedding, chunk.metadata);
-
-        // Add to dependency graph
-        this.dependencyGraph.addChunk(chunk);
+      // CRITICAL: Validate embeddings before processing
+      if (!Array.isArray(embeddings)) {
+        throw new Error(`getBatchEmbeddings returned non-array: ${typeof embeddings}`);
       }
 
-      // Index chunks in lexical index
-      this.lexicalIndex.index(chunks);
+      if (embeddings.length !== chunks.length) {
+        console.error(`[Indexer] Embedding count mismatch for ${relPath}: expected ${chunks.length}, got ${embeddings.length}`);
+        throw new Error(`Embedding array length (${embeddings.length}) does not match chunks array length (${chunks.length})`);
+      }
+
+      // Expected embedding dimension
+      const expectedDim = this.embeddings.getDimension();
+
+      // Filter out invalid embeddings instead of failing entire file
+      const validChunks = [];
+      const validEmbeddings = [];
+      const invalidReasons = [];
+
+      for (let i = 0; i < embeddings.length; i++) {
+        const emb = embeddings[i];
+        const chunkId = chunks[i]?.id || `chunk_${i}`;
+
+        // Check 1: Not null/undefined
+        if (emb === undefined || emb === null) {
+          invalidReasons.push(`${chunkId}=null/undefined`);
+          continue;
+        }
+
+        // Check 2: Is Array or Float32Array
+        if (!Array.isArray(emb) && !(emb instanceof Float32Array)) {
+          invalidReasons.push(`${chunkId}=type:${typeof emb}`);
+          continue;
+        }
+
+        // Check 3: Correct dimension
+        if (emb.length !== expectedDim) {
+          invalidReasons.push(`${chunkId}=dim:${emb.length}(expected${expectedDim})`);
+          continue;
+        }
+
+        // Check 4: No NaN/Infinity values (check all elements for data integrity)
+        let hasInvalidValue = false;
+        for (let j = 0; j < emb.length; j++) {
+          if (!Number.isFinite(emb[j])) {
+            invalidReasons.push(`${chunkId}=nonfinite@${j}`);
+            hasInvalidValue = true;
+            break;
+          }
+        }
+        if (hasInvalidValue) continue;
+
+        // Check 5: No all-zero embeddings (indicates generation failure)
+        // Check all elements for comprehensive validation (already iterating for NaN check above)
+        let sumSquares = 0;
+        for (let j = 0; j < emb.length; j++) {
+          sumSquares += emb[j] * emb[j];
+        }
+        // If embedding is essentially zero, reject it
+        if (sumSquares < 0.001) {
+          invalidReasons.push(`${chunkId}=zero_magnitude`);
+          continue;
+        }
+
+        // All checks passed
+        validChunks.push(chunks[i]);
+        validEmbeddings.push(emb);
+      }
+
+      // Log validation results
+      const validCount = validChunks.length;
+      const invalidCount = invalidReasons.length;
+
+      if (invalidCount > 0) {
+        console.error(`[Indexer] Filtered ${invalidCount} invalid embeddings for ${relPath}: ${invalidReasons.slice(0, 5).join(', ')}${invalidReasons.length > 5 ? '...' : ''}`);
+      }
+
+      // If ALL embeddings are invalid, then fail
+      if (validCount === 0) {
+        throw new Error(`All ${chunks.length} embeddings for ${relPath} are invalid. Reasons: ${invalidReasons.slice(0, 3).join(', ')}`);
+      }
+
+      console.error(`[Indexer] Generated ${validCount}/${chunks.length} valid embeddings for ${relPath}${invalidCount > 0 ? ` (${invalidCount} filtered)` : ''}`);
+
+      // Store in vector store and dependency graph
+      let vectorsStored = 0;
+      let symbolsAdded = 0;
+
+      for (let i = 0; i < validChunks.length; i++) {
+        const chunk = validChunks[i];
+        const embedding = validEmbeddings[i];
+
+        try {
+          // Add file path to chunk metadata
+          chunk.metadata.file = relPath;
+
+          // CRITICAL: Store chunk text and name in metadata for retrieval
+          // This ensures get_chunk_details can return the actual source code
+          chunk.metadata.text = chunk.text;
+          chunk.metadata.name = chunk.name;
+          chunk.metadata.type = chunk.type;
+
+          // Store context in metadata for retrieval
+          if (chunk.context) {
+            chunk.metadata.contextBefore = chunk.context.before;
+            chunk.metadata.contextAfter = chunk.context.after;
+          }
+
+          // Store in vector store
+          this.vectorStore.upsert(chunk.id, embedding, chunk.metadata);
+          vectorsStored++;
+
+          // Add to dependency graph
+          this.dependencyGraph.addChunk(chunk);
+          symbolsAdded++;
+
+        } catch (storeError) {
+          console.error(`[Indexer] Failed to store chunk ${chunk.id} from ${relPath}:`, storeError.message);
+          // Continue with next chunk instead of failing entire file
+        }
+      }
+
+      console.error(`[Indexer] Stored ${vectorsStored} vectors and ${symbolsAdded} symbols for ${relPath}`);
+
+      // Index chunks in lexical index (index only valid chunks that passed embedding validation)
+      try {
+        this.lexicalIndex.index(validChunks);
+      } catch (lexicalError) {
+        console.error(`[Indexer] Lexical indexing failed for ${relPath}:`, lexicalError.message);
+        // Non-critical, continue
+      }
 
       // Store in cache WITH embeddings (reuse fileStat from earlier)
-      await this.cache.storeFileChunks(relPath, chunks, fileStat.mtimeMs, embeddings);
+      // CRITICAL: Store only valid chunks/embeddings to prevent cache corruption
+      let cacheSuccess = true;
+      try {
+        await this.cache.storeFileChunks(relPath, validChunks, fileStat.mtimeMs, validEmbeddings);
+      } catch (cacheError) {
+        cacheSuccess = false;
+        console.error(`[Indexer] Cache storage FAILED for ${relPath}:`, cacheError.message);
+        console.error(`[Indexer] ⚠️  Cache degradation detected - re-embedding will be required on restart`);
+        // Track cache failures with timestamp
+        this.stats.cacheFailures = (this.stats.cacheFailures || 0) + 1;
+        this.stats.lastCacheFailureTime = Date.now();
+        // Non-critical for indexing, but expensive on restart
+      }
 
-      this.stats.chunksIndexed += chunks.length;
-      console.error(`[Indexer] Indexed ${relPath} (${chunks.length} chunks)`);
+      this.stats.chunksIndexed += validCount; // Track valid chunks, not total
+      console.error(`[Indexer] Indexed ${relPath} (${validCount} valid chunks, ${vectorsStored} vectors, ${symbolsAdded} symbols${!cacheSuccess ? ', CACHE FAILED' : ''})`);
 
     } catch (error) {
       if (error.code === 'ENOENT') {
@@ -328,6 +493,12 @@ export class CodeIndexer {
           this.dependencyGraph.removeChunk(chunk.chunkId);
         }
         console.warn(`[Indexer] Cleaned up ${chunks.length} orphaned chunks for ${relPath}`);
+      } else if (error.code === 'EACCES') {
+        console.error(`[Indexer] Permission denied for ${relPath} - check file permissions`);
+      } else if (error.code === 'EISDIR') {
+        console.error(`[Indexer] BUG: Tried to index directory ${relPath} - file discovery bug`);
+      } else if (error.code === 'EMFILE') {
+        console.error(`[Indexer] Too many open files - system limit reached, consider throttling`);
       } else {
         console.error(`[Indexer] Failed to index ${relPath}:`, error.message);
       }
@@ -411,14 +582,8 @@ export class CodeIndexer {
    * - Provides actionable debugging information
    */
   async _saveCache() {
-    // CRITICAL FIX #3: Prevent concurrent cache saves (race condition)
-    if (this._cacheSaveLock) {
-      console.warn('[Indexer] Cache save already in progress, skipping duplicate save');
-      return;
-    }
-
-    this._cacheSaveLock = true;
-
+    // Note: Cache has its own Promise-based locking mechanism (cache._saveLock)
+    // No additional locking needed at indexer level
     try {
       const result = await this.cache.save();
       if (result === false) {
@@ -438,9 +603,6 @@ export class CodeIndexer {
 
       // Log the error but don't crash the indexer
       // The cache will retry on next save operation
-    } finally {
-      // Always release the lock
-      this._cacheSaveLock = false;
     }
   }
 
@@ -840,6 +1002,8 @@ export class CodeIndexer {
       filesSkipped: 0,
       filesFromCache: 0,
       chunksIndexed: 0,
+      cacheFailures: 0,  // Track cache storage failures
+      lastCacheFailureTime: null,  // Track when last cache failure occurred
       embeddingSource: 'unknown',
       indexTime: 0,
       lastIndexed: null
