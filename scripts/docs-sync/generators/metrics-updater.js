@@ -99,7 +99,8 @@ export class MetricsUpdater {
 > - **${metrics.summary.utilities} Utilities**: Enhanced reliability and performance utilities
 > - **Advanced Error Handling**: Intelligent classification and recovery systems
 > - **Enhanced Streaming**: Real-time message processing with proper buffering
-> - **Security v2.0**: Enhanced validation, adaptive rate limiting, and protection`;
+> - **Security v2.0**: Enhanced validation, adaptive rate limiting, and protection
+>`;
 
       content = content.replace(headerPattern, newHeader);
 
