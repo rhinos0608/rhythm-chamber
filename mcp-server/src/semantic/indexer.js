@@ -21,6 +21,7 @@ import { HybridEmbeddings } from './embeddings.js';
 import { VectorStore } from './vector-store.js';
 import { DependencyGraph } from './dependency-graph.js';
 import { EmbeddingCache } from './cache.js';
+import { LexicalIndex } from './lexical-index.js';
 
 /**
  * Default patterns for files to index
@@ -62,6 +63,7 @@ export class CodeIndexer {
     });
     this.dependencyGraph = new DependencyGraph();
     this.cache = new EmbeddingCache(this.cacheDir, { enabled: options.cache !== false });
+    this.lexicalIndex = new LexicalIndex(options.lexical);
 
     // Patterns
     this.patterns = options.patterns || DEFAULT_PATTERNS;
@@ -302,6 +304,9 @@ export class CodeIndexer {
         this.dependencyGraph.addChunk(chunk);
       }
 
+      // Index chunks in lexical index
+      this.lexicalIndex.index(chunks);
+
       // Store in cache WITH embeddings (reuse fileStat from earlier)
       await this.cache.storeFileChunks(relPath, chunks, fileStat.mtimeMs, embeddings);
 
@@ -332,6 +337,8 @@ export class CodeIndexer {
    * Load cached chunks
    */
   async _loadCachedChunks(filePaths) {
+    const chunksToIndexLexically = [];
+
     for (const relPath of filePaths) {
       try {
         const chunkIds = this.cache.getFileChunks(relPath);
@@ -367,6 +374,13 @@ export class CodeIndexer {
               ...chunkData
             });
 
+            // Collect chunk for lexical indexing
+            chunksToIndexLexically.push({
+              id: chunkId,
+              text: chunkData.text,
+              metadata: metadataWithText
+            });
+
             this.stats.chunksIndexed++;
           }
         }
@@ -377,6 +391,11 @@ export class CodeIndexer {
         // Invalidate and re-index on next run
         this.cache.invalidateFile(relPath);
       }
+    }
+
+    // Index all cached chunks in lexical index (batch operation)
+    if (chunksToIndexLexically.length > 0) {
+      this.lexicalIndex.index(chunksToIndexLexically);
     }
   }
 
@@ -424,10 +443,55 @@ export class CodeIndexer {
   }
 
   /**
+   * Reciprocal Rank Fusion (RRF) for combining vector and lexical search results
+   *
+   * RRF is a rank aggregation method that combines multiple ranked lists without
+   * relying on score magnitudes. It's particularly effective for combining different
+   * retrieval methods (e.g., vector similarity and BM25) that may have incompatible
+   * score distributions.
+   *
+   * Formula: RRF(score) = 1 / (k + rank)
+   * Where k is a constant (default 60) that dampens the influence of high ranks
+   *
+   * @param {Array} vectorResults - Vector search results with chunkId
+   * @param {Array} lexicalResults - Lexical search results with chunkId and score
+   * @param {number} k - RRF constant (default 60)
+   * @returns {Array} Combined results sorted by RRF score
+   */
+  reciprocalRankFusion(vectorResults, lexicalResults, k = 60) {
+    const scores = new Map();
+
+    // Add vector search scores (1-indexed rank)
+    for (let i = 0; i < vectorResults.length; i++) {
+      const rank = i + 1;
+      const chunkId = vectorResults[i].chunkId;
+      const rrfScore = 1 / (k + rank);
+      scores.set(chunkId, rrfScore);
+    }
+
+    // Add lexical search scores (1-indexed rank)
+    for (let i = 0; i < lexicalResults.length; i++) {
+      const rank = i + 1;
+      const chunkId = lexicalResults[i].chunkId;
+      const rrfScore = 1 / (k + rank);
+      scores.set(chunkId, (scores.get(chunkId) || 0) + rrfScore);
+    }
+
+    // Convert to array and sort by RRF score
+    const combined = Array.from(scores.entries(), ([chunkId, rrfScore]) => ({
+      chunkId,
+      rrfScore
+    })).sort((a, b) => b.rrfScore - a.rrfScore);
+
+    return combined;
+  }
+
+  /**
    * Semantic search with intelligent ranking
    * Prioritizes meaningful chunks (functions, methods, classes) over generic code
    *
    * Features:
+   * - Hybrid search: Combines vector similarity and lexical BM25 via RRF
    * - Adaptive threshold: If too few results, automatically retries with lower threshold
    * - Type-based reranking: Boosts function/method/class chunks
    * - Enhanced scoring: Considers symbol name matches, exported status, and call frequency
@@ -441,7 +505,8 @@ export class CodeIndexer {
       limit = 10,
       threshold = 0.3,
       filters = {},
-      queryText = null
+      queryText = null,
+      useHybrid = true
     } = options;
 
     // Minimum threshold to prevent runaway queries
@@ -454,7 +519,8 @@ export class CodeIndexer {
     // This prevents duplicate API calls when retrying with lower threshold
     const queryEmbedding = await this.embeddings.getEmbedding(query);
 
-    let results = await this.vectorStore.searchByText(query, this.embeddings, {
+    // Perform vector search
+    let vectorResults = await this.vectorStore.searchByText(query, this.embeddings, {
       limit: fetchLimit,
       threshold,
       filters,
@@ -463,9 +529,9 @@ export class CodeIndexer {
     });
 
     // Adaptive threshold: If too few results, retry with lower threshold
-    if (results.length < limit && threshold > MIN_THRESHOLD) {
+    if (vectorResults.length < limit && threshold > MIN_THRESHOLD) {
       const adjustedThreshold = Math.max(MIN_THRESHOLD, threshold * 0.7);
-      console.error(`[Indexer] Too few results (${results.length} < ${limit}), retrying with threshold ${adjustedThreshold.toFixed(3)}`);
+      console.error(`[Indexer] Too few results (${vectorResults.length} < ${limit}), retrying with threshold ${adjustedThreshold.toFixed(3)}`);
 
       const additionalResults = await this.vectorStore.searchByText(query, this.embeddings, {
         limit: fetchLimit,
@@ -476,13 +542,53 @@ export class CodeIndexer {
       });
 
       // Merge results, avoiding duplicates by chunkId
-      const existingIds = new Set(results.map(r => r.chunkId));
+      const existingIds = new Set(vectorResults.map(r => r.chunkId));
       for (const result of additionalResults) {
         if (!existingIds.has(result.chunkId)) {
-          results.push(result);
+          vectorResults.push(result);
           existingIds.add(result.chunkId);
         }
       }
+    }
+
+    // Hybrid search: combine vector and lexical results using RRF
+    let finalResults;
+
+    if (useHybrid) {
+      try {
+        // Perform lexical search using BM25
+        const lexicalResults = this.lexicalIndex.search(queryText || query, fetchLimit);
+
+        // Combine results using Reciprocal Rank Fusion
+        const combined = this.reciprocalRankFusion(vectorResults, lexicalResults);
+
+        // Build full result objects with metadata from vector store
+        finalResults = combined.map(item => {
+          const vectorResult = vectorResults.find(r => r.chunkId === item.chunkId);
+          if (vectorResult) {
+            return {
+              ...vectorResult,
+              rrfScore: item.rrfScore
+            };
+          }
+          // Lexical-only result: fetch from vector store
+          const fromStore = this.vectorStore.get(item.chunkId);
+          if (fromStore) {
+            return {
+              chunkId: item.chunkId,
+              similarity: 0, // No vector similarity for lexical-only results
+              rrfScore: item.rrfScore,
+              metadata: fromStore.metadata
+            };
+          }
+          return null;
+        }).filter(r => r !== null);
+      } catch (error) {
+        console.error('[Indexer] Lexical search failed, falling back to vector-only:', error.message);
+        finalResults = vectorResults;
+      }
+    } else {
+      finalResults = vectorResults;
     }
 
     // Enhanced type-based reranking with additional boost factors
@@ -500,8 +606,10 @@ export class CodeIndexer {
 
     const queryLower = (queryText || query).toLowerCase();
 
-    const ranked = results.map(r => {
-      let rankScore = (r.similarity * 100) + (typePriority[r.metadata?.type] || 0);
+    const ranked = finalResults.map(r => {
+      // Use RRF score if available, otherwise fall back to similarity
+      const baseScore = r.rrfScore !== undefined ? r.rrfScore * 1000 : (r.similarity * 100);
+      let rankScore = baseScore + (typePriority[r.metadata?.type] || 0);
 
       // Exact symbol name match bonus: +50
       if (r.metadata?.name && queryLower === r.metadata.name.toLowerCase()) {
@@ -616,7 +724,8 @@ export class CodeIndexer {
       vectorStore: this.vectorStore.getStats(),
       dependencyGraph: this.dependencyGraph.getStats(),
       cache: this.cache.getStats(),
-      embeddings: this.embeddings.getCacheStats()
+      embeddings: this.embeddings.getCacheStats(),
+      lexicalIndex: this.lexicalIndex.getStats()
     };
   }
 
@@ -692,6 +801,7 @@ export class CodeIndexer {
     this.vectorStore.clear();
     this.dependencyGraph.clear();
     this.cache.clear();
+    this.lexicalIndex.clear();
 
     this.indexed = false;
     this.stats = {
