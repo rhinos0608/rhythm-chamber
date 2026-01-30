@@ -124,7 +124,7 @@ async function executeReset() {
 
     try {
         // Step 1: Stop background operations
-        if (Spotify && _Spotify.stopBackgroundRefresh) {
+        if (_Spotify && _Spotify.stopBackgroundRefresh) {
             _Spotify.stopBackgroundRefresh();
         }
 

@@ -65,9 +65,7 @@ import { DIContainer } from './di-container.js';
 const Container = new DIContainer();
 
 // Export Container for use in other modules (after function declarations)
-if (typeof window !== 'undefined') {
-    window.Container = Container;
-}
+// Container now available via ES6 imports, no window globals needed
 
 function showToast(message, type = 'info', duration = 3000) {
     if (typeof document === 'undefined') return;
@@ -119,7 +117,9 @@ function registerContainerServices() {
     Container.registerController('ResetController', ResetController);
     Container.registerController('SidebarController', SidebarController);
     Container.registerController('ChatUIController', ChatUIController);
-    Container.registerController('MessageOperations', MessageOperations);
+
+    // MessageOperations is a service (business logic), not a controller (UI)
+    Container.registerInstance('MessageOperations', MessageOperations);
 }
 
 /**
@@ -132,8 +132,7 @@ const CONTROLLER_DEPENDENCIES = Object.freeze({
     DemoController: ['AppState', 'DemoData', 'ViewController', 'Patterns', 'showToast'],
     ResetController: ['Storage', 'AppState', 'Spotify', 'Chat', 'OperationLock', 'ViewController', 'showToast', 'FileUploadController'],
     SidebarController: ['AppState', 'Storage', 'ViewController', 'showToast'],
-    ChatUIController: ['AppState', 'Storage', 'ViewController', 'showToast'],
-    MessageOperations: ['DataQuery', 'TokenCounter', 'Functions']
+    ChatUIController: ['AppState', 'Storage', 'ViewController', 'showToast']
 });
 
 function initializeControllers() {
@@ -192,21 +191,26 @@ function bindSettingsButtons() {
 }
 
 /**
- * Bind UI elements to tab authority changes from TabCoordinator
+ * Bind UI elements to tab authority changes from TabCoordinator via EventBus
  *
  * Updates the following when tab authority changes:
  * - Authority indicator (class and text)
  * - Upload zone (enabled/disabled state)
  * - Body class (read-only-mode)
+ * - Multi-tab modal visibility
  *
  * @listens tab:authority_changed
- * @see TabCoordinator.onAuthorityChange
+ * @see TabCoordinator emits 'tab:authority_changed' event
  */
 function bindAuthorityUI() {
     if (typeof document === 'undefined') return;
-    TabCoordinator.onAuthorityChange((authority) => {
-        const isPrimary = authority.level === 'primary';
-        console.log('[App] Authority changed:', authority.level, isPrimary ? 'primary' : 'secondary');
+
+    // Listen for authority changes via EventBus instead of direct callback
+    EventBus.on('tab:authority_changed', (data) => {
+        const isPrimary = data.isPrimary;
+        const level = data.level;
+
+        console.log('[App] Authority changed:', level, isPrimary ? 'primary' : 'secondary');
         document.body.classList.toggle('read-only-mode', !isPrimary);
 
         // Update authority indicator element
@@ -214,9 +218,24 @@ function bindAuthorityUI() {
         if (indicator) {
             // Remove both classes first, then add the correct one
             indicator.classList.remove('primary', 'secondary');
-            indicator.classList.add(authority.level);
+            indicator.classList.add(level);
             // Update text content
-            indicator.textContent = isPrimary ? 'Primary' : 'Secondary';
+            const statusText = indicator.querySelector('.status-text');
+            if (statusText) {
+                statusText.textContent = level === 'primary' ? 'Primary' : 'Secondary';
+            } else {
+                indicator.textContent = level === 'primary' ? 'Primary' : 'Secondary';
+            }
+        }
+
+        // Update read-only banner
+        const readOnlyBanner = document.getElementById('read-only-banner');
+        if (readOnlyBanner) {
+            if (isPrimary) {
+                readOnlyBanner.classList.remove('active');
+            } else {
+                readOnlyBanner.classList.add('active');
+            }
         }
 
         // Immediately disable/enable upload zone based on authority
@@ -228,6 +247,43 @@ function bindAuthorityUI() {
             } else {
                 uploadZone.style.pointerEvents = '';
                 uploadZone.style.opacity = '';
+            }
+        }
+
+        // Enable/disable file input
+        const fileInput = document.getElementById('file-input');
+        if (fileInput) fileInput.disabled = !isPrimary;
+
+        // Enable/disable chat input and send button
+        const chatInput = document.getElementById('chat-input');
+        const chatSend = document.getElementById('chat-send');
+        if (chatInput) {
+            chatInput.disabled = !isPrimary;
+            chatInput.placeholder = isPrimary
+                ? 'Ask about your music...'
+                : 'Read-only mode (close other tab to enable)';
+        }
+        if (chatSend) chatSend.disabled = !isPrimary;
+
+        // Enable/disable reset button
+        const resetBtn = document.getElementById('reset-btn');
+        if (resetBtn) resetBtn.disabled = !isPrimary;
+
+        // Enable/disable Spotify connect button
+        const spotifyConnectBtn = document.getElementById('spotify-connect-btn');
+        if (spotifyConnectBtn) spotifyConnectBtn.disabled = !isPrimary;
+
+        // Enable/disable new chat button
+        const newChatBtn = document.getElementById('new-chat-btn');
+        if (newChatBtn) newChatBtn.disabled = !isPrimary;
+
+        // Handle multi-tab modal display
+        const multiTabModal = document.getElementById('multi-tab-modal');
+        if (multiTabModal) {
+            if (!isPrimary) {
+                multiTabModal.style.display = 'flex';
+            } else {
+                multiTabModal.style.display = 'none';
             }
         }
 
@@ -359,6 +415,31 @@ function bindFileUpload() {
         console.log('[App] Chat send listeners bound');
     }
 
+    // Set up suggestion chip clicks (event delegation)
+    // FIX: Suggestion chips had data-question attributes but no click handlers
+    const chatSuggestions = document.getElementById('chat-suggestions');
+    if (chatSuggestions) {
+        chatSuggestions.addEventListener('click', (e) => {
+            const chip = e.target.closest('.suggestion-chip');
+            if (!chip) return;
+
+            const question = chip.dataset.question;
+            if (!question) return;
+
+            // Fill the question into input and send
+            const chatInput = document.getElementById('chat-input');
+            if (chatInput) {
+                chatInput.value = question;
+                // Trigger the send function
+                const chatSend = document.getElementById('chat-send');
+                if (chatSend) {
+                    chatSend.click();
+                }
+            }
+        });
+        console.log('[App] Suggestion chip listeners bound');
+    }
+
     // Set up sidebar toggle
     const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
     if (sidebarToggleBtn) {
@@ -423,7 +504,7 @@ function bindFileUpload() {
     }
 
     // Set up cancel buttons for modals
-    const cancelBtns = document.querySelectorAll('[data-action="hide-reset-modal"], [data-action="hide-delete-modal"]');
+    const cancelBtns = document.querySelectorAll('[data-action="hide-reset-modal"], [data-action="hide-delete-modal"], [data-action="close-multi-tab-modal"]');
     cancelBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const modal = btn.closest('.modal-overlay');
@@ -433,6 +514,18 @@ function bindFileUpload() {
         });
     });
     console.log('[App] Modal cancel listeners bound');
+
+    // FIX: Set up delete chat modal buttons (were completely unbound)
+    const confirmDeleteBtn = document.querySelector('[data-action="confirm-delete-chat"]');
+    if (confirmDeleteBtn) {
+        confirmDeleteBtn.addEventListener('click', async () => {
+            if (typeof SidebarController !== 'undefined' && SidebarController.confirmDeleteChat) {
+                await SidebarController.confirmDeleteChat();
+            }
+        });
+        console.log('[App] Delete chat confirm listener bound');
+    }
+
 
     // Set up privacy dashboard button
     const privacyDashboardBtn = document.getElementById('privacy-dashboard-btn');
@@ -485,19 +578,183 @@ function bindFileUpload() {
     });
     console.log('[App] Settings modal close listeners bound');
 
+    // Set up close tools modal buttons
+    const closeToolsBtns = document.querySelectorAll('[data-action="close-tools-modal"]');
+    closeToolsBtns.forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const { Settings } = await import('../settings.js');
+            Settings.hideToolsModal?.();
+        });
+    });
+    console.log('[App] Tools modal close listeners bound');
+
+
+    // Set up provider selection change handler
+    const providerSelect = document.getElementById('setting-provider');
+    if (providerSelect) {
+        providerSelect.addEventListener('change', (e) => {
+            // Hide all provider-specific fields
+            document.querySelectorAll('.provider-fields').forEach(el => {
+                el.style.display = 'none';
+            });
+            // Show selected provider fields
+            const selectedFields = document.getElementById(`provider-${e.target.value}-fields`);
+            if (selectedFields) {
+                selectedFields.style.display = 'block';
+            }
+        });
+        console.log('[App] Provider selection listener bound');
+    }
+
+    // Set up temperature slider with real-time feedback
+    const temperatureSlider = document.getElementById('setting-temperature');
+    const temperatureValue = document.getElementById('temperature-value');
+    const temperatureLabel = document.getElementById('temperature-label');
+    if (temperatureSlider && temperatureValue && temperatureLabel) {
+        temperatureSlider.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            temperatureValue.textContent = val.toFixed(1);
+
+            // Update label based on value
+            if (val < 0.4) {
+                temperatureLabel.textContent = 'Focused';
+            } else if (val < 1.0) {
+                temperatureLabel.textContent = 'Balanced';
+            } else if (val < 1.6) {
+                temperatureLabel.textContent = 'Creative';
+            } else {
+                temperatureLabel.textContent = 'Very Creative';
+            }
+        });
+        console.log('[App] Temperature slider listener bound');
+    }
+
     // Set up save settings button
     const saveSettingsBtn = document.querySelector('[data-action="save-settings"]');
     if (saveSettingsBtn) {
         saveSettingsBtn.addEventListener('click', async () => {
-            // Get the max tokens value
-            const maxTokensInput = document.getElementById('setting-max-tokens');
-            if (maxTokensInput) {
+            try {
                 const { Settings } = await import('../settings.js');
                 const settings = await Settings.getSettingsAsync();
-                settings.llm.maxTokens = parseInt(maxTokensInput.value, 10) || 4500;
+
+                // Get selected provider
+                const providerSelect = document.getElementById('setting-provider');
+                if (!providerSelect) {
+                    Settings.showToast('Provider selector not found', 'error');
+                    return;
+                }
+
+                const selectedProvider = providerSelect.value;
+                settings.llm.provider = selectedProvider;
+
+                // Save provider-specific settings with validation
+                if (selectedProvider === 'openrouter') {
+                    const openrouterKey = document.getElementById('setting-openrouter-apikey');
+                    const openrouterModel = document.getElementById('setting-openrouter-model');
+                    if (!openrouterKey?.value?.trim()) {
+                        Settings.showToast('OpenRouter API key is required', 'error');
+                        return;
+                    }
+                    if (!openrouterModel?.value?.trim()) {
+                        Settings.showToast('OpenRouter model is required', 'error');
+                        return;
+                    }
+                    settings.llm.openrouterApiKey = openrouterKey.value.trim();
+                    settings.llm.openrouterModel = openrouterModel.value.trim();
+                }
+
+                if (selectedProvider === 'gemini') {
+                    const geminiKey = document.getElementById('setting-gemini-apikey');
+                    const geminiModel = document.getElementById('setting-gemini-model');
+                    if (!geminiKey?.value?.trim()) {
+                        Settings.showToast('Gemini API key is required', 'error');
+                        return;
+                    }
+                    if (!geminiModel?.value?.trim()) {
+                        Settings.showToast('Gemini model is required', 'error');
+                        return;
+                    }
+                    settings.llm.geminiApiKey = geminiKey.value.trim();
+                    settings.llm.geminiModel = geminiModel.value.trim();
+                }
+
+                if (selectedProvider === 'openai-compatible') {
+                    const openaiKey = document.getElementById('setting-openai-compatible-apikey');
+                    const openaiEndpoint = document.getElementById('setting-openai-compatible-endpoint');
+                    const openaiModel = document.getElementById('setting-openai-compatible-model');
+                    if (!openaiKey?.value?.trim()) {
+                        Settings.showToast('API key is required', 'error');
+                        return;
+                    }
+                    if (!openaiEndpoint?.value?.trim()) {
+                        Settings.showToast('API endpoint is required', 'error');
+                        return;
+                    }
+                    if (!openaiModel?.value?.trim()) {
+                        Settings.showToast('Model is required', 'error');
+                        return;
+                    }
+                    settings.llm.openaiCompatibleApiKey = openaiKey.value.trim();
+                    settings.llm.openaiCompatibleEndpoint = openaiEndpoint.value.trim();
+                    settings.llm.openaiCompatibleModel = openaiModel.value.trim();
+                }
+
+                if (selectedProvider === 'ollama') {
+                    const ollamaEndpoint = document.getElementById('setting-ollama-endpoint');
+                    const ollamaModel = document.getElementById('setting-ollama-model');
+                    if (!ollamaEndpoint?.value?.trim()) {
+                        Settings.showToast('Ollama endpoint is required', 'error');
+                        return;
+                    }
+                    settings.llm.ollamaEndpoint = ollamaEndpoint.value.trim();
+                    settings.llm.ollamaModel = ollamaModel?.value?.trim() || 'llama3.2';
+                }
+
+                if (selectedProvider === 'lmstudio') {
+                    const lmstudioEndpoint = document.getElementById('setting-lmstudio-endpoint');
+                    const lmstudioModel = document.getElementById('setting-lmstudio-model');
+                    if (!lmstudioEndpoint?.value?.trim()) {
+                        Settings.showToast('LM Studio endpoint is required', 'error');
+                        return;
+                    }
+                    settings.llm.lmstudioEndpoint = lmstudioEndpoint.value.trim();
+                    settings.llm.lmstudioModel = lmstudioModel?.value?.trim() || 'local-model';
+                }
+
+                // Validate and save max tokens (common to all)
+                const maxTokensInput = document.getElementById('setting-max-tokens');
+                if (maxTokensInput) {
+                    const maxTokens = parseInt(maxTokensInput.value, 10);
+                    if (isNaN(maxTokens) || maxTokens < 100 || maxTokens > 32000) {
+                        Settings.showToast('Max tokens must be between 100 and 32000', 'error');
+                        return;
+                    }
+                    settings.llm.maxTokens = maxTokens;
+                }
+
+                // Validate and save temperature (common to all)
+                const temperatureInput = document.getElementById('setting-temperature');
+                if (temperatureInput) {
+                    const temperature = parseFloat(temperatureInput.value);
+                    if (isNaN(temperature) || temperature < 0 || temperature > 2) {
+                        Settings.showToast('Temperature must be between 0 and 2', 'error');
+                        return;
+                    }
+                    settings.llm.temperature = temperature;
+                }
+
+                // Save Spotify client ID
+                const spotifyClientId = document.getElementById('setting-spotify-clientid');
+                if (spotifyClientId) {
+                    settings.spotify.clientId = spotifyClientId.value.trim();
+                }
+
                 await Settings.saveSettings(settings);
-                Settings.showToast('Settings saved');
+                Settings.showToast('Settings saved successfully');
                 Settings.hideSettingsModal?.();
+            } catch (error) {
+                console.error('[App] Failed to save settings:', error);
+                Settings.showToast('Failed to save settings: ' + error.message, 'error');
             }
         });
         console.log('[App] Settings save listener bound');
@@ -509,9 +766,152 @@ function bindFileUpload() {
         settingsBtn.addEventListener('click', async () => {
             const { Settings } = await import('../settings.js');
             const settings = await Settings.getSettingsAsync();
+
+            // Populate provider selection
+            const providerSelect = document.getElementById('setting-provider');
+            if (providerSelect && settings?.llm?.provider) {
+                providerSelect.value = settings.llm.provider;
+            }
+
+            // Populate OpenRouter settings
+            const openrouterKey = document.getElementById('setting-openrouter-apikey');
+            const openrouterModelSelect = document.getElementById('setting-openrouter-model');
+            if (openrouterKey && settings?.llm?.openrouterApiKey) {
+                openrouterKey.value = settings.llm.openrouterApiKey;
+            }
+
+            // Populate OpenRouter model dropdown
+            if (openrouterModelSelect && Settings.AVAILABLE_MODELS?.openrouter) {
+                openrouterModelSelect.innerHTML = Settings.AVAILABLE_MODELS.openrouter.map(model =>
+                    `<option value="${model.id}">${model.name}</option>`
+                ).join('');
+
+                if (settings?.llm?.openrouterModel) {
+                    openrouterModelSelect.value = settings.llm.openrouterModel;
+                } else {
+                    openrouterModelSelect.value = 'xiaomi/mimo-v2-flash:free';
+                }
+            }
+
+            // Populate Gemini settings
+            const geminiKey = document.getElementById('setting-gemini-apikey');
+            const geminiModelSelect = document.getElementById('setting-gemini-model');
+            if (geminiKey && settings?.llm?.geminiApiKey) {
+                geminiKey.value = settings.llm.geminiApiKey;
+            }
+
+            // Populate Gemini model dropdown
+            if (geminiModelSelect && Settings.AVAILABLE_MODELS?.gemini) {
+                geminiModelSelect.innerHTML = Settings.AVAILABLE_MODELS.gemini.map(model =>
+                    `<option value="${model.id}">${model.name}</option>`
+                ).join('');
+
+                if (settings?.llm?.geminiModel) {
+                    geminiModelSelect.value = settings.llm.geminiModel;
+                } else {
+                    geminiModelSelect.value = 'gemini-2.5-flash';
+                }
+            }
+
+            // Populate OpenAI Compatible settings
+            const openaiKey = document.getElementById('setting-openai-compatible-apikey');
+            const openaiEndpoint = document.getElementById('setting-openai-compatible-endpoint');
+            const openaiModelSelect = document.getElementById('setting-openai-compatible-model');
+            if (openaiKey && settings?.llm?.openaiCompatibleApiKey) {
+                openaiKey.value = settings.llm.openaiCompatibleApiKey;
+            }
+            if (openaiEndpoint && settings?.llm?.openaiCompatibleEndpoint) {
+                openaiEndpoint.value = settings.llm.openaiCompatibleEndpoint;
+            } else if (openaiEndpoint) {
+                openaiEndpoint.value = 'https://api.openai.com/v1';
+            }
+
+            // Populate OpenAI-compatible model dropdown
+            if (openaiModelSelect && Settings.AVAILABLE_MODELS?.['openai-compatible']) {
+                openaiModelSelect.innerHTML = Settings.AVAILABLE_MODELS['openai-compatible'].map(model =>
+                    `<option value="${model.id}">${model.name}</option>`
+                ).join('');
+
+                if (settings?.llm?.openaiCompatibleModel) {
+                    openaiModelSelect.value = settings.llm.openaiCompatibleModel;
+                } else {
+                    openaiModelSelect.value = 'gpt-4o-mini';
+                }
+            }
+
+            // Populate Ollama settings
+            const ollamaEndpoint = document.getElementById('setting-ollama-endpoint');
+            if (ollamaEndpoint && settings?.llm?.ollamaEndpoint) {
+                ollamaEndpoint.value = settings.llm.ollamaEndpoint;
+            } else if (ollamaEndpoint) {
+                ollamaEndpoint.value = 'http://localhost:11434';
+            }
+            const ollamaModel = document.getElementById('setting-ollama-model');
+            if (ollamaModel && settings?.llm?.ollamaModel) {
+                ollamaModel.value = settings.llm.ollamaModel;
+            } else if (ollamaModel) {
+                ollamaModel.value = 'llama3.2';
+            }
+
+            // Populate LM Studio settings
+            const lmstudioEndpoint = document.getElementById('setting-lmstudio-endpoint');
+            if (lmstudioEndpoint && settings?.llm?.lmstudioEndpoint) {
+                lmstudioEndpoint.value = settings.llm.lmstudioEndpoint;
+            } else if (lmstudioEndpoint) {
+                lmstudioEndpoint.value = 'http://localhost:1234/v1';
+            }
+            const lmstudioModel = document.getElementById('setting-lmstudio-model');
+            if (lmstudioModel && settings?.llm?.lmstudioModel) {
+                lmstudioModel.value = settings.llm.lmstudioModel;
+            } else if (lmstudioModel) {
+                lmstudioModel.value = 'local-model';
+            }
+
+            // Populate max tokens
             const maxTokensInput = document.getElementById('setting-max-tokens');
             if (maxTokensInput && settings?.llm?.maxTokens) {
                 maxTokensInput.value = settings.llm.maxTokens;
+            } else if (maxTokensInput) {
+                maxTokensInput.value = 4500;
+            }
+
+            // Populate temperature slider
+            const temperatureInput = document.getElementById('setting-temperature');
+            const temperatureValue = document.getElementById('temperature-value');
+            const temperatureLabel = document.getElementById('temperature-label');
+            if (temperatureInput && settings?.llm?.temperature !== undefined) {
+                temperatureInput.value = settings.llm.temperature;
+                // Update display
+                if (temperatureValue && temperatureLabel) {
+                    const val = settings.llm.temperature;
+                    temperatureValue.textContent = val.toFixed(1);
+                    if (val < 0.4) {
+                        temperatureLabel.textContent = 'Focused';
+                    } else if (val < 1.0) {
+                        temperatureLabel.textContent = 'Balanced';
+                    } else if (val < 1.6) {
+                        temperatureLabel.textContent = 'Creative';
+                    } else {
+                        temperatureLabel.textContent = 'Very Creative';
+                    }
+                }
+            } else if (temperatureInput) {
+                temperatureInput.value = 0.7;
+                if (temperatureValue && temperatureLabel) {
+                    temperatureValue.textContent = '0.7';
+                    temperatureLabel.textContent = 'Balanced';
+                }
+            }
+
+            // Populate Spotify client ID
+            const spotifyClientId = document.getElementById('setting-spotify-clientid');
+            if (spotifyClientId && settings?.spotify?.clientId) {
+                spotifyClientId.value = settings.spotify.clientId;
+            }
+
+            // Trigger provider change to show correct fields
+            if (providerSelect) {
+                providerSelect.dispatchEvent(new Event('change'));
             }
         }, { once: false }); // Allow multiple opens
     }
@@ -548,11 +948,8 @@ async function loadSavedSettings() {
         const settings = JSON.parse(saved);
         console.log('[App] Loading saved settings:', settings);
 
-        // Update AppState with loaded settings
-        if (typeof AppState !== 'undefined') {
-            AppState.update('config', settings);
-            console.log('[App] Settings loaded into AppState');
-        }
+        // Note: Settings are managed via localStorage and input elements,
+        // not in AppState (which only supports: view, data, lite, ui, operations, demo)
 
         // Update input elements to reflect loaded values
         if (settings.maxTokens) {
@@ -583,7 +980,15 @@ async function restoreViewState() {
         // We have personality data, restore the reveal view
         console.log('[App] Restoring view from persisted data:', personality);
 
-        // Update AppState with the persisted personality
+        // Also load streams, chunks, and patterns for complete state restoration
+        // ViewController.showReveal() expects streams from AppState.getActiveData()
+        const streams = await Storage.getStreams?.();
+        const chunks = await Storage.getChunks?.();
+        const patterns = await Storage.getPatterns?.();
+
+        console.log('[App] Loaded persisted data - streams:', streams?.length || 0, 'patterns:', !!patterns);
+
+        // Update AppState with the persisted personality AND data
         // Include ALL fields needed by ViewController.showReveal()
         if (typeof AppState !== 'undefined') {
             const personalityData = {
@@ -596,17 +1001,29 @@ async function restoreViewState() {
                 allEvidence: personality.allEvidence,
                 score: personality.score,
                 confidence: personality.confidence,
-                secondaryType: personality.secondaryType
+                secondaryType: personality.secondaryType,
+                breakdown: personality.breakdown
             };
 
-            AppState.update('data', { personality: personalityData });
+            // Update data domain with ALL persisted data (personality, streams, chunks, patterns)
+            // If patterns storage is not available, reconstruct minimal patterns from personality.summary
+            // (personality.summary contains the patterns summary that was embedded during processing)
+            const restoredPatterns = patterns || (personality.summary ? { summary: personality.summary } : null);
+
+            AppState.update('data', {
+                personality: personalityData,
+                streams: streams || null,
+                chunks: chunks || null,
+                patterns: restoredPatterns
+            });
             AppState.update('view', { current: 'reveal' });
 
-            console.log('[App] AppState updated with personality');
+            console.log('[App] AppState updated with personality and data');
         }
 
+
         // Wait for next tick to ensure AppState updates propagate
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await new Promise(resolve => queueMicrotask(resolve));
 
         // Show the reveal section
         if (typeof ViewController !== 'undefined' && ViewController.showReveal) {
@@ -641,6 +1058,9 @@ async function init() {
         return;
     }
 
+    // Register EventBus listeners BEFORE TabCoordinator.init() to avoid race condition
+    bindAuthorityUI();
+
     try {
         await TabCoordinator.init();
     } catch (e) {
@@ -656,8 +1076,27 @@ async function init() {
     registerContainerServices();
     initializeControllers();
 
+    // Initialize MessageOperations with optional RAG dependency
+    try {
+        const RAG = await ModuleRegistry.load('RAG');
+        MessageOperations.init({
+            DataQuery,
+            TokenCounter,
+            Functions,
+            RAG
+        });
+        console.log('[App] MessageOperations initialized with RAG');
+    } catch (e) {
+        console.warn('[App] RAG not available, MessageOperations will fall back');
+        MessageOperations.init({
+            DataQuery,
+            TokenCounter,
+            Functions,
+            RAG: null
+        });
+    }
+
     bindSettingsButtons();
-    bindAuthorityUI();
     bindFileUpload();
 
     // Load saved settings into AppState
@@ -687,7 +1126,9 @@ if (typeof window !== 'undefined') {
     window.getDependencyGraph = getDependencyGraph;
     window.getContainerStatus = getContainerStatus;
     window.getDependencyGraphDot = getDependencyGraphDot;
-    window.CONTROLLER_DEPENDENCIES = CONTROLLER_DEPENDENCIES;
+    // Note: CONTROLLER_DEPENDENCIES removed - use Container.getAllInstances()
+    console.log('[App] DI Container loaded:', Object.keys(Container));
+    console.log('[App] Controller dependencies:', Object.keys(CONTROLLER_DEPENDENCIES));
 }
 
 export { init };

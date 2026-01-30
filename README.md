@@ -110,6 +110,28 @@ npm run docs:validate
 - Pre-commit hook ensures docs stay current
 - See [Documentation Sync Tooling](scripts/docs-sync/README.md) for details
 
+#### MCP Server (AI Agent Tooling)
+
+Model Context Protocol server for intelligent codebase analysis and HNW architecture validation:
+
+```bash
+# Start MCP server (requires application to be running)
+cd mcp-server
+node server.js
+
+# Test standalone
+node examples/test-server.js
+```
+
+**Features:**
+- **get_module_info**: Analyze module exports, imports, dependencies, and HNW compliance ✅
+- **find_dependencies**: Trace dependency graphs with circular dependency detection ✅
+- **search_architecture**: Search for HNW patterns and anti-patterns ✅
+- **validate_hnw_compliance**: Comprehensive architecture validation ✅
+
+**Integration:**
+Works with Claude Code and other MCP-compatible AI clients. See [mcp-server/README.md](mcp-server/README.md) for complete documentation.
+
 ---
 
 ## Core Flow

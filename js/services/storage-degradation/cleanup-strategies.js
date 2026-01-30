@@ -377,7 +377,7 @@ export class CleanupStrategies {
                 }));
 
                 // Yield to event loop between batches
-                await new Promise(resolve => setTimeout(resolve, 0));
+                await new Promise(resolve => queueMicrotask(resolve));
             }
 
             return { success: true, bytesFreed, itemsDeleted, operations, error: null };
@@ -457,7 +457,7 @@ export class CleanupStrategies {
                 }));
 
                 // Yield to event loop between batches
-                await new Promise(resolve => setTimeout(resolve, 0));
+                await new Promise(resolve => queueMicrotask(resolve));
             }
 
             return { success: true, bytesFreed, itemsDeleted, operations, error: null };
@@ -508,7 +508,7 @@ export class CleanupStrategies {
                 }));
 
                 // Yield to event loop between batches
-                await new Promise(resolve => setTimeout(resolve, 0));
+                await new Promise(resolve => queueMicrotask(resolve));
             }
 
             return { success: true, bytesFreed, itemsDeleted, operations, error: null };

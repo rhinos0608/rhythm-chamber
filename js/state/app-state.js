@@ -41,7 +41,10 @@ const INITIAL_STATE = {
         sidebarCollapsed: false,
         currentSessionId: null,
         authorityLevel: 'primary',  // 'primary' | 'secondary' for multi-tab coordination
-        isReadOnlyMode: false
+        isReadOnlyMode: false,
+        resetButton: {
+            visible: false  // Reset button visibility state
+        }
     },
 
     // Operations state - background processing
@@ -497,6 +500,14 @@ const AppState = {
      */
     setSidebarCollapsed(collapsed) {
         return this.update('ui', { sidebarCollapsed: collapsed });
+    },
+
+    /**
+     * Set reset button visibility
+     * @param {boolean} visible - Whether reset button should be visible
+     */
+    setResetButton(visible) {
+        return this.update('ui', { resetButton: { visible } });
     },
 
     /**

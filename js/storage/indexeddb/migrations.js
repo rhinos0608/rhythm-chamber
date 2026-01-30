@@ -212,13 +212,8 @@ function createStores(database) {
         chunksStore.createIndex('type', 'type', { unique: false });
         chunksStore.createIndex('startDate', 'startDate', { unique: false });
         chunksStore.createIndex('streamId', 'streamId', { unique: false });
-    } else {
-        // Ensure streamId index exists on existing chunks store (V7 migration)
-        const chunksStore = database.objectStore('chunks');
-        if (!chunksStore.indexNames.contains('streamId')) {
-            chunksStore.createIndex('streamId', 'streamId', { unique: false });
-        }
     }
+    // Note: If store already exists, migration V7 handles index updates
 
     // Store for embeddings
     if (!database.objectStoreNames.contains(INDEXEDDB_STORES.EMBEDDINGS)) {

@@ -77,7 +77,7 @@ export class RAGChunkingService {
             // Yield every 10 months
             if (i % 10 === 0 && i > 0) {
                 onProgress(30 + Math.round((i / monthEntries.length) * 20), 100, 'Creating monthly summaries...');
-                await new Promise(resolve => setTimeout(resolve, 0));
+                await new Promise(resolve => queueMicrotask(resolve));
             }
         }
 
@@ -109,7 +109,7 @@ export class RAGChunkingService {
             // Yield every 10 artists
             if (i % 10 === 0 && i > 0) {
                 onProgress(70 + Math.round((i / topArtistEntries.length) * 25), 100, 'Creating artist profiles...');
-                await new Promise(resolve => setTimeout(resolve, 0));
+                await new Promise(resolve => queueMicrotask(resolve));
             }
         }
 
@@ -141,7 +141,7 @@ export class RAGChunkingService {
         const chunks = [];
 
         // Yield to event loop before heavy pattern detection
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await new Promise(resolve => queueMicrotask(resolve));
 
         // Run pattern detection with proper error handling
         let patterns;
@@ -439,7 +439,7 @@ export class RAGChunkingService {
             // Yield to event loop to maintain UI responsiveness
             if (processed < total) {
                 onProgress(baseProgress + Math.round((processed / total) * progressMultiplier), 100, phaseName);
-                await new Promise(resolve => setTimeout(resolve, 0));
+                await new Promise(resolve => queueMicrotask(resolve));
             }
         }
     }

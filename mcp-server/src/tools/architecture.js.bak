@@ -1,0 +1,47 @@
+/**
+ * MCP Tool: search_architecture
+ * Search codebase based on HNW architecture patterns
+ */
+
+import { logger } from '../utils/logger.js';
+
+export const search_architecture = {
+  name: 'search_architecture',
+  description: 'Search the codebase based on HNW architecture patterns and constraints',
+  inputSchema: {
+      type: 'object',
+      properties: {
+        pattern: {
+          type: 'string',
+          description:
+            'Architecture pattern to search for (e.g., "HNW violation", "EventBus usage", "Service dependency")',
+        },
+        layer: {
+          type: 'string',
+          enum: ['controllers', 'services', 'utils', 'storage', 'providers'],
+          description: 'Specific architectural layer to search within',
+        },
+        complianceCheck: {
+          type: 'boolean',
+          default: false,
+          description: 'Perform strict HNW compliance validation',
+        },
+      },
+      required: ['pattern'],
+    },
+  },
+
+  handler: async (args, projectRoot) => {
+    logger.info('search_architecture called with:', args);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text:
+            '# Architecture Search\n\nThis tool is currently under development.\n\nIt will soon provide:\n- Pattern-based search across architectural layers\n- HNW compliance scoring\n- Anti-pattern detection\n- Architectural recommendations\n\nFor now, please use the `get_module_info` tool to analyze individual modules for HNW compliance.',
+        },
+      ],
+    };
+  },
+};

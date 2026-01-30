@@ -35,13 +35,45 @@ const DEFAULT_ENDPOINTS = {
     lmstudio: 'http://localhost:1234/v1'
 };
 
-const AVAILABLE_MODELS = [
-    { id: 'xiaomi/mimo-v2-flash:free', name: 'Xiaomi Mimo v2 Flash (Free)', free: true },
-    { id: 'mistralai/mistral-7b-instruct:free', name: 'Mistral 7B (Free)', free: true },
-    { id: 'meta-llama/llama-3.1-8b-instruct:free', name: 'Llama 3.1 8B (Free)', free: true },
-    { id: 'google/gemma-2-9b-it:free', name: 'Gemma 2 9B (Free)', free: true },
-    { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini ($)', free: false }
-];
+const AVAILABLE_MODELS = {
+    openrouter: [
+        { id: 'xiaomi/mimo-v2-flash:free', name: 'Xiaomi Mimo v2 Flash (Free)', free: true },
+        { id: 'mistralai/mistral-7b-instruct:free', name: 'Mistral 7B (Free)', free: true },
+        { id: 'meta-llama/llama-3.1-8b-instruct:free', name: 'Llama 3.1 8B (Free)', free: true },
+        { id: 'google/gemma-2-9b-it:free', name: 'Gemma 2 9B (Free)', free: true },
+        { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini ($)', free: false },
+        { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet ($)', free: false },
+        { id: 'openai/gpt-4-turbo', name: 'GPT-4 Turbo ($)', free: false }
+    ],
+    gemini: [
+        { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Free)', free: true },
+        { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite (Free)', free: true },
+        { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Free)', free: true },
+        { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite (Free)', free: true },
+        { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Free)', free: true },
+        { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro ($)', free: false },
+        { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro ($)', free: false }
+    ],
+    ollama: [
+        { id: 'llama3.1', name: 'Llama 3.1', free: true },
+        { id: 'llama3.2', name: 'Llama 3.2', free: true },
+        { id: 'mistral', name: 'Mistral', free: true },
+        { id: 'gemma2', name: 'Gemma 2', free: true },
+        { id: 'qwen2.5', name: 'Qwen 2.5', free: true }
+    ],
+    lmstudio: [
+        { id: 'lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF', name: 'Llama 3.1 8B', free: true },
+        { id: 'lmstudio-community/Meta-Llama-3.2-3B-Instruct-GGUF', name: 'Llama 3.2 3B', free: true },
+        { id: 'lmstudio-community/gemma-2-9b-it-GGUF', name: 'Gemma 2 9B', free: true },
+        { id: 'lmstudio-community/Mistral-7B-Instruct-v0.3-GGUF', name: 'Mistral 7B', free: true }
+    ],
+    'openai-compatible': [
+        { id: 'gpt-4o-mini', name: 'GPT-4o Mini', free: false },
+        { id: 'gpt-4o', name: 'GPT-4o', free: false },
+        { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', free: false },
+        { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', free: false }
+    ]
+};
 
 let _cachedSettings = null;
 
@@ -64,7 +96,9 @@ function buildDefaults() {
             lmstudioEndpoint: configLmStudio.endpoint || DEFAULT_ENDPOINTS.lmstudio,
             openaiCompatibleEndpoint: configOpenAICompatible.endpoint || '',
             openaiCompatibleApiKey: configOpenAICompatible.apiKey || '',
+            openaiCompatibleModel: configOpenAICompatible.defaultModel || 'gpt-4o-mini',
             maxTokens: 4500,
+            temperature: configOpenrouter.temperature ?? 0.7,
             contextWindow: 4096
         },
         spotify: {

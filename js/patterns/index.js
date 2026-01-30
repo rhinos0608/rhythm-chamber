@@ -21,8 +21,20 @@ import * as Cache from './pattern-cache.js';
  * @returns {Object} All detected patterns with summary and evidence
  */
 export function detectAllPatterns(streams, chunks) {
+    // Add validation at start of detectAllPatterns():
     if (!streams || streams.length === 0) {
-        throw new Error('generatePatternSummary requires data');
+        console.warn('[Patterns] No streams data, returning empty patterns');
+        return {
+            comfortDiscovery: { ratio: 0, hasComfortDiscovery: false },
+            timePatterns: { hasTimePatterns: false },
+            socialPatterns: { hasSocialPatterns: false },
+            emotionalJourney: { hasJourney: false },
+            artistLoyalty: { hasLoyalty: false },
+            genreEvolution: { hasEvolution: false },
+            eras: { hasEras: false },
+            evidence: [],
+            summary: 'No data available for pattern detection'
+        };
     }
 
     const patterns = {
