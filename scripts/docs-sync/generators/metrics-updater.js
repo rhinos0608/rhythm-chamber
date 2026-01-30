@@ -126,13 +126,16 @@ export class MetricsUpdater {
 > - **Security v2.0**: Enhanced validation, adaptive rate limiting, and protection
 >`;
 
+      // Check if content would actually change
+      const oldContent = content;
       content = content.replace(headerPattern, newHeader);
+      const hasChanges = content !== oldContent;
 
-      if (!this.dryRun) {
+      if (hasChanges && !this.dryRun) {
         writeFileSync(filepath, content, 'utf-8');
       }
 
-      this.logger.success('Updated AGENT_CONTEXT.md');
+      this.logger.success(hasChanges ? 'Updated AGENT_CONTEXT.md' : 'AGENT_CONTEXT.md already up to date');
       return true;
     } catch (error) {
       this.logger.error('Failed to update AGENT_CONTEXT.md', error.message);
