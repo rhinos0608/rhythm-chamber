@@ -7,8 +7,7 @@
 > - **Advanced Error Handling**: Intelligent classification and recovery systems
 > - **Enhanced Streaming**: Real-time message processing with proper buffering
 > - **Security v2.0**: Enhanced validation, adaptive rate limiting, and protection
->npm run dev                  # Start dev server (port 8080)
-npm run dev:coop-coep       # With COOP/COEP for SharedArrayBuffer
+>npm run dev:coop-coep       # With COOP/COEP for SharedArrayBuffer
 
 # Testing
 npm run test:unit            # Run all unit tests
