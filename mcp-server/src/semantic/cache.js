@@ -5,7 +5,7 @@
  * Tracks file modification times to invalidate stale cache entries.
  */
 
-import { mkdir, readFile, writeFile, stat, readdir, rename, unlink } from 'fs/promises';
+import { mkdir, readFile, writeFile, stat, readdir, rename, unlink, open } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, dirname } from 'path';
 
@@ -36,6 +36,16 @@ export class EmbeddingCache {
     this.loaded = false;
     this.dirty = false;
     this._saveLock = null;  // Concurrency control for save()
+
+    // Save statistics for monitoring and debugging
+    this.stats = {
+      savesSucceeded: 0,
+      savesSkipped: 0,  // Track no-op saves (when dirty=false)
+      savesFailed: 0,
+      lastSaveError: null,
+      lastSaveTime: null,
+      lastSaveTimestamp: null
+    };
   }
 
   /**
@@ -53,6 +63,17 @@ export class EmbeddingCache {
     } catch (error) {
       console.error('[Cache] Failed to create cache directory:', error.message);
       return false;
+    }
+
+    // Clean up stale temp files from previous interrupted saves
+    try {
+      const tempFile = this.cacheFile + '.tmp';
+      if (existsSync(tempFile)) {
+        console.warn('[Cache] Found stale temp file, cleaning up:', tempFile);
+        await unlink(tempFile).catch(() => {});
+      }
+    } catch (error) {
+      // Ignore cleanup errors
     }
 
     // Try to load existing cache
@@ -106,19 +127,117 @@ export class EmbeddingCache {
       return true;
     } catch (error) {
       console.error('[Cache] Failed to load cache:', error.message);
+
+      // FIX #4: Cache corruption recovery
+      // Move corrupted file for analysis instead of deleting
+      if (existsSync(this.cacheFile)) {
+        // Add random suffix to prevent collisions
+        const backupFile = this.cacheFile + `.corrupted.${Date.now()}.${Math.random().toString(36).slice(2)}`;
+        try {
+          await rename(this.cacheFile, backupFile);
+          console.error('[Cache] Backed up corrupted cache to:', backupFile);
+
+          // Clean up old backups (keep only last 5)
+          await this._cleanupOldBackups();
+        } catch (renameError) {
+          console.error('[Cache] Failed to backup corrupted cache:', renameError.message);
+          // Try to delete if backup fails
+          await unlink(this.cacheFile).catch(() => {});
+        }
+      }
+
       return false;
     }
   }
 
   /**
-   * Save cache to disk
+   * Clean up old corrupted backup files
+   * Keeps only the 5 most recent backups to prevent disk space exhaustion
    */
-  async save() {
-    if (!this.enabled || !this.dirty) {
-      return false;
+  async _cleanupOldBackups() {
+    try {
+      const files = await readdir(this.cacheDir);
+      const backups = files
+        .filter(f => f.includes('semantic-embeddings.json.corrupted.'))
+        .map(f => ({
+          name: f,
+          path: join(this.cacheDir, f),
+          time: parseInt(f.split('.').pop()) || 0
+        }))
+        .sort((a, b) => b.time - a.time);  // Newest first
+
+      // Keep only last 5 backups
+      const toDelete = backups.slice(5);
+      for (const backup of toDelete) {
+        await unlink(backup.path);
+        console.error('[Cache] Deleted old backup:', backup.name);
+      }
+    } catch (error) {
+      console.error('[Cache] Failed to cleanup old backups:', error.message);
+    }
+  }
+
+  /**
+   * Sanitize error messages to prevent leaking sensitive information
+   * Removes file paths, API keys, passwords, and truncates long messages
+   */
+  _sanitizeErrorMessage(message) {
+    if (!message || typeof message !== 'string') {
+      return 'Unknown error';
     }
 
-    // Acquire lock
+    let sanitized = message;
+
+    // Remove file paths (Unix and Windows)
+    sanitized = sanitized.replace(/\/[^\s"']+/g, '[PATH]');
+    sanitized = sanitized.replace(/\\[^\s"']+/g, '[PATH]');
+
+    // Remove potential API keys (basic patterns)
+    sanitized = sanitized.replace(/sk-[a-zA-Z0-9]{20,}/g, '[REDACTED]');
+    sanitized = sanitized.replace(/api[_-]?key["\s=:]+[^\s"']+/gi, 'api_key=[REDACTED]');
+    sanitized = sanitized.replace(/bearer[a-z\s=:]+[a-zA-Z0-9._-]{20,}/gi, 'bearer [REDACTED]');
+
+    // Remove passwords
+    sanitized = sanitized.replace(/password["\s=:]+[^\s"']+/gi, 'password=[REDACTED]');
+    sanitized = sanitized.replace(/pwd["\s=:]+[^\s"']+/gi, 'pwd=[REDACTED]');
+    sanitized = sanitized.replace(/passwd["\s=:]+[^\s"']+/gi, 'passwd=[REDACTED]');
+
+    // Remove tokens
+    sanitized = sanitized.replace(/token["\s=:]+[a-zA-Z0-9._-]{20,}/gi, 'token=[REDACTED]');
+
+    // Truncate long messages
+    if (sanitized.length > 200) {
+      sanitized = sanitized.substring(0, 200) + '...';
+    }
+
+    return sanitized;
+  }
+
+  /**
+   * Save cache to disk with validation, retry logic, and error tracking
+   *
+   * Implements:
+   * - JSON validation before atomic rename (fix #1)
+   * - Retry logic with exponential backoff (fix #2)
+   * - Detailed error tracking and statistics (fix #3, #5)
+   * - Lock acquired before dirty check (fixes race condition)
+   *
+   * @param {number} maxRetries - Maximum number of retry attempts (default: 3, max: 10)
+   * @returns {Promise<boolean>} True if save succeeded, false if disabled or not dirty
+   * @throws {Error} If all retry attempts fail
+   */
+  async save(maxRetries = 3) {
+    // FIX #12: Validate maxRetries parameter
+    if (!Number.isInteger(maxRetries) || maxRetries < 0) {
+      throw new Error(`maxRetries must be a non-negative integer, got: ${maxRetries}`);
+    }
+    if (maxRetries > 10) {
+      console.warn(`[Cache] WARNING: maxRetries=${maxRetries} is unusually high, capping at 10`);
+      maxRetries = 10;
+    }
+
+    // CRITICAL FIX: Acquire lock BEFORE checking dirty flag
+    // This prevents race condition where multiple saves think dirty=true
     while (this._saveLock) {
       await this._saveLock;
     }
@@ -126,7 +245,15 @@ export class EmbeddingCache {
     let resolveLock;
     this._saveLock = new Promise(resolve => { resolveLock = resolve; });
 
+    const startTime = Date.now();
+
     try {
+      // Now check dirty flag while holding lock
+      if (!this.enabled || !this.dirty) {
+        this.stats.savesSkipped = (this.stats.savesSkipped || 0) + 1;
+        return false;
+      }
+
       const data = {
         version: CACHE_VERSION,
         timestamp: Date.now(),
@@ -148,19 +275,86 @@ export class EmbeddingCache {
         data.embeddings[chunkId] = embData;
       }
 
-      // Write to temp file first, then rename for atomicity
-      const tempFile = this.cacheFile + '.tmp';
-      await writeFile(tempFile, JSON.stringify(data), 'utf-8');
+      // FIX #2: Retry logic with exponential backoff
+      let lastError;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          // Write to temp file first, then rename for atomicity
+          const tempFile = this.cacheFile + '.tmp';
+          await writeFile(tempFile, JSON.stringify(data), 'utf-8');
 
-      // Rename (atomic on most systems)
-      await rename(tempFile, this.cacheFile);
+          // FIX #1: Validate JSON before renaming
+          // This ensures we only rename valid, complete JSON files
+          const written = await readFile(tempFile, 'utf-8');
+          JSON.parse(written);  // Will throw if invalid
 
-      this.dirty = false;
-      console.error(`[Cache] Saved cache (${Object.keys(data.embeddings).length} chunks)`);
-      return true;
-    } catch (error) {
-      console.error('[Cache] Failed to save cache:', error.message);
-      return false;
+          // CRITICAL: Sync to disk to ensure data is actually written
+          // Without this, the rename can happen before data is flushed, causing data loss
+          const handle = await open(tempFile, 'r');
+          try {
+            await handle.datasync();  // Sync data + metadata to disk
+          } finally {
+            await handle.close();
+          }
+
+          // Rename (atomic on most systems)
+          await rename(tempFile, this.cacheFile);
+
+          // Success!
+          this.dirty = false;
+
+          // FIX #5: Track success statistics
+          const saveTime = Date.now() - startTime;
+          this.stats.savesSucceeded++;
+          this.stats.lastSaveError = null;
+          this.stats.lastSaveTime = saveTime;
+          this.stats.lastSaveTimestamp = new Date().toISOString();
+
+          console.error(`[Cache] Saved cache (${Object.keys(data.embeddings).length} chunks, ${saveTime}ms${attempt > 0 ? `, attempt ${attempt + 1}` : ''})`);
+          return true;
+
+        } catch (error) {
+          lastError = error;
+
+          // Skip retries for errors that won't resolve with retrying
+          // ENOSPC: Disk full - retrying won't help
+          // EACCES/EPERM: Permission denied - retrying won't help
+          if (error.code === 'ENOSPC' || error.code === 'EACCES' || error.code === 'EPERM') {
+            console.error(`[Cache] Fatal error (${error.code}), skipping retries:`, error.message);
+            break;
+          }
+
+          // If this is the last attempt, don't wait
+          if (attempt === maxRetries - 1) {
+            break;
+          }
+
+          // Exponential backoff: 1s, 2s, 4s
+          const delay = Math.pow(2, attempt) * 1000;
+          console.error(`[Cache] Save attempt ${attempt + 1} failed: ${error.message}, retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+
+      // All retries failed
+      const saveTime = Date.now() - startTime;
+
+      // FIX #3 & #5: Propagate errors and track failure statistics
+      this.stats.savesFailed++;
+      this.stats.lastSaveError = {
+        message: this._sanitizeErrorMessage(lastError.message),
+        code: lastError.code,
+        name: lastError.name,
+        time: new Date().toISOString()
+      };
+      this.stats.lastSaveTime = saveTime;
+      this.stats.lastSaveTimestamp = new Date().toISOString();
+
+      console.error(`[Cache] Failed to save cache after ${maxRetries} attempts (${saveTime}ms):`, lastError.message);
+
+      // FIX #3: Throw error instead of silent failure
+      throw new Error(`Cache save failed after ${maxRetries} attempts: ${lastError.message}`);
+
     } finally {
       this._saveLock = null;
       resolveLock();

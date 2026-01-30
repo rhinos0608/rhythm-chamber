@@ -370,13 +370,33 @@ export class CodeIndexer {
   }
 
   /**
-   * Save cache to disk
+   * Save cache to disk with improved error handling
+   *
+   * FIX #3: Enhanced error handling and logging
+   * - Logs detailed error information from cache stats
+   * - Doesn't crash indexer if cache save fails
+   * - Provides actionable debugging information
    */
   async _saveCache() {
     try {
-      await this.cache.save();
+      const result = await this.cache.save();
+      if (result === false) {
+        // Cache was not dirty or disabled - this is fine
+        return;
+      }
     } catch (error) {
-      console.error('[Indexer] Failed to save cache:', error.message);
+      // Enhanced error logging with cache statistics
+      const stats = this.cache.stats || {};
+      console.error('[Indexer] Failed to save cache:', {
+        error: error.message,
+        savesSucceeded: stats.savesSucceeded || 0,
+        savesFailed: stats.savesFailed || 0,
+        lastSaveError: stats.lastSaveError,
+        lastSaveTime: stats.lastSaveTime
+      });
+
+      // Log the error but don't crash the indexer
+      // The cache will retry on next save operation
     }
   }
 

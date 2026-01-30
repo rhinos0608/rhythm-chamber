@@ -58,6 +58,7 @@ class RhythmChamberMCPServer {
     this.enableSemantic = process.env.RC_SEMANTIC_SEARCH !== 'false';  // Enabled by default
     this._indexingInProgress = false;  // Track indexing state
     this._indexingError = null;  // Track any indexing errors
+    this._indexingPromise = null;  // Track current indexing operation for graceful shutdown
 
     console.error(`[Rhythm Chamber MCP] Initializing...`);
     console.error(`[Rhythm Chamber MCP] Project root: ${this.projectRoot}`);
@@ -260,30 +261,37 @@ class RhythmChamberMCPServer {
 
   /**
    * Run indexing in the background
+   * Returns immediately, indexing runs asynchronously
    */
-  async runIndexing() {
-    if (!this.semanticIndexer) return;
+  runIndexing() {
+    if (!this.semanticIndexer) return Promise.resolve();
 
     this._indexingInProgress = true;
     this._indexingError = null;
 
     console.error(`[Rhythm Chamber MCP] Starting background indexing...`);
 
-    try {
-      const stats = await this.semanticIndexer.indexAll({ force: false });
+    // Store promise so shutdown can wait for it
+    this._indexingPromise = (async () => {
+      try {
+        const stats = await this.semanticIndexer.indexAll({ force: false });
 
-      console.error(`[Rhythm Chamber MCP] Indexing complete:`, {
-        files: stats.filesIndexed,
-        chunks: stats.chunksIndexed,
-        time: `${(stats.indexTime / 1000).toFixed(2)}s`,
-        source: stats.embeddingSource
-      });
-    } catch (error) {
-      console.error(`[Rhythm Chamber MCP] Indexing error:`, error);
-      this._indexingError = error.message || String(error);
-    } finally {
-      this._indexingInProgress = false;
-    }
+        console.error(`[Rhythm Chamber MCP] Indexing complete:`, {
+          files: stats.filesIndexed,
+          chunks: stats.chunksIndexed,
+          time: `${(stats.indexTime / 1000).toFixed(2)}s`,
+          source: stats.embeddingSource
+        });
+      } catch (error) {
+        console.error(`[Rhythm Chamber MCP] Indexing error:`, error);
+        this._indexingError = error.message || String(error);
+      } finally {
+        this._indexingInProgress = false;
+      }
+    })();
+
+    // Return promise for error handling at call site
+    return this._indexingPromise;
   }
 
   /**
@@ -309,6 +317,10 @@ async function main() {
   console.error('[Rhythm Chamber MCP] Starting Rhythm Chamber MCP Server v0.1.0');
 
   const mcpServer = new RhythmChamberMCPServer();
+
+  // Store instance globally for error handlers
+  mcpServerInstance = mcpServer;
+
   await mcpServer.start();
 
   console.error('[Rhythm Chamber MCP] Ready!');
@@ -324,6 +336,49 @@ function setupShutdownHandlers(mcpServer) {
   const shutdown = async (signal) => {
     console.error(`[Rhythm Chamber MCP] Received ${signal}, shutting down gracefully...`);
 
+    // CRITICAL: Wait for any in-progress indexing to complete before saving cache
+    // But add a timeout to avoid waiting forever for large codebases
+    if (mcpServer._indexingPromise) {
+      console.error('[Rhythm Chamber MCP] Waiting for indexing to complete (max 10s)...');
+      console.error('[Rhythm Chamber MCP] DEBUG: _indexingPromise exists:', !!mcpServer._indexingPromise);
+      try {
+        // Wait with timeout - if indexing takes too long, save what we have
+        const result = await Promise.race([
+          mcpServer._indexingPromise,
+          new Promise((_, reject) =>
+            setTimeout(() => {
+              console.error('[Rhythm Chamber MCP] DEBUG: Timeout callback triggered');
+              reject(new Error('Indexing timeout'));
+            }, 10000)
+          )
+        ]);
+        console.error('[Rhythm Chamber MCP] Indexing complete');
+      } catch (error) {
+        console.error('[Rhythm Chamber MCP] DEBUG: Caught error:', error.message);
+        if (error.message === 'Indexing timeout') {
+          console.error('[Rhythm Chamber MCP] Indexing timed out, saving partial cache...');
+        } else {
+          console.error('[Rhythm Chamber MCP] Indexing error during shutdown:', error.message);
+        }
+      }
+      console.error('[Rhythm Chamber MCP] DEBUG: Indexing wait block complete');
+    }
+
+    console.error('[Rhythm Chamber MCP] DEBUG: About to save cache...');
+
+    // CRITICAL: Save cache before exiting to persist embeddings
+    if (mcpServer.semanticIndexer) {
+      try {
+        console.error('[Rhythm Chamber MCP] Saving cache...');
+        const saveResult = await mcpServer.semanticIndexer._saveCache();
+        console.error('[Rhythm Chamber MCP] Cache saved, result:', saveResult);
+      } catch (error) {
+        console.error('[Rhythm Chamber MCP] Error saving cache:', error.message);
+      }
+    }
+
+    console.error('[Rhythm Chamber MCP] DEBUG: Cache save complete');
+
     // Stop file watcher if running
     if (mcpServer.semanticIndexer?.watcher) {
       console.error('[Rhythm Chamber MCP] Stopping file watcher...');
@@ -335,6 +390,7 @@ function setupShutdownHandlers(mcpServer) {
       }
     }
 
+    console.error('[Rhythm Chamber MCP] DEBUG: About to exit...');
     process.exit(0);
   };
 
@@ -342,19 +398,87 @@ function setupShutdownHandlers(mcpServer) {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
-// Handle errors
-process.on('uncaughtException', (error) => {
+// Handle errors - try to save cache before exiting
+let mcpServerInstance = null;
+
+process.on('uncaughtException', async (error) => {
   console.error('[Rhythm Chamber MCP] Uncaught exception:', error);
+
+  // Wait for indexing to complete
+  if (mcpServerInstance?._indexingPromise) {
+    console.error('[Rhythm Chamber MCP] Waiting for indexing to complete...');
+    try {
+      await mcpServerInstance._indexingPromise;
+    } catch (indexError) {
+      console.error('[Rhythm Chamber MCP] Indexing error:', indexError.message);
+    }
+  }
+
+  // Try to save cache before exiting
+  if (mcpServerInstance?.semanticIndexer) {
+    try {
+      console.error('[Rhythm Chamber MCP] Attempting to save cache before exit...');
+      await mcpServerInstance.semanticIndexer._saveCache();
+      console.error('[Rhythm Chamber MCP] Cache saved');
+    } catch (saveError) {
+      console.error('[Rhythm Chamber MCP] Error saving cache:', saveError.message);
+    }
+  }
+
   process.exit(1);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', async (reason, promise) => {
   console.error('[Rhythm Chamber MCP] Unhandled rejection at:', promise, 'reason:', reason);
+
+  // Wait for indexing to complete
+  if (mcpServerInstance?._indexingPromise) {
+    console.error('[Rhythm Chamber MCP] Waiting for indexing to complete...');
+    try {
+      await mcpServerInstance._indexingPromise;
+    } catch (indexError) {
+      console.error('[Rhythm Chamber MCP] Indexing error:', indexError.message);
+    }
+  }
+
+  // Try to save cache before exiting
+  if (mcpServerInstance?.semanticIndexer) {
+    try {
+      console.error('[Rhythm Chamber MCP] Attempting to save cache before exit...');
+      await mcpServerInstance.semanticIndexer._saveCache();
+      console.error('[Rhythm Chamber MCP] Cache saved');
+    } catch (saveError) {
+      console.error('[Rhythm Chamber MCP] Error saving cache:', saveError.message);
+    }
+  }
+
   process.exit(1);
 });
 
 // Start server
-main().catch((error) => {
+main().catch(async (error) => {
   console.error('[Rhythm Chamber MCP] Fatal error:', error);
+
+  // Wait for indexing to complete
+  if (mcpServerInstance?._indexingPromise) {
+    console.error('[Rhythm Chamber MCP] Waiting for indexing to complete...');
+    try {
+      await mcpServerInstance._indexingPromise;
+    } catch (indexError) {
+      console.error('[Rhythm Chamber MCP] Indexing error:', indexError.message);
+    }
+  }
+
+  // Try to save cache before exiting
+  if (mcpServerInstance?.semanticIndexer) {
+    try {
+      console.error('[Rhythm Chamber MCP] Attempting to save cache before exit...');
+      await mcpServerInstance.semanticIndexer._saveCache();
+      console.error('[Rhythm Chamber MCP] Cache saved');
+    } catch (saveError) {
+      console.error('[Rhythm Chamber MCP] Error saving cache:', saveError.message);
+    }
+  }
+
   process.exit(1);
 });
