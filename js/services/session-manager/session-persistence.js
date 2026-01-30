@@ -4,6 +4,7 @@
 import * as SessionState from './session-state.js';
 import { Storage } from '../../storage.js';
 import { AppState } from '../../state/app-state.js';
+import { EventBus } from '../event-bus.js';
 
 // ==========================================
 // Constants
@@ -83,8 +84,11 @@ export async function saveCurrentSession() {
             : messages;
 
         // Get personality from AppState (ES module, not global)
-        const personality = AppState.get('data.personality') || {};
-        const isLiteMode = AppState.get('lite.isLiteMode') || false;
+        // FIX: AppState.get() only accepts top-level domain names, not dotted paths
+        const dataState = AppState.get('data') || {};
+        const liteState = AppState.get('lite') || {};
+        const personality = dataState.personality || {};
+        const isLiteMode = liteState.isLiteMode || false;
 
         const session = {
             id: currentSessionId,
@@ -100,6 +104,11 @@ export async function saveCurrentSession() {
 
         await Storage.saveSession(session);
         console.log('[SessionPersistence] Session saved:', currentSessionId);
+
+        // CRITICAL FIX: Emit session:updated event so sidebar re-renders
+        // Without this, sessions saved from message flow wouldn't appear in sidebar
+        EventBus.emit('session:updated', { sessionId: currentSessionId, field: 'messages' });
+
         return true;
     } catch (e) {
         console.error('[SessionPersistence] Failed to save session:', e);

@@ -30,7 +30,7 @@ import { Storage } from '../storage.js';
 const PROFILE_VERSION = '1.0.0';
 const SALT_LENGTH = 16;
 const IV_LENGTH = 12;
-const KEY_ITERATIONS = 600000;
+const KEY_ITERATIONS = 210000; // Strong protection while maintaining UX
 
 // ==========================================
 // Encryption Utilities

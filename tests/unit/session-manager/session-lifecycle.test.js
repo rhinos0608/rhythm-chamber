@@ -23,15 +23,15 @@ import * as SessionPersistence from '../../../js/services/session-manager/sessio
 
 // Initialize the lifecycle module with state accessor to avoid circular dependency
 SessionLifecycle.initialize({
-    getCurrentSessionId: SessionState.getCurrentSessionId,
-    setCurrentSessionId: SessionState.setCurrentSessionId,
-    getCurrentSessionCreatedAt: SessionState.getCurrentSessionCreatedAt,
-    setCurrentSessionCreatedAt: SessionState.setCurrentSessionCreatedAt,
-    syncSessionIdToAppState: SessionState.syncSessionIdToAppState,
-    getSessionData: SessionState.getSessionData,
-    setSessionData: SessionState.setSessionData,
-    updateSessionData: SessionState.updateSessionData,
-    getHistory: SessionState.getHistory
+  getCurrentSessionId: SessionState.getCurrentSessionId,
+  setCurrentSessionId: SessionState.setCurrentSessionId,
+  getCurrentSessionCreatedAt: SessionState.getCurrentSessionCreatedAt,
+  setCurrentSessionCreatedAt: SessionState.setCurrentSessionCreatedAt,
+  syncSessionIdToAppState: SessionState.syncSessionIdToAppState,
+  getSessionData: SessionState.getSessionData,
+  setSessionData: SessionState.setSessionData,
+  updateSessionData: SessionState.updateSessionData,
+  getHistory: SessionState.getHistory
 });
 
 // Mock dependencies
@@ -70,8 +70,8 @@ vi.mock('../../../js/services/session-lock-manager.js', () => ({
 vi.mock('../../../js/services/session-manager/session-persistence.js', () => ({
   saveCurrentSession: vi.fn(() => Promise.resolve(true)),
   flushPendingSaveAsync: vi.fn(() => Promise.resolve()),
-  saveConversation: vi.fn(() => {}),
-  emergencyBackupSync: vi.fn(() => {}),
+  saveConversation: vi.fn(() => { }),
+  emergencyBackupSync: vi.fn(() => { }),
   recoverEmergencyBackup: vi.fn(() => Promise.resolve(false))
 }));
 
@@ -118,15 +118,15 @@ describe('SessionLifecycle Module', () => {
     SessionLifecycle.reset();
     // Re-initialize with state accessor after reset
     SessionLifecycle.initialize({
-        getCurrentSessionId: SessionState.getCurrentSessionId,
-        setCurrentSessionId: SessionState.setCurrentSessionId,
-        getCurrentSessionCreatedAt: SessionState.getCurrentSessionCreatedAt,
-        setCurrentSessionCreatedAt: SessionState.setCurrentSessionCreatedAt,
-        syncSessionIdToAppState: SessionState.syncSessionIdToAppState,
-        getSessionData: SessionState.getSessionData,
-        setSessionData: SessionState.setSessionData,
-        updateSessionData: SessionState.updateSessionData,
-        getHistory: SessionState.getHistory
+      getCurrentSessionId: SessionState.getCurrentSessionId,
+      setCurrentSessionId: SessionState.setCurrentSessionId,
+      getCurrentSessionCreatedAt: SessionState.getCurrentSessionCreatedAt,
+      setCurrentSessionCreatedAt: SessionState.setCurrentSessionCreatedAt,
+      syncSessionIdToAppState: SessionState.syncSessionIdToAppState,
+      getSessionData: SessionState.getSessionData,
+      setSessionData: SessionState.setSessionData,
+      updateSessionData: SessionState.updateSessionData,
+      getHistory: SessionState.getHistory
     });
   });
 
@@ -153,6 +153,24 @@ describe('SessionLifecycle Module', () => {
 
       expect(sessionId).toBeTruthy();
       expect(SessionPersistence.saveCurrentSession).toHaveBeenCalled();
+    });
+
+    it('should save empty session to storage before emitting event', async () => {
+      // CRITICAL: This test verifies the fix for the session navigation bug
+      // where empty sessions weren't appearing in sidebar because they
+      // weren't persisted before the session:created event was emitted
+
+      // Create session with NO initial messages
+      const sessionId = await SessionLifecycle.createSession();
+
+      // Verify save was called even for empty session
+      expect(SessionPersistence.saveCurrentSession).toHaveBeenCalled();
+
+      // Verify event was emitted
+      expect(EventBus.emit).toHaveBeenCalledWith(
+        'session:created',
+        expect.objectContaining({ sessionId })
+      );
     });
 
     it('should save session ID to storage', async () => {

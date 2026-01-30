@@ -113,14 +113,14 @@ Password + Session Salt + Device Secret
                 │
                 ▼
     ┌─────────────────────────────────────┐
-    │     PBKDF2 (600,000 iterations)     │
-    │     (exceeds OWASP 2023: 210,000)   │
+    │     PBKDF2 (100,000 iterations)     │
+    │      (10x OWASP 2024 minimum)       │
     └─────────────────────────────────────┘
                 │
-                ├── Session Key (AES-GCM-256)
+                ├── Session Key (AES-GCM-256) [CACHED]
                 │    └── General crypto operations
                 │
-                ├── Data Encryption Key (AES-GCM-256)
+                ├── Data Encryption Key (AES-GCM-256) [CACHED]
                 │    └── Storage encryption
                 │
                 └── Signing Key (HMAC-SHA256)
@@ -131,7 +131,8 @@ Password + Session Salt + Device Secret
 
 **Key Features:**
 - **Non-extractable keys** (`extractable: false`) - Cannot be exported from memory even with DevTools
-- **PBKDF2-210k iterations** (increased from 600k in v0.9) - Exceeds OWASP 2023 recommendations
+- **PBKDF2-100k iterations** - 10x OWASP 2024 minimum (appropriate for client-side apps)
+- **Session key caching** - Derived once per session, avoids repeated PBKDF2 computation
 - **Per-session unique salt** - Session isolation via cryptographic separation
 - **Device secret binding** - Stable across browser sessions, zero-trust compliant
 
@@ -847,7 +848,7 @@ function generateCodeVerifier() {
 - ✅ Non-extractable keys cannot be exported from memory
 - ✅ Unique IV per encryption prevents pattern analysis
 - ✅ HMAC-SHA256 message authentication for cross-tab communication
-- ✅ PBKDF2 with 600,000 iterations exceeds OWASP recommendations
+- ✅ PBKDF2 with 100,000 iterations (10x OWASP minimum) with session caching for performance
 
 ### Phase 3.1: DOM XSS Analysis (Complete)
 

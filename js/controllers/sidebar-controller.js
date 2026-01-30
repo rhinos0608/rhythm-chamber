@@ -419,8 +419,10 @@ async function handleSessionClick(sessionId) {
     const messages = document.getElementById('chat-messages');
     if (messages) {
         messages.innerHTML = '';
-        const history = Chat.getHistory();
-        history.forEach(msg => {
+        // FIX: Chat.getHistory() is async - must await it
+        const history = await Chat.getHistory();
+        // Guard against null/undefined history
+        (history || []).forEach(msg => {
             if (msg.role === 'user' || msg.role === 'assistant') {
                 appendMessage(msg.role, msg.content);
             }

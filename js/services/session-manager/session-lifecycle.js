@@ -351,10 +351,10 @@ export async function createSession(initialMessages = []) {
         console.warn('[SessionLifecycle] Session may not be remembered on reload due to storage issues.');
     }
 
-    // Save immediately if we have messages - use SessionPersistence module
-    if (initialMessages.length > 0) {
-        await SessionPersistence.saveCurrentSession();
-    }
+    // CRITICAL FIX: Always persist session to storage before emitting event
+    // This ensures renderSessionList() sees the new session via Storage.getAllSessions()
+    // Previously, empty sessions were not saved, causing them to be missing from sidebar
+    await SessionPersistence.saveCurrentSession();
 
     console.log('[SessionLifecycle] Created new session:', currentSessionId);
     notifySessionUpdate('session:created', { sessionId: currentSessionId, title: 'New Chat' });

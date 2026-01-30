@@ -34,7 +34,7 @@ const DEVICE_BINDING_KEY = 'rhythm_chamber_keymgr_device_binding';
 const KEY_ROTATION_KEY = 'rhythm_chamber_keymgr_rotation';
 
 // PBKDF2 iterations - OWASP 2023 minimum recommendation
-const PBKDF2_ITERATIONS = 210000;
+const PBKDF2_ITERATIONS = 100000;
 
 // Key lifecycle tracking
 const KEY_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days

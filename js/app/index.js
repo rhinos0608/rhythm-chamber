@@ -20,6 +20,7 @@ import { DemoController } from '../controllers/demo-controller.js';
 import { ResetController } from '../controllers/reset-controller.js';
 import { SidebarController } from '../controllers/sidebar-controller.js';
 import { ChatUIController } from '../controllers/chat-ui-controller.js';
+import { StreamingMessageHandler } from '../controllers/streaming-message-handler.js';
 
 import { TabCoordinator } from '../services/tab-coordination.js';
 import { SessionManager } from '../services/session-manager.js';
@@ -389,12 +390,18 @@ function bindFileUpload() {
             if (message) {
                 if (typeof Chat !== 'undefined' && Chat.sendMessage) {
                     chatInput.value = '';
-                    console.log('[App] Calling Chat.sendMessage...');
+                    // FIX: Add loading indicator for immediate feedback
+                    const loadingId = StreamingMessageHandler.addLoadingMessage();
+                    console.log('[App] Calling Chat.sendMessage, loadingId:', loadingId);
                     try {
                         await Chat.sendMessage(message);
                         console.log('[App] Chat.sendMessage returned');
+                        // Remove loading indicator on success (response will render the actual message)
+                        if (loadingId) StreamingMessageHandler.removeMessageElement(loadingId);
                     } catch (e) {
                         console.error('[App] Chat.sendMessage error:', e);
+                        // Remove loading indicator on error
+                        if (loadingId) StreamingMessageHandler.removeMessageElement(loadingId);
                         // Still show the message even if there's an error
                         renderUserMessage(message);
                     }
@@ -1104,6 +1111,22 @@ async function init() {
 
     // Restore view state from persisted data
     await restoreViewState();
+
+    // Check for demo mode URL parameter (from landing page "Try Demo Mode" button)
+    // This triggers demo mode when accessing app.html?mode=demo
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('mode') === 'demo') {
+        console.log('[App] Demo mode requested via URL parameter, loading demo...');
+        try {
+            await DemoController.loadDemoMode();
+            // Clean up the URL parameter without triggering a reload
+            const cleanUrl = window.location.pathname + window.location.hash;
+            window.history.replaceState({}, document.title, cleanUrl);
+        } catch (e) {
+            console.error('[App] Failed to load demo mode:', e);
+            showToast('Failed to load demo mode. Please try again.', 'error', 5000);
+        }
+    }
 
     await validateExistingLicense();
 

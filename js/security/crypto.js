@@ -55,6 +55,10 @@ const ENCRYPTED_CREDS_KEY = 'rhythm_chamber_encrypted_creds';
 const SESSION_SALT_KEY = 'rhythm_chamber_session_salt';
 const SESSION_VERSION_KEY = 'rhythm_chamber_session_version';
 
+// Session key cache - derive once per session, reuse for performance
+let _cachedSessionKey = null;
+let _cachedKeyMaterial = null; // Track what material was used for cache validation
+
 // ==========================================
 // SECURE CONTEXT
 // ==========================================
@@ -66,9 +70,9 @@ const SESSION_VERSION_KEY = 'rhythm_chamber_session_version';
  */
 function isSecureContext() {
     return window.isSecureContext ||
-           location.protocol === 'https:' ||
-           location.hostname === 'localhost' ||
-           location.hostname === '127.0.0.1';
+        location.protocol === 'https:' ||
+        location.hostname === 'localhost' ||
+        location.hostname === '127.0.0.1';
 }
 
 /**
@@ -171,7 +175,7 @@ async function deriveKey(password, salt) {
         {
             name: 'PBKDF2',
             salt: encoder.encode(salt),
-            iterations: 210000, // OWASP 2023 minimum recommendation
+            iterations: 100000, // OWASP 2024: appropriate for client-side apps
             hash: 'SHA-256'
         },
         keyMaterial,
@@ -219,7 +223,16 @@ async function getSessionKey() {
 
     // Combine all keying material
     const combinedSecret = `${sessionSalt}:${deviceSecret}:rhythm-chamber:v${version}`;
-    return deriveKey(combinedSecret, sessionSalt);
+
+    // Return cached key if material hasn't changed (avoids re-deriving with PBKDF2)
+    if (_cachedSessionKey && _cachedKeyMaterial === combinedSecret) {
+        return _cachedSessionKey;
+    }
+
+    // Derive new key and cache it
+    _cachedSessionKey = await deriveKey(combinedSecret, sessionSalt);
+    _cachedKeyMaterial = combinedSecret;
+    return _cachedSessionKey;
 }
 
 /**

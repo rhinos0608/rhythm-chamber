@@ -564,15 +564,19 @@ function addDemoBadge() {
 
 /**
  * Setup demo-specific chat suggestions tuned to sample data
- * Note: We use data attributes and rely on existing event delegation from setupEventListeners
- * to avoid duplicate click handlers
+ * Creates demo-specific suggestion chips that are handled by the global
+ * event delegation in app/index.js (setupEventListeners)
  *
- * MEMORY LEAK FIX: Tracks and returns cleanup function that removes all attached listeners
- * Call the returned function when demo mode is exited or before re-setup
- * @returns {Function|undefined} Cleanup function to remove event listeners
+ * NOTE: We no longer attach separate click handlers to demo chips.
+ * The global suggestion-chip handler in app/index.js already handles these
+ * correctly by filling the chat input and triggering the send button.
+ * Previously, demo chips had their own handlers that called Chat.sendMessage()
+ * directly, which bypassed proper UI rendering and caused issues with provider loading.
+ *
+ * @returns {Function|undefined} Cleanup function (for compatibility, now a no-op)
  */
 function setupDemoChatSuggestions() {
-    // Clean up any existing listeners first
+    // Clean up any existing listeners first (legacy support)
     if (_demoChipCleanup) {
         _demoChipCleanup();
         _demoChipCleanup = null;
@@ -597,53 +601,24 @@ function setupDemoChatSuggestions() {
 
     demoQuestions.forEach(question => {
         const button = document.createElement('button');
+        // Use suggestion-chip class for compatibility with global event delegation
+        // demo-chip class is kept for styling/identification purposes
         button.className = 'suggestion-chip demo-chip';
         button.dataset.question = question;
         button.textContent = question;
         suggestions.appendChild(button);
     });
 
-    // Track attached chips and their handlers for cleanup
-    const chips = [];
-    const handlers = [];
-
-    // Attach event listeners to the NEW demo-specific chips
-    // These are new elements so won't have duplicate listeners
-    suggestions.querySelectorAll('.demo-chip').forEach(chip => {
-        const handler = async (e) => {
-            e.preventDefault();
-            e.stopPropagation(); // Prevent any bubbling
-            const question = chip.dataset.question;
-            const input = document.getElementById('chat-input');
-            if (input) {
-                // Set input value to the question
-                input.value = question;
-            }
-
-            // Trigger chat send via Chat module
-            // This avoids programmatic click() which can trigger duplicate listeners
-            if (Chat?.sendMessage && typeof Chat.sendMessage === 'function') {
-                await Chat.sendMessage(question);
-                // Clear input after sending
-                if (input) input.value = '';
-            }
-        };
-        chip.addEventListener('click', handler);
-        chips.push(chip);
-        handlers.push(handler);
-    });
-
-    // Create and store cleanup function
+    // No custom handlers needed - global delegation in app/index.js handles clicks
+    // Cleanup is now a no-op but kept for API compatibility
     _demoChipCleanup = () => {
-        for (let i = 0; i < chips.length; i++) {
-            chips[i]?.removeEventListener('click', handlers[i]);
-        }
-        chips.length = 0;
-        handlers.length = 0;
+        // No listeners to clean up - handled by global delegation
     };
 
+    console.log('[DemoController] Demo chat suggestions setup (using global delegation)');
     return _demoChipCleanup;
 }
+
 
 /**
  * Get demo data package
