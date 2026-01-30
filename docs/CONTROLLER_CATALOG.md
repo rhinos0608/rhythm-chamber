@@ -1,7 +1,7 @@
 # Controller Catalog
 
 > **Auto-generated** by docs-sync tool
-> **Generated:** 2026-01-30T16:18:16.038Z
+> **Generated:** 2026-01-30T16:48:06.247Z
 > **Total Controllers:** 21
 
 This catalog provides detailed information about all UI controllers in the application.

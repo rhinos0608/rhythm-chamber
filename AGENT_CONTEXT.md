@@ -7,8 +7,7 @@
 > - **Advanced Error Handling**: Intelligent classification and recovery systems
 > - **Enhanced Streaming**: Real-time message processing with proper buffering
 > - **Security v2.0**: Enhanced validation, adaptive rate limiting, and protection
->`Landing → Spotify OAuth → Quick Snapshot Reveal → Upsell to Full`
-
+>
 **Tech stack:**
 Modern client-side: Static HTML/CSS/ES6 Modules + IndexedDB + Web Workers + WASM Semantic Search + Enhanced error handling + Multiple AI providers + Real-time streaming
 
