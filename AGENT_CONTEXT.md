@@ -6,7 +6,14 @@
 > - **37 Utilities**: Enhanced reliability and performance utilities
 > - **Advanced Error Handling**: Intelligent classification and recovery systems
 > - **Enhanced Streaming**: Real-time message processing with proper buffering
-> - **Security v2.0**: Enhanced validation, adaptive rate limiting, and protectionMusic analytics app that tells users what their listening says about them — like Spotify Wrapped but deeper, year-round, and conversational.
+> - **Security v2.0**: Enhanced validation, adaptive rate limiting, and protection
+
+---
+
+## Quick Context
+
+**What is this?**
+Music analytics app that tells users what their listening says about them — like Spotify Wrapped but deeper, year-round, and conversational.
 
 **Core flow (Full):**
 `Landing → Upload .zip/.json → Personality Reveal → Chat → Share Card`
