@@ -7,8 +7,7 @@
 > - **Advanced Error Handling**: Intelligent classification and recovery systems
 > - **Enhanced Streaming**: Real-time message processing with proper buffering
 > - **Security v2.0**: Enhanced validation, adaptive rate limiting, and protection
->---
-
+>
 ## Quick Context
 
 **What is this?**
