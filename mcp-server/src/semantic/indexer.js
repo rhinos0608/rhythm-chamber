@@ -22,6 +22,7 @@ import { VectorStore } from './vector-store.js';
 import { DependencyGraph } from './dependency-graph.js';
 import { EmbeddingCache } from './cache.js';
 import { LexicalIndex } from './lexical-index.js';
+import { QueryExpander } from './query-expander.js';
 
 /**
  * Default patterns for files to index
@@ -64,6 +65,7 @@ export class CodeIndexer {
     this.dependencyGraph = new DependencyGraph();
     this.cache = new EmbeddingCache(this.cacheDir, { enabled: options.cache !== false });
     this.lexicalIndex = new LexicalIndex(options.lexical);
+    this.queryExpander = new QueryExpander(this.dependencyGraph);
 
     // Patterns
     this.patterns = options.patterns || DEFAULT_PATTERNS;
@@ -491,6 +493,7 @@ export class CodeIndexer {
    * Prioritizes meaningful chunks (functions, methods, classes) over generic code
    *
    * Features:
+   * - Query expansion: Generates alternative query formulations for better recall
    * - Hybrid search: Combines vector similarity and lexical BM25 via RRF
    * - Adaptive threshold: If too few results, automatically retries with lower threshold
    * - Type-based reranking: Boosts function/method/class chunks
@@ -506,7 +509,8 @@ export class CodeIndexer {
       threshold = 0.3,
       filters = {},
       queryText = null,
-      useHybrid = true
+      useHybrid = true,
+      useQueryExpansion = true
     } = options;
 
     // Minimum threshold to prevent runaway queries
@@ -519,34 +523,60 @@ export class CodeIndexer {
     // This prevents duplicate API calls when retrying with lower threshold
     const queryEmbedding = await this.embeddings.getEmbedding(query);
 
-    // Perform vector search
-    let vectorResults = await this.vectorStore.searchByText(query, this.embeddings, {
-      limit: fetchLimit,
-      threshold,
-      filters,
-      queryText,
-      queryEmbedding // Pass pre-generated embedding
-    });
+    // Query expansion: Generate alternative query formulations
+    const queriesToSearch = useQueryExpansion
+      ? this.queryExpander.expand(queryText || query)
+      : [queryText || query];
+
+    console.error(`[Indexer] Query expansion: ${queriesToSearch.length} queries to search`);
+
+    // Perform vector search with expanded queries
+    let vectorResults = [];
+    const seenChunkIds = new Set();
+
+    for (const expandedQuery of queriesToSearch) {
+      const results = await this.vectorStore.searchByText(expandedQuery, this.embeddings, {
+        limit: fetchLimit,
+        threshold,
+        filters,
+        queryText: expandedQuery,
+        queryEmbedding // Pass pre-generated embedding
+      });
+
+      // Merge results, avoiding duplicates by chunkId
+      for (const result of results) {
+        if (!seenChunkIds.has(result.chunkId)) {
+          vectorResults.push(result);
+          seenChunkIds.add(result.chunkId);
+        }
+      }
+
+      // Stop if we have enough results
+      if (vectorResults.length >= fetchLimit * 2) {
+        break;
+      }
+    }
 
     // Adaptive threshold: If too few results, retry with lower threshold
     if (vectorResults.length < limit && threshold > MIN_THRESHOLD) {
       const adjustedThreshold = Math.max(MIN_THRESHOLD, threshold * 0.7);
       console.error(`[Indexer] Too few results (${vectorResults.length} < ${limit}), retrying with threshold ${adjustedThreshold.toFixed(3)}`);
 
-      const additionalResults = await this.vectorStore.searchByText(query, this.embeddings, {
-        limit: fetchLimit,
-        threshold: adjustedThreshold,
-        filters,
-        queryText,
-        queryEmbedding // Reuse the same embedding (no duplicate API call)
-      });
+      for (const expandedQuery of queriesToSearch.slice(0, 3)) { // Limit expanded queries on retry
+        const additionalResults = await this.vectorStore.searchByText(expandedQuery, this.embeddings, {
+          limit: fetchLimit,
+          threshold: adjustedThreshold,
+          filters,
+          queryText: expandedQuery,
+          queryEmbedding // Reuse the same embedding (no duplicate API call)
+        });
 
-      // Merge results, avoiding duplicates by chunkId
-      const existingIds = new Set(vectorResults.map(r => r.chunkId));
-      for (const result of additionalResults) {
-        if (!existingIds.has(result.chunkId)) {
-          vectorResults.push(result);
-          existingIds.add(result.chunkId);
+        // Merge results, avoiding duplicates by chunkId
+        for (const result of additionalResults) {
+          if (!seenChunkIds.has(result.chunkId)) {
+            vectorResults.push(result);
+            seenChunkIds.add(result.chunkId);
+          }
         }
       }
     }

@@ -1,23 +1,13 @@
 # AI Agent Reference — Rhythm Chamber
 
-> **Status:** v0.9.0 Enhanced Architecture Complete — 366 Source Files
+> **Status:** v0.9.0 Enhanced Architecture Complete — 367 Source Files
 > - **21 Controllers**: Modular UI components for focused functionality
 > - **94 Services**: Comprehensive business logic with enhanced error handling
 > - **37 Utilities**: Enhanced reliability and performance utilities
 > - **Advanced Error Handling**: Intelligent classification and recovery systems
 > - **Enhanced Streaming**: Real-time message processing with proper buffering
 > - **Security v2.0**: Enhanced validation, adaptive rate limiting, and protection
->**Tech stack:**
-Modern client-side: Static HTML/CSS/ES6 Modules + IndexedDB + Web Workers + WASM Semantic Search + Enhanced error handling + Multiple AI providers + Real-time streaming
-
----
-
-## AI Agent Quick Reference (AGENTS.md Extension)
-
-> **Purpose**: Quick reference for AI agents working on this codebase
-> **Read Time**: 2 minutes
-> **For Deep Dives**: See sections below
-
+>
 ### Essential Commands (Most Used)
 
 ```bash

@@ -27,49 +27,71 @@ export class MetricsUpdater {
     try {
       let content = readFileSync(filepath, 'utf-8');
 
+      // Track if any actual content changes occur
+      let hasChanges = false;
+
       // Update modular structure section (around line 73-92)
       const structurePattern = /├── controllers\/.*?# UI LAYER \(\d+ controllers\)/;
       const structureReplacement = `├── controllers/               # UI LAYER (${metrics.summary.controllers} controllers)`;
-
+      if (structurePattern.test(content) && !content.match(structurePattern)[0].includes(`(${metrics.summary.controllers} controllers)`)) {
+        hasChanges = true;
+      }
       content = content.replace(structurePattern, structureReplacement);
 
       const servicesPattern = /├── services\/.*?# BUSINESS LOGIC \(\d+ services\)/;
       const servicesReplacement = `├── services/                  # BUSINESS LOGIC (${metrics.summary.services} services)`;
-
+      if (servicesPattern.test(content) && !content.match(servicesPattern)[0].includes(`(${metrics.summary.services} services)`)) {
+        hasChanges = true;
+      }
       content = content.replace(servicesPattern, servicesReplacement);
 
       const utilsPattern = /├── utils\/.*?# SHARED UTILITIES \(\d+ utilities\)/;
       const utilsReplacement = `├── utils/                     # SHARED UTILITIES (${metrics.summary.utilities} utilities)`;
-
+      if (utilsPattern.test(content) && !content.match(utilsPattern)[0].includes(`(${metrics.summary.utilities} utilities)`)) {
+        hasChanges = true;
+      }
       content = content.replace(utilsPattern, utilsReplacement);
 
       // Update Essential Documentation section (around line 113)
       const docPattern = /- \*\*\[AGENT_CONTEXT\.md\]\(AGENT_CONTEXT\.md\)\*\* - Complete technical architecture \(\d[\d,]*\+ lines\)/;
       const docReplacement = `- **[AGENT_CONTEXT.md](AGENT_CONTEXT.md)** - Complete technical architecture (${metrics.summary.totalLines.toLocaleString()}+ lines)`;
-
+      if (docPattern.test(content) && !content.includes(`(${metrics.summary.totalLines.toLocaleString()}+ lines)`)) {
+        hasChanges = true;
+      }
       content = content.replace(docPattern, docReplacement);
 
       // Update Key Directories table (around line 102-110)
       const controllersDirPattern = /\| `js\/controllers\/` \| UI components \(\d+ controllers\) \|/;
+      if (controllersDirPattern.test(content) && !content.match(controllersDirPattern)[0].includes(`(${metrics.summary.controllers} controllers)`)) {
+        hasChanges = true;
+      }
       content = content.replace(controllersDirPattern, '| `js/controllers/` | UI components (' + metrics.summary.controllers + ' controllers) |');
 
       const servicesDirPattern = /\| `js\/services\/` \| Business logic \(\d+ services\) \|/;
+      if (servicesDirPattern.test(content) && !content.match(servicesDirPattern)[0].includes(`(${metrics.summary.services} services)`)) {
+        hasChanges = true;
+      }
       content = content.replace(servicesDirPattern, '| `js/services/` | Business logic (' + metrics.summary.services + ' services) |');
 
       const utilsDirPattern = /\| `js\/utils\/` \| Shared utilities \(\d+ utilities\) \|/;
+      if (utilsDirPattern.test(content) && !content.match(utilsDirPattern)[0].includes(`(${metrics.summary.utilities} utilities)`)) {
+        hasChanges = true;
+      }
       content = content.replace(utilsDirPattern, '| `js/utils/` | Shared utilities (' + metrics.summary.utilities + ' utilities) |');
 
-      // Update last updated timestamp
-      content = content.replace(
-        /\*\*Last Updated\*\*: [0-9-]+/,
-        `**Last Updated**: ${new Date().toISOString().split('T')[0]}`
-      );
+      // Only update last updated timestamp if actual content changed
+      if (hasChanges) {
+        content = content.replace(
+          /\*\*Last Updated\*\*: [0-9-]+/,
+          `**Last Updated**: ${new Date().toISOString().split('T')[0]}`
+        );
+      }
 
       if (!this.dryRun) {
         writeFileSync(filepath, content, 'utf-8');
       }
 
-      this.logger.success('Updated CLAUDE.md');
+      this.logger.success(hasChanges ? 'Updated CLAUDE.md' : 'CLAUDE.md already up to date');
       return true;
     } catch (error) {
       this.logger.error('Failed to update CLAUDE.md', error.message);
@@ -270,9 +292,8 @@ export class MetricsUpdater {
    */
   async needsUpdate(metrics, gitData) {
     const version = gitData.currentVersion || 'v1.0';
-    const currentDate = new Date().toISOString().split('T')[0];
 
-    // Check AGENT_CONTEXT.md
+    // Check AGENT_CONTEXT.md for actual metric changes
     const agentContextPath = resolve(this.projectRoot, 'AGENT_CONTEXT.md');
     try {
       const content = readFileSync(agentContextPath, 'utf-8');
@@ -281,36 +302,72 @@ export class MetricsUpdater {
       if (match) {
         const currentFileCount = parseInt(match[1], 10);
         if (currentFileCount !== metrics.summary.totalFiles) {
-          return true;
+          return true; // File count changed - needs update
         }
       }
 
-      // Check for version match
+      // Check for version match (only if version changed)
       if (!content.includes(`Status:** ${version}`)) {
-        return true;
+        return true; // Version changed - needs update
+      }
+
+      // Check controller count
+      const controllerMatch = content.match(/\* \*\*(\d+) Controllers\*\*:/);
+      if (controllerMatch) {
+        const currentControllers = parseInt(controllerMatch[1], 10);
+        if (currentControllers !== metrics.summary.controllers) {
+          return true; // Controller count changed - needs update
+        }
+      }
+
+      // Check service count
+      const serviceMatch = content.match(/\* \*\*(\d+) Services\*\*:/);
+      if (serviceMatch) {
+        const currentServices = parseInt(serviceMatch[1], 10);
+        if (currentServices !== metrics.summary.services) {
+          return true; // Service count changed - needs update
+        }
       }
     } catch (error) {
-      return true; // File doesn't exist or can't be read
+      return true; // File doesn't exist or can't be read - needs update
     }
 
-    // Check ARCHITECTURE.md for date
-    const archPath = resolve(this.projectRoot, 'ARCHITECTURE.md');
+    // Check CLAUDE.md for metric changes (not just date)
+    const claudePath = resolve(this.projectRoot, 'CLAUDE.md');
     try {
-      const content = readFileSync(archPath, 'utf-8');
-      const dateMatch = content.match(/\*\*Last Updated:\*\* ([0-9-]+)/);
+      const content = readFileSync(claudePath, 'utf-8');
 
-      if (dateMatch) {
-        const lastDate = dateMatch[1];
-        // If date is different, we consider it needs update
-        // (In practice, you might want to check if it's older than X days)
-        if (lastDate !== currentDate) {
+      // Check controller count in tree structure
+      const controllerTreeMatch = content.match(/controllers\/.*?# UI LAYER \((\d+) controllers\)/);
+      if (controllerTreeMatch) {
+        const currentControllers = parseInt(controllerTreeMatch[1], 10);
+        if (currentControllers !== metrics.summary.controllers) {
+          return true;
+        }
+      }
+
+      // Check service count in tree structure
+      const serviceTreeMatch = content.match(/services\/.*?# BUSINESS LOGIC \((\d+) services\)/);
+      if (serviceTreeMatch) {
+        const currentServices = parseInt(serviceTreeMatch[1], 10);
+        if (currentServices !== metrics.summary.services) {
+          return true;
+        }
+      }
+
+      // Check utility count in tree structure
+      const utilTreeMatch = content.match(/utils\/.*?# SHARED UTILITIES \((\d+) utilities\)/);
+      if (utilTreeMatch) {
+        const currentUtils = parseInt(utilTreeMatch[1], 10);
+        if (currentUtils !== metrics.summary.utilities) {
           return true;
         }
       }
     } catch (error) {
-      return true;
+      return true; // File doesn't exist or can't be read - needs update
     }
 
+    // All metrics match - no update needed
     return false;
   }
 }
