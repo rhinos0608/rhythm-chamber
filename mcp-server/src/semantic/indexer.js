@@ -403,6 +403,11 @@ export class CodeIndexer {
   /**
    * Semantic search with intelligent ranking
    * Prioritizes meaningful chunks (functions, methods, classes) over generic code
+   *
+   * Features:
+   * - Adaptive threshold: If too few results, automatically retries with lower threshold
+   * - Type-based reranking: Boosts function/method/class chunks
+   * - Enhanced scoring: Considers symbol name matches, exported status, and call frequency
    */
   async search(query, options = {}) {
     if (!this.indexed) {
@@ -412,18 +417,45 @@ export class CodeIndexer {
     const {
       limit = 10,
       threshold = 0.3,
-      filters = {}
+      filters = {},
+      queryText = null
     } = options;
+
+    // Minimum threshold to prevent runaway queries
+    const MIN_THRESHOLD = 0.1;
 
     // Fetch more results to allow re-ranking by type
     const fetchLimit = limit * 3;
-    const results = await this.vectorStore.searchByText(query, this.embeddings, {
+    let results = await this.vectorStore.searchByText(query, this.embeddings, {
       limit: fetchLimit,
       threshold,
-      filters
+      filters,
+      queryText // Pass query text for symbol name boosting
     });
 
-    // Re-rank results: prioritize meaningful chunks over generic code
+    // Adaptive threshold: If too few results, retry with lower threshold
+    if (results.length < limit && threshold > MIN_THRESHOLD) {
+      const adjustedThreshold = Math.max(MIN_THRESHOLD, threshold * 0.7);
+      console.error(`[Indexer] Too few results (${results.length} < ${limit}), retrying with threshold ${adjustedThreshold.toFixed(3)}`);
+
+      const additionalResults = await this.vectorStore.searchByText(query, this.embeddings, {
+        limit: fetchLimit,
+        threshold: adjustedThreshold,
+        filters,
+        queryText
+      });
+
+      // Merge results, avoiding duplicates by chunkId
+      const existingIds = new Set(results.map(r => r.chunkId));
+      for (const result of additionalResults) {
+        if (!existingIds.has(result.chunkId)) {
+          results.push(result);
+          existingIds.add(result.chunkId);
+        }
+      }
+    }
+
+    // Enhanced type-based reranking with additional boost factors
     const typePriority = {
       'function': 100,
       'method': 95,
@@ -436,10 +468,35 @@ export class CodeIndexer {
       'fallback': 5
     };
 
-    const ranked = results.map(r => ({
-      ...r,
-      rankScore: (r.similarity * 100) + (typePriority[r.metadata?.type] || 0)
-    })).sort((a, b) => b.rankScore - a.rankScore);
+    const queryLower = (queryText || query).toLowerCase();
+
+    const ranked = results.map(r => {
+      let rankScore = (r.similarity * 100) + (typePriority[r.metadata?.type] || 0);
+
+      // Exact symbol name match bonus: +50
+      if (r.metadata?.name && queryLower === r.metadata.name.toLowerCase()) {
+        rankScore += 50;
+      }
+
+      // Exported status bonus: +20
+      if (r.metadata?.exported) {
+        rankScore += 20;
+      }
+
+      // Call frequency bonus: +1 per 10 calls (from dependency graph)
+      if (r.metadata?.name) {
+        const usages = this.dependencyGraph.findUsages(r.metadata.name);
+        if (usages.length > 0) {
+          const callBonus = Math.floor(usages.length / 10);
+          rankScore += callBonus;
+        }
+      }
+
+      return {
+        ...r,
+        rankScore
+      };
+    }).sort((a, b) => b.rankScore - a.rankScore);
 
     return ranked.slice(0, limit);
   }

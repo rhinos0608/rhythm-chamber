@@ -22,8 +22,14 @@ const MAX_CHUNK_SIZE = 4000;
 
 /**
  * Context window size (lines before/after a chunk)
+ * Increased from 3 to 5 for better search context
  */
-const CONTEXT_LINES = 3;
+const CONTEXT_LINES = 5;
+
+/**
+ * Chunk overlap percentage (20% overlap at function boundaries)
+ */
+const OVERLAP_PERCENTAGE = 0.2;
 
 /**
  * Code Chunker class
@@ -33,6 +39,7 @@ export class CodeChunker {
     this.maxChunkSize = options.maxChunkSize || MAX_CHUNK_SIZE;
     this.contextLines = options.contextLines || CONTEXT_LINES;
     this.includeComments = options.includeComments !== false;
+    this.overlapPercentage = options.overlapPercentage || OVERLAP_PERCENTAGE;
   }
 
   /**
@@ -300,6 +307,28 @@ export class CodeChunker {
   }
 
   /**
+   * Get overlap text from previous context
+   * Helps maintain continuity between adjacent chunks
+   *
+   * @param {string[]} lines - Array of source code lines
+   * @param {number} startLine - The starting line number (1-based)
+   * @param {number} overlapLines - Number of lines to overlap
+   * @returns {string} Overlap text to prepend to chunk
+   */
+  _getOverlapText(lines, startLine, overlapLines) {
+    if (overlapLines <= 0) return '';
+
+    const overlapStart = Math.max(0, startLine - overlapLines - 1);
+    const overlapEnd = startLine - 1;
+    const overlapLinesArray = lines.slice(overlapStart, overlapEnd);
+
+    if (overlapLinesArray.length === 0) return '';
+
+    // Add a comment marker to indicate overlap
+    return '// ... previous context ...\n' + overlapLinesArray.join('\n') + '\n';
+  }
+
+  /**
    * Create a function chunk
    */
   _createFunctionChunk(node, sourceCode, lines, filePath, isAsync = false, isGenerator = false) {
@@ -320,11 +349,16 @@ export class CodeChunker {
 
     const context = this._extractContext(lines, startLine, endLine);
 
+    // Calculate overlap: 20% of function length, rounded up
+    const funcLength = endLine - startLine + 1;
+    const overlapLines = Math.max(1, Math.ceil(funcLength * this.overlapPercentage));
+    const overlapText = this._getOverlapText(lines, startLine, overlapLines);
+
     return {
       id: this._generateChunkId('function', node.id?.name || 'anonymous', startLine),
       type: 'function',
       name: node.id?.name || 'anonymous',
-      text: (jsDoc ? jsDoc + '\n' : '') + funcText,
+      text: (overlapText ? overlapText + '\n' : '') + (jsDoc ? jsDoc + '\n' : '') + funcText,
       context,
       metadata: {
         file: filePath,
@@ -336,7 +370,9 @@ export class CodeChunker {
         params,
         calls,
         throws,
-        hasJSDoc: !!jsDoc
+        hasJSDoc: !!jsDoc,
+        hasOverlap: overlapText.length > 0,
+        overlapLines
       }
     };
   }
@@ -429,12 +465,20 @@ export class CodeChunker {
       const methodEnd = method.loc.end.line;
       const methodText = sourceCode.substring(method.start, method.end);
 
+      // Calculate overlap for methods
+      const methodLength = methodEnd - methodStart + 1;
+      const overlapLines = Math.max(1, Math.ceil(methodLength * this.overlapPercentage));
+      const overlapText = this._getOverlapText(lines, methodStart, overlapLines);
+
+      // Get JSDoc comment if present
+      const jsDoc = this._extractJSDoc(sourceCode, method);
+
       chunks.push({
         id: this._generateChunkId('method', `${node.id.name}.${method.key?.name || 'anonymous'}`, methodStart),
         type: 'method',
         name: `${node.id.name}.${method.key?.name || 'anonymous'}`,
         className: node.id.name,
-        text: methodText,
+        text: (overlapText ? overlapText + '\n' : '') + (jsDoc ? jsDoc + '\n' : '') + methodText,
         context: this._extractContext(lines, methodStart, methodEnd),
         metadata: {
           file: filePath,
@@ -444,7 +488,9 @@ export class CodeChunker {
           kind: method.kind,
           async: method.async || false,
           static: method.static || false,
-          params: this._extractParams(method.value)
+          params: this._extractParams(method.value),
+          hasOverlap: overlapText.length > 0,
+          overlapLines
         }
       });
     }
