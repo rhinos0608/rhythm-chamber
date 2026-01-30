@@ -1,12 +1,13 @@
 {
   "name": "@rhythm-chamber/mcp-server",
   "version": "0.1.0",
-  "description": "Model Context Protocol (MCP) server for Rhythm Chamber codebase analysis",
+  "description": "Model Context Protocol (MCP) server for Rhythm Chamber codebase analysis with semantic search",
   "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "semantic:start": "node scripts/start-semantic.js",
     "test": "node --test",
     "build": "echo 'No build step required for JS'",
     "typecheck": "tsc --noEmit"
@@ -16,15 +17,23 @@
     "model-context-protocol",
     "code-analysis",
     "rhythm-chamber",
-    "hnw-architecture"
+    "hnw-architecture",
+    "semantic-search",
+    "vector-embeddings"
   ],
   "author": "Rhythm Chamber",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.4",
     "@babel/parser": "^7.28.6",
     "@babel/traverse": "^7.28.6",
     "@babel/types": "^7.28.6",
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@xenova/transformers": "^2.17.2",
+    "acorn": "^8.14.0",
+    "acorn-walk": "^8.3.4",
+    "chokidar": "^4.0.3",
+    "eslint": "^9.39.2",
+    "glob": "^13.0.0",
     "lru-cache": "^11.0.2"
   },
   "devDependencies": {
@@ -33,5 +42,8 @@
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "optionalDependencies": {
+    "@lmstudio/sdk": "^1.0.0"
   }
 }

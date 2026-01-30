@@ -1,0 +1,47 @@
+# MCP Semantic Search Ignore Patterns
+# Files and directories to exclude from semantic indexing
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+build/
+.mcp-cache/
+
+# Test files (optional - comment out if you want to index tests)
+tests/
+**/*.test.js
+**/*.spec.js
+
+# Documentation
+docs/
+**/*.md
+
+# Git
+.git/
+.github/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
