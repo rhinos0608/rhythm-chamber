@@ -1,7 +1,7 @@
 # Dependency Graph
 
 > **Auto-generated** by docs-sync tool
-> **Generated:** 2026-01-30T15:17:18.354Z
+> **Generated:** 2026-01-30T16:18:16.045Z
 
 ## Module Dependencies
 
@@ -1284,7 +1284,6 @@
 
 ### js/services/session-manager/session-lifecycle.js
 
-- `/workspaces/rhythm-chamber/js/services/event-bus.js`
 - `/workspaces/rhythm-chamber/js/storage.js`
 - `/workspaces/rhythm-chamber/js/storage/keys.js`
 - `/workspaces/rhythm-chamber/js/services/session-lock-manager.js`
@@ -1298,6 +1297,7 @@
 - `/workspaces/rhythm-chamber/js/services/session-manager/session-persistence.js`
 - `/workspaces/rhythm-chamber/js/storage.js`
 - `/workspaces/rhythm-chamber/js/services/error-boundary.js`
+- `/workspaces/rhythm-chamber/js/services/event-bus.js`
 
 ### js/services/fallback/priority.js
 

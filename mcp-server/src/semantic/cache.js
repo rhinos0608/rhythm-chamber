@@ -116,9 +116,24 @@ export class EmbeddingCache {
       // Restore embeddings
       if (data.embeddings) {
         for (const [chunkId, chunkData] of Object.entries(data.embeddings)) {
-          // Convert embedding array back to Float32Array if present
-          if (chunkData.embedding && Array.isArray(chunkData.embedding)) {
-            chunkData.embedding = new Float32Array(chunkData.embedding);
+          // Validate and convert embedding to Float32Array
+          if (chunkData.embedding) {
+            if (Array.isArray(chunkData.embedding)) {
+              // Standard array format - convert to Float32Array
+              chunkData.embedding = new Float32Array(chunkData.embedding);
+            } else if (typeof chunkData.embedding === 'object' && !Array.isArray(chunkData.embedding)) {
+              // Corrupted cache: object with numeric keys instead of array
+              console.error(`[Cache] Skipping corrupted embedding for ${chunkId}: has object with numeric keys`);
+              delete data.embeddings[chunkId];  // Remove corrupted entry
+              continue;  // Skip this chunk
+            } else if (chunkData.embedding instanceof Float32Array) {
+              // Already Float32Array (shouldn't happen from JSON but handle it)
+              // Already in correct format, nothing to do
+            } else {
+              console.warn(`[Cache] Unexpected embedding type for ${chunkId}: ${typeof chunkData.embedding}`);
+              delete data.embeddings[chunkId];
+              continue;
+            }
           }
           this.embeddings.set(chunkId, chunkData);
         }
@@ -413,7 +428,34 @@ export class EmbeddingCache {
    */
   getChunkEmbedding(chunkId) {
     const chunk = this.embeddings.get(chunkId);
-    return chunk?.embedding || null;
+    const embedding = chunk?.embedding;
+
+    // Handle null/undefined
+    if (embedding === null || embedding === undefined) {
+      return null;
+    }
+
+    // Already Float32Array - return as-is
+    if (embedding instanceof Float32Array) {
+      return embedding;
+    }
+
+    // Convert Array to Float32Array
+    if (Array.isArray(embedding)) {
+      return new Float32Array(embedding);
+    }
+
+    // Detect corruption: Object with numeric keys (from old/broken cache)
+    if (typeof embedding === 'object' && !Array.isArray(embedding)) {
+      console.error(`[Cache] Corrupted embedding detected for ${chunkId}: has object with numeric keys instead of Array/Float32Array`);
+      // Invalidate and remove corrupted entry
+      this.invalidateChunk(chunkId);
+      return null;
+    }
+
+    // Unknown type - log error and return null
+    console.error(`[Cache] Invalid embedding type for ${chunkId}: ${typeof embedding}`);
+    return null;
   }
 
   /**

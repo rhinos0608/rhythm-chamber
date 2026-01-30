@@ -1,7 +1,7 @@
 # Controller Catalog
 
 > **Auto-generated** by docs-sync tool
-> **Generated:** 2026-01-30T15:17:18.313Z
+> **Generated:** 2026-01-30T16:18:16.038Z
 > **Total Controllers:** 21
 
 This catalog provides detailed information about all UI controllers in the application.
@@ -101,9 +101,9 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/dev-panel-controller.js`
 
-**Lines:** 329
+**Lines:** 326
 
-**Named Exports:** 2
+**Named Exports:** 1
 
 **Classes:** 1
 
@@ -240,11 +240,9 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/sidebar/index.js`
 
-**Lines:** 124
+**Lines:** 121
 
 **Named Exports:** 4
-
-**Default Exports:** 1
 
 **Functions:** 2
 

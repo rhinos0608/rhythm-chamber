@@ -69,9 +69,22 @@ export const schema = {
  * Handle tool execution
  */
 export const handler = async (args, projectRoot) => {
-  const { target, analysisType = 'comprehensive', includeSuggestions = true, severity = 'all' } = args;
+  let { target, analysisType = 'comprehensive', includeSuggestions = true, severity = 'all' } = args;
 
   logger.info('analyze_architecture called with:', { target, analysisType, includeSuggestions, severity });
+
+  // CRITICAL FIX: Handle case where target is a JSON string (user error or client bug)
+  // Some clients may pass object parameters as JSON strings
+  if (typeof target === 'string' && target.trim().startsWith('{')) {
+    try {
+      target = JSON.parse(target);
+      logger.info('Parsed target from JSON string:', target);
+    } catch (parseError) {
+      throw new Error(
+        `Invalid target format: If trying to use object format, ensure valid JSON. Error: ${parseError.message}`
+      );
+    }
+  }
 
   try {
     // Determine target files

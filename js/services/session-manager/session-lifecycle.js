@@ -23,7 +23,6 @@
 
 'use strict';
 
-import { EventBus } from '../event-bus.js';
 import { Storage } from '../../storage.js';
 import { STORAGE_KEYS } from '../../storage/keys.js';
 import lockManager from '../session-lock-manager.js';
@@ -87,19 +86,30 @@ let autoSaveTimeoutId = null;
 let stateAccessor = null;
 
 /**
- * Initialize the lifecycle module with state accessor interface
- * This follows dependency injection pattern to avoid circular imports.
- * @param {Object} accessor - State accessor object with get/set/update methods
+ * Event emitter interface for cross-module communication (HNW compliance)
+ * This is injected via initialize() to avoid direct EventBus import.
+ * @type {Object|null}
  */
-export function initialize(accessor) {
+let eventEmitter = null;
+
+/**
+ * Initialize the lifecycle module with state accessor and event emitter interfaces
+ * This follows dependency injection pattern to avoid circular imports and
+ * complies with HNW architecture by using injected event emitter instead of direct EventBus import.
+ * @param {Object} accessor - State accessor object with get/set/update methods
+ * @param {Object} emitter - Event emitter interface with emit() method
+ */
+export function initialize(accessor, emitter = null) {
     stateAccessor = accessor;
+    eventEmitter = emitter;
 }
 
 /**
- * Reset the state accessor (mainly for testing)
+ * Reset the state accessor and event emitter (mainly for testing)
  */
 export function reset() {
     stateAccessor = null;
+    eventEmitter = null;
     hasWarnedAboutMessageLimit = false;
     previousSessionId = null;
 }
@@ -170,22 +180,28 @@ function generateSessionTitle(messages) {
 }
 
 /**
- * Notify session update via EventBus
+ * Notify session update via injected event emitter (HNW compliance)
  * Uses state accessor to get current session ID without circular dependency.
- * Tracks event emission for cleanup purposes.
+ * Uses injected event emitter to avoid direct EventBus dependency.
  * @param {string} [eventType='session:updated'] - Event type for EventBus
  * @param {Object} [eventPayload={}] - Additional event payload
  * @returns {void}
  */
 function notifySessionUpdate(eventType = 'session:updated', eventPayload = {}) {
+    // HNW Compliance: Use injected event emitter instead of direct EventBus import
+    if (!eventEmitter || typeof eventEmitter.emit !== 'function') {
+        console.warn('[SessionLifecycle] Event emitter not available, skipping event:', eventType);
+        return;
+    }
+
     // Use state accessor to get current session ID (no circular import)
     // Only add sessionId if not already in eventPayload (for events like session:switched)
     if (!eventPayload.sessionId) {
         const currentSessionId = stateAccessor?.getCurrentSessionId?.() ?? null;
         eventPayload = { sessionId: currentSessionId, ...eventPayload };
     }
-    // Emit via centralized EventBus - no legacy listeners
-    EventBus.emit(eventType, eventPayload);
+    // Emit via injected event emitter - follows HNW architecture
+    eventEmitter.emit(eventType, eventPayload);
 }
 
 /**

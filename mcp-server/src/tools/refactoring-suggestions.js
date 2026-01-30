@@ -7,7 +7,7 @@
  * - HNW compliance checks and before/after examples
  */
 
-import { resolve, join } from 'path';
+import { resolve, join, relative } from 'path';
 import { promises as fs } from 'fs';
 import { existsSync, statSync } from 'fs';
 import { globSync } from 'glob';
@@ -22,6 +22,43 @@ import { logger } from '../utils/logger.js';
 import { createPartialResponse, createErrorResponse } from '../errors/partial.js';
 
 const cache = new CacheManager();
+
+/**
+ * Validate and sanitize file path extracted from chunk ID
+ * Prevents path traversal attacks
+ */
+function validateChunkFilePath(filePath, projectRoot) {
+  // CRITICAL FIX #1: Prevent path traversal attacks
+  // Reject paths with directory traversal sequences
+  if (filePath.includes('..') || filePath.includes('\\..') || filePath.includes('./..')) {
+    logger.warn('[validateChunkFilePath] Rejected path traversal attempt');
+    return null;
+  }
+
+  // Reject absolute paths (should be relative to project root)
+  if (filePath.startsWith('/')) {
+    logger.warn('[validateChunkFilePath] Rejected absolute path');
+    return null;
+  }
+
+  // Reject null bytes (potential security issue)
+  if (filePath.includes('\0')) {
+    logger.warn('[validateChunkFilePath] Rejected path with null byte');
+    return null;
+  }
+
+  // Resolve to absolute path and verify it's within project root
+  const fullPath = resolve(projectRoot, filePath);
+  const resolvedPath = relative(projectRoot, fullPath);
+
+  // Check if the resolved path escaped the project root
+  if (resolvedPath.startsWith('..')) {
+    logger.warn('[validateChunkFilePath] Rejected path escaping project root');
+    return null;
+  }
+
+  return fullPath;
+}
 
 /**
  * Priority constants for consistent priority handling
@@ -159,7 +196,7 @@ export const schema = {
  * Handle tool execution
  */
 export const handler = async (args, projectRoot, indexer, server) => {
-  const {
+  let {
     target,
     complexityThreshold = 10,
     includeHNWCheck = true,
@@ -174,6 +211,19 @@ export const handler = async (args, projectRoot, indexer, server) => {
     priorityBy,
     maxSuggestions
   });
+
+  // CRITICAL FIX: Handle case where target is a JSON string (user error or client bug)
+  // Some clients may pass object parameters as JSON strings
+  if (typeof target === 'string' && target.trim().startsWith('{')) {
+    try {
+      target = JSON.parse(target);
+      logger.info('[suggest_refactoring] Parsed target from JSON string:', target);
+    } catch (parseError) {
+      throw new Error(
+        `[suggest_refactoring] Invalid target format: If trying to use object format, ensure valid JSON. Error: ${parseError.message}`
+      );
+    }
+  }
 
   try {
     // Determine target files with path validation
@@ -618,6 +668,20 @@ async function generateRefactoringSuggestions(functions, options) {
     };
 
     suggestions.push(suggestion);
+  }
+
+  // NEW: Add semantic pattern-based consolidation suggestions
+  if (indexer && indexer.vectorStore) {
+    try {
+      const consolidationSuggestions = await findConsolidationOpportunities(functions, indexer, projectRoot, complexityThreshold);
+      if (consolidationSuggestions.length > 0) {
+        // Add consolidation suggestions, up to 1/3 of maxSuggestions
+        const slotsAvailable = Math.max(1, Math.floor(maxSuggestions / 3));
+        suggestions.push(...consolidationSuggestions.slice(0, slotsAvailable));
+      }
+    } catch (error) {
+      logger.warn('[generateRefactoringSuggestions] Failed to find consolidation opportunities:', error);
+    }
   }
 
   // Sort by priority and limit
@@ -1306,3 +1370,124 @@ function formatSuggestion(lines, suggestion) {
     lines.push('');
   }
 }
+
+/**
+ * Find code consolidation opportunities using semantic search
+ * @param {Array<Object>} functions - Array of function objects
+ * @param {Object} indexer - Semantic indexer with vector store
+ * @param {string} projectRoot - Project root directory
+ * @param {number} complexityThreshold - Minimum complexity threshold
+ * @returns {Promise<Array<Object>>} Array of consolidation suggestions
+ */
+async function findConsolidationOpportunities(functions, indexer, projectRoot, complexityThreshold) {
+  const suggestions = [];
+
+  if (!indexer || !indexer.vectorStore) {
+    return suggestions;
+  }
+
+  // Group functions by complexity for analysis
+  const highComplexityFunctions = functions.filter(f => f.cyclomatic >= complexityThreshold);
+
+  if (highComplexityFunctions.length < 2) {
+    return suggestions; // Need at least 2 complex functions to consider consolidation
+  }
+
+  // For each high-complexity function, search for semantically similar code
+  const processedPairs = new Set();
+
+  for (const func of highComplexityFunctions.slice(0, 10)) { // Limit to 10 functions for performance
+    const query = func.name + ' function complexity ' + func.cyclomatic + ' ' + (func.cognitive || '');
+
+    try {
+      const semanticMatches = await indexer.vectorStore.search(query, 10, 0.65);
+
+      for (const match of semanticMatches) {
+        const chunkId = match.chunkId || match.id;
+        if (!chunkId) continue;
+
+        const filePath = chunkId.split('_L')[0].replace(/_/g, '/');
+
+        // CRITICAL FIX #1: Validate the extracted path to prevent path traversal
+        const fullPath = validateChunkFilePath(filePath, projectRoot);
+        if (!fullPath) {
+          continue; // Skip invalid paths
+        }
+
+        // Skip if it's the same file
+        if (filePath === func.filePath.replace(/^\//, '')) {
+          continue;
+        }
+
+        // Create a pair key to avoid duplicates
+        const pairKey = [func.filePath, filePath].sort().join('|');
+        if (processedPairs.has(pairKey)) {
+          continue;
+        }
+        processedPairs.add(pairKey);
+
+        // CRITICAL FIX #6: Add null checks for similarity
+        const similarity = match.similarity || 0;
+
+        // Only suggest consolidation if similarity is high enough
+        if (similarity >= 0.75) {
+          const similarityPercent = Math.round(similarity * 100);
+          const sharedModuleName = func.name.replace(/([A-Z])/g, '_$1').toLowerCase() + '.js';
+
+          suggestions.push({
+            function: {
+              name: func.name,
+              file: func.filePath,
+              line: func.line,
+              linesOfCode: func.linesOfCode
+            },
+            refactoringType: 'consolidate_similar',
+            priority: 'MEDIUM',
+            impact: 6,
+            effort: 7,
+            risk: 5,
+            currentMetrics: {
+              cyclomatic: func.cyclomatic,
+              cognitive: func.cognitive,
+              maintainability: func.maintainability?.toFixed(1) || 'N/A'
+            },
+            consolidation: {
+              similarFile: filePath,
+              similarity: similarityPercent,
+              suggestedSharedModule: 'utils/' + sharedModuleName,
+              reason: 'Similar code pattern detected across multiple files',
+              benefits: [
+                'Reduce code duplication',
+                'Single source of truth for changes',
+                'Improved maintainability',
+                'Consistent behavior'
+              ]
+            },
+            examples: {
+              description: 'Extract shared ' + func.name + ' functionality into a common module',
+              before: '// Similar code exists in:\n- ' + func.filePath + '\n- ' + filePath + '\n\nBoth implement ' + func.name + ' with similar complexity.',
+              after: '// Create shared module: utils/' + sharedModuleName.replace('.js', '') + '\n\nexport function ' + func.name + '(...) {\n  // Shared implementation\n}\n\n// Both files now import from shared module:\nimport { ' + func.name + ' } from \'./utils/' + sharedModuleName.replace('.js', '') + '\';'
+            },
+            callFrequency: 0,
+            hasTestCoverage: false
+          });
+        }
+
+        // Stop after finding the first consolidation opportunity for this function
+        if (suggestions.length >= 3) {
+          break;
+        }
+      }
+    } catch (error) {
+      logger.warn('[findConsolidationOpportunities] Failed for ' + func.name + ':', error);
+    }
+
+    // Stop if we have enough suggestions
+    if (suggestions.length >= 3) {
+      break;
+    }
+  }
+
+  return suggestions;
+}
+

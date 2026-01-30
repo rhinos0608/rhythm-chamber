@@ -44,8 +44,17 @@ export class VectorStore {
    * Add or update a vector
    */
   upsert(chunkId, embedding, metadata = {}) {
+    // Validate and convert embedding to Float32Array
     if (!(embedding instanceof Float32Array)) {
-      embedding = new Float32Array(embedding);
+      if (Array.isArray(embedding)) {
+        // Convert Array to Float32Array
+        embedding = new Float32Array(embedding);
+      } else if (typeof embedding === 'object' && embedding !== null) {
+        // Corrupted embedding: object with numeric keys
+        throw new Error(`Invalid embedding type for ${chunkId}: expected Float32Array or Array, got object with numeric keys. This may indicate cache corruption.`);
+      } else {
+        throw new Error(`Invalid embedding type for ${chunkId}: expected Float32Array or Array, got ${typeof embedding}`);
+      }
     }
 
     this.vectors.set(chunkId, embedding);
