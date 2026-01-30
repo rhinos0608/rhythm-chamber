@@ -32,6 +32,7 @@ import { schema as deep_code_search_schema, handler as deep_code_search_handler 
 import { schema as get_chunk_details_schema, handler as get_chunk_details_handler } from './src/tools/get-chunk-details.js';
 import { schema as list_indexed_files_schema, handler as list_indexed_files_handler } from './src/tools/list-indexed-files.js';
 import { schema as watcher_control_schema, handler as watcher_control_handler } from './src/tools/watcher-control.js';
+import { schema as indexing_control_schema, handler as indexing_control_handler } from './src/tools/indexing-control.js';
 
 // Semantic indexer
 import { CodeIndexer } from './src/semantic/indexer.js';
@@ -91,7 +92,8 @@ class RhythmChamberMCPServer {
           deep_code_search_schema,
           get_chunk_details_schema,
           list_indexed_files_schema,
-          watcher_control_schema
+          watcher_control_schema,
+          indexing_control_schema
         );
       }
 
@@ -151,6 +153,9 @@ class RhythmChamberMCPServer {
 
           case 'watcher_control':
             return await watcher_control_handler(args, this.projectRoot, this.semanticIndexer, this);
+
+          case 'indexing_control':
+            return await indexing_control_handler(args, this.projectRoot, this.semanticIndexer, this);
 
           default:
             throw new Error(`Unknown tool: ${name}`);
@@ -269,6 +274,10 @@ class RhythmChamberMCPServer {
     this._indexingInProgress = true;
     this._indexingError = null;
 
+    // Also set indexer flags for consistency
+    this.semanticIndexer._indexingInProgress = true;
+    this.semanticIndexer._indexingError = null;
+
     console.error(`[Rhythm Chamber MCP] Starting background indexing...`);
 
     // Store promise so shutdown can wait for it
@@ -285,10 +294,15 @@ class RhythmChamberMCPServer {
       } catch (error) {
         console.error(`[Rhythm Chamber MCP] Indexing error:`, error);
         this._indexingError = error.message || String(error);
+        this.semanticIndexer._indexingError = error;
       } finally {
         this._indexingInProgress = false;
+        this.semanticIndexer._indexingInProgress = false;
       }
     })();
+
+    // Also store promise on indexer
+    this.semanticIndexer._indexingPromise = this._indexingPromise;
 
     // Return promise for error handling at call site
     return this._indexingPromise;

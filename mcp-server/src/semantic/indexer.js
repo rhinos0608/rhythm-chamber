@@ -71,6 +71,9 @@ export class CodeIndexer {
     this.indexed = false;
     this.watcher = null;  // File watcher instance
     this._reindexLock = null;  // Concurrency control for reindexFiles()
+    this._indexingInProgress = false;  // Track if indexing is currently running
+    this._indexingError = null;  // Track any indexing errors
+    this._indexingPromise = null;  // Track current indexing operation
     this.stats = {
       filesDiscovered: 0,
       filesIndexed: 0,
@@ -199,15 +202,22 @@ export class CodeIndexer {
     // Load cached chunks
     await this._loadCachedChunks(fromCache);
 
-    // Index new/modified files
+    // Index new/modified files (with stop checking)
+    let indexedCount = 0;
     for (const filePath of toIndex) {
+      // Check if we should stop
+      if (!this._indexingInProgress) {
+        console.error('[Indexer] Indexing stopped by user request');
+        break;
+      }
       await this._indexFile(filePath);
+      indexedCount++;
     }
 
     // Finalize
     this.stats.indexTime = Date.now() - startTime;
     this.stats.lastIndexed = new Date().toISOString();
-    this.stats.filesIndexed = toIndex.length;
+    this.stats.filesIndexed = indexedCount;
     this.stats.filesFromCache = fromCache.length;
     this.indexed = true;
 
