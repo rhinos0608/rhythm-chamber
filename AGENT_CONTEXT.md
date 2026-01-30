@@ -7,8 +7,7 @@
 > - **Advanced Error Handling**: Intelligent classification and recovery systems
 > - **Enhanced Streaming**: Real-time message processing with proper buffering
 > - **Security v2.0**: Enhanced validation, adaptive rate limiting, and protection
->
-```bash
+>```bash
 # Development
 npm install                  # Install dependencies
 npm run dev                  # Start dev server (port 8080)
