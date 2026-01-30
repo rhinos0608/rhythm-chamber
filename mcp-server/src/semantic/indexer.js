@@ -426,11 +426,17 @@ export class CodeIndexer {
 
     // Fetch more results to allow re-ranking by type
     const fetchLimit = limit * 3;
+
+    // FIX #5: Generate embedding once and reuse for adaptive threshold retries
+    // This prevents duplicate API calls when retrying with lower threshold
+    const queryEmbedding = await this.embeddings.getEmbedding(query);
+
     let results = await this.vectorStore.searchByText(query, this.embeddings, {
       limit: fetchLimit,
       threshold,
       filters,
-      queryText // Pass query text for symbol name boosting
+      queryText,
+      queryEmbedding // Pass pre-generated embedding
     });
 
     // Adaptive threshold: If too few results, retry with lower threshold
@@ -442,7 +448,8 @@ export class CodeIndexer {
         limit: fetchLimit,
         threshold: adjustedThreshold,
         filters,
-        queryText
+        queryText,
+        queryEmbedding // Reuse the same embedding (no duplicate API call)
       });
 
       // Merge results, avoiding duplicates by chunkId
@@ -484,8 +491,14 @@ export class CodeIndexer {
       }
 
       // Call frequency bonus: +1 per 10 calls (from dependency graph)
+      // FIX #4: For methods (name like "MyClass.methodName"), extract just the method name
+      // before looking up usages, since calls are stored as just "methodName" not "MyClass.methodName"
       if (r.metadata?.name) {
-        const usages = this.dependencyGraph.findUsages(r.metadata.name);
+        let symbolName = r.metadata.name;
+        if (r.metadata?.type === 'method' && symbolName.includes('.')) {
+          symbolName = symbolName.split('.').pop();
+        }
+        const usages = this.dependencyGraph.findUsages(symbolName);
         if (usages.length > 0) {
           const callBonus = Math.floor(usages.length / 10);
           rankScore += callBonus;

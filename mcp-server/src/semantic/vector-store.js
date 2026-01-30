@@ -232,12 +232,22 @@ export class VectorStore {
    * @returns {number} Match score from 0 to 1
    */
   _calculateNameMatch(queryTerms, symbolName) {
-    if (!queryTerms.length || !symbolName) return 0;
+    // FIX #6: Better null/undefined/empty string handling
+    // Explicitly check for invalid inputs
+    if (!queryTerms || !Array.isArray(queryTerms) || queryTerms.length === 0) {
+      return 0;
+    }
+    if (symbolName === null || symbolName === undefined || symbolName === '') {
+      return 0;
+    }
 
     const nameLower = symbolName.toLowerCase();
     let maxScore = 0;
 
     for (const term of queryTerms) {
+      // Skip invalid terms
+      if (!term || term === '') continue;
+
       const termLower = term.toLowerCase();
 
       // Exact match
@@ -275,15 +285,20 @@ export class VectorStore {
   /**
    * Search by text (requires embedding provider)
    * Now supports symbol name boosting for better relevance
+   *
+   * FIX #5: Added variant that accepts pre-generated embedding to avoid
+   * duplicate API calls when retrying with different thresholds.
    */
   async searchByText(query, embeddings, options = {}) {
     const {
       queryText = null,
+      queryEmbedding = null,
       ...remainingOptions
     } = options;
 
-    const queryEmbedding = await embeddings.getEmbedding(query);
-    const results = this.search(queryEmbedding, remainingOptions);
+    // Generate embedding if not provided (allows caching across retries)
+    const embedding = queryEmbedding || await embeddings.getEmbedding(query);
+    const results = this.search(embedding, remainingOptions);
 
     // Apply symbol name boost if query text is provided
     if (queryText) {
@@ -406,18 +421,28 @@ export class VectorStore {
     }
 
     // File pattern filter (with ReDoS protection)
+    // FIX #8: Be more specific, only block actual ReDoS patterns like nested quantifiers
     if (filters.filePattern) {
       try {
-        // Limit pattern complexity to prevent ReDoS
         const patternStr = filters.filePattern;
-        if (patternStr.length > 200) {
-          console.warn('[VectorStore] filePattern too long, truncating');
+
+        // Basic length limit to prevent excessive memory use
+        if (patternStr.length > 500) {
+          console.warn('[VectorStore] filePattern too long (>500 chars), ignoring filter');
           return false;
         }
 
-        // Disallow nested quantifiers and complex patterns
-        if (/(?:\*\*|\*\?|\{|\})|\^|\$/.test(patternStr)) {
-          console.warn('[VectorStore] filePattern contains unsupported pattern, ignoring filter');
+        // Only block dangerous ReDoS patterns:
+        // - Nested quantifiers like (a+)+, (a*)*, (a+)* that cause exponential backtracking
+        // - Overlapping alternations like (a|a)+ that match the same thing multiple ways
+        const redosPatterns = [
+          /\([^)]*[\*\+][^)]*[\*\+]\)/,  // Nested quantifiers: (a+)+, (a*)*, etc.
+          /\([^)]*\|[^)]*\)[\*\+]/,      // Overlapping alternations: (a|a)+
+          /\(\.[\*\+].*\)[\*\+]/,        // Nested with wildcard: (.+)+, (.)+
+        ];
+
+        if (redosPatterns.some(p => p.test(patternStr))) {
+          console.warn('[VectorStore] filePattern contains potential ReDoS pattern, ignoring filter');
           return false;
         }
 
