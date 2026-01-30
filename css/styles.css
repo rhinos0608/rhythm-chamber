@@ -1354,11 +1354,13 @@ button:focus:not(:focus-visible) {
   width: 90%;
   max-width: 560px;
   max-height: 90vh;
-  overflow: hidden;
+  overflow-y: auto;
+  /* Allow vertical scrolling for tall content */
   display: flex;
   flex-direction: column;
   animation: slideUp 0.3s ease;
 }
+
 
 @keyframes slideUp {
   from {
