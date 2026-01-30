@@ -277,12 +277,40 @@ async function handleStatus(indexer, mcpServer) {
 
   // Cache status
   const cacheStats = indexer.cache ? indexer.cache.getStats() : {};
-  if (cacheStats.fileCount !== undefined) {
+  if (cacheStats.fileCount !== undefined || stats.cacheFailures > 0) {
     lines.push('## Cache');
-    lines.push(`- **Cached Files**: ${cacheStats.fileCount}`);
-    lines.push(`- **Cache Hits**: ${cacheStats.hits || 0}`);
-    lines.push(`- **Cache Misses**: ${cacheStats.misses || 0}`);
-    lines.push(`- **Hit Rate**: ${((cacheStats.hits / (cacheStats.hits + cacheStats.misses)) * 100).toFixed(1)}%`);
+    if (cacheStats.fileCount !== undefined) {
+      lines.push(`- **Cached Files**: ${cacheStats.fileCount}`);
+      if (cacheStats.chunkCount !== undefined) {
+        lines.push(`- **Cached Chunks**: ${cacheStats.chunkCount}`);
+      }
+      if (cacheStats.approximateSize !== undefined) {
+        const sizeMB = (cacheStats.approximateSize / 1024 / 1024).toFixed(2);
+        lines.push(`- **Cache Size**: ${sizeMB} MB`);
+      }
+      if (cacheStats.dirty !== undefined) {
+        lines.push(`- **Dirty**: ${cacheStats.dirty ? 'Yes (needs save)' : 'No'}`);
+      }
+    }
+    if (stats.cacheFailures > 0) {
+      const failureRate = stats.filesIndexed > 0
+        ? ((stats.cacheFailures / stats.filesIndexed) * 100).toFixed(1)
+        : '0.0';
+
+      // Only show warning if failures are recent (< 1 hour ago)
+      const lastFailureTime = stats.lastCacheFailureTime || 0;
+      const failureAge = Date.now() - lastFailureTime;
+      const isRecent = failureAge < 3600000; // 1 hour in milliseconds
+
+      lines.push(`- **Cache Failures**: ${stats.cacheFailures}/${stats.filesIndexed} (${failureRate}%)${isRecent ? ' ⚠️' : ''}`);
+
+      if (isRecent) {
+        lines.push(`- **Status**: Cache degradation detected - re-embedding required on restart`);
+      } else {
+        const minutesAgo = Math.floor(failureAge / 60000);
+        lines.push(`- **Last Failure**: ${minutesAgo} minutes ago (resolved)`);
+      }
+    }
     lines.push('');
   }
 
@@ -302,18 +330,29 @@ async function handleStatus(indexer, mcpServer) {
 
   // Vector store status
   if (indexer.vectorStore) {
-    const vectorCount = indexer.vectorStore.size || 0;
+    const vectorCount = indexer.vectorStore.chunkCount || 0;
+    const expectedCount = stats.chunksIndexed || 0;
+    const mismatch = vectorCount !== expectedCount;
+
     lines.push('## Vector Store');
-    lines.push(`- **Vectors**: ${vectorCount}`);
+    lines.push(`- **Vectors**: ${vectorCount}${expectedCount > 0 ? ` (expected: ${expectedCount})` : ''}${mismatch ? ' ⚠️' : ''}`);
+    if (mismatch && expectedCount > 0) {
+      lines.push(`- **Status**: MISMATCH - ${expectedCount - vectorCount > 0 ? 'Some embeddings not stored' : 'More vectors than chunks indexed'}`);
+    }
     lines.push('');
   }
 
   // Dependency graph status
   if (indexer.dependencyGraph) {
-    const symbolCount = indexer.dependencyGraph.graph ?
-      Object.keys(indexer.dependencyGraph.graph).length : 0;
+    // Count symbols from all relevant maps
+    const definitionCount = indexer.dependencyGraph.definitions?.size || 0;
+    const usageCount = indexer.dependencyGraph.usages?.size || 0;
+    const exportCount = indexer.dependencyGraph.exports?.size || 0;
+    const importCount = indexer.dependencyGraph.imports?.size || 0;
+    const symbolCount = definitionCount + usageCount + exportCount + importCount;
+
     lines.push('## Dependency Graph');
-    lines.push(`- **Symbols**: ${symbolCount}`);
+    lines.push(`- **Symbols**: ${symbolCount} (definitions: ${definitionCount}, usages: ${usageCount}, exports: ${exportCount}, imports: ${importCount})`);
     lines.push('');
   }
 
