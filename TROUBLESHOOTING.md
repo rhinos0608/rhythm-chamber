@@ -46,7 +46,7 @@ SafeMode.getSafeModeStatus()
 ### Issue: "API key is required" Error
 
 **Symptoms:**
-- Configuration modal shows errors
+- configuration model shows errors
 - Provider selection fails
 - Chat responses don't work
 

@@ -26,6 +26,10 @@
     "docs:sync:commit": "node scripts/docs-sync/orchestrator.js --mode=manual --commit",
     "docs:watch": "node scripts/docs-sync/watcher.js",
     "docs:validate": "node scripts/docs-sync/orchestrator.js --mode=hook",
+    "watcher:start": "node mcp-server/scripts/watcher-control.js start",
+    "watcher:stop": "node mcp-server/scripts/watcher-control.js stop",
+    "watcher:status": "node mcp-server/scripts/watcher-control.js status",
+    "watcher:restart": "node mcp-server/scripts/watcher-control.js restart",
     "prepare": "husky"
   },
   "repository": {
