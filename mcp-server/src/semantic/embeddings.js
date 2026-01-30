@@ -328,8 +328,24 @@ export class HybridEmbeddings {
     });
 
     // Convert to Float32Array
+    // CRITICAL FIX: Handle nested array structure from feature-extraction pipeline
+    // With pooling, output is [[batch, hidden_size]], we need the inner array
     const tensorData = await output.tolist();
-    return new Float32Array(tensorData);
+
+    // Flatten nested array structure if present
+    let embeddingArray;
+    if (Array.isArray(tensorData) && tensorData.length > 0 && Array.isArray(tensorData[0])) {
+      // Nested array: [[0.1, 0.2, ..., 0.768]] -> extract inner array
+      embeddingArray = tensorData[0];
+    } else if (Array.isArray(tensorData)) {
+      // Flat array: [0.1, 0.2, ..., 0.768]
+      embeddingArray = tensorData;
+    } else {
+      // Unexpected structure
+      throw new Error(`Unexpected tensor structure: ${JSON.stringify(tensorData).slice(0, 100)}`);
+    }
+
+    return new Float32Array(embeddingArray);
   }
 
   /**
@@ -356,8 +372,25 @@ export class HybridEmbeddings {
         normalize: true
       });
       const testTensor = await testOutput.tolist();
-      const actualDim = Array.isArray(testTensor) ? testTensor.length :
-                      Array.isArray(testTensor[0]) ? testTensor[0].length : testTensor.dims?.[testTensor.dims.length - 1] || 384;
+
+      // CRITICAL FIX: Handle nested array structure correctly
+      // feature-extraction with pooling returns [[batch, hidden_size]]
+      // We need to get the inner dimension (hidden_size), not batch size
+      let actualDim;
+      if (Array.isArray(testTensor)) {
+        if (testTensor.length === 0) {
+          actualDim = 384; // Fallback default
+        } else if (Array.isArray(testTensor[0])) {
+          // Nested array: [[0.1, 0.2, ...]] -> use inner array length
+          actualDim = testTensor[0].length;
+        } else {
+          // Flat array: [0.1, 0.2, ...] -> use outer length
+          actualDim = testTensor.length;
+        }
+      } else {
+        // Tensor-like object with dims property
+        actualDim = testTensor.dims?.[testTensor.dims.length - 1] || 384;
+      }
 
       if (actualDim !== this.dimension) {
         console.warn(`[Embeddings] Dimension mismatch: expected ${this.dimension}, but ${FALLBACK_MODEL} produces ${actualDim}. Using actual dimension.`);
