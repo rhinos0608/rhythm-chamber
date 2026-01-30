@@ -160,6 +160,8 @@ test.describe('Upload → Analysis → Chat Flow', () => {
         await expect(chatBtn).toBeVisible({ timeout: 5000 });
         await chatBtn.click();
 
+        // Wait for chat section transition to complete
+        await page.waitForTimeout(300);
         // Verify chat section is visible
         await expect(page.locator('#chat-section')).toHaveClass(/active/);
         await expect(page.locator('#chat-input')).toBeVisible();
@@ -185,7 +187,8 @@ test.describe('Session Persistence', () => {
         const personalityName = await page.locator('#personality-name').textContent();
 
         // Reload the page
-        await page.reload();
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await page.waitForTimeout(500); // Wait for data restoration to complete
 
         // Should show reveal section immediately (data persisted)
         await expect(page.locator('#reveal-section')).toHaveClass(/active/, { timeout: 5000 });
@@ -204,6 +207,8 @@ test.describe('Session Persistence', () => {
         await expect(page.locator('#reveal-section')).toHaveClass(/active/, { timeout: 30000 });
         await page.locator('#explore-chat-btn').click();
 
+        // Wait for chat section transition
+        await page.waitForTimeout(500);
         // Note: We can't fully test chat without API key, but we can verify session structure
         const chatInput = page.locator('#chat-input');
         await expect(chatInput).toBeVisible();
@@ -212,6 +217,8 @@ test.describe('Session Persistence', () => {
         await chatInput.fill('Test message');
         await page.locator('#chat-send').click();
 
+        // Wait for message to be added to DOM
+        await page.waitForTimeout(300);
         // User message should appear
         await expect(page.locator('.message.user').last()).toContainText('Test message');
     });
@@ -377,6 +384,7 @@ test.describe('Settings Persistence', () => {
         // Open settings modal via settings button
         const settingsBtn = page.locator('#settings-btn, .settings-btn').first();
         await settingsBtn.click();
+        await page.waitForTimeout(300); // Wait for modal animation
         await expect(page.locator('#settings-modal')).toBeVisible({ timeout: 5000 });
 
         // Change a setting (max tokens)
@@ -388,6 +396,7 @@ test.describe('Settings Persistence', () => {
         // Close modal via close button
         const closeBtn = page.locator('.settings-close').first();
         await closeBtn.click();
+        await page.waitForTimeout(300); // Wait for modal to close
         await expect(page.locator('#settings-modal')).not.toBeVisible({ timeout: 5000 });
 
         // Reload page
@@ -396,6 +405,7 @@ test.describe('Settings Persistence', () => {
         // Re-open settings
         const settingsBtnAfterReload = page.locator('#settings-btn, .settings-btn').first();
         await settingsBtnAfterReload.click();
+        await page.waitForTimeout(300); // Wait for modal animation
         await expect(page.locator('#settings-modal')).toBeVisible({ timeout: 5000 });
 
         // Verify setting persisted
@@ -414,11 +424,13 @@ test.describe('Settings Persistence', () => {
         // Open settings
         const settingsBtn = page.locator('#settings-btn, .settings-btn').first();
         await settingsBtn.click();
+        await page.waitForTimeout(300); // Wait for modal animation
         await expect(page.locator('#settings-modal')).toBeVisible({ timeout: 5000 });
 
         // Close via close button
         const closeBtn = page.locator('#settings-modal .close-btn, #settings-modal [class*="close"]').first();
         await closeBtn.click();
+        await page.waitForTimeout(300); // Wait for modal to close
         await expect(page.locator('#settings-modal')).not.toBeVisible({ timeout: 5000 });
     });
 });
@@ -443,6 +455,7 @@ test.describe('Start Over Functionality', () => {
 
         if (await startOverBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
             await startOverBtn.click();
+            await page.waitForTimeout(300); // Wait for modal animation
 
             // Should show confirmation modal
             const resetModal = page.locator('#reset-confirm-modal, #reset-modal, .reset-modal').first();
@@ -466,11 +479,13 @@ test.describe('Start Over Functionality', () => {
         const startOverBtn = page.locator('#reset-btn');
         if (await startOverBtn.isVisible()) {
             await startOverBtn.click();
+            await page.waitForTimeout(300); // Wait for modal to appear
 
             // Confirm reset
             const confirmBtn = page.locator('#reset-modal .confirm-btn, #reset-modal .btn-danger');
             if (await confirmBtn.isVisible()) {
                 await confirmBtn.click();
+                await page.waitForTimeout(500); // Wait for reset to complete
 
                 // Should return to upload view
                 await expect(page.locator('#upload-zone')).toBeVisible({ timeout: 10000 });
@@ -498,6 +513,8 @@ test.describe('Chat Input Functionality', () => {
         await expect(chatBtn).toBeVisible({ timeout: 5000 });
         await chatBtn.click();
 
+        // Wait for chat section transition
+        await page.waitForTimeout(500);
         // Wait for chat view with longer timeout
         await expect(page.locator('#chat-container, .chat-container, [class*="chat"]').first()).toBeVisible({ timeout: 10000 });
 
@@ -528,6 +545,8 @@ test.describe('Chat Input Functionality', () => {
         await expect(chatBtn).toBeVisible({ timeout: 5000 });
         await chatBtn.click();
 
+        // Wait for chat section transition
+        await page.waitForTimeout(500);
         // Should have at least one message (system/assistant welcome)
         const messages = page.locator('.chat-message, .message');
         await expect(messages.first()).toBeVisible({ timeout: 5000 });
@@ -552,6 +571,8 @@ test.describe('Sidebar Functionality', () => {
         await expect(chatBtn).toBeVisible({ timeout: 5000 });
         await chatBtn.click();
 
+        // Wait for chat section transition
+        await page.waitForTimeout(500);
         // Sidebar toggle should be accessible
         const toggleBtn = page.locator('#sidebar-toggle');
         if (await toggleBtn.isVisible()) {
@@ -579,6 +600,7 @@ test.describe('Sidebar Functionality', () => {
         const chatBtn = page.locator('#explore-chat-btn');
         await expect(chatBtn).toBeVisible({ timeout: 5000 });
         await chatBtn.click();
+        await page.waitForTimeout(500); // Wait for chat section transition
         await expect(page.locator('#chat-container, .chat-container, [class*="chat"]').first()).toBeVisible({ timeout: 10000 });
 
 

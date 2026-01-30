@@ -23,7 +23,8 @@ import * as Internal from './storage-degradation/index.js';
 // Re-export Enums and Constants
 // ==========================================
 
-export { DegradationTier, CleanupPriority } from './storage-degradation/degradation-detector.js';
+export { DegradationTier } from './storage-degradation/degradation-detector.js';
+export { CleanupPriority } from './storage-degradation/cleanup-strategies.js';
 
 // ==========================================
 // StorageDegradationManager Class (Backward Compatible)

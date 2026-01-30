@@ -38,6 +38,22 @@ configureLogger({
 const logger = createLogger('Main');
 
 // ==========================================
+// Browser Compatibility Polyfills
+// ==========================================
+
+/**
+ * Polyfill queueMicrotask for older browsers
+ * queueMicrotask requires Chrome 71+, Firefox 69+, Safari 12.1+
+ * This polyfill uses Promise.resolve().then() as a fallback
+ */
+if (typeof queueMicrotask !== 'function') {
+    window.queueMicrotask = function(callback) {
+        Promise.resolve().then(callback);
+    };
+    logger.debug('queueMicrotask polyfill installed for older browser support');
+}
+
+// ==========================================
 // Security Check (MUST run first, synchronously)
 // ==========================================
 
@@ -566,6 +582,10 @@ async function bootstrap() {
         // These are NOT preloaded at startup - loaded on user intent instead
         ModuleRegistry.register('Ollama', () => import('./ollama.js'), 'Ollama');
         ModuleRegistry.register('OllamaProvider', () => import('./providers/ollama-adapter.js'), 'OllamaProvider');
+        ModuleRegistry.register('OpenRouterProvider', () => import('./providers/openrouter.js'), 'OpenRouterProvider');
+        ModuleRegistry.register('GeminiProvider', () => import('./providers/gemini.js'), 'GeminiProvider');
+        ModuleRegistry.register('LMStudioProvider', () => import('./providers/lmstudio.js'), 'LMStudioProvider');
+        ModuleRegistry.register('OpenAICompatibleProvider', () => import('./providers/openai-compatible.js'), 'OpenAICompatibleProvider');
         ModuleRegistry.register('RAG', () => import('./rag.js'), 'RAG');
         ModuleRegistry.register('LocalVectorStore', () => import('./local-vector-store.js'), 'LocalVectorStore');
         ModuleRegistry.register('LocalEmbeddings', () => import('./local-embeddings.js'), 'LocalEmbeddings');

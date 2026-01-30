@@ -1,0 +1,1 @@
+export const test9 = 9;

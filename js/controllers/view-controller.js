@@ -23,6 +23,9 @@ let descriptionAbortController = null;
 // Edge case: Pending request flag to prevent concurrent AI description requests (RACE CONDITION FIX)
 let descriptionRequestPending = false;
 
+// Unsubscribe function for AppState subscription
+let unsubscribeAppState = null;
+
 /**
  * Initialize DOM element references
  * Called once on first use
@@ -40,6 +43,20 @@ function initElements() {
         resetBtn: document.getElementById('reset-btn'),
         chatSidebar: document.getElementById('chat-sidebar')
     };
+
+    // Subscribe to AppState changes for reset button visibility
+    if (!unsubscribeAppState) {
+        unsubscribeAppState = AppState.subscribe((state, changedDomains) => {
+            // Only respond to ui domain changes
+            if (changedDomains.includes('ui')) {
+                const resetButtonVisible = state.ui.resetButton?.visible || false;
+                const el = initElements();
+                if (el.resetBtn) {
+                    el.resetBtn.style.display = resetButtonVisible ? 'block' : 'none';
+                }
+            }
+        });
+    }
 
     return _elements;
 }
@@ -87,13 +104,13 @@ function showUpload() {
     const el = initElements();
 
     AppState.setView('upload');
+    AppState.setResetButton(false);
 
-    el.uploadZone.style.display = 'flex';
-    el.processing.classList.remove('active');
-    el.revealSection.classList.remove('active');
-    el.liteRevealSection?.classList.remove('active');
-    el.chatSection.classList.remove('active');
-    el.resetBtn.style.display = 'none';
+    if (el.uploadZone) el.uploadZone.style.display = 'flex';
+    if (el.processing) el.processing.classList.remove('active');
+    if (el.revealSection) el.revealSection.classList.remove('active');
+    if (el.liteRevealSection) el.liteRevealSection.classList.remove('active');
+    if (el.chatSection) el.chatSection.classList.remove('active');
 
     // Hide sidebar in non-chat views
     if (el.chatSidebar) {
@@ -110,13 +127,13 @@ function showProcessing(message = 'Processing...') {
 
     AppState.setView('processing');
     AppState.setProcessing(true, message);
+    AppState.setResetButton(false);
 
-    el.uploadZone.style.display = 'none';
-    el.processing.classList.add('active');
-    el.revealSection.classList.remove('active');
-    el.liteRevealSection?.classList.remove('active');
-    el.chatSection.classList.remove('active');
-    el.resetBtn.style.display = 'none';
+    if (el.uploadZone) el.uploadZone.style.display = 'none';
+    if (el.processing) el.processing.classList.add('active');
+    if (el.revealSection) el.revealSection.classList.remove('active');
+    if (el.liteRevealSection) el.liteRevealSection.classList.remove('active');
+    if (el.chatSection) el.chatSection.classList.remove('active');
 
     if (el.progressText) {
         el.progressText.textContent = message;
@@ -133,6 +150,7 @@ function updateProgress(message, progress = 0) {
 
     AppState.setProcessing(true, message, progress);
 
+    // Null check already present, no changes needed
     if (el.progressText) {
         el.progressText.textContent = message;
     }
@@ -157,13 +175,13 @@ function showReveal() {
 
     AppState.setView('reveal');
     AppState.setProcessing(false);
+    AppState.setResetButton(true);
 
-    el.uploadZone.style.display = 'none';
-    el.processing.classList.remove('active');
-    el.revealSection.classList.add('active');
-    el.liteRevealSection?.classList.remove('active');
-    el.chatSection.classList.remove('active');
-    el.resetBtn.style.display = 'block';
+    if (el.uploadZone) el.uploadZone.style.display = 'none';
+    if (el.processing) el.processing.classList.remove('active');
+    if (el.revealSection) el.revealSection.classList.add('active');
+    if (el.liteRevealSection) el.liteRevealSection.classList.remove('active');
+    if (el.chatSection) el.chatSection.classList.remove('active');
 
     // Populate reveal content
     const personalityEmojiEl = document.getElementById('personality-emoji');
@@ -376,13 +394,13 @@ function showLiteReveal() {
 
     AppState.setView('lite-reveal');
     AppState.setProcessing(false);
+    AppState.setResetButton(true);
 
-    el.uploadZone.style.display = 'none';
-    el.processing.classList.remove('active');
-    el.revealSection.classList.remove('active');
-    el.liteRevealSection?.classList.add('active');
-    el.chatSection.classList.remove('active');
-    el.resetBtn.style.display = 'block';
+    if (el.uploadZone) el.uploadZone.style.display = 'none';
+    if (el.processing) el.processing.classList.remove('active');
+    if (el.revealSection) el.revealSection.classList.remove('active');
+    if (el.liteRevealSection) el.liteRevealSection.classList.add('active');
+    if (el.chatSection) el.chatSection.classList.remove('active');
 
     // Populate lite reveal content
     const litePersonalityEmojiEl = document.getElementById('lite-personality-emoji');
@@ -430,13 +448,13 @@ function showChat() {
     }
 
     AppState.setView('chat');
+    AppState.setResetButton(true);
 
-    el.uploadZone.style.display = 'none';
-    el.processing.classList.remove('active');
-    el.revealSection.classList.remove('active');
-    el.liteRevealSection?.classList.remove('active');
-    el.chatSection.classList.add('active');
-    el.resetBtn.style.display = 'block';
+    if (el.uploadZone) el.uploadZone.style.display = 'none';
+    if (el.processing) el.processing.classList.remove('active');
+    if (el.revealSection) el.revealSection.classList.remove('active');
+    if (el.liteRevealSection) el.liteRevealSection.classList.remove('active');
+    if (el.chatSection) el.chatSection.classList.add('active');
 
     const chatPersonalityName = document.getElementById('chat-personality-name');
     if (chatPersonalityName) {
@@ -474,6 +492,11 @@ function destroy() {
     }
     // Reset pending request flag (RACE CONDITION FIX)
     descriptionRequestPending = false;
+    // Unsubscribe from AppState changes
+    if (unsubscribeAppState) {
+        unsubscribeAppState();
+        unsubscribeAppState = null;
+    }
     // Clear element cache
     _elements = null;
 }

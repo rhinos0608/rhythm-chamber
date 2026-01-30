@@ -113,7 +113,7 @@ function transformForAnalysis(spotifyData) {
  * @param {function} onProgress - Progress callback
  * @returns {Promise<object>} All Spotify data for analysis
  */
-async function fetchSnapshotData(onProgress = () => {}) {
+async function fetchSnapshotData(onProgress = () => { }) {
     const data = {
         recentlyPlayed: null,
         topArtists: {
@@ -247,11 +247,11 @@ export const Spotify = {
     fetchSnapshotData,
     transformForAnalysis,
 
-    // Background Refresh
-    startBackgroundRefresh: RefreshService.startBackgroundRefresh,
-    stopBackgroundRefresh: RefreshService.stopBackgroundRefresh,
-    isBackgroundRefreshActive: RefreshService.isBackgroundRefreshActive,
-    checkTokenRefreshNeeded: RefreshService.checkTokenRefreshNeeded
+    // Background Refresh - wrapped to preserve class context for private fields
+    startBackgroundRefresh: () => RefreshService.startBackgroundRefresh(),
+    stopBackgroundRefresh: () => RefreshService.stopBackgroundRefresh(),
+    isBackgroundRefreshActive: () => RefreshService.isBackgroundRefreshActive(),
+    checkTokenRefreshNeeded: () => RefreshService.checkTokenRefreshNeeded()
 };
 
 logger.debug('Spotify module facade loaded');

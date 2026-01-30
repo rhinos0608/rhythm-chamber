@@ -1628,10 +1628,13 @@ button:focus:not(:focus-visible) {
 }
 
 @keyframes pulse-blacklist {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
     box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.7);
   }
+
   50% {
     opacity: 0.7;
     box-shadow: 0 0 0 6px rgba(139, 92, 246, 0);
@@ -2297,6 +2300,9 @@ button:focus:not(:focus-visible) {
   padding: var(--space-2xl);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   animation: fade-in 0.2s ease;
+  /* FIX: Enable scrolling for tall modals like settings */
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 /* Modal overlay background click handler */
@@ -2405,7 +2411,8 @@ button:focus:not(:focus-visible) {
 
 /* Premium Preview Modal */
 .premium-preview-modal {
-  z-index: 10001; /* Above safe-mode-banner (10000) and demo-transitioning overlay (9999) */
+  z-index: 10001;
+  /* Above safe-mode-banner (10000) and demo-transitioning overlay (9999) */
 }
 
 .premium-modal-content {
@@ -4964,9 +4971,12 @@ body.read-only-mode .chat-input {
 
 /* Skeleton animation */
 @keyframes skeleton-pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     background-position: -200% 0;
   }
+
   50% {
     background-position: 200% 0;
   }
@@ -4974,12 +4984,10 @@ body.read-only-mode .chat-input {
 
 /* Base skeleton styles */
 .skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--bg-glass) 25%,
-    rgba(255, 255, 255, 0.08) 50%,
-    var(--bg-glass) 75%
-  );
+  background: linear-gradient(90deg,
+      var(--bg-glass) 25%,
+      rgba(255, 255, 255, 0.08) 50%,
+      var(--bg-glass) 75%);
   background-size: 200% 100%;
   animation: skeleton-pulse 1.5s ease-in-out infinite;
   border-radius: var(--radius-sm);
@@ -5086,6 +5094,7 @@ body.read-only-mode .chat-input {
     opacity: 0;
     transform: translateX(-10px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -5096,15 +5105,41 @@ body.read-only-mode .chat-input {
   animation: slide-in-stagger 0.3s ease-out forwards;
 }
 
-.session-item:nth-child(1) { animation-delay: 0ms; }
-.session-item:nth-child(2) { animation-delay: 50ms; }
-.session-item:nth-child(3) { animation-delay: 100ms; }
-.session-item:nth-child(4) { animation-delay: 150ms; }
-.session-item:nth-child(5) { animation-delay: 200ms; }
-.session-item:nth-child(6) { animation-delay: 250ms; }
-.session-item:nth-child(7) { animation-delay: 300ms; }
-.session-item:nth-child(8) { animation-delay: 350ms; }
-.session-item:nth-child(n+9) { animation-delay: 400ms; }
+.session-item:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.session-item:nth-child(2) {
+  animation-delay: 50ms;
+}
+
+.session-item:nth-child(3) {
+  animation-delay: 100ms;
+}
+
+.session-item:nth-child(4) {
+  animation-delay: 150ms;
+}
+
+.session-item:nth-child(5) {
+  animation-delay: 200ms;
+}
+
+.session-item:nth-child(6) {
+  animation-delay: 250ms;
+}
+
+.session-item:nth-child(7) {
+  animation-delay: 300ms;
+}
+
+.session-item:nth-child(8) {
+  animation-delay: 350ms;
+}
+
+.session-item:nth-child(n+9) {
+  animation-delay: 400ms;
+}
 
 /* ------------------------------------------
    5. Enhanced Empty States
@@ -5196,6 +5231,7 @@ body.read-only-mode .chat-input {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -5206,6 +5242,7 @@ body.read-only-mode .chat-input {
     opacity: 0;
     transform: scale(0.95) translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: scale(1) translateY(0);
@@ -5290,12 +5327,10 @@ body.read-only-mode .chat-input {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.3),
-    transparent
-  );
+  background: linear-gradient(90deg,
+      transparent,
+      rgba(255, 255, 255, 0.3),
+      transparent);
   animation: shimmer 1.5s infinite;
 }
 
@@ -5303,6 +5338,7 @@ body.read-only-mode .chat-input {
   0% {
     transform: translateX(-100%);
   }
+
   100% {
     transform: translateX(100%);
   }
@@ -5347,10 +5383,12 @@ body.read-only-mode .chat-input {
     transform: scale(0.8);
     opacity: 0.8;
   }
+
   50% {
     transform: scale(1.1);
     opacity: 0.4;
   }
+
   100% {
     transform: scale(0.8);
     opacity: 0.8;
@@ -5547,6 +5585,7 @@ body.read-only-mode .chat-input {
    ------------------------------------------ */
 
 @media (max-width: 768px) {
+
   /* Reduce animation complexity on mobile for performance */
   .interactive-card:hover {
     transform: none;
@@ -5569,6 +5608,7 @@ body.read-only-mode .chat-input {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   /* Respect user's motion preferences */
   *,
   *::before,
@@ -5700,7 +5740,7 @@ body.read-only-mode .chat-input {
   line-height: 1.5;
 }
 
-.artifact-explanation p + p {
+.artifact-explanation p+p {
   margin-top: var(--space-sm);
 }
 
@@ -5782,24 +5822,25 @@ body.read-only-mode .chat-input {
     padding: var(--space-sm);
     overflow-x: auto;
   }
-  
+
   .artifact-table {
     font-size: 0.75rem;
   }
-  
+
   .artifact-table th,
   .artifact-table td {
     padding: var(--space-xs) var(--space-sm);
   }
-  
+
   .artifact-header {
     padding: var(--space-sm) var(--space-md);
   }
-  
+
   .artifact-title {
     font-size: 0.85rem;
   }
 }
+
 /* ==========================================
    Premium Upgrade Modal Styles
    ========================================== */

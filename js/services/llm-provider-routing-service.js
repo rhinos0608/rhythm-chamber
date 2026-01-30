@@ -62,25 +62,28 @@ function buildProviderConfig(provider, settings, baseConfig) {
     }
 
     // Fallback for backward compatibility
+    // All settings are stored under settings.llm.* for consistency
+    const llmSettings = settings?.llm || {};
+
     switch (normalizedProvider) {
         case 'ollama':
             return {
                 provider: 'ollama',
-                endpoint: settings.llm?.ollamaEndpoint || 'http://localhost:11434',
-                model: settings.ollama?.model || 'llama3.2',
-                temperature: settings.ollama?.temperature ?? settings.openrouter?.temperature ?? 0.7,
-                topP: settings.ollama?.topP ?? 0.9,
-                maxTokens: settings.ollama?.maxTokens || 2000
+                endpoint: llmSettings.ollamaEndpoint || 'http://localhost:11434',
+                model: llmSettings.ollamaModel || 'llama3.2',
+                temperature: llmSettings.temperature ?? 0.7,
+                topP: 0.9,
+                maxTokens: llmSettings.maxTokens || 2000
             };
 
         case 'lmstudio':
             return {
                 provider: 'lmstudio',
-                endpoint: settings.llm?.lmstudioEndpoint || 'http://localhost:1234/v1',
-                model: settings.lmstudio?.model || 'local-model',
-                temperature: settings.lmstudio?.temperature ?? settings.openrouter?.temperature ?? 0.7,
-                topP: settings.lmstudio?.topP ?? 0.9,
-                maxTokens: settings.lmstudio?.maxTokens || 2000
+                endpoint: llmSettings.lmstudioEndpoint || 'http://localhost:1234/v1',
+                model: llmSettings.lmstudioModel || 'local-model',
+                temperature: llmSettings.temperature ?? 0.7,
+                topP: 0.9,
+                maxTokens: llmSettings.maxTokens || 2000
             };
 
         case 'openrouter':
@@ -88,15 +91,15 @@ function buildProviderConfig(provider, settings, baseConfig) {
             return {
                 provider: 'openrouter',
                 ...baseConfig,
-                ...(settings.openrouter || {}),
-                model: settings.openrouter?.model || baseConfig.model,
-                temperature: settings.openrouter?.temperature ?? 0.7,
-                topP: settings.openrouter?.topP ?? 0.9,
-                maxTokens: settings.openrouter?.maxTokens || 4500,
-                frequencyPenalty: settings.openrouter?.frequencyPenalty ?? 0,
-                presencePenalty: settings.openrouter?.presencePenalty ?? 0
+                model: llmSettings.openrouterModel || baseConfig?.model || 'xiaomi/mimo-v2-flash:free',
+                temperature: llmSettings.temperature ?? 0.7,
+                topP: 0.9,
+                maxTokens: llmSettings.maxTokens || 4500,
+                frequencyPenalty: 0,
+                presencePenalty: 0
             };
     }
+
 }
 
 /**

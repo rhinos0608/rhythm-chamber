@@ -1,0 +1,209 @@
+# CodeRabbit Configuration for Rhythm Chamber
+# Enforces HNW architecture patterns and code quality standards
+
+language: "en-US"
+tone: "friendly and precise"
+early_access: false
+free_tier_features: true
+
+# Review settings
+reviews:
+  profile: "chill"  # Friendly but thorough reviews
+  auto_approve: false
+  generate_summary: true
+  high_level_summary_instructions: |
+    Create concise release notes as a bullet-point list of key changes.
+    Focus on architectural impact, new features, and critical fixes.
+    Include a Markdown table showing lines added/removed by each contributing author.
+  high_level_summary_placeholder: "@coderabbitai summary"
+  wrap_walkthrough: true
+  include_file_summary: true
+  include_sequence_diagrams: true
+  estimate_effort: true
+  post_status_messages: true
+  post_review_details: false
+  set_commit_status: true
+  set_failure_status: false
+
+# Path filters - exclude generated code and dependencies
+path_filters:
+  - "!**/dist/**"
+  - "!**/node_modules/**"
+  - "!**/tests/**"
+  - "!**/*.test.js"
+  - "!**/*.spec.js"
+  - "!**/*.spec.ts"
+  - "!**/coverage/**"
+  - "!**/*.min.js"
+  - "!**/package-lock.json"
+  - "!**/.state/**"
+  - "!scripts/docs-sync/**"  # Auto-generated docs
+
+# Custom review instructions for HNW architecture
+path_instructions:
+  - path: "**/*.js"
+    instructions: |
+      Review against Rhythm Chamber's HNW (Hierarchical Network Wave) architecture:
+
+      **Hierarchy (Command Chain):**
+      - Controllers should call Services, Services should call Providers
+      - Never bypass abstraction layers (e.g., Controllers → Providers directly)
+      - Follow dependency injection patterns
+      - Check for circular dependencies in import chains
+
+      **Network (Event-Driven):**
+      - Use EventBus for cross-module communication
+      - Avoid tight coupling through direct imports
+      - Implement proper event cleanup
+      - Use domain filtering for event handlers
+
+      **Wave (Cross-Tab Coordination):**
+      - Let TabCoordinator handle cross-tab coordination
+      - Check primary tab status before IndexedDB writes
+      - Use write-ahead log for crash recovery
+      - Test with multiple tabs when modifying coordination logic
+
+      **ES6 Module Best Practices:**
+      - Use import/export statements (no require())
+      - Include file extensions in imports (./module.js)
+      - No accidental globals or window pollution
+      - Proper JSDoc comments for public APIs
+
+      **Error Handling:**
+      - Use OperationLock for critical operations
+      - Implement proper try/catch/finally patterns
+      - Never log sensitive data (API keys, tokens)
+      - Use Security facade for encrypted credentials
+
+  - path: "js/controllers/**"
+    instructions: |
+      Controllers should ONLY handle UI logic:
+      - Call services for business logic (no direct provider/storage access)
+      - Validate all user inputs
+      - Use EventBus for communication with other controllers
+      - Handle UI rendering and user interactions
+      - Implement proper cleanup (event listeners, etc.)
+      - No business logic or data processing in controllers
+
+  - path: "js/services/**"
+    instructions: |
+      Services contain business logic:
+      - No direct DOM manipulation
+      - Use dependency injection for dependencies
+      - Implement proper error handling with OperationLock
+      - Use EventBus for cross-service communication
+      - Follow HNW patterns strictly
+      - Test both happy and sad paths
+
+  - path: "js/storage/**"
+    instructions: |
+      Storage modules handle IndexedDB operations:
+      - No business logic in storage modules
+      - Use write-ahead log for crash recovery
+      - Ensure cross-tab coordination via TabCoordinator
+      - Implement proper transaction handling
+      - Validate all data before storage
+      - Handle encryption/decryption through Security facade
+
+  - path: "js/security/**"
+    instructions: |
+      ⚠️ SECURITY MODULE - CHANGES REQUIRE REVIEW ⚠️
+      - Never log sensitive data (keys, tokens, user data)
+      - Use Security facade for encrypted credentials
+      - Validate all inputs to prevent injection attacks
+      - Implement proper key management
+      - Follow zero-trust security model
+      - Changes to these files should trigger security review
+
+  - path: "js/providers/**"
+    instructions: |
+      Provider modules implement AI integrations:
+      - Always use llm-api-orchestrator.js (never call providers directly from services)
+      - Handle rate limiting and fallbacks
+      - Implement proper error handling for API failures
+      - Support multiple providers (local/cloud)
+      - Test with both Ollama and OpenRouter
+      - Never hard-code API keys or credentials
+
+  - path: "package.json"
+    instructions: |
+      Review package.json changes:
+      - Check for unnecessary dependencies
+      - Verify security updates are legitimate
+      - Ensure scripts follow project conventions
+      - Check for duplicate or conflicting packages
+
+# Pre-merge checks
+pre_merge_checks:
+  custom_checks:
+    - name: "HNW Architecture Compliance"
+      mode: "warning"
+      instructions: |
+        Ensure changes follow HNW patterns:
+        - Controllers call Services, not Providers directly
+        - Services use EventBus, not direct module imports for cross-module comms
+        - No circular dependencies in the call chain
+        - TabCoordinator handles cross-tab operations
+        - Proper layer separation maintained
+
+    - name: "ES6 Module Compliance"
+      mode: "warning"
+      instructions: |
+        Verify proper ES6 module usage:
+        - Use import/export statements
+        - No require() or module.exports
+        - Proper file extensions in imports
+        - No accidental globals (check with npm run lint:globals)
+        - No window pollution
+
+    - name: "Security Compliance"
+      mode: "error"
+      instructions: |
+        Check security requirements:
+        - No sensitive data in logs, comments, or console output
+        - Use Security.storeEncryptedCredentials for API keys
+        - Validate all user inputs
+        - No innerHTML with user input (XSS prevention)
+        - HTTPS/localhost enforcement
+        - Changes to js/security/ require explicit approval
+
+    - name: "Testing Requirements"
+      mode: "warning"
+      instructions: |
+        Verify test coverage:
+        - Unit tests for new services in tests/unit/services/
+        - E2E tests for user flows in tests/rhythm-chamber.spec.ts
+        - Tests use fake-indexeddb for storage operations
+        - Critical paths have test coverage
+        - No tests skipped or commented out without reason
+
+# Tools configuration
+tools:
+  ast-grep:
+    essential_rules: true
+    rule_dirs:
+      - ".coderabbit/rules"
+    util_dirs:
+      - ".coderabbit/utils"
+
+  eslint:
+    enabled: true
+
+  markdownlint:
+    enabled: true
+
+# Code guidelines - auto-detect CLAUDE.md and AGENT_CONTEXT.md
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    file_patterns:
+      - "**/CLAUDE.md"
+      - "**/AGENT_CONTEXT.md"
+      - "**/.cursorrules"
+      - "**/.github/instructions/*.md"
+
+# Documentation settings
+documentation:
+  enabled: true
+  auto_detection: true
+  summary_method: "comprehensive"

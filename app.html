@@ -66,12 +66,15 @@
         <!-- Header -->
         <header class="app-header" role="banner">
             <div class="header-left">
-                <button class="sidebar-toggle-btn" id="sidebar-toggle-btn" aria-label="Toggle sidebar" aria-pressed="false" title="Toggle sidebar">☰</button>
+                <button class="sidebar-toggle-btn" id="sidebar-toggle-btn" aria-label="Toggle sidebar"
+                    aria-pressed="false" title="Toggle sidebar">☰</button>
                 <h1><a href="index.html" aria-label="Rhythm Chamber home">🎵 Rhythm Chamber</a></h1>
             </div>
             <div class="header-actions">
-                <button class="settings-btn" id="settings-btn" data-action="show-settings" aria-label="Open settings" title="Settings">⚙️</button>
-                <button class="tools-btn" id="tools-btn" data-action="show-tools" aria-label="Open AI tools" title="AI Tools">🧰</button>
+                <button class="settings-btn" id="settings-btn" data-action="show-settings" aria-label="Open settings"
+                    title="Settings">⚙️</button>
+                <button class="tools-btn" id="tools-btn" data-action="show-tools" aria-label="Open AI tools"
+                    title="AI Tools">🧰</button>
                 <button class="btn btn-secondary" id="privacy-dashboard-btn" data-action="show-privacy-dashboard"
                     aria-label="Open privacy dashboard" title="Privacy Dashboard">🔒</button>
                 <button class="btn btn-secondary" id="reset-btn" style="display: none;">Start Over</button>
@@ -91,7 +94,8 @@
                     <!-- Dynamically populated with session items -->
                 </div>
                 <div class="sidebar-footer">
-                    <button class="sidebar-collapse-btn" id="sidebar-collapse-btn" aria-label="Hide sidebar" title="Hide sidebar">◀</button>
+                    <button class="sidebar-collapse-btn" id="sidebar-collapse-btn" aria-label="Hide sidebar"
+                        title="Hide sidebar">◀</button>
                 </div>
             </aside>
 
@@ -101,7 +105,8 @@
             <!-- Main Content -->
             <main class="app-main" role="main" id="main-content">
                 <!-- Upload Zone -->
-                <div class="upload-zone" id="upload-zone" role="region" aria-labelledby="upload-zone-heading" tabindex="0">
+                <div class="upload-zone" id="upload-zone" role="region" aria-labelledby="upload-zone-heading"
+                    tabindex="0">
                     <div class="icon" aria-hidden="true">📁</div>
                     <h2 id="upload-zone-heading">Drop your Spotify data here</h2>
                     <p>Upload a .zip export or .json streaming history. Your data stays on your device.</p>
@@ -114,7 +119,8 @@
                     <!-- Spotify Quick Snapshot Option -->
                     <div class="upload-alternatives">
                         <div class="divider-text">or get a quick snapshot</div>
-                        <button class="btn btn-spotify" id="spotify-connect-btn" aria-label="Connect to Spotify for quick snapshot">
+                        <button class="btn btn-spotify" id="spotify-connect-btn"
+                            aria-label="Connect to Spotify for quick snapshot">
                             <span aria-hidden="true">🎵</span> Connect Spotify
                         </button>
                         <p style="margin-top: var(--space-sm); font-size: 0.8rem; color: var(--text-muted);">
@@ -227,10 +233,12 @@
                 <!-- Chat Section -->
                 <section class="chat-section" id="chat-section" aria-labelledby="chat-header-label">
                     <div class="chat-header">
-                        <p id="chat-header-label"><span aria-hidden="true">🎵</span> You're <strong id="chat-personality-name">The Emotional Archaeologist</strong></p>
+                        <p id="chat-header-label"><span aria-hidden="true">🎵</span> You're <strong
+                                id="chat-personality-name">The Emotional Archaeologist</strong></p>
                     </div>
 
-                    <div class="chat-messages" id="chat-messages" role="log" aria-live="polite" aria-atomic="false" aria-label="Chat messages">
+                    <div class="chat-messages" id="chat-messages" role="log" aria-live="polite" aria-atomic="false"
+                        aria-label="Chat messages">
                         <div class="message assistant">
                             What would you like to explore about your listening patterns?
                         </div>
@@ -267,7 +275,8 @@
                         <div class="chat-input-wrapper">
                             <label for="chat-input" class="sr-only">Type your message</label>
                             <input type="text" class="chat-input" id="chat-input" placeholder="Ask about your music..."
-                                inputmode="text" enterkeyhint="send" autocomplete="off" aria-describedby="chat-input-hint">
+                                inputmode="text" enterkeyhint="send" autocomplete="off"
+                                aria-describedby="chat-input-hint">
                             <button class="chat-send" id="chat-send" aria-label="Send message">
                                 <span aria-hidden="true">➤</span>
                             </button>
@@ -292,16 +301,19 @@
         </div>
 
         <!-- Reset Confirmation Modal -->
-        <div class="modal-overlay" id="reset-confirm-modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="reset-modal-title" aria-describedby="reset-modal-desc">
+        <div class="modal-overlay" id="reset-confirm-modal" style="display: none;" role="dialog" aria-modal="true"
+            aria-labelledby="reset-modal-title" aria-describedby="reset-modal-desc">
             <div class="modal-content" style="max-width: 400px; text-align: center;" tabindex="-1">
-                <h3 id="reset-modal-title" style="margin-bottom: var(--space-md);"><span aria-hidden="true">🔄</span> Start Over?</h3>
+                <h3 id="reset-modal-title" style="margin-bottom: var(--space-md);"><span aria-hidden="true">🔄</span>
+                    Start Over?</h3>
                 <p id="reset-modal-desc" style="margin-bottom: var(--space-md); color: var(--text-muted);">
                     Your data will be cleared. This cannot be undone.
                 </p>
                 <p style="margin-bottom: var(--space-sm); font-size: 0.9rem;">
                     Type <strong>DELETE</strong> to confirm:
                 </p>
-                <input type="text" id="reset-confirm-input" class="reset-confirm-input" autocomplete="off" placeholder="Type DELETE" aria-label="Type DELETE to confirm">
+                <input type="text" id="reset-confirm-input" class="reset-confirm-input" autocomplete="off"
+                    placeholder="Type DELETE" aria-label="Type DELETE to confirm">
                 <div style="display: flex; gap: var(--space-md); justify-content: center; margin-top: var(--space-lg);">
                     <button class="btn btn-secondary" data-action="hide-reset-modal">Cancel</button>
                     <button class="btn btn-destructive" id="reset-confirm-btn" data-action="execute-reset" disabled>
@@ -312,9 +324,11 @@
         </div>
 
         <!-- Delete Chat Confirmation Modal -->
-        <div class="modal-overlay" id="delete-chat-modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title" aria-describedby="delete-modal-desc">
+        <div class="modal-overlay" id="delete-chat-modal" style="display: none;" role="dialog" aria-modal="true"
+            aria-labelledby="delete-modal-title" aria-describedby="delete-modal-desc">
             <div class="modal-content" style="max-width: 400px; text-align: center;" tabindex="-1">
-                <h3 id="delete-modal-title" style="margin-bottom: var(--space-md);"><span aria-hidden="true">🗑️</span> Delete Chat?</h3>
+                <h3 id="delete-modal-title" style="margin-bottom: var(--space-md);"><span aria-hidden="true">🗑️</span>
+                    Delete Chat?</h3>
                 <p id="delete-modal-desc" style="margin-bottom: var(--space-lg); color: var(--text-muted);">
                     This conversation will be permanently deleted.
                 </p>
@@ -328,10 +342,13 @@
         </div>
 
         <!-- Multi-Tab Warning Modal -->
-        <div class="modal-overlay" id="multi-tab-modal" style="display: none;" role="alertdialog" aria-modal="true" aria-labelledby="multi-tab-modal-title" aria-describedby="multi-tab-modal-desc">
+        <div class="modal-overlay" id="multi-tab-modal" style="display: none;" role="alertdialog" aria-modal="true"
+            aria-labelledby="multi-tab-modal-title" aria-describedby="multi-tab-modal-desc">
             <div class="modal-content" style="max-width: 400px; text-align: center;" tabindex="-1">
-                <h3 id="multi-tab-modal-title" style="margin-bottom: var(--space-md);"><span aria-hidden="true">⚠️</span> Multiple Tabs Detected</h3>
-                <p id="multi-tab-modal-desc" class="modal-message" style="margin-bottom: var(--space-lg); color: var(--text-muted);">
+                <h3 id="multi-tab-modal-title" style="margin-bottom: var(--space-md);"><span
+                        aria-hidden="true">⚠️</span> Multiple Tabs Detected</h3>
+                <p id="multi-tab-modal-desc" class="modal-message"
+                    style="margin-bottom: var(--space-lg); color: var(--text-muted);">
                     Rhythm Chamber is open in another tab. This tab is now read-only to prevent data corruption.
                 </p>
                 <div style="display: flex; gap: var(--space-md); justify-content: center;">
@@ -343,9 +360,11 @@
         </div>
 
         <!-- Privacy Dashboard Modal -->
-        <div class="modal-overlay" id="privacy-dashboard-modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="privacy-modal-title">
+        <div class="modal-overlay" id="privacy-dashboard-modal" style="display: none;" role="dialog" aria-modal="true"
+            aria-labelledby="privacy-modal-title">
             <div class="modal-content" style="max-width: 600px; text-align: left;" tabindex="-1">
-                <h3 id="privacy-modal-title" style="margin-bottom: var(--space-md);"><span aria-hidden="true">🔒</span> Privacy Health Check</h3>
+                <h3 id="privacy-modal-title" style="margin-bottom: var(--space-md);"><span aria-hidden="true">🔒</span>
+                    Privacy Health Check</h3>
                 <div class="privacy-dashboard" id="privacy-dashboard-content">
                     <p><strong>Raw streams:</strong> <span id="raw-streams-count">-</span></p>
                     <p><strong>Aggregated patterns:</strong> <span id="patterns-summary">-</span></p>
@@ -364,30 +383,300 @@
         </div>
 
         <!-- Settings Modal -->
-        <div class="modal-overlay" id="settings-modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+        <div class="modal-overlay" id="settings-modal" style="display: none;" role="dialog" aria-modal="true"
+            aria-labelledby="settings-modal-title">
             <div class="modal-content" style="max-width: 500px; text-align: left;" tabindex="-1">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
                     <h3 id="settings-modal-title" style="margin: 0;"><span aria-hidden="true">⚙️</span> Settings</h3>
-                    <button class="close-btn settings-close" data-action="close-settings-modal" aria-label="Close settings" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; padding: 0;">&times;</button>
+                    <button class="close-btn settings-close" data-action="close-settings-modal"
+                        aria-label="Close settings"
+                        style="background: none; border: none; font-size: 1.5rem; cursor: pointer; padding: 0;">&times;</button>
                 </div>
 
                 <div class="settings-content" id="settings-content">
+                    <!-- AI Provider Selection -->
                     <div style="margin-bottom: var(--space-lg);">
-                        <label for="setting-max-tokens" style="display: block; margin-bottom: var(--space-sm); font-weight: 500;">
+                        <label for="setting-provider"
+                            style="display: block; margin-bottom: var(--space-sm); font-weight: 500;">
+                            AI Provider
+                        </label>
+                        <select id="setting-provider" class="setting-input"
+                            style="width: 100%; padding: var(--space-sm); border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-primary); color: var(--text-primary);"
+                            aria-describedby="provider-desc">
+                            <option value="ollama">Ollama (Local)</option>
+                            <option value="lmstudio">LM Studio (Local)</option>
+                            <option value="openrouter">OpenRouter (Cloud)</option>
+                            <option value="gemini">Google Gemini</option>
+                            <option value="openai-compatible">OpenAI Compatible</option>
+                        </select>
+                        <p id="provider-desc"
+                            style="margin-top: var(--space-xs); font-size: 0.85rem; color: var(--text-muted);">
+                            Choose your AI provider. Local providers run offline, cloud providers require API keys.
+                        </p>
+                    </div>
+
+                    <!-- OpenRouter Configuration -->
+                    <div id="provider-openrouter-fields" class="provider-fields" style="display: none;">
+                        <div style="margin-bottom: var(--space-lg);">
+                            <label for="setting-openrouter-apikey"
+                                style="display: block; margin-bottom: var(--space-sm); font-weight: 500;">
+                                OpenRouter API Key
+                            </label>
+                            <input type="password" id="setting-openrouter-apikey" class="setting-input"
+                                style="width: 100%; padding: var(--space-sm); border: 1px solid var(--border-color); border-radius: var(--radius-md);"
+                                placeholder="sk-or-..." autocomplete="off">
+                        </div>
+                        <div style="margin-bottom: var(--space-lg);">
+                            <label for="setting-openrouter-model"
+                                style="display: block; margin-bottom: var(--space-sm); font-weight: 500;">
+                                OpenRouter Model
+                            </label>
+                            <select id="setting-openrouter-model" class="setting-input"
+                                style="width: 100%; padding: var(--space-sm); border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-primary); color: var(--text-primary);">
+                                <!-- Populated dynamically from AVAILABLE_MODELS.openrouter -->
+                            </select>
+                            <p style="margin-top: var(--space-xs); font-size: 0.85rem; color: var(--text-muted);">
+                                Free models available for testing, paid models for production use.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Gemini Configuration -->
+                    <div id="provider-gemini-fields" class="provider-fields" style="display: none;">
+                        <div style="margin-bottom: var(--space-lg);">
+                            <label for="setting-gemini-apikey"
+                                style="display: block; margin-bottom: var(--space-sm); font-weight: 500;">
+                                Gemini API Key
+                            </label>
+                            <input type="password" id="setting-gemini-apikey" class="setting-input"
+                                style="width: 100%; padding: var(--space-sm); border: 1px solid var(--border-color); border-radius: var(--radius-md);"
+                                placeholder="AIza..." autocomplete="off">
+                        </div>
+                        <div style="margin-bottom: var(--space-lg);">
+                            <label for="setting-gemini-model"
+                                style="display: block; margin-bottom: var(--space-sm); font-weight: 500;">
+                                Gemini Model
+                            </label>
+                            <select id="setting-gemini-model" class="setting-input"
+                                style="width: 100%; padding: var(--space-sm); border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-primary); color: var(--text-primary);">
+                                <!-- Populated dynamically from AVAILABLE_MODELS.gemini -->
+                            </select>
+                            <p style="margin-top: var(--space-xs); font-size: 0.85rem; color: var(--text-muted);">
+                                Flash models are free and fast. Pro models require Google AI Studio credits.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- OpenAI Compatible Configuration -->
+                    <div id="provider-openai-compatible-fields" class="provider-fields" style="display: none;">
+                        <div style="margin-bottom: var(--space-lg);">
+                            <label for="setting-openai-compatible-apikey"
+                                style="display: block; margin-bottom: var(--space-sm); font-weight: 500;">
+                                API Key
+                            </label>
+                            <input type="password" id="setting-openai-compatible-apikey" class="setting-input"
+                                style="width: 100%; padding: var(--space-sm); border: 1px solid var(--border-color); border-radius: var(--radius-md);"
+                                placeholder="sk-..." autocomplete="off">
+                        </div>
+                        <div style="margin-bottom: var(--space-lg);">
+                            <label for="setting-openai-compatible-endpoint"
+                                style="display: block; margin-bottom: var(--space-sm); font-weight: 500;">
+                                API Endpoint
+                            </label>
+                            <input type="text" id="setting-openai-compatible-endpoint" class="setting-input"
+                                style="width: 100%; padding: var(--space-sm); border: 1px solid var(--border-color); border-radius: var(--radius-md);"
+                                value="https://api.openai.com/v1" placeholder="https://api.openai.com/v1">
+                        </div>
+                        <div style="margin-bottom: var(--space-lg);">
+                            <label for="setting-openai-compatible-model"
+                                style="display: block; margin-bottom: var(--space-sm); font-weight: 500;">
+                                Model
+                            </label>
+                            <select id="setting-openai-compatible-model" class="setting-input"
+                                style="width: 100%; padding: var(--space-sm); border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-primary); color: var(--text-primary);">
+                                <!-- Populated dynamically from AVAILABLE_MODELS['openai-compatible'] -->
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Ollama Configuration -->
+                    <div id="provider-ollama-fields" class="provider-fields" style="display: none;">
+                        <div style="margin-bottom: var(--space-lg);">
+                            <label for="setting-ollama-endpoint"
+                                style="display: block; margin-bottom: var(--space-sm); font-weight: 500;">
+                                Ollama Endpoint
+                            </label>
+                            <input type="text" id="setting-ollama-endpoint" class="setting-input"
+                                style="width: 100%; padding: var(--space-sm); border: 1px solid var(--border-color); border-radius: var(--radius-md);"
+                                value="http://localhost:11434" placeholder="http://localhost:11434">
+                            <p style="margin-top: var(--space-xs); font-size: 0.85rem; color: var(--text-muted);">
+                                Ollama API endpoint at default port 11434
+                            </p>
+                        </div>
+                        <div style="margin-bottom: var(--space-lg);">
+                            <label for="setting-ollama-model"
+                                style="display: block; margin-bottom: var(--space-sm); font-weight: 500;">
+                                Model Name
+                            </label>
+                            <input type="text" id="setting-ollama-model" class="setting-input"
+                                style="width: 100%; padding: var(--space-sm); border: 1px solid var(--border-color); border-radius: var(--radius-md);"
+                                value="llama3.2" placeholder="llama3.2">
+                            <p style="margin-top: var(--space-xs); font-size: 0.85rem; color: var(--text-muted);">
+                                The model name as shown in Ollama (e.g., llama3.2, mistral, codellama)
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- LM Studio Configuration -->
+                    <div id="provider-lmstudio-fields" class="provider-fields" style="display: none;">
+                        <div style="margin-bottom: var(--space-lg);">
+                            <label for="setting-lmstudio-endpoint"
+                                style="display: block; margin-bottom: var(--space-sm); font-weight: 500;">
+                                LM Studio Endpoint
+                            </label>
+                            <input type="text" id="setting-lmstudio-endpoint" class="setting-input"
+                                style="width: 100%; padding: var(--space-sm); border: 1px solid var(--border-color); border-radius: var(--radius-md);"
+                                value="http://localhost:1234/v1" placeholder="http://localhost:1234/v1">
+                            <p style="margin-top: var(--space-xs); font-size: 0.85rem; color: var(--text-muted);">
+                                LM Studio uses OpenAI-compatible API at port 1234
+                            </p>
+                        </div>
+                        <div style="margin-bottom: var(--space-lg);">
+                            <label for="setting-lmstudio-model"
+                                style="display: block; margin-bottom: var(--space-sm); font-weight: 500;">
+                                Model Name
+                            </label>
+                            <input type="text" id="setting-lmstudio-model" class="setting-input"
+                                style="width: 100%; padding: var(--space-sm); border: 1px solid var(--border-color); border-radius: var(--radius-md);"
+                                value="openai/gpt-oss-20b" placeholder="openai/gpt-oss-20b">
+                            <p style="margin-top: var(--space-xs); font-size: 0.85rem; color: var(--text-muted);">
+                                The model name as shown in LM Studio's server tab
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Max Tokens (Common to all providers) -->
+                    <div style="margin-bottom: var(--space-lg);">
+                        <label for="setting-max-tokens"
+                            style="display: block; margin-bottom: var(--space-sm); font-weight: 500;">
                             Max Tokens
                         </label>
-                        <input type="number" id="setting-max-tokens" class="setting-input" min="100" max="32000" step="100"
+                        <input type="number" id="setting-max-tokens" class="setting-input" min="100" max="32000"
+                            step="100"
                             style="width: 100%; padding: var(--space-sm); border: 1px solid var(--border-color); border-radius: var(--radius-md);"
                             aria-describedby="max-tokens-desc">
-                        <p id="max-tokens-desc" style="margin-top: var(--space-xs); font-size: 0.85rem; color: var(--text-muted);">
+                        <p id="max-tokens-desc"
+                            style="margin-top: var(--space-xs); font-size: 0.85rem; color: var(--text-muted);">
                             Maximum tokens for AI responses (100-32000)
                         </p>
                     </div>
 
-                    <div style="margin-top: var(--space-xl); display: flex; justify-content: flex-end; gap: var(--space-md);">
+                    <!-- Temperature (Common to all providers) -->
+                    <div style="margin-bottom: var(--space-lg);">
+                        <label for="setting-temperature"
+                            style="display: block; margin-bottom: var(--space-sm); font-weight: 500;">
+                            Creativity (Temperature)
+                        </label>
+                        <input type="range" id="setting-temperature" class="setting-input" min="0" max="2" step="0.1"
+                            style="width: 100%;" aria-describedby="temperature-desc">
+                        <p id="temperature-desc"
+                            style="margin-top: var(--space-xs); font-size: 0.85rem; color: var(--text-muted);">
+                            <span id="temperature-value">0.7</span> - <span id="temperature-label">Balanced</span>
+                            <br>
+                            Lower = more focused, Higher = more creative
+                        </p>
+                    </div>
+
+                    <!-- Spotify Configuration -->
+                    <div style="margin-bottom: var(--space-lg);">
+                        <label for="setting-spotify-clientid"
+                            style="display: block; margin-bottom: var(--space-sm); font-weight: 500;">
+                            Spotify Client ID
+                        </label>
+                        <input type="text" id="setting-spotify-clientid" class="setting-input"
+                            style="width: 100%; padding: var(--space-sm); border: 1px solid var(--border-color); border-radius: var(--radius-md);"
+                            placeholder="Your Spotify app client ID" autocomplete="off">
+                        <p style="margin-top: var(--space-xs); font-size: 0.85rem; color: var(--text-muted);">
+                            Create a Spotify app at developer.spotify.com to get your client ID.
+                        </p>
+                    </div>
+
+                    <div
+                        style="margin-top: var(--space-xl); display: flex; justify-content: flex-end; gap: var(--space-md);">
                         <button class="btn btn-secondary" data-action="close-settings-modal">Cancel</button>
                         <button class="btn btn-primary" data-action="save-settings">Save Settings</button>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tools Modal (AI Tool Calls) -->
+    <div class="modal-overlay" id="tools-modal" style="display: none;" role="dialog" aria-modal="true"
+        aria-labelledby="tools-modal-title">
+        <div class="modal-content" style="max-width: 500px; text-align: left;" tabindex="-1">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+                <h3 id="tools-modal-title" style="margin: 0;"><span aria-hidden="true">🧰</span> AI Tools</h3>
+                <button class="close-btn tools-close" data-action="close-tools-modal" aria-label="Close tools"
+                    style="background: none; border: none; font-size: 1.5rem; cursor: pointer; padding: 0;">&times;</button>
+            </div>
+
+            <div class="tools-content" id="tools-content">
+                <p style="color: var(--text-secondary); margin-bottom: var(--space-lg);">
+                    These AI tools are enabled for analyzing your music data. The assistant can use these during
+                    conversation.
+                </p>
+
+                <div class="tools-list" style="display: flex; flex-direction: column; gap: var(--space-md);">
+                    <div class="tool-item"
+                        style="padding: var(--space-md); background: var(--bg-glass); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                        <div
+                            style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-xs);">
+                            <span style="font-size: 1.2rem;">🔍</span>
+                            <strong>DataQuery</strong>
+                        </div>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">Query your listening history
+                            with natural language</p>
+                    </div>
+
+                    <div class="tool-item"
+                        style="padding: var(--space-md); background: var(--bg-glass); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                        <div
+                            style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-xs);">
+                            <span style="font-size: 1.2rem;">📊</span>
+                            <strong>PatternAnalyzer</strong>
+                        </div>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">Analyze listening patterns
+                            and trends over time</p>
+                    </div>
+
+                    <div class="tool-item"
+                        style="padding: var(--space-md); background: var(--bg-glass); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                        <div
+                            style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-xs);">
+                            <span style="font-size: 1.2rem;">🎭</span>
+                            <strong>PersonalityClassifier</strong>
+                        </div>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">Classify music personality
+                            based on listening data</p>
+                    </div>
+
+                    <div class="tool-item"
+                        style="padding: var(--space-md); background: var(--bg-glass); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                        <div
+                            style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-xs);">
+                            <span style="font-size: 1.2rem;">⚡</span>
+                            <strong>StreamProcessor</strong>
+                        </div>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">Process and aggregate
+                            streaming data efficiently</p>
+                    </div>
+                </div>
+
+                <div style="margin-top: var(--space-xl); display: flex; justify-content: flex-end;">
+                    <button class="btn btn-secondary" data-action="close-tools-modal">Close</button>
                 </div>
             </div>
         </div>
@@ -400,7 +689,8 @@
     </div>
 
     <!-- Tab Authority Indicator (HNW) -->
-    <div class="authority-indicator primary" id="authority-indicator" role="status" aria-label="Tab authority status: Primary">
+    <div class="authority-indicator primary" id="authority-indicator" role="status"
+        aria-label="Tab authority status: Primary">
         <span class="status-dot" aria-hidden="true"></span>
         <span class="status-text">Primary</span>
     </div>

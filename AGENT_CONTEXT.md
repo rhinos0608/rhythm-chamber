@@ -24,6 +24,291 @@ Modern client-side: Static HTML/CSS/ES6 Modules + IndexedDB + Web Workers + WASM
 
 ---
 
+## AI Agent Quick Reference (AGENTS.md Extension)
+
+> **Purpose**: Quick reference for AI agents working on this codebase
+> **Read Time**: 2 minutes
+> **For Deep Dives**: See sections below
+
+### Essential Commands (Most Used)
+
+```bash
+# Development
+npm install                  # Install dependencies
+npm run dev                  # Start dev server (port 8080)
+npm run dev:coop-coep       # With COOP/COEP for SharedArrayBuffer
+
+# Testing
+npm run test:unit            # Run all unit tests
+npm run test:unit -- --run   # Run once (no watch mode)
+npm run test:unit:watch      # Watch mode for TDD
+npm test                     # Run E2E tests
+npm run test:ui              # E2E with UI for debugging
+
+# Code Quality
+npm run lint:globals         # Check for accidental globals
+npm run docs:sync            # Update documentation
+npm run docs:validate        # Validate docs are in sync
+
+# Specific Test Patterns
+npm run test:unit -- --testNamePattern="ChatUIController"  # Single test
+npm run test:unit -- --reporter=verbose                    # Verbose output
+npm test --headed                                                   # E2E with browser
+```
+
+### MCP Server (AI Agent Tooling)
+
+The Rhythm Chamber MCP (Model Context Protocol) server provides AI agents with tools to analyze the codebase and validate HNW architecture compliance.
+
+**Start MCP Server:**
+```bash
+# Terminal 1: Start the application
+npm run dev
+
+# Terminal 2: Start the MCP server
+cd mcp-server
+node server.js
+
+# Or test standalone
+node examples/test-server.js
+```
+
+**What it does:**
+- **get_module_info**: Analyze any module's exports, imports, dependencies, and HNW compliance score ✅
+- **find_dependencies**: Trace dependency graphs, detect circular dependencies ✅
+- **search_architecture**: Search for HNW patterns and anti-patterns ✅
+- **validate_hnw_compliance**: Comprehensive architecture validation ✅
+
+**Example usage from AI agents:**
+```json
+{
+  "tool": "get_module_info",
+  "arguments": {
+    "filePath": "js/controllers/chat-ui-controller.js",
+    "includeDependencies": true,
+    "includeExports": true
+  }
+}
+```
+
+**Returns:**
+- Module layer (controllers/services/utils/storage/providers)
+- HNW compliance score (0-100)
+- Architecture violations with recommendations
+- Import/export analysis
+- Dependency information
+
+**Integration with Claude Code:**
+Add to `~/.config/claude-code/config.json`:
+```json
+{
+  "mcpServers": {
+    "rhythm-chamber": {
+      "command": "node",
+      "args": ["/absolute/path/to/rhythm-chamber/mcp-server/server.js"],
+      "env": {
+        "RC_PROJECT_ROOT": "/absolute/path/to/rhythm-chamber"
+      }
+    }
+  }
+}
+```
+
+See [mcp-server/README.md](mcp-server/README.md) for complete documentation.
+
+### HNW Architecture Patterns (Critical)
+
+**Hierarchy:** Controllers → Services → Providers (never bypass layers)
+- ✅ DO: Controllers call Services, Services call Providers
+- ✅ DO: Use EventBus for cross-module communication
+- ✅ DO: Let TabCoordinator handle cross-tab conflicts
+- ❌ DON'T: Create circular dependencies
+- ❌ DON'T: Bypass abstraction layers (Controllers shouldn't call Providers directly)
+
+**Network:** EventBus for modular communication
+```javascript
+import { EventBus } from './services/event-bus.js';
+
+// Subscribe with domain filtering
+EventBus.on('chat:message:sent', async (data) => {
+  // Handle message sent
+}, { domain: 'chat' });
+
+// Emit with priority
+await EventBus.emit('chat:message:sent', {
+  sessionId: '...',
+  content: '...'
+}, { priority: 'HIGH' });
+```
+
+**Wave:** TabCoordinator for cross-tab coordination
+- ✅ Check primary tab status before writing to IndexedDB
+- ✅ Use write-ahead log for crash recovery
+- ✅ Test with multiple tabs open
+- ❌ Never write directly from non-primary tabs
+
+### Common Gotchas (Mistake Patterns)
+
+**Cross-Tab Data Corruption**
+- ❌ Symptom: Data disappears or gets corrupted with multiple tabs
+- ✅ Solution: Always use TabCoordinator, never write directly from non-primary tabs
+
+**Data Loss on Page Refresh**
+- ❌ Symptom: Changes lost after refresh
+- ✅ Solution: Use write-ahead log, transactions, proper error handling
+
+**"CORS error" or "null origin"**
+- ❌ Symptom: API calls fail with CORS errors
+- ✅ Solution: Must run on HTTPS or localhost (secure context requirement)
+
+**IndexedDB Tests Failing**
+- ❌ Symptom: Tests fail with IDB errors
+- ✅ Solution: Use `fake-indexeddb` from test utilities
+
+**Event Handlers Firing Multiple Times**
+- ❌ Symptom: Events trigger repeatedly
+- ✅ Solution: Check EventBus circuit breaker, use domain filtering
+
+**Import Path Errors**
+- ❌ Symptom: "Cannot find module" errors
+- ✅ Solution: Always use `./` prefix for relative imports (ES6 modules)
+
+### Testing Patterns for AI Workflows
+
+**When Adding New Features:**
+1. Write unit tests for new services in `tests/unit/services/`
+2. Add E2E tests for user flows in `tests/rhythm-chamber.spec.ts`
+3. Test cross-tab coordination by opening multiple browser tabs
+4. Verify IndexedDB operations work with private browsing mode
+
+**Service Tests:** Mock dependencies, test happy/sad paths
+**Controller Tests:** Test UI interactions, event emissions
+**Integration Tests:** Test Event Bus communication between modules
+**Security Tests:** Validate encryption/decryption, token binding
+
+### ES6 Module Best Practices
+
+**Import/Export Patterns:**
+```javascript
+// ✅ GOOD - Named exports for services
+import { Storage, EventBus } from './services/index.js';
+
+// ✅ GOOD - Default exports for classes
+export default class ChatUIController {
+  constructor({ chat, artifacts }) {
+    this.chat = chat;
+    this.artifacts = artifacts;
+  }
+}
+
+// ❌ BAD - No globals, window pollution
+window.ChatController = {};
+```
+
+**Dependency Injection:**
+```javascript
+// ✅ GOOD - Use parameterized dependencies
+const controller = new ChatUIController({
+  chat: container.resolve('Chat'),
+  artifacts: container.resolve('Artifacts')
+});
+
+// ❌ BAD - Hard-coded dependencies
+const controller = new ChatUIController(new Chat());
+```
+
+**Error Handling:**
+```javascript
+// ✅ GOOD - Use OperationLock for critical operations
+const lock = OperationLock.acquire('processing-streams');
+try {
+  await this.processStreams(streams);
+} finally {
+  lock.release();
+}
+
+// ❌ BAD - No concurrency control
+await this.processStreams(streams);
+await this.processMoreStreams(streams); // Race condition!
+```
+
+### Project-Specific Patterns
+
+**AI Provider Integration:**
+- Always use `llm-api-orchestrator.js` (never call providers directly)
+- Test with both local (Ollama) and cloud (OpenRouter) providers
+- Handle rate limiting and fallbacks automatically
+
+**Data Processing Flow:**
+```
+Upload → Validate → Encrypt → Store → Process → Generate → Display
+    ↓         ↓        ↓       ↓        ↓        ↓       ↓
+  Security  Security  Security Storage  Service  LLM     UI
+```
+
+**Streaming Architecture:**
+- Use `StreamingMessageHandler` for real-time updates
+- Implement proper buffering and backpressure
+- Handle connection drops gracefully
+
+### Security Requirements (CRITICAL)
+
+**Before committing changes:**
+- [ ] No sensitive data in logs or error messages
+- [ ] API keys encrypted with `Security.storeEncryptedCredentials()`
+- [ ] User input validated
+- [ ] No `innerHTML` with user input (XSS risk)
+- [ ] HTTPS/localhost enforcement (secure context)
+- [ ] Security review if modifying `js/security/`
+
+**Critical Files:**
+- `js/security/` - Any changes require security review
+- `js/storage/` - Encrypted storage operations
+- `js/providers/` - AI provider credentials
+
+### File Locations Quick Reference
+
+**Entry Points:**
+- `js/main.js` - Application bootstrap, security checks
+- `js/app.js` - Main orchestrator, controller initialization
+
+**Key Directories:**
+| Directory | Purpose | First Stop For... |
+|-----------|---------|-------------------|
+| `js/controllers/` | UI components | Adding/modifying UI behavior |
+| `js/services/` | Business logic | Core functionality, data processing |
+| `js/security/` | Encryption, signing | Security features (review required!) |
+| `js/storage/` | IndexedDB operations | Data persistence |
+| `tests/unit/` | Vitest tests | Unit testing |
+| `tests/rhythm-chamber.spec.ts` | Playwright tests | E2E testing |
+
+### Debug Patterns
+
+**Enable Debug Mode:**
+```javascript
+// In browser console
+localStorage.setItem('rhythm-chamber-debug', 'true');
+// Reload page to see detailed logs
+```
+
+**Test Cross-Tab Coordination:**
+1. Open app in multiple browser tabs
+2. Watch leader election in console
+3. Verify only primary tab writes to IndexedDB
+4. Test message passing between tabs
+
+**Test Storage Operations:**
+```javascript
+// Check IndexedDB contents
+await Storage.streams.getAll();
+await Storage.sessions.getAll();
+
+// Verify encryption
+await Security.decrypt(encryptedData);
+```
+
+---
+
 ## Monetization Strategy
 
 **Philosophy:** Zero-friction overlay checkout with community-first growth. Build a base of enthusiasts, then scale to premium managed features.

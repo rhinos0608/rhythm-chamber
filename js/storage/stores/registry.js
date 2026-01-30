@@ -104,6 +104,48 @@ export function getStoreMetadata(storeName) {
             description: 'Migration state tracking',
             keyPath: 'id',
             autoIncrement: false
+        },
+        [STORES.EVENT_LOG]: {
+            name: STORES.EVENT_LOG,
+            description: 'Event log for cross-tab coordination',
+            keyPath: 'id',
+            autoIncrement: false
+        },
+        [STORES.EVENT_CHECKPOINT]: {
+            name: STORES.EVENT_CHECKPOINT,
+            description: 'Event log checkpoint for recovery',
+            keyPath: 'id',
+            autoIncrement: false
+        },
+        [STORES.DEMO_STREAMS]: {
+            name: STORES.DEMO_STREAMS,
+            description: 'Demo mode streaming data',
+            keyPath: 'id',
+            autoIncrement: true
+        },
+        [STORES.DEMO_PATTERNS]: {
+            name: STORES.DEMO_PATTERNS,
+            description: 'Demo mode pattern data',
+            keyPath: 'id',
+            autoIncrement: false
+        },
+        [STORES.DEMO_PERSONALITY]: {
+            name: STORES.DEMO_PERSONALITY,
+            description: 'Demo mode personality result',
+            keyPath: 'id',
+            autoIncrement: false
+        },
+        [STORES.TRANSACTION_JOURNAL]: {
+            name: STORES.TRANSACTION_JOURNAL,
+            description: 'Two-phase commit transaction journal',
+            keyPath: 'id',
+            autoIncrement: true
+        },
+        [STORES.TRANSACTION_COMPENSATION]: {
+            name: STORES.TRANSACTION_COMPENSATION,
+            description: 'Transaction compensation log',
+            keyPath: 'id',
+            autoIncrement: true
         }
     };
 
