@@ -1,3 +1,9 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+---
+
 # AI Agent Quick Reference — Rhythm Chamber
 
 > **Purpose**: Primary onboarding document for AI agents working on this codebase
@@ -64,22 +70,25 @@ js/
 ├── main.js                    # ENTRY POINT - Bootstrap and initialization
 ├── app.js                     # Main orchestrator
 │
-├── controllers/               # UI LAYER (15 controllers)
+├── controllers/               # UI LAYER (21 controllers)
 │   ├── chat-ui-controller.js  # Message rendering, streaming
 │   ├── sidebar-controller.js  # Session management
-│   └── [13 more...]           # Focused UI components
+│   └── [18 more...]           # Focused UI components
 │
-├── services/                  # BUSINESS LOGIC (25+ services)
+├── services/                  # BUSINESS LOGIC (94 services)
 │   ├── event-bus.js           # ⭐ Central event system
 │   ├── llm-api-orchestrator.js # AI provider routing
 │   ├── tab-coordination.js    # Cross-tab coordination
-│   └── [22 more...]           # Core functionality
+│   └── [91 more...]           # Core functionality
 │
-├── utils/                     # SHARED UTILITIES (13+)
+├── utils/                     # SHARED UTILITIES (37 utilities)
 ├── storage/                   # IndexedDB + encryption
 ├── security/                  # AES-GCM, HMAC, key management
 ├── workers/                   # Web Workers (parallel processing)
-└── artifacts/                 # Data visualization (SVG renderer)
+├── artifacts/                 # Data visualization (SVG renderer)
+├── functions/                 # Function calling schemas
+├── providers/                 # LLM provider adapters
+└── constants/                 # Shared constants
 ```
 
 ---
@@ -93,19 +102,32 @@ js/
 ### Key Directories
 | Directory | Purpose | First Stop For... |
 |-----------|---------|-------------------|
-| `js/controllers/` | UI components | Adding/modifying UI behavior |
-| `js/services/` | Business logic | Core functionality, data processing |
+| `js/controllers/` | UI components (21 controllers) | Adding/modifying UI behavior |
+| `js/services/` | Business logic (94 services) | Core functionality, data processing |
+| `js/utils/` | Shared utilities (37 utilities) | Common helper functions |
 | `js/security/` | Encryption, signing | Security features (review required!) |
 | `js/storage/` | IndexedDB operations | Data persistence |
+| `mcp-server/` | AI agent tooling | Semantic search, architecture validation |
 | `tests/unit/` | Vitest tests | Unit testing |
 | `tests/rhythm-chamber.spec.ts` | Playwright tests | E2E testing |
+| `scripts/docs-sync/` | Documentation automation | Auto-sync architecture docs |
 
 ### Essential Documentation
-- **[AGENT_CONTEXT.md](AGENT_CONTEXT.md)** - Complete technical architecture (777 lines)
+- **[AGENT_CONTEXT.md](AGENT_CONTEXT.md)** - Complete technical architecture (109,403+ lines)
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - Development workflow, testing, PR process
 - **[SECURITY.md](SECURITY.md)** - Security model and threat analysis
 - **[REFACTORING.md](REFACTORING.md)** - Refactoring history with honest metrics
-- **[docs/INDEX.md](docs/INDEX.md)** - Documentation index (if it exists)
+- **[API.md](API.md)** - Auto-generated API reference from JSDoc
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System design and architecture patterns
+
+### Auto-Generated Architecture Breakdowns
+- **[docs/CONTROLLER_CATALOG.md](docs/CONTROLLER_CATALOG.md)** - All 21 UI controllers with dependencies
+- **[docs/SERVICE_CATALOG.md](docs/SERVICE_CATALOG.md)** - All 94 business logic services
+- **[docs/UTILITY_REFERENCE.md](docs/UTILITY_REFERENCE.md)** - All 37 utility modules
+- **[docs/DEPENDENCY_GRAPH.md](docs/DEPENDENCY_GRAPH.md)** - Auto-generated dependency tree
+
+### Additional Documentation
+- **[docs/INDEX.md](docs/INDEX.md)** - Documentation index
 
 ---
 
@@ -124,7 +146,18 @@ window.Storage = { /* ... */ }
 
 **Why?** Prevents pollution, enables tree-shaking, maintains modular architecture
 
-### 2. Security Requirements
+### 2. Documentation Sync Requirement
+
+**Before committing code changes:**
+```bash
+npm run docs:sync
+```
+
+The codebase uses automated AST analysis to keep documentation synchronized. The pre-commit hook will verify documentation is current.
+
+**Why?** Keeps architecture docs (AGENT_CONTEXT.md, ARCHITECTURE.md, API.md) aligned with code changes through automated metric extraction and JSDoc generation.
+
+### 3. Security Requirements
 
 **CRITICAL**: Any changes to security modules require security review.
 
@@ -144,7 +177,7 @@ console.log('API key:', apiKey); // NEVER!
 - [ ] Follow the threat model in `SECURITY.md`
 - [ ] Test for XSS vulnerabilities (avoid `innerHTML` with user input)
 
-### 3. Testing Requirements
+### 4. Testing Requirements
 
 ```bash
 # Unit tests (Vitest)
@@ -159,10 +192,11 @@ npm run test:ui            # Run with UI for debugging
 **Before committing:**
 - [ ] Unit tests pass (`npm run test:unit`)
 - [ ] E2E tests pass (`npm test`)
+- [ ] Documentation updated (`npm run docs:sync`)
 - [ ] Code follows style guidelines (JSDoc for public APIs)
 - [ ] Security review completed if needed
 
-### 4. Code Style
+### 5. Code Style
 
 - **JSDoc comments** for public interfaces
 - **Conventional commits** for commit messages (`feat:`, `fix:`, `docs:`, etc.)
@@ -180,16 +214,18 @@ npm run test:ui            # Run with UI for debugging
 3. **Follow HNW**: Controller → Service → Provider chain
 4. **Use EventBus**: For cross-module communication
 5. **Write tests**: Unit tests for services, E2E for full flows
-6. **Document**: Add JSDoc for public APIs
+6. **Add JSDoc**: Document public APIs for auto-generated docs
+7. **Sync documentation**: Run `npm run docs:sync` to update architecture docs
 
 ### Fixing a Bug
 
 1. **Reproduce**: Write a test that fails
-2. **Locate**: Use Grep/Glob to find relevant code (see AGENT_CONTEXT.md for module locations)
+2. **Locate**: Use Grep/Glob to find relevant code (or MCP semantic search)
 3. **Understand**: Read the existing implementation and related code
 4. **Fix**: Make minimal changes to fix the issue
 5. **Test**: Ensure all tests pass
-6. **Document**: Add comments if the fix is non-obvious
+6. **Sync documentation**: Run `npm run docs:sync`
+7. **Document**: Add comments if the fix is non-obvious
 
 ### Working with Storage
 
@@ -265,18 +301,30 @@ try {
 ### Development Commands
 
 ```bash
-# Start development server
-npm run dev                  # Port 8080
+# Development
+npm run dev                  # Start dev server (port 8080)
 npm run dev:coop-coep       # With COOP/COEP for SharedArrayBuffer
+npm run build               # Build production bundle
 
 # Testing
 npm run test:unit           # Unit tests (Vitest)
-npm run test:unit:watch     # Watch mode
+npm run test:unit -- --run  # Run once (no watch mode)
+npm run test:unit:watch     # Watch mode for TDD
+npm run test:unit -- --testNamePattern="ChatUIController"  # Single test
 npm test                    # E2E tests (Playwright)
 npm run test:ui             # Playwright with UI
+npm run test:headed         # E2E with browser
 
-# Linting
+# Code Quality
 npm run lint:globals        # Check for accidental globals
+
+# Documentation
+npm run docs:sync           # Update documentation from code analysis
+npm run docs:watch          # Watch mode for continuous updates
+npm run docs:validate       # Check if docs are current
+
+# MCP Server
+cd mcp-server && node server.js  # Start AI agent tooling server
 ```
 
 ### Security Checklist
@@ -379,6 +427,43 @@ The codebase follows clear principles:
 
 ---
 
-**Last Updated**: 2025-01-29
+**Last Updated**: 2026-01-30
 **For comprehensive documentation**: See [AGENT_CONTEXT.md](AGENT_CONTEXT.md)
 **For contribution guidelines**: See [CONTRIBUTING.md](CONTRIBUTING.md)
+
+---
+
+## MCP Server Integration
+
+The project includes an MCP (Model Context Protocol) server for AI agent tooling:
+
+```bash
+# Start the MCP server
+cd mcp-server
+node server.js
+
+# Test standalone
+node examples/test-server.js
+```
+
+**Features:**
+- Semantic search across codebase using vector embeddings
+- Architecture validation (HNW compliance)
+- Dependency graph analysis with circular dependency detection
+- Module info extraction (exports, imports, dependencies)
+
+**Integration with Claude Code:**
+Add to `~/.config/claude-code/config.json`:
+```json
+{
+  "mcpServers": {
+    "rhythm-chamber": {
+      "command": "node",
+      "args": ["/absolute/path/to/rhythm-chamber/mcp-server/server.js"],
+      "env": {
+        "RC_PROJECT_ROOT": "/absolute/path/to/rhythm-chamber"
+      }
+    }
+  }
+}
+```

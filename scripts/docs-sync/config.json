@@ -1,9 +1,14 @@
 {
   "targetFiles": {
-    "metrics": ["AGENT_CONTEXT.md", "ARCHITECTURE.md"],
+    "metrics": ["AGENT_CONTEXT.md", "ARCHITECTURE.md", "CLAUDE.md"],
     "apiDocs": "API.md",
     "security": "SECURITY.md",
     "crossRefs": ["*.md", "docs/**/*.md"]
+  },
+  "architectureCatalogs": {
+    "controllers": "docs/CONTROLLER_CATALOG.md",
+    "services": "docs/SERVICE_CATALOG.md",
+    "utilities": "docs/UTILITY_REFERENCE.md"
   },
   "watchPaths": ["js/**/*.js"],
   "excludePaths": ["js/workers/embed-worker.js"],
@@ -19,5 +24,9 @@
   "git": {
     "autoCommit": false,
     "commitMessage": "docs: sync documentation from code analysis"
+  },
+  "catalogs": {
+    "enabled": true,
+    "groupByDirectory": true
   }
 }

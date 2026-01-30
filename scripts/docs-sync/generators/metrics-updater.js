@@ -15,6 +15,69 @@ export class MetricsUpdater {
   }
 
   /**
+   * Update CLAUDE.md status section
+   * @param {object} metrics - AST analysis results
+   * @param {string} version - Current version
+   * @returns {boolean} Success
+   */
+  updateClaude(metrics, version) {
+    const filepath = resolve(this.projectRoot, 'CLAUDE.md');
+    this.logger.processing('Updating CLAUDE.md...');
+
+    try {
+      let content = readFileSync(filepath, 'utf-8');
+
+      // Update modular structure section (around line 73-92)
+      const structurePattern = /├── controllers\/.*?# UI LAYER \(\d+ controllers\)/;
+      const structureReplacement = `├── controllers/               # UI LAYER (${metrics.summary.controllers} controllers)`;
+
+      content = content.replace(structurePattern, structureReplacement);
+
+      const servicesPattern = /├── services\/.*?# BUSINESS LOGIC \(\d+ services\)/;
+      const servicesReplacement = `├── services/                  # BUSINESS LOGIC (${metrics.summary.services} services)`;
+
+      content = content.replace(servicesPattern, servicesReplacement);
+
+      const utilsPattern = /├── utils\/.*?# SHARED UTILITIES \(\d+ utilities\)/;
+      const utilsReplacement = `├── utils/                     # SHARED UTILITIES (${metrics.summary.utilities} utilities)`;
+
+      content = content.replace(utilsPattern, utilsReplacement);
+
+      // Update Essential Documentation section (around line 113)
+      const docPattern = /- \*\*\[AGENT_CONTEXT\.md\]\(AGENT_CONTEXT\.md\)\*\* - Complete technical architecture \(\d[\d,]*\+ lines\)/;
+      const docReplacement = `- **[AGENT_CONTEXT.md](AGENT_CONTEXT.md)** - Complete technical architecture (${metrics.summary.totalLines.toLocaleString()}+ lines)`;
+
+      content = content.replace(docPattern, docReplacement);
+
+      // Update Key Directories table (around line 102-110)
+      const controllersDirPattern = /\| `js\/controllers\/` \| UI components \(\d+ controllers\) \|/;
+      content = content.replace(controllersDirPattern, '| `js/controllers/` | UI components (' + metrics.summary.controllers + ' controllers) |');
+
+      const servicesDirPattern = /\| `js\/services\/` \| Business logic \(\d+ services\) \|/;
+      content = content.replace(servicesDirPattern, '| `js/services/` | Business logic (' + metrics.summary.services + ' services) |');
+
+      const utilsDirPattern = /\| `js\/utils\/` \| Shared utilities \(\d+ utilities\) \|/;
+      content = content.replace(utilsDirPattern, '| `js/utils/` | Shared utilities (' + metrics.summary.utilities + ' utilities) |');
+
+      // Update last updated timestamp
+      content = content.replace(
+        /\*\*Last Updated\*\*: [0-9-]+/,
+        `**Last Updated**: ${new Date().toISOString().split('T')[0]}`
+      );
+
+      if (!this.dryRun) {
+        writeFileSync(filepath, content, 'utf-8');
+      }
+
+      this.logger.success('Updated CLAUDE.md');
+      return true;
+    } catch (error) {
+      this.logger.error('Failed to update CLAUDE.md', error.message);
+      return false;
+    }
+  }
+
+  /**
    * Update AGENT_CONTEXT.md status header
    * @param {object} metrics - AST analysis results
    * @param {string} version - Current version
@@ -177,6 +240,7 @@ export class MetricsUpdater {
     const date = new Date().toISOString().split('T')[0];
 
     const results = {
+      claude: this.updateClaude(metrics, version),
       agentContext: this.updateAgentContext(metrics, version),
       architecture: this.updateArchitecture(version, date),
       api: this.updateAPI(version, date),
@@ -187,6 +251,7 @@ export class MetricsUpdater {
     const totalCount = Object.keys(results).length;
 
     this.logger.section('Update Results');
+    this.logger.data('CLAUDE.md:', results.claude ? '✓' : '✗');
     this.logger.data('AGENT_CONTEXT.md:', results.agentContext ? '✓' : '✗');
     this.logger.data('ARCHITECTURE.md:', results.architecture ? '✓' : '✗');
     this.logger.data('API.md:', results.api ? '✓' : '✗');

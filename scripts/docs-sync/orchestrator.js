@@ -13,6 +13,7 @@ import ASTCache from './utils/cache.js';
 import ASTAnalyzer from './analyzers/ast-analyzer.js';
 import GitAnalyzer from './analyzers/git-analyzer.js';
 import MetricsUpdater from './generators/metrics-updater.js';
+import ArchitectureCatalogGenerator from './generators/architecture-catalog-generator.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const projectRoot = resolve(__dirname, '../..');
@@ -97,6 +98,20 @@ async function main() {
     dryRun,
   });
 
+  // Phase 3.5: Generate Architecture Catalogs
+  if (config.catalogs?.enabled !== false) {
+    logger.section('Phase 3.5: Generating Architecture Catalogs');
+    const catalogGenerator = new ArchitectureCatalogGenerator({
+      projectRoot,
+      logger,
+      dryRun,
+    });
+    catalogGenerator.generateAll(metrics);
+  }
+
+  // Perform updates
+  const updateResults = metricsUpdater.updateAll(metrics, gitData);
+
   // Check if updates needed (for git hook mode)
   if (mode === 'hook') {
     const needsUpdate = await metricsUpdater.needsUpdate(metrics, gitData);
@@ -111,9 +126,6 @@ async function main() {
     logger.success('Documentation is up to date');
     process.exit(0);
   }
-
-  // Perform updates
-  const updateResults = metricsUpdater.updateAll(metrics, gitData);
 
   // Phase 4: Generate Dependency Graph (if there are dependencies)
   if (metrics.dependencyGraph.size > 0) {
@@ -181,9 +193,13 @@ async function main() {
       await git.add([
         'AGENT_CONTEXT.md',
         'ARCHITECTURE.md',
+        'CLAUDE.md',
         'API.md',
         'SECURITY.md',
         'docs/DEPENDENCY_GRAPH.md',
+        'docs/CONTROLLER_CATALOG.md',
+        'docs/SERVICE_CATALOG.md',
+        'docs/UTILITY_REFERENCE.md',
       ]);
 
       await git.commit(config.git.commitMessage);
