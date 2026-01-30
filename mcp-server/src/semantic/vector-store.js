@@ -465,6 +465,36 @@ export class VectorStore {
       }
     }
 
+    // Direct exported status filter (supports false for non-exported only)
+    if (filters.exported !== undefined && metadata.exported !== filters.exported) {
+      return false;
+    }
+
+    // Has overlap filter: chunks with context before/after
+    // Useful for finding chunks that have surrounding context
+    if (filters.hasOverlap === true) {
+      const hasBefore = metadata.contextBefore && metadata.contextBefore.length > 0;
+      const hasAfter = metadata.contextAfter && metadata.contextAfter.length > 0;
+      if (!hasBefore && !hasAfter) {
+        return false;
+      }
+    }
+
+    // Parent chunk ID filter: find chunks belonging to a parent
+    // Useful for finding all methods in a class, etc.
+    if (filters.parentChunkId && metadata.parentChunkId !== filters.parentChunkId) {
+      return false;
+    }
+
+    // Minimum call frequency filter
+    // Requires metadata.callFrequency to be set by dependency graph
+    if (filters.minCallFrequency !== undefined) {
+      const callFreq = metadata.callFrequency || 0;
+      if (callFreq < filters.minCallFrequency) {
+        return false;
+      }
+    }
+
     return true;
   }
 

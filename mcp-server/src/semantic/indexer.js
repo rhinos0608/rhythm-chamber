@@ -25,6 +25,23 @@ import { LexicalIndex } from './lexical-index.js';
 import { QueryExpander } from './query-expander.js';
 
 /**
+ * Per-chunk-type thresholds for semantic search
+ * Different chunk types have different optimal similarity thresholds
+ * based on their semantic density and specificity
+ */
+const TYPE_THRESHOLDS = {
+  'function': 0.25,      // Functions have dense semantics, lower threshold OK
+  'method': 0.25,        // Methods similar to functions
+  'class': 0.30,         // Class definitions are more specific
+  'class-declaration': 0.30,
+  'variable': 0.35,      // Variables are less semantically dense
+  'export': 0.40,        // Export statements need higher similarity
+  'imports': 0.40,       // Import statements are very specific
+  'code': 0.20,          // Generic code chunks, more permissive
+  'fallback': 0.15       // Fallback chunks, most permissive
+};
+
+/**
  * Default patterns for files to index
  */
 const DEFAULT_PATTERNS = [
@@ -98,13 +115,15 @@ export class CodeIndexer {
   async initialize() {
     console.error('[Indexer] Initializing semantic search indexer...');
 
-    // Initialize cache
+    // Initialize cache with model version for invalidation tracking
+    const modelInfo = this.embeddings.getModelInfo();
+    this.cache.setModelVersion(modelInfo.name);
     await this.cache.initialize();
 
     // Load cached data if available
     const stats = this.cache.getStats();
     if (stats.fileCount > 0) {
-      console.error(`[Indexer] Found cached data for ${stats.fileCount} files`);
+      console.error(`[Indexer] Found cached data for ${stats.fileCount} files (model: ${stats.modelVersion || 'unknown'})`);
     }
 
     // Check embedding source and detect actual dimension
@@ -660,6 +679,8 @@ export class CodeIndexer {
    * - Adaptive threshold: If too few results, automatically retries with lower threshold
    * - Type-based reranking: Boosts function/method/class chunks
    * - Enhanced scoring: Considers symbol name matches, exported status, and call frequency
+   * - Per-type thresholds: Uses chunk-type-specific similarity thresholds
+   * - Performance monitoring: Returns timing metrics for each search phase
    */
   async search(query, options = {}) {
     if (!this.indexed) {
@@ -675,6 +696,27 @@ export class CodeIndexer {
       useQueryExpansion = true
     } = options;
 
+    // Performance monitoring: track timing for each phase
+    const perf = {
+      embeddingTime: 0,
+      queryExpansionTime: 0,
+      vectorSearchTime: 0,
+      lexicalSearchTime: 0,
+      rankingTime: 0,
+      totalTime: 0
+    };
+
+    const searchStart = Date.now();
+
+    // Determine type-specific threshold if chunkType filter is set
+    const effectiveThreshold = filters.chunkType && TYPE_THRESHOLDS[filters.chunkType]
+      ? Math.max(threshold, TYPE_THRESHOLDS[filters.chunkType])
+      : threshold;
+
+    if (filters.chunkType && TYPE_THRESHOLDS[filters.chunkType]) {
+      console.error(`[Indexer] Using type-specific threshold for ${filters.chunkType}: ${effectiveThreshold.toFixed(3)}`);
+    }
+
     // Minimum threshold to prevent runaway queries
     const MIN_THRESHOLD = 0.1;
 
@@ -683,23 +725,28 @@ export class CodeIndexer {
 
     // FIX #5: Generate embedding once and reuse for adaptive threshold retries
     // This prevents duplicate API calls when retrying with lower threshold
+    const embeddingStart = Date.now();
     const queryEmbedding = await this.embeddings.getEmbedding(query);
+    perf.embeddingTime = Date.now() - embeddingStart;
 
     // Query expansion: Generate alternative query formulations
+    const expansionStart = Date.now();
     const queriesToSearch = useQueryExpansion
       ? this.queryExpander.expand(queryText || query)
       : [queryText || query];
+    perf.queryExpansionTime = Date.now() - expansionStart;
 
     console.error(`[Indexer] Query expansion: ${queriesToSearch.length} queries to search`);
 
     // Perform vector search with expanded queries
+    const vectorSearchStart = Date.now();
     let vectorResults = [];
     const seenChunkIds = new Set();
 
     for (const expandedQuery of queriesToSearch) {
       const results = await this.vectorStore.searchByText(expandedQuery, this.embeddings, {
         limit: fetchLimit,
-        threshold,
+        threshold: effectiveThreshold,
         filters,
         queryText: expandedQuery,
         queryEmbedding // Pass pre-generated embedding
@@ -720,8 +767,8 @@ export class CodeIndexer {
     }
 
     // Adaptive threshold: If too few results, retry with lower threshold
-    if (vectorResults.length < limit && threshold > MIN_THRESHOLD) {
-      const adjustedThreshold = Math.max(MIN_THRESHOLD, threshold * 0.7);
+    if (vectorResults.length < limit && effectiveThreshold > MIN_THRESHOLD) {
+      const adjustedThreshold = Math.max(MIN_THRESHOLD, effectiveThreshold * 0.7);
       console.error(`[Indexer] Too few results (${vectorResults.length} < ${limit}), retrying with threshold ${adjustedThreshold.toFixed(3)}`);
 
       for (const expandedQuery of queriesToSearch.slice(0, 3)) { // Limit expanded queries on retry
@@ -743,13 +790,17 @@ export class CodeIndexer {
       }
     }
 
+    perf.vectorSearchTime = Date.now() - vectorSearchStart;
+
     // Hybrid search: combine vector and lexical results using RRF
     let finalResults;
 
     if (useHybrid) {
       try {
+        const lexicalStart = Date.now();
         // Perform lexical search using BM25
         const lexicalResults = this.lexicalIndex.search(queryText || query, fetchLimit);
+        perf.lexicalSearchTime = Date.now() - lexicalStart;
 
         // Combine results using Reciprocal Rank Fusion
         const combined = this.reciprocalRankFusion(vectorResults, lexicalResults);
@@ -798,6 +849,7 @@ export class CodeIndexer {
 
     const queryLower = (queryText || query).toLowerCase();
 
+    const rankingStart = Date.now();
     const ranked = finalResults.map(r => {
       // Use RRF score if available, otherwise fall back to similarity
       const baseScore = r.rrfScore !== undefined ? r.rrfScore * 1000 : (r.similarity * 100);
@@ -833,8 +885,23 @@ export class CodeIndexer {
         rankScore
       };
     }).sort((a, b) => b.rankScore - a.rankScore);
+    perf.rankingTime = Date.now() - rankingStart;
 
-    return ranked.slice(0, limit);
+    perf.totalTime = Date.now() - searchStart;
+
+    const results = ranked.slice(0, limit);
+
+    // Attach performance metadata to results
+    results.performance = perf;
+    results.queryInfo = {
+      originalQuery: query,
+      queryText: queryText || query,
+      expandedQueries: queriesToSearch.length,
+      effectiveThreshold,
+      typeSpecificThreshold: filters.chunkType ? TYPE_THRESHOLDS[filters.chunkType] : null
+    };
+
+    return results;
   }
 
   /**
