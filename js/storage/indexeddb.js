@@ -2,7 +2,7 @@
  * IndexedDB Core Module - Refactored
  *
  * This is the main entry point and public API facade.
- * All exports maintain backward compatibility with the original monolithic module.
+ * Exports a single IndexedDBCore object for consistency across storage modules.
  *
  * INTERNAL STRUCTURE:
  * - config.js: Database configuration constants
@@ -19,81 +19,7 @@
  */
 
 // ==========================================
-// CONFIGURATION
-// ==========================================
-
-export {
-    INDEXEDDB_NAME as DB_NAME,
-    INDEXEDDB_VERSION as DB_VERSION,
-    INDEXEDDB_STORES as STORES,
-    CONNECTION_CONFIG,
-    AUTHORITY_CONFIG,
-    REQUEST_CONFIG
-} from './indexeddb/config.js';
-
-// ==========================================
-// CONNECTION MANAGEMENT
-// ==========================================
-
-export {
-    initDatabase,
-    initDatabaseWithRetry,
-    closeDatabase,
-    getConnection,
-    resetConnectionState,
-    getConnectionStatus
-} from './indexeddb/connection.js';
-
-// ==========================================
-// FALLBACK MANAGEMENT
-// ==========================================
-
-export {
-    isUsingFallback,
-    getStorageBackend,
-    activateFallback
-} from './indexeddb/connection.js';
-
-// ==========================================
-// PRIMITIVE OPERATIONS - READ
-// ==========================================
-
-export {
-    get,
-    getAll,
-    count
-} from './indexeddb/operations/read.js';
-
-// ==========================================
-// PRIMITIVE OPERATIONS - WRITE
-// ==========================================
-
-export {
-    put,
-    clear,
-    deleteRecord as delete
-} from './indexeddb/operations/write.js';
-
-// ==========================================
-// ADVANCED OPERATIONS
-// ==========================================
-
-export {
-    getAllByIndex,
-    atomicUpdate,
-    transaction
-} from './indexeddb/indexing.js';
-
-// ==========================================
-// CONFLICT DETECTION
-// ==========================================
-
-export {
-    detectWriteConflict
-} from './indexeddb/conflict.js';
-
-// ==========================================
-// PUBLIC API (FACADE)
+// IMPORTS
 // ==========================================
 
 import {
@@ -135,6 +61,9 @@ import {
     INDEXEDDB_VERSION,
     INDEXEDDB_STORES
 } from './indexeddb/config.js';
+
+// Re-export constants for backward compatibility
+export { INDEXEDDB_NAME as DB_NAME, INDEXEDDB_VERSION as DB_VERSION, INDEXEDDB_STORES as STORES } from './indexeddb/config.js';
 
 // Export IndexedDBCore object for grouped exports (backward compatibility)
 export const IndexedDBCore = {

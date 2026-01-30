@@ -323,6 +323,3 @@ export class DevPanelController {
         }
     }
 }
-
-// Export singleton shortcut
-export const DevPanel = DevPanelController;

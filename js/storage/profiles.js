@@ -1,13 +1,14 @@
 /**
  * Profile Storage Module
- * 
+ *
  * Manages saved template/synthetic profiles separately from the main storage facade.
  * HNW: Extracted from storage.js to maintain single-responsibility principle.
- * 
+ *
  * Profiles are stored in IndexedDB settings under 'saved_profiles' key.
  */
 
-const ProfileStorage = {
+// Export for ES Module consumers
+export const ProfileStorage = {
     /**
      * Storage reference (set during initialization)
      */
@@ -141,7 +142,3 @@ const ProfileStorage = {
         console.log('[ProfileStorage] All profiles cleared');
     }
 };
-
-// Export for ES Module consumers
-export { ProfileStorage };
-

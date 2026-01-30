@@ -614,7 +614,7 @@ async function bootstrap() {
 // Developer Mode
 // ==========================================
 
-import { DevPanel } from './controllers/dev-panel-controller.js';
+import { DevPanelController } from './controllers/dev-panel-controller.js';
 
 /**
  * Setup keyboard shortcuts for developer features
@@ -630,7 +630,7 @@ function setupKeyboardShortcuts() {
         // Ctrl+Shift+D or Cmd+Shift+D for Dev Panel
         if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'd') {
             e.preventDefault();
-            DevPanel.toggle();
+            DevPanelController.toggle();
         }
     }
 
