@@ -85,7 +85,7 @@ const CONNECTION_RETRY_CONFIG = {
  * @param {Function} onUpgrade - Upgrade callback (optional)
  * @returns {Promise<IDBDatabase>} Database connection
  */
-export async function openConnection(dbName, version, onUpgrade = null) {
+async function openConnection(dbName, version, onUpgrade = null) {
     // Check for existing connection
     const existing = connectionPool.get(dbName);
     if (existing && existing.state === ConnectionState.CONNECTED) {
@@ -227,7 +227,7 @@ export async function openConnection(dbName, version, onUpgrade = null) {
  *
  * @param {string} dbName - Database name
  */
-export function closeConnection(dbName) {
+function closeConnection(dbName) {
     const entry = connectionPool.get(dbName);
     if (!entry || !entry.connection) {
         return;
@@ -248,7 +248,7 @@ export function closeConnection(dbName) {
  * @param {string} dbName - Database name
  * @returns {ConnectionState|null} Connection state or null if not tracked
  */
-export function getConnectionState(dbName) {
+function getConnectionState(dbName) {
     const entry = connectionPool.get(dbName);
     return entry?.state || null;
 }
@@ -258,7 +258,7 @@ export function getConnectionState(dbName) {
  *
  * @returns {boolean} True if in fallback mode
  */
-export function isFallbackMode() {
+function isFallbackMode() {
     return fallbackMode;
 }
 
@@ -267,7 +267,7 @@ export function isFallbackMode() {
  *
  * @returns {Promise<boolean>} True if successfully exited fallback mode
  */
-export async function exitFallbackMode() {
+async function exitFallbackMode() {
     if (!fallbackMode) {
         return true;
     }
@@ -319,7 +319,7 @@ export async function exitFallbackMode() {
  * @param {Function} operation - Operation function (receives transaction)
  * @returns {Promise<any>} Operation result
  */
-export async function executeWithRetry(dbName, storeNames, mode, operation) {
+async function executeWithRetry(dbName, storeNames, mode, operation) {
     const maxTransactionRetries = 2;
     let lastError = null;
 
@@ -371,7 +371,7 @@ export async function executeWithRetry(dbName, storeNames, mode, operation) {
  *
  * @returns {Object} Connection pool stats
  */
-export function getConnectionStats() {
+function getConnectionStats() {
     const stats = {
         totalConnections: connectionPool.size,
         connected: 0,
@@ -410,7 +410,7 @@ export function getConnectionStats() {
 /**
  * Close all connections
  */
-export function closeAllConnections() {
+function closeAllConnections() {
     for (const dbName of connectionPool.keys()) {
         closeConnection(dbName);
     }
@@ -421,21 +421,28 @@ export function closeAllConnections() {
  * Reset connection manager state
  * Clears all connections and exits fallback mode
  */
-export function reset() {
+function reset() {
     closeAllConnections();
     fallbackMode = false;
     console.log('[ConnectionManager] Connection manager reset');
 }
 
-// Export
-export default {
+// Export ConnectionManager object for consistency across storage modules
+export const ConnectionManager = {
+    // Constants
     ConnectionState,
+
+    // Connection management
     openConnection,
     closeConnection,
     getConnectionState,
     isFallbackMode,
     exitFallbackMode,
+
+    // Transaction management
     executeWithRetry,
+
+    // Utilities
     getConnectionStats,
     closeAllConnections,
     reset

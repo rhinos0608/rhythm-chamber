@@ -117,7 +117,4 @@ SidebarController.destroy = function destroySidebarController() {
 // Export sub-controllers for direct access if needed
 export { SidebarStateController, SessionListController, SessionActionsController };
 
-// Also export as default for compatibility
-export default SidebarController;
-
 console.log('[SidebarController] Refactored controller loaded (coordinator pattern)');
