@@ -71,6 +71,7 @@ export class CodeIndexer {
     this.indexed = false;
     this.watcher = null;  // File watcher instance
     this._reindexLock = null;  // Concurrency control for reindexFiles()
+    this._cacheSaveLock = false;  // CRITICAL FIX #3: Prevent concurrent cache saves
     this._indexingInProgress = false;  // Track if indexing is currently running
     this._indexingError = null;  // Track any indexing errors
     this._indexingPromise = null;  // Track current indexing operation
@@ -382,12 +383,21 @@ export class CodeIndexer {
   /**
    * Save cache to disk with improved error handling
    *
-   * FIX #3: Enhanced error handling and logging
+   * FIX #3: Enhanced error handling and race condition prevention
+   * - Uses lock to prevent concurrent saves
    * - Logs detailed error information from cache stats
    * - Doesn't crash indexer if cache save fails
    * - Provides actionable debugging information
    */
   async _saveCache() {
+    // CRITICAL FIX #3: Prevent concurrent cache saves (race condition)
+    if (this._cacheSaveLock) {
+      console.warn('[Indexer] Cache save already in progress, skipping duplicate save');
+      return;
+    }
+
+    this._cacheSaveLock = true;
+
     try {
       const result = await this.cache.save();
       if (result === false) {
@@ -407,6 +417,9 @@ export class CodeIndexer {
 
       // Log the error but don't crash the indexer
       // The cache will retry on next save operation
+    } finally {
+      // Always release the lock
+      this._cacheSaveLock = false;
     }
   }
 

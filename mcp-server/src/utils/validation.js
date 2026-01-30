@@ -20,6 +20,25 @@ export class ValidationError extends Error {
 }
 
 /**
+ * Check if a path exists and return its type
+ */
+export function getPathType(path) {
+  if (!existsSync(path)) {
+    return null;
+  }
+
+  try {
+    const stats = statSync(path);
+    if (stats.isFile()) return 'file';
+    if (stats.isDirectory()) return 'directory';
+  } catch {
+    return null;
+  }
+
+  return 'unknown';
+}
+
+/**
  * Validate and normalize the target parameter for file/directory operations
  *
  * @param {*} target - The target parameter (string, object, or invalid)
@@ -51,6 +70,17 @@ export function validateTarget(target, projectRoot) {
           resolved: targetPath
         }
       );
+    }
+
+    // Determine if it's a file or directory
+    const pathType = getPathType(targetPath);
+    if (pathType === 'directory') {
+      return {
+        type: 'directory',
+        path: targetPath,
+        relative: target,
+        original: target
+      };
     }
 
     return {
@@ -213,23 +243,4 @@ export function resolvePath(filePath, projectRoot) {
 
   const resolved = resolve(projectRoot, filePath);
   return resolved;
-}
-
-/**
- * Check if a path exists and return its type
- */
-export function getPathType(path) {
-  if (!existsSync(path)) {
-    return null;
-  }
-
-  try {
-    const stats = statSync(path);
-    if (stats.isFile()) return 'file';
-    if (stats.isDirectory()) return 'directory';
-  } catch {
-    return null;
-  }
-
-  return 'unknown';
 }

@@ -58,9 +58,28 @@ export const schema = {
  * Handle tool execution
  */
 export const handler = async (args, projectRoot) => {
-  const { target, severity = 'all', includeContext = true } = args;
+  let { target, severity = 'all', includeContext = true } = args;
 
   logger.info('get_compilation_errors called with:', { target, severity, includeContext });
+
+  // CRITICAL FIX: Handle case where target is a JSON string (user error or client bug)
+  // Some clients may pass object parameters as JSON strings
+  if (typeof target === 'string' && target.trim().startsWith('{')) {
+    try {
+      target = JSON.parse(target);
+      logger.info('Parsed target from JSON string:', target);
+    } catch (parseError) {
+      // If it looks like JSON but fails to parse, provide helpful error
+      logger.warn('Failed to parse target as JSON:', parseError.message);
+      return createErrorResponse(
+        'Invalid target format. If trying to use object format, ensure valid JSON. For file paths, use plain string without braces.',
+        {
+          received: target.substring(0, 100),
+          hint: 'Use either "path/to/file.js" or {"directory": "path/to/dir"}'
+        }
+      );
+    }
+  }
 
   try {
     // Validate and normalize target using strict validation

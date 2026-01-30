@@ -10,6 +10,7 @@ export class FileScanner {
   constructor(projectRoot) {
     this.projectRoot = projectRoot;
     this.cache = new Map(); // Cache for scan results
+    this.maxCacheSize = 100; // CRITICAL FIX #7: Prevent unbounded cache growth
   }
 
   /**
@@ -38,7 +39,13 @@ export class FileScanner {
       includeDist,
     });
 
-    // Cache the result
+    // Cache the result with LRU eviction
+    // CRITICAL FIX #7: Prevent unbounded cache growth
+    if (this.cache.size >= this.maxCacheSize) {
+      // Remove first entry (simple FIFO eviction)
+      const firstKey = this.cache.keys().next().value;
+      this.cache.delete(firstKey);
+    }
     this.cache.set(cacheKey, jsFiles);
 
     return jsFiles;

@@ -1,20 +1,58 @@
 /**
  * MCP Tool: search_architecture
  * Search codebase based on HNW architecture patterns
+ * ENHANCED: Now integrates semantic search for conceptual pattern matching
  */
 
-import { resolve } from 'path';
+import { resolve, relative } from 'path';
 import { existsSync } from 'fs';
 import { HNWAnalyzer } from '../analyzers/hnw-analyzer.js';
 import { FileScanner } from '../utils/file-scanner.js';
 import { logger } from '../utils/logger.js';
+
+/**
+ * Validate and sanitize file path extracted from chunk ID
+ * Prevents path traversal attacks
+ */
+function validateChunkFilePath(filePath, projectRoot) {
+  // CRITICAL FIX #1: Prevent path traversal attacks
+  // Reject paths with directory traversal sequences
+  if (filePath.includes('..') || filePath.includes('\\..') || filePath.includes('./..')) {
+    logger.warn(`[validateChunkFilePath] Rejected path traversal attempt`);
+    return null;
+  }
+
+  // Reject absolute paths (should be relative to project root)
+  if (filePath.startsWith('/')) {
+    logger.warn(`[validateChunkFilePath] Rejected absolute path`);
+    return null;
+  }
+
+  // Reject null bytes (potential security issue)
+  if (filePath.includes('\0')) {
+    logger.warn(`[validateChunkFilePath] Rejected path with null byte`);
+    return null;
+  }
+
+  // Resolve to absolute path and verify it's within project root
+  const fullPath = resolve(projectRoot, filePath);
+  const resolvedPath = relative(projectRoot, fullPath);
+
+  // Check if the resolved path escaped the project root
+  if (resolvedPath.startsWith('..')) {
+    logger.warn(`[validateChunkFilePath] Rejected path escaping project root`);
+    return null;
+  }
+
+  return fullPath;
+}
 
 let fileScanner = null;
 let analyzerCache = null;
 
 export const schema = {
   name: 'search_architecture',
-  description: 'Search the codebase based on HNW architecture patterns and constraints',
+  description: 'Search the codebase based on HNW architecture patterns and constraints. Enhanced with semantic search for conceptual pattern matching.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -39,13 +77,30 @@ export const schema = {
         default: 50,
         description: 'Maximum number of results to return (1-200)',
       },
+      useSemanticSearch: {
+        type: 'boolean',
+        default: true,
+        description: 'Use semantic search to find conceptual pattern matches (requires semantic indexer)',
+      },
+      semanticThreshold: {
+        type: 'number',
+        default: 0.4,
+        description: 'Minimum similarity threshold for semantic matches (0-1)',
+      },
     },
     required: ['pattern'],
   },
 };
 
-export const handler = async (args, projectRoot) => {
-  const { pattern, layer = 'all', complianceCheck = false, maxResults = 50 } = args;
+export const handler = async (args, projectRoot, indexer, server) => {
+  const {
+    pattern,
+    layer = 'all',
+    complianceCheck = false,
+    maxResults = 50,
+    useSemanticSearch = true,
+    semanticThreshold = 0.4
+  } = args;
 
   // Initialize file scanner and analyzer
   if (!fileScanner || fileScanner.projectRoot !== projectRoot) {
@@ -60,6 +115,8 @@ export const handler = async (args, projectRoot) => {
     layer,
     complianceCheck,
     maxResults,
+    useSemanticSearch,
+    semanticThreshold,
   });
 
   // Validate inputs
@@ -76,14 +133,50 @@ export const handler = async (args, projectRoot) => {
   }
 
   try {
-    // Perform search
-    const results = await searchArchitecture(
+    let results;
+    let semanticResults = null;
+
+    // Use semantic search if available and enabled
+    if (useSemanticSearch && indexer) {
+      const indexingStatus = server?.getIndexingStatus ? server.getIndexingStatus() : { status: 'unknown' };
+
+      if (indexingStatus.status === 'ready' && indexingStatus.stats?.vectorStore?.chunkCount > 0) {
+        logger.info('Using semantic search for pattern matching');
+
+        // Build semantic query from pattern
+        const semanticQuery = buildSemanticQuery(pattern, layer);
+
+        // Search using semantic search
+        const semanticMatches = await indexer.vectorStore.search(
+          semanticQuery,
+          maxResults * 2, // Get more results, then filter
+          semanticThreshold
+        );
+
+        // Convert semantic results to architecture results
+        semanticResults = processSemanticResults(semanticMatches, layer, complianceCheck, analyzerCache, fileScanner, projectRoot);
+        logger.info(`Semantic search found ${semanticResults.matches.length} matches`);
+      } else {
+        logger.info('Semantic search not ready, falling back to pattern matching');
+      }
+    }
+
+    // Perform traditional pattern-based search
+    results = await searchArchitecture(
       projectRoot,
       pattern,
       layer,
       complianceCheck,
       maxResults
     );
+
+    // Merge semantic results if available
+    if (semanticResults && semanticResults.matches.length > 0) {
+      results = mergeResults(results, semanticResults, maxResults);
+      results.searchMethod = 'hybrid (semantic + pattern)';
+    } else {
+      results.searchMethod = useSemanticSearch ? 'pattern (semantic unavailable)' : 'pattern-only';
+    }
 
     // Format results
     const output = formatSearchResults(results, pattern, layer, complianceCheck);
@@ -447,5 +540,178 @@ function formatSearchResults(results, pattern, layer, complianceCheck) {
     lines.push('');
   }
 
+  // Add search method indicator
+  if (results.searchMethod) {
+    lines.push('## Search Method');
+    lines.push('');
+    lines.push(`**Method**: ${results.searchMethod}`);
+    lines.push('');
+  }
+
   return lines.join('\n');
+}
+
+/**
+ * Build a semantic search query from the architecture pattern
+ */
+function buildSemanticQuery(pattern, layer) {
+  const queries = {
+    'eventbus': 'EventBus cross-module communication event-driven loose coupling',
+    'event bus': 'EventBus cross-module communication event-driven loose coupling',
+    'hnw': 'HNW architecture hierarchy network wave compliance violation',
+    'violation': 'architecture violation layer bypass dependency rule',
+    'compliance': 'HNW architecture compliance score validation check',
+    'service': 'service layer dependency injection business logic',
+    'provider': 'provider abstraction data source external api',
+    'dependency': 'import dependency module coupling circular',
+    'circular': 'circular dependency cycle import mutual reference',
+    'controller': 'controller layer UI interaction event handling',
+    'hierarchy': 'hierarchical layer architecture controller service provider',
+    'network': 'network event bus communication loose coupling',
+    'wave': 'wave tab coordination cross-tab primary authority',
+  };
+
+  // Find matching key or construct query from pattern
+  const patternLower = pattern.toLowerCase();
+
+  for (const [key, query] of Object.entries(queries)) {
+    if (patternLower.includes(key)) {
+      if (layer !== 'all') {
+        return `${query} ${layer} layer`;
+      }
+      return query;
+    }
+  }
+
+  // Default: use the pattern directly with layer context
+  const baseQuery = pattern.includes(' ') ? pattern : `${pattern} architecture pattern`;
+  return layer !== 'all' ? `${baseQuery} ${layer} layer` : baseQuery;
+}
+
+/**
+ * Process semantic search results into architecture results format
+ */
+function processSemanticResults(semanticMatches, layer, complianceCheck, analyzerCache, fileScanner, projectRoot) {
+  const results = {
+    pattern: 'semantic',
+    matches: [],
+    summary: {
+      totalFiles: 0,
+      matchedFiles: 0,
+      totalViolations: 0,
+      layers: {},
+    },
+  };
+
+  // Track processed files to avoid duplicates
+  const processedFiles = new Set();
+
+  for (const match of semanticMatches) {
+    const chunkId = match.chunkId || match.id;
+    if (!chunkId) continue;
+
+    // Extract file path from chunk ID
+    const filePath = chunkId.split('_L')[0].replace(/_/g, '/');
+
+    // CRITICAL FIX #1: Validate the extracted path to prevent path traversal
+    const fullPath = validateChunkFilePath(filePath, projectRoot);
+    if (!fullPath) {
+      continue; // Skip invalid paths
+    }
+
+    if (processedFiles.has(filePath)) continue;
+    processedFiles.add(filePath);
+
+    if (!existsSync(fullPath)) continue;
+
+    // CRITICAL FIX #5: Add null safety for file operations
+    let fileLayer = 'unknown';
+    try {
+      fileLayer = fileScanner.getFileLayer(fullPath);
+    } catch (error) {
+      logger.warn(`[processSemanticResults] Failed to get layer: ${error.message}`);
+      continue;
+    }
+
+    // Filter by layer if specified
+    if (layer !== 'all' && fileLayer !== layer) {
+      continue;
+    }
+
+    try {
+      // Analyze file for HNW compliance
+      const analysis = analyzerCache.analyzeFile(fullPath);
+
+      // Filter by compliance if requested
+      if (complianceCheck && analysis.compliance.score < 50) {
+        continue;
+      }
+
+      // CRITICAL FIX #6: Add null checks for metadata access
+      const matchInfo = match.metadata?.exported || match.chunkType || 'code chunk';
+
+      results.matches.push({
+        file: filePath,
+        layer: fileLayer,
+        compliance: analysis.compliance,
+        pattern: {
+          type: 'Semantic Match',
+          details: [
+            `Semantic similarity: ${((match.similarity || 0) * 100).toFixed(0)}%`,
+            `Match: ${matchInfo}`,
+          ],
+          score: Math.round((match.similarity || 0) * 100),
+          similarity: match.similarity || 0,
+        },
+      });
+
+      results.summary.matchedFiles++;
+      results.summary.totalViolations += analysis.compliance.violations.length;
+      results.summary.layers[fileLayer] = (results.summary.layers[fileLayer] || 0) + 1;
+
+      // Stop if we've reached max results
+      if (results.matches.length >= 50) {
+        break;
+      }
+    } catch (error) {
+      // CRITICAL FIX #4: Sanitize error messages - don't expose internal paths
+      logger.warn(`Failed to analyze file: ${error.message}`);
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Merge pattern and semantic results, removing duplicates
+ */
+function mergeResults(patternResults, semanticResults, maxResults) {
+  const merged = {
+    ...patternResults,
+    matches: [],
+  };
+
+  // Track files we've already added
+  const seenFiles = new Set();
+
+  // Add pattern results first (higher priority for exact matches)
+  for (const match of patternResults.matches) {
+    if (!seenFiles.has(match.file)) {
+      seenFiles.add(match.file);
+      merged.matches.push(match);
+    }
+  }
+
+  // Add semantic results that weren't in pattern results
+  for (const match of semanticResults.matches) {
+    if (!seenFiles.has(match.file) && merged.matches.length < maxResults) {
+      seenFiles.add(match.file);
+      merged.matches.push(match);
+    }
+  }
+
+  // Trim to maxResults
+  merged.matches = merged.matches.slice(0, maxResults);
+
+  return merged;
 }

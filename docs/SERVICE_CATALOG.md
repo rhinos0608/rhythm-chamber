@@ -1,7 +1,7 @@
 # Service Catalog
 
 > **Auto-generated** by docs-sync tool
-> **Generated:** 2026-01-30T15:17:18.321Z
+> **Generated:** 2026-01-30T16:18:16.040Z
 > **Total Services:** 94
 
 This catalog provides detailed information about all business logic services in the application.
@@ -854,7 +854,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/session-manager/index.js`
 
-**Lines:** 427
+**Lines:** 432
 
 **Named Exports:** 13
 
@@ -867,6 +867,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 - `js/services/session-manager/session-persistence.js`
 - `js/storage.js`
 - `js/services/error-boundary.js`
+- `js/services/event-bus.js`
 
 ---
 
@@ -874,7 +875,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/session-manager/session-lifecycle.js`
 
-**Lines:** 611
+**Lines:** 627
 
 **Named Exports:** 15
 
@@ -882,7 +883,6 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **Dependencies:**
 
-- `js/services/event-bus.js`
 - `js/storage.js`
 - `js/storage/keys.js`
 - `js/services/session-lock-manager.js`

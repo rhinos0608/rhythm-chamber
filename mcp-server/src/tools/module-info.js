@@ -3,7 +3,7 @@
  * Get comprehensive metadata about a module including symbol table
  */
 
-import { resolve, join } from 'path';
+import { resolve, join, relative } from 'path';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { HNWAnalyzer } from '../analyzers/hnw-analyzer.js';
 import { CacheManager } from '../cache/cache-manager.js';
@@ -23,7 +23,7 @@ const cache = new CacheManager();
 export const schema = {
   name: 'get_module_info',
   description:
-    'Get detailed metadata about a module including exports, imports, dependencies, and architecture role',
+    'Get detailed metadata about a module including exports, imports, dependencies, and architecture role. Enhanced with semantic similarity analysis.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -47,6 +47,16 @@ export const schema = {
         default: false,
         description: 'Include detailed symbol table (functions, classes, variables with locations)',
       },
+      includeSimilarModules: {
+        type: 'boolean',
+        default: true,
+        description: 'Include semantically similar modules (requires semantic indexer)',
+      },
+      similarityLimit: {
+        type: 'number',
+        default: 5,
+        description: 'Maximum number of similar modules to show',
+      },
     },
     required: ['filePath'],
   },
@@ -55,10 +65,24 @@ export const schema = {
 /**
  * Handle tool execution
  */
-export const handler = async (args, projectRoot) => {
-  const { filePath, includeDependencies = true, includeExports = true, includeSymbols = false } = args;
+export const handler = async (args, projectRoot, indexer, server) => {
+  const {
+    filePath,
+    includeDependencies = true,
+    includeExports = true,
+    includeSymbols = false,
+    includeSimilarModules = true,
+    similarityLimit = 5
+  } = args;
 
-  logger.info('get_module_info called with:', { filePath, includeDependencies, includeExports, includeSymbols });
+  logger.info('get_module_info called with:', {
+    filePath,
+    includeDependencies,
+    includeExports,
+    includeSymbols,
+    includeSimilarModules,
+    similarityLimit
+  });
 
   // Resolve file path
   const absolutePath = resolve(projectRoot, filePath);
@@ -78,7 +102,7 @@ ${similarFiles.length > 0 ? similarFiles.map(f => `- Did you mean \`${f}\`?`).jo
 
 ## Check
 - Verify the file path is correct
-- The file should be in the project root: ${projectRoot}
+- The file should be relative to the project root
 `
       }]
     }, {
@@ -134,12 +158,37 @@ ${similarFiles.length > 0 ? similarFiles.map(f => `- Did you mean \`${f}\`?`).jo
     }
   }
 
+  // Find semantically similar modules if requested
+  let similarModules = null;
+  if (includeSimilarModules && indexer) {
+    try {
+      const indexingStatus = server?.getIndexingStatus ? server.getIndexingStatus() : { status: 'unknown' };
+
+      if (indexingStatus.status === 'ready' && indexingStatus.stats?.vectorStore?.chunkCount > 0) {
+        // Build semantic query from file name and layer
+        const layer = analysis.layer;
+        const basename = filePath.split('/').pop().replace('.js', '');
+        const query = `${basename} ${layer} module exports functions`;
+
+        // Search for similar code
+        const semanticMatches = await indexer.vectorStore.search(query, similarityLimit * 3, 0.5);
+
+        // Process matches to extract unique files
+        similarModules = processSimilarModules(semanticMatches, filePath, similarityLimit, projectRoot);
+        logger.info(`Found ${similarModules.length} similar modules for ${filePath}`);
+      }
+    } catch (error) {
+      logger.warn(`Similar module search failed for ${filePath}:`, error);
+      // Continue without similar modules rather than failing
+    }
+  }
+
   // Build response
   const result = {
     content: [
       {
         type: 'text',
-        text: formatModuleInfo(analysis, includeDependencies, includeExports, includeSymbols, symbols),
+        text: formatModuleInfo(analysis, includeDependencies, includeExports, includeSymbols, symbols, similarModules),
       },
     ],
   };
@@ -153,7 +202,7 @@ ${similarFiles.length > 0 ? similarFiles.map(f => `- Did you mean \`${f}\`?`).jo
 /**
  * Format module information for display
  */
-function formatModuleInfo(analysis, includeDependencies, includeExports, includeSymbols = false, symbols = null) {
+function formatModuleInfo(analysis, includeDependencies, includeExports, includeSymbols = false, symbols = null, similarModules = null) {
   const lines = [];
 
   lines.push(`# Module Information: ${analysis.filePath}`);
@@ -266,6 +315,29 @@ function formatModuleInfo(analysis, includeDependencies, includeExports, include
     for (const rec of analysis.recommendations) {
       lines.push(`- ${rec}`);
     }
+    lines.push('');
+  }
+
+  // Similar Modules (SEMANTIC SEARCH)
+  if (similarModules && similarModules.length > 0) {
+    lines.push('## Semantically Similar Modules');
+    lines.push('');
+    lines.push('Modules with similar code patterns or functionality:');
+    lines.push('');
+
+    for (const module of similarModules) {
+      const similarityPercent = Math.round(module.similarity * 100);
+      lines.push(`### ${module.filePath}`);
+      lines.push('');
+      lines.push(`- **Similarity**: ${similarityPercent}%`);
+      lines.push(`- **Layer**: ${module.layer}`);
+      if (module.sharedExports.length > 0) {
+        lines.push(`- **Shared Concepts**: ${module.sharedExports.slice(0, 3).join(', ')}`);
+      }
+      lines.push('');
+    }
+
+    lines.push('**Note**: Similarity is based on code patterns, functionality, and structure.');
     lines.push('');
   }
 
@@ -495,4 +567,116 @@ function findSimilarFiles(filePath, projectRoot) {
     .slice(0, 5);
 
   return similar.map(f => path.join(dirname, f));
+}
+
+/**
+ * Validate and sanitize file path extracted from chunk ID
+ * Prevents path traversal attacks
+ */
+function validateChunkFilePath(filePath, projectRoot) {
+  // CRITICAL FIX #1: Prevent path traversal attacks
+  // Reject paths with directory traversal sequences
+  if (filePath.includes('..') || filePath.includes('\\..') || filePath.includes('./..')) {
+    logger.warn(`[validateChunkFilePath] Rejected path traversal attempt: ${filePath}`);
+    return null;
+  }
+
+  // Reject absolute paths (should be relative to project root)
+  if (filePath.startsWith('/')) {
+    logger.warn(`[validateChunkFilePath] Rejected absolute path: ${filePath}`);
+    return null;
+  }
+
+  // Reject null bytes (potential security issue)
+  if (filePath.includes('\0')) {
+    logger.warn(`[validateChunkFilePath] Rejected path with null byte`);
+    return null;
+  }
+
+  // Resolve to absolute path and verify it's within project root
+  const fullPath = resolve(projectRoot, filePath);
+  const relativePath = relative(projectRoot, fullPath);
+
+  // Check if the resolved path escaped the project root
+  if (relativePath.startsWith('..')) {
+    logger.warn(`[validateChunkFilePath] Rejected path escaping project root: ${filePath}`);
+    return null;
+  }
+
+  return fullPath;
+}
+
+/**
+ * Process semantic search results to extract similar modules
+ */
+function processSimilarModules(semanticMatches, currentFilePath, limit, projectRoot) {
+  const fileScanner = new FileScanner(projectRoot);
+  const processedFiles = new Map();
+
+  for (const match of semanticMatches) {
+    const chunkId = match.chunkId || match.id;
+    if (!chunkId) continue;
+
+    // Extract file path from chunk ID
+    const filePath = chunkId.split('_L')[0].replace(/_/g, '/');
+
+    // CRITICAL FIX #1: Validate the extracted path to prevent path traversal
+    const fullPath = validateChunkFilePath(filePath, projectRoot);
+    if (!fullPath) {
+      continue; // Skip invalid paths
+    }
+
+    // Skip the current file
+    if (filePath === currentFilePath || filePath === currentFilePath.replace(/^\//, '')) {
+      continue;
+    }
+
+    // Skip if already processed
+    if (processedFiles.has(filePath)) {
+      // Update similarity if this match is higher
+      const existing = processedFiles.get(filePath);
+      if (match.similarity > existing.similarity) {
+        existing.similarity = match.similarity;
+      }
+      continue;
+    }
+
+    // CRITICAL FIX #5: Add null safety for file operations
+    let layer = 'unknown';
+    try {
+      layer = fileScanner.getFileLayer(fullPath);
+    } catch (error) {
+      logger.warn(`[processSimilarModules] Failed to get layer for ${filePath}:`, error.message);
+      // Continue with unknown layer
+    }
+
+    const sharedExports = [];
+
+    // CRITICAL FIX #6: Add null checks for metadata access
+    if (match.metadata) {
+      if (match.metadata.exported) {
+        sharedExports.push(match.metadata.exported);
+      }
+      if (match.chunkType === 'function' && match.metadata.name) {
+        sharedExports.push(match.metadata.name);
+      }
+    }
+
+    processedFiles.set(filePath, {
+      filePath,
+      layer,
+      similarity: match.similarity || 0, // Default to 0 if undefined
+      sharedExports,
+    });
+
+    // Stop if we've reached the limit
+    if (processedFiles.size >= limit) {
+      break;
+    }
+  }
+
+  // Convert to array and sort by similarity
+  return Array.from(processedFiles.values())
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, limit);
 }

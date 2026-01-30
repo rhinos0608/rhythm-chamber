@@ -40,6 +40,10 @@ export class DependencyGraph {
 
     // file -> chunks
     this.fileChunks = new Map();
+
+    // CRITICAL FIX #8: Prevent unbounded array growth
+    this.maxDefinitionsPerSymbol = 1000;
+    this.maxUsagesPerSymbol = 5000;
   }
 
   /**
@@ -206,7 +210,17 @@ export class DependencyGraph {
     const importRegex = /import\s+(?:(\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+)?['"]([^'"]+)['"]/g;
     let match;
 
+    // CRITICAL FIX #2: Prevent ReDoS by limiting iterations
+    let iterations = 0;
+    const maxIterations = 1000; // Safe upper limit for import parsing
+
     while ((match = importRegex.exec(text)) !== null) {
+      iterations++;
+      if (iterations > maxIterations) {
+        console.warn(`[DependencyGraph] Too many import matches (${iterations}), stopping to prevent ReDoS`);
+        break;
+      }
+
       const imports = match[1];
       const source = match[2];
 
@@ -263,7 +277,17 @@ export class DependencyGraph {
     const callRegex = /(\w+)\s*\(/g;
     let match;
 
+    // CRITICAL FIX #2: Prevent ReDoS by limiting iterations
+    let iterations = 0;
+    const maxIterations = 10000; // Safe upper limit for call extraction
+
     while ((match = callRegex.exec(text)) !== null) {
+      iterations++;
+      if (iterations > maxIterations) {
+        console.warn(`[DependencyGraph] Too many call matches (${iterations}), stopping to prevent ReDoS`);
+        break;
+      }
+
       // Skip if it's a keyword
       if (!this._isKeyword(match[1])) {
         this._addUsage(match[1], id, 'call');
@@ -279,7 +303,14 @@ export class DependencyGraph {
       this.definitions.set(symbol, []);
     }
 
-    this.definitions.get(symbol).push({
+    // CRITICAL FIX #8: Prevent unbounded array growth
+    const defs = this.definitions.get(symbol);
+    if (defs.length >= this.maxDefinitionsPerSymbol) {
+      // Skip this definition if we've reached the limit
+      return;
+    }
+
+    defs.push({
       chunkId,
       ...info
     });
@@ -299,8 +330,15 @@ export class DependencyGraph {
       this.usages.set(symbol, []);
     }
 
-    // Avoid duplicates
+    // Avoid duplicates and enforce limit
     const existing = this.usages.get(symbol);
+
+    // CRITICAL FIX #8: Prevent unbounded array growth
+    if (existing.length >= this.maxUsagesPerSymbol) {
+      // Skip this usage if we've reached the limit
+      return;
+    }
+
     if (!existing.some(u => u.chunkId === chunkId)) {
       existing.push({
         chunkId,

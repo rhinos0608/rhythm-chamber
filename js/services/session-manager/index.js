@@ -16,24 +16,29 @@ import * as SessionLifecycle from './session-lifecycle.js';
 import * as SessionPersistence from './session-persistence.js';
 import { Storage } from '../../storage.js';
 import { ErrorBoundary } from '../error-boundary.js';
+import { EventBus } from '../event-bus.js';
 
 // ==========================================
-// Initialize Lifecycle Module with State Accessor
+// Initialize Lifecycle Module with State Accessor and Event Emitter
 // ==========================================
 
-// Initialize session-lifecycle with state accessor to avoid circular dependency
-// This follows the Facade pattern where lifecycle uses state through injected interface
-SessionLifecycle.initialize({
-    getCurrentSessionId: SessionState.getCurrentSessionId,
-    setCurrentSessionId: SessionState.setCurrentSessionId,
-    getCurrentSessionCreatedAt: SessionState.getCurrentSessionCreatedAt,
-    setCurrentSessionCreatedAt: SessionState.setCurrentSessionCreatedAt,
-    syncSessionIdToAppState: SessionState.syncSessionIdToAppState,
-    getSessionData: SessionState.getSessionData,
-    setSessionData: SessionState.setSessionData,
-    updateSessionData: SessionState.updateSessionData,
-    getHistory: SessionState.getHistory
-});
+// Initialize session-lifecycle with state accessor and event emitter
+// This follows HNW architecture by injecting EventBus instead of direct import
+// This prevents circular dependencies and maintains loose coupling
+SessionLifecycle.initialize(
+    {
+        getCurrentSessionId: SessionState.getCurrentSessionId,
+        setCurrentSessionId: SessionState.setCurrentSessionId,
+        getCurrentSessionCreatedAt: SessionState.getCurrentSessionCreatedAt,
+        setCurrentSessionCreatedAt: SessionState.setCurrentSessionCreatedAt,
+        syncSessionIdToAppState: SessionState.syncSessionIdToAppState,
+        getSessionData: SessionState.getSessionData,
+        setSessionData: SessionState.setSessionData,
+        updateSessionData: SessionState.updateSessionData,
+        getHistory: SessionState.getHistory
+    },
+    EventBus  // Inject EventBus for event emission (HNW compliance)
+);
 
 // Re-export all module exports for internal use
 export * from './session-state.js';
