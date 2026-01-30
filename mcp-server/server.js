@@ -19,6 +19,22 @@ import { schema as get_module_info_schema, handler as get_module_info_handler } 
 import { schema as find_dependencies_schema, handler as find_dependencies_handler } from './src/tools/dependencies.js';
 import { schema as search_architecture_schema, handler as search_architecture_handler } from './src/tools/architecture.js';
 import { schema as validate_hnw_compliance_schema, handler as validate_hnw_compliance_handler } from './src/tools/validation.js';
+import { schema as find_all_usages_schema, handler as find_all_usages_handler } from './src/tools/find-usages.js';
+import { schema as get_compilation_errors_schema, handler as get_compilation_errors_handler } from './src/tools/compilation-errors.js';
+import { schema as get_symbol_graph_schema, handler as get_symbol_graph_handler } from './src/tools/symbol-graph.js';
+import { schema as analyze_architecture_schema, handler as analyze_architecture_handler } from './src/tools/architecture-analysis.js';
+import { schema as trace_execution_flow_schema, handler as trace_execution_flow_handler } from './src/tools/execution-flow.js';
+import { schema as suggest_refactoring_schema, handler as suggest_refactoring_handler } from './src/tools/refactoring-suggestions.js';
+
+// Semantic search tools
+import { schema as semantic_search_schema, handler as semantic_search_handler } from './src/tools/semantic-search.js';
+import { schema as deep_code_search_schema, handler as deep_code_search_handler } from './src/tools/deep-code-search.js';
+import { schema as get_chunk_details_schema, handler as get_chunk_details_handler } from './src/tools/get-chunk-details.js';
+import { schema as list_indexed_files_schema, handler as list_indexed_files_handler } from './src/tools/list-indexed-files.js';
+import { schema as watcher_control_schema, handler as watcher_control_handler } from './src/tools/watcher-control.js';
+
+// Semantic indexer
+import { CodeIndexer } from './src/semantic/indexer.js';
 
 /**
  * Main MCP Server class for Rhythm Chamber
@@ -39,10 +55,14 @@ class RhythmChamberMCPServer {
 
     this.projectRoot = process.env.RC_PROJECT_ROOT || join(__dirname, '..');
     this.cacheDir = process.env.RC_MCP_CACHE_DIR || join(this.projectRoot, '.mcp-cache');
+    this.enableSemantic = process.env.RC_SEMANTIC_SEARCH !== 'false';  // Enabled by default
+    this._indexingInProgress = false;  // Track indexing state
+    this._indexingError = null;  // Track any indexing errors
 
     console.error(`[Rhythm Chamber MCP] Initializing...`);
     console.error(`[Rhythm Chamber MCP] Project root: ${this.projectRoot}`);
     console.error(`[Rhythm Chamber MCP] Cache dir: ${this.cacheDir}`);
+    console.error(`[Rhythm Chamber MCP] Semantic search: ${this.enableSemantic ? 'enabled' : 'disabled'}`);
   }
 
   /**
@@ -50,14 +70,31 @@ class RhythmChamberMCPServer {
    */
   setupToolHandlers() {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-      return {
-        tools: [
-          get_module_info_schema,
-          find_dependencies_schema,
-          search_architecture_schema,
-          validate_hnw_compliance_schema,
-        ],
-      };
+      const tools = [
+        get_module_info_schema,
+        find_dependencies_schema,
+        search_architecture_schema,
+        validate_hnw_compliance_schema,
+        find_all_usages_schema,
+        get_compilation_errors_schema,
+        get_symbol_graph_schema,
+        analyze_architecture_schema,
+        trace_execution_flow_schema,
+        suggest_refactoring_schema,
+      ];
+
+      // Add semantic search tools if enabled (check indexer at handler level)
+      if (this.enableSemantic) {
+        tools.push(
+          semantic_search_schema,
+          deep_code_search_schema,
+          get_chunk_details_schema,
+          list_indexed_files_schema,
+          watcher_control_schema
+        );
+      }
+
+      return { tools };
     });
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -80,11 +117,53 @@ class RhythmChamberMCPServer {
           case 'validate_hnw_compliance':
             return await validate_hnw_compliance_handler(args, this.projectRoot);
 
+          case 'find_all_usages':
+            return await find_all_usages_handler(args, this.projectRoot);
+
+          case 'get_compilation_errors':
+            return await get_compilation_errors_handler(args, this.projectRoot);
+
+          case 'get_symbol_graph':
+            return await get_symbol_graph_handler(args, this.projectRoot);
+
+          case 'analyze_architecture':
+            return await analyze_architecture_handler(args, this.projectRoot);
+
+          case 'trace_execution_flow':
+            return await trace_execution_flow_handler(args, this.projectRoot);
+
+          case 'suggest_refactoring':
+            return await suggest_refactoring_handler(args, this.projectRoot);
+
+          // Semantic search tools
+          case 'semantic_search':
+            return await semantic_search_handler(args, this.projectRoot, this.semanticIndexer, this);
+
+          case 'deep_code_search':
+            return await deep_code_search_handler(args, this.projectRoot, this.semanticIndexer, this);
+
+          case 'get_chunk_details':
+            return await get_chunk_details_handler(args, this.projectRoot, this.semanticIndexer, this);
+
+          case 'list_indexed_files':
+            return await list_indexed_files_handler(args, this.projectRoot, this.semanticIndexer, this);
+
+          case 'watcher_control':
+            return await watcher_control_handler(args, this.projectRoot, this.semanticIndexer, this);
+
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
       } catch (error) {
         console.error(`[Rhythm Chamber MCP] Error in ${name}:`, error);
+
+        // Check if handler already returned an error response (avoid double-wrapping)
+        // Handlers use createErrorResponse() which returns { content, isError, metadata }
+        if (error.content && error.isError !== undefined) {
+          return error; // Pass through handler's error response
+        }
+
+        // Otherwise, wrap in error response
         return {
           content: [
             {
@@ -102,6 +181,13 @@ class RhythmChamberMCPServer {
    * Start the server
    */
   async start() {
+    console.error(`[Rhythm Chamber MCP] Initializing semantic indexer...`);
+
+    // Initialize semantic indexer FIRST if enabled (before setting up tool handlers)
+    if (this.enableSemantic) {
+      await this.initializeSemanticIndexer();
+    }
+
     console.error(`[Rhythm Chamber MCP] Setting up tool handlers...`);
     this.setupToolHandlers();
 
@@ -110,6 +196,109 @@ class RhythmChamberMCPServer {
 
     await this.server.connect(transport);
     console.error(`[Rhythm Chamber MCP] Server running and listening for requests`);
+
+    // Auto-start file watcher if enabled via environment variable
+    if (process.env.RC_ENABLE_WATCHER === 'true' && this.semanticIndexer) {
+      try {
+        const watcherConfig = {
+          debounceDelay: parseInt(process.env.RC_WATCHER_DEBOUNCE || '300', 10),
+          coalesceWindow: parseInt(process.env.RC_WATCHER_COALESCE || '1000', 10),
+          maxQueueSize: parseInt(process.env.RC_WATCHER_MAX_QUEUE || '1000', 10)
+        };
+
+        await this.semanticIndexer.startWatcher(watcherConfig);
+        console.error(`[MCP] File watcher initialized`);
+      } catch (error) {
+        console.error(`[MCP] Failed to initialize watcher:`, error.message);
+      }
+    }
+  }
+
+  /**
+   * Initialize semantic search indexer
+   */
+  async initializeSemanticIndexer() {
+    console.error(`[Rhythm Chamber MCP] Initializing semantic search indexer...`);
+
+    try {
+      this.semanticIndexer = new CodeIndexer(this.projectRoot, {
+        cacheDir: this.cacheDir,
+        patterns: [
+          'js/**/*.js',
+          'mcp-server/src/**/*.js',
+          'tests/**/*.js'
+        ],
+        ignore: [
+          '**/node_modules/**',
+          '**/dist/**',
+          '**/build/**',
+          '**/.mcp-cache/**',
+          '**/*.test.js',
+          '**/*.spec.js',
+          '**/coverage/**'
+        ]
+      });
+
+      await this.semanticIndexer.initialize();
+
+      // Load cached chunks IMMEDIATELY (blocks server start until cache loaded)
+      await this.semanticIndexer.loadCachedChunks();
+
+      // Perform incremental indexing in background (doesn't block server start)
+      this.runIndexing().catch(error => {
+        console.error(`[Rhythm Chamber MCP] Indexing error:`, error);
+      });
+
+      console.error(`[Rhythm Chamber MCP] Semantic indexer initialized`);
+
+    } catch (error) {
+      console.error(`[Rhythm Chamber MCP] Failed to initialize semantic indexer:`, error.message);
+      this.semanticIndexer = null;
+      this.enableSemantic = false;
+    }
+  }
+
+  /**
+   * Run indexing in the background
+   */
+  async runIndexing() {
+    if (!this.semanticIndexer) return;
+
+    this._indexingInProgress = true;
+    this._indexingError = null;
+
+    console.error(`[Rhythm Chamber MCP] Starting background indexing...`);
+
+    try {
+      const stats = await this.semanticIndexer.indexAll({ force: false });
+
+      console.error(`[Rhythm Chamber MCP] Indexing complete:`, {
+        files: stats.filesIndexed,
+        chunks: stats.chunksIndexed,
+        time: `${(stats.indexTime / 1000).toFixed(2)}s`,
+        source: stats.embeddingSource
+      });
+    } catch (error) {
+      console.error(`[Rhythm Chamber MCP] Indexing error:`, error);
+      this._indexingError = error.message || String(error);
+    } finally {
+      this._indexingInProgress = false;
+    }
+  }
+
+  /**
+   * Get indexing status
+   */
+  getIndexingStatus() {
+    if (!this.semanticIndexer) {
+      return { status: 'disabled' };
+    }
+
+    return {
+      status: this._indexingInProgress ? 'indexing' : 'ready',
+      error: this._indexingError,
+      stats: this.semanticIndexer.getStats()
+    };
   }
 }
 
@@ -123,6 +312,34 @@ async function main() {
   await mcpServer.start();
 
   console.error('[Rhythm Chamber MCP] Ready!');
+
+  // Set up graceful shutdown handlers
+  setupShutdownHandlers(mcpServer);
+}
+
+/**
+ * Set up signal handlers for graceful shutdown
+ */
+function setupShutdownHandlers(mcpServer) {
+  const shutdown = async (signal) => {
+    console.error(`[Rhythm Chamber MCP] Received ${signal}, shutting down gracefully...`);
+
+    // Stop file watcher if running
+    if (mcpServer.semanticIndexer?.watcher) {
+      console.error('[Rhythm Chamber MCP] Stopping file watcher...');
+      try {
+        await mcpServer.semanticIndexer.watcher.stop();
+        console.error('[Rhythm Chamber MCP] File watcher stopped');
+      } catch (error) {
+        console.error('[Rhythm Chamber MCP] Error stopping watcher:', error.message);
+      }
+    }
+
+    process.exit(0);
+  };
+
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
 // Handle errors

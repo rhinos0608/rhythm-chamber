@@ -17,6 +17,7 @@ import { createLogger } from '../utils/logger.js';
 import { getGenre } from './genre-detection.js';
 import { getCache, cacheGenres } from './genre-enrichment-cache.js';
 import { checkEnrichmentAccess, showEnrichmentUpgradeModal } from './genre-enrichment-premium.js';
+import { LIMITS } from '../constants/limits.js';
 
 const logger = createLogger('GenreEnrichmentMusicBrainz');
 
@@ -45,12 +46,6 @@ let apiProcessing = false;
  * MusicBrainz allows 1 request per second.
  */
 const API_RATE_LIMIT_MS = 1100;
-
-/**
- * Maximum iterations to prevent infinite loops.
- * Safety limit for queue processing.
- */
-const MAX_ITERATIONS = 100;
 
 // ==========================================
 // Queue Management
@@ -121,7 +116,7 @@ export async function processApiQueue() {
     let iterations = 0;
 
     try {
-        while (API_QUEUE.length > 0 && iterations < MAX_ITERATIONS) {
+        while (API_QUEUE.length > 0 && iterations < LIMITS.MAX_ITERATIONS) {
             iterations++;
             const artistName = API_QUEUE.shift();
 
@@ -144,8 +139,8 @@ export async function processApiQueue() {
         }
 
         // Log warning if max iterations reached
-        if (iterations >= MAX_ITERATIONS && API_QUEUE.length > 0) {
-            logger.warn(`Queue processing stopped at max iterations (${MAX_ITERATIONS}), ${API_QUEUE.length} artists remaining`);
+        if (iterations >= LIMITS.MAX_ITERATIONS && API_QUEUE.length > 0) {
+            logger.warn(`Queue processing stopped at max iterations (${LIMITS.MAX_ITERATIONS}), ${API_QUEUE.length} artists remaining`);
         }
     } finally {
         apiProcessing = false;

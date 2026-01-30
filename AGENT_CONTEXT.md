@@ -57,7 +57,7 @@ npm test --headed                                                   # E2E with b
 
 ### MCP Server (AI Agent Tooling)
 
-The Rhythm Chamber MCP (Model Context Protocol) server provides AI agents with tools to analyze the codebase and validate HNW architecture compliance.
+The Rhythm Chamber MCP (Model Context Protocol) server provides AI agents with tools to analyze the codebase, search by meaning, and validate HNW architecture compliance.
 
 **Start MCP Server:**
 ```bash
@@ -73,29 +73,47 @@ node examples/test-server.js
 ```
 
 **What it does:**
+
+*Semantic Search (NEW):*
+- **semantic_search**: Search code by meaning using vector embeddings ✅
+- **deep_code_search**: Orchestrated semantic + structural + architectural analysis ✅
+- **get_chunk_details**: Inspect specific chunks with relationships ✅
+- **list_indexed_files**: Browse all indexed files ✅
+
+*Architecture Analysis:*
 - **get_module_info**: Analyze any module's exports, imports, dependencies, and HNW compliance score ✅
 - **find_dependencies**: Trace dependency graphs, detect circular dependencies ✅
 - **search_architecture**: Search for HNW patterns and anti-patterns ✅
 - **validate_hnw_compliance**: Comprehensive architecture validation ✅
 
-**Example usage from AI agents:**
+**Semantic Search Example:**
 ```json
 {
-  "tool": "get_module_info",
+  "tool": "semantic_search",
   "arguments": {
-    "filePath": "js/controllers/chat-ui-controller.js",
-    "includeDependencies": true,
-    "includeExports": true
+    "query": "how are sessions created?",
+    "limit": 10,
+    "threshold": 0.3
+  }
+}
+```
+
+**Deep Code Search Example:**
+```json
+{
+  "tool": "deep_code_search",
+  "arguments": {
+    "query": "authentication flow",
+    "depth": "thorough"
   }
 }
 ```
 
 **Returns:**
-- Module layer (controllers/services/utils/storage/providers)
-- HNW compliance score (0-100)
-- Architecture violations with recommendations
-- Import/export analysis
-- Dependency information
+- Matching chunks ranked by semantic similarity
+- File location, line numbers, and type
+- Related chunks (callers/callees)
+- Symbol relationships and dependencies
 
 **Integration with Claude Code:**
 Add to `~/.config/claude-code/config.json`:
@@ -138,6 +156,26 @@ await EventBus.emit('chat:message:sent', {
   sessionId: '...',
   content: '...'
 }, { priority: 'HIGH' });
+```
+
+**EventBus Limitations:**
+
+The EventBus supports catch-all subscriptions but **does NOT** support pattern-based wildcards:
+
+```javascript
+// ❌ WRONG - Pattern wildcards don't work
+EventBus.on('session:*', handler);
+
+// ✅ CORRECT - Subscribe to each specific event
+const sessionEvents = ['session:created', 'session:loaded', 'session:switched', 'session:deleted', 'session:updated'];
+sessionEvents.forEach(eventType => {
+    EventBus.on(eventType, handler);
+});
+
+// ✅ ALSO SUPPORTED - Catch-all events
+EventBus.on('*', (data, meta) => {
+    console.log('All events:', meta.eventType, data);
+});
 ```
 
 **Wave:** TabCoordinator for cross-tab coordination
@@ -1145,6 +1183,19 @@ static async initialize() {
 - Self-documenting events
 - Schema validation available
 - Decentralized ownership (services own their schemas)
+
+**⚠️ Important Limitation:**
+The EventBus does **NOT** support pattern-based wildcard subscriptions (e.g., `session:*`). Only catch-all (`*`) is supported. To subscribe to multiple related events, you must register each event individually:
+
+```javascript
+// ❌ DOES NOT WORK - Pattern wildcards not supported
+EventBus.on('session:*', handler);
+
+// ✅ CORRECT - Individual subscriptions
+['session:created', 'session:loaded', 'session:updated'].forEach(event => {
+    EventBus.on(event, handler);
+});
+```
 
 ### Event Listener Registration for Persistence
 

@@ -815,7 +815,7 @@ describe('API Breaking Changes - Documentation', () => {
             'clearConversation()': 'clearAllSessions() - Use new name',
             'listSessions()': 'getAllSessions() - Use new name',
             'setUserContext()': 'Deprecated - Still exists as no-op with warning',
-            'onSessionUpdate()': 'Removed - Use EventBus.on("session:*") instead',
+            'onSessionUpdate()': 'Removed - Use individual EventBus.on() calls for each session event instead (session:created, session:loaded, session:switched, session:deleted, session:updated) - EventBus does NOT support wildcard patterns like "session:*"',
             'switchSession()': 'Still available - Moved to internal module',
             'loadSession()': 'Still available - Use activateSession() or loadSession()',
             // New persistence methods added

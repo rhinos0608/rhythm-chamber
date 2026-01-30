@@ -25,6 +25,9 @@ const SIDEBAR_STATE_KEY = STORAGE_KEYS.SIDEBAR_COLLAPSED;
 let pendingDeleteSessionId = null;
 let _unsubscribe = null; // AppState subscription cleanup
 
+// Session event handler cleanup functions (FIX: EventBus doesn't support 'session:*' wildcards)
+let _sessionEventUnsubscribers = [];
+
 // Rename input tracking for event listener cleanup (MEMORY LEAK FIX)
 let currentRenameInput = null;
 let currentRenameBlurHandler = null;
@@ -103,7 +106,13 @@ async function initSidebar() {
     }
 
     // Register for session updates from EventBus
-    SidebarController._sessionHandler = EventBus.on('session:*', renderSessionList);
+    // FIX: EventBus doesn't support wildcard patterns like 'session:*'
+    // We must subscribe to each specific session event individually
+    const sessionEvents = ['session:created', 'session:loaded', 'session:switched', 'session:deleted', 'session:updated'];
+    sessionEvents.forEach(eventType => {
+        const unsubscribe = EventBus.on(eventType, renderSessionList);
+        _sessionEventUnsubscribers.push(unsubscribe);
+    });
 
     // Subscribe to AppState for reactive view changes
     // If a previous subscription exists, unsubscribe first to avoid duplicates
@@ -151,8 +160,19 @@ async function initSidebar() {
     }, 100); // Throttle resize to once per 100ms
     window.addEventListener('resize', resizeHandler);
 
+    // CRITICAL FIX: Render initial session list from storage
+    // Without this, existing sessions aren't shown until a session:* event fires
+    try {
+        await renderSessionList();
+        console.log('[SidebarController] Initial session list rendered');
+    } catch (err) {
+        console.error('[SidebarController] Failed to render initial session list:', err);
+    }
+
     // Initial sidebar hidden (shown only in chat view)
     hideSidebarForNonChatViews();
+
+    console.log('[SidebarController] Initialized');
 }
 
 // ==========================================
@@ -695,13 +715,26 @@ SidebarController.destroy = function destroySidebarController() {
         _unsubscribe = null;
     }
 
-    // Unregister session update callback from EventBus
+    // Unregister session update callbacks from EventBus
+    // FIX: Clean up all individual session event subscriptions
+    _sessionEventUnsubscribers.forEach(unsubscribe => {
+        if (typeof unsubscribe === 'function') {
+            try {
+                unsubscribe();
+            } catch (e) {
+                console.warn('[SidebarController] Failed to unregister session event callback:', e);
+            }
+        }
+    });
+    _sessionEventUnsubscribers = [];
+
+    // Legacy cleanup for old _sessionHandler
     if (SidebarController._sessionHandler && typeof SidebarController._sessionHandler === 'function') {
         try {
             SidebarController._sessionHandler();
             SidebarController._sessionHandler = null;
         } catch (e) {
-            console.warn('[SidebarController] Failed to unregister session update callback:', e);
+            console.warn('[SidebarController] Failed to unregister old session update callback:', e);
         }
     }
 

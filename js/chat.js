@@ -340,8 +340,15 @@ function getCurrentSessionId() {
  */
 function onSessionUpdate(callback) {
     // NOTE: SessionManager no longer supports onSessionUpdate - use EventBus instead
+    // IMPORTANT: EventBus does NOT support wildcard patterns like 'session:*'
+    // You must subscribe to each specific event individually:
+    //   EventBus.on('session:created', callback)
+    //   EventBus.on('session:loaded', callback)
+    //   EventBus.on('session:switched', callback)
+    //   EventBus.on('session:deleted', callback)
+    //   EventBus.on('session:updated', callback)
     // This is kept for backwards compatibility but does nothing
-    logger.warn('onSessionUpdate is deprecated. Use EventBus.on("session:*", callback) instead.');
+    logger.warn('onSessionUpdate is deprecated. Use EventBus.on with specific session events instead.');
 }
 
 /**
