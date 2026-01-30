@@ -1,7 +1,7 @@
 # Service Catalog
 
 > **Auto-generated** by docs-sync tool
-> **Generated:** 2026-01-30T12:46:56.962Z
+> **Generated:** 2026-01-30T12:48:52.678Z
 > **Total Services:** 94
 
 This catalog provides detailed information about all business logic services in the application.
