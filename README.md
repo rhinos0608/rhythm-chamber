@@ -115,7 +115,7 @@ npm run docs:validate
 Model Context Protocol server for intelligent codebase analysis and HNW architecture validation:
 
 ```bash
-# Start MCP server (requires application to be running)
+# Start MCP server
 cd mcp-server
 node server.js
 
@@ -123,11 +123,31 @@ node server.js
 node examples/test-server.js
 ```
 
+**File Watcher Commands:**
+
+Via npm scripts (recommended):
+```bash
+npm run watcher:start      # Start the file watcher
+npm run watcher:status     # Check watcher status
+npm run watcher:stop       # Stop the watcher
+npm run watcher:restart    # Restart the watcher
+```
+
+Or direct script access:
+```bash
+node mcp-server/scripts/watcher-control.js start
+node mcp-server/scripts/watcher-control.js status
+node mcp-server/scripts/watcher-control.js stop
+node mcp-server/scripts/watcher-control.js restart --debounce 500
+```
+
 **Features:**
 - **get_module_info**: Analyze module exports, imports, dependencies, and HNW compliance ✅
 - **find_dependencies**: Trace dependency graphs with circular dependency detection ✅
 - **search_architecture**: Search for HNW patterns and anti-patterns ✅
 - **validate_hnw_compliance**: Comprehensive architecture validation ✅
+- **list_indexed_files**: View all indexed files with chunk counts and types ✅
+- **watcher_control**: Manage automatic reindexing daemon ✅
 
 **Integration:**
 Works with Claude Code and other MCP-compatible AI clients. See [mcp-server/README.md](mcp-server/README.md) for complete documentation.
