@@ -3,6 +3,7 @@
  *
  * Provides persistent caching for embeddings and indexed data.
  * Tracks file modification times to invalidate stale cache entries.
+ * Tracks model version to invalidate cache when embedding model changes.
  */
 
 import { mkdir, readFile, writeFile, stat, readdir, rename, unlink, open } from 'fs/promises';
@@ -11,8 +12,9 @@ import { join, dirname } from 'path';
 
 /**
  * Current cache format version
+ * Increment this when cache structure changes incompatibly
  */
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;  // Bumped from 1 to 2 for modelVersion tracking
 
 /**
  * Default cache filename
@@ -32,6 +34,9 @@ export class EmbeddingCache {
     // In-memory cache (not LRU - full cache until invalidated)
     this.files = new Map();       // filePath -> { mtime, chunks[] }
     this.embeddings = new HybridEmbeddingMap();
+
+    // Model version tracking for cache invalidation
+    this.modelVersion = options.modelVersion || null;
 
     this.loaded = false;
     this.dirty = false;
@@ -104,6 +109,21 @@ export class EmbeddingCache {
         console.error(`[Cache] Cache version mismatch: ${data.version} vs ${CACHE_VERSION}, deleting old cache`);
         await unlink(this.cacheFile).catch(() => {}); // Best effort delete
         return false;
+      }
+
+      // Validate model version - invalidate cache if embedding model changed
+      // This ensures embeddings from different models aren't mixed
+      if (this.modelVersion !== null && data.modelVersion !== undefined) {
+        if (data.modelVersion !== this.modelVersion) {
+          console.error(`[Cache] Model version mismatch: cache has "${data.modelVersion}" but current is "${this.modelVersion}", deleting old cache`);
+          await unlink(this.cacheFile).catch(() => {}); // Best effort delete
+          return false;
+        }
+      }
+
+      // Store loaded model version for reference
+      if (data.modelVersion !== undefined) {
+        this.modelVersion = data.modelVersion;
       }
 
       // Restore files
@@ -272,6 +292,7 @@ export class EmbeddingCache {
       const data = {
         version: CACHE_VERSION,
         timestamp: Date.now(),
+        modelVersion: this.modelVersion,  // Track embedding model for cache invalidation
         files: {},
         embeddings: {}
       };
@@ -563,8 +584,28 @@ export class EmbeddingCache {
       fileCount: this.files.size,
       chunkCount: totalChunks,
       approximateSize: totalSize,
-      dirty: this.dirty
+      dirty: this.dirty,
+      modelVersion: this.modelVersion
     };
+  }
+
+  /**
+   * Set the model version (for cache invalidation)
+   * Call this when the embedding model changes to invalidate existing cache
+   */
+  setModelVersion(modelVersion) {
+    if (this.modelVersion !== modelVersion) {
+      console.error(`[Cache] Model version changing from "${this.modelVersion}" to "${modelVersion}", clearing cache`);
+      this.modelVersion = modelVersion;
+      this.clear();  // Clear cache to prevent mixing embeddings from different models
+    }
+  }
+
+  /**
+   * Get the current model version
+   */
+  getModelVersion() {
+    return this.modelVersion;
   }
 
   /**

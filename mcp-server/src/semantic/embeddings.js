@@ -15,6 +15,7 @@
  *
  * Common embedding models:
  * - text-embedding-nomic-embed-text-v1.5 (768 dim) - Default, excellent quality, lightweight (84MB)
+ * - jinaai/jina-code-1b (1024 dim) - Code-specialized, highest quality for code search
  * - Xenova/gte-base (768 dim) - Fallback, high quality, CPU-based
  * - text-embedding-qwen3-embedding-0.6b (768 dim) - High quality, larger model
  * - nomic-ai/nomic-embed-text-v1.5 (768 dim) - Nomic AI format (needs text-embedding- prefix in LM Studio)
@@ -36,6 +37,7 @@ const FALLBACK_MODEL = 'Xenova/gte-base';
 const DIMENSIONS = {
   'text-embedding-nomic-embed-text-v1.5': 768,
   'text-embedding-qwen3-embedding-0.6b': 768,
+  'jinaai/jina-code-1b': 1024,
   'Xenova/all-MiniLM-L6-v2': 384,
   'Xenova/gte-base': 768
 };
@@ -426,9 +428,35 @@ export class HybridEmbeddings {
 
   /**
    * Get embedding dimension
+   * Supports dynamic dimension detection for different models
    */
   getDimension() {
+    // Check if current model has predefined dimension
+    const modelDim = DIMENSIONS[this.modelName];
+    if (modelDim) {
+      return modelDim;
+    }
+
+    // Return detected dimension (updated after first embedding)
     return this.dimension;
+  }
+
+  /**
+   * Get the current model name
+   */
+  getModelName() {
+    return this.modelName;
+  }
+
+  /**
+   * Get model version info for cache invalidation
+   */
+  getModelInfo() {
+    return {
+      name: this.modelName,
+      dimension: this.getDimension(),
+      source: this.lmStudioAvailable ? 'lmstudio' : 'transformers'
+    };
   }
 }
 
