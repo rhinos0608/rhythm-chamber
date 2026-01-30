@@ -660,6 +660,14 @@
 
 - `/workspaces/rhythm-chamber/js/state/app-state.js`
 
+### js/patterns/index.js
+
+- `/workspaces/rhythm-chamber/js/patterns/pattern-extractors.js`
+- `/workspaces/rhythm-chamber/js/patterns/pattern-validators.js`
+- `/workspaces/rhythm-chamber/js/patterns/pattern-transformers.js`
+- `/workspaces/rhythm-chamber/js/patterns/pattern-matching.js`
+- `/workspaces/rhythm-chamber/js/patterns/pattern-cache.js`
+
 ### js/observability/observability-settings.js
 
 - `/workspaces/rhythm-chamber/js/storage.js`
@@ -965,14 +973,6 @@
 - `/workspaces/rhythm-chamber/js/profile-synthesizer.js`
 - `/workspaces/rhythm-chamber/js/services/lemon-squeezy-service.js`
 - `/workspaces/rhythm-chamber/js/app/di-container.js`
-
-### js/patterns/index.js
-
-- `/workspaces/rhythm-chamber/js/patterns/pattern-extractors.js`
-- `/workspaces/rhythm-chamber/js/patterns/pattern-validators.js`
-- `/workspaces/rhythm-chamber/js/patterns/pattern-transformers.js`
-- `/workspaces/rhythm-chamber/js/patterns/pattern-matching.js`
-- `/workspaces/rhythm-chamber/js/patterns/pattern-cache.js`
 
 ### js/workers/pattern-worker-pool/worker-lifecycle.js
 
