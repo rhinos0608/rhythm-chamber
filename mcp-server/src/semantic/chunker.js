@@ -22,8 +22,14 @@ const MAX_CHUNK_SIZE = 4000;
 
 /**
  * Context window size (lines before/after a chunk)
+ * Increased from 3 to 5 for better search context
  */
-const CONTEXT_LINES = 3;
+const CONTEXT_LINES = 5;
+
+/**
+ * Chunk overlap percentage (20% overlap at function boundaries)
+ */
+const OVERLAP_PERCENTAGE = 0.2;
 
 /**
  * Code Chunker class
@@ -33,6 +39,7 @@ export class CodeChunker {
     this.maxChunkSize = options.maxChunkSize || MAX_CHUNK_SIZE;
     this.contextLines = options.contextLines || CONTEXT_LINES;
     this.includeComments = options.includeComments !== false;
+    this.overlapPercentage = options.overlapPercentage || OVERLAP_PERCENTAGE;
   }
 
   /**
@@ -318,7 +325,14 @@ export class CodeChunker {
     // Get JSDoc comment if present
     const jsDoc = this._extractJSDoc(sourceCode, node);
 
-    const context = this._extractContext(lines, startLine, endLine);
+    // FIX #2: Calculate overlap lines for context, but don't add overlap text to chunk.text
+    // The context.before already provides the surrounding information.
+    // Adding overlap to both text and context causes duplication in embeddings.
+    const funcLength = endLine - startLine + 1;
+    const overlapLines = Math.max(1, Math.ceil(funcLength * this.overlapPercentage));
+
+    // Update context to include overlap
+    const context = this._extractContextWithOverlap(lines, startLine, endLine, overlapLines);
 
     return {
       id: this._generateChunkId('function', node.id?.name || 'anonymous', startLine),
@@ -336,7 +350,9 @@ export class CodeChunker {
         params,
         calls,
         throws,
-        hasJSDoc: !!jsDoc
+        hasJSDoc: !!jsDoc,
+        hasOverlap: overlapText.length > 0,
+        overlapLines
       }
     };
   }
@@ -429,13 +445,23 @@ export class CodeChunker {
       const methodEnd = method.loc.end.line;
       const methodText = sourceCode.substring(method.start, method.end);
 
+      // FIX #2: Calculate overlap for context only, not for text
+      const methodLength = methodEnd - methodStart + 1;
+      const overlapLines = Math.max(1, Math.ceil(methodLength * this.overlapPercentage));
+
+      // Get JSDoc comment if present
+      const jsDoc = this._extractJSDoc(sourceCode, method);
+
+      // Context includes overlap for continuity
+      const context = this._extractContextWithOverlap(lines, methodStart, methodEnd, overlapLines);
+
       chunks.push({
         id: this._generateChunkId('method', `${node.id.name}.${method.key?.name || 'anonymous'}`, methodStart),
         type: 'method',
         name: `${node.id.name}.${method.key?.name || 'anonymous'}`,
         className: node.id.name,
-        text: methodText,
-        context: this._extractContext(lines, methodStart, methodEnd),
+        text: (jsDoc ? jsDoc + '\n' : '') + methodText,
+        context,
         metadata: {
           file: filePath,
           startLine: methodStart,
@@ -444,7 +470,9 @@ export class CodeChunker {
           kind: method.kind,
           async: method.async || false,
           static: method.static || false,
-          params: this._extractParams(method.value)
+          params: this._extractParams(method.value),
+          hasOverlap: overlapText.length > 0,
+          overlapLines
         }
       });
     }
@@ -518,6 +546,34 @@ export class CodeChunker {
    */
   _extractContext(lines, startLine, endLine) {
     const beforeStart = Math.max(0, startLine - this.contextLines - 1);
+    const beforeLines = lines.slice(beforeStart, startLine - 1);
+
+    const afterEnd = Math.min(lines.length, endLine + this.contextLines);
+    const afterLines = lines.slice(endLine, afterEnd);
+
+    return {
+      before: beforeLines.join('\n').trim(),
+      after: afterLines.join('\n').trim()
+    };
+  }
+
+  /**
+   * Extract context with overlap (before/after lines including extra overlap)
+   *
+   * FIX #2: This method extends the before context to include overlap lines,
+   * providing continuity between adjacent chunks without duplicating content
+   * in the chunk text itself (which would bias embeddings).
+   *
+   * @param {string[]} lines - Array of source code lines
+   * @param {number} startLine - The starting line number (1-based)
+   * @param {number} endLine - The ending line number (1-based)
+   * @param {number} overlapLines - Additional lines to include in before context
+   * @returns {Object} Context with before/after text
+   */
+  _extractContextWithOverlap(lines, startLine, endLine, overlapLines) {
+    // Include overlap lines in the before context
+    // overlapLines are the lines immediately before startLine
+    const beforeStart = Math.max(0, startLine - this.contextLines - overlapLines - 1);
     const beforeLines = lines.slice(beforeStart, startLine - 1);
 
     const afterEnd = Math.min(lines.length, endLine + this.contextLines);
@@ -654,12 +710,30 @@ export class CodeChunker {
 
   /**
    * Extract JSDoc comment before a node
+   *
+   * FIX #3: Verify JSDoc is close to the node (within 100 chars)
+   * to avoid picking up unrelated comments.
    */
   _extractJSDoc(sourceCode, node) {
-    const before = sourceCode.substring(Math.max(0, node.start - 500), node.start);
-    const jsDocMatch = before.match(/\/\*\*[\s\S]*?\*\//);
+    // Look back up to 500 characters, but only accept JSDoc within 100 chars of node
+    const searchWindow = sourceCode.substring(Math.max(0, node.start - 500), node.start);
+    const jsDocMatch = searchWindow.match(/\/\*\*[\s\S]*?\*\//g);
 
-    return jsDocMatch ? jsDocMatch[0] : '';
+    if (jsDocMatch) {
+      // Get the last JSDoc comment (should be the one immediately preceding the node)
+      const lastJsDoc = jsDocMatch[jsDocMatch.length - 1];
+      // Find where this JSDoc ends in the search window
+      const lastJsDocEndIndex = searchWindow.lastIndexOf(lastJsDoc);
+      const jsDocEndPosition = node.start - searchWindow.length + lastJsDocEndIndex + lastJsDoc.length;
+
+      // Only accept if JSDoc ends within 100 characters of the node start
+      // This prevents picking up comments from far away
+      if (node.start - jsDocEndPosition <= 100) {
+        return lastJsDoc;
+      }
+    }
+
+    return '';
   }
 
   /**
