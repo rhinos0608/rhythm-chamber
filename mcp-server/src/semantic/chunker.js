@@ -32,6 +32,12 @@ const CONTEXT_LINES = 5;
 const OVERLAP_PERCENTAGE = 0.2;
 
 /**
+ * Parent chunk threshold (lines)
+ * Functions longer than this will have both parent and child chunks
+ */
+const PARENT_CHUNK_THRESHOLD = 50;
+
+/**
  * Code Chunker class
  */
 export class CodeChunker {
@@ -293,26 +299,44 @@ export class CodeChunker {
     });
 
     for (const func of functions) {
-      chunks.push(this._createFunctionChunk(
+      const functionChunks = this._createFunctionChunk(
         func.node,
         sourceCode,
         lines,
         filePath,
         func.async,
         func.generator
-      ));
+      );
+      chunks.push(...functionChunks);
     }
 
     return chunks;
   }
 
   /**
-   * Create a function chunk
+   * Create function chunk(s) with parent-child relationship for large functions
+   *
+   * For functions exceeding PARENT_CHUNK_THRESHOLD lines:
+   * - Creates a parent chunk containing the full function context
+   * - Creates child chunks for smaller sections of the function
+   * - Links child chunks to parent via parentChunkId metadata
+   *
+   * For smaller functions:
+   * - Creates a single chunk as before
+   *
+   * @param {Object} node - The AST node for the function
+   * @param {string} sourceCode - Full source code
+   * @param {string[]} lines - Source code split by lines
+   * @param {string} filePath - Relative file path
+   * @param {boolean} isAsync - Whether function is async
+   * @param {boolean} isGenerator - Whether function is a generator
+   * @returns {Object[]} Array of chunk objects (1 for small functions, 2+ for large)
    */
   _createFunctionChunk(node, sourceCode, lines, filePath, isAsync = false, isGenerator = false) {
     const startLine = node.loc.start.line;
     const endLine = node.loc.end.line;
     const funcText = sourceCode.substring(node.start, node.end);
+    const funcLength = endLine - startLine + 1;
 
     // Extract function info
     const params = this._extractParams(node);
@@ -325,42 +349,94 @@ export class CodeChunker {
     // Get JSDoc comment if present
     const jsDoc = this._extractJSDoc(sourceCode, node);
 
-    // FIX #2 & #1: Calculate overlap lines for context, but don't add overlap text to chunk.text
-    // The context.before already provides the surrounding information.
-    // Adding overlap to both text and context causes duplication in embeddings.
-    //
-    // Overlap calculation: For a function spanning N lines, we include 20% of those lines
-    // as context before the function starts. This provides continuity between chunks.
-    // - overlapLines = max(1, ceil(N * 0.2))
-    // - These lines are added to context.before, NOT to chunk.text
-    // - Edge cases: At least 1 line of overlap even for small functions
-    const funcLength = endLine - startLine + 1;
+    // Calculate overlap lines
     const overlapLines = Math.max(1, Math.ceil(funcLength * this.overlapPercentage));
-
-    // Update context to include overlap
     const context = this._extractContextWithOverlap(lines, startLine, endLine, overlapLines);
 
-    return {
-      id: this._generateChunkId('function', node.id?.name || 'anonymous', startLine),
-      type: 'function',
+    const baseMetadata = {
+      file: filePath,
+      startLine,
+      endLine,
+      exported,
+      async: isAsync,
+      generator: isGenerator,
+      params,
+      calls,
+      throws,
+      hasJSDoc: !!jsDoc,
+      hasOverlap: overlapLines > 0,
+      overlapLines
+    };
+
+    // For small functions, return single chunk as before
+    if (funcLength <= PARENT_CHUNK_THRESHOLD) {
+      return [{
+        id: this._generateChunkId('function', node.id?.name || 'anonymous', startLine),
+        type: 'function',
+        name: node.id?.name || 'anonymous',
+        text: (jsDoc ? jsDoc + '\n' : '') + funcText,
+        context,
+        metadata: baseMetadata
+      }];
+    }
+
+    // Large function: Create parent-child structure
+    const chunks = [];
+
+    // 1. Create parent chunk with full function context
+    const parentChunkId = this._generateChunkId('function', `${node.id?.name || 'anonymous'}_parent`, startLine);
+    chunks.push({
+      id: parentChunkId,
+      type: 'parent',
       name: node.id?.name || 'anonymous',
       text: (jsDoc ? jsDoc + '\n' : '') + funcText,
       context,
       metadata: {
-        file: filePath,
-        startLine,
-        endLine,
-        exported,
-        async: isAsync,
-        generator: isGenerator,
-        params,
-        calls,
-        throws,
-        hasJSDoc: !!jsDoc,
-        hasOverlap: overlapLines > 0,
-        overlapLines
+        ...baseMetadata,
+        parentChunkId: null, // Parent chunks have no parent
+        childCount: 0, // Will be updated when children are created
+        isLargeFunction: true
       }
-    };
+    });
+
+    // 2. Create child chunks for different sections of the function
+    // Split function into logical sections based on statements
+    const funcLines = funcText.split('\n');
+    const childSize = Math.max(10, Math.floor(funcLength / 3)); // Target ~1/3 of function per child
+    let childStart = 0;
+
+    while (childStart < funcLines.length) {
+      const childEnd = Math.min(childStart + childSize, funcLines.length);
+      const childText = funcLines.slice(childStart, childEnd).join('\n');
+      const childStartLine = startLine + childStart;
+      const childEndLine = startLine + childEnd - 1;
+
+      // Calculate context for child chunk (smaller overlap for children)
+      const childOverlap = Math.max(1, Math.ceil((childEndLine - childStartLine + 1) * 0.1));
+      const childContext = this._extractContextWithOverlap(lines, childStartLine, childEndLine, childOverlap);
+
+      chunks.push({
+        id: this._generateChunkId('function', `${node.id?.name || 'anonymous'}_child${Math.floor(childStart / childSize)}`, childStartLine),
+        type: 'child',
+        name: `${node.id?.name || 'anonymous'} [${childStart + 1}-${childEnd}]`,
+        text: childText,
+        context: childContext,
+        metadata: {
+          ...baseMetadata,
+          startLine: childStartLine,
+          endLine: childEndLine,
+          parentChunkId,
+          isChildChunk: true
+        }
+      });
+
+      childStart = childEnd;
+    }
+
+    // Update parent chunk's child count
+    chunks[0].metadata.childCount = chunks.length - 1;
+
+    return chunks;
   }
 
   /**

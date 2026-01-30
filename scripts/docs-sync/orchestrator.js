@@ -132,9 +132,10 @@ async function main() {
     logger.section('Phase 4: Generating Dependency Graph');
 
     const depGraphPath = resolve(projectRoot, 'docs/DEPENDENCY_GRAPH.md');
+    const generatedDate = new Date().toISOString().split('T')[0];
     let depGraphContent = '# Dependency Graph\n\n';
     depGraphContent += '> **Auto-generated** by docs-sync tool\n';
-    depGraphContent += `> **Generated:** ${new Date().toISOString()}\n\n`;
+    depGraphContent += `> **Generated:** ${generatedDate}\n\n`;
 
     depGraphContent += '## Module Dependencies\n\n';
 

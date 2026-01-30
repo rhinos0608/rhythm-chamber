@@ -49,9 +49,10 @@ export class ArchitectureCatalogGenerator {
         .map(([path, data]) => ({ path, ...data }))
         .sort((a, b) => a.filepath.localeCompare(b.filepath));
 
+      const generatedDate = new Date().toISOString().split('T')[0];
       let content = '# Controller Catalog\n\n';
       content += '> **Auto-generated** by docs-sync tool\n';
-      content += `> **Generated:** ${new Date().toISOString()}\n`;
+      content += `> **Generated:** ${generatedDate}\n`;
       content += `> **Total Controllers:** ${controllers.length}\n\n`;
       content += 'This catalog provides detailed information about all UI controllers in the application.\n\n';
       content += '## Overview\n\n';
@@ -137,9 +138,10 @@ export class ArchitectureCatalogGenerator {
         .map(([path, data]) => ({ path, ...data }))
         .sort((a, b) => a.filepath.localeCompare(b.filepath));
 
+      const generatedDate = new Date().toISOString().split('T')[0];
       let content = '# Service Catalog\n\n';
       content += '> **Auto-generated** by docs-sync tool\n';
-      content += `> **Generated:** ${new Date().toISOString()}\n`;
+      content += `> **Generated:** ${generatedDate}\n`;
       content += `> **Total Services:** ${services.length}\n\n`;
       content += 'This catalog provides detailed information about all business logic services in the application.\n\n';
       content += '## Overview\n\n';
@@ -225,9 +227,10 @@ export class ArchitectureCatalogGenerator {
         .map(([path, data]) => ({ path, ...data }))
         .sort((a, b) => a.filepath.localeCompare(b.filepath));
 
+      const generatedDate = new Date().toISOString().split('T')[0];
       let content = '# Utility Reference\n\n';
       content += '> **Auto-generated** by docs-sync tool\n';
-      content += `> **Generated:** ${new Date().toISOString()}\n`;
+      content += `> **Generated:** ${generatedDate}\n`;
       content += `> **Total Utilities:** ${utilities.length}\n\n`;
       content += 'This reference provides detailed information about all utility modules in the application.\n\n';
       content += '## Overview\n\n';
