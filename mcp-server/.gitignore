@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Cache and temp files
+*.log
+*.tmp
+*.cache
+
+# Backup files
+*.bak
+*.bak2
+
+# Build outputs
+dist/
+build/
