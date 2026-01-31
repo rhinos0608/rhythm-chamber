@@ -240,9 +240,10 @@ export class SemanticQueryCache {
           entry.lastAccess = Date.now();
           entry.accessCount++;
 
-          // Also store this query as an alias for the cached embedding
-          this.cache.set(query, entry);
-          this.normalizedCache.set(normalized, query);
+          // Also store this query as an alias for the cached embedding.
+          // Use the cached entry's canonical key to avoid duplicate Map entries
+          // pointing at the same object.
+          this.normalizedCache.set(normalized, cachedQuery);
 
           console.error(`[QueryCache] Semantic hit: "${query}" ~ "${cachedQuery}" (similarity: ${similarity.toFixed(3)}, model: ${entry.modelName || 'unknown'})`);
           return entry.embedding;
