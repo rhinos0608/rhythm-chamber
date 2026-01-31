@@ -258,9 +258,8 @@ export function getHistory() {
  */
 export async function addMessageToHistory(message) {
     // Tag message with current data version for stale detection
-    if (DataVersion.tagMessage) {
-        DataVersion.tagMessage(message);
-    }
+    // FIX: DataVersion is imported, no need for defensive check
+    DataVersion.tagMessage(message);
 
     // Use updateSessionData for mutex protection
     await updateSessionData((currentData) => {
@@ -301,9 +300,8 @@ export async function addMessagesToHistory(messages) {
     }
 
     // Tag all messages with current data version for stale detection
-    if (DataVersion.tagMessage) {
-        messages.forEach(msg => DataVersion.tagMessage(msg));
-    }
+    // FIX: DataVersion is imported, no need for defensive check
+    messages.forEach(msg => DataVersion.tagMessage(msg));
 
     // Use updateSessionData for mutex protection - adds all messages in one transaction
     await updateSessionData((currentData) => {

@@ -170,10 +170,16 @@ export function emergencyBackupSync() {
     const currentSessionId = SessionState.getCurrentSessionId();
     const sessionData = SessionState.getSessionData();
 
-    if (!currentSessionId || !sessionData.id) return;
+    if (!currentSessionId || !sessionData.id) {
+        console.debug('[SessionPersistence] Skipping emergency backup: no active session');
+        return;
+    }
 
     const messages = sessionData.messages || [];
-    if (messages.length === 0) return;
+    if (messages.length === 0) {
+        console.debug('[SessionPersistence] Skipping emergency backup: no messages to save');
+        return;
+    }
 
     const backup = {
         sessionId: currentSessionId,

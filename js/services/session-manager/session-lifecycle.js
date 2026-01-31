@@ -475,8 +475,17 @@ export async function loadSession(sessionId) {
 export async function switchSession(sessionId) {
     const currentSessionId = stateAccessor?.getCurrentSessionId?.() ?? null;
 
+    // NOTE ON CROSS-TAB RACE CONDITIONS:
+    // The acquireProcessingLock() below is per-tab (in-memory). It protects against
+    // concurrent operations within the same tab but NOT against other tabs.
+    // Cross-tab coordination relies on:
+    // 1. TabCoordinator for leader election (who can write)
+    // 2. IndexedDB transaction atomicity for data consistency
+    // 3. Emergency backup to localStorage for crash recovery
+    // If two tabs switch sessions simultaneously, the last write to IndexedDB wins.
+
     // Acquire the lock (not just check it)
-    // Hold lock through the save operation to prevent race conditions
+    // Hold lock through the save operation to prevent intra-tab race conditions
     const MAX_SWITCH_RETRIES = 3;
     let attempt = 0;
     let lockResult;
@@ -496,10 +505,15 @@ export async function switchSession(sessionId) {
     try {
         // CRITICAL FIX: Always save current session before switching
         // Previous conditional (only if autoSaveTimeoutId) created data loss window
+        // FIX: Also trigger emergency backup for cross-tab crash protection
         if (currentSessionId) {
             // Use SessionPersistence to flush and save
             await SessionPersistence.flushPendingSaveAsync();
             await SessionPersistence.saveCurrentSession();
+            // Emergency backup for crash protection (sync, won't block)
+            if (SessionPersistence.emergencyBackupSync) {
+                SessionPersistence.emergencyBackupSync();
+            }
         }
 
         // Track the previous session ID before switching
