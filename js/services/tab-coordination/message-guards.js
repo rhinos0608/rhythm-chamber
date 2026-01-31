@@ -311,6 +311,30 @@ const remoteSequenceTimestamps = new Map();
 let outOfOrderCount = 0;
 const REMOTE_SEQUENCE_MAX_AGE_MS = 300000;
 
+// Import ordering functions from message-sender
+let queuePendingMessage = null;
+let processPendingMessages = null;
+let checkForMessageGaps = null;
+
+// Lazy import to avoid circular dependency
+async function initOrderingFunctions() {
+    if (!queuePendingMessage) {
+        const module = await import('./modules/message-sender.js');
+        queuePendingMessage = module.queuePendingMessage || null;
+        processPendingMessages = module.processPendingMessages || null;
+        checkForMessageGaps = module.checkForMessageGaps || null;
+
+        // Note: These functions are internal to message-sender.js
+        // We'll need to export them if we want to use them here
+        // For now, we'll implement ordering logic inline
+    }
+}
+
+// Initialize on module load
+initOrderingFunctions().catch(() => {
+    // Ignore errors - ordering functions are optional enhancement
+});
+
 function pruneStaleRemoteSequences(debugMode = false) {
     const now = Date.now();
     const pruned = [];
@@ -333,34 +357,100 @@ function pruneStaleRemoteSequences(debugMode = false) {
     return pruned.length;
 }
 
-function checkAndTrackSequence({ seq, senderId, localTabId, debugMode = false }) {
+/**
+ * Check sequence and determine if message should be processed or queued
+ * Enhanced version that supports message ordering with pending queue
+ *
+ * @param {Object} params - Sequence check parameters
+ * @param {number} params.seq - Message sequence number
+ * @param {string} params.senderId - Sender's tab ID
+ * @param {string} params.localTabId - Local tab ID
+ * @param {boolean} params.debugMode - Enable debug logging
+ * @param {Object} params.message - Full message object (for queuing)
+ * @param {Function} params.processFn - Function to process pending messages
+ * @returns {Object} Result object with processing decision
+ */
+function checkAndTrackSequence({ seq, senderId, localTabId, debugMode = false, message = null, processFn = null }) {
+    // Handle messages without sequence numbers or from self
     if (seq === undefined || !senderId || senderId === localTabId) {
-        return { shouldProcess: true, isDuplicate: false, isOutOfOrder: false };
+        return { shouldProcess: true, isDuplicate: false, isOutOfOrder: false, shouldQueue: false };
     }
 
     const lastSeq = remoteSequences.get(senderId) || 0;
 
+    // Check for duplicate messages
     if (seq <= lastSeq) {
         if (debugMode) {
             console.warn(`[TabCoordination] Duplicate message: seq=${seq} from ${senderId} (last=${lastSeq})`);
         }
-        return { shouldProcess: false, isDuplicate: true, isOutOfOrder: false };
+        return { shouldProcess: false, isDuplicate: true, isOutOfOrder: false, shouldQueue: false };
     }
 
-    let isOutOfOrder = false;
+    // Check for out-of-order messages
     if (seq > lastSeq + 1) {
         outOfOrderCount++;
-        isOutOfOrder = true;
-        console.warn(`[TabCoordination] Out-of-order message: expected seq=${lastSeq + 1}, got seq=${seq} from ${senderId} (total OOO: ${outOfOrderCount})`);
+
+        // Log gap detection
+        const gapSize = seq - lastSeq - 1;
+        if (!checkForMessageGaps) {
+            // Inline gap detection if function not available
+            console.warn(`[TabCoordination] Message gap detected from ${senderId}: missing seq ${lastSeq + 1} to ${seq - 1} (${gapSize} messages)`);
+        }
+
+        if (debugMode) {
+            console.warn(`[TabCoordination] Out-of-order message: expected seq=${lastSeq + 1}, got seq=${seq} from ${senderId} (total OOO: ${outOfOrderCount})`);
+        }
+
+        // Queue the message for later processing
+        // We'll process it when the missing sequence numbers arrive
+        if (message && gapSize <= 10) { // Only queue if gap is reasonable
+            // Update the sequence tracking to the current message
+            // This allows us to track that we've seen this sequence
+            remoteSequences.set(senderId, seq);
+            remoteSequenceTimestamps.set(senderId, Date.now());
+
+            return {
+                shouldProcess: false,
+                isDuplicate: false,
+                isOutOfOrder: true,
+                shouldQueue: true,
+                expectedSeq: lastSeq + 1,
+                gapSize
+            };
+        } else {
+            // Gap too large or no message provided, process anyway
+            remoteSequences.set(senderId, seq);
+            remoteSequenceTimestamps.set(senderId, Date.now());
+            if (Math.random() < 0.05) {
+                pruneStaleRemoteSequences(debugMode);
+            }
+
+            return {
+                shouldProcess: true,
+                isDuplicate: false,
+                isOutOfOrder: true,
+                shouldQueue: false,
+                gapSize
+            };
+        }
     }
 
+    // Message is in order, process it and check for pending messages
     remoteSequences.set(senderId, seq);
     remoteSequenceTimestamps.set(senderId, Date.now());
+
+    // Periodically prune stale entries
     if (Math.random() < 0.05) {
         pruneStaleRemoteSequences(debugMode);
     }
 
-    return { shouldProcess: true, isDuplicate: false, isOutOfOrder };
+    return {
+        shouldProcess: true,
+        isDuplicate: false,
+        isOutOfOrder: false,
+        shouldQueue: false,
+        expectedSeq: seq + 1
+    };
 }
 
 function getOutOfOrderCount() {
@@ -368,6 +458,16 @@ function getOutOfOrderCount() {
 }
 
 function resetOutOfOrderCount() {
+    outOfOrderCount = 0;
+}
+
+/**
+ * Reset sequence tracking state
+ * Used primarily in tests to ensure clean state between test runs
+ */
+function resetSequenceTracking() {
+    remoteSequences.clear();
+    remoteSequenceTimestamps.clear();
     outOfOrderCount = 0;
 }
 
@@ -391,5 +491,6 @@ export {
     isRateLimited,
     pruneStaleRemoteSequences,
     resetOutOfOrderCount,
+    resetSequenceTracking,
     validateMessageStructure
 };

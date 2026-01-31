@@ -105,23 +105,72 @@ export function isPromise(value) {
 
 /**
  * Ensure value is a number with fallback
+ * Converts string numbers to numeric type, returns fallback for invalid values
+ *
  * @param {*} value - Value to convert
  * @param {number} [fallback=0] - Fallback value if conversion fails
  * @returns {number} Parsed number or fallback
+ * @throws {TypeError} If fallback is not a finite number
  *
  * @example
  * const count = ensureNumber(userInput, 0);
  * const size = ensureNumber(config.size, 10);
+ * const timeout = ensureNumber(config.timeout, 5000);
  */
 export function ensureNumber(value, fallback = 0) {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-        return value;
+    // Validate fallback parameter - it must be a finite number
+    if (typeof fallback !== 'number' || !Number.isFinite(fallback)) {
+        throw new TypeError(
+            `ensureNumber fallback must be a finite number, received ${typeof fallback}: ${fallback}`
+        );
     }
-    if (typeof value === 'string') {
-        const parsed = Number(value);
-        if (!Number.isNaN(parsed) && Number.isFinite(parsed)) {
-            return parsed;
+
+    // Fast path: already a valid finite number
+    if (typeof value === 'number') {
+        if (Number.isFinite(value)) {
+            return value;
         }
+        // Handle special number values (NaN, Infinity, -Infinity)
+        // These are technically numbers but not valid for most use cases
+        if (Number.isNaN(value)) {
+            return fallback;
+        }
+        if (!Number.isFinite(value)) {
+            // Infinity or -Infinity
+            return fallback;
+        }
+        return fallback;
     }
+
+    // Convert string to number
+    if (typeof value === 'string') {
+        // Trim whitespace first
+        const trimmed = value.trim();
+
+        // Empty string after trimming is invalid
+        if (trimmed === '') {
+            return fallback;
+        }
+
+        // Use Number() for conversion (handles decimal, hex, octal, scientific notation)
+        const parsed = Number(trimmed);
+
+        // Check if conversion produced a valid finite number
+        if (Number.isNaN(parsed)) {
+            return fallback;
+        }
+        if (!Number.isFinite(parsed)) {
+            return fallback;
+        }
+
+        // Additional safety: ensure the entire string was consumed
+        // This prevents partial matches like "123abc" from being parsed as 123
+        // However, Number() already handles this correctly - it returns NaN for "123abc"
+        // So we only need to verify the result is valid
+
+        return parsed;
+    }
+
+    // All other types (null, undefined, boolean, object, array, etc.) use fallback
     return fallback;
 }
