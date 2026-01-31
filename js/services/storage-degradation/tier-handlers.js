@@ -244,20 +244,25 @@ export class TierHandlers {
         }
 
         // Show emergency modal for session-only mode
+        // FIX: Enhanced warning message to clearly communicate data loss risk
         if (this._eventBus) {
             this._eventBus.emit('UI:MODAL', {
                 type: 'emergency',
-                title: 'Storage Unavailable',
-                message: `Unable to connect to storage after ${data.attempts} attempts. Your data will only be saved for this session.`,
+                title: '⚠️ Storage Unavailable - Risk of Data Loss',
+                message: `Unable to connect to storage after ${data.attempts} attempts.\n\n⚠️ WARNING: Your chat history will be LOST if you:\n• Refresh or close this page\n• Navigate away from this site\n• Switch to another app on mobile\n\nTo keep your conversations, please export or copy important messages now.`,
                 options: [
                     {
-                        label: 'Continue in Session-Only Mode',
+                        label: 'I Understand - Continue Without Saving',
                         action: 'session_only_mode',
                         primary: true
                     },
                     {
                         label: 'Retry Connection',
                         action: 'retry_connection'
+                    },
+                    {
+                        label: 'Export Current Chat',
+                        action: 'export_chat'
                     }
                 ]
             });

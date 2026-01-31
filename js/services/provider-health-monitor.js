@@ -23,6 +23,7 @@ import {
     HealthStatus as AuthorityHealthStatus
 } from './provider-health-authority.js';
 import { TimeoutError, TimeoutType, isTimeoutError, getUserMessage } from './timeout-error.js';
+import { deepClone } from '../utils/common.js';
 
 /**
  * Health status levels for UI display
@@ -324,24 +325,46 @@ export class ProviderHealthMonitor {
 
     /**
      * Get current health snapshot for all providers
-     * @returns {Object} Health snapshot
+     *
+     * CRITICAL FIX for HIGH ISSUE #6: Returns deep cloned data to prevent state mutation.
+     * Uses structuredClone if available, falls back to deepClone utility for older environments.
+     * This ensures external code cannot modify internal health data structures.
+     *
+     * @returns {Object} Deep cloned health snapshot
      */
     getHealthSnapshot() {
         const snapshot = {};
         for (const [provider, data] of this._healthData) {
-            snapshot[provider] = { ...data };
+            // Use structuredClone for deep cloning (modern browsers)
+            // Fallback to deepClone utility for older environments
+            snapshot[provider] = typeof structuredClone === 'function'
+                ? structuredClone(data)
+                : deepClone(data);
         }
         return snapshot;
     }
 
     /**
      * Get health data for a specific provider
+     *
+     * CRITICAL FIX for HIGH ISSUE #6: Returns deep cloned data to prevent state mutation.
+     * Uses structuredClone if available, falls back to deepClone utility for older environments.
+     * This ensures external code cannot modify internal health data structures.
+     *
      * @param {string} provider - Provider name
-     * @returns {ProviderHealthData|null} Health data (shallow copy)
+     * @returns {ProviderHealthData|null} Deep cloned health data
      */
     getProviderHealth(provider) {
         const healthData = this._healthData.get(provider);
-        return healthData ? { ...healthData } : null;
+        if (!healthData) {
+            return null;
+        }
+
+        // Use structuredClone for deep cloning (modern browsers)
+        // Fallback to deepClone utility for older environments
+        return typeof structuredClone === 'function'
+            ? structuredClone(healthData)
+            : deepClone(healthData);
     }
 
     /**
