@@ -52,3 +52,6 @@ test-circular-dep.js
 
 # MCP cache
 .mcp-cache/
+
+#MCP config files
+.mcp-config/

@@ -606,17 +606,19 @@ mcp-server/
 
 ### Hybrid Embeddings
 
-The semantic search uses a hybrid embedding provider:
+The semantic search uses Transformers.js for 100% local, privacy-preserving embeddings:
 
-1. **LM Studio** (preferred): Fast GPU-accelerated embeddings
-   - Model: `text-embedding-nomic-embed-text-v1.5` (768 dimensions)
-   - Endpoint: `http://localhost:1234/v1`
-   - Auto-detected when available
+1. **Code Embeddings**: `jinaai/jina-embeddings-v2-base-code` (768 dimensions)
+   - Specialized for code understanding
+   - 8,192 token context window
+   - Optimized for JavaScript/TypeScript semantics
 
-2. **Transformers.js** (fallback): CPU-based embeddings (always available)
-   - Model: `Xenova/gte-base` (768 dimensions)
-   - Runs entirely in-browser
-   - Same dimensions as LM Studio model enables true hybrid fallback
+2. **General Text**: `Xenova/gte-base` (768 dimensions)
+   - High-quality general-purpose embeddings
+   - Excellent for documentation and comments
+   - Falls back when code model unavailable
+
+**Note:** LM Studio integration was deprecated due to batch API instability. The system now relies entirely on Transformers.js for reliable, consistent embeddings.
 
 ## HNW Architecture Patterns
 
@@ -773,12 +775,10 @@ this.server.setRequestHandler(CallToolRequestSchema, async (request) => { ... })
 
 ### Semantic Search Configuration
 - `RC_ENABLE_SEMANTIC` (optional): Enable semantic search (default: `true`)
-- `RC_LMSTUDIO_ENDPOINT` (optional): LM Studio API endpoint (default: `http://localhost:1234/v1`)
-- `RC_EMBEDDING_MODEL` (optional): Embedding model name (default: `text-embedding-nomic-embed-text-v1.5`)
 - `RC_EMBEDDING_DIM` (optional): Embedding dimension (default: `768`)
 - `RC_EMBEDDING_TTL` (optional): Cache TTL in seconds (default: `600`)
 - `RC_MAX_CHUNK_SIZE` (optional): Maximum chunk size in characters (default: `4000`)
-- `RC_FORCE_TRANSFORMERS` (optional): Force Transformers.js usage for testing (default: `false`)
+- `RC_FORCE_TRANSFORMERS` (optional): Force Transformers.js usage (default: `true`, LM Studio deprecated)
 
 ### File Watcher Configuration
 - `RC_ENABLE_WATCHER` (optional): Enable file watcher on startup (default: `false`)

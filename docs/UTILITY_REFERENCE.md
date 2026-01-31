@@ -1,7 +1,7 @@
 # Utility Reference
 
 > **Auto-generated** by docs-sync tool
-> **Generated:** 2026-01-30
+> **Generated:** 2026-01-31
 > **Total Utilities:** 35
 
 This reference provides detailed information about all utility modules in the application.
@@ -461,7 +461,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/validation/format-validators.js`
 
-**Lines:** 139
+**Lines:** 235
 
 **Named Exports:** 4
 
@@ -531,7 +531,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/validation/type-guards.js`
 
-**Lines:** 128
+**Lines:** 177
 
 **Named Exports:** 7
 
