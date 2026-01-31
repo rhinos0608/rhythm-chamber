@@ -145,7 +145,16 @@ async function getCheckpointDB() {
 async function saveTextsToIndexedDB(texts) {
     try {
         const db = await getCheckpointDB();
-        if (!db) return false;
+        if (!db) {
+            EventBus.emit('embedding:error', {
+                error: 'IndexedDB not available for checkpoint storage',
+                context: 'checkpoint_save',
+                userFacing: true,
+                userMessage: 'Unable to save progress - database unavailable',
+                recoverable: true
+            });
+            return false;
+        }
 
         return new Promise((resolve, reject) => {
             const transaction = db.transaction(CHECKPOINT_IDB_STORE, 'readwrite');
@@ -159,12 +168,35 @@ async function saveTextsToIndexedDB(texts) {
 
             request.onsuccess = () => resolve(true);
             request.onerror = () => {
+                const errorMsg = request.error?.message || 'Unknown IndexedDB error';
                 console.error('[EmbeddingsTaskManager] Failed to save texts to IndexedDB:', request.error);
+
+                // Emit user-facing error
+                EventBus.emit('embedding:error', {
+                    error: errorMsg,
+                    context: 'checkpoint_save',
+                    userFacing: true,
+                    userMessage: 'Failed to save checkpoint progress. Your data may not be recoverable if interrupted.',
+                    recoverable: false,
+                    technicalDetails: request.error
+                });
+
                 reject(request.error);
             };
         });
     } catch (e) {
         console.error('[EmbeddingsTaskManager] IndexedDB save error:', e);
+
+        // Emit error for unexpected failures
+        EventBus.emit('embedding:error', {
+            error: e.message || 'Unknown error',
+            context: 'checkpoint_save',
+            userFacing: true,
+            userMessage: 'Unexpected error while saving checkpoint progress',
+            recoverable: true,
+            technicalDetails: e
+        });
+
         return false;
     }
 }
@@ -176,7 +208,16 @@ async function saveTextsToIndexedDB(texts) {
 async function loadTextsFromIndexedDB() {
     try {
         const db = await getCheckpointDB();
-        if (!db) return null;
+        if (!db) {
+            EventBus.emit('embedding:error', {
+                error: 'IndexedDB not available for checkpoint recovery',
+                context: 'checkpoint_load',
+                userFacing: true,
+                userMessage: 'Unable to recover progress - database unavailable',
+                recoverable: false
+            });
+            return null;
+        }
 
         return new Promise((resolve, reject) => {
             const transaction = db.transaction(CHECKPOINT_IDB_STORE, 'readonly');
@@ -188,12 +229,35 @@ async function loadTextsFromIndexedDB() {
                 resolve(result?.value || null);
             };
             request.onerror = () => {
+                const errorMsg = request.error?.message || 'Unknown IndexedDB error';
                 console.error('[EmbeddingsTaskManager] Failed to load texts from IndexedDB:', request.error);
+
+                // Emit user-facing error
+                EventBus.emit('embedding:error', {
+                    error: errorMsg,
+                    context: 'checkpoint_load',
+                    userFacing: true,
+                    userMessage: 'Failed to load saved progress. Starting from beginning.',
+                    recoverable: true,
+                    technicalDetails: request.error
+                });
+
                 reject(request.error);
             };
         });
     } catch (e) {
         console.error('[EmbeddingsTaskManager] IndexedDB load error:', e);
+
+        // Emit error for unexpected failures
+        EventBus.emit('embedding:error', {
+            error: e.message || 'Unknown error',
+            context: 'checkpoint_load',
+            userFacing: true,
+            userMessage: 'Unexpected error while loading saved progress',
+            recoverable: true,
+            technicalDetails: e
+        });
+
         return null;
     }
 }
@@ -205,7 +269,10 @@ async function loadTextsFromIndexedDB() {
 async function clearTextsFromIndexedDB() {
     try {
         const db = await getCheckpointDB();
-        if (!db) return;
+        if (!db) {
+            console.warn('[EmbeddingsTaskManager] Database unavailable for cleanup');
+            return;
+        }
 
         return new Promise((resolve) => {
             const transaction = db.transaction(CHECKPOINT_IDB_STORE, 'readwrite');
@@ -214,12 +281,25 @@ async function clearTextsFromIndexedDB() {
 
             request.onsuccess = () => resolve();
             request.onerror = () => {
-                console.warn('[EmbeddingsTaskManager] Failed to clear texts from IndexedDB');
+                const errorMsg = request.error?.message || 'Unknown IndexedDB error';
+                console.warn('[EmbeddingsTaskManager] Failed to clear texts from IndexedDB:', request.error);
+
+                // Emit cleanup error (non-critical, but good to know)
+                EventBus.emit('embedding:error', {
+                    error: errorMsg,
+                    context: 'checkpoint_cleanup',
+                    userFacing: false, // Cleanup errors are not critical for users
+                    userMessage: null,
+                    recoverable: true,
+                    technicalDetails: request.error
+                });
+
                 resolve();
             };
         });
     } catch (e) {
-        // Ignore cleanup errors
+        // Log cleanup errors but don't fail
+        console.warn('[EmbeddingsTaskManager] Cleanup error:', e);
     }
 }
 
@@ -288,7 +368,10 @@ async function saveCheckpoint() {
                     EventBus.emit('embedding:checkpoint_failed', {
                         reason: 'storage_quota_exceeded',
                         textsSize,
-                        processedCount
+                        processedCount,
+                        userFacing: true,
+                        userMessage: 'Storage quota exceeded. Progress cannot be saved - if interrupted, you will need to start over.',
+                        recoverable: false
                     });
                 }
             } catch (fallbackError) {
@@ -296,7 +379,11 @@ async function saveCheckpoint() {
                 EventBus.emit('embedding:checkpoint_failed', {
                     reason: 'all_storage_failed',
                     textsSize,
-                    processedCount
+                    processedCount,
+                    userFacing: true,
+                    userMessage: 'All storage methods failed. Progress cannot be saved.',
+                    recoverable: false,
+                    technicalDetails: fallbackError
                 });
             }
         } else {
@@ -593,7 +680,10 @@ async function startTask(options) {
             taskId: currentTask?.id,
             error: error.message,
             processed: processedCount,
-            total: totalCount
+            total: totalCount,
+            userFacing: true,
+            userMessage: `Embedding generation failed: ${error.message}`,
+            recoverable: false
         };
 
         EventBus.emit('embedding:task_error', errorResult);
@@ -868,7 +958,10 @@ async function recoverTask(options = {}) {
             error: error.message,
             processed: processedCount,
             total: totalCount,
-            recovered: true
+            recovered: true,
+            userFacing: true,
+            userMessage: `Recovery failed: ${error.message}. Try starting from the beginning.`,
+            recoverable: true
         };
 
         EventBus.emit('embedding:task_error', errorResult);

@@ -146,6 +146,10 @@ class OperationQueue {
             failed: [],
             cancelled: []
         };
+        // MEMORY LEAK FIX #4: Track listener registrations to prevent duplicates
+        // Uses WeakMap to avoid memory leaks - entries are automatically garbage collected
+        // when the callback function is no longer referenced elsewhere in the application.
+        this._listenerRegistry = new WeakMap();
     }
 
     /**
@@ -478,33 +482,84 @@ class OperationQueue {
 
     /**
      * Add event listener
+     * MEMORY LEAK FIX #4: Prevents duplicate listener registration by tracking
+     * registered callbacks in a WeakMap. This prevents memory leaks from the same
+     * callback being registered multiple times for the same event.
+     *
      * @param {string} event - Event name (queued, processing, completed, failed, cancelled)
      * @param {Function} callback - Event handler
+     * @returns {boolean} True if listener was added, false if it was already registered
      */
     on(event, callback) {
-        if (this.listeners[event]) {
-            this.listeners[event].push(callback);
+        if (!this.listeners[event]) {
+            console.warn(`[OperationQueue] Unknown event type: ${event}`);
+            return false;
         }
+
+        if (typeof callback !== 'function') {
+            console.error(`[OperationQueue] Event listener must be a function, got: ${typeof callback}`);
+            return false;
+        }
+
+        // Get existing registrations for this callback
+        let registrations = this._listenerRegistry.get(callback);
+        if (!registrations) {
+            registrations = new Set();
+            this._listenerRegistry.set(callback, registrations);
+        }
+
+        // Check if this callback is already registered for this event
+        if (registrations.has(event)) {
+            console.warn(`[OperationQueue] Event listener already registered for '${event}' event`);
+            return false;
+        }
+
+        // Register the listener
+        this.listeners[event].push(callback);
+        registrations.add(event);
+
+        return true;
     }
 
     /**
      * Remove event listener
+     * MEMORY LEAK FIX #4: Updates the listener registry when removing listeners
+     * to maintain consistency and prevent stale references.
+     *
      * @param {string} event - Event name
      * @param {Function} callback - Event handler to remove
+     * @returns {boolean} True if listener was removed, false if not found
      */
     off(event, callback) {
-        if (this.listeners[event]) {
-            const index = this.listeners[event].indexOf(callback);
-            if (index > -1) {
-                this.listeners[event].splice(index, 1);
-            }
+        if (!this.listeners[event]) {
+            return false;
         }
+
+        const index = this.listeners[event].indexOf(callback);
+        if (index > -1) {
+            this.listeners[event].splice(index, 1);
+
+            // Update registry
+            const registrations = this._listenerRegistry.get(callback);
+            if (registrations) {
+                registrations.delete(event);
+                // Clean up empty registry entries
+                if (registrations.size === 0) {
+                    this._listenerRegistry.delete(callback);
+                }
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     /**
      * Clear all listeners for a specific event type
      * MEMORY LEAK FIX: Prevents unbounded memory growth by removing all listeners
-     * for a specific event type.
+     * for a specific event type. Also updates the listener registry to prevent
+     * stale references.
      *
      * Use this when:
      * - A component or module that registered listeners is being destroyed
@@ -517,6 +572,19 @@ class OperationQueue {
     clearListeners(eventType) {
         if (this.listeners[eventType]) {
             const count = this.listeners[eventType].length;
+
+            // Clean up registry entries for this event type
+            this.listeners[eventType].forEach(callback => {
+                const registrations = this._listenerRegistry.get(callback);
+                if (registrations) {
+                    registrations.delete(eventType);
+                    // Clean up empty registry entries
+                    if (registrations.size === 0) {
+                        this._listenerRegistry.delete(callback);
+                    }
+                }
+            });
+
             this.listeners[eventType] = [];
             console.log(`[OperationQueue] Cleared ${count} listener(s) for '${eventType}' event`);
             return count > 0;
@@ -527,7 +595,8 @@ class OperationQueue {
     /**
      * Clear all event listeners
      * MEMORY LEAK FIX: Prevents unbounded memory growth by removing all listeners.
-     * Critical for preventing memory leaks in long-running applications.
+     * Critical for preventing memory leaks in long-running applications. Also clears
+     * the listener registry to prevent stale references.
      *
      * Use this when:
      * - The OperationQueue instance is no longer needed
@@ -546,6 +615,9 @@ class OperationQueue {
             counts[key] = this.listeners[key].length;
             this.listeners[key] = [];
         });
+
+        // Clear the listener registry
+        this._listenerRegistry = new WeakMap();
 
         const totalCleared = Object.values(counts).reduce((sum, count) => sum + count, 0);
         console.log(`[OperationQueue] Cleared all listeners (${totalCleared} total):`, counts);

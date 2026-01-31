@@ -250,8 +250,45 @@ function subscribeToEvents() {
     unsubscribers.push(EventBus.on('embedding:error', (payload) => {
         const operationEl = document.querySelector('#current-operation .operation-text');
         if (operationEl) {
-            operationEl.textContent = `Error: ${payload.error}`;
+            // Use user-facing message if available, otherwise fall back to technical error
+            const displayMessage = payload.userFacing && payload.userMessage
+                ? payload.userMessage
+                : `Error: ${payload.error}`;
+            operationEl.textContent = displayMessage;
             operationEl.classList.add('error');
+        }
+
+        // Log technical details for debugging
+        if (payload.technicalDetails) {
+            console.warn('[EmbeddingsProgress] Technical details:', payload.technicalDetails);
+        }
+    }));
+
+    // Checkpoint failed events
+    unsubscribers.push(EventBus.on('embedding:checkpoint_failed', (payload) => {
+        const operationEl = document.querySelector('#current-operation .operation-text');
+        if (operationEl && payload.userFacing) {
+            // Use user-facing message for checkpoint failures
+            operationEl.textContent = payload.userMessage || `Checkpoint failed: ${payload.reason}`;
+            operationEl.classList.add('warning');
+        }
+    }));
+
+    // Task error events
+    unsubscribers.push(EventBus.on('embedding:task_error', (payload) => {
+        const operationEl = document.querySelector('#current-operation .operation-text');
+        if (operationEl) {
+            // Use user-facing message if available
+            const displayMessage = payload.userFacing && payload.userMessage
+                ? payload.userMessage
+                : `Task error: ${payload.error}`;
+            operationEl.textContent = displayMessage;
+            operationEl.classList.add('error');
+
+            // Log technical details for debugging
+            if (payload.technicalDetails) {
+                console.warn('[EmbeddingsProgress] Task error details:', payload.technicalDetails);
+            }
         }
     }));
 }
