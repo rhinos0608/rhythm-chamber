@@ -13,6 +13,9 @@ import {
   getFilesInDirectory,
   ValidationError
 } from '../utils/validation.js';
+// FIX: Replace CommonJS require() with ES module imports
+import * as parser from '@babel/parser';
+import { ESLint } from 'eslint';
 
 /**
  * Tool schema definition
@@ -265,8 +268,7 @@ function getSyntaxErrors(filePath, projectRoot) {
 
   try {
     const content = readFileSync(filePath, 'utf-8');
-    const parser = require('@babel/parser');
-
+    // FIX: Use imported parser instead of require()
     parser.parse(content, {
       sourceType: 'module',
       plugins: ['jsx']
@@ -309,7 +311,7 @@ async function getLintErrors(filePath, projectRoot, severity) {
   const errors = [];
 
   try {
-    const { ESLint } = require('eslint');
+    // FIX: Use imported ESLint instead of require()
     const content = readFileSync(filePath, 'utf-8');
     const lines = content.split('\n');
 

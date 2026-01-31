@@ -230,10 +230,13 @@ export function isUsingFallback() {
  */
 export function getStorageBackend() {
     if (usingFallback) {
+        // FIX: Add defensive checks for fallback backend methods
+        const mode = FallbackBackend.getMode?.() || 'unknown';
+        const stats = FallbackBackend.getStats?.() || {};
         return {
             type: 'fallback',
-            fallbackMode: FallbackBackend.getMode(),
-            stats: FallbackBackend.getStats()
+            fallbackMode: mode,
+            stats: stats
         };
     }
     return { type: 'indexeddb' };

@@ -111,8 +111,8 @@ export async function handler(args, projectRoot, semanticIndexer, mcpServer) {
  * Handle start action
  */
 async function handleStart(indexer, mcpServer, patterns, ignore, force) {
-  // Check if indexing is already in progress (check both server and indexer flags)
-  const isIndexing = (mcpServer && mcpServer._indexingInProgress) || indexer._indexingInProgress || false;
+  // Check if indexing is already in progress (only check indexer flag now)
+  const isIndexing = indexer._indexingInProgress || false;
   if (isIndexing) {
     return {
       content: [
@@ -136,13 +136,10 @@ async function handleStart(indexer, mcpServer, patterns, ignore, force) {
 
   console.error(`[Indexing Control] Starting ${force ? 'force ' : ''}indexing...`);
 
-  // Set indexing flags on both indexer and server
-  indexer._indexingInProgress = true;
-  indexer._indexingError = null;
-  if (mcpServer) {
-    mcpServer._indexingInProgress = true;
-    mcpServer._indexingError = null;
-  }
+  // CRITICAL FIX: Don't set _indexingInProgress before calling indexAll()
+  // indexAll() has its own concurrency control and sets this flag internally.
+  // Setting it here causes a race condition where indexAll() throws
+  // "Indexing already in progress" immediately.
 
   // Start indexing in background
   const indexPromise = indexer.indexAll({ force });
@@ -155,23 +152,11 @@ async function handleStart(indexer, mcpServer, patterns, ignore, force) {
   indexPromise
     .then((stats) => {
       console.error('[Indexing Control] Indexing completed:', stats);
-      indexer._indexingInProgress = false;
-      indexer._indexingPromise = null;
-      if (mcpServer) {
-        mcpServer._indexingInProgress = false;
-        mcpServer._indexingPromise = null;
-      }
+      // indexAll() already manages its own state, no need to modify flags here
     })
     .catch((error) => {
       console.error('[Indexing Control] Indexing failed:', error);
-      indexer._indexingInProgress = false;
-      indexer._indexingError = error;
-      indexer._indexingPromise = null;
-      if (mcpServer) {
-        mcpServer._indexingInProgress = false;
-        mcpServer._indexingError = error.message || String(error);
-        mcpServer._indexingPromise = null;
-      }
+      // indexAll() already manages its own state and error tracking
     });
 
   return {
@@ -195,7 +180,7 @@ async function handleStart(indexer, mcpServer, patterns, ignore, force) {
  * Handle stop action
  */
 async function handleStop(indexer, mcpServer) {
-  const isIndexing = (mcpServer && mcpServer._indexingInProgress) || indexer._indexingInProgress || false;
+  const isIndexing = indexer._indexingInProgress || false;
 
   if (!isIndexing) {
     return {
@@ -208,11 +193,8 @@ async function handleStop(indexer, mcpServer) {
     };
   }
 
-  // Set flag to stop indexing (both server and indexer)
+  // Set flag to stop indexing (indexer only - server flags removed)
   indexer._indexingInProgress = false;
-  if (mcpServer) {
-    mcpServer._indexingInProgress = false;
-  }
 
   // Note: We can't actually cancel the promise, but the indexer can check the flag
   // and stop processing new files. For a complete stop, we'd need to add abort
@@ -234,9 +216,9 @@ async function handleStop(indexer, mcpServer) {
  * Handle status action
  */
 async function handleStatus(indexer, mcpServer) {
-  const isIndexing = (mcpServer && mcpServer._indexingInProgress) || indexer._indexingInProgress || false;
+  const isIndexing = indexer._indexingInProgress || false;
   const stats = indexer.stats || {};
-  const hasError = indexer._indexingError || (mcpServer && mcpServer._indexingError);
+  const hasError = indexer._indexingError;
 
   const lines = [
     '# Indexing Status',
@@ -370,7 +352,7 @@ async function handleStatus(indexer, mcpServer) {
  * Handle clear_cache action
  */
 async function handleClearCache(indexer, mcpServer) {
-  const isIndexing = (mcpServer && mcpServer._indexingInProgress) || indexer._indexingInProgress || false;
+  const isIndexing = indexer._indexingInProgress || false;
 
   if (isIndexing) {
     return {
@@ -385,8 +367,27 @@ async function handleClearCache(indexer, mcpServer) {
     };
   }
 
-  // Clear the cache
+  // Clear the cache (in-memory)
   indexer.cache.clear();
+
+  // FIX: Also delete the cache file from disk to truly clear it
+  try {
+    await indexer.cache.delete();
+  } catch (deleteError) {
+    console.error('[Indexing Control] Warning: Failed to delete cache file:', deleteError.message);
+    // Continue - the in-memory cache is still cleared
+  }
+
+  // FIX: Clean up any stale .tmp files
+  const { unlink } = await import('fs/promises');
+  const { join } = await import('path');
+  const tmpFile = indexer.cache.cacheFile + '.tmp';
+  try {
+    await unlink(tmpFile);
+    console.error('[Indexing Control] Cleaned up stale tmp file');
+  } catch {
+    // File doesn't exist, that's fine
+  }
 
   // Reset index state
   indexer.indexed = false;
