@@ -20,7 +20,7 @@ import {
     checkAndTrackSequence,
     isNonceFresh
 } from '../message-guards.js';
-import { sendMessage } from './message-sender.js';
+import { sendMessage, queuePendingMessage, processPendingMessages, clearPendingMessages } from './message-sender.js';
 import {
     getIsPrimaryTab,
     setIsPrimaryTab,
@@ -56,6 +56,113 @@ import {
 // ==========================================
 
 let messageHandler = null;
+
+// ==========================================
+// Message Ordering State
+// ==========================================
+
+/**
+ * Pending messages awaiting processing
+ * Maps senderId -> Map<sequenceNumber, message>
+ */
+const pendingMessageQueue = new Map();
+
+/**
+ * Maximum time to hold a pending message (ms)
+ */
+const MAX_PENDING_AGE_MS = 5000;
+
+/**
+ * Check and process pending messages for a sender
+ * @param {string} senderId - Sender's tab ID
+ * @param {number} expectedSeq - Expected next sequence number
+ */
+async function checkPendingMessages(senderId, expectedSeq) {
+    if (!pendingMessageQueue.has(senderId)) {
+        return;
+    }
+
+    const senderQueue = pendingMessageQueue.get(senderId);
+    const now = Date.now();
+    let currentSeq = expectedSeq;
+    let processed = 0;
+
+    // Process messages in sequence order
+    while (senderQueue.has(currentSeq)) {
+        const pending = senderQueue.get(currentSeq);
+
+        // Check if message has expired
+        if (now - pending.timestamp > MAX_PENDING_AGE_MS) {
+            console.warn(`[TabCoordination] Pending message seq=${currentSeq} from ${senderId} expired, processing anyway`);
+        }
+
+        try {
+            // Process the pending message
+            await routeMessage(pending.message);
+            processed++;
+        } catch (error) {
+            console.error(`[TabCoordination] Error processing pending message seq=${currentSeq}:`, error);
+        }
+
+        senderQueue.delete(currentSeq);
+        currentSeq++;
+    }
+
+    // Clean up expired messages
+    for (const [seq, pending] of senderQueue.entries()) {
+        if (now - pending.timestamp > MAX_PENDING_AGE_MS) {
+            console.warn(`[TabCoordination] Expired pending message seq=${seq} from ${senderId}, processing anyway`);
+            try {
+                await routeMessage(pending.message);
+                processed++;
+            } catch (error) {
+                console.error(`[TabCoordination] Error processing expired message seq=${seq}:`, error);
+            }
+            senderQueue.delete(seq);
+        }
+    }
+
+    // Clean up empty queues
+    if (senderQueue.size === 0) {
+        pendingMessageQueue.delete(senderId);
+    }
+
+    if (processed > 0 && debugMode) {
+        console.log(`[TabCoordination] Processed ${processed} pending messages from ${senderId}`);
+    }
+}
+
+/**
+ * Queue an out-of-order message for later processing
+ * @param {string} senderId - Sender's tab ID
+ * @param {number} seq - Message sequence number
+ * @param {Object} message - The message to queue
+ * @returns {boolean} True if queued successfully
+ */
+function queueOutOfOrderMessage(senderId, seq, message) {
+    if (!pendingMessageQueue.has(senderId)) {
+        pendingMessageQueue.set(senderId, new Map());
+    }
+
+    const senderQueue = pendingMessageQueue.get(senderId);
+
+    // Limit queue size to prevent memory issues
+    if (senderQueue.size >= 50) {
+        console.warn(`[TabCoordination] Pending message queue full for ${senderId}, dropping seq=${seq}`);
+        return false;
+    }
+
+    senderQueue.set(seq, {
+        message,
+        timestamp: Date.now()
+    });
+
+    if (debugMode) {
+        console.log(`[TabCoordination] Queued out-of-order message seq=${seq} from ${senderId} (${senderQueue.size} pending)`);
+    }
+
+    return true;
+}
 
 // ==========================================
 // Message Handler Creation
@@ -103,8 +210,22 @@ export function createMessageHandler() {
                 return;
             }
 
-            // Sequence tracking
-            const ordering = checkAndTrackSequence({ seq, senderId, localTabId: TAB_ID, debugMode });
+            // Sequence tracking with ordering support
+            const ordering = checkAndTrackSequence({
+                seq,
+                senderId,
+                localTabId: TAB_ID,
+                debugMode,
+                message: event.data
+            });
+
+            // Handle out-of-order messages
+            if (ordering.shouldQueue) {
+                queueOutOfOrderMessage(senderId, seq, event.data);
+                return;
+            }
+
+            // Skip processing for duplicates
             if (!ordering.shouldProcess) {
                 return;
             }
@@ -116,6 +237,11 @@ export function createMessageHandler() {
 
             // Route message by type
             await routeMessage(event.data);
+
+            // Check for pending messages that can now be processed
+            if (ordering.expectedSeq) {
+                await checkPendingMessages(senderId, ordering.expectedSeq);
+            }
 
         } catch (error) {
             console.error('[TabCoordination] Message handler error:', error);

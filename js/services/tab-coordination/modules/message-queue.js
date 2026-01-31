@@ -105,8 +105,17 @@ export function clearQueue() {
  */
 export async function sendMessageWithQueue(msg) {
     if (shouldQueueMessage()) {
-        return queueMessage(msg);
+        // FIX: Return consistent status object
+        const queued = queueMessage(msg);
+        return { success: queued, queued: true, added: queued };
     }
 
-    await sendMessage(msg, false);
+    // FIX: Return status so caller knows if message was sent
+    try {
+        await sendMessage(msg, false);
+        return { success: true, queued: false };
+    } catch (error) {
+        console.error('[MessageQueue] Failed to send message:', error);
+        return { success: false, queued: false, error: error.message };
+    }
 }

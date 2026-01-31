@@ -137,7 +137,13 @@ async function init() {
     }
 
     // Send candidate message
-    MessageSender.sendMessage({ type: MESSAGE_TYPES.CANDIDATE, tabId: TAB_ID });
+    // FIX: Await sendMessage to catch errors and ensure message is sent
+    try {
+        await MessageSender.sendMessage({ type: MESSAGE_TYPES.CANDIDATE, tabId: TAB_ID });
+    } catch (sendError) {
+        console.error('[TabCoordination] Failed to send candidate message:', sendError);
+        // Continue with election anyway - other tabs may have seen our candidacy via other means
+    }
 
     // Wait for election window
     await new Promise(resolve => {
@@ -303,6 +309,11 @@ const TabCoordinator = {
     getQueueSize: MessageQueue.getQueueSize,
     getQueueInfo: () => MessageQueue.getQueueInfo(isKeySessionActive()),
     processQueue: MessageQueue.processMessageQueue,
+
+    // Message Ordering
+    getPendingCount: MessageSender.getPendingCount,
+    getAllPendingCounts: MessageSender.getAllPendingCounts,
+    clearPendingMessages: MessageSender.clearPendingMessages,
 
     // Transport
     getTransportType: MessageSender.getTransportType,
