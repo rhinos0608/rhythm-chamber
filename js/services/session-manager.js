@@ -258,10 +258,11 @@ export class SessionManager {
      * Save the current conversation with debounce delay
      * @public
      * @param {number} delayMs - Delay in milliseconds before saving (default: 2000)
+     * @returns {Promise<void>}
      */
-    static saveConversation(delayMs = 2000) {
+    static async saveConversation(delayMs = 2000) {
         const manager = Internal.getSessionManager();
-        manager.saveConversation(delayMs);
+        await manager.saveConversation(delayMs);
     }
 
     /**
@@ -277,10 +278,11 @@ export class SessionManager {
     /**
      * Perform an emergency synchronous backup
      * @public
+     * @returns {void}
      */
     static emergencyBackupSync() {
         const manager = Internal.getSessionManager();
-        manager.emergencyBackupSync();
+        return manager.emergencyBackupSync();
     }
 
     /**

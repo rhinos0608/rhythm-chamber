@@ -141,10 +141,10 @@ export function createManager() {
             );
         },
 
-        saveConversation(delayMs) {
-            // Sync operation - use wrapSync
-            ErrorBoundary.wrapSync(
-                () => SessionPersistence.saveConversation(delayMs),
+        async saveConversation(delayMs) {
+            // Async operation - use wrap for proper error handling
+            return await ErrorBoundary.wrap(
+                async () => SessionPersistence.saveConversation(delayMs),
                 {
                     context: 'sessionSaveConversation',
                     fallback: null,
