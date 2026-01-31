@@ -42,7 +42,7 @@ cd "$MCP_SERVER_DIR"
 
 # Environment variables
 export RC_PROJECT_ROOT="$PROJECT_ROOT"
-export RC_EMBEDDING_DIM=384  # Must match model dimension
+export RC_EMBEDDING_DIM=768  # Must match model dimension (jina-code and gte-base)
 
 # Start in background with logging
 nohup node server.js > "$LOG_FILE" 2>&1 &
@@ -61,7 +61,7 @@ if ps -p $SERVER_PID > /dev/null; then
     echo -e "${GREEN}✅ Server is running successfully!${NC}"
     echo ""
     echo -e "${BLUE}🔍 Recent activity:${NC}"
-    tail -20 "$LOG_FILE" | grep -E "Indexing|Indexed|complete|Available|Error|LM Studio" || echo "Still initializing..."
+    tail -20 "$LOG_FILE" | grep -E "Indexing|Indexed|complete|Available|Error|Model" || echo "Still initializing..."
     echo ""
     echo -e "${BLUE}💡 Useful commands:${NC}"
     echo "   Monitor logs:    tail -f $LOG_FILE"
@@ -74,8 +74,8 @@ else
     echo "   cat $LOG_FILE"
     echo ""
     echo -e "${YELLOW}💡 Common fixes:${NC}"
-    echo "   1. Check port 1234 conflicts (LM Studio)"
-    echo "   2. Verify Node.js is installed: node --version"
-    echo "   3. Check available memory: htop or Activity Monitor"
+    echo "   1. Verify Node.js is installed: node --version"
+    echo "   2. Check available memory: htop or Activity Monitor"
+    echo "   3. Check cache directory permissions: ls -la .mcp-cache/"
     exit 1
 fi

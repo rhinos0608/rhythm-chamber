@@ -19,6 +19,8 @@
  *   - b = length normalization parameter (default 0.75)
  */
 
+import { passesFilters as sharedPassesFilters } from './filters.js';
+
 /**
  * Default BM25 parameters
  */
@@ -319,9 +321,10 @@ export class LexicalIndex {
    *
    * @param {string} query - Search query
    * @param {number} limit - Maximum number of results
+   * @param {Object} filters - Optional filters to apply
    * @returns {Array<Object>} Array of results with chunkId, score, and metadata
    */
-  search(query, limit = 10) {
+  search(query, limit = 10, filters = null) {
     // Extract and normalize query terms
     const queryTerms = this._extractQueryTerms(query);
 
@@ -333,10 +336,16 @@ export class LexicalIndex {
 
     // Calculate BM25 score for each document
     for (const chunkId of this.documents.keys()) {
+      const doc = this.documents.get(chunkId);
+
+      // FIX #10: Apply filters using shared utility (consistency with VectorStore)
+      if (filters && !sharedPassesFilters(doc.metadata, filters)) {
+        continue;
+      }
+
       const score = this._calculateBM25(chunkId, queryTerms);
 
       if (score > 0) {
-        const doc = this.documents.get(chunkId);
         results.push({
           chunkId,
           score,
