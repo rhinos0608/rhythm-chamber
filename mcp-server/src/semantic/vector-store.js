@@ -9,6 +9,7 @@
  */
 
 import { HybridEmbeddings, cosineSimilarity } from './embeddings.js';
+import { passesFilters as sharedPassesFilters } from './filters.js';
 
 /**
  * Auto-upgrade threshold
@@ -55,6 +56,15 @@ export class VectorStore {
       } else {
         throw new Error(`Invalid embedding type for ${chunkId}: expected Float32Array or Array, got ${typeof embedding}`);
       }
+    }
+
+    // FIX: Validate embedding dimension matches expected dimension
+    if (embedding.length !== this.dimension) {
+      throw new Error(
+        `Embedding dimension mismatch for ${chunkId}: ` +
+        `expected ${this.dimension} dimensions, got ${embedding.length}. ` +
+        `This may indicate a model change or cache corruption.`
+      );
     }
 
     this.vectors.set(chunkId, embedding);
@@ -135,13 +145,17 @@ export class VectorStore {
 
   /**
    * Update the embedding dimension (called after actual dimension is detected)
+   * @returns {boolean} True if the vector store was cleared due to dimension mismatch
    */
   setDimension(dimension) {
     if (this.dimension !== dimension && this.chunkCount > 0) {
       console.warn(`[VectorStore] Dimension mismatch detected! Existing vectors have ${this.dimension} dims, but trying to use ${dimension} dims. Clearing vector store.`);
       this.clear();
+      this.dimension = dimension;
+      return true; // Indicate that store was cleared
     }
     this.dimension = dimension;
+    return false; // No clear needed
   }
 
   /**
@@ -165,13 +179,22 @@ export class VectorStore {
       queryEmbedding = new Float32Array(queryEmbedding);
     }
 
+    // CRITICAL FIX: Validate dimension matches before search
+    if (queryEmbedding.length !== this.dimension) {
+      throw new Error(
+        `Query embedding dimension (${queryEmbedding.length}) does not match ` +
+        `vector store dimension (${this.dimension}). Model may have switched. ` +
+        `Clear cache and reindex if needed.`
+      );
+    }
+
     const results = [];
 
     for (const [chunkId, vector] of this.vectors.entries()) {
       const metadata = this.metadata.get(chunkId);
 
-      // Apply filters
-      if (!this._passesFilters(metadata, filters)) {
+      // Apply filters using shared utility (consistency with LexicalIndex)
+      if (!sharedPassesFilters(metadata, filters)) {
         continue;
       }
 
@@ -314,17 +337,21 @@ export class VectorStore {
       const queryTerms = this._extractQueryTerms(queryText);
 
       if (queryTerms.length > 0) {
-        // Boost results with matching symbol names by 0.15
-        const NAME_BOOST = 0.15;
+        // FIX #8: Use multiplicative boost to avoid non-linear distortion
+        // Old additive approach gave different boost at different similarity levels
+        // New multiplicative approach: similarity * (1 + nameMatch * BOOST_FACTOR)
+        const NAME_BOOST_FACTOR = 0.2; // 20% max boost for perfect name match
 
         const boosted = results.map(r => {
           const nameMatch = this._calculateNameMatch(queryTerms, r.metadata?.name || '');
 
           if (nameMatch > 0) {
+            // Multiplicative boost: applies proportionally regardless of base similarity
+            const boostedSim = Math.min(1.0, r.similarity * (1 + nameMatch * NAME_BOOST_FACTOR));
             return {
               ...r,
-              similarity: Math.min(1.0, r.similarity + (nameMatch * NAME_BOOST)),
-              nameMatchBoost: nameMatch * NAME_BOOST
+              similarity: boostedSim,
+              nameMatchBoost: boostedSim - r.similarity
             };
           }
 
@@ -396,118 +423,6 @@ export class VectorStore {
     }
 
     console.error(`[VectorStore] Imported ${this.chunkCount} chunks`);
-  }
-
-  /**
-   * Apply filters to metadata
-   */
-  _passesFilters(metadata, filters) {
-    if (!filters || Object.keys(filters).length === 0) {
-      return true;
-    }
-
-    // File path filter
-    if (filters.filePath && metadata.file !== filters.filePath) {
-      return false;
-    }
-
-    // Chunk type filter
-    if (filters.chunkType && metadata.type !== filters.chunkType) {
-      return false;
-    }
-
-    // Exported only filter
-    if (filters.exportedOnly === true && !metadata.exported) {
-      return false;
-    }
-
-    // Layer filter (for HNW architecture)
-    if (filters.layer) {
-      const fileLayer = this._extractLayer(metadata.file || '');
-      if (fileLayer !== filters.layer) {
-        return false;
-      }
-    }
-
-    // File pattern filter (with ReDoS protection)
-    // FIX #8: Be more specific, only block actual ReDoS patterns like nested quantifiers
-    if (filters.filePattern) {
-      try {
-        const patternStr = filters.filePattern;
-
-        // Basic length limit to prevent excessive memory use
-        if (patternStr.length > 500) {
-          console.warn('[VectorStore] filePattern too long (>500 chars), ignoring filter');
-          return false;
-        }
-
-        // Only block dangerous ReDoS patterns:
-        // - Nested quantifiers like (a+)+, (a*)*, (a+)* that cause exponential backtracking
-        // - Overlapping alternations like (a|a)+ that match the same thing multiple ways
-        const redosPatterns = [
-          /\([^)]*[\*\+][^)]*[\*\+]\)/,  // Nested quantifiers: (a+)+, (a*)*, etc.
-          /\([^)]*\|[^)]*\)[\*\+]/,      // Overlapping alternations: (a|a)+
-          /\(\.[\*\+].*\)[\*\+]/,        // Nested with wildcard: (.+)+, (.)+
-        ];
-
-        if (redosPatterns.some(p => p.test(patternStr))) {
-          console.warn('[VectorStore] filePattern contains potential ReDoS pattern, ignoring filter');
-          return false;
-        }
-
-        const pattern = new RegExp(patternStr);
-        if (!pattern.test(metadata.file || '')) {
-          return false;
-        }
-      } catch (e) {
-        console.warn('[VectorStore] Invalid filePattern:', e.message);
-        return false;
-      }
-    }
-
-    // Direct exported status filter (supports false for non-exported only)
-    if (filters.exported !== undefined && metadata.exported !== filters.exported) {
-      return false;
-    }
-
-    // Has overlap filter: chunks with context before/after
-    // Useful for finding chunks that have surrounding context
-    if (filters.hasOverlap === true) {
-      const hasBefore = metadata.contextBefore && metadata.contextBefore.length > 0;
-      const hasAfter = metadata.contextAfter && metadata.contextAfter.length > 0;
-      if (!hasBefore && !hasAfter) {
-        return false;
-      }
-    }
-
-    // Parent chunk ID filter: find chunks belonging to a parent
-    // Useful for finding all methods in a class, etc.
-    if (filters.parentChunkId && metadata.parentChunkId !== filters.parentChunkId) {
-      return false;
-    }
-
-    // Minimum call frequency filter
-    // Requires metadata.callFrequency to be set by dependency graph
-    if (filters.minCallFrequency !== undefined) {
-      const callFreq = metadata.callFrequency || 0;
-      if (callFreq < filters.minCallFrequency) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  /**
-   * Extract HNW layer from file path
-   */
-  _extractLayer(filePath) {
-    if (filePath.includes('/controllers/')) return 'controllers';
-    if (filePath.includes('/services/')) return 'services';
-    if (filePath.includes('/providers/')) return 'providers';
-    if (filePath.includes('/utils/')) return 'utils';
-    if (filePath.includes('/storage/')) return 'storage';
-    return 'unknown';
   }
 
   /**

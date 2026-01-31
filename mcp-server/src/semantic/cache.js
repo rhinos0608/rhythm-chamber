@@ -135,6 +135,11 @@ export class EmbeddingCache {
 
       // Restore embeddings
       if (data.embeddings) {
+        let loadedCount = 0;
+        let corruptedCount = 0;
+        let recoveredCount = 0;
+        const totalCount = Object.keys(data.embeddings).length;
+
         for (const [chunkId, chunkData] of Object.entries(data.embeddings)) {
           // Validate and convert embedding to Float32Array
           if (chunkData.embedding) {
@@ -143,20 +148,50 @@ export class EmbeddingCache {
               chunkData.embedding = new Float32Array(chunkData.embedding);
             } else if (typeof chunkData.embedding === 'object' && !Array.isArray(chunkData.embedding)) {
               // Corrupted cache: object with numeric keys instead of array
-              console.error(`[Cache] Skipping corrupted embedding for ${chunkId}: has object with numeric keys`);
-              delete data.embeddings[chunkId];  // Remove corrupted entry
-              continue;  // Skip this chunk
+              // This happens when Float32Array was serialized without Array.from()
+              // RECOVERY: Convert object with numeric keys back to array
+              const keys = Object.keys(chunkData.embedding);
+              if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
+                // Valid numeric keys - recover the embedding
+                const maxIndex = Math.max(...keys.map(k => parseInt(k, 10)));
+                const recovered = new Float32Array(maxIndex + 1);
+                for (const [idx, val] of Object.entries(chunkData.embedding)) {
+                  recovered[parseInt(idx, 10)] = val;
+                }
+                chunkData.embedding = recovered;
+                recoveredCount++;
+              } else {
+                // Truly corrupted - cannot recover
+                corruptedCount++;
+                delete data.embeddings[chunkId];
+                continue;
+              }
             } else if (chunkData.embedding instanceof Float32Array) {
               // Already Float32Array (shouldn't happen from JSON but handle it)
               // Already in correct format, nothing to do
             } else {
               console.warn(`[Cache] Unexpected embedding type for ${chunkId}: ${typeof chunkData.embedding}`);
+              corruptedCount++;
               delete data.embeddings[chunkId];
               continue;
             }
           }
           this.embeddings.set(chunkId, chunkData);
+          loadedCount++;
         }
+
+        // Log recovery and corruption statistics for visibility
+        if (recoveredCount > 0) {
+          console.error(`[Cache] Recovered ${recoveredCount} embeddings from object format (Float32Array serialization bug)`);
+          this.dirty = true;  // Mark dirty to save repaired cache
+        }
+        if (corruptedCount > 0) {
+          const corruptionRate = ((corruptedCount / totalCount) * 100).toFixed(1);
+          console.error(`[Cache] WARNING: ${corruptedCount}/${totalCount} embeddings corrupted and discarded (${corruptionRate}%)`);
+          console.error(`[Cache] Corrupted embeddings will be regenerated on next indexing run`);
+          this.dirty = true;  // Mark dirty to save cleaned cache
+        }
+        console.error(`[Cache] Loaded ${loadedCount} embeddings from cache${recoveredCount > 0 ? ` (${recoveredCount} recovered)` : ''}`);
       }
 
       return true;
@@ -308,7 +343,14 @@ export class EmbeddingCache {
       }
 
       for (const [chunkId, embData] of embeddingsSnapshot.entries()) {
-        data.embeddings[chunkId] = embData;
+        // FIX: Convert Float32Array to Array for JSON serialization
+        // Float32Array serializes as {"0": val, "1": val, ...} instead of [val, val, ...]
+        // This caused progressive cache corruption after load() -> save() cycles
+        const serializable = { ...embData };
+        if (serializable.embedding instanceof Float32Array) {
+          serializable.embedding = Array.from(serializable.embedding);
+        }
+        data.embeddings[chunkId] = serializable;
       }
 
       // FIX #2: Retry logic with exponential backoff
@@ -508,13 +550,21 @@ export class EmbeddingCache {
       chunkIds.push(chunk.id);
 
       // Store chunk data WITH embedding
-      this.embeddings.set(chunk.id, {
+      // FIX: Don't store null embeddings - skip storing if embedding is missing/invalid
+      const embeddingData = {
         text: chunk.text,
         type: chunk.type,
         name: chunk.name,
-        metadata: chunk.metadata,
-        embedding: embeddings[i] ? Array.from(embeddings[i]) : null // Convert Float32Array to plain array for JSON serialization
-      });
+        metadata: chunk.metadata
+      };
+
+      // Only store embedding if it's valid (non-null and has elements)
+      if (embeddings[i] && embeddings[i].length > 0) {
+        embeddingData.embedding = Array.from(embeddings[i]); // Convert Float32Array to plain array for JSON serialization
+      }
+      // If embedding is missing/invalid, don't set the field - getChunkEmbedding will return null
+
+      this.embeddings.set(chunk.id, embeddingData);
     }
 
     // Store file info
@@ -594,10 +644,16 @@ export class EmbeddingCache {
    * Call this when the embedding model changes to invalidate existing cache
    */
   setModelVersion(modelVersion) {
-    if (this.modelVersion !== modelVersion) {
+    // FIX: Don't clear cache on initial set (when modelVersion is null/null/undefined)
+    // Only clear when changing from one non-null model version to another
+    // This prevents clearing the cache on first initialization
+    if (this.modelVersion !== null && this.modelVersion !== modelVersion) {
       console.error(`[Cache] Model version changing from "${this.modelVersion}" to "${modelVersion}", clearing cache`);
       this.modelVersion = modelVersion;
       this.clear();  // Clear cache to prevent mixing embeddings from different models
+    } else {
+      // First time setting the model version (or same version) - just set it without clearing
+      this.modelVersion = modelVersion;
     }
   }
 

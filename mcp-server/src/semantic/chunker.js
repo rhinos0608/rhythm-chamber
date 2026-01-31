@@ -435,11 +435,16 @@ export class CodeChunker {
 
     // For small functions, return single chunk as before
     if (funcLength <= PARENT_CHUNK_THRESHOLD) {
+      // CRITICAL FIX: Include overlap context in the text for embeddings
+      // The context provides boundary information that helps with semantic search
+      const contextBeforeText = context.before ? `// Context before:\n${context.before}\n` : '';
+      const contextAfterText = context.after ? `\n// Context after:\n${context.after}` : '';
+
       return [{
         id: this._generateChunkId('function', node.id?.name || 'anonymous', startLine),
         type: 'function',
         name: node.id?.name || 'anonymous',
-        text: (jsDoc ? jsDoc + '\n' : '') + funcText,
+        text: contextBeforeText + (jsDoc ? jsDoc + '\n' : '') + funcText + contextAfterText,
         context,
         metadata: baseMetadata
       }];
@@ -448,13 +453,18 @@ export class CodeChunker {
     // Large function: Create parent-child structure
     const chunks = [];
 
+    // CRITICAL FIX: Include overlap context in the text for embeddings
+    const contextBeforeText = context.before ? `// Context before:\n${context.before}\n` : '';
+    const contextAfterText = context.after ? `\n// Context after:\n${context.after}` : '';
+    const fullTextWithContext = contextBeforeText + (jsDoc ? jsDoc + '\n' : '') + funcText + contextAfterText;
+
     // 1. Create parent chunk with full function context
     const parentChunkId = this._generateChunkId('function', `${node.id?.name || 'anonymous'}_parent`, startLine);
     chunks.push({
       id: parentChunkId,
       type: 'parent',
       name: node.id?.name || 'anonymous',
-      text: (jsDoc ? jsDoc + '\n' : '') + funcText,
+      text: fullTextWithContext,  // Include overlap context in embeddings
       context,
       metadata: {
         ...baseMetadata,
@@ -465,7 +475,7 @@ export class CodeChunker {
     });
 
     // 2. Create child chunks for different sections of the function
-    // Split function into logical sections based on statements
+    // CRITICAL FIX: Include limited context in child chunks for embeddings
     const funcLines = funcText.split('\n');
     const childSize = Math.max(10, Math.floor(funcLength / 3)); // Target ~1/3 of function per child
     let childStart = 0;
@@ -480,11 +490,17 @@ export class CodeChunker {
       const childOverlap = Math.max(1, Math.ceil((childEndLine - childStartLine + 1) * 0.1));
       const childContext = this._extractContextWithOverlap(lines, childStartLine, childEndLine, childOverlap);
 
+      // CRITICAL FIX: Include child context in the text for embeddings
+      // Use smaller context for children to avoid excessive duplication
+      const childContextBeforeText = childContext.before ? `// Context before:\n${childContext.before}\n` : '';
+      const childContextAfterText = childContext.after ? `\n// Context after:\n${childContext.after}` : '';
+      const childTextWithContext = childContextBeforeText + childText + childContextAfterText;
+
       chunks.push({
         id: this._generateChunkId('function', `${node.id?.name || 'anonymous'}_child${Math.floor(childStart / childSize)}`, childStartLine),
         type: 'child',
         name: `${node.id?.name || 'anonymous'} [${childStart + 1}-${childEnd}]`,
-        text: childText,
+        text: childTextWithContext,  // Include overlap context in embeddings
         context: childContext,
         metadata: {
           ...baseMetadata,
@@ -539,6 +555,9 @@ export class CodeChunker {
     const chunks = [];
     const methods = [];
 
+    // FIX: Preserve class context for walker callbacks
+    const self = this;
+
     walk(ast, {
       // Look for object expressions that might contain methods
       ObjectExpression(node) {
@@ -551,7 +570,7 @@ export class CodeChunker {
 
         if (methodProperties.length > 0) {
           // Try to get a name for this object from its parent context
-          const objName = this._getObjectName(node, sourceCode);
+          const objName = self._getObjectName(node, sourceCode);
 
           for (const prop of methodProperties) {
             if (prop.key && (prop.key.type === 'Identifier' || prop.key.type === 'Literal')) {
@@ -691,6 +710,9 @@ export class CodeChunker {
       // Context includes overlap for continuity
       const context = this._extractContextWithOverlap(lines, methodStart, methodEnd, overlapLines);
 
+      // FIX: Extract calls with class context for qualified names
+      const calls = this._extractCalls(method.value, node.id.name);
+
       chunks.push({
         id: this._generateChunkId('method', `${node.id.name}.${method.key?.name || 'anonymous'}`, methodStart),
         type: 'method',
@@ -707,6 +729,7 @@ export class CodeChunker {
           async: method.async || false,
           static: method.static || false,
           params: this._extractParams(method.value),
+          calls,
           hasOverlap: overlapLines > 0,
           overlapLines
         }
@@ -853,23 +876,55 @@ export class CodeChunker {
 
   /**
    * Extract function calls within a node
+   *
+   * FIX: Preserves qualified names for MemberExpressions to disambiguate
+   * overloaded methods (e.g., "UserService.getUser" vs "APIProvider.getUser")
    */
-  _extractCalls(node) {
+  _extractCalls(node, enclosingClassName = null) {
     const calls = new Set();
 
     walk(node, {
       CallExpression(callNode) {
         if (callNode.callee.type === 'Identifier') {
+          // Simple function call: foo()
           calls.add(callNode.callee.name);
         } else if (callNode.callee.type === 'MemberExpression') {
+          // Method call: obj.method() or this.method()
           if (callNode.callee.property.type === 'Identifier') {
-            calls.add(callNode.callee.property.name);
+            const methodName = callNode.callee.property.name;
+
+            // Try to extract object context for qualified name
+            let qualifiedName = null;
+            const object = callNode.callee.object;
+
+            if (object.type === 'Identifier') {
+              // obj.method() -> try to qualify as obj.method
+              qualifiedName = `${object.name}.${methodName}`;
+            } else if (object.type === 'MemberExpression' && object.property.type === 'Identifier') {
+              // obj.foo.method() -> try to qualify as obj.foo.method
+              qualifiedName = `${object.property.name}.${methodName}`;
+            } else if (object.type === 'ThisExpression' && enclosingClassName) {
+              // this.method() inside a class -> qualify as ClassName.method
+              qualifiedName = `${enclosingClassName}.${methodName}`;
+            } else if (object.type === 'MemberExpression' &&
+                       object.object.type === 'ThisExpression' &&
+                       object.property.type === 'Identifier' &&
+                       enclosingClassName) {
+              // this.prop.method() -> ClassName.prop.method
+              qualifiedName = `${enclosingClassName}.${object.property.name}.${methodName}`;
+            }
+
+            // Add both qualified and short name for maximum recall
+            if (qualifiedName) {
+              calls.add(qualifiedName);
+            }
+            calls.add(methodName);
           }
         }
       }
     });
 
-    return Array.from(calls).slice(0, 10); // Limit to 10
+    return Array.from(calls).slice(0, 15); // Increased limit for qualified names
   }
 
   /**

@@ -23,23 +23,16 @@ import { DependencyGraph } from './dependency-graph.js';
 import { EmbeddingCache } from './cache.js';
 import { LexicalIndex } from './lexical-index.js';
 import { QueryExpander } from './query-expander.js';
-
-/**
- * Per-chunk-type thresholds for semantic search
- * Different chunk types have different optimal similarity thresholds
- * based on their semantic density and specificity
- */
-const TYPE_THRESHOLDS = {
-  'function': 0.25,      // Functions have dense semantics, lower threshold OK
-  'method': 0.25,        // Methods similar to functions
-  'class': 0.30,         // Class definitions are more specific
-  'class-declaration': 0.30,
-  'variable': 0.35,      // Variables are less semantically dense
-  'export': 0.40,        // Export statements need higher similarity
-  'imports': 0.40,       // Import statements are very specific
-  'code': 0.20,          // Generic code chunks, more permissive
-  'fallback': 0.15       // Fallback chunks, most permissive
-};
+import { SemanticQueryCache } from './query-cache.js';
+// FIX #13: Import centralized configuration for all magic numbers
+import {
+  TYPE_PRIORITY,
+  TYPE_THRESHOLDS,
+  ADAPTIVE_THRESHOLD,
+  CALL_FREQUENCY,
+  QUERY_EXPANSION,
+  RRF_CONFIG
+} from './config.js';
 
 /**
  * Default patterns for files to index
@@ -60,7 +53,10 @@ const DEFAULT_IGNORE = [
   '**/.mcp-cache/**',
   '**/*.test.js',
   '**/*.spec.js',
-  '**/coverage/**'
+  '**/coverage/**',
+  '**/vendor/**',
+  '**/vendor/**/*.js',  // Skip large minified vendor files that cause chunker to hang
+  'js/vendor/**'  // More specific pattern for js/vendor directory
 ];
 
 /**
@@ -83,6 +79,8 @@ export class CodeIndexer {
     this.cache = new EmbeddingCache(this.cacheDir, { enabled: options.cache !== false });
     this.lexicalIndex = new LexicalIndex(options.lexical);
     this.queryExpander = new QueryExpander(this.dependencyGraph);
+    // FIX: Query cache to reduce redundant embedding API calls
+    this.queryCache = new SemanticQueryCache(options.queryCache);
 
     // Patterns
     this.patterns = options.patterns || DEFAULT_PATTERNS;
@@ -133,7 +131,15 @@ export class CodeIndexer {
 
     // Sync dimension to vector store (important for Transformers.js fallback)
     const actualDim = this.embeddings.getDimension();
-    this.vectorStore.setDimension(actualDim);
+    const wasCleared = this.vectorStore.setDimension(actualDim);
+
+    // FIX: If vector store was cleared due to dimension mismatch, reset stats
+    if (wasCleared) {
+      console.error('[Indexer] Dimension mismatch caused vector store clear - resetting stats');
+      this.stats.chunksIndexed = 0;
+      this.stats.filesIndexed = 0;
+      this.stats.filesFromCache = 0;
+    }
 
     return true;
   }
@@ -156,7 +162,9 @@ export class CodeIndexer {
     await this._loadCachedChunks(cachedFiles);
 
     // Mark as indexed since we've loaded cached data
+    // FIX: Set indexed flag when we have loaded data, even if full index wasn't run
     this.indexed = true;
+    // NOTE: filesFromCache and chunksIndexed are already incremented in _loadCachedChunks()
 
     const elapsed = Date.now() - startTime;
     console.error(`[Indexer] Loaded ${this.stats.chunksIndexed} chunks from cache in ${elapsed}ms`);
@@ -183,7 +191,15 @@ export class CodeIndexer {
       }
     }
 
-    const discovered = Array.from(allFiles);
+    // Explicit filter: skip vendor files (fix for glob ignore not working consistently)
+    const discovered = Array.from(allFiles).filter(file => {
+      const shouldSkip = file.includes('/vendor/') || file.includes('\\vendor\\');
+      if (shouldSkip) {
+        console.error(`[Indexer] Skipping vendor file: ${file}`);
+      }
+      return !shouldSkip;
+    });
+
     console.error(`[Indexer] Discovered ${discovered.length} files`);
 
     return discovered;
@@ -211,6 +227,32 @@ export class CodeIndexer {
     // Set indexing flags
     this._indexingInProgress = true;
     this._indexingError = null;
+
+    // FIX: Reset stats at start of indexAll to prevent accumulation across runs
+    // This ensures stats accurately reflect THIS indexing run, not cumulative totals
+    this.stats = {
+      filesDiscovered: 0,
+      filesIndexed: 0,
+      filesSkipped: 0,
+      filesFromCache: 0,
+      chunksIndexed: 0,
+      cacheFailures: 0,
+      lastCacheFailureTime: null,
+      embeddingSource: this.embeddings.getModelInfo().source || 'unknown',
+      indexTime: 0,
+      lastIndexed: null
+    };
+
+    // FIX: When force=true, clear vector store and dependency graph to prevent mismatch
+    // Without this, old vectors remain while stats reset, causing count discrepancies
+    if (force) {
+      console.error('[Indexer] Force mode: clearing vector store and dependency graph...');
+      this.vectorStore.clear();
+      this.dependencyGraph.clear();
+      this.lexicalIndex.clear();
+      // Note: cache.clear() is NOT called - we just bypass it for validity checks
+      // This allows cache to be rebuilt as files are re-indexed
+    }
 
     // Create indexing promise
     const indexPromise = (async () => {
@@ -271,6 +313,17 @@ export class CodeIndexer {
               const progress = ((indexedCount / totalToIndex) * 100).toFixed(1);
               console.error(`[Indexer] Progress: ${indexedCount}/${totalToIndex} files (${progress}%)`);
               lastProgressLog = indexedCount;
+
+              // FIX: Periodic cache save every 10 files to prevent data loss on interruption
+              if (indexedCount % 10 === 0) {
+                try {
+                  await this._saveCache();
+                  console.error(`[Indexer] Checkpoint: Saved cache at ${indexedCount} files`);
+                } catch (cacheError) {
+                  console.error(`[Indexer] Checkpoint save failed:`, cacheError.message);
+                  // Non-critical - continue indexing
+                }
+              }
             }
           }
         }
@@ -278,8 +331,10 @@ export class CodeIndexer {
         // Finalize
         this.stats.indexTime = Date.now() - startTime;
         this.stats.lastIndexed = new Date().toISOString();
-        this.stats.filesIndexed = indexedCount;
-        this.stats.filesFromCache = fromCache.length;
+        // FIX: Don't overwrite filesIndexed - it's now tracked incrementally in _indexFile()
+        // this.stats.filesIndexed = indexedCount;  // REMOVED
+        // FIX: filesFromCache is already set in loadCachedChunks(), don't overwrite
+        // this.stats.filesFromCache = fromCache.length;  // REMOVED
         this.indexed = true;
 
         // Save cache
@@ -496,7 +551,14 @@ export class CodeIndexer {
         // Non-critical for indexing, but expensive on restart
       }
 
-      this.stats.chunksIndexed += validCount; // Track valid chunks, not total
+      // FIX: Track successfully stored vectors, not just valid chunks
+      // This ensures chunksIndexed matches actual vectors in the store
+      this.stats.chunksIndexed += vectorsStored;
+
+      // FIX: Increment filesIndexed for each successfully processed file
+      // This counter was previously only updated at the end of indexAll()
+      this.stats.filesIndexed++;
+
       console.error(`[Indexer] Indexed ${relPath} (${validCount} valid chunks, ${vectorsStored} vectors, ${symbolsAdded} symbols${!cacheSuccess ? ', CACHE FAILED' : ''})`);
 
     } catch (error) {
@@ -535,10 +597,24 @@ export class CodeIndexer {
       try {
         const chunkIds = this.cache.getFileChunks(relPath);
 
+        // FIX: Skip files that are already loaded (prevent double-counting)
+        // This happens when loadCachedChunks() is called at startup,
+        // then indexAll() calls _loadCachedChunks() again for the same files
+        const alreadyLoaded = chunkIds.every(id => this.vectorStore.has(id));
+        if (alreadyLoaded && chunkIds.length > 0) {
+          console.error(`[Indexer] Skipping already loaded file: ${relPath}`);
+          continue;
+        }
+
         for (const chunkId of chunkIds) {
           const chunkData = this.cache.getChunk(chunkId);
 
           if (chunkData) {
+            // FIX: Skip chunks already in vector store (prevent double-counting)
+            if (this.vectorStore.has(chunkId)) {
+              continue;
+            }
+
             // Use cached embedding if available
             let embedding = this.cache.getChunkEmbedding(chunkId);
 
@@ -557,8 +633,15 @@ export class CodeIndexer {
               type: chunkData.type
             };
 
-            // Store in vector store
-            this.vectorStore.upsert(chunkId, embedding, metadataWithText);
+            // FIX: Wrap upsert in try/catch to handle storage failures gracefully
+            try {
+              // Store in vector store
+              this.vectorStore.upsert(chunkId, embedding, metadataWithText);
+            } catch (upsertError) {
+              console.error(`[Indexer] Failed to store chunk ${chunkId} in vector store:`, upsertError.message);
+              // Skip this chunk - don't add to dependency graph or lexical index
+              continue;
+            }
 
             // Add to dependency graph
             this.dependencyGraph.addChunk({
@@ -577,7 +660,11 @@ export class CodeIndexer {
           }
         }
 
-        this.stats.filesFromCache++;
+        // FIX: Only count file if we actually loaded any chunks from it
+        const wasAlreadyLoaded = this.vectorStore.getByFile(relPath).length > 0;
+        if (!wasAlreadyLoaded || chunkIds.some(id => !this.vectorStore.has(id))) {
+          this.stats.filesFromCache++;
+        }
       } catch (error) {
         console.error(`[Indexer] Failed to load cache for ${relPath}:`, error.message);
         // Invalidate and re-index on next run
@@ -638,25 +725,30 @@ export class CodeIndexer {
    *
    * @param {Array} vectorResults - Vector search results with chunkId
    * @param {Array} lexicalResults - Lexical search results with chunkId and score
-   * @param {number} k - RRF constant (default 60)
+   * @param {number} k - RRF constant (uses RRF_CONFIG.k if not provided)
    * @returns {Array} Combined results sorted by RRF score
    */
-  reciprocalRankFusion(vectorResults, lexicalResults, k = 60) {
+  reciprocalRankFusion(vectorResults, lexicalResults, k = undefined) {
     const scores = new Map();
+    // FIX #13: Use configured k value if not provided
+    const rrfK = k ?? RRF_CONFIG.k;
+
+    // FIX #3: Both loops must accumulate scores consistently
+    // Previously vector loop overwrote, lexical loop accumulated - fixed below
 
     // Add vector search scores (1-indexed rank)
     for (let i = 0; i < vectorResults.length; i++) {
       const rank = i + 1;
       const chunkId = vectorResults[i].chunkId;
-      const rrfScore = 1 / (k + rank);
-      scores.set(chunkId, rrfScore);
+      const rrfScore = 1 / (rrfK + rank);
+      scores.set(chunkId, (scores.get(chunkId) || 0) + rrfScore);
     }
 
     // Add lexical search scores (1-indexed rank)
     for (let i = 0; i < lexicalResults.length; i++) {
       const rank = i + 1;
       const chunkId = lexicalResults[i].chunkId;
-      const rrfScore = 1 / (k + rank);
+      const rrfScore = 1 / (rrfK + rank);
       scores.set(chunkId, (scores.get(chunkId) || 0) + rrfScore);
     }
 
@@ -685,6 +777,19 @@ export class CodeIndexer {
   async search(query, options = {}) {
     if (!this.indexed) {
       throw new Error('Indexer not initialized. Call indexAll() first.');
+    }
+
+    // CRITICAL FIX: Validate query parameter
+    if (!query || typeof query !== 'string') {
+      throw new TypeError('Query must be a non-empty string');
+    }
+
+    if (query.trim().length === 0) {
+      throw new TypeError('Query cannot be empty or whitespace only');
+    }
+
+    if (query.length > 10000) {
+      throw new RangeError('Query too long (max 10000 characters)');
     }
 
     const {
@@ -717,17 +822,11 @@ export class CodeIndexer {
       console.error(`[Indexer] Using type-specific threshold for ${filters.chunkType}: ${effectiveThreshold.toFixed(3)}`);
     }
 
-    // Minimum threshold to prevent runaway queries
-    const MIN_THRESHOLD = 0.1;
+    // FIX #13: Use centralized configuration
+    const MIN_THRESHOLD = ADAPTIVE_THRESHOLD.MIN_THRESHOLD;
 
     // Fetch more results to allow re-ranking by type
     const fetchLimit = limit * 3;
-
-    // FIX #5: Generate embedding once and reuse for adaptive threshold retries
-    // This prevents duplicate API calls when retrying with lower threshold
-    const embeddingStart = Date.now();
-    const queryEmbedding = await this.embeddings.getEmbedding(query);
-    perf.embeddingTime = Date.now() - embeddingStart;
 
     // Query expansion: Generate alternative query formulations
     const expansionStart = Date.now();
@@ -742,21 +841,47 @@ export class CodeIndexer {
     const vectorSearchStart = Date.now();
     let vectorResults = [];
     const seenChunkIds = new Set();
+    const bestSimilarities = new Map(); // Track highest similarity per chunk
 
+    // FIX: Use query cache to reduce redundant embedding API calls
+    // Generate embeddings with caching and semantic similarity deduplication
+    const queryEmbeddings = new Map();
     for (const expandedQuery of queriesToSearch) {
+      const embedding = await this.queryCache.get(
+        expandedQuery,
+        // Compute function: generate embedding if not cached
+        async () => await this.embeddings.getEmbedding(expandedQuery),
+        // Optional: existing embedding for semantic similarity check
+        queryEmbeddings.size > 0 ? Array.from(queryEmbeddings.values())[0] : null
+      );
+      queryEmbeddings.set(expandedQuery, embedding);
+    }
+
+    for (const [expandedQuery, queryEmbedding] of queryEmbeddings.entries()) {
+      // Use cached embedding to avoid redundant API calls
       const results = await this.vectorStore.searchByText(expandedQuery, this.embeddings, {
         limit: fetchLimit,
         threshold: effectiveThreshold,
         filters,
         queryText: expandedQuery,
-        queryEmbedding // Pass pre-generated embedding
+        queryEmbedding  // Pass cached embedding
       });
 
-      // Merge results, avoiding duplicates by chunkId
+      // Merge results, keeping HIGHEST similarity per chunkId (FIX #4)
       for (const result of results) {
-        if (!seenChunkIds.has(result.chunkId)) {
-          vectorResults.push(result);
-          seenChunkIds.add(result.chunkId);
+        const existingSimilarity = bestSimilarities.get(result.chunkId) ?? -1;
+        if (result.similarity > existingSimilarity) {
+          // Remove old entry if exists, add new one
+          if (existingSimilarity >= 0) {
+            const oldIndex = vectorResults.findIndex(r => r.chunkId === result.chunkId);
+            if (oldIndex !== -1) {
+              vectorResults[oldIndex] = result;
+            }
+          } else {
+            vectorResults.push(result);
+            seenChunkIds.add(result.chunkId);
+          }
+          bestSimilarities.set(result.chunkId, result.similarity);
         }
       }
 
@@ -766,26 +891,62 @@ export class CodeIndexer {
       }
     }
 
-    // Adaptive threshold: If too few results, retry with lower threshold
+    // Adaptive threshold: If too few results, retry with lower threshold and expanded queries
     if (vectorResults.length < limit && effectiveThreshold > MIN_THRESHOLD) {
-      const adjustedThreshold = Math.max(MIN_THRESHOLD, effectiveThreshold * 0.7);
+      const adjustedThreshold = Math.max(MIN_THRESHOLD, effectiveThreshold * ADAPTIVE_THRESHOLD.REDUCTION_MULTIPLIER);
       console.error(`[Indexer] Too few results (${vectorResults.length} < ${limit}), retrying with threshold ${adjustedThreshold.toFixed(3)}`);
 
-      for (const expandedQuery of queriesToSearch.slice(0, 3)) { // Limit expanded queries on retry
-        const additionalResults = await this.vectorStore.searchByText(expandedQuery, this.embeddings, {
+      // FIX: Use expanded queries for retry (original + RETRY_QUERY_COUNT-1 expanded)
+      // This improves recall by trying alternative query formulations
+      const retryQueries = useQueryExpansion && queriesToSearch.length > 1
+        ? queriesToSearch.slice(0, QUERY_EXPANSION.RETRY_QUERY_COUNT + 1)
+        : [queryText || query];
+
+      console.error(`[Indexer] Retrying with ${retryQueries.length} expanded queries: ${retryQueries.map(q => `"${q}"`).join(', ')}`);
+
+      for (const retryQuery of retryQueries) {
+        // Use cached embedding if available, otherwise compute new one
+        const retryEmbedding = queryEmbeddings.has(retryQuery)
+          ? queryEmbeddings.get(retryQuery)
+          : await this.queryCache.get(
+              retryQuery,
+              async () => await this.embeddings.getEmbedding(retryQuery)
+            );
+
+        // Store in map for potential reuse
+        if (!queryEmbeddings.has(retryQuery)) {
+          queryEmbeddings.set(retryQuery, retryEmbedding);
+        }
+
+        const additionalResults = await this.vectorStore.searchByText(retryQuery, this.embeddings, {
           limit: fetchLimit,
           threshold: adjustedThreshold,
           filters,
-          queryText: expandedQuery,
-          queryEmbedding // Reuse the same embedding (no duplicate API call)
+          queryText: retryQuery,
+          queryEmbedding: retryEmbedding  // Use cached embedding
         });
 
-        // Merge results, avoiding duplicates by chunkId
+        // Merge results, keeping HIGHEST similarity per chunkId
         for (const result of additionalResults) {
-          if (!seenChunkIds.has(result.chunkId)) {
-            vectorResults.push(result);
-            seenChunkIds.add(result.chunkId);
+          const existingSimilarity = bestSimilarities.get(result.chunkId) ?? -1;
+          if (result.similarity > existingSimilarity) {
+            if (existingSimilarity >= 0) {
+              const oldIndex = vectorResults.findIndex(r => r.chunkId === result.chunkId);
+              if (oldIndex !== -1) {
+                vectorResults[oldIndex] = result;
+              }
+            } else {
+              vectorResults.push(result);
+              seenChunkIds.add(result.chunkId);
+            }
+            bestSimilarities.set(result.chunkId, result.similarity);
           }
+        }
+
+        // Early termination if we have enough results
+        if (vectorResults.length >= limit) {
+          console.error(`[Indexer] Retry found sufficient results (${vectorResults.length}), stopping early`);
+          break;
         }
       }
     }
@@ -798,8 +959,30 @@ export class CodeIndexer {
     if (useHybrid) {
       try {
         const lexicalStart = Date.now();
-        // Perform lexical search using BM25
-        const lexicalResults = this.lexicalIndex.search(queryText || query, fetchLimit);
+
+        // FIX #7: Apply query expansion to lexical search too
+        // Use the same expanded queries for BM25 to maintain consistency
+        // FIX #10: Pass filters to lexical search for consistency
+        const lexicalQueries = useQueryExpansion ? queriesToSearch : [queryText || query];
+        const lexicalResultsMap = new Map(); // chunkId -> best BM25 score
+
+        for (const lexQuery of lexicalQueries) {
+          const lexResults = this.lexicalIndex.search(lexQuery, fetchLimit, filters);
+          // Keep highest BM25 score per chunk
+          for (const lr of lexResults) {
+            const existing = lexicalResultsMap.get(lr.chunkId);
+            if (!existing || lr.score > existing) {
+              lexicalResultsMap.set(lr.chunkId, lr.score);
+            }
+          }
+        }
+
+        // Convert Map to array format
+        const lexicalResults = Array.from(lexicalResultsMap.entries()).map(([chunkId, score]) => ({
+          chunkId,
+          score
+        }));
+
         perf.lexicalSearchTime = Date.now() - lexicalStart;
 
         // Combine results using Reciprocal Rank Fusion
@@ -834,25 +1017,20 @@ export class CodeIndexer {
       finalResults = vectorResults;
     }
 
-    // Enhanced type-based reranking with additional boost factors
-    const typePriority = {
-      'function': 100,
-      'method': 95,
-      'class': 90,
-      'class-declaration': 85,
-      'variable': 60,
-      'export': 50,
-      'imports': 40,
-      'code': 10,
-      'fallback': 5
-    };
+    // FIX #13: Use centralized type priority configuration
+    const typePriority = TYPE_PRIORITY;
 
     const queryLower = (queryText || query).toLowerCase();
 
     const rankingStart = Date.now();
     const ranked = finalResults.map(r => {
-      // Use RRF score if available, otherwise fall back to similarity
-      const baseScore = r.rrfScore !== undefined ? r.rrfScore * 1000 : (r.similarity * 100);
+      // FIX #1: Use consistent scaling for RRF and similarity
+      // RRF scores range ~0-0.02, similarity ranges 0-1
+      // Scale both to similar range (0-100) for fair comparison
+      const baseScore = r.rrfScore !== undefined
+        ? r.rrfScore * RRF_CONFIG.SCALING  // RRF: max ~0.02 * 5000 = 100
+        : r.similarity * 100;  // Similarity: max 1.0 * 100 = 100
+
       let rankScore = baseScore + (typePriority[r.metadata?.type] || 0);
 
       // Exact symbol name match bonus: +50
@@ -865,17 +1043,34 @@ export class CodeIndexer {
         rankScore += 20;
       }
 
-      // Call frequency bonus: +1 per 10 calls (from dependency graph)
-      // FIX #4: For methods (name like "MyClass.methodName"), extract just the method name
-      // before looking up usages, since calls are stored as just "methodName" not "MyClass.methodName"
+      // FIX #11: Call frequency bonus using sqrt scaling to prevent domination
+      // Old: Math.floor(usages/10) could give +100, overwhelming semantic relevance
+      // New: Sqrt scaling provides meaningful bonus progression: 1-9 calls=0, 10-99 calls=1-3, 100-999 calls=3-9, 1000+=10-20 (capped)
       if (r.metadata?.name) {
         let symbolName = r.metadata.name;
+        let usages = [];
+
+        // FIX: Try fully-qualified name first for overloaded method disambiguation
+        // For methods like "UserService.getUser", try the full name first
         if (r.metadata?.type === 'method' && symbolName.includes('.')) {
-          symbolName = symbolName.split('.').pop();
+          // Try qualified name first (e.g., "UserService.getUser")
+          usages = this.dependencyGraph.findUsages(symbolName);
+
+          // If no results with qualified name, try short name (e.g., "getUser")
+          if (usages.length === 0) {
+            const shortName = symbolName.split('.').pop();
+            usages = this.dependencyGraph.findUsages(shortName);
+          }
+        } else {
+          // For non-methods, use the symbol name directly
+          usages = this.dependencyGraph.findUsages(symbolName);
         }
-        const usages = this.dependencyGraph.findUsages(symbolName);
+
         if (usages.length > 0) {
-          const callBonus = Math.floor(usages.length / 10);
+          // FIX #13: Use centralized call frequency config
+          const callBonus = CALL_FREQUENCY.USE_SQRT_SCALING
+            ? Math.min(CALL_FREQUENCY.MAX_BONUS, Math.floor(Math.sqrt(Math.max(0, usages.length / 10))))
+            : Math.floor(usages.length / 10);
           rankScore += callBonus;
         }
       }
@@ -887,9 +1082,30 @@ export class CodeIndexer {
     }).sort((a, b) => b.rankScore - a.rankScore);
     perf.rankingTime = Date.now() - rankingStart;
 
+    // FIX #14: Parent-child deduplication - filter out children when parent also in results
+    // If both parent and child chunks match, prefer parent (more context)
+    // But keep children if parent is below threshold
+    const seenParentIds = new Set();
+    const allChunkIds = new Set(ranked.map(r => r.chunkId));
+
+    const deduplicated = ranked.filter(r => {
+      const parentChunkId = r.metadata?.parentChunkId;
+      if (!parentChunkId) {
+        // Not a child chunk
+        // Mark this as a parent if it has children (for filtering children later)
+        if (r.metadata?.childCount && r.metadata.childCount > 0) {
+          seenParentIds.add(r.chunkId);
+        }
+        return true;  // Always keep non-child chunks
+      }
+      // This is a child chunk - only keep if parent is NOT also in results
+      // If parent chunk exists in results, prefer it (has more context)
+      return !allChunkIds.has(parentChunkId);
+    });
+
     perf.totalTime = Date.now() - searchStart;
 
-    const results = ranked.slice(0, limit);
+    const results = deduplicated.slice(0, limit);
 
     // Attach performance metadata to results
     results.performance = perf;
@@ -1018,14 +1234,13 @@ export class CodeIndexer {
    * Reindex specific files
    */
   async reindexFiles(filePaths) {
-    // Wait for existing reindex to complete (concurrency control)
-    while (this._reindexLock) {
-      await this._reindexLock;
+    // CRITICAL FIX: Use proper mutex flag instead of promise-based locking
+    // Prevents race condition where multiple concurrent calls all pass the check
+    while (this._reindexInProgress) {
+      await this._reindexPromise;
     }
 
-    // Acquire lock
-    let resolveLock;
-    this._reindexLock = new Promise(resolve => { resolveLock = resolve; });
+    this._reindexInProgress = true;
 
     try {
       console.error(`[Indexer] Reindexing ${filePaths.length} files...`);
@@ -1046,8 +1261,9 @@ export class CodeIndexer {
         reindexed: filePaths.length
       };
     } finally {
-      this._reindexLock = null;
-      resolveLock();
+      // CRITICAL: Clear flag BEFORE clearing promise to prevent race condition
+      this._reindexInProgress = false;
+      this._reindexPromise = null;
     }
   }
 
@@ -1089,7 +1305,12 @@ export class CodeIndexer {
   }
 
   /**
-   * Start the file watcher daemon
+   * Start the file watcher daemon with health monitoring
+   *
+   * ENHANCEMENT: Auto-starts health monitor to detect and auto-recover from:
+   * - Vector store mismatches (chunks indexed but not stored)
+   * - Cache degradation (high failure rates)
+   * - Orphaned dependency graph entries
    */
   async startWatcher(options = {}) {
     if (this.watcher && this.watcher.isRunning()) {
@@ -1097,13 +1318,25 @@ export class CodeIndexer {
       return;
     }
 
-    console.error('[Indexer] Starting file watcher...');
+    console.error('[Indexer] Starting file watcher with health monitoring...');
 
     const { FileWatcher } = await import('./file-watcher.js');
     this.watcher = new FileWatcher(this.projectRoot, this, options);
     await this.watcher.start();
 
-    console.error('[Indexer] File watcher started');
+    // ENHANCEMENT: Auto-start health monitor for corruption detection
+    // This automatically detects and fixes corrupted index data
+    try {
+      const { HealthMonitor } = await import('./health-monitor.js');
+      this.healthMonitor = new HealthMonitor(this, this.watcher, options);
+      this.healthMonitor.start();
+      console.error('[Indexer] Health monitor started - will auto-detect corruption');
+    } catch (error) {
+      // Health monitor is optional - continue without it
+      console.warn('[Indexer] Health monitor not available:', error.message);
+    }
+
+    console.error('[Indexer] File watcher and health monitor started');
   }
 
   /**

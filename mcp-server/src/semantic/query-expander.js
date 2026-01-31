@@ -195,10 +195,15 @@ export class QueryExpander {
     const identifiers = query.match(identifierRegex) || [];
 
     for (const id of identifiers) {
-      // Split camelCase and snake_case
+      // FIX #14: Improved camelCase/PascalCase splitting with number handling
+      // Handles edge cases like: OAuth2Token, XML2JSON, Base64Encoder
       const words = id
-        .replace(/([a-z])([A-Z])/g, '$1 $2')  // camelCase -> camel Case
-        .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')  // PascalCase -> Pascal Case
+        // Insert space before capital letters (including consecutive caps)
+        .replace(/([a-z])([A-Z])/g, '$1 $2')  // camelCase: camelCase -> camel Case
+        .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')  // PascalCase: HTTPRequest -> HTTP Request
+        // Insert space between letters and numbers
+        .replace(/([a-zA-Z])(\d)/g, '$1 $2')  // get2 -> get 2
+        .replace(/(\d)([a-zA-Z])/g, '$1 $2')  // 2get -> 2 get
         .replace(/[_-]+/g, ' ')  // snake_case or kebab-case
         .toLowerCase()
         .split(/\s+/);
@@ -276,13 +281,21 @@ export class QueryExpander {
    * @returns {string} Modified query
    */
   _replaceTermInQuery(query, term, synonym) {
+    // FIX #9: Sanitize term to prevent regex injection
+    // Escape special regex characters to prevent ReDoS attacks
+    const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     // Case-insensitive replacement preserving word boundaries
-    const regex = new RegExp(`\\b${term}\\b`, 'gi');
-    return query.replace(regex, synonym);
+    const regex = new RegExp(`\\b${escapedTerm}\\b`, 'gi');
+
+    // FIX #8: Use function replacement to avoid $backreference injection in synonym
+    // If synonym contains $&, $1, $`, etc., they would be interpreted as regex replacements
+    return query.replace(regex, () => synonym);
   }
 
   /**
    * Find related symbols from the dependency graph
+   *
+   * FIX #4: Added depth/cost limits to prevent O(n³) performance issues
    *
    * @param {string[]} terms - Extracted query terms
    * @returns {string[]} Array of related symbol names
@@ -293,19 +306,28 @@ export class QueryExpander {
     }
 
     const related = new Set();
+    // Performance limits to prevent O(n³) traversal
+    const MAX_SYMBOLS_TO_SCAN = 500;  // Limit symbols scanned per term
+    const MAX_USAGES_PER_SYMBOL = 10;   // Limit usage lookups
+    const MAX_RELATED_RESULTS = 50;     // Limit total results
 
     for (const term of terms) {
+      let symbolsScanned = 0;
+
       // Find symbols that match or contain the term
       for (const [symbol, definitions] of this.dependencyGraph.definitions.entries()) {
+        if (symbolsScanned++ >= MAX_SYMBOLS_TO_SCAN) break;
+
         const symbolLower = symbol.toLowerCase();
 
         // Exact match or symbol contains term
         if (symbolLower === term || symbolLower.includes(term)) {
+          if (related.size >= MAX_RELATED_RESULTS) break;
           related.add(symbol);
 
-          // Add symbols that use this symbol
+          // Add symbols that use this symbol (with limit)
           const usages = this.dependencyGraph.findUsages(symbol);
-          for (const usage of usages.slice(0, 10)) {
+          for (const usage of usages.slice(0, MAX_USAGES_PER_SYMBOL)) {
             const chunkSyms = this.dependencyGraph.getSymbolsForChunk(usage.chunkId);
             for (const definedSymbol of chunkSyms.defines) {
               if (definedSymbol.toLowerCase() !== term) {
@@ -316,8 +338,15 @@ export class QueryExpander {
         }
       }
 
-      // Find symbols where term is a substring
+      // Early exit if we've hit the limit
+      if (related.size >= MAX_RELATED_RESULTS) break;
+
+      // Find symbols where term is a substring (with limit)
+      let substringScanned = 0;
       for (const symbol of this.dependencyGraph.definitions.keys()) {
+        if (substringScanned++ >= MAX_SYMBOLS_TO_SCAN) break;
+        if (related.size >= MAX_RELATED_RESULTS) break;
+
         if (term.includes(symbol.toLowerCase()) && symbol.length >= 3) {
           related.add(symbol);
         }
