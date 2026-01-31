@@ -179,19 +179,40 @@ export class SemanticQueryCache {
   async get(query, computeFn, existingEmbedding = null, modelName = null) {
     this.stats.totalQueries++;
 
+    // Evict expired entries opportunistically so TTL actually bounds memory.
+    // This is intentionally lightweight (linear in cache size) and keeps
+    // semantics simple/correct.
+    this._evictExpired();
+
     const normalized = this._normalizeQuery(query);
+
+    // CRITICAL FIX: Deduplicate concurrent requests using normalized key
+    // so case/whitespace variants don't trigger redundant embedding work.
+    if (this.pendingComputes.has(normalized)) {
+      this.stats.deduplicatedHits++;
+      console.error(`[QueryCache] Deduplicated concurrent request for: "${query}"`);
+      return await this.pendingComputes.get(normalized);
+    }
 
     // Check exact match first (fastest path)
     if (this.normalizedCache.has(normalized)) {
-      const entry = this.cache.get(this.normalizedCache.get(normalized));
+      const cacheKey = this.normalizedCache.get(normalized);
+      const entry = this.cache.get(cacheKey);
 
-      // Validate model match if modelName is provided
-      if (modelName && entry.modelName && entry.modelName !== modelName) {
+      // Entry may have been evicted by _evictExpired() or otherwise removed.
+      if (!entry) {
+        this.normalizedCache.delete(normalized);
+      } else if (this._isExpired(entry)) {
+        // TTL enforcement: never return expired entries.
+        this.cache.delete(cacheKey);
+        this.normalizedCache.delete(normalized);
+        this.stats.evictions++;
+      } else if (modelName && entry.modelName && entry.modelName !== modelName) {
         // Model changed - treat as cache miss
         console.error(`[QueryCache] Model mismatch for cached query "${query}": cached=${entry.modelName}, current=${modelName}`);
         this.stats.modelMismatches++;
         // Remove stale entry
-        this.cache.delete(this.normalizedCache.get(normalized));
+        this.cache.delete(cacheKey);
         this.normalizedCache.delete(normalized);
       } else {
         // Valid cache hit
@@ -200,14 +221,6 @@ export class SemanticQueryCache {
         entry.accessCount++;
         return entry.embedding;
       }
-    }
-
-    // CRITICAL FIX: Use atomic setDefault pattern for deduplication
-    // Check if there's already a pending compute for this query
-    if (this.pendingComputes.has(query)) {
-      this.stats.deduplicatedHits++;
-      console.error(`[QueryCache] Deduplicated concurrent request for: "${query}"`);
-      return await this.pendingComputes.get(query);
     }
 
     // Check semantic similarity if we have an embedding to compare against
@@ -274,12 +287,12 @@ export class SemanticQueryCache {
         return embedding;
       } finally {
         // Always remove from pending computes, even if computation fails
-        this.pendingComputes.delete(query);
+        this.pendingComputes.delete(normalized);
       }
     })();
 
     // Store promise BEFORE awaiting (atomic deduplication)
-    this.pendingComputes.set(query, computePromise);
+    this.pendingComputes.set(normalized, computePromise);
 
     return await computePromise;
   }
