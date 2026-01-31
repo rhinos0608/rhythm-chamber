@@ -212,9 +212,9 @@ export function requiresUserAction(classifiedError) {
  * @param {Object} context - Shared context for all errors
  * @returns {Object} Batch error summary
  */
-export function handleBatchErrors(errors, context = {}) {
-    // Import here to avoid circular dependency
-    const { classifyError } = require('./error-classifier.js');
+export async function handleBatchErrors(errors, context = {}) {
+    // FIX: Use dynamic import() instead of require() to avoid circular dependency
+    const { classifyError } = await import('./error-classifier.js');
 
     const classifiedErrors = errors.map(error =>
         classifyError(error, context)

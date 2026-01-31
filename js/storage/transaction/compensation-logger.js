@@ -160,24 +160,90 @@ export class CompensationLogger {
   // Private: IndexedDB Storage
   // ==========================================
 
+  /**
+   * Log compensation entry to IndexedDB
+   * Uses IndexedDBCore.put for proper transaction safety and fallback support
+   *
+   * @private
+   * @param {string} transactionId - Transaction ID
+   * @param {Object} logEntry - Log entry to store
+   * @returns {Promise<void>}
+   * @throws {Error} If IndexedDB operation fails
+   */
   async _logToIndexedDB(transactionId, logEntry) {
-    // Note: Will be implemented with IndexedDBCore access
-    throw new Error('IndexedDB storage not yet implemented');
+    try {
+      // Use IndexedDBCore.put for transaction safety and fallback support
+      // This ensures proper error handling and automatic fallback to localStorage
+      await IndexedDBCore.put(COMPENSATION_LOG_STORE, logEntry, {
+        bypassAuthority: true, // Compensation logs are system-level writes
+        skipWriteEpoch: true   // Skip VectorClock for internal logging
+      });
+    } catch (error) {
+      console.error(`[CompensationLogger] IndexedDB put failed:`, error);
+      throw new Error(`Failed to log to IndexedDB: ${error.message}`);
+    }
   }
 
+  /**
+   * Get compensation log from IndexedDB by transaction ID
+   * Uses IndexedDBCore.get for proper transaction safety and fallback support
+   *
+   * @private
+   * @param {string} transactionId - Transaction ID
+   * @returns {Promise<Object|null>} Log entry or null if not found
+   */
   async _getFromIndexedDB(transactionId) {
-    // Note: Will be implemented with IndexedDBCore access
-    return null;
+    try {
+      const log = await IndexedDBCore.get(COMPENSATION_LOG_STORE, transactionId);
+      return log || null;
+    } catch (error) {
+      console.error(`[CompensationLogger] IndexedDB get failed:`, error);
+      throw new Error(`Failed to read from IndexedDB: ${error.message}`);
+    }
   }
 
+  /**
+   * Get all compensation logs from IndexedDB
+   * Uses IndexedDBCore.getAll for proper transaction safety and fallback support
+   *
+   * @private
+   * @returns {Promise<Array>} Array of all log entries
+   */
   async _getAllFromIndexedDB() {
-    // Note: Will be implemented with IndexedDBCore access
-    return [];
+    try {
+      const logs = await IndexedDBCore.getAll(COMPENSATION_LOG_STORE);
+      return logs || [];
+    } catch (error) {
+      console.error(`[CompensationLogger] IndexedDB getAll failed:`, error);
+      throw new Error(`Failed to scan IndexedDB: ${error.message}`);
+    }
   }
 
+  /**
+   * Clear compensation log from IndexedDB
+   * Uses IndexedDBCore.delete for proper transaction safety and fallback support
+   *
+   * @private
+   * @param {string} transactionId - Transaction ID
+   * @returns {Promise<boolean>} True if log was found and deleted
+   */
   async _clearFromIndexedDB(transactionId) {
-    // Note: Will be implemented with IndexedDBCore access
-    return false;
+    try {
+      // First check if the log exists
+      const existing = await this._getFromIndexedDB(transactionId);
+      if (!existing) {
+        return false;
+      }
+
+      // Delete the log entry
+      await IndexedDBCore.delete(COMPENSATION_LOG_STORE, transactionId, {
+        bypassAuthority: true // Compensation logs are system-level deletes
+      });
+      return true;
+    } catch (error) {
+      console.error(`[CompensationLogger] IndexedDB delete failed:`, error);
+      throw new Error(`Failed to clear from IndexedDB: ${error.message}`);
+    }
   }
 
   // ==========================================
