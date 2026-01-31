@@ -250,8 +250,12 @@ async function execute(provider, fn, config = {}) {
     }
 
     const state = getProviderState(provider);
+    let incrementedHalfOpen = false;
+
+    // FIX: Track if we incremented to ensure we always decrement
     if (state.state === STATE.HALF_OPEN) {
         state.halfOpenRequests++;
+        incrementedHalfOpen = true;
     }
 
     const startTime = Date.now();
@@ -265,6 +269,12 @@ async function execute(provider, fn, config = {}) {
         const message = error instanceof Error ? error.message : String(error);
         recordFailure(provider, message, config);
         return { success: false, error: message, state: state.state };
+    } finally {
+        // FIX: Ensure halfOpenRequests is always decremented if we incremented it
+        // This prevents counter leaks if state changes mid-execution
+        if (incrementedHalfOpen && state.halfOpenRequests > 0) {
+            state.halfOpenRequests--;
+        }
     }
 }
 

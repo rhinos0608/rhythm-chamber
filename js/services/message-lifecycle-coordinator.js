@@ -552,7 +552,7 @@ async function processMessage(message, optionsOrKey = null) {
                     }
                 }
 
-                _SessionManager.saveConversation();
+                await _SessionManager.saveConversation();
 
                 return toolHandlingResult.earlyReturn;
             }
@@ -593,7 +593,7 @@ async function processMessage(message, optionsOrKey = null) {
                 renderMessagesToDOM([assistantMsg]);
             }
 
-            _SessionManager.saveConversation();
+            await _SessionManager.saveConversation();
 
             return {
                 content: assistantContent,
@@ -622,7 +622,7 @@ async function processMessage(message, optionsOrKey = null) {
                     excludeFromContext: true
                 });
             }
-            _SessionManager.saveConversation();
+            await _SessionManager.saveConversation();
 
             // Always show error toast with actionable information
             StreamProcessor.showErrorToast(`Error: ${error.message}`, 5000);
@@ -641,7 +641,7 @@ async function regenerateLastResponse(options = null) {
     const conversationHistory = _SessionManager.getHistory();
 
     if (typeof _MessageOperations !== 'undefined') {
-        return _MessageOperations.regenerateLastResponse(
+        return await _MessageOperations.regenerateLastResponse(
             conversationHistory,
             sendMessage,
             options
@@ -684,7 +684,7 @@ async function deleteMessage(index) {
 
     if (typeof _MessageOperations !== 'undefined') {
         const result = _MessageOperations.deleteMessage(index, conversationHistory);
-        _SessionManager.saveConversation();
+        await _SessionManager.saveConversation();
         return result;
     }
 
@@ -692,7 +692,7 @@ async function deleteMessage(index) {
 
     // HIGH PRIORITY FIX: Await removeMessageFromHistory since it's now async with mutex protection
     await _SessionManager.removeMessageFromHistory(index);
-    _SessionManager.saveConversation();
+    await _SessionManager.saveConversation();
     return true;
 }
 
@@ -703,7 +703,7 @@ async function editMessage(index, newText, options = null) {
     const conversationHistory = _SessionManager.getHistory();
 
     if (typeof _MessageOperations !== 'undefined') {
-        return _MessageOperations.editMessage(
+        return await _MessageOperations.editMessage(
             index,
             newText,
             conversationHistory,
@@ -725,9 +725,10 @@ async function editMessage(index, newText, options = null) {
 
 /**
  * Clear conversation history
+ * @returns {Promise<void>}
  */
-function clearHistory() {
-    _SessionManager.clearConversation();
+async function clearHistory() {
+    await _SessionManager.clearConversation();
 }
 
 /**

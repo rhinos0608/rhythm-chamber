@@ -218,15 +218,28 @@ class TimeoutBudgetInstance {
 
     /**
      * Run all abort handlers
+     * FIX: Now properly awaits async handlers
      * @private
+     * @returns {Promise<void>}
      */
-    _runAbortHandlers(reason) {
+    async _runAbortHandlers(reason) {
+        const results = [];
         for (const handler of this._abortHandlers) {
             try {
-                handler(reason);
+                const result = handler(reason);
+                // FIX: If handler returns a Promise, track it for proper await
+                if (result && typeof result.then === 'function') {
+                    results.push(result.catch(e => {
+                        console.error('[TimeoutBudget] Async abort handler error:', e);
+                    }));
+                }
             } catch (e) {
-                console.error('[TimeoutBudget] Abort handler error:', e);
+                console.error('[TimeoutBudget] Sync abort handler error:', e);
             }
+        }
+        // FIX: Wait for all async handlers to complete
+        if (results.length > 0) {
+            await Promise.all(results);
         }
     }
 

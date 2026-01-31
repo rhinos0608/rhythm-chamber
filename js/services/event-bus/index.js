@@ -341,17 +341,37 @@ function dispatchHandlers(eventType, payload, meta) {
     });
 
     let called = 0;
+    const handlerErrors = [];
+
     for (const sub of combined) {
         try {
             sub.handler(payload, meta);
         } catch (e) {
             console.error('[EventBus] Handler error:', e);
+            // FIX: Collect handler errors for optional propagation
+            handlerErrors.push({
+                eventType,
+                handlerId: sub.id,
+                error: e
+            });
         } finally {
             called++;
             if (sub.once) {
                 off(eventType === '*' ? '*' : eventType, sub.handler);
             }
         }
+    }
+
+    // FIX: Emit handler errors event so callers can react to handler failures
+    if (handlerErrors.length > 0) {
+        // Use setTimeout to avoid recursive sync emit issues
+        setTimeout(() => {
+            emit('EVENTBUS:HANDLER_ERROR', {
+                originalEvent: eventType,
+                errors: handlerErrors,
+                timestamp: Date.now()
+            }, { priority: PRIORITY.HIGH });
+        }, 0);
     }
 
     return called > 0;
