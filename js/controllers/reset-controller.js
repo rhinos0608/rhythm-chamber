@@ -171,7 +171,7 @@ async function executeReset() {
 
         // Step 6: Clear chat history
         if (_Chat) {
-            _Chat.clearHistory();
+            await _Chat.clearHistory();
         }
 
         console.log('[ResetController] Reset complete');

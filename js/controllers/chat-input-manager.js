@@ -47,11 +47,19 @@ function isValidToolName(toolName) {
 /**
  * Get the current input value
  * Edge case: Trims and validates length
- * @returns {string}
+ * @returns {string} Empty string if input element not found
  */
 function getInputValue() {
     const input = document.getElementById(CHAT_UI_INPUT_ID);
-    const value = input?.value?.trim() || '';
+
+    // Null safety: Validate DOM element exists before accessing properties
+    if (!input) {
+        console.error('[ChatInputManager] Input element not found:', CHAT_UI_INPUT_ID);
+        return '';
+    }
+
+    const value = input.value?.trim() || '';
+
     // Edge case: Enforce maximum message length
     // Use Array.from to properly handle Unicode surrogate pairs (emojis, rare CJK chars)
     // which prevents splitting multi-byte characters during truncation
@@ -67,33 +75,51 @@ function getInputValue() {
 
 /**
  * Clear the input
+ * Null safety: Validates element exists before clearing
  */
 function clearInput() {
     const input = document.getElementById(CHAT_UI_INPUT_ID);
-    if (input) input.value = '';
+    if (!input) {
+        console.error('[ChatInputManager] Input element not found for clear:', CHAT_UI_INPUT_ID);
+        return;
+    }
+    input.value = '';
 }
 
 /**
  * Hide the suggestions panel
+ * Null safety: Validates element exists before hiding
  */
 function hideSuggestions() {
     const suggestions = document.getElementById(CHAT_UI_SUGGESTIONS_ID);
-    if (suggestions) suggestions.style.display = 'none';
+    if (!suggestions) {
+        console.warn('[ChatInputManager] Suggestions element not found:', CHAT_UI_SUGGESTIONS_ID);
+        return;
+    }
+    suggestions.style.display = 'none';
 }
 
 /**
  * Clear all messages from the chat
+ * Null safety: Validates elements exist before manipulation
  */
 function clearMessages() {
     const messages = document.getElementById(CHAT_UI_MESSAGE_CONTAINER_ID);
-    if (messages) {
-        // SAFE: Static HTML with no user input
-        messages.innerHTML = '<div class="message assistant">What would you like to explore about your listening patterns?</div>';
+    if (!messages) {
+        console.error('[ChatInputManager] Messages container not found:', CHAT_UI_MESSAGE_CONTAINER_ID);
+        return;
     }
+
+    // SAFE: Static HTML with no user input
+    messages.innerHTML = '<div class="message assistant">What would you like to explore about your listening patterns?</div>';
 
     // Show suggestions again
     const suggestions = document.getElementById(CHAT_UI_SUGGESTIONS_ID);
-    if (suggestions) suggestions.style.display = '';
+    if (!suggestions) {
+        console.warn('[ChatInputManager] Suggestions element not found when clearing messages:', CHAT_UI_SUGGESTIONS_ID);
+        return;
+    }
+    suggestions.style.display = '';
 }
 
 // ==========================================

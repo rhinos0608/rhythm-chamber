@@ -4859,6 +4859,10 @@ body.read-only-mode .chat-input {
   color: #ef4444;
 }
 
+.current-operation .operation-text.warning {
+  color: #f59e0b;
+}
+
 /* Transparency Panel */
 .transparency-panel {
   border-top: 1px solid var(--border-subtle);

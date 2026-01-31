@@ -241,9 +241,10 @@ async function handleStorageUpdate(event) {
 /**
  * Save conversation to IndexedDB (debounced)
  * Delegates to SessionManager
+ * @returns {Promise<void>}
  */
-function saveConversation() {
-    SessionManager.saveConversation();
+async function saveConversation() {
+    await SessionManager.saveConversation();
 }
 
 /**
@@ -257,9 +258,10 @@ async function flushPendingSaveAsync() {
 /**
  * Emergency synchronous backup to localStorage
  * Delegates to SessionManager
+ * @returns {void}
  */
 function emergencyBackupSync() {
-    SessionManager.emergencyBackupSync();
+    return SessionManager.emergencyBackupSync();
 }
 
 /**
@@ -336,27 +338,34 @@ function getCurrentSessionId() {
 
 /**
  * Register a listener for session updates
- * Delegates to SessionManager
+ * FIX: Now properly subscribes to all session events via EventBus
+ * @param {Function} callback - Function to call on session updates
+ * @returns {Function} Unsubscribe function
  */
 function onSessionUpdate(callback) {
-    // NOTE: SessionManager no longer supports onSessionUpdate - use EventBus instead
-    // IMPORTANT: EventBus does NOT support wildcard patterns like 'session:*'
-    // You must subscribe to each specific event individually:
-    //   EventBus.on('session:created', callback)
-    //   EventBus.on('session:loaded', callback)
-    //   EventBus.on('session:switched', callback)
-    //   EventBus.on('session:deleted', callback)
-    //   EventBus.on('session:updated', callback)
-    // This is kept for backwards compatibility but does nothing
-    logger.warn('onSessionUpdate is deprecated. Use EventBus.on with specific session events instead.');
+    // Subscribe to all session-related events
+    const sessionEvents = ['session:created', 'session:loaded', 'session:switched', 'session:deleted', 'session:updated'];
+    const unsubscribers = sessionEvents.map(eventType => EventBus.on(eventType, callback));
+
+    // Return combined unsubscribe function
+    return () => {
+        unsubscribers.forEach(unsub => {
+            try {
+                unsub();
+            } catch (e) {
+                logger.warn('[Chat] Error unsubscribing from session event:', e);
+            }
+        });
+    };
 }
 
 /**
  * Clear conversation history and create new session
  * Delegates to SessionManager
+ * @returns {Promise<void>}
  */
-function clearConversation() {
-    SessionManager.clearConversation();
+async function clearConversation() {
+    await SessionManager.clearConversation();
 }
 
 

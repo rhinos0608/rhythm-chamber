@@ -106,13 +106,16 @@ async function initSidebar() {
     }
 
     // Register for session updates from EventBus
-    // FIX: EventBus doesn't support wildcard patterns like 'session:*'
-    // We must subscribe to each specific session event individually
-    const sessionEvents = ['session:created', 'session:loaded', 'session:switched', 'session:deleted', 'session:updated'];
-    sessionEvents.forEach(eventType => {
-        const unsubscribe = EventBus.on(eventType, renderSessionList);
-        _sessionEventUnsubscribers.push(unsubscribe);
+    // FIX: Subscribe to all session events via wildcard for automatic future event support
+    // The '*' wildcard receives all events, so we filter for session-related ones
+    const unsubscribeSessionEvents = EventBus.on('*', (data) => {
+        // Only re-render for session-related events
+        const sessionEventPrefix = 'session:';
+        if (data?.event?.startsWith(sessionEventPrefix)) {
+            renderSessionList();
+        }
     });
+    _sessionEventUnsubscribers.push(unsubscribeSessionEvents);
 
     // Subscribe to AppState for reactive view changes
     // If a previous subscription exists, unsubscribe first to avoid duplicates
