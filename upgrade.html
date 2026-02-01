@@ -1,13 +1,14 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Upgrade to Premium — Rhythm Chamber</title>
-    <meta name="description"
-        content="Unlock unlimited playlists, metadata enrichment, and semantic search. Upgrade to Rhythm Chamber Premium.">
-    <!--
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+        <title>Upgrade to Premium — Rhythm Chamber</title>
+        <meta
+            name="description"
+            content="Unlock unlimited playlists, metadata enrichment, and semantic search. Upgrade to Rhythm Chamber Premium."
+        />
+        <!--
       Content Security Policy (CSP)
 
       Strict CSP configuration to prevent XSS attacks:
@@ -29,691 +30,768 @@
       - form-action 'self': Restrict form submissions to same origin
       - frame-src 'self' https://*.lemonsqueezy.com: Allow payment processor iframes
     -->
-    <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self' 'unsafe-eval'; script-src-elem 'self' https://app.lemonsqueezy.com https://assets.lemonsqueezy.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.lemonsqueezy.com; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'self' https://*.lemonsqueezy.com;">
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'self'; script-src 'self' 'unsafe-eval'; script-src-elem 'self' https://cdn.jsdelivr.net https://app.lemonsqueezy.com https://assets.lemonsqueezy.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co https://*.lemonsqueezy.com; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'self' https://*.lemonsqueezy.com;"
+        />
 
-    <!-- Open Graph -->
-    <meta property="og:title" content="Upgrade to Premium — Rhythm Chamber">
-    <meta property="og:description"
-        content="Unlock unlimited playlists, metadata enrichment, and semantic search.">
-    <meta property="og:type" content="website">
+        <!-- Open Graph -->
+        <meta property="og:title" content="Upgrade to Premium — Rhythm Chamber" />
+        <meta
+            property="og:description"
+            content="Unlock unlimited playlists, metadata enrichment, and semantic search."
+        />
+        <meta property="og:type" content="website" />
 
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap"
-        rel="stylesheet">
+        <!-- Fonts -->
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap"
+            rel="stylesheet"
+        />
 
-    <link rel="stylesheet" href="css/styles.css">
-    <style>
-        /* Upgrade page specific styles */
-        .upgrade-page {
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            padding: var(--space-3xl) var(--space-lg);
-        }
+        <link rel="stylesheet" href="css/styles.css" />
+        <style>
+            /* Upgrade page specific styles */
+            .upgrade-page {
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+                padding: var(--space-3xl) var(--space-lg);
+            }
 
-        .upgrade-header {
-            text-align: center;
-            margin-bottom: var(--space-3xl);
-        }
+            .upgrade-header {
+                text-align: center;
+                margin-bottom: var(--space-3xl);
+            }
 
-        .upgrade-header h1 {
-            font-size: clamp(2rem, 5vw, 3rem);
-            margin-bottom: var(--space-md);
-        }
+            .upgrade-header h1 {
+                font-size: clamp(2rem, 5vw, 3rem);
+                margin-bottom: var(--space-md);
+            }
 
-        .upgrade-header p {
-            font-size: 1.2rem;
-            color: var(--text-secondary);
-            max-width: 600px;
-            margin: 0 auto;
-        }
+            .upgrade-header p {
+                font-size: 1.2rem;
+                color: var(--text-secondary);
+                max-width: 600px;
+                margin: 0 auto;
+            }
 
-        .pricing-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: var(--space-xl);
-            max-width: 900px;
-            margin: 0 auto var(--space-3xl);
-        }
+            .pricing-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                gap: var(--space-xl);
+                max-width: 900px;
+                margin: 0 auto var(--space-3xl);
+            }
 
-        .pricing-card {
-            background: var(--bg-glass);
-            backdrop-filter: blur(20px);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-lg);
-            padding: var(--space-2xl);
-            transition: var(--transition-base);
-            display: flex;
-            flex-direction: column;
-        }
+            .pricing-card {
+                background: var(--bg-glass);
+                backdrop-filter: blur(20px);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-lg);
+                padding: var(--space-2xl);
+                transition: var(--transition-base);
+                display: flex;
+                flex-direction: column;
+            }
 
-        .pricing-card:hover {
-            border-color: var(--border-accent);
-            box-shadow: var(--accent-glow);
-            transform: translateY(-4px);
-        }
+            .pricing-card:hover {
+                border-color: var(--border-accent);
+                box-shadow: var(--accent-glow);
+                transform: translateY(-4px);
+            }
 
-        .pricing-card.premium {
-            border: 2px solid var(--accent-primary);
-            position: relative;
-        }
+            .pricing-card.premium {
+                border: 2px solid var(--accent-primary);
+                position: relative;
+            }
 
-        .pricing-card.premium::before {
-            content: 'RECOMMENDED';
-            position: absolute;
-            top: -12px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--accent-gradient);
-            color: white;
-            font-size: 0.75rem;
-            font-weight: 600;
-            padding: var(--space-xs) var(--space-md);
-            border-radius: var(--radius-full);
-            letter-spacing: 0.05em;
-        }
+            .pricing-card.premium::before {
+                content: 'RECOMMENDED';
+                position: absolute;
+                top: -12px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: var(--accent-gradient);
+                color: white;
+                font-size: 0.75rem;
+                font-weight: 600;
+                padding: var(--space-xs) var(--space-md);
+                border-radius: var(--radius-full);
+                letter-spacing: 0.05em;
+            }
 
-        .pricing-tier {
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: var(--space-sm);
-        }
+            .pricing-tier {
+                font-size: 0.85rem;
+                color: var(--text-muted);
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                margin-bottom: var(--space-sm);
+            }
 
-        .pricing-name {
-            font-size: 1.75rem;
-            font-weight: 600;
-            margin-bottom: var(--space-sm);
-        }
+            .pricing-name {
+                font-size: 1.75rem;
+                font-weight: 600;
+                margin-bottom: var(--space-sm);
+            }
 
-        .pricing-price {
-            font-size: 2.5rem;
-            font-weight: 700;
-            margin-bottom: var(--space-md);
-        }
+            .pricing-price {
+                font-size: 2.5rem;
+                font-weight: 700;
+                margin-bottom: var(--space-md);
+            }
 
-        .pricing-price .period {
-            font-size: 1rem;
-            font-weight: 400;
-            color: var(--text-muted);
-        }
+            .pricing-price .period {
+                font-size: 1rem;
+                font-weight: 400;
+                color: var(--text-muted);
+            }
 
-        .pricing-description {
-            color: var(--text-secondary);
-            margin-bottom: var(--space-xl);
-            line-height: 1.5;
-        }
+            .pricing-description {
+                color: var(--text-secondary);
+                margin-bottom: var(--space-xl);
+                line-height: 1.5;
+            }
 
-        .pricing-features {
-            list-style: none;
-            margin-bottom: var(--space-xl);
-            flex: 1;
-        }
+            .pricing-features {
+                list-style: none;
+                margin-bottom: var(--space-xl);
+                flex: 1;
+            }
 
-        .pricing-features li {
-            display: flex;
-            align-items: flex-start;
-            gap: var(--space-md);
-            padding: var(--space-sm) 0;
-            color: var(--text-secondary);
-        }
+            .pricing-features li {
+                display: flex;
+                align-items: flex-start;
+                gap: var(--space-md);
+                padding: var(--space-sm) 0;
+                color: var(--text-secondary);
+            }
 
-        .pricing-features li .icon {
-            min-width: 20px;
-        }
+            .pricing-features li .icon {
+                min-width: 20px;
+            }
 
-        .pricing-features li.locked {
-            opacity: 0.5;
-            text-decoration: line-through;
-        }
+            .pricing-features li.locked {
+                opacity: 0.5;
+                text-decoration: line-through;
+            }
 
-        .pricing-action {
-            margin-top: auto;
-        }
+            .pricing-action {
+                margin-top: auto;
+            }
 
-        .billing-toggle {
-            display: flex;
-            background: var(--bg-secondary);
-            border-radius: var(--radius-md);
-            padding: var(--space-xs);
-            margin-bottom: var(--space-md);
-        }
+            .billing-toggle {
+                display: flex;
+                background: var(--bg-secondary);
+                border-radius: var(--radius-md);
+                padding: var(--space-xs);
+                margin-bottom: var(--space-md);
+            }
 
-        .toggle-btn {
-            flex: 1;
-            border: none;
-            background: transparent;
-            color: var(--text-secondary);
-            padding: var(--space-sm) var(--space-md);
-            border-radius: var(--radius-sm);
-            cursor: pointer;
-            font-weight: 500;
-            transition: var(--transition-fast);
-            position: relative;
-        }
+            .toggle-btn {
+                flex: 1;
+                border: none;
+                background: transparent;
+                color: var(--text-secondary);
+                padding: var(--space-sm) var(--space-md);
+                border-radius: var(--radius-sm);
+                cursor: pointer;
+                font-weight: 500;
+                transition: var(--transition-fast);
+                position: relative;
+            }
 
-        .toggle-btn:hover {
-            color: var(--text-primary);
-        }
+            .toggle-btn:hover {
+                color: var(--text-primary);
+            }
 
-        .toggle-btn.active {
-            background: var(--accent-primary);
-            color: white;
-        }
+            .toggle-btn.active {
+                background: var(--accent-primary);
+                color: white;
+            }
 
-        .save-badge {
-            font-size: 0.65rem;
-            background: #22c55e;
-            color: white;
-            padding: 2px 6px;
-            border-radius: var(--radius-full);
-            margin-left: var(--space-xs);
-        }
+            .save-badge {
+                font-size: 0.65rem;
+                background: #22c55e;
+                color: white;
+                padding: 2px 6px;
+                border-radius: var(--radius-full);
+                margin-left: var(--space-xs);
+            }
 
-        .toggle-btn.active .save-badge {
-            background: rgba(255, 255, 255, 0.25);
-        }
+            .toggle-btn.active .save-badge {
+                background: rgba(255, 255, 255, 0.25);
+            }
 
-        .secure-checkout {
-            text-align: center;
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            margin-top: var(--space-sm);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: var(--space-xs);
-        }
+            .secure-checkout {
+                text-align: center;
+                font-size: 0.75rem;
+                color: var(--text-muted);
+                margin-top: var(--space-sm);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: var(--space-xs);
+            }
 
-        .btn-spinner {
-            animation: spin 1s linear infinite;
-        }
+            .btn-spinner {
+                animation: spin 1s linear infinite;
+            }
 
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
+            @keyframes spin {
+                from {
+                    transform: rotate(0deg);
+                }
+                to {
+                    transform: rotate(360deg);
+                }
+            }
 
-        .btn:disabled {
-            opacity: 0.7;
-            cursor: not-allowed;
-        }
+            .btn:disabled {
+                opacity: 0.7;
+                cursor: not-allowed;
+            }
 
-        .payment-status-message {
-            text-align: center;
-            padding: var(--space-md);
-            border-radius: var(--radius-md);
-            margin-bottom: var(--space-lg);
-            display: none;
-        }
+            .payment-status-message {
+                text-align: center;
+                padding: var(--space-md);
+                border-radius: var(--radius-md);
+                margin-bottom: var(--space-lg);
+                display: none;
+            }
 
-        .payment-status-message.success {
-            display: block;
-            background: rgba(34, 197, 94, 0.2);
-            color: #22c55e;
-            border: 1px solid rgba(34, 197, 94, 0.3);
-        }
+            .payment-status-message.success {
+                display: block;
+                background: rgba(34, 197, 94, 0.2);
+                color: #22c55e;
+                border: 1px solid rgba(34, 197, 94, 0.3);
+            }
 
-        .payment-status-message.cancelled {
-            display: block;
-            background: rgba(251, 146, 60, 0.2);
-            color: #fb923c;
-            border: 1px solid rgba(251, 146, 60, 0.3);
-        }
+            .payment-status-message.cancelled {
+                display: block;
+                background: rgba(251, 146, 60, 0.2);
+                color: #fb923c;
+                border: 1px solid rgba(251, 146, 60, 0.3);
+            }
 
-        .payment-status-message.error {
-            display: block;
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-            border: 1px solid rgba(239, 68, 68, 0.3);
-        }
+            .payment-status-message.error {
+                display: block;
+                background: rgba(239, 68, 68, 0.2);
+                color: #ef4444;
+                border: 1px solid rgba(239, 68, 68, 0.3);
+            }
 
-        .feature-showcase {
-            max-width: 1000px;
-            margin: 0 auto;
-        }
+            .feature-showcase {
+                max-width: 1000px;
+                margin: 0 auto;
+            }
 
-        .feature-showcase h2 {
-            text-align: center;
-            margin-bottom: var(--space-2xl);
-        }
+            .feature-showcase h2 {
+                text-align: center;
+                margin-bottom: var(--space-2xl);
+            }
 
-        .feature-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: var(--space-lg);
-        }
+            .feature-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                gap: var(--space-lg);
+            }
 
-        .feature-card {
-            background: var(--bg-tertiary);
-            border-radius: var(--radius-md);
-            padding: var(--space-xl);
-            text-align: center;
-        }
+            .feature-card {
+                background: var(--bg-tertiary);
+                border-radius: var(--radius-md);
+                padding: var(--space-xl);
+                text-align: center;
+            }
 
-        .feature-card .icon {
-            font-size: 2.5rem;
-            margin-bottom: var(--space-md);
-        }
+            .feature-card .icon {
+                font-size: 2.5rem;
+                margin-bottom: var(--space-md);
+            }
 
-        .feature-card h3 {
-            margin-bottom: var(--space-sm);
-        }
+            .feature-card h3 {
+                margin-bottom: var(--space-sm);
+            }
 
-        .feature-card p {
-            font-size: 0.9rem;
-            color: var(--text-muted);
-        }
+            .feature-card p {
+                font-size: 0.9rem;
+                color: var(--text-muted);
+            }
 
-        .back-link {
-            display: inline-flex;
-            align-items: center;
-            gap: var(--space-sm);
-            color: var(--text-muted);
-            margin-bottom: var(--space-lg);
-            transition: var(--transition-fast);
-        }
+            .back-link {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-sm);
+                color: var(--text-muted);
+                margin-bottom: var(--space-lg);
+                transition: var(--transition-fast);
+            }
 
-        .back-link:hover {
-            color: var(--text-primary);
-        }
+            .back-link:hover {
+                color: var(--text-primary);
+            }
 
-        .faq-section {
-            max-width: 800px;
-            margin: var(--space-3xl) auto 0;
-        }
+            .faq-section {
+                max-width: 800px;
+                margin: var(--space-3xl) auto 0;
+            }
 
-        .faq-section h2 {
-            text-align: center;
-            margin-bottom: var(--space-xl);
-        }
+            .faq-section h2 {
+                text-align: center;
+                margin-bottom: var(--space-xl);
+            }
 
-        details {
-            background: var(--bg-tertiary);
-            border-radius: var(--radius-md);
-            padding: var(--space-md);
-            margin-bottom: var(--space-md);
-        }
+            details {
+                background: var(--bg-tertiary);
+                border-radius: var(--radius-md);
+                padding: var(--space-md);
+                margin-bottom: var(--space-md);
+            }
 
-        details summary {
-            cursor: pointer;
-            font-weight: 500;
-            list-style: none;
-            display: flex;
-            align-items: center;
-            gap: var(--space-sm);
-        }
+            details summary {
+                cursor: pointer;
+                font-weight: 500;
+                list-style: none;
+                display: flex;
+                align-items: center;
+                gap: var(--space-sm);
+            }
 
-        details summary::-webkit-details-marker {
-            display: none;
-        }
+            details summary::-webkit-details-marker {
+                display: none;
+            }
 
-        details summary::after {
-            content: '+';
-            margin-left: auto;
-            font-size: 1.2rem;
-            color: var(--accent-primary);
-        }
+            details summary::after {
+                content: '+';
+                margin-left: auto;
+                font-size: 1.2rem;
+                color: var(--accent-primary);
+            }
 
-        details[open] summary::after {
-            content: '−';
-        }
+            details[open] summary::after {
+                content: '−';
+            }
 
-        details p {
-            margin-top: var(--space-md);
-            color: var(--text-secondary);
-        }
-    </style>
-</head>
+            details p {
+                margin-top: var(--space-md);
+                color: var(--text-secondary);
+            }
+        </style>
+    </head>
 
-<body>
-    <div class="upgrade-page">
-        <!-- Back link -->
-        <div>
-            <a href="index.html" class="back-link">
-                <span>←</span> Back to Home
-            </a>
-        </div>
-
-        <!-- Header -->
-        <div class="upgrade-header">
-            <!-- Payment Status Messages -->
-            <div id="payment-status" class="payment-status-message"></div>
-        </div>
-
-        <div class="upgrade-header">
-            <h1>Unlock the <span class="gradient-text">Full Experience</span></h1>
-            <p>Go deeper into your music with unlimited playlists, rich metadata, and AI-powered discovery.</p>
-        </div>
-
-        <!-- Pricing Cards -->
-        <div class="pricing-grid">
-            <!-- Free Tier -->
-            <div class="pricing-card">
-                <div class="pricing-tier">Free Forever</div>
-                <h3 class="pricing-name">The Sovereign</h3>
-                <div class="pricing-price">$0<span class="period">/forever</span></div>
-                <p class="pricing-description">Complete privacy-focused music analysis with your own AI.</p>
-
-                <ul class="pricing-features">
-                    <li><span class="icon">✓</span> Full local analysis</li>
-                    <li><span class="icon">✓</span> Personality reveal</li>
-                    <li><span class="icon">✓</span> BYOI (local models)</li>
-                    <li><span class="icon">✓</span> Shareable cards</li>
-                    <li><span class="icon">✓</span> <strong>1 free playlist</strong></li>
-                    <li class="locked"><span class="icon">✗</span> Unlimited playlists</li>
-                    <li class="locked"><span class="icon">✗</span> Metadata enrichment</li>
-                    <li class="locked"><span class="icon">✗</span> Semantic search</li>
-                </ul>
-
-                <div class="pricing-action">
-                    <a href="app.html" class="btn btn-secondary btn-full-width">Get Started</a>
-                </div>
+    <body>
+        <div class="upgrade-page">
+            <!-- Back link -->
+            <div>
+                <a href="index.html" class="back-link"> <span>←</span> Back to Home </a>
             </div>
 
-            <!-- Premium Tier -->
-            <div class="pricing-card premium" id="chamber-card">
-                <div class="pricing-tier">Premium</div>
-                <h3 class="pricing-name">The Chamber</h3>
+            <!-- Header -->
+            <div class="upgrade-header">
+                <!-- Payment Status Messages -->
+                <div id="payment-status" class="payment-status-message"></div>
+            </div>
 
-                <!-- Billing Toggle -->
-                <div class="billing-toggle">
-                    <button class="toggle-btn active" data-billing="monthly">Monthly</button>
-                    <button class="toggle-btn" data-billing="yearly">Yearly <span class="save-badge">Save 35%</span></button>
-                </div>
+            <div class="upgrade-header">
+                <h1>Unlock the <span class="gradient-text">Full Experience</span></h1>
+                <p>
+                    Go deeper into your music with unlimited playlists, rich metadata, and
+                    AI-powered discovery.
+                </p>
+            </div>
 
-                <div class="pricing-price" id="chamber-price">
-                    <span class="amount">$4.99</span><span class="period">/mo</span>
-                </div>
-                <p class="pricing-description" id="chamber-description">Billed monthly. Cancel anytime.</p>
-
-                <ul class="pricing-features">
-                    <li><span class="icon">✓</span> <strong>Everything in Free</strong></li>
-                    <li><span class="icon">∞</span> <strong>Unlimited playlists</strong></li>
-                    <li><span class="icon">∞</span> Mood, era, & time machine playlists</li>
-                    <li><span class="icon">📊</span> Metadata enrichment (BPM, key, genres)</li>
-                    <li><span class="icon">🔍</span> Semantic vibe-based search</li>
-                    <li><span class="icon">🤖</span> AI playlist curator</li>
-                    <li><span class="icon">📧</span> Monthly insights (coming soon)</li>
-                </ul>
-
-                <div class="pricing-action">
-                    <button class="btn btn-primary btn-full-width" id="upgrade-btn" data-billing="monthly">
-                        <span class="btn-text">✨ Upgrade to Premium</span>
-                        <span class="btn-spinner" style="display: none;">⟳</span>
-                    </button>
-                    <p class="secure-checkout">
-                        <span>🔒</span> Secure checkout via Lemon Squeezy
+            <!-- Pricing Cards -->
+            <div class="pricing-grid">
+                <!-- Free Tier -->
+                <div class="pricing-card">
+                    <div class="pricing-tier">Free Forever</div>
+                    <h3 class="pricing-name">The Sovereign</h3>
+                    <div class="pricing-price">$0<span class="period">/forever</span></div>
+                    <p class="pricing-description">
+                        Complete privacy-focused music analysis with your own AI.
                     </p>
+
+                    <ul class="pricing-features">
+                        <li><span class="icon">✓</span> Full local analysis</li>
+                        <li><span class="icon">✓</span> Personality reveal</li>
+                        <li><span class="icon">✓</span> BYOI (local models)</li>
+                        <li><span class="icon">✓</span> Shareable cards</li>
+                        <li><span class="icon">✓</span> <strong>1 free playlist</strong></li>
+                        <li class="locked"><span class="icon">✗</span> Unlimited playlists</li>
+                        <li class="locked"><span class="icon">✗</span> Metadata enrichment</li>
+                        <li class="locked"><span class="icon">✗</span> Semantic search</li>
+                    </ul>
+
+                    <div class="pricing-action">
+                        <a href="app.html" class="btn btn-secondary btn-full-width">Get Started</a>
+                    </div>
+                </div>
+
+                <!-- Premium Tier -->
+                <div class="pricing-card premium" id="chamber-card">
+                    <div class="pricing-tier">Premium</div>
+                    <h3 class="pricing-name">The Chamber</h3>
+
+                    <!-- Billing Toggle -->
+                    <div class="billing-toggle">
+                        <button class="toggle-btn active" data-billing="monthly">Monthly</button>
+                        <button class="toggle-btn" data-billing="yearly">
+                            Yearly <span class="save-badge">Save 35%</span>
+                        </button>
+                    </div>
+
+                    <div class="pricing-price" id="chamber-price">
+                        <span class="amount">$4.99</span><span class="period">/mo</span>
+                    </div>
+                    <p class="pricing-description" id="chamber-description">
+                        Billed monthly. Cancel anytime.
+                    </p>
+
+                    <ul class="pricing-features">
+                        <li><span class="icon">✓</span> <strong>Everything in Free</strong></li>
+                        <li><span class="icon">∞</span> <strong>Unlimited playlists</strong></li>
+                        <li><span class="icon">∞</span> Mood, era, & time machine playlists</li>
+                        <li><span class="icon">📊</span> Metadata enrichment (BPM, key, genres)</li>
+                        <li><span class="icon">🔍</span> Semantic vibe-based search</li>
+                        <li><span class="icon">🤖</span> AI playlist curator</li>
+                        <li><span class="icon">📧</span> Monthly insights (coming soon)</li>
+                    </ul>
+
+                    <div class="pricing-action">
+                        <button
+                            class="btn btn-primary btn-full-width"
+                            id="upgrade-btn"
+                            data-billing="monthly"
+                        >
+                            <span class="btn-text">✨ Upgrade to Premium</span>
+                            <span class="btn-spinner" style="display: none">⟳</span>
+                        </button>
+                        <p class="secure-checkout">
+                            <span>🔒</span> Secure checkout via Lemon Squeezy
+                        </p>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Feature Showcase -->
-        <div class="feature-showcase">
-            <h2>What You'll Unlock</h2>
-            <div class="feature-grid">
-                <div class="feature-card">
-                    <div class="icon">∞</div>
-                    <h3>Unlimited Playlists</h3>
-                    <p>Create as many AI-curated playlists as you want — era throwbacks, mood mixes, and more.</p>
-                </div>
+            <!-- Feature Showcase -->
+            <div class="feature-showcase">
+                <h2>What You'll Unlock</h2>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <div class="icon">∞</div>
+                        <h3>Unlimited Playlists</h3>
+                        <p>
+                            Create as many AI-curated playlists as you want — era throwbacks, mood
+                            mixes, and more.
+                        </p>
+                    </div>
 
-                <div class="feature-card">
-                    <div class="icon">📊</div>
-                    <h3>Metadata Enrichment</h3>
-                    <p>See BPM, key, genres, and audio features for every track in your history.</p>
-                </div>
+                    <div class="feature-card">
+                        <div class="icon">📊</div>
+                        <h3>Metadata Enrichment</h3>
+                        <p>
+                            See BPM, key, genres, and audio features for every track in your
+                            history.
+                        </p>
+                    </div>
 
-                <div class="feature-card">
-                    <div class="icon">🔍</div>
-                    <h3>Semantic Search</h3>
-                    <p>Ask "songs that feel like 3 AM existential crisis" and find exactly those tracks.</p>
-                </div>
+                    <div class="feature-card">
+                        <div class="icon">🔍</div>
+                        <h3>Semantic Search</h3>
+                        <p>
+                            Ask "songs that feel like 3 AM existential crisis" and find exactly
+                            those tracks.
+                        </p>
+                    </div>
 
-                <div class="feature-card">
-                    <div class="icon">🤖</div>
-                    <h3>AI Playlist Curator</h3>
-                    <p>Describe any mood or moment, and AI creates the perfect playlist from your history.</p>
+                    <div class="feature-card">
+                        <div class="icon">🤖</div>
+                        <h3>AI Playlist Curator</h3>
+                        <p>
+                            Describe any mood or moment, and AI creates the perfect playlist from
+                            your history.
+                        </p>
+                    </div>
                 </div>
             </div>
+
+            <!-- FAQ -->
+            <div class="faq-section">
+                <h2>Frequently Asked Questions</h2>
+
+                <details>
+                    <summary>Why is Rhythm Chamber premium?</summary>
+                    <p>
+                        Rhythm Chamber runs 100% in your browser with zero backend. This means we
+                        have no server costs, but also no venture funding. Premium supports
+                        continued development and keeps the free tier available for everyone.
+                    </p>
+                </details>
+
+                <details>
+                    <summary>What's the difference between Free and Premium?</summary>
+                    <p>
+                        Free users get full music analysis, personality reveal, and 1 free playlist
+                        to try. Premium unlocks unlimited playlists, metadata enrichment, semantic
+                        search, and the AI playlist curator.
+                    </p>
+                </details>
+
+                <details>
+                    <summary>Is my data safe?</summary>
+                    <p>
+                        Yes! Your data never leaves your device. All processing happens locally in
+                        your browser. We're privacy-first by design — no servers, no tracking, no
+                        data collection.
+                    </p>
+                </details>
+
+                <details>
+                    <summary>Can I cancel anytime?</summary>
+                    <p>
+                        Yes, you can cancel anytime. You'll keep premium features until the end of
+                        your billing period.
+                    </p>
+                </details>
+
+                <details>
+                    <summary>Do I need to provide my own AI?</summary>
+                    <p>
+                        No! Free tier supports Bring Your Own AI (Ollama, LM Studio) for privacy.
+                        Premium includes access to cloud AI if you prefer convenience.
+                    </p>
+                </details>
+            </div>
+
+            <!-- Footer -->
+            <footer
+                style="
+                    margin-top: var(--space-3xl);
+                    text-align: center;
+                    color: var(--text-muted);
+                    padding: var(--space-xl);
+                "
+            >
+                <p>Zero-backend architecture. No servers. No data collection.</p>
+                <p style="margin-top: var(--space-sm)">
+                    Questions? Contact us at hello@rhythmchamber.com
+                </p>
+            </footer>
         </div>
 
-        <!-- FAQ -->
-        <div class="faq-section">
-            <h2>Frequently Asked Questions</h2>
+        <!-- Browser Compatibility Check -->
+        <script src="js/compatibility.js?v=1"></script>
 
-            <details>
-                <summary>Why is Rhythm Chamber premium?</summary>
-                <p>Rhythm Chamber runs 100% in your browser with zero backend. This means we have no server costs, but also no venture funding. Premium supports continued development and keeps the free tier available for everyone.</p>
-            </details>
+        <!-- Lemon Squeezy Script (overlay checkout) -->
+        <script src="https://assets.lemonsqueezy.com/lemon.js" defer></script>
 
-            <details>
-                <summary>What's the difference between Free and Premium?</summary>
-                <p>Free users get full music analysis, personality reveal, and 1 free playlist to try. Premium unlocks unlimited playlists, metadata enrichment, semantic search, and the AI playlist curator.</p>
-            </details>
+        <!-- Config Loader Initialization -->
+        <script type="module">
+            import { ConfigLoader } from './js/services/config-loader.js';
+            // Force config refresh to bypass cache and get latest PAYMENT_MODE
+            await ConfigLoader.load({ forceRefresh: true });
+            console.log(
+                '[Config] Loaded, PAYMENT_MODE:',
+                ConfigLoader.get('PAYMENT_MODE'),
+                'Lemon Squeezy config:',
+                {
+                    storeUrl: ConfigLoader.get('lemonsqueezy.storeUrl'),
+                    variantMonthly: ConfigLoader.get('lemonsqueezy.variantMonthly'),
+                    variantYearly: ConfigLoader.get('lemonsqueezy.variantYearly'),
+                }
+            );
+        </script>
 
-            <details>
-                <summary>Is my data safe?</summary>
-                <p>Yes! Your data never leaves your device. All processing happens locally in your browser. We're privacy-first by design — no servers, no tracking, no data collection.</p>
-            </details>
+        <!-- Scripts -->
+        <script type="module">
+            import { PremiumController } from './js/controllers/premium-controller.js';
+            import { PremiumQuota } from './js/services/premium-quota.js';
+            import { Payments } from './js/payments.js';
+            import { LemonSqueezyService } from './js/services/lemon-squeezy-service.js';
 
-            <details>
-                <summary>Can I cancel anytime?</summary>
-                <p>Yes, you can cancel anytime. You'll keep premium features until the end of your billing period.</p>
-            </details>
+            // ==========================================
+            // Billing Toggle
+            // ==========================================
 
-            <details>
-                <summary>Do I need to provide my own AI?</summary>
-                <p>No! Free tier supports Bring Your Own AI (Ollama, LM Studio) for privacy. Premium includes access to cloud AI if you prefer convenience.</p>
-            </details>
-        </div>
+            let selectedBilling = 'monthly'; // 'monthly' or 'yearly'
 
-        <!-- Footer -->
-        <footer style="margin-top: var(--space-3xl); text-align: center; color: var(--text-muted); padding: var(--space-xl);">
-            <p>Zero-backend architecture. No servers. No data collection.</p>
-            <p style="margin-top: var(--space-sm);">Questions? Contact us at hello@rhythmchamber.com</p>
-        </footer>
-    </div>
+            const pricingData = {
+                monthly: {
+                    price: '$4.99',
+                    period: '/mo',
+                    description: 'Billed monthly. Cancel anytime.',
+                    amount: '$4.99',
+                },
+                yearly: {
+                    price: '$3.25',
+                    period: '/mo',
+                    description: '$39 billed yearly. Save 35%!',
+                    amount: '$39',
+                },
+            };
 
-    <!-- Browser Compatibility Check -->
-    <script src="js/compatibility.js?v=1"></script>
+            // Setup billing toggle
+            const toggleBtns = document.querySelectorAll('.toggle-btn');
+            const priceElement = document.getElementById('chamber-price');
+            const descriptionElement = document.getElementById('chamber-description');
+            const upgradeBtn = document.getElementById('upgrade-btn');
 
-    <!-- Lemon Squeezy Script (overlay checkout) -->
-    <script src="https://assets.lemonsqueezy.com/lemon.js" defer></script>
+            toggleBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    // Update active state
+                    toggleBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
 
-    <!-- Config Loader Initialization -->
-    <script type="module">
-        import { ConfigLoader } from './js/services/config-loader.js';
-        // Force config refresh to bypass cache and get latest PAYMENT_MODE
-        await ConfigLoader.load({ forceRefresh: true });
-        console.log('[Config] Loaded, PAYMENT_MODE:', ConfigLoader.get('PAYMENT_MODE'), 'Lemon Squeezy config:', {
-            storeUrl: ConfigLoader.get('lemonsqueezy.storeUrl'),
-            variantMonthly: ConfigLoader.get('lemonsqueezy.variantMonthly'),
-            variantYearly: ConfigLoader.get('lemonsqueezy.variantYearly')
-        });
-    </script>
+                    // Update selected billing
+                    selectedBilling = btn.dataset.billing;
 
-    <!-- Scripts -->
-    <script type="module">
-        import { PremiumController } from './js/controllers/premium-controller.js';
-        import { PremiumQuota } from './js/services/premium-quota.js';
-        import { Payments } from './js/payments.js';
-        import { LemonSqueezyService } from './js/services/lemon-squeezy-service.js';
+                    // Update price display
+                    const data = pricingData[selectedBilling];
+                    priceElement.innerHTML = `<span class="amount">${data.price}</span><span class="period">${data.period}</span>`;
+                    descriptionElement.textContent = data.description;
 
-        // ==========================================
-        // Billing Toggle
-        // ==========================================
-
-        let selectedBilling = 'monthly'; // 'monthly' or 'yearly'
-
-        const pricingData = {
-            monthly: {
-                price: '$4.99',
-                period: '/mo',
-                description: 'Billed monthly. Cancel anytime.',
-                amount: '$4.99'
-            },
-            yearly: {
-                price: '$3.25',
-                period: '/mo',
-                description: '$39 billed yearly. Save 35%!',
-                amount: '$39'
-            }
-        };
-
-        // Setup billing toggle
-        const toggleBtns = document.querySelectorAll('.toggle-btn');
-        const priceElement = document.getElementById('chamber-price');
-        const descriptionElement = document.getElementById('chamber-description');
-        const upgradeBtn = document.getElementById('upgrade-btn');
-
-        toggleBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                // Update active state
-                toggleBtns.forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-
-                // Update selected billing
-                selectedBilling = btn.dataset.billing;
-
-                // Update price display
-                const data = pricingData[selectedBilling];
-                priceElement.innerHTML = `<span class="amount">${data.price}</span><span class="period">${data.period}</span>`;
-                descriptionElement.textContent = data.description;
-
-                // Update button data attribute
-                upgradeBtn.dataset.billing = selectedBilling;
+                    // Update button data attribute
+                    upgradeBtn.dataset.billing = selectedBilling;
+                });
             });
-        });
 
-        // ==========================================
-        // Lemon Squeezy Checkout
-        // ==========================================
+            // ==========================================
+            // Lemon Squeezy Checkout
+            // ==========================================
 
-        // Setup Lemon Squeezy event handlers
-        LemonSqueezyService.setupEventHandlers({
-            onCheckoutSuccess: async (data) => {
-                console.log('[Upgrade] Checkout successful:', data);
+            // Setup Lemon Squeezy event handlers
+            LemonSqueezyService.setupEventHandlers({
+                onCheckoutSuccess: async data => {
+                    console.log('[Upgrade] Checkout successful:', data);
 
-                // Extract license key from event
-                const licenseKey = data.licenseKey || data.meta?.license_key?.key;
+                    // Extract license key from event
+                    const licenseKey = data.licenseKey || data.meta?.license_key?.key;
 
-                if (licenseKey) {
-                    // Auto-activate the license
-                    const result = await LemonSqueezyService.activateLicense(licenseKey);
+                    if (licenseKey) {
+                        // Auto-activate the license
+                        const result = await LemonSqueezyService.activateLicense(licenseKey);
 
-                    if (result.success) {
-                        showPaymentStatus('success', '🎉 Premium unlocked! All features are now activated.');
+                        if (result.success) {
+                            showPaymentStatus(
+                                'success',
+                                '🎉 Premium unlocked! All features are now activated.'
+                            );
+                        } else {
+                            showPaymentStatus(
+                                'error',
+                                'Payment received but activation failed. Please contact support.'
+                            );
+                        }
                     } else {
-                        showPaymentStatus('error', 'Payment received but activation failed. Please contact support.');
+                        showPaymentStatus(
+                            'success',
+                            '🎉 Payment successful! You now have access to Premium.'
+                        );
                     }
-                } else {
-                    showPaymentStatus('success', '🎉 Payment successful! You now have access to Premium.');
+
+                    // Reset button state
+                    upgradeBtn.disabled = false;
+                    btnText.style.display = 'inline';
+                    btnSpinner.style.display = 'none';
+                },
+                onCheckoutClosed: () => {
+                    console.log('[Upgrade] Checkout closed');
+                    // Reset button state
+                    upgradeBtn.disabled = false;
+                    btnText.style.display = 'inline';
+                    btnSpinner.style.display = 'none';
+                },
+            });
+
+            async function handleUpgradeClick(e) {
+                e.preventDefault();
+
+                const btn = e.currentTarget;
+                const btnText = btn.querySelector('.btn-text');
+                const btnSpinner = btn.querySelector('.btn-spinner');
+
+                // Check if already premium
+                if (Payments.isPremium()) {
+                    alert('You already have premium access!');
+                    return;
                 }
 
-                // Reset button state
-                upgradeBtn.disabled = false;
-                btnText.style.display = 'inline';
-                btnSpinner.style.display = 'none';
-            },
-            onCheckoutClosed: () => {
-                console.log('[Upgrade] Checkout closed');
-                // Reset button state
-                upgradeBtn.disabled = false;
-                btnText.style.display = 'inline';
-                btnSpinner.style.display = 'none';
-            }
-        });
+                // Show loading state
+                btn.disabled = true;
+                btnText.style.display = 'none';
+                btnSpinner.style.display = 'inline';
 
-        async function handleUpgradeClick(e) {
-            e.preventDefault();
+                try {
+                    let result;
 
-            const btn = e.currentTarget;
-            const btnText = btn.querySelector('.btn-text');
-            const btnSpinner = btn.querySelector('.btn-spinner');
+                    // Call appropriate checkout based on selection
+                    if (selectedBilling === 'monthly') {
+                        result = await LemonSqueezyService.openMonthlyCheckout();
+                    } else {
+                        result = await LemonSqueezyService.openYearlyCheckout();
+                    }
 
-            // Check if already premium
-            if (Payments.isPremium()) {
-                alert('You already have premium access!');
-                return;
-            }
+                    if (!result.success) {
+                        // Show error message
+                        showPaymentStatus(
+                            'error',
+                            result.message || 'Payment initialization failed'
+                        );
 
-            // Show loading state
-            btn.disabled = true;
-            btnText.style.display = 'none';
-            btnSpinner.style.display = 'inline';
-
-            try {
-                let result;
-
-                // Call appropriate checkout based on selection
-                if (selectedBilling === 'monthly') {
-                    result = await LemonSqueezyService.openMonthlyCheckout();
-                } else {
-                    result = await LemonSqueezyService.openYearlyCheckout();
-                }
-
-                if (!result.success) {
-                    // Show error message
-                    showPaymentStatus('error', result.message || 'Payment initialization failed');
+                        // Re-enable button
+                        btn.disabled = false;
+                        btnText.style.display = 'inline';
+                        btnSpinner.style.display = 'none';
+                    }
+                } catch (error) {
+                    console.error('[Upgrade] Checkout error:', error);
+                    showPaymentStatus('error', 'An unexpected error occurred. Please try again.');
 
                     // Re-enable button
                     btn.disabled = false;
                     btnText.style.display = 'inline';
                     btnSpinner.style.display = 'none';
                 }
-
-            } catch (error) {
-                console.error('[Upgrade] Checkout error:', error);
-                showPaymentStatus('error', 'An unexpected error occurred. Please try again.');
-
-                // Re-enable button
-                btn.disabled = false;
-                btnText.style.display = 'inline';
-                btnSpinner.style.display = 'none';
             }
-        }
 
-        // ==========================================
-        // Payment Status Messages
-        // ==========================================
+            // ==========================================
+            // Payment Status Messages
+            // ==========================================
 
-        function showPaymentStatus(type, message) {
-            const statusEl = document.getElementById('payment-status');
-            statusEl.className = `payment-status-message ${type}`;
-            statusEl.textContent = message;
+            function showPaymentStatus(type, message) {
+                const statusEl = document.getElementById('payment-status');
+                statusEl.className = `payment-status-message ${type}`;
+                statusEl.textContent = message;
 
-            // Auto-hide success messages after 5 seconds
-            if (type === 'success') {
-                setTimeout(() => {
-                    statusEl.className = 'payment-status-message';
-                    statusEl.textContent = '';
-                }, 5000);
+                // Auto-hide success messages after 5 seconds
+                if (type === 'success') {
+                    setTimeout(() => {
+                        statusEl.className = 'payment-status-message';
+                        statusEl.textContent = '';
+                    }, 5000);
+                }
             }
-        }
 
-        // ==========================================
-        // Event Handlers
-        // ==========================================
+            // ==========================================
+            // Event Handlers
+            // ==========================================
 
-        // Setup upgrade button click handler
-        upgradeBtn.addEventListener('click', handleUpgradeClick);
+            // Setup upgrade button click handler
+            upgradeBtn.addEventListener('click', handleUpgradeClick);
 
-        // Log current quota status for debugging
-        PremiumQuota.getQuotaStatus().then(status => {
-            console.log('[Upgrade Page] Current quota status:', status);
-        });
+            // Log current quota status for debugging
+            PremiumQuota.getQuotaStatus().then(status => {
+                console.log('[Upgrade Page] Current quota status:', status);
+            });
 
-        // Log Lemon Squeezy configuration status
-        console.log('[Upgrade Page] Lemon Squeezy configured:', LemonSqueezyService.isConfigured());
-        console.log('[Upgrade Page] Variant IDs:', LemonSqueezyService.getVariantIds());
-    </script>
-</body>
-
+            // Log Lemon Squeezy configuration status
+            console.log(
+                '[Upgrade Page] Lemon Squeezy configured:',
+                LemonSqueezyService.isConfigured()
+            );
+            console.log('[Upgrade Page] Variant IDs:', LemonSqueezyService.getVariantIds());
+        </script>
+    </body>
 </html>
