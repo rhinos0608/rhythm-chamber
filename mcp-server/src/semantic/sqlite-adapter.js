@@ -51,13 +51,13 @@ export class SqliteVectorAdapter {
     const extPath = getLoadablePath();
     this._db.loadExtension(extPath);
 
-    console.error(`[SqliteAdapter] Loaded sqlite-vec extension from: ${extPath}`);
+    console.log(`[SqliteAdapter] Loaded sqlite-vec extension from: ${extPath}`);
 
     // Create vec0 virtual tables
     this._createTables();
 
     this._initialized = true;
-    console.error(`[SqliteAdapter] Initialized: ${dbPath} (dimension: ${dimension})`);
+    console.log(`[SqliteAdapter] Initialized: ${dbPath} (dimension: ${dimension})`);
   }
 
   /**
@@ -65,14 +65,9 @@ export class SqliteVectorAdapter {
    * @private
    */
   _createTables() {
-    // Drop tables if they exist (for development)
-    this._db.exec('DROP TABLE IF EXISTS vec_chunks');
-    this._db.exec('DROP TABLE IF EXISTS chunk_metadata');
-
-    // Create main vec0 table for vector storage
-    // Note: The embedding column type must match dimension exactly
+    // Create main vec0 table for vector storage (IF NOT EXISTS for persistence)
     this._db.exec(`
-      CREATE VIRTUAL TABLE vec_chunks USING vec0(
+      CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
         chunk_id TEXT PRIMARY KEY,
         embedding FLOAT[${this._dimension}]
       );
@@ -95,7 +90,7 @@ export class SqliteVectorAdapter {
       );
     `);
 
-    console.error('[SqliteAdapter] Created vec0 tables');
+    console.log('[SqliteAdapter] Created vec0 tables');
   }
 
   /**
@@ -195,12 +190,22 @@ export class SqliteVectorAdapter {
       ? 'AND ' + conditions.join(' AND ')
       : '';
 
-    // KNN search using distance calculation
-    // We compute distance for all chunks and filter by threshold
+    // KNN search using distance calculation with metadata JOIN
+    // Fetches all data in a single query to avoid N+1 problem
     const query = `
       SELECT
         v.chunk_id,
-        distance
+        v.distance,
+        m.text,
+        m.name,
+        m.type,
+        m.file,
+        m.line,
+        m.exported,
+        m.layer,
+        m.context_before as contextBefore,
+        m.context_after as contextAfter,
+        m.updated_at as updatedAt
       FROM (
         SELECT
           chunk_id,
@@ -217,13 +222,25 @@ export class SqliteVectorAdapter {
     const stmt = this._db.prepare(query);
     const rows = stmt.all(queryEmbedding, maxDistance, ...params, limit);
 
-    // Convert results and fetch metadata
+    // Convert results to expected format
     const results = [];
     for (const row of rows) {
       const similarity = 1 - row.distance;
 
       if (similarity >= threshold) {
-        const metadata = this._getMetadata(row.chunk_id);
+        const metadata = {
+          text: row.text,
+          name: row.name,
+          type: row.type,
+          file: row.file,
+          line: row.line,
+          exported: row.exported === 1,
+          layer: row.layer,
+          contextBefore: row.contextBefore,
+          contextAfter: row.contextAfter,
+          updatedAt: row.updatedAt,
+          chunkId: row.chunk_id,
+        };
         results.push({
           chunkId: row.chunk_id,
           similarity,
@@ -365,7 +382,7 @@ export class SqliteVectorAdapter {
       this._db.close();
       this._db = null;
       this._initialized = false;
-      console.error('[SqliteAdapter] Database connection closed');
+      console.log('[SqliteAdapter] Database connection closed');
     }
   }
 
