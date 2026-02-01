@@ -44,24 +44,24 @@ import path from 'path';
  * Ensure the key storage directory exists
  */
 function ensureKeyStorage() {
-    if (!fs.existsSync(KEY_STORAGE_PATH)) {
-        fs.mkdirSync(KEY_STORAGE_PATH, { mode: 0o700 });
-        console.log(`Created key storage directory: ${KEY_STORAGE_PATH}`);
-    }
+  if (!fs.existsSync(KEY_STORAGE_PATH)) {
+    fs.mkdirSync(KEY_STORAGE_PATH, { mode: 0o700 });
+    console.log(`Created key storage directory: ${KEY_STORAGE_PATH}`);
+  }
 }
 
 /**
  * Get the private key path
  */
 function getPrivateKeyPath() {
-    return path.join(KEY_STORAGE_PATH, 'private.pem');
+  return path.join(KEY_STORAGE_PATH, 'private.pem');
 }
 
 /**
  * Get the public key path
  */
 function getPublicKeyPath() {
-    return path.join(KEY_STORAGE_PATH, 'public.pem');
+  return path.join(KEY_STORAGE_PATH, 'public.pem');
 }
 
 /**
@@ -69,42 +69,42 @@ function getPublicKeyPath() {
  * @returns {Object} { privateKey, publicKey }
  */
 function loadOrGenerateKeyPair() {
-    ensureKeyStorage();
+  ensureKeyStorage();
 
-    const privateKeyPath = getPrivateKeyPath();
-    const publicKeyPath = getPublicKeyPath();
+  const privateKeyPath = getPrivateKeyPath();
+  const publicKeyPath = getPublicKeyPath();
 
-    // Check if keys already exist
-    if (fs.existsSync(privateKeyPath) && fs.existsSync(publicKeyPath)) {
-        console.log('Loading existing ECDSA key pair...');
-        return {
-            privateKey: fs.readFileSync(privateKeyPath, 'utf-8'),
-            publicKey: fs.readFileSync(publicKeyPath, 'utf-8')
-        };
-    }
+  // Check if keys already exist
+  if (fs.existsSync(privateKeyPath) && fs.existsSync(publicKeyPath)) {
+    console.log('Loading existing ECDSA key pair...');
+    return {
+      privateKey: fs.readFileSync(privateKeyPath, 'utf-8'),
+      publicKey: fs.readFileSync(publicKeyPath, 'utf-8'),
+    };
+  }
 
-    // Generate new key pair
-    console.log('Generating new ECDSA P-256 key pair...');
-    const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', {
-        namedCurve: 'P-256',
-        privateKeyEncoding: {
-            type: 'pkcs8',
-            format: 'pem'
-        },
-        publicKeyEncoding: {
-            type: 'spki',
-            format: 'pem'
-        }
-    });
+  // Generate new key pair
+  console.log('Generating new ECDSA P-256 key pair...');
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', {
+    namedCurve: 'P-256',
+    privateKeyEncoding: {
+      type: 'pkcs8',
+      format: 'pem',
+    },
+    publicKeyEncoding: {
+      type: 'spki',
+      format: 'pem',
+    },
+  });
 
-    // Save keys with restricted permissions
-    fs.writeFileSync(privateKeyPath, privateKey, { mode: 0o600 });
-    fs.writeFileSync(publicKeyPath, publicKey, { mode: 0o644 });
+  // Save keys with restricted permissions
+  fs.writeFileSync(privateKeyPath, privateKey, { mode: 0o600 });
+  fs.writeFileSync(publicKeyPath, publicKey, { mode: 0o644 });
 
-    console.log(`Private key saved to: ${privateKeyPath}`);
-    console.log(`Public key saved to: ${publicKeyPath}`);
+  console.log(`Private key saved to: ${privateKeyPath}`);
+  console.log(`Public key saved to: ${publicKeyPath}`);
 
-    return { privateKey, publicKey };
+  return { privateKey, publicKey };
 }
 
 /**
@@ -113,18 +113,15 @@ function loadOrGenerateKeyPair() {
  * @returns {string} Base64URL encoded SPKI
  */
 function exportPublicKeyForClient(publicKey) {
-    // Extract the base64 part from PEM
-    const pemContents = publicKey
-        .replace(/-----BEGIN PUBLIC KEY-----/g, '')
-        .replace(/-----END PUBLIC KEY-----/g, '')
-        .replace(/\n/g, '')
-        .trim();
+  // Extract the base64 part from PEM
+  const pemContents = publicKey
+    .replace(/-----BEGIN PUBLIC KEY-----/g, '')
+    .replace(/-----END PUBLIC KEY-----/g, '')
+    .replace(/\n/g, '')
+    .trim();
 
-    // Convert to base64URL
-    return pemContents
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=/g, '');
+  // Convert to base64URL
+  return pemContents.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
 // ==========================================
@@ -137,8 +134,8 @@ function exportPublicKeyForClient(publicKey) {
  * @returns {string} Base64URL encoded string
  */
 function base64UrlEncode(str) {
-    const base64 = Buffer.from(str).toString('base64');
-    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  const base64 = Buffer.from(str).toString('base64');
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
 /**
@@ -148,30 +145,30 @@ function base64UrlEncode(str) {
  * @returns {string} JWT token
  */
 function createJWT(payload, privateKey) {
-    const header = {
-        alg: 'ES256',
-        typ: 'JWT'
-    };
+  const header = {
+    alg: 'ES256',
+    typ: 'JWT',
+  };
 
-    const encodedHeader = base64UrlEncode(JSON.stringify(header));
-    const encodedPayload = base64UrlEncode(JSON.stringify(payload));
-    const data = `${encodedHeader}.${encodedPayload}`;
+  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+  const data = `${encodedHeader}.${encodedPayload}`;
 
-    // Sign with ECDSA using SHA-256
-    const signature = crypto.sign('sha256', Buffer.from(data), {
-        key: privateKey,
-        format: 'pem',
-        type: 'pkcs8'
-    });
+  // Sign with ECDSA using SHA-256
+  const signature = crypto.sign('sha256', Buffer.from(data), {
+    key: privateKey,
+    format: 'pem',
+    type: 'pkcs8',
+  });
 
-    // Encode signature in base64URL
-    const encodedSignature = Buffer.from(signature)
-        .toString('base64')
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=/g, '');
+  // Encode signature in base64URL
+  const encodedSignature = Buffer.from(signature)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
 
-    return `${data}.${encodedSignature}`;
+  return `${data}.${encodedSignature}`;
 }
 
 // ==========================================
@@ -184,44 +181,44 @@ function createJWT(payload, privateKey) {
  * @returns {string} JWT license token
  */
 function generateLicense(options = {}) {
-    const {
-        tier = 'sovereign',
-        expiresInDays = DEFAULT_EXPIRATION_DAYS,
-        instanceId = null,
-        features = [],
-        deviceBinding = null
-    } = options;
+  const {
+    tier = 'sovereign',
+    expiresInDays = DEFAULT_EXPIRATION_DAYS,
+    instanceId = null,
+    features = [],
+    deviceBinding = null,
+  } = options;
 
-    // Validate tier
-    if (!VALID_TIERS.includes(tier)) {
-        throw new Error(`Invalid tier: ${tier}. Must be one of: ${VALID_TIERS.join(', ')}`);
-    }
+  // Validate tier
+  if (!VALID_TIERS.includes(tier)) {
+    throw new Error(`Invalid tier: ${tier}. Must be one of: ${VALID_TIERS.join(', ')}`);
+  }
 
-    // Calculate timestamps
-    const now = Math.floor(Date.now() / 1000);
-    const exp = now + (expiresInDays * 24 * 60 * 60);
+  // Calculate timestamps
+  const now = Math.floor(Date.now() / 1000);
+  const exp = now + expiresInDays * 24 * 60 * 60;
 
-    // Build payload
-    const payload = {
-        tier,
-        iat: now,
-        exp,
-        features
-    };
+  // Build payload
+  const payload = {
+    tier,
+    iat: now,
+    exp,
+    features,
+  };
 
-    if (instanceId) {
-        payload.instanceId = instanceId;
-    }
+  if (instanceId) {
+    payload.instanceId = instanceId;
+  }
 
-    if (deviceBinding) {
-        payload.deviceBinding = deviceBinding;
-    }
+  if (deviceBinding) {
+    payload.deviceBinding = deviceBinding;
+  }
 
-    // Load key pair and sign
-    const { privateKey } = loadOrGenerateKeyPair();
-    const token = createJWT(payload, privateKey);
+  // Load key pair and sign
+  const { privateKey } = loadOrGenerateKeyPair();
+  const token = createJWT(payload, privateKey);
 
-    return token;
+  return token;
 }
 
 // ==========================================
@@ -229,7 +226,7 @@ function generateLicense(options = {}) {
 // ==========================================
 
 function printHelp() {
-    console.log(`
+  console.log(`
 License Generation Utility (Server-Side)
 
 Usage:
@@ -263,99 +260,98 @@ Security Notes:
 }
 
 function parseArgs(args) {
-    const options = {};
-    let i = 0;
+  const options = {};
+  let i = 0;
 
-    while (i < args.length) {
-        const arg = args[i];
+  while (i < args.length) {
+    const arg = args[i];
 
-        switch (arg) {
-            case '--tier':
-                options.tier = args[++i];
-                break;
-            case '--expires-in':
-                options.expiresInDays = parseInt(args[++i], 10);
-                break;
-            case '--instance-id':
-                options.instanceId = args[++i];
-                break;
-            case '--features':
-                options.features = args[++i].split(',').map(f => f.trim());
-                break;
-            case '--device-binding':
-                options.deviceBinding = args[++i];
-                break;
-            case '--export-public-key':
-                options.exportPublicKey = true;
-                break;
-            case '--help':
-            case '-h':
-                options.help = true;
-                break;
-            default:
-                console.error(`Unknown option: ${arg}`);
-                printHelp();
-                process.exit(1);
-        }
-
-        i++;
+    switch (arg) {
+      case '--tier':
+        options.tier = args[++i];
+        break;
+      case '--expires-in':
+        options.expiresInDays = parseInt(args[++i], 10);
+        break;
+      case '--instance-id':
+        options.instanceId = args[++i];
+        break;
+      case '--features':
+        options.features = args[++i].split(',').map(f => f.trim());
+        break;
+      case '--device-binding':
+        options.deviceBinding = args[++i];
+        break;
+      case '--export-public-key':
+        options.exportPublicKey = true;
+        break;
+      case '--help':
+      case '-h':
+        options.help = true;
+        break;
+      default:
+        console.error(`Unknown option: ${arg}`);
+        printHelp();
+        process.exit(1);
     }
 
-    return options;
+    i++;
+  }
+
+  return options;
 }
 
 function main() {
-    const args = parseArgs(process.argv.slice(2));
+  const args = parseArgs(process.argv.slice(2));
 
-    if (args.help) {
-        printHelp();
-        return;
-    }
+  if (args.help) {
+    printHelp();
+    return;
+  }
 
-    if (args.exportPublicKey) {
-        const { publicKey } = loadOrGenerateKeyPair();
-        const publicKeyB64Url = exportPublicKeyForClient(publicKey);
+  if (args.exportPublicKey) {
+    const { publicKey } = loadOrGenerateKeyPair();
+    const publicKeyB64Url = exportPublicKeyForClient(publicKey);
 
-        console.log('\n=== Public Key for Client Code ===');
-        console.log('\nJavaScript/TypeScript:');
-        console.log(`const PUBLIC_KEY_SPKI = '${publicKeyB64Url.substring(0, 64)}';`);
-        console.log(`const PUBLIC_KEY_SPKI += '${publicKeyB64Url.substring(64)}';`);
-        console.log('\nFull string:');
-        console.log(publicKeyB64Url);
-        console.log('\nPEM format:');
-        console.log(publicKey);
-        return;
-    }
+    console.log('\n=== Public Key for Client Code ===');
+    console.log('\nJavaScript/TypeScript:');
+    console.log(`const PUBLIC_KEY_SPKI = '${publicKeyB64Url.substring(0, 64)}';`);
+    console.log(`const PUBLIC_KEY_SPKI += '${publicKeyB64Url.substring(64)}';`);
+    console.log('\nFull string:');
+    console.log(publicKeyB64Url);
+    console.log('\nPEM format:');
+    console.log(publicKey);
+    return;
+  }
 
-    try {
-        const token = generateLicense(args);
+  try {
+    const token = generateLicense(args);
 
-        console.log('\n=== Generated License Token ===');
-        console.log('\nJWT Token:');
-        console.log(token);
+    console.log('\n=== Generated License Token ===');
+    console.log('\nJWT Token:');
+    console.log(token);
 
-        // Decode for display
-        const parts = token.split('.');
-        const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString());
-        const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+    // Decode for display
+    const parts = token.split('.');
+    const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString());
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
 
-        console.log('\nHeader:');
-        console.log(JSON.stringify(header, null, 2));
+    console.log('\nHeader:');
+    console.log(JSON.stringify(header, null, 2));
 
-        console.log('\nPayload:');
-        console.log(JSON.stringify(payload, null, 2));
+    console.log('\nPayload:');
+    console.log(JSON.stringify(payload, null, 2));
 
-        console.log('\nLicense valid until:', new Date(payload.exp * 1000).toISOString());
-
-    } catch (error) {
-        console.error('Error generating license:', error.message);
-        process.exit(1);
-    }
+    console.log('\nLicense valid until:', new Date(payload.exp * 1000).toISOString());
+  } catch (error) {
+    console.error('Error generating license:', error.message);
+    process.exit(1);
+  }
 }
 
 // Run if called directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-    main();
+  main();
 }
 
 export { generateLicense, loadOrGenerateKeyPair, exportPublicKeyForClient };

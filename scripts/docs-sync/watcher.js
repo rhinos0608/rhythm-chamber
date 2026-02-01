@@ -31,13 +31,16 @@ try {
 const args = process.argv.slice(2);
 const verbose = args.includes('--verbose') || args.includes('-v');
 const autoCommit = args.includes('--commit');
-const debounceMs = parseInt(args.find(arg => arg.startsWith('--debounce='))?.split('=')[1]) || config.debounceMs || 500;
+const debounceMs =
+  parseInt(args.find(arg => arg.startsWith('--debounce='))?.split('=')[1]) ||
+  config.debounceMs ||
+  500;
 
 const logger = new Logger({ verbose });
 
 // State
-let cache = new ASTCache();
-let pendingChanges = new Set();
+const cache = new ASTCache();
+const pendingChanges = new Set();
 let debounceTimer = null;
 let isProcessing = false;
 
@@ -216,18 +219,18 @@ function startWatch() {
     });
 
     watcher
-      .on('change', (filepath) => {
+      .on('change', filepath => {
         handleChange(filepath);
       })
-      .on('add', (filepath) => {
+      .on('add', filepath => {
         logger.dim(`Added: ${filepath}`);
         handleChange(filepath);
       })
-      .on('unlink', (filepath) => {
+      .on('unlink', filepath => {
         logger.dim(`Removed: ${filepath}`);
         handleChange(filepath);
       })
-      .on('error', (error) => {
+      .on('error', error => {
         logger.error('Watcher error', error.message);
       });
 

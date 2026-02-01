@@ -42,11 +42,15 @@ export class Logger {
   }
 
   warning(message) {
-    console.warn(`${colors.yellow}${symbols.warning}${colors.reset} ${colors.yellow}${message}${colors.reset}`);
+    console.warn(
+      `${colors.yellow}${symbols.warning}${colors.reset} ${colors.yellow}${message}${colors.reset}`
+    );
   }
 
   error(message, details = null) {
-    console.error(`${colors.red}${symbols.error}${colors.reset} ${colors.red}${message}${colors.reset}`);
+    console.error(
+      `${colors.red}${symbols.error}${colors.reset} ${colors.red}${message}${colors.reset}`
+    );
     if (details && this.verbose) {
       console.error(`${colors.dim}  ${details}${colors.reset}`);
     }
@@ -66,7 +70,9 @@ export class Logger {
 
   header(message) {
     if (!this.quiet) {
-      console.log(`\n${colors.bright}${colors.cyan}═${colors.reset} ${colors.bright}${message}${colors.bright}${colors.cyan} ═${colors.reset}\n`);
+      console.log(
+        `\n${colors.bright}${colors.cyan}═${colors.reset} ${colors.bright}${message}${colors.bright}${colors.cyan} ═${colors.reset}\n`
+      );
     }
   }
 
@@ -90,9 +96,7 @@ export class Logger {
       );
 
       // Header
-      const headerRow = headers.map((h, i) =>
-        h.padEnd(colWidths[i])
-      ).join(' | ');
+      const headerRow = headers.map((h, i) => h.padEnd(colWidths[i])).join(' | ');
       console.log(`${colors.bright}${headerRow}${colors.reset}`);
 
       // Separator
@@ -101,9 +105,7 @@ export class Logger {
 
       // Rows
       rows.forEach(row => {
-        const rowStr = row.map((cell, i) =>
-          String(cell).padEnd(colWidths[i])
-        ).join(' | ');
+        const rowStr = row.map((cell, i) => String(cell).padEnd(colWidths[i])).join(' | ');
         console.log(rowStr);
       });
     }

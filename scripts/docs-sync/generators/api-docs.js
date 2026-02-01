@@ -40,32 +40,40 @@ export class APIDocsGenerator {
 
       const docs = [];
 
-      traverse(ast, {
-        ExportNamedDeclaration(path) {
-          this.extractDocsFromDeclaration(path, docs, filepath);
-        },
+      traverse(
+        ast,
+        {
+          ExportNamedDeclaration(path) {
+            this.extractDocsFromDeclaration(path, docs, filepath);
+          },
 
-        ExportDefaultDeclaration(path) {
-          this.extractDocsFromDeclaration(path, docs, filepath);
-        },
+          ExportDefaultDeclaration(path) {
+            this.extractDocsFromDeclaration(path, docs, filepath);
+          },
 
-        FunctionDeclaration(path) {
-          if (path.parent.type !== 'ExportNamedDeclaration' &&
-              path.parent.type !== 'ExportDefaultDeclaration') {
-            // Skip non-exported functions
-            return;
-          }
-          this.extractDocsFromDeclaration(path, docs, filepath);
-        },
+          FunctionDeclaration(path) {
+            if (
+              path.parent.type !== 'ExportNamedDeclaration' &&
+              path.parent.type !== 'ExportDefaultDeclaration'
+            ) {
+              // Skip non-exported functions
+              return;
+            }
+            this.extractDocsFromDeclaration(path, docs, filepath);
+          },
 
-        ClassDeclaration(path) {
-          if (path.parent.type !== 'ExportNamedDeclaration' &&
-              path.parent.type !== 'ExportDefaultDeclaration') {
-            return;
-          }
-          this.extractDocsFromDeclaration(path, docs, filepath);
+          ClassDeclaration(path) {
+            if (
+              path.parent.type !== 'ExportNamedDeclaration' &&
+              path.parent.type !== 'ExportDefaultDeclaration'
+            ) {
+              return;
+            }
+            this.extractDocsFromDeclaration(path, docs, filepath);
+          },
         },
-      }, { scope: this, docs, filepath });
+        { scope: this, docs, filepath }
+      );
 
       return docs;
     } catch (error) {
@@ -208,8 +216,8 @@ export class APIDocsGenerator {
       }
 
       // Other custom tags
-      const otherTags = jsdoc.tags.filter(tag =>
-        !['param', 'returns', 'return', 'throws', 'exception', 'example'].includes(tag.title)
+      const otherTags = jsdoc.tags.filter(
+        tag => !['param', 'returns', 'return', 'throws', 'exception', 'example'].includes(tag.title)
       );
 
       if (otherTags.length > 0) {
@@ -333,10 +341,14 @@ export class APIDocsGenerator {
     const before = content.substring(0, insertIndex);
     const after = content.substring(insertIndex);
 
-    const newContent = before + '\n' +
-      this.markers.start + '\n' +
+    const newContent =
+      before +
+      '\n' +
+      this.markers.start +
+      '\n' +
       '<!-- API documentation will be auto-generated here -->\n' +
-      this.markers.end + '\n' +
+      this.markers.end +
+      '\n' +
       after;
 
     if (!this.dryRun) {

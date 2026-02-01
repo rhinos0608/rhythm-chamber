@@ -42,7 +42,7 @@ const LAYERS = {
   config: { level: 0, canImport: [] }, // Cannot import anything
   contracts: { level: 0, canImport: [] }, // Cannot import anything
   state: { level: 0, canImport: ['utils'] },
-  vendor: { level: 0, canImport: [] } // External libraries
+  vendor: { level: 0, canImport: [] }, // External libraries
 };
 
 /**
@@ -88,7 +88,8 @@ function extractImports(filePath) {
   // import { X } from './path.js'
   // import X from './path.js'
   // import * as X from './path.js'
-  const importRegex = /import\s+(?:(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s*,?\s*)*\s+from\s+['"]([^'"]+)['"]/g;
+  const importRegex =
+    /import\s+(?:(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s*,?\s*)*\s+from\s+['"]([^'"]+)['"]/g;
 
   let match;
   while ((match = importRegex.exec(content)) !== null) {
@@ -167,7 +168,7 @@ function isValidLayerImport(importingLayer, targetLayer) {
  */
 function detectCircularDeps(graph) {
   const WHITE = 0; // Not visited
-  const GRAY = 1;  // Visiting (in recursion stack)
+  const GRAY = 1; // Visiting (in recursion stack)
   const BLACK = 2; // Visited
 
   const color = {};
@@ -259,7 +260,7 @@ function analyzeDependencies() {
   let totalResolveTime = 0;
   const progressFile = join(OUTPUT_DIR, 'analyze-progress.txt');
 
-  writeFileSync(progressFile, `Starting file processing...\n`);
+  writeFileSync(progressFile, 'Starting file processing...\n');
 
   console.log('  Starting file processing...');
 
@@ -276,7 +277,9 @@ function analyzeDependencies() {
     // Report progress more frequently at first
     if (processed === 1 || processed % progressInterval === 0 || processed < 5) {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(`  Processing: ${processed}/${files.length} files... (${elapsed}s, ${totalImports} imports, ${(totalResolveTime/1000).toFixed(1)}s resolving)`);
+      console.log(
+        `  Processing: ${processed}/${files.length} files... (${elapsed}s, ${totalImports} imports, ${(totalResolveTime / 1000).toFixed(1)}s resolving)`
+      );
     }
 
     try {
@@ -322,7 +325,7 @@ function analyzeDependencies() {
                   importingLayer: currentLayer,
                   imports: relative(JS_DIR, resolvedPath),
                   targetLayer: targetLayer,
-                  reason: `Layer '${currentLayer}' cannot import from layer '${targetLayer}'`
+                  reason: `Layer '${currentLayer}' cannot import from layer '${targetLayer}'`,
                 });
               }
             }
@@ -330,7 +333,7 @@ function analyzeDependencies() {
             // File is in js/ but doesn't exist
             missingImports.push({
               file: relative(JS_DIR, file),
-              imports: importPath
+              imports: importPath,
             });
           }
         } catch (error) {
@@ -398,20 +401,20 @@ function analyzeDependencies() {
       totalFiles: files.length,
       circularDependencies: cycles.length,
       layerViolations: layerViolations.length,
-      missingImports: missingImports.length
+      missingImports: missingImports.length,
     },
     cycles: cycles.map(cycle => cycle.map(f => relative(JS_DIR, f))),
     layerViolations: layerViolations.map(v => ({
       ...v,
-      severity: 'error'
+      severity: 'error',
     })),
     missingImports,
     graph: Object.fromEntries(
       Object.entries(graph).map(([file, deps]) => [
         relative(JS_DIR, file),
-        deps.map(d => relative(JS_DIR, d))
+        deps.map(d => relative(JS_DIR, d)),
       ])
-    )
+    ),
   };
 
   const jsonPath = join(OUTPUT_DIR, 'dependency-graph.json');
@@ -459,13 +462,13 @@ function analyzeDependencies() {
 function getLayerColor(layer) {
   const colors = {
     controllers: '#ff9999', // Red
-    services: '#99ccff',    // Blue
-    providers: '#99ff99',   // Green
-    utils: '#ffff99',       // Yellow
-    storage: '#ff99ff',     // Purple
-    security: '#ffcc99',    // Orange
-    artifacts: '#cc99ff',   // Light purple
-    workers: '#99ffcc'      // Teal
+    services: '#99ccff', // Blue
+    providers: '#99ff99', // Green
+    utils: '#ffff99', // Yellow
+    storage: '#ff99ff', // Purple
+    security: '#ffcc99', // Orange
+    artifacts: '#cc99ff', // Light purple
+    workers: '#99ffcc', // Teal
   };
   return colors[layer] || '#cccccc';
 }

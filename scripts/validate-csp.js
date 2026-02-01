@@ -16,7 +16,9 @@ const successes = [];
 
 files.forEach(file => {
   const content = fs.readFileSync(file, 'utf8');
-  const cspMatch = content.match(/<meta http-equiv="Content-Security-Policy"[^>]*content="([^"]+)"/);
+  const cspMatch = content.match(
+    /<meta http-equiv="Content-Security-Policy"[^>]*content="([^"]+)"/
+  );
   if (!cspMatch) {
     issues.push(`${file}: No CSP found`);
     return;
@@ -25,9 +27,11 @@ files.forEach(file => {
   const csp = cspMatch[1];
 
   // Check for unsafe-inline in script-src (should be REMOVED)
-  if (csp.includes("script-src 'self' 'unsafe-inline'") ||
-      csp.includes("script-src 'unsafe-inline'") ||
-      csp.match(/script-src[^;]*'unsafe-inline'/)) {
+  if (
+    csp.includes("script-src 'self' 'unsafe-inline'") ||
+    csp.includes("script-src 'unsafe-inline'") ||
+    csp.match(/script-src[^;]*'unsafe-inline'/)
+  ) {
     issues.push(`${file}: unsafe-inline found in script-src (should be removed)`);
   } else {
     successes.push(`${file}: unsafe-inline removed from script-src ✓`);

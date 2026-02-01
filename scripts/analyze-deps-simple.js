@@ -23,7 +23,7 @@ const LAYERS = {
   providers: 3,
   utils: 1,
   storage: 2,
-  security: 2
+  security: 2,
 };
 
 function findJSFiles(dir) {
@@ -112,7 +112,7 @@ for (const file of files) {
             file: relative(JS_DIR, file),
             imports: relative(JS_DIR, resolved),
             fromLayer,
-            toLayer
+            toLayer,
           });
         }
       }
@@ -126,7 +126,9 @@ console.log(`✓ Processed ${files.length} files\n`);
 
 // Detect cycles using simple DFS
 console.log('Detecting circular dependencies...');
-const WHITE = 0, GRAY = 1, BLACK = 2;
+const WHITE = 0,
+  GRAY = 1,
+  BLACK = 2;
 const color = {};
 const cycles = [];
 
@@ -172,7 +174,9 @@ if (cycles.length > 0) {
 if (violations.length > 0) {
   console.log('⚠️  LAYER VIOLATIONS:\n');
   violations.slice(0, 10).forEach((v, i) => {
-    console.log(`${i + 1}. ${v.file} (layer ${v.fromLayer}) imports ${v.imports} (layer ${v.toLayer})`);
+    console.log(
+      `${i + 1}. ${v.file} (layer ${v.fromLayer}) imports ${v.imports} (layer ${v.toLayer})`
+    );
   });
   console.log('');
 }
@@ -183,14 +187,14 @@ const results = {
   summary: {
     totalFiles: files.length,
     circularDependencies: cycles.length,
-    layerViolations: violations.length
+    layerViolations: violations.length,
   },
   cycles: cycles.map(c => c.map(f => relative(JS_DIR, f))),
   violations: violations.map(v => ({
     ...v,
     file: relative(JS_DIR, v.file),
-    imports: relative(JS_DIR, v.imports)
-  }))
+    imports: relative(JS_DIR, v.imports),
+  })),
 };
 
 writeFileSync(join(OUTPUT_DIR, 'dependency-graph.json'), JSON.stringify(results, null, 2));
