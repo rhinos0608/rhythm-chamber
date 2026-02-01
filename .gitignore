@@ -58,3 +58,6 @@ test-circular-dep.js
 
 # ESLint cache
 .eslintcache
+
+# Test wrapper JSON outputs
+.test-results/

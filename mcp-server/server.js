@@ -295,13 +295,7 @@ class RhythmChamberMCPServer {
    * Start the server
    */
   async start() {
-    console.error('[Rhythm Chamber MCP] Initializing semantic indexer...');
-
-    // Initialize semantic indexer FIRST if enabled (before setting up tool handlers)
-    if (this.enableSemantic) {
-      await this.initializeSemanticIndexer();
-    }
-
+    console.error('[Rhythm Chamber MCP] Initializing...');
     console.error('[Rhythm Chamber MCP] Setting up tool handlers...');
     this.setupToolHandlers();
 
@@ -311,19 +305,44 @@ class RhythmChamberMCPServer {
     await this.server.connect(transport);
     console.error('[Rhythm Chamber MCP] Server running and listening for requests');
 
-    // Auto-start file watcher if enabled via environment variable
-    if (process.env.RC_ENABLE_WATCHER === 'true' && this.semanticIndexer) {
-      try {
-        const watcherConfig = {
-          debounceDelay: parseInt(process.env.RC_WATCHER_DEBOUNCE || '300', 10),
-          coalesceWindow: parseInt(process.env.RC_WATCHER_COALESCE || '1000', 10),
-          maxQueueSize: parseInt(process.env.RC_WATCHER_MAX_QUEUE || '1000', 10),
-        };
+    // CRITICAL FIX: Initialize semantic indexer AFTER transport is connected
+    // This allows the server to respond to Claude immediately, then load cache in background
+    if (this.enableSemantic) {
+      // Start indexing in background - don't await, but store promise for watcher setup
+      this._indexerInitPromise = this.initializeSemanticIndexer().catch(error => {
+        console.error('[Rhythm Chamber MCP] Failed to initialize semantic indexer:', error.message);
+        this.semanticIndexer = null;
+        this.enableSemantic = false;
+      });
+    }
 
-        await this.semanticIndexer.startWatcher(watcherConfig);
-        console.error('[MCP] File watcher initialized');
-      } catch (error) {
-        console.error('[MCP] Failed to initialize watcher:', error.message);
+    // CRITICAL FIX: Log ready message AFTER transport connects
+    // The semantic indexer will initialize in background
+    console.error('[Rhythm Chamber MCP] Ready! Semantic search initializing in background...');
+
+    // Auto-start file watcher if enabled via environment variable
+    // Note: This waits for indexer initialization to complete first
+    if (process.env.RC_ENABLE_WATCHER === 'true') {
+      // Wait for indexer to be ready before starting watcher
+      if (this._indexerInitPromise) {
+        this._indexerInitPromise.then(async () => {
+          if (this.semanticIndexer) {
+            try {
+              const watcherConfig = {
+                debounceDelay: parseInt(process.env.RC_WATCHER_DEBOUNCE || '300', 10),
+                coalesceWindow: parseInt(process.env.RC_WATCHER_COALESCE || '1000', 10),
+                maxQueueSize: parseInt(process.env.RC_WATCHER_MAX_QUEUE || '1000', 10),
+              };
+
+              await this.semanticIndexer.startWatcher(watcherConfig);
+              console.error('[MCP] File watcher initialized');
+            } catch (error) {
+              console.error('[MCP] Failed to initialize watcher:', error.message);
+            }
+          }
+        }).catch(error => {
+          console.error('[MCP] Failed to initialize indexer for watcher:', error.message);
+        });
       }
     }
   }
@@ -488,13 +507,32 @@ function setupShutdownHandlers(mcpServer) {
     console.error('[Rhythm Chamber MCP] DEBUG: About to save cache...');
 
     // CRITICAL: Save cache before exiting to persist embeddings
+    // FIX: Increased timeout from 1.5s to 15s to accommodate large caches
+    // Cache save time scales with chunk count: ~8s for 11K chunks observed
+    // This prevents the MCP client from timing out and killing the server
+    const CACHE_SAVE_TIMEOUT = 15000; // 15 seconds
     if (mcpServer.semanticIndexer) {
       try {
         console.error('[Rhythm Chamber MCP] Saving cache...');
-        const saveResult = await mcpServer.semanticIndexer._saveCache();
-        console.error('[Rhythm Chamber MCP] Cache saved, result:', saveResult);
+        const saveStart = Date.now();
+        const saveResult = await Promise.race([
+          mcpServer.semanticIndexer._saveCache(),
+          new Promise((_, reject) =>
+            setTimeout(() => {
+              const elapsed = Date.now() - saveStart;
+              console.error(`[Rhythm Chamber MCP] Cache save timeout (${elapsed}ms > ${CACHE_SAVE_TIMEOUT}ms), proceeding with shutdown`);
+              reject(new Error('Cache save timeout'));
+            }, CACHE_SAVE_TIMEOUT)
+          ),
+        ]);
+        const saveElapsed = Date.now() - saveStart;
+        console.error(`[Rhythm Chamber MCP] Cache saved in ${saveElapsed}ms, result:`, saveResult);
       } catch (error) {
-        console.error('[Rhythm Chamber MCP] Error saving cache:', error.message);
+        if (error.message === 'Cache save timeout') {
+          console.error('[Rhythm Chamber MCP] Cache save timed out - partial data may be lost. Consider increasing CACHE_SAVE_TIMEOUT if this happens frequently.');
+        } else {
+          console.error('[Rhythm Chamber MCP] Error saving cache:', error.message);
+        }
       }
     }
 
@@ -536,13 +574,29 @@ process.on('uncaughtException', async error => {
   }
 
   // Try to save cache before exiting
+  // FIX: Increased timeout from 1.5s to 15s to match shutdown handler
   if (mcpServerInstance?.semanticIndexer) {
     try {
       console.error('[Rhythm Chamber MCP] Attempting to save cache before exit...');
-      await mcpServerInstance.semanticIndexer._saveCache();
-      console.error('[Rhythm Chamber MCP] Cache saved');
+      const saveStart = Date.now();
+      await Promise.race([
+        mcpServerInstance.semanticIndexer._saveCache(),
+        new Promise((_, reject) =>
+          setTimeout(() => {
+            const elapsed = Date.now() - saveStart;
+            console.error(`[Rhythm Chamber MCP] Cache save timeout (${elapsed}ms > 15000ms), proceeding with shutdown`);
+            reject(new Error('Cache save timeout'));
+          }, 15000)
+        ),
+      ]);
+      const elapsed = Date.now() - saveStart;
+      console.error(`[Rhythm Chamber MCP] Cache saved in ${elapsed}ms`);
     } catch (saveError) {
-      console.error('[Rhythm Chamber MCP] Error saving cache:', saveError.message);
+      if (saveError.message === 'Cache save timeout') {
+        console.error('[Rhythm Chamber MCP] Cache save timed out - partial data may be lost');
+      } else {
+        console.error('[Rhythm Chamber MCP] Error saving cache:', saveError.message);
+      }
     }
   }
 
@@ -563,13 +617,29 @@ process.on('unhandledRejection', async (reason, promise) => {
   }
 
   // Try to save cache before exiting
+  // FIX: Increased timeout from 1.5s to 15s to match shutdown handler
   if (mcpServerInstance?.semanticIndexer) {
     try {
       console.error('[Rhythm Chamber MCP] Attempting to save cache before exit...');
-      await mcpServerInstance.semanticIndexer._saveCache();
-      console.error('[Rhythm Chamber MCP] Cache saved');
+      const saveStart = Date.now();
+      await Promise.race([
+        mcpServerInstance.semanticIndexer._saveCache(),
+        new Promise((_, reject) =>
+          setTimeout(() => {
+            const elapsed = Date.now() - saveStart;
+            console.error(`[Rhythm Chamber MCP] Cache save timeout (${elapsed}ms > 15000ms), proceeding with shutdown`);
+            reject(new Error('Cache save timeout'));
+          }, 15000)
+        ),
+      ]);
+      const elapsed = Date.now() - saveStart;
+      console.error(`[Rhythm Chamber MCP] Cache saved in ${elapsed}ms`);
     } catch (saveError) {
-      console.error('[Rhythm Chamber MCP] Error saving cache:', saveError.message);
+      if (saveError.message === 'Cache save timeout') {
+        console.error('[Rhythm Chamber MCP] Cache save timed out - partial data may be lost');
+      } else {
+        console.error('[Rhythm Chamber MCP] Error saving cache:', saveError.message);
+      }
     }
   }
 
@@ -591,13 +661,29 @@ main().catch(async error => {
   }
 
   // Try to save cache before exiting
+  // FIX: Increased timeout from 1.5s to 15s to match shutdown handler
   if (mcpServerInstance?.semanticIndexer) {
     try {
       console.error('[Rhythm Chamber MCP] Attempting to save cache before exit...');
-      await mcpServerInstance.semanticIndexer._saveCache();
-      console.error('[Rhythm Chamber MCP] Cache saved');
+      const saveStart = Date.now();
+      await Promise.race([
+        mcpServerInstance.semanticIndexer._saveCache(),
+        new Promise((_, reject) =>
+          setTimeout(() => {
+            const elapsed = Date.now() - saveStart;
+            console.error(`[Rhythm Chamber MCP] Cache save timeout (${elapsed}ms > 15000ms), proceeding with shutdown`);
+            reject(new Error('Cache save timeout'));
+          }, 15000)
+        ),
+      ]);
+      const elapsed = Date.now() - saveStart;
+      console.error(`[Rhythm Chamber MCP] Cache saved in ${elapsed}ms`);
     } catch (saveError) {
-      console.error('[Rhythm Chamber MCP] Error saving cache:', saveError.message);
+      if (saveError.message === 'Cache save timeout') {
+        console.error('[Rhythm Chamber MCP] Cache save timed out - partial data may be lost');
+      } else {
+        console.error('[Rhythm Chamber MCP] Error saving cache:', saveError.message);
+      }
     }
   }
 
