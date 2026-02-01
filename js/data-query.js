@@ -61,8 +61,8 @@ function queryByTimePeriod(streams, { year, month, startDate, endDate }) {
  */
 function queryByArtist(streams, artistName) {
     const searchTerm = artistName.toLowerCase();
-    const filtered = streams.filter(s =>
-        s && s.artistName && s.artistName.toLowerCase().includes(searchTerm)
+    const filtered = streams.filter(
+        s => s && s.artistName && s.artistName.toLowerCase().includes(searchTerm)
     );
 
     if (filtered.length === 0) {
@@ -87,8 +87,8 @@ function queryByArtist(streams, artistName) {
  */
 function queryByTrack(streams, trackName) {
     const searchTerm = trackName.toLowerCase();
-    const filtered = streams.filter(s =>
-        s && s.trackName && s.trackName.toLowerCase().includes(searchTerm)
+    const filtered = streams.filter(
+        s => s && s.trackName && s.trackName.toLowerCase().includes(searchTerm)
     );
 
     if (filtered.length === 0) {
@@ -115,7 +115,7 @@ function getTopArtistsForPeriod(streams, { year, month, limit = 10 }) {
         period: month ? `${getMonthName(month)} ${year}` : `${year}`,
         topArtists: results.topArtists.slice(0, limit),
         totalPlays: results.totalPlays,
-        uniqueArtists: results.uniqueArtists
+        uniqueArtists: results.uniqueArtists,
     };
 }
 
@@ -131,7 +131,7 @@ function getTopTracksForPeriod(streams, { year, month, limit = 10 }) {
         period: month ? `${getMonthName(month)} ${year}` : `${year}`,
         topTracks: results.topTracks.slice(0, limit),
         totalPlays: results.totalPlays,
-        totalHours: results.totalHours
+        totalHours: results.totalHours,
     };
 }
 
@@ -145,7 +145,7 @@ function comparePeriods(streams, period1, period2) {
     if (!data1.found || !data2.found) {
         return {
             found: false,
-            message: 'Could not compare - one or both periods have no data.'
+            message: 'Could not compare - one or both periods have no data.',
         };
     }
 
@@ -163,7 +163,7 @@ function comparePeriods(streams, period1, period2) {
         newArtists: newIn2.slice(0, 5),
         droppedArtists: goneFrom1.slice(0, 5),
         hoursChange: data2.totalHours - data1.totalHours,
-        diversityChange: data2.uniqueArtists - data1.uniqueArtists
+        diversityChange: data2.uniqueArtists - data1.uniqueArtists,
     };
 }
 
@@ -172,8 +172,8 @@ function comparePeriods(streams, period1, period2) {
  */
 function findPeakListeningPeriod(streams, artistName) {
     const searchTerm = artistName.toLowerCase();
-    const artistStreams = streams.filter(s =>
-        s && s.artistName && s.artistName.toLowerCase().includes(searchTerm)
+    const artistStreams = streams.filter(
+        s => s && s.artistName && s.artistName.toLowerCase().includes(searchTerm)
     );
 
     if (artistStreams.length === 0) {
@@ -190,8 +190,7 @@ function findPeakListeningPeriod(streams, artistName) {
     }
 
     // Find peak month
-    const peak = Object.entries(byMonth)
-        .sort((a, b) => b[1] - a[1])[0];
+    const peak = Object.entries(byMonth).sort((a, b) => b[1] - a[1])[0];
 
     const [peakYear, peakMonth] = peak[0].split('-');
 
@@ -202,12 +201,15 @@ function findPeakListeningPeriod(streams, artistName) {
         peakPeriod: `${getMonthName(parseInt(peakMonth))} ${peakYear}`,
         peakPlays: peak[1],
         // Guard against empty array access
-        firstListen: artistStreams.length > 0 ? artistStreams[0]?.date ?? null : null,
-        lastListen: artistStreams.length > 0 ? artistStreams[artistStreams.length - 1]?.date ?? null : null,
+        firstListen: artistStreams.length > 0 ? (artistStreams[0]?.date ?? null) : null,
+        lastListen:
+            artistStreams.length > 0
+                ? (artistStreams[artistStreams.length - 1]?.date ?? null)
+                : null,
         monthlyBreakdown: Object.entries(byMonth)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 5)
-            .map(([period, plays]) => ({ period, plays }))
+            .map(([period, plays]) => ({ period, plays })),
     };
 }
 
@@ -220,10 +222,17 @@ function summarizeStreams(streams) {
     const topArtists = getTopItems(streams, 'artistName', 10);
     const topTracks = getTopItemsWithArtist(streams, 10);
     const uniqueArtists = new Set(streams.map(s => s?.artistName).filter(Boolean)).size;
-    const uniqueTracks = new Set(streams.map(s => s?.trackName && s?.artistName ? `${s.trackName}::${s.artistName}` : null).filter(Boolean)).size;
+    const uniqueTracks = new Set(
+        streams
+            .map(s => (s?.trackName && s?.artistName ? `${s.trackName}::${s.artistName}` : null))
+            .filter(Boolean)
+    ).size;
 
     // Date range - filter out null dates
-    const dates = streams.map(s => s?.date).filter(d => d != null).sort();
+    const dates = streams
+        .map(s => s?.date)
+        .filter(d => d != null)
+        .sort();
 
     return {
         found: true,
@@ -236,8 +245,8 @@ function summarizeStreams(streams) {
         dateRange: {
             // Guard against empty array access
             start: dates.length > 0 ? dates[0] : null,
-            end: dates.length > 0 ? dates[dates.length - 1] : null
-        }
+            end: dates.length > 0 ? dates[dates.length - 1] : null,
+        },
     };
 }
 
@@ -274,13 +283,25 @@ function getTopItemsWithArtist(streams, limit) {
         .map(([name, plays]) => ({
             name,
             artist: trackArtist[name],
-            plays
+            plays,
         }));
 }
 
 function getMonthName(monthNum) {
-    const months = ['January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'];
+    const months = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+    ];
     return months[monthNum - 1] || 'Unknown';
 }
 
@@ -297,18 +318,30 @@ function formatPeriodLabel({ year, month }) {
  */
 function parseDateQuery(query) {
     const monthNames = {
-        'january': 1, 'jan': 1,
-        'february': 2, 'feb': 2,
-        'march': 3, 'mar': 3,
-        'april': 4, 'apr': 4,
-        'may': 5,
-        'june': 6, 'jun': 6,
-        'july': 7, 'jul': 7,
-        'august': 8, 'aug': 8,
-        'september': 9, 'sep': 9, 'sept': 9,
-        'october': 10, 'oct': 10,
-        'november': 11, 'nov': 11,
-        'december': 12, 'dec': 12
+        january: 1,
+        jan: 1,
+        february: 2,
+        feb: 2,
+        march: 3,
+        mar: 3,
+        april: 4,
+        apr: 4,
+        may: 5,
+        june: 6,
+        jun: 6,
+        july: 7,
+        jul: 7,
+        august: 8,
+        aug: 8,
+        september: 9,
+        sep: 9,
+        sept: 9,
+        october: 10,
+        oct: 10,
+        november: 11,
+        nov: 11,
+        december: 12,
+        dec: 12,
     };
 
     const lowerQuery = query.toLowerCase();
@@ -373,9 +406,7 @@ export const DataQuery = {
     comparePeriods,
     findPeakListeningPeriod,
     parseDateQuery,
-    extractEntityFromQuery
+    extractEntityFromQuery,
 };
 
-
 logger.info('Module loaded');
-

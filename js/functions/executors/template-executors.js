@@ -19,7 +19,7 @@ function executeGetTemplatesByGenre(args) {
 
     if (templates.length === 0) {
         return {
-            error: `No templates found for genre "${genre}". Try: ${TemplateProfileStore.getAllGenres().slice(0, 5).join(', ')}`
+            error: `No templates found for genre "${genre}". Try: ${TemplateProfileStore.getAllGenres().slice(0, 5).join(', ')}`,
         };
     }
 
@@ -32,8 +32,8 @@ function executeGetTemplatesByGenre(args) {
             emoji: t.emoji,
             description: t.description,
             personality_type: t.metadata.personalityType,
-            has_data: TemplateProfileStore.hasData(t.id)
-        }))
+            has_data: TemplateProfileStore.hasData(t.id),
+        })),
     };
 }
 
@@ -48,7 +48,7 @@ function executeGetTemplatesWithPattern(args) {
 
     if (templates.length === 0) {
         return {
-            error: `No templates found with pattern "${pattern_type}". Available patterns: ${TemplateProfileStore.getAllPatterns().join(', ')}`
+            error: `No templates found with pattern "${pattern_type}". Available patterns: ${TemplateProfileStore.getAllPatterns().join(', ')}`,
         };
     }
 
@@ -60,8 +60,8 @@ function executeGetTemplatesWithPattern(args) {
             name: t.name,
             emoji: t.emoji,
             description: t.description,
-            all_patterns: t.metadata.patternSignals
-        }))
+            all_patterns: t.metadata.patternSignals,
+        })),
     };
 }
 
@@ -76,7 +76,7 @@ function executeGetTemplatesByPersonality(args) {
 
     if (templates.length === 0) {
         return {
-            error: `No templates found for personality "${personality_type}".`
+            error: `No templates found for personality "${personality_type}".`,
         };
     }
 
@@ -89,8 +89,8 @@ function executeGetTemplatesByPersonality(args) {
             emoji: t.emoji,
             description: t.description,
             genres: t.metadata.genres,
-            has_data: TemplateProfileStore.hasData(t.id)
-        }))
+            has_data: TemplateProfileStore.hasData(t.id),
+        })),
     };
 }
 
@@ -110,15 +110,17 @@ async function executeSynthesizeProfile(args) {
                 id: profile.id,
                 name: profile.name,
                 description: profile.description,
-                personality: profile.personality ? {
-                    type: profile.personality.type,
-                    emoji: profile.personality.emoji,
-                    tagline: profile.personality.tagline
-                } : null,
+                personality: profile.personality
+                    ? {
+                        type: profile.personality.type,
+                        emoji: profile.personality.emoji,
+                        tagline: profile.personality.tagline,
+                    }
+                    : null,
                 source_templates: profile.sourceTemplates,
-                stream_count: profile.metadata.streamCount
+                stream_count: profile.metadata.streamCount,
             },
-            message: `Created synthetic profile "${profile.name}" from ${profile.sourceTemplates.length} template(s).`
+            message: `Created synthetic profile "${profile.name}" from ${profile.sourceTemplates.length} template(s).`,
         };
     } catch (err) {
         return { error: `Synthesis failed: ${err.message}` };
@@ -134,9 +136,7 @@ export const TemplateExecutors = {
     get_templates_by_genre: executeGetTemplatesByGenre,
     get_templates_with_pattern: executeGetTemplatesWithPattern,
     get_templates_by_personality: executeGetTemplatesByPersonality,
-    synthesize_profile: executeSynthesizeProfile
+    synthesize_profile: executeSynthesizeProfile,
 };
 
-
 console.log('[TemplateExecutors] Module loaded');
-

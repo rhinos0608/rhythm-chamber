@@ -89,7 +89,9 @@ function showResetConfirmModal() {
             resetModalFocusTrapCleanup();
             resetModalFocusTrapCleanup = null;
         }
-        resetModalFocusTrapCleanup = setupModalFocusTrap('reset-confirm-modal', () => hideResetConfirmModal());
+        resetModalFocusTrapCleanup = setupModalFocusTrap('reset-confirm-modal', () =>
+            hideResetConfirmModal()
+        );
     }
 }
 
@@ -156,7 +158,10 @@ async function executeReset() {
 
         // Show warning if Qdrant clear failed
         if (result.qdrant?.error) {
-            console.warn('[ResetController] Qdrant embeddings may not have been cleared:', result.qdrant.error);
+            console.warn(
+                '[ResetController] Qdrant embeddings may not have been cleared:',
+                result.qdrant.error
+            );
         }
 
         // Step 4: Clear Spotify tokens (handled separately for security)
@@ -179,7 +184,6 @@ async function executeReset() {
         if (_ViewController) {
             _ViewController.showUpload();
         }
-
     } catch (error) {
         console.error('[ResetController] Reset failed:', error);
         if (_ViewController) {
@@ -192,10 +196,10 @@ async function executeReset() {
 /**
  * Wait for all workers to abort with timeout
  * This is the core of the safe reset flow
- * 
+ *
  * HNW Fix: Keep the "force terminate" timeout logic from app.js
  * It's a necessary safety valve for client-side processing that can freeze
- * 
+ *
  * @param {AbortController} abortController - Abort controller for timeout
  * @param {number} timeoutMs - Maximum wait time in milliseconds
  * @returns {Promise<boolean>} Success status
@@ -237,7 +241,9 @@ async function waitForWorkersAbort(abortController, timeoutMs) {
             // If still active, force terminate
             const stillProcessing = _FileUploadController?.getProcessingState?.();
             if (stillProcessing && stillProcessing.isProcessing) {
-                console.log('[ResetController] Worker not responding to abort, forcing termination');
+                console.log(
+                    '[ResetController] Worker not responding to abort, forcing termination'
+                );
 
                 // Force cleanup
                 if (_FileUploadController?.cleanupWorker) {
@@ -274,7 +280,8 @@ async function clearSensitiveData() {
     if (!_Storage || !_ViewController) return;
 
     await _Storage.clearSensitiveData();
-    if (_showToast) _showToast('Raw data cleared. Your personality analysis and chat history are preserved.');
+    if (_showToast)
+        _showToast('Raw data cleared. Your personality analysis and chat history are preserved.');
 
     if (_ViewController) {
         _ViewController.showPrivacyDashboard(); // Refresh the dashboard
@@ -303,9 +310,10 @@ async function showPrivacyDashboard() {
     }
 
     if (patternsSummary) {
-        patternsSummary.textContent = summary.chunkCount > 0
-            ? `${summary.chunkCount} chunks, ${summary.chatSessionCount} chat sessions`
-            : 'No patterns yet';
+        patternsSummary.textContent =
+            summary.chunkCount > 0
+                ? `${summary.chunkCount} chunks, ${summary.chatSessionCount} chat sessions`
+                : 'No patterns yet';
     }
 
     // Check Spotify tokens
@@ -364,8 +372,7 @@ export const ResetController = {
     showPrivacyDashboard,
     getPendingDeleteSessionId,
     setPendingDeleteSessionId,
-    waitForWorkersAbort
+    waitForWorkersAbort,
 };
-
 
 console.log('[ResetController] Controller loaded');

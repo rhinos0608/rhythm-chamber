@@ -30,7 +30,7 @@ import { ModuleRegistry } from '../module-registry.js';
 const QUERY_CONFIG = {
     DEFAULT_RESULT_LIMIT: 5,
     SIMILARITY_THRESHOLD: 0.3,
-    MAX_CONTEXT_CHUNKS: 3
+    MAX_CONTEXT_CHUNKS: 3,
 };
 
 /**
@@ -70,7 +70,7 @@ export class RAGQueryService {
             limit = QUERY_CONFIG.DEFAULT_RESULT_LIMIT,
             threshold = QUERY_CONFIG.SIMILARITY_THRESHOLD,
             abortSignal = null,
-            skipQuotaCheck = false
+            skipQuotaCheck = false,
         } = options;
 
         // Validate inputs
@@ -96,7 +96,7 @@ export class RAGQueryService {
             query,
             results: rankedResults,
             count: rankedResults.length,
-            context: this._buildContext(rankedResults)
+            context: this._buildContext(rankedResults),
         };
     }
 
@@ -121,7 +121,7 @@ export class RAGQueryService {
         // Initialize LocalEmbeddings if needed
         if (!this.embeddings?.isReady()) {
             console.log('[RAGQueryService] Initializing LocalEmbeddings...');
-            await this.embeddings.initialize(() => { });
+            await this.embeddings.initialize(() => {});
         }
 
         // Initialize LocalVectorStore if needed
@@ -139,13 +139,17 @@ export class RAGQueryService {
         const queryVector = await this.generateEmbedding(query);
 
         // Use async search for non-blocking UI
-        const results = await this.vectorStore.searchAsync(queryVector, limit, QUERY_CONFIG.SIMILARITY_THRESHOLD);
+        const results = await this.vectorStore.searchAsync(
+            queryVector,
+            limit,
+            QUERY_CONFIG.SIMILARITY_THRESHOLD
+        );
 
         // Transform to match Qdrant response format
         return results.map(r => ({
             id: r.id,
             score: r.score,
-            payload: r.payload
+            payload: r.payload,
         }));
     }
 
@@ -232,7 +236,6 @@ export class RAGQueryService {
 
             const context = results.map(r => r.payload.text).join('\n\n');
             return `SEMANTIC SEARCH RESULTS:\n${context}`;
-
         } catch (err) {
             console.error('[RAGQueryService] Semantic context error:', err);
             return null;
@@ -282,7 +285,9 @@ export class RAGQueryService {
             }
 
             if (!LocalEmbeddings) {
-                throw new Error('Failed to load LocalEmbeddings module. Check browser compatibility.');
+                throw new Error(
+                    'Failed to load LocalEmbeddings module. Check browser compatibility.'
+                );
             }
 
             this.embeddings = LocalEmbeddings;
@@ -298,7 +303,9 @@ export class RAGQueryService {
             }
 
             if (!LocalVectorStore) {
-                throw new Error('Failed to load LocalVectorStore module. Check browser compatibility.');
+                throw new Error(
+                    'Failed to load LocalVectorStore module. Check browser compatibility.'
+                );
             }
 
             this.vectorStore = LocalVectorStore;
@@ -319,7 +326,7 @@ export class RAGQueryService {
             checkpointManager: !!this.checkpointManager,
             vectorStore: !!this.vectorStore,
             embeddings: !!this.embeddings,
-            modulesLoaded: !!(this.embeddings && this.vectorStore)
+            modulesLoaded: !!(this.embeddings && this.vectorStore),
         };
     }
 

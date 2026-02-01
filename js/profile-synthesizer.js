@@ -22,10 +22,10 @@ import { TemplateProfileStore } from './template-profiles.js';
 // ==========================================
 
 const SYNTHESIS_CONFIG = {
-    MIN_STREAMS: 500,           // Minimum synthetic streams to generate
-    MAX_STREAMS: 5000,          // Maximum for performance
+    MIN_STREAMS: 500, // Minimum synthetic streams to generate
+    MAX_STREAMS: 5000, // Maximum for performance
     DEFAULT_TIME_RANGE_YEARS: 2, // Default synthetic listening period
-    DEFAULT_STREAMS_PER_DAY: 8   // Average plays per day
+    DEFAULT_STREAMS_PER_DAY: 8, // Average plays per day
 };
 
 // ==========================================
@@ -50,7 +50,7 @@ class ProfileSynthesizer {
     /**
      * Synthesize a new profile from natural language description
      * Uses AI function calling to select and combine templates
-     * 
+     *
      * @param {string} description - Natural language profile description
      * @param {Function} onProgress - Progress callback (0-100)
      * @returns {Promise<object>} Synthesized profile
@@ -92,7 +92,7 @@ class ProfileSynthesizer {
             sourceTemplates: templateSelection.map(t => ({
                 id: t.template.id,
                 name: t.template.name,
-                weight: t.weight
+                weight: t.weight,
             })),
 
             // Data
@@ -105,8 +105,8 @@ class ProfileSynthesizer {
                 createdAt: new Date().toISOString(),
                 streamCount: syntheticStreams.length,
                 isSynthetic: true,
-                synthesizedFrom: description
-            }
+                synthesizedFrom: description,
+            },
         };
 
         if (onProgress) onProgress(100, 'Complete');
@@ -117,17 +117,19 @@ class ProfileSynthesizer {
 
     /**
      * Synthesize from explicit template selection
-     * 
+     *
      * @param {Array<{templateId: string, weight: number}>} selection - Templates with weights
      * @returns {Promise<object>} Synthesized profile
      */
     async synthesizeFromTemplates(selection) {
         this._ensureInitialized();
 
-        const templateSelection = selection.map(s => ({
-            template: this._templateStore.get(s.templateId),
-            weight: s.weight || 1.0
-        })).filter(s => s.template !== null);
+        const templateSelection = selection
+            .map(s => ({
+                template: this._templateStore.get(s.templateId),
+                weight: s.weight || 1.0,
+            }))
+            .filter(s => s.template !== null);
 
         if (templateSelection.length === 0) {
             throw new Error('No valid templates selected');
@@ -147,7 +149,7 @@ class ProfileSynthesizer {
             sourceTemplates: templateSelection.map(t => ({
                 id: t.template.id,
                 name: t.template.name,
-                weight: t.weight
+                weight: t.weight,
             })),
             streams: syntheticStreams,
             patterns: patterns,
@@ -155,8 +157,8 @@ class ProfileSynthesizer {
             metadata: {
                 createdAt: new Date().toISOString(),
                 streamCount: syntheticStreams.length,
-                isSynthetic: true
-            }
+                isSynthetic: true,
+            },
         };
     }
 
@@ -168,7 +170,7 @@ class ProfileSynthesizer {
      * Select templates based on natural language description
      * In full implementation, this calls AI with function calling.
      * For now, uses keyword matching as fallback.
-     * 
+     *
      * @param {string} description - Profile description
      * @returns {Promise<Array>} Array of {template, weight}
      */
@@ -193,9 +195,12 @@ class ProfileSynthesizer {
             if (descLower.includes(template.name.toLowerCase())) {
                 score += 3;
             }
-            if (template.description.toLowerCase().split(' ').some(w =>
-                w.length > 3 && descLower.includes(w)
-            )) {
+            if (
+                template.description
+                    .toLowerCase()
+                    .split(' ')
+                    .some(w => w.length > 3 && descLower.includes(w))
+            ) {
                 score += 1;
             }
 
@@ -245,7 +250,7 @@ class ProfileSynthesizer {
 
     /**
      * Combine patterns from multiple templates
-     * 
+     *
      * @param {Array<{template, weight}>} selection - Templates with weights
      * @returns {object} Combined pattern object
      */
@@ -255,7 +260,7 @@ class ProfileSynthesizer {
             genres: new Set(),
             timePatterns: { morning: 0, evening: 0 },
             diversity: 0,
-            repeatRate: 0
+            repeatRate: 0,
         };
 
         for (const { template, weight } of selection) {
@@ -285,11 +290,14 @@ class ProfileSynthesizer {
             const templatePatterns = template.patterns;
             if (templatePatterns) {
                 if (templatePatterns.timePatterns) {
-                    combined.timePatterns.morning += (templatePatterns.timePatterns.morningStreamCount || 0) * weight;
-                    combined.timePatterns.evening += (templatePatterns.timePatterns.eveningStreamCount || 0) * weight;
+                    combined.timePatterns.morning +=
+                        (templatePatterns.timePatterns.morningStreamCount || 0) * weight;
+                    combined.timePatterns.evening +=
+                        (templatePatterns.timePatterns.eveningStreamCount || 0) * weight;
                 }
                 if (templatePatterns.comfortDiscovery) {
-                    combined.diversity += (1 / (templatePatterns.comfortDiscovery.ratio || 50)) * weight;
+                    combined.diversity +=
+                        (1 / (templatePatterns.comfortDiscovery.ratio || 50)) * weight;
                     combined.repeatRate += (templatePatterns.comfortDiscovery.ratio || 50) * weight;
                 }
             }
@@ -309,7 +317,7 @@ class ProfileSynthesizer {
 
     /**
      * Generate realistic stream data from combined patterns
-     * 
+     *
      * @param {object} combinedPatterns - Combined pattern object
      * @param {Array} templateSelection - Source templates
      * @returns {Array} Synthetic stream array
@@ -343,8 +351,7 @@ class ProfileSynthesizer {
         for (let i = 0; i < targetStreams; i++) {
             // Random date within range
             const streamDate = new Date(
-                startDate.getTime() +
-                Math.random() * (Date.now() - startDate.getTime())
+                startDate.getTime() + Math.random() * (Date.now() - startDate.getTime())
             );
 
             // Time distribution based on combined patterns
@@ -359,7 +366,7 @@ class ProfileSynthesizer {
                 ts: streamDate.toISOString(),
                 master_metadata_track_name: `Track ${Math.floor(Math.random() * 10) + 1}`,
                 master_metadata_album_artist_name: artist.name,
-                master_metadata_album_album_name: `Album`,
+                master_metadata_album_album_name: 'Album',
                 ms_played: 180000 + Math.floor(Math.random() * 60000),
                 platform: Math.random() > 0.5 ? 'android' : 'ios',
                 shuffle: Math.random() > 0.6,
@@ -378,7 +385,7 @@ class ProfileSynthesizer {
 
                 // Synthesis markers
                 _synthetic: true,
-                _synth_id: streamId++
+                _synth_id: streamId++,
             });
         }
 
@@ -504,4 +511,3 @@ const profileSynthesizer = new ProfileSynthesizer();
 export { profileSynthesizer as ProfileSynthesizer, ProfileSynthesizer as ProfileSynthesizerClass };
 
 console.log('[ProfileSynthesizer] Module loaded');
-

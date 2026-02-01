@@ -48,7 +48,7 @@ export function setupAllMonitoring() {
     return {
         visibility: visibilityMonitorCleanup,
         network: networkMonitorCleanup,
-        wakeFromSleep: wakeFromSleepCleanup
+        wakeFromSleep: wakeFromSleepCleanup,
     };
 }
 
@@ -83,6 +83,6 @@ export function getCleanupFunctions() {
     return {
         visibility: visibilityMonitorCleanup,
         network: networkMonitorCleanup,
-        wakeFromSleep: wakeFromSleepCleanup
+        wakeFromSleep: wakeFromSleepCleanup,
     };
 }

@@ -132,7 +132,7 @@ const DemoStorage = {
                 id: prefixedKey,
                 key: key,
                 value: value,
-                timestamp: Date.now()
+                timestamp: Date.now(),
             };
 
             await IndexedDBCore.put(storeName, data, { bypassAuthority: true });
@@ -264,7 +264,7 @@ const DemoStorage = {
         }
 
         return { valid: true };
-    }
+    },
 };
 
 // ==========================================
@@ -345,8 +345,14 @@ async function loadDemoMode() {
         if (!demoPackage || typeof demoPackage !== 'object') {
             throw new Error('Demo data package is not available or invalid');
         }
-        if (!demoPackage.streams || !Array.isArray(demoPackage.streams) || demoPackage.streams.length === 0) {
-            throw new Error('Demo streams data is missing or empty. Please check demo data source.');
+        if (
+            !demoPackage.streams ||
+            !Array.isArray(demoPackage.streams) ||
+            demoPackage.streams.length === 0
+        ) {
+            throw new Error(
+                'Demo streams data is missing or empty. Please check demo data source.'
+            );
         }
         if (!demoPackage.personality || typeof demoPackage.personality !== 'object') {
             throw new Error('Demo personality data is missing. Please check demo data source.');
@@ -393,7 +399,7 @@ async function loadDemoMode() {
             patterns: computedPatterns,
             personality: demoPackage.personality,
             isDemoMode: true,
-            loadedAt: Date.now()
+            loadedAt: Date.now(),
         };
 
         // Phase 2: Persist all storage operations atomically
@@ -429,7 +435,9 @@ async function loadDemoMode() {
         // Pre-load chat with demo-specific suggestions
         setupDemoChatSuggestions();
 
-        console.log('[DemoController] Demo mode loaded (AppState as source of truth, DemoStorage for persistence)');
+        console.log(
+            '[DemoController] Demo mode loaded (AppState as source of truth, DemoStorage for persistence)'
+        );
     } catch (error) {
         console.error('[DemoController] Demo mode load failed:', error);
         if (_showToast) {
@@ -486,7 +494,11 @@ async function flushPendingOperations() {
                 // Emit event for observability (safe access)
                 const eventBus = getEventBus();
                 if (eventBus?.emit) {
-                    eventBus.emit('error:handler', { source: 'DemoController', error: e, context: 'flushPendingSaveAsync' });
+                    eventBus.emit('error:handler', {
+                        source: 'DemoController',
+                        error: e,
+                        context: 'flushPendingSaveAsync',
+                    });
                 }
                 throw e; // Re-throw for allSettled to capture
             })
@@ -517,7 +529,9 @@ async function flushPendingOperations() {
     // Log any failures that occurred
     const failures = results.filter(r => r.status === 'rejected');
     if (failures.length > 0) {
-        console.warn(`[DemoController] ${failures.length} pending operation(s) failed during flush`);
+        console.warn(
+            `[DemoController] ${failures.length} pending operation(s) failed during flush`
+        );
         failures.forEach((f, i) => {
             console.error(`[DemoController] Flush failure ${i + 1}:`, f.reason);
         });
@@ -533,14 +547,16 @@ function addDemoBadge() {
     // Add badge to header
     const headerLeft = document.querySelector('.header-left');
     // Strong duplicate guard: check by both ID and class presence
-    const existingBadge = document.getElementById('demo-badge') || headerLeft?.querySelector('.demo-badge');
+    const existingBadge =
+        document.getElementById('demo-badge') || headerLeft?.querySelector('.demo-badge');
     if (headerLeft && !existingBadge) {
         const badge = document.createElement('span');
         badge.id = 'demo-badge';
         badge.className = 'demo-badge';
         // SAFE: Using textContent instead of innerHTML
         badge.textContent = '🎭 Demo Mode';
-        badge.title = 'You are viewing sample data. Upload your own data to see your real personality.';
+        badge.title =
+            'You are viewing sample data. Upload your own data to see your real personality.';
         badge.style.cssText = `
             background: linear-gradient(135deg, var(--accent), var(--accent-secondary, #9b59b6));
             color: white;
@@ -596,7 +612,7 @@ function setupDemoChatSuggestions() {
         'Tell me about my MCR obsession',
         'What was my emo phase like in 2019?',
         'Why did I stop listening to Pierce The Veil?',
-        'How has my taste evolved?'
+        'How has my taste evolved?',
     ];
 
     demoQuestions.forEach(question => {
@@ -618,7 +634,6 @@ function setupDemoChatSuggestions() {
     console.log('[DemoController] Demo chat suggestions setup (using global delegation)');
     return _demoChipCleanup;
 }
-
 
 /**
  * Get demo data package
@@ -662,7 +677,7 @@ function getActiveData() {
             streams: state.demo.streams,
             patterns: state.demo.patterns,
             personality: state.demo.personality,
-            isDemoMode: true
+            isDemoMode: true,
         };
     }
 
@@ -670,7 +685,7 @@ function getActiveData() {
         streams: state.data.streams,
         patterns: state.data.patterns,
         personality: state.data.personality,
-        isDemoMode: false
+        isDemoMode: false,
     };
 }
 
@@ -686,7 +701,7 @@ function getDemoDataFromState() {
     return {
         streams: demoState.streams,
         patterns: demoState.patterns,
-        personality: demoState.personality
+        personality: demoState.personality,
     };
 }
 
@@ -719,7 +734,7 @@ async function exitDemoMode() {
         isDemoMode: false,
         streams: null,
         patterns: null,
-        personality: null
+        personality: null,
     });
 
     // Remove demo badge
@@ -753,11 +768,13 @@ function validateDemoData() {
 
     try {
         const demoPackage = _DemoData.getFullDemoPackage();
-        return demoPackage &&
+        return (
+            demoPackage &&
             Array.isArray(demoPackage.streams) &&
             demoPackage.streams.length > 0 &&
             demoPackage.patterns &&
-            demoPackage.personality;
+            demoPackage.personality
+        );
     } catch (error) {
         console.error('[DemoController] Demo data validation failed:', error);
         return false;
@@ -780,8 +797,7 @@ export const DemoController = {
     exitDemoMode,
     validateDemoData,
     // HNW Defensive: Export DemoStorage for testing and debugging
-    DemoStorage
+    DemoStorage,
 };
-
 
 console.log('[DemoController] Controller loaded');

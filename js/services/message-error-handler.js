@@ -24,7 +24,7 @@ const PROVIDER_HINTS = {
     gemini: 'Verify your Gemini API key in Settings',
     openrouter: 'Check your OpenRouter API key in Settings',
     anthropic: 'Verify your Anthropic API key in Settings',
-    openai: 'Verify your OpenAI API key in Settings'
+    openai: 'Verify your OpenAI API key in Settings',
 };
 
 // ==========================================
@@ -56,7 +56,11 @@ function getEarlyReturnAssistantMessage(earlyReturn) {
     }
 
     const nestedMessage = earlyReturn.message || earlyReturn.responseMessage;
-    if (nestedMessage && typeof nestedMessage.content === 'string' && nestedMessage.content.trim().length > 0) {
+    if (
+        nestedMessage &&
+        typeof nestedMessage.content === 'string' &&
+        nestedMessage.content.trim().length > 0
+    ) {
         return nestedMessage.content;
     }
 
@@ -112,7 +116,10 @@ function validateLLMResponse(response, provider) {
     if (content !== undefined && content !== null) {
         const type = typeof content;
         if (type !== 'string' && type !== 'object') {
-            return { valid: false, error: `${provider} returned message with invalid content type: ${type}` };
+            return {
+                valid: false,
+                error: `${provider} returned message with invalid content type: ${type}`,
+            };
         }
     }
 
@@ -125,10 +132,16 @@ function validateLLMResponse(response, provider) {
         for (let i = 0; i < firstChoice.message.tool_calls.length; i++) {
             const tc = firstChoice.message.tool_calls[i];
             if (!tc.function || typeof tc.function !== 'object') {
-                return { valid: false, error: `${provider} returned tool_call without function object at index ${i}` };
+                return {
+                    valid: false,
+                    error: `${provider} returned tool_call without function object at index ${i}`,
+                };
             }
             if (!tc.function.name) {
-                return { valid: false, error: `${provider} returned tool_call without function.name at index ${i}` };
+                return {
+                    valid: false,
+                    error: `${provider} returned tool_call without function.name at index ${i}`,
+                };
             }
         }
     }
@@ -151,7 +164,7 @@ function buildErrorResponse(errorMessage, originalError) {
         content: errorMessage,
         status: 'error',
         error: originalError?.message || errorMessage,
-        role: 'assistant'
+        role: 'assistant',
     };
 }
 
@@ -168,8 +181,8 @@ function buildErrorMessagesArray(userMessage, errorMessage) {
             role: 'assistant',
             content: errorMessage,
             error: true,
-            excludeFromContext: true
-        }
+            excludeFromContext: true,
+        },
     ];
 }
 
@@ -206,7 +219,7 @@ const MessageErrorHandler = {
     buildErrorResponse,
     buildErrorMessagesArray,
     getProviderHint,
-    addProviderHint
+    addProviderHint,
 };
 
 // ES Module export

@@ -108,7 +108,9 @@ export function migrateToV6(database) {
         journalStore.createIndex('journalTime', 'journalTime', { unique: false });
     }
     if (!database.objectStoreNames.contains('TRANSACTION_COMPENSATION')) {
-        const compensationStore = database.createObjectStore('TRANSACTION_COMPENSATION', { keyPath: 'id' });
+        const compensationStore = database.createObjectStore('TRANSACTION_COMPENSATION', {
+            keyPath: 'id',
+        });
         compensationStore.createIndex('timestamp', 'timestamp', { unique: false });
         compensationStore.createIndex('resolved', 'resolved', { unique: false });
     }
@@ -232,7 +234,9 @@ function createStores(database) {
 
     // Store for chat sessions
     if (!database.objectStoreNames.contains(INDEXEDDB_STORES.CHAT_SESSIONS)) {
-        const sessionsStore = database.createObjectStore(INDEXEDDB_STORES.CHAT_SESSIONS, { keyPath: 'id' });
+        const sessionsStore = database.createObjectStore(INDEXEDDB_STORES.CHAT_SESSIONS, {
+            keyPath: 'id',
+        });
         sessionsStore.createIndex('updatedAt', 'updatedAt', { unique: false });
     }
 
@@ -253,7 +257,9 @@ function createStores(database) {
 
     // Event log store for event replay
     if (!database.objectStoreNames.contains(INDEXEDDB_STORES.EVENT_LOG)) {
-        const eventLogStore = database.createObjectStore(INDEXEDDB_STORES.EVENT_LOG, { keyPath: 'id' });
+        const eventLogStore = database.createObjectStore(INDEXEDDB_STORES.EVENT_LOG, {
+            keyPath: 'id',
+        });
         eventLogStore.createIndex('sequenceNumber', 'sequenceNumber', { unique: true });
         eventLogStore.createIndex('type', 'type', { unique: false });
         eventLogStore.createIndex('timestamp', 'timestamp', { unique: false });
@@ -261,20 +267,26 @@ function createStores(database) {
 
     // Event checkpoint store for rapid recovery
     if (!database.objectStoreNames.contains(INDEXEDDB_STORES.EVENT_CHECKPOINT)) {
-        const checkpointStore = database.createObjectStore(INDEXEDDB_STORES.EVENT_CHECKPOINT, { keyPath: 'id' });
+        const checkpointStore = database.createObjectStore(INDEXEDDB_STORES.EVENT_CHECKPOINT, {
+            keyPath: 'id',
+        });
         checkpointStore.createIndex('sequenceNumber', 'sequenceNumber', { unique: true });
     }
 
     // Demo streams store for demo mode data
     if (!database.objectStoreNames.contains(INDEXEDDB_STORES.DEMO_STREAMS)) {
-        const demoStreamsStore = database.createObjectStore(INDEXEDDB_STORES.DEMO_STREAMS, { keyPath: 'id' });
+        const demoStreamsStore = database.createObjectStore(INDEXEDDB_STORES.DEMO_STREAMS, {
+            keyPath: 'id',
+        });
         demoStreamsStore.createIndex('timestamp', 'timestamp', { unique: false });
         demoStreamsStore.createIndex('type', 'type', { unique: false });
     }
 
     // Demo patterns store for demo mode analysis
     if (!database.objectStoreNames.contains(INDEXEDDB_STORES.DEMO_PATTERNS)) {
-        const demoPatternsStore = database.createObjectStore(INDEXEDDB_STORES.DEMO_PATTERNS, { keyPath: 'id' });
+        const demoPatternsStore = database.createObjectStore(INDEXEDDB_STORES.DEMO_PATTERNS, {
+            keyPath: 'id',
+        });
         demoPatternsStore.createIndex('timestamp', 'timestamp', { unique: false });
     }
 
@@ -293,7 +305,9 @@ function createStores(database) {
     // Compensation log store for rollback failure recovery
     // HNW Network: Persists failed rollback operations for manual recovery
     if (!database.objectStoreNames.contains('TRANSACTION_COMPENSATION')) {
-        const compensationStore = database.createObjectStore('TRANSACTION_COMPENSATION', { keyPath: 'id' });
+        const compensationStore = database.createObjectStore('TRANSACTION_COMPENSATION', {
+            keyPath: 'id',
+        });
         compensationStore.createIndex('timestamp', 'timestamp', { unique: false });
         compensationStore.createIndex('resolved', 'resolved', { unique: false });
     }

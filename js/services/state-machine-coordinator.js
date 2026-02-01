@@ -1,13 +1,13 @@
 /**
  * State Machine Coordinator
- * 
+ *
  * Centralizes cross-controller state transitions. Controllers request
  * state changes through a unified API, and the coordinator validates
  * and broadcasts changes.
- * 
+ *
  * HNW Hierarchy: Provides single source of truth for application state,
  * preventing conflicting state changes from multiple controllers.
- * 
+ *
  * @module services/state-machine-coordinator
  */
 
@@ -21,7 +21,7 @@
 const MODES = {
     IDLE: 'idle',
     DEMO: 'demo',
-    REAL: 'real'
+    REAL: 'real',
 };
 
 /**
@@ -31,7 +31,7 @@ const UPLOAD_STATES = {
     IDLE: 'idle',
     PROCESSING: 'processing',
     COMPLETE: 'complete',
-    ERROR: 'error'
+    ERROR: 'error',
 };
 
 /**
@@ -40,7 +40,7 @@ const UPLOAD_STATES = {
 const CHAT_STATES = {
     DISABLED: 'disabled',
     ENABLED: 'enabled',
-    BUSY: 'busy'
+    BUSY: 'busy',
 };
 
 /**
@@ -50,7 +50,7 @@ const SPOTIFY_STATES = {
     IDLE: 'idle',
     AUTHENTICATING: 'authenticating',
     AUTHENTICATED: 'authenticated',
-    ERROR: 'error'
+    ERROR: 'error',
 };
 
 /**
@@ -79,7 +79,7 @@ const EVENTS = {
     SPOTIFY_LOGOUT: 'spotify_logout',
 
     // Reset
-    RESET: 'reset'
+    RESET: 'reset',
 };
 
 // ==========================================
@@ -95,7 +95,7 @@ let currentState = {
     chat: CHAT_STATES.DISABLED,
     spotify: SPOTIFY_STATES.IDLE,
     lastTransition: null,
-    transitionHistory: []
+    transitionHistory: [],
 };
 
 /**
@@ -109,55 +109,55 @@ const subscribers = [];
 const TRANSITION_RULES = {
     [EVENTS.DEMO_ENTER]: {
         validFrom: { mode: [MODES.IDLE] },
-        newState: { mode: MODES.DEMO }
+        newState: { mode: MODES.DEMO },
     },
     [EVENTS.DEMO_EXIT]: {
         validFrom: { mode: [MODES.DEMO] },
-        newState: { mode: MODES.IDLE }
+        newState: { mode: MODES.IDLE },
     },
     [EVENTS.UPLOAD_START]: {
         validFrom: { upload: [UPLOAD_STATES.IDLE, UPLOAD_STATES.COMPLETE, UPLOAD_STATES.ERROR] },
-        newState: { upload: UPLOAD_STATES.PROCESSING }
+        newState: { upload: UPLOAD_STATES.PROCESSING },
     },
     [EVENTS.UPLOAD_COMPLETE]: {
         validFrom: { upload: [UPLOAD_STATES.PROCESSING] },
-        newState: { upload: UPLOAD_STATES.COMPLETE, mode: MODES.REAL }
+        newState: { upload: UPLOAD_STATES.COMPLETE, mode: MODES.REAL },
     },
     [EVENTS.UPLOAD_ERROR]: {
         validFrom: { upload: [UPLOAD_STATES.PROCESSING] },
-        newState: { upload: UPLOAD_STATES.ERROR }
+        newState: { upload: UPLOAD_STATES.ERROR },
     },
     [EVENTS.CHAT_ENABLE]: {
         validFrom: { chat: [CHAT_STATES.DISABLED] },
-        newState: { chat: CHAT_STATES.ENABLED }
+        newState: { chat: CHAT_STATES.ENABLED },
     },
     [EVENTS.CHAT_DISABLE]: {
         validFrom: { chat: [CHAT_STATES.ENABLED, CHAT_STATES.BUSY] },
-        newState: { chat: CHAT_STATES.DISABLED }
+        newState: { chat: CHAT_STATES.DISABLED },
     },
     [EVENTS.CHAT_BUSY]: {
         validFrom: { chat: [CHAT_STATES.ENABLED] },
-        newState: { chat: CHAT_STATES.BUSY }
+        newState: { chat: CHAT_STATES.BUSY },
     },
     [EVENTS.CHAT_IDLE]: {
         validFrom: { chat: [CHAT_STATES.BUSY] },
-        newState: { chat: CHAT_STATES.ENABLED }
+        newState: { chat: CHAT_STATES.ENABLED },
     },
     [EVENTS.SPOTIFY_AUTH_START]: {
         validFrom: { spotify: [SPOTIFY_STATES.IDLE, SPOTIFY_STATES.ERROR] },
-        newState: { spotify: SPOTIFY_STATES.AUTHENTICATING }
+        newState: { spotify: SPOTIFY_STATES.AUTHENTICATING },
     },
     [EVENTS.SPOTIFY_AUTH_COMPLETE]: {
         validFrom: { spotify: [SPOTIFY_STATES.AUTHENTICATING] },
-        newState: { spotify: SPOTIFY_STATES.AUTHENTICATED }
+        newState: { spotify: SPOTIFY_STATES.AUTHENTICATED },
     },
     [EVENTS.SPOTIFY_AUTH_ERROR]: {
         validFrom: { spotify: [SPOTIFY_STATES.AUTHENTICATING] },
-        newState: { spotify: SPOTIFY_STATES.ERROR }
+        newState: { spotify: SPOTIFY_STATES.ERROR },
     },
     [EVENTS.SPOTIFY_LOGOUT]: {
         validFrom: { spotify: [SPOTIFY_STATES.AUTHENTICATED] },
-        newState: { spotify: SPOTIFY_STATES.IDLE }
+        newState: { spotify: SPOTIFY_STATES.IDLE },
     },
     [EVENTS.RESET]: {
         validFrom: {}, // Always valid
@@ -166,9 +166,9 @@ const TRANSITION_RULES = {
             upload: UPLOAD_STATES.IDLE,
             chat: CHAT_STATES.DISABLED,
             spotify: SPOTIFY_STATES.IDLE,
-            transitionHistory: []  // Clear history on reset
-        }
-    }
+            transitionHistory: [], // Clear history on reset
+        },
+    },
 };
 
 // ==========================================
@@ -177,7 +177,7 @@ const TRANSITION_RULES = {
 
 /**
  * Request a state transition
- * 
+ *
  * @param {string} event - Event to trigger
  * @param {Object} [metadata] - Additional context for the transition
  * @returns {{
@@ -195,7 +195,7 @@ function request(event, metadata = {}) {
             allowed: false,
             previousState: { ...currentState },
             newState: { ...currentState },
-            reason: `Unknown event: ${event}`
+            reason: `Unknown event: ${event}`,
         };
     }
 
@@ -208,7 +208,7 @@ function request(event, metadata = {}) {
             allowed: false,
             previousState: { ...currentState },
             newState: { ...currentState },
-            reason: validationResult.reason
+            reason: validationResult.reason,
         };
     }
 
@@ -222,17 +222,19 @@ function request(event, metadata = {}) {
         lastTransition: {
             event,
             timestamp: Date.now(),
-            metadata
-        }
+            metadata,
+        },
     };
 
     // Track history (keep last 20 transitions)
     currentState.transitionHistory = [
         ...previousState.transitionHistory.slice(-19),
-        currentState.lastTransition
+        currentState.lastTransition,
     ];
 
-    console.log(`[StateMachine] Transition ${event}: ${JSON.stringify(previousState)} → ${JSON.stringify(currentState)}`);
+    console.log(
+        `[StateMachine] Transition ${event}: ${JSON.stringify(previousState)} → ${JSON.stringify(currentState)}`
+    );
 
     // CRITICAL: Create return snapshot BEFORE notifying subscribers
     // This prevents race conditions where subscribers might modify state
@@ -241,7 +243,7 @@ function request(event, metadata = {}) {
         allowed: true,
         previousState,
         newState: { ...currentState },
-        reason: 'Transition successful'
+        reason: 'Transition successful',
     };
 
     // Notify subscribers AFTER return value is fully constructed
@@ -252,7 +254,7 @@ function request(event, metadata = {}) {
 
 /**
  * Validate if a transition is allowed
- * 
+ *
  * @param {string} event - Event to validate
  * @param {Object} rule - Transition rule
  * @returns {{ valid: boolean, reason?: string }}
@@ -272,7 +274,7 @@ function validateTransition(event, rule) {
         if (!validValues.includes(currentValue)) {
             return {
                 valid: false,
-                reason: `Invalid ${stateKey} state: ${currentValue}, expected one of: ${validValues.join(', ')}`
+                reason: `Invalid ${stateKey} state: ${currentValue}, expected one of: ${validValues.join(', ')}`,
             };
         }
     }
@@ -282,7 +284,7 @@ function validateTransition(event, rule) {
 
 /**
  * Get current state
- * 
+ *
  * @returns {Object}
  */
 function getState() {
@@ -291,7 +293,7 @@ function getState() {
 
 /**
  * Check if a specific state matches
- * 
+ *
  * @param {Object} query - State to check (partial match)
  * @returns {boolean}
  */
@@ -306,7 +308,7 @@ function is(query) {
 
 /**
  * Subscribe to state changes
- * 
+ *
  * @param {function(string, Object, Object, Object): void} callback - (event, previousState, newState, metadata)
  * @returns {function(): void} Unsubscribe function
  */
@@ -323,7 +325,7 @@ function subscribe(callback) {
 
 /**
  * Notify all subscribers of state change
- * 
+ *
  * @param {string} event - Event that triggered the change
  * @param {Object} previousState - State before transition
  * @param {Object} newState - State after transition
@@ -343,7 +345,7 @@ function notifySubscribers(event, previousState, newState, metadata) {
 
 /**
  * Get transition history
- * 
+ *
  * @returns {Array}
  */
 function getHistory() {
@@ -352,7 +354,7 @@ function getHistory() {
 
 /**
  * Check if an event would be valid (without executing)
- * 
+ *
  * @param {string} event - Event to check
  * @returns {boolean}
  */
@@ -365,7 +367,7 @@ function canRequest(event) {
 
 /**
  * Force set state (for recovery/testing only)
- * 
+ *
  * @param {Object} newState - State to set
  */
 function forceState(newState) {
@@ -376,8 +378,8 @@ function forceState(newState) {
         lastTransition: {
             event: 'FORCE_SET',
             timestamp: Date.now(),
-            metadata: { forced: true }
-        }
+            metadata: { forced: true },
+        },
     };
 }
 
@@ -414,7 +416,7 @@ const StateMachine = {
     UPLOAD_STATES,
     CHAT_STATES,
     SPOTIFY_STATES,
-    EVENTS
+    EVENTS,
 };
 
 // ES Module export

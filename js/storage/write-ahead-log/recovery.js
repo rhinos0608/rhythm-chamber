@@ -50,10 +50,10 @@ export async function replayWal() {
 
         // Check if there are entries to replay
         const pendingEntries = walState.entries.filter(
-            entry => entry.status === WalStatus.PENDING ||
-                   entry.status === WalStatus.FAILED ||
-                   (entry.status === WalStatus.PROCESSING &&
-                    (Date.now() - entry.processedAt) > 60000) // Assume crashed if processing for > 1 min
+            entry =>
+                entry.status === WalStatus.PENDING ||
+                entry.status === WalStatus.FAILED ||
+                (entry.status === WalStatus.PROCESSING && Date.now() - entry.processedAt > 60000) // Assume crashed if processing for > 1 min
         );
 
         if (pendingEntries.length === 0) {
@@ -76,7 +76,6 @@ export async function replayWal() {
         await processWal();
 
         console.log('[WAL] Crash recovery replay complete');
-
     } catch (error) {
         console.error('[WAL] Error replaying WAL:', error);
     } finally {
@@ -85,7 +84,7 @@ export async function replayWal() {
         // Emit event for any blocked writes waiting on replay
         EventBus.emit('wal:replay_complete', {
             timestamp: Date.now(),
-            entriesReplayed: entriesReplayedCount
+            entriesReplayed: entriesReplayedCount,
         });
     }
 }

@@ -141,7 +141,9 @@ export function resizePool(newWorkerCount) {
                 workerInfo.worker.terminate();
             }
         }
-        console.log(`[PatternWorkerPool] Removed ${workersToRemove} workers (total: ${newWorkerCount})`);
+        console.log(
+            `[PatternWorkerPool] Removed ${workersToRemove} workers (total: ${newWorkerCount})`
+        );
     }
 
     // Update task distribution with new worker count
@@ -163,7 +165,7 @@ export function getPoolStatus() {
         busyWorkers: workers.filter(w => w.busy).length,
         pendingRequests: TaskDistribution.getState().pendingRequests.size,
         totalProcessed: workers.reduce((sum, w) => sum + w.processedCount, 0),
-        ...TaskDistribution.getBackpressureState()
+        ...TaskDistribution.getBackpressureState(),
     };
 }
 

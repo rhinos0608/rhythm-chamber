@@ -22,11 +22,11 @@ import { DegradationTier } from './degradation-detector.js';
  * @enum {number}
  */
 export const CleanupPriority = Object.freeze({
-    NEVER_DELETE: 0,         // Critical data (personality, settings, active session)
-    LOW: 1,                  // Recent data (< 7 days)
-    MEDIUM: 2,               // Medium age data (7-30 days)
-    HIGH: 3,                 // Old data (> 30 days)
-    AGGRESSIVE: 4            // Very old data (> 90 days) or regeneratable
+    NEVER_DELETE: 0, // Critical data (personality, settings, active session)
+    LOW: 1, // Recent data (< 7 days)
+    MEDIUM: 2, // Medium age data (7-30 days)
+    HIGH: 3, // Old data (> 30 days)
+    AGGRESSIVE: 4, // Very old data (> 90 days) or regeneratable
 });
 
 /**
@@ -114,48 +114,48 @@ export class CleanupStrategies {
             this._registerItem(STORAGE_KEYS.PERSONALITY_RESULT, {
                 priority: CleanupPriority.NEVER_DELETE,
                 category: 'personality',
-                regeneratable: false
+                regeneratable: false,
             });
 
             this._registerItem(STORAGE_KEYS.USER_SETTINGS, {
                 priority: CleanupPriority.NEVER_DELETE,
                 category: 'settings',
-                regeneratable: false
+                regeneratable: false,
             });
 
             // Active session - never delete
             this._registerItem(STORAGE_KEYS.ACTIVE_SESSION_ID, {
                 priority: CleanupPriority.NEVER_DELETE,
                 category: 'session',
-                regeneratable: false
+                regeneratable: false,
             });
 
             // Embeddings - regeneratable, high cleanup priority
             this._registerItem(STORAGE_KEYS.EMBEDDING_CACHE, {
                 priority: CleanupPriority.AGGRESSIVE,
                 category: 'embedding',
-                regeneratable: true
+                regeneratable: true,
             });
 
             // Chat sessions - medium priority based on age
             this._registerItem(STORAGE_KEYS.CHAT_SESSIONS, {
                 priority: CleanupPriority.MEDIUM,
                 category: 'session',
-                regeneratable: false
+                regeneratable: false,
             });
 
             // Chunks - regeneratable from streams
             this._registerItem(STORAGE_KEYS.AGGREGATED_CHUNKS, {
                 priority: CleanupPriority.HIGH,
                 category: 'chunk',
-                regeneratable: true
+                regeneratable: true,
             });
 
             // Raw streams - keep recent, aggressive cleanup for old
             this._registerItem(STORAGE_KEYS.RAW_STREAMS, {
                 priority: CleanupPriority.HIGH,
                 category: 'stream',
-                regeneratable: false
+                regeneratable: false,
             });
         });
     }
@@ -171,7 +171,7 @@ export class CleanupStrategies {
             key,
             ...metadata,
             sizeBytes: 0,
-            lastAccessed: Date.now()
+            lastAccessed: Date.now(),
         });
     }
 
@@ -212,33 +212,37 @@ export class CleanupStrategies {
             const operations = [];
 
             switch (item.category) {
-                case 'session':
+                case 'session': {
                     const sessionResult = await this._cleanupOldSessions();
                     bytesFreed += sessionResult.bytesFreed;
                     itemsDeleted += sessionResult.itemsDeleted;
                     operations.push(...sessionResult.operations);
                     break;
+                }
 
-                case 'embedding':
+                case 'embedding': {
                     const embedResult = await this._clearEmbeddings();
                     bytesFreed += embedResult.bytesFreed;
                     itemsDeleted += embedResult.itemsDeleted;
                     operations.push(...embedResult.operations);
                     break;
+                }
 
-                case 'chunk':
+                case 'chunk': {
                     const chunkResult = await this._cleanupOldChunks();
                     bytesFreed += chunkResult.bytesFreed;
                     itemsDeleted += chunkResult.itemsDeleted;
                     operations.push(...chunkResult.operations);
                     break;
+                }
 
-                case 'stream':
+                case 'stream': {
                     const streamResult = await this._cleanupOldStreams();
                     bytesFreed += streamResult.bytesFreed;
                     itemsDeleted += streamResult.itemsDeleted;
                     operations.push(...streamResult.operations);
                     break;
+                }
             }
 
             return {
@@ -246,9 +250,8 @@ export class CleanupStrategies {
                 bytesFreed,
                 itemsDeleted,
                 operations,
-                error: null
+                error: null,
             };
-
         } catch (error) {
             console.error(`[CleanupStrategies] Failed to cleanup ${item.key}:`, error);
             return {
@@ -256,7 +259,7 @@ export class CleanupStrategies {
                 bytesFreed: 0,
                 itemsDeleted: 0,
                 operations: [],
-                error
+                error,
             };
         } finally {
             performance.measure(`cleanup-item-${item.key}`, `cleanup-item-${item.key}-start`);
@@ -289,7 +292,10 @@ export class CleanupStrategies {
                         operationsPerformed.push(...result.operations);
 
                         // Check if we've freed enough space
-                        if (this._currentMetrics && bytesFreed > this._currentMetrics.usageBytes * 0.1) {
+                        if (
+                            this._currentMetrics &&
+                            bytesFreed > this._currentMetrics.usageBytes * 0.1
+                        ) {
                             console.log('[CleanupStrategies] Freed 10% of usage, stopping cleanup');
                             break;
                         }
@@ -304,9 +310,8 @@ export class CleanupStrategies {
                 bytesFreed,
                 itemsDeleted,
                 operationsPerformed,
-                error: null
+                error: null,
             };
-
         } catch (error) {
             console.error('[CleanupStrategies] Cleanup failed:', error);
             return {
@@ -314,7 +319,7 @@ export class CleanupStrategies {
                 bytesFreed,
                 itemsDeleted,
                 operationsPerformed,
-                error
+                error,
             };
         } finally {
             performance.measure('storage-cleanup', 'storage-cleanup-start');
@@ -364,24 +369,28 @@ export class CleanupStrategies {
                 const batch = sessionsToDelete.slice(i, i + BATCH_SIZE);
 
                 // Process batch in parallel
-                await Promise.all(batch.map(async (session) => {
-                    try {
-                        await this._storage.deleteChatSession(session.id);
-                        itemsDeleted++;
-                        bytesFreed += 2048; // Estimate 2KB per session
-                        operations.push(`deleted_session_${session.id}`);
-                    } catch (error) {
-                        console.warn(`[CleanupStrategies] Failed to delete session ${session.id}:`, error);
-                        // Continue with other sessions even if one fails
-                    }
-                }));
+                await Promise.all(
+                    batch.map(async session => {
+                        try {
+                            await this._storage.deleteChatSession(session.id);
+                            itemsDeleted++;
+                            bytesFreed += 2048; // Estimate 2KB per session
+                            operations.push(`deleted_session_${session.id}`);
+                        } catch (error) {
+                            console.warn(
+                                `[CleanupStrategies] Failed to delete session ${session.id}:`,
+                                error
+                            );
+                            // Continue with other sessions even if one fails
+                        }
+                    })
+                );
 
                 // Yield to event loop between batches
                 await new Promise(resolve => queueMicrotask(resolve));
             }
 
             return { success: true, bytesFreed, itemsDeleted, operations, error: null };
-
         } catch (error) {
             return { success: false, bytesFreed: 0, itemsDeleted: 0, operations: [], error };
         }
@@ -409,9 +418,8 @@ export class CleanupStrategies {
                 bytesFreed,
                 itemsDeleted,
                 operations: ['cleared_embedding_cache'],
-                error: null
+                error: null,
             };
-
         } catch (error) {
             return { success: false, bytesFreed: 0, itemsDeleted: 0, operations: [], error };
         }
@@ -444,24 +452,28 @@ export class CleanupStrategies {
                 const batch = chunksToDelete.slice(i, i + BATCH_SIZE);
 
                 // Process batch in parallel
-                await Promise.all(batch.map(async (chunk) => {
-                    try {
-                        await this._storage.deleteChunk(chunk.id);
-                        itemsDeleted++;
-                        bytesFreed += 10240; // Estimate 10KB per chunk
-                        operations.push(`deleted_chunk_${chunk.id}`);
-                    } catch (error) {
-                        console.warn(`[CleanupStrategies] Failed to delete chunk ${chunk.id}:`, error);
-                        // Continue with other chunks even if one fails
-                    }
-                }));
+                await Promise.all(
+                    batch.map(async chunk => {
+                        try {
+                            await this._storage.deleteChunk(chunk.id);
+                            itemsDeleted++;
+                            bytesFreed += 10240; // Estimate 10KB per chunk
+                            operations.push(`deleted_chunk_${chunk.id}`);
+                        } catch (error) {
+                            console.warn(
+                                `[CleanupStrategies] Failed to delete chunk ${chunk.id}:`,
+                                error
+                            );
+                            // Continue with other chunks even if one fails
+                        }
+                    })
+                );
 
                 // Yield to event loop between batches
                 await new Promise(resolve => queueMicrotask(resolve));
             }
 
             return { success: true, bytesFreed, itemsDeleted, operations, error: null };
-
         } catch (error) {
             return { success: false, bytesFreed: 0, itemsDeleted: 0, operations: [], error };
         }
@@ -495,24 +507,28 @@ export class CleanupStrategies {
                 const batch = streamsToDelete.slice(i, i + BATCH_SIZE);
 
                 // Process batch in parallel
-                await Promise.all(batch.map(async (stream) => {
-                    try {
-                        await this._storage.deleteStream(stream.id);
-                        itemsDeleted++;
-                        bytesFreed += 512; // Estimate 512B per stream
-                        operations.push(`deleted_stream_${stream.id}`);
-                    } catch (error) {
-                        console.warn(`[CleanupStrategies] Failed to delete stream ${stream.id}:`, error);
-                        // Continue with other streams even if one fails
-                    }
-                }));
+                await Promise.all(
+                    batch.map(async stream => {
+                        try {
+                            await this._storage.deleteStream(stream.id);
+                            itemsDeleted++;
+                            bytesFreed += 512; // Estimate 512B per stream
+                            operations.push(`deleted_stream_${stream.id}`);
+                        } catch (error) {
+                            console.warn(
+                                `[CleanupStrategies] Failed to delete stream ${stream.id}:`,
+                                error
+                            );
+                            // Continue with other streams even if one fails
+                        }
+                    })
+                );
 
                 // Yield to event loop between batches
                 await new Promise(resolve => queueMicrotask(resolve));
             }
 
             return { success: true, bytesFreed, itemsDeleted, operations, error: null };
-
         } catch (error) {
             return { success: false, bytesFreed: 0, itemsDeleted: 0, operations: [], error };
         }
@@ -592,7 +608,7 @@ export class CleanupStrategies {
                 bytesFreed,
                 itemsDeleted,
                 operations,
-                error: null
+                error: null,
             };
         } catch (error) {
             return {
@@ -600,7 +616,7 @@ export class CleanupStrategies {
                 bytesFreed,
                 itemsDeleted,
                 operations,
-                error
+                error,
             };
         }
     }

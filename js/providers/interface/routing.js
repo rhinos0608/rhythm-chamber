@@ -82,7 +82,8 @@ export async function callProvider(config, apiKey, messages, tools, onProgress =
     }
 
     // Get appropriate timeout for provider type
-    const timeoutMs = config.timeout || (config.isLocal ? PROVIDER_TIMEOUTS.local : PROVIDER_TIMEOUTS.cloud);
+    const timeoutMs =
+        config.timeout || (config.isLocal ? PROVIDER_TIMEOUTS.local : PROVIDER_TIMEOUTS.cloud);
 
     // Execute with retry logic and exponential backoff
     let lastError;
@@ -106,14 +107,32 @@ export async function callProvider(config, apiKey, messages, tools, onProgress =
                             return await providerModule.call(config, messages, tools, onProgress);
 
                         case 'gemini':
-                            return await providerModule.call(apiKey, config, messages, tools, onProgress);
+                            return await providerModule.call(
+                                apiKey,
+                                config,
+                                messages,
+                                tools,
+                                onProgress
+                            );
 
                         case 'openai-compatible':
-                            return await providerModule.call(apiKey, config, messages, tools, onProgress);
+                            return await providerModule.call(
+                                apiKey,
+                                config,
+                                messages,
+                                tools,
+                                onProgress
+                            );
 
                         case 'openrouter':
                         default:
-                            return await providerModule.call(apiKey, config, messages, tools, onProgress);
+                            return await providerModule.call(
+                                apiKey,
+                                config,
+                                messages,
+                                tools,
+                                onProgress
+                            );
                     }
                 },
                 timeoutMs,
@@ -130,7 +149,9 @@ export async function callProvider(config, apiKey, messages, tools, onProgress =
                 throw new Error(`${config.provider} returned no response`);
             }
             if (!response.choices || !Array.isArray(response.choices)) {
-                throw new Error(`${config.provider} returned malformed response (missing choices array)`);
+                throw new Error(
+                    `${config.provider} returned malformed response (missing choices array)`
+                );
             }
             // Validate choices array is not empty
             if (response.choices.length === 0) {
@@ -138,17 +159,20 @@ export async function callProvider(config, apiKey, messages, tools, onProgress =
             }
             // Validate first choice has message structure
             if (!response.choices[0]?.message) {
-                throw new Error(`${config.provider} returned malformed response (missing message in first choice)`);
+                throw new Error(
+                    `${config.provider} returned malformed response (missing message in first choice)`
+                );
             }
             // Validate message has content or tool_calls (at least one should be present)
             const message = response.choices[0].message;
             if (!message.content && !message.tool_calls) {
                 // Empty response is valid for some models, but log it
-                console.warn(`[ProviderInterface] ${config.provider} returned response with no content or tool_calls`);
+                console.warn(
+                    `[ProviderInterface] ${config.provider} returned response with no content or tool_calls`
+                );
             }
 
             return response;
-
         } catch (error) {
             lastError = error;
 
@@ -156,7 +180,9 @@ export async function callProvider(config, apiKey, messages, tools, onProgress =
             if (error.message.includes('429') || error.message.includes('rate limit')) {
                 const retryAfterMs = extractRetryAfter(error);
                 if (retryAfterMs > 0) {
-                    console.warn(`[ProviderInterface] Rate limited by ${config.provider}, waiting ${retryAfterMs}ms`);
+                    console.warn(
+                        `[ProviderInterface] Rate limited by ${config.provider}, waiting ${retryAfterMs}ms`
+                    );
                     await delay(retryAfterMs);
                     continue; // Retry immediately after waiting
                 }
@@ -165,7 +191,9 @@ export async function callProvider(config, apiKey, messages, tools, onProgress =
             // Check if error is retryable and we have more attempts
             if (attempt < RETRY_CONFIG.MAX_RETRIES && isRetryableError(error)) {
                 const retryDelay = calculateRetryDelay(attempt);
-                console.warn(`[ProviderInterface] Retryable error for ${config.provider} (attempt ${attempt + 1}/${RETRY_CONFIG.MAX_RETRIES + 1}): ${error.message}`);
+                console.warn(
+                    `[ProviderInterface] Retryable error for ${config.provider} (attempt ${attempt + 1}/${RETRY_CONFIG.MAX_RETRIES + 1}): ${error.message}`
+                );
                 console.log(`[ProviderInterface] Waiting ${retryDelay}ms before retry...`);
                 await delay(retryDelay);
                 continue;
@@ -188,7 +216,9 @@ export async function callProvider(config, apiKey, messages, tools, onProgress =
     }
 
     // If we exhausted all retries, throw the last error
-    console.error(`[ProviderInterface] All ${RETRY_CONFIG.MAX_RETRIES + 1} attempts failed for ${config.provider}`);
+    console.error(
+        `[ProviderInterface] All ${RETRY_CONFIG.MAX_RETRIES + 1} attempts failed for ${config.provider}`
+    );
     throw lastError;
 }
 

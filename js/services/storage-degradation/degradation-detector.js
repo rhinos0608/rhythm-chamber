@@ -19,11 +19,11 @@
  * @enum {string}
  */
 export const DegradationTier = Object.freeze({
-    NORMAL: 'normal',        // < 80% quota used
-    WARNING: 'warning',      // 80-94% quota used
-    CRITICAL: 'critical',    // 95-99% quota used
-    EXCEEDED: 'exceeded',    // 100% quota used
-    EMERGENCY: 'emergency'   // Emergency mode activated
+    NORMAL: 'normal', // < 80% quota used
+    WARNING: 'warning', // 80-94% quota used
+    CRITICAL: 'critical', // 95-99% quota used
+    EXCEEDED: 'exceeded', // 100% quota used
+    EMERGENCY: 'emergency', // Emergency mode activated
 });
 
 /**
@@ -135,7 +135,7 @@ export class DegradationDetector {
                         oldTier: this._currentTier,
                         newTier,
                         metrics,
-                        reason: 'quota_check'
+                        reason: 'quota_check',
                     });
                 }
 
@@ -146,10 +146,9 @@ export class DegradationDetector {
             if (this._eventBus) {
                 this._eventBus.emit('STORAGE:QUOTA_STATUS', {
                     tier: this._currentTier,
-                    metrics
+                    metrics,
                 });
             }
-
         } catch (error) {
             console.error('[DegradationDetector] Failed to check quota:', error);
         }
@@ -172,7 +171,7 @@ export class DegradationDetector {
                 quotaBytes,
                 usagePercent,
                 tier: this._determineDegradationTier({ usagePercent }),
-                availableBytes: quotaBytes - usageBytes
+                availableBytes: quotaBytes - usageBytes,
             };
         }
 
@@ -211,7 +210,7 @@ export class DegradationDetector {
                 quotaBytes,
                 usagePercent,
                 tier: this._determineDegradationTier({ usagePercent }),
-                availableBytes: quotaBytes - usageBytes
+                availableBytes: quotaBytes - usageBytes,
             };
         } catch (error) {
             console.error('[DegradationDetector] Failed to estimate storage:', error);
@@ -220,7 +219,7 @@ export class DegradationDetector {
                 quotaBytes: 50 * 1024 * 1024,
                 usagePercent: 0,
                 tier: DegradationTier.NORMAL,
-                availableBytes: 50 * 1024 * 1024
+                availableBytes: 50 * 1024 * 1024,
             };
         }
     }

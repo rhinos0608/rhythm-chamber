@@ -53,7 +53,9 @@
 // Define error classes
 export class LockAcquisitionError extends Error {
     constructor(operationName, blockedBy) {
-        super(`Cannot acquire lock for '${operationName}'. Blocked by: ${blockedBy?.join(', ') || 'unknown'}`);
+        super(
+            `Cannot acquire lock for '${operationName}'. Blocked by: ${blockedBy?.join(', ') || 'unknown'}`
+        );
         this.name = 'LockAcquisitionError';
         this.code = 'LOCK_ACQUISITION_FAILED';
     }
@@ -69,7 +71,9 @@ export class LockTimeoutError extends Error {
 
 export class LockReleaseError extends Error {
     constructor(operationName, providedOwnerId, actualOwnerId) {
-        super(`Cannot release lock for '${operationName}'. Provided owner: ${providedOwnerId}, Actual owner: ${actualOwnerId || 'none'}`);
+        super(
+            `Cannot release lock for '${operationName}'. Provided owner: ${providedOwnerId}, Actual owner: ${actualOwnerId || 'none'}`
+        );
         this.name = 'LockReleaseError';
         this.code = 'LOCK_RELEASE_FAILED';
     }
@@ -98,7 +102,7 @@ export const OPERATIONS = {
     EMBEDDING_GENERATION: 'embedding_generation',
     PRIVACY_CLEAR: 'privacy_clear',
     SPOTIFY_FETCH: 'spotify_fetch',
-    CHAT_SAVE: 'chat_save'
+    CHAT_SAVE: 'chat_save',
 };
 
 // Conflict matrix: which operations cannot run concurrently
@@ -107,17 +111,21 @@ const CONFLICT_MATRIX = {
     // RAG uses a snapshot of streams at start; dataHash staleness check handles new uploads
     [OPERATIONS.FILE_PROCESSING]: [OPERATIONS.PRIVACY_CLEAR],
     [OPERATIONS.EMBEDDING_GENERATION]: [OPERATIONS.PRIVACY_CLEAR],
-    [OPERATIONS.PRIVACY_CLEAR]: [OPERATIONS.FILE_PROCESSING, OPERATIONS.EMBEDDING_GENERATION, OPERATIONS.CHAT_SAVE],
-    [OPERATIONS.SPOTIFY_FETCH]: [],  // Spotify can run alongside others
-    [OPERATIONS.CHAT_SAVE]: [OPERATIONS.PRIVACY_CLEAR]
+    [OPERATIONS.PRIVACY_CLEAR]: [
+        OPERATIONS.FILE_PROCESSING,
+        OPERATIONS.EMBEDDING_GENERATION,
+        OPERATIONS.CHAT_SAVE,
+    ],
+    [OPERATIONS.SPOTIFY_FETCH]: [], // Spotify can run alongside others
+    [OPERATIONS.CHAT_SAVE]: [OPERATIONS.PRIVACY_CLEAR],
 };
 
 // Current locks state
-const activeLocks = new Map();  // operationName -> { ownerId, acquiredAt }
+const activeLocks = new Map(); // operationName -> { ownerId, acquiredAt }
 let lockIdCounter = 0;
 
 // HNW Hierarchy: Pending lock requests for deadlock detection
-const pendingRequests = new Map();  // operationName -> Set<waitingFor>
+const pendingRequests = new Map(); // operationName -> Set<waitingFor>
 
 /**
  * Build a dependency graph from pending requests and current locks
@@ -157,7 +165,7 @@ function detectCycle(graph, start, visited = new Set(), path = []) {
     }
 
     if (visited.has(start)) {
-        return null;  // Already explored this node, no cycle through here
+        return null; // Already explored this node, no cycle through here
     }
 
     visited.add(start);
@@ -200,7 +208,7 @@ function canAcquire(operationName) {
 
     return {
         canAcquire: blockedBy.length === 0,
-        blockedBy: blockedBy.length > 0 ? blockedBy : undefined
+        blockedBy: blockedBy.length > 0 ? blockedBy : undefined,
     };
 }
 
@@ -214,14 +222,16 @@ async function acquire(operationName) {
     const { canAcquire: allowed, blockedBy } = canAcquire(operationName);
 
     if (!allowed) {
-        console.warn(`[LockManager] Operation '${operationName}' blocked by: ${blockedBy.join(', ')}`);
+        console.warn(
+            `[LockManager] Operation '${operationName}' blocked by: ${blockedBy.join(', ')}`
+        );
         throw new LockAcquisitionError(operationName, blockedBy);
     }
 
     const ownerId = generateOwnerId();
     activeLocks.set(operationName, {
         ownerId,
-        acquiredAt: Date.now()
+        acquiredAt: Date.now(),
     });
 
     console.log(`[LockManager] Acquired '${operationName}' (${ownerId})`);
@@ -252,7 +262,9 @@ async function acquireWithTimeout(operationName, timeoutMs = 30000) {
 
             // If timeout is reached, throw timeout error
             if (Date.now() - startTime >= timeoutMs) {
-                console.warn(`[LockManager] Timeout acquiring '${operationName}' after ${timeoutMs}ms`);
+                console.warn(
+                    `[LockManager] Timeout acquiring '${operationName}' after ${timeoutMs}ms`
+                );
                 throw new LockTimeoutError(operationName, timeoutMs);
             }
 
@@ -311,7 +323,9 @@ async function acquireWithDeadlockDetection(operationName, timeoutMs = 30000) {
             // If timeout is reached, throw timeout error
             if (Date.now() - startTime >= timeoutMs) {
                 pendingRequests.delete(operationName);
-                console.warn(`[LockManager] Timeout acquiring '${operationName}' after ${timeoutMs}ms`);
+                console.warn(
+                    `[LockManager] Timeout acquiring '${operationName}' after ${timeoutMs}ms`
+                );
                 throw new LockTimeoutError(operationName, timeoutMs);
             }
 
@@ -385,7 +399,7 @@ function getLockStatus(operationName) {
         canAcquire: check.canAcquire,
         blockedBy: check.blockedBy,
         activeLocks: active,
-        timestamp: Date.now()
+        timestamp: Date.now(),
     };
 }
 
@@ -401,7 +415,7 @@ function getLockDetails() {
         details.push({
             operation,
             heldFor: now - lock.acquiredAt,
-            ownerId: lock.ownerId
+            ownerId: lock.ownerId,
         });
     }
 
@@ -418,7 +432,9 @@ function forceReleaseAll(reason = 'Emergency') {
     const released = [...activeLocks.keys()];
     activeLocks.clear();
 
-    console.warn(`[LockManager] Force released all locks: ${released.join(', ')} - Reason: ${reason}`);
+    console.warn(
+        `[LockManager] Force released all locks: ${released.join(', ')} - Reason: ${reason}`
+    );
     released.forEach(op => dispatchLockEvent('released', op));
 
     return { released, reason };
@@ -430,9 +446,11 @@ function forceReleaseAll(reason = 'Emergency') {
  */
 function dispatchLockEvent(action, operationName) {
     if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('lockmanager', {
-            detail: { action, operationName, activeLocks: getActiveLocks() }
-        }));
+        window.dispatchEvent(
+            new CustomEvent('lockmanager', {
+                detail: { action, operationName, activeLocks: getActiveLocks() },
+            })
+        );
     }
 }
 
@@ -483,7 +501,7 @@ export const LockManager = {
     getLockDetails,
     forceReleaseAll,
     withLock,
-    withLockAndTimeout
+    withLockAndTimeout,
 };
 
 // Export default

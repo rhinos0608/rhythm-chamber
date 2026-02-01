@@ -41,7 +41,7 @@ function initElements() {
         liteRevealSection: document.getElementById('lite-reveal-section'),
         chatSection: document.getElementById('chat-section'),
         resetBtn: document.getElementById('reset-btn'),
-        chatSidebar: document.getElementById('chat-sidebar')
+        chatSidebar: document.getElementById('chat-sidebar'),
     };
 
     // Subscribe to AppState changes for reset button visibility
@@ -198,20 +198,23 @@ function showReveal() {
     if (canGenerateAI && descriptionEl) {
         // Show loading state for description
         // SAFE: Static HTML literal with no user input
-        descriptionEl.innerHTML = '<span class="ai-description-loading">✨ Crafting your personalized description...</span>';
+        descriptionEl.innerHTML =
+            '<span class="ai-description-loading">✨ Crafting your personalized description...</span>';
         descriptionEl.classList.add('generating');
 
         // Generate AI description async with error handling
-        generateAIDescription(personality, patterns, summary, descriptionEl)
-            .catch(err => {
-                // Catch any errors that occur before internal try/catch
-                console.error('[ViewController] Critical error in AI description background task:', err);
-                // Clean up UI state
-                if (descriptionEl) {
-                    descriptionEl.classList.remove('generating');
-                    descriptionEl.textContent = personality?.description || 'Description unavailable';
-                }
-            });
+        generateAIDescription(personality, patterns, summary, descriptionEl).catch(err => {
+            // Catch any errors that occur before internal try/catch
+            console.error(
+                '[ViewController] Critical error in AI description background task:',
+                err
+            );
+            // Clean up UI state
+            if (descriptionEl) {
+                descriptionEl.classList.remove('generating');
+                descriptionEl.textContent = personality?.description || 'Description unavailable';
+            }
+        });
     } else {
         // Use generic description
         if (descriptionEl) {
@@ -243,7 +246,7 @@ function showReveal() {
     // Evidence
     const evidenceItems = document.getElementById('evidence-items');
     if (evidenceItems && personality.allEvidence) {
-        renderList(evidenceItems, personality.allEvidence, (text) => {
+        renderList(evidenceItems, personality.allEvidence, text => {
             const li = document.createElement('li');
             li.textContent = text;
             return li;
@@ -271,7 +274,9 @@ async function generateAIDescription(personality, patterns, summary, description
     // Between abort() and creating a new AbortController, there's a microtask window.
     // This flag ensures we never have two requests in flight simultaneously.
     if (descriptionRequestPending) {
-        console.log('[ViewController] AI description request already in flight, ignoring duplicate call');
+        console.log(
+            '[ViewController] AI description request already in flight, ignoring duplicate call'
+        );
         return;
     }
     descriptionRequestPending = true;
@@ -300,7 +305,9 @@ async function generateAIDescription(personality, patterns, summary, description
 
         // Check if request was aborted (RACE CONDITION FIX)
         if (signal.aborted) {
-            console.log('[ViewController] AI description request was aborted - newer request in progress');
+            console.log(
+                '[ViewController] AI description request was aborted - newer request in progress'
+            );
             return;
         }
 
@@ -362,7 +369,7 @@ function populateScoreBreakdown(personality) {
     explainer.style.display = '';
 
     if (scoreBreakdown) {
-        renderList(scoreBreakdown, personality.breakdown, (item) => {
+        renderList(scoreBreakdown, personality.breakdown, item => {
             const li = document.createElement('li');
             li.className = item.points > 0 ? 'score-positive' : 'score-zero';
             li.textContent = `${item.label} (${item.points > 0 ? '+' + item.points : '0'} points)`;
@@ -420,7 +427,7 @@ function showLiteReveal() {
     // Evidence
     const evidenceItems = document.getElementById('lite-evidence-items');
     if (evidenceItems && personality.allEvidence) {
-        renderList(evidenceItems, personality.allEvidence, (text) => {
+        renderList(evidenceItems, personality.allEvidence, text => {
             const li = document.createElement('li');
             li.textContent = text;
             return li;
@@ -429,7 +436,12 @@ function showLiteReveal() {
 
     // Init chat context
     if (Chat?.initChat) {
-        Chat.initChat(personality, litePatterns, litePatterns?.summary, liteData?.recentStreams || null);
+        Chat.initChat(
+            personality,
+            litePatterns,
+            litePatterns?.summary,
+            liteData?.recentStreams || null
+        );
     }
 }
 
@@ -512,8 +524,7 @@ export const ViewController = {
     showChat,
     updateProgress,
     populateScoreBreakdown,
-    destroy
+    destroy,
 };
-
 
 console.log('[ViewController] Module loaded');

@@ -62,7 +62,7 @@ export const ErrorType = {
 
     // Generic Errors
     UNKNOWN_ERROR: 'UNKNOWN_ERROR',
-    OPERATION_CANCELLED: 'OPERATION_CANCELLED'
+    OPERATION_CANCELLED: 'OPERATION_CANCELLED',
 };
 
 /**
@@ -71,11 +71,11 @@ export const ErrorType = {
  * @enum {string}
  */
 export const ErrorSeverity = {
-    CRITICAL: 'CRITICAL',      // System-breaking, requires immediate attention
-    HIGH: 'HIGH',             // Major feature impact, user intervention needed
-    MEDIUM: 'MEDIUM',         // Degraded experience, workaround available
-    LOW: 'LOW',               // Minor issue, cosmetic or informational
-    INFO: 'INFO'              // Not an error, just informational
+    CRITICAL: 'CRITICAL', // System-breaking, requires immediate attention
+    HIGH: 'HIGH', // Major feature impact, user intervention needed
+    MEDIUM: 'MEDIUM', // Degraded experience, workaround available
+    LOW: 'LOW', // Minor issue, cosmetic or informational
+    INFO: 'INFO', // Not an error, just informational
 };
 
 /**
@@ -85,10 +85,10 @@ export const ErrorSeverity = {
  * @enum {string}
  */
 export const ErrorRecoverability = {
-    RECOVERABLE: 'RECOVERABLE',           // Can retry with same parameters
-    RECOVERABLE_WITH_RETRY: 'RECOVERABLE_WITH_RETRY',  // Can retry with modified parameters
-    USER_ACTION_REQUIRED: 'USER_ACTION_REQUIRED',      // User must provide input/fix
-    NOT_RECOVERABLE: 'NOT_RECOVERABLE'     // Cannot be recovered, must fail
+    RECOVERABLE: 'RECOVERABLE', // Can retry with same parameters
+    RECOVERABLE_WITH_RETRY: 'RECOVERABLE_WITH_RETRY', // Can retry with modified parameters
+    USER_ACTION_REQUIRED: 'USER_ACTION_REQUIRED', // User must provide input/fix
+    NOT_RECOVERABLE: 'NOT_RECOVERABLE', // Cannot be recovered, must fail
 };
 
 /**
@@ -101,29 +101,29 @@ const PROVIDER_ERROR_PATTERNS = {
         invalidKey: /invalid.*key|unauthorized|401/i,
         timeout: /timeout|request.*timeout|504/i,
         modelUnavailable: /model.*not.*found|model.*unavailable|400/i,
-        quotaExceeded: /quota|credits|insufficient.*credits/i
+        quotaExceeded: /quota|credits|insufficient.*credits/i,
     },
     anthropic: {
         rateLimit: /rate.*limit|429/i,
         invalidKey: /invalid.*key|unauthorized|401/i,
         timeout: /timeout|504/i,
-        quotaExceeded: /quota|credits/i
+        quotaExceeded: /quota|credits/i,
     },
     ollama: {
         connection: /connection.*refused|ECONNREFUSED/i,
         timeout: /timeout/i,
-        unavailable: /not.*running|unavailable/i
+        unavailable: /not.*running|unavailable/i,
     },
     lmstudio: {
         connection: /connection.*refused|ECONNREFUSED/i,
         timeout: /timeout/i,
-        unavailable: /not.*running|unavailable/i
+        unavailable: /not.*running|unavailable/i,
     },
     gemini: {
         rateLimit: /rate.*limit|quota|429/i,
         invalidKey: /invalid.*key|unauthorized|401|403/i,
-        quotaExceeded: /quota|exceeded/i
-    }
+        quotaExceeded: /quota|exceeded/i,
+    },
 };
 
 /**
@@ -159,7 +159,7 @@ export function classifyError(error, context = {}) {
             return createClassifiedError({
                 ...providerClassification,
                 originalError: errorObj,
-                context: sanitizeContext({ provider, operation, ...sanitizedMetadata })
+                context: sanitizeContext({ provider, operation, ...sanitizedMetadata }),
             });
         }
     }
@@ -170,7 +170,7 @@ export function classifyError(error, context = {}) {
         return createClassifiedError({
             ...storageClassification,
             originalError: errorObj,
-            context: sanitizeContext({ provider, operation, ...sanitizedMetadata })
+            context: sanitizeContext({ provider, operation, ...sanitizedMetadata }),
         });
     }
 
@@ -180,7 +180,7 @@ export function classifyError(error, context = {}) {
         return createClassifiedError({
             ...networkClassification,
             originalError: errorObj,
-            context: sanitizeContext({ provider, operation, ...sanitizedMetadata })
+            context: sanitizeContext({ provider, operation, ...sanitizedMetadata }),
         });
     }
 
@@ -190,7 +190,7 @@ export function classifyError(error, context = {}) {
         return createClassifiedError({
             ...validationClassification,
             originalError: errorObj,
-            context: sanitizeContext({ provider, operation, ...sanitizedMetadata })
+            context: sanitizeContext({ provider, operation, ...sanitizedMetadata }),
         });
     }
 
@@ -200,7 +200,7 @@ export function classifyError(error, context = {}) {
         return createClassifiedError({
             ...transactionClassification,
             originalError: errorObj,
-            context: sanitizeContext({ provider, operation, ...sanitizedMetadata })
+            context: sanitizeContext({ provider, operation, ...sanitizedMetadata }),
         });
     }
 
@@ -211,7 +211,7 @@ export function classifyError(error, context = {}) {
         recoverable: ErrorRecoverability.NOT_RECOVERABLE,
         message: message,
         originalError: errorObj,
-        context: sanitizeContext({ provider, operation, ...sanitizedMetadata })
+        context: sanitizeContext({ provider, operation, ...sanitizedMetadata }),
     });
 }
 
@@ -228,7 +228,7 @@ export function normalizeError(error) {
             message: sanitizeMessage(error.message),
             stack: error.stack,
             code: error.code,
-            status: error.status
+            status: error.status,
         };
     }
 
@@ -236,7 +236,7 @@ export function normalizeError(error) {
         return {
             name: 'Error',
             message: sanitizeMessage(error),
-            stack: undefined
+            stack: undefined,
         };
     }
 
@@ -246,14 +246,14 @@ export function normalizeError(error) {
             message: sanitizeMessage(error.message || error.toString() || 'Unknown error'),
             stack: error.stack,
             code: error.code,
-            status: error.status
+            status: error.status,
         };
     }
 
     return {
         name: 'Error',
         message: sanitizeMessage(String(error)),
-        stack: undefined
+        stack: undefined,
     };
 }
 
@@ -275,7 +275,7 @@ export function classifyProviderError(message, provider, errorObj) {
             severity: ErrorSeverity.MEDIUM,
             recoverable: ErrorRecoverability.RECOVERABLE_WITH_RETRY,
             message: `Rate limit exceeded for ${provider}. Please try again later.`,
-            hint: getRateLimitHint(provider)
+            hint: getRateLimitHint(provider),
         };
     }
 
@@ -286,7 +286,7 @@ export function classifyProviderError(message, provider, errorObj) {
             severity: ErrorSeverity.HIGH,
             recoverable: ErrorRecoverability.USER_ACTION_REQUIRED,
             message: `Invalid API key for ${provider}. Please check your settings.`,
-            hint: getInvalidKeyHint(provider)
+            hint: getInvalidKeyHint(provider),
         };
     }
 
@@ -297,7 +297,7 @@ export function classifyProviderError(message, provider, errorObj) {
             severity: ErrorSeverity.MEDIUM,
             recoverable: ErrorRecoverability.RECOVERABLE_WITH_RETRY,
             message: `Request to ${provider} timed out. Please try again.`,
-            hint: 'The service may be experiencing high load. Wait a moment and retry.'
+            hint: 'The service may be experiencing high load. Wait a moment and retry.',
         };
     }
 
@@ -308,7 +308,7 @@ export function classifyProviderError(message, provider, errorObj) {
             severity: ErrorSeverity.HIGH,
             recoverable: ErrorRecoverability.USER_ACTION_REQUIRED,
             message: `The selected model is not available on ${provider}.`,
-            hint: 'Please select a different model in settings.'
+            hint: 'Please select a different model in settings.',
         };
     }
 
@@ -319,7 +319,7 @@ export function classifyProviderError(message, provider, errorObj) {
             severity: ErrorSeverity.HIGH,
             recoverable: ErrorRecoverability.USER_ACTION_REQUIRED,
             message: `Quota exceeded for ${provider}. Please check your account.`,
-            hint: getQuotaExceededHint(provider)
+            hint: getQuotaExceededHint(provider),
         };
     }
 
@@ -330,7 +330,7 @@ export function classifyProviderError(message, provider, errorObj) {
             severity: ErrorSeverity.HIGH,
             recoverable: ErrorRecoverability.USER_ACTION_REQUIRED,
             message: `Could not connect to ${provider}.`,
-            hint: getConnectionHint(provider)
+            hint: getConnectionHint(provider),
         };
     }
 
@@ -352,7 +352,7 @@ export function classifyStorageError(message, name, errorObj) {
             severity: ErrorSeverity.HIGH,
             recoverable: ErrorRecoverability.USER_ACTION_REQUIRED,
             message: 'Storage quota exceeded. Please clear some data or use a different browser.',
-            hint: 'Try clearing old conversations or exporting your data first.'
+            hint: 'Try clearing old conversations or exporting your data first.',
         };
     }
 
@@ -363,7 +363,7 @@ export function classifyStorageError(message, name, errorObj) {
             severity: ErrorSeverity.MEDIUM,
             recoverable: ErrorRecoverability.RECOVERABLE_WITH_RETRY,
             message: 'Storage transaction failed. Please try again.',
-            hint: 'This may be due to browser storage limitations. Try refreshing the page.'
+            hint: 'This may be due to browser storage limitations. Try refreshing the page.',
         };
     }
 
@@ -374,7 +374,7 @@ export function classifyStorageError(message, name, errorObj) {
             severity: ErrorSeverity.HIGH,
             recoverable: ErrorRecoverability.NOT_RECOVERABLE,
             message: 'IndexedDB is not available in this browser.',
-            hint: 'Try using a modern browser like Chrome, Firefox, or Edge.'
+            hint: 'Try using a modern browser like Chrome, Firefox, or Edge.',
         };
     }
 
@@ -385,7 +385,7 @@ export function classifyStorageError(message, name, errorObj) {
             severity: ErrorSeverity.MEDIUM,
             recoverable: ErrorRecoverability.USER_ACTION_REQUIRED,
             message: 'Cannot write in read-only mode. Close other tabs to enable editing.',
-            hint: 'Multiple tabs may be open. Close other tabs to enable write access.'
+            hint: 'Multiple tabs may be open. Close other tabs to enable write access.',
         };
     }
 
@@ -396,7 +396,7 @@ export function classifyStorageError(message, name, errorObj) {
             severity: ErrorSeverity.CRITICAL,
             recoverable: ErrorRecoverability.NOT_RECOVERABLE,
             message: 'Storage system in fatal error state. Please refresh the page.',
-            hint: 'If this persists, clear browser data and reload.'
+            hint: 'If this persists, clear browser data and reload.',
         };
     }
 
@@ -417,7 +417,7 @@ export function classifyNetworkError(message, errorObj) {
             severity: ErrorSeverity.HIGH,
             recoverable: ErrorRecoverability.RECOVERABLE_WITH_RETRY,
             message: 'No internet connection. Please check your network.',
-            hint: 'Check your WiFi or ethernet connection and try again.'
+            hint: 'Check your WiFi or ethernet connection and try again.',
         };
     }
 
@@ -428,7 +428,7 @@ export function classifyNetworkError(message, errorObj) {
             severity: ErrorSeverity.MEDIUM,
             recoverable: ErrorRecoverability.RECOVERABLE_WITH_RETRY,
             message: 'Network request timed out. Please try again.',
-            hint: 'The network may be slow. Wait a moment and retry.'
+            hint: 'The network may be slow. Wait a moment and retry.',
         };
     }
 
@@ -439,7 +439,7 @@ export function classifyNetworkError(message, errorObj) {
             severity: ErrorSeverity.HIGH,
             recoverable: ErrorRecoverability.RECOVERABLE_WITH_RETRY,
             message: 'Connection refused. The service may be down.',
-            hint: 'Check if the service is running and accessible.'
+            hint: 'Check if the service is running and accessible.',
         };
     }
 
@@ -461,7 +461,7 @@ export function classifyValidationError(message, operation, errorObj) {
             severity: ErrorSeverity.MEDIUM,
             recoverable: ErrorRecoverability.NOT_RECOVERABLE,
             message: `Missing required parameter for ${operation || 'operation'}.`,
-            hint: 'Please check that all required fields are provided.'
+            hint: 'Please check that all required fields are provided.',
         };
     }
 
@@ -472,7 +472,7 @@ export function classifyValidationError(message, operation, errorObj) {
             severity: ErrorSeverity.MEDIUM,
             recoverable: ErrorRecoverability.NOT_RECOVERABLE,
             message: 'Invalid parameter type.',
-            hint: 'Please check the parameter types and try again.'
+            hint: 'Please check the parameter types and try again.',
         };
     }
 
@@ -483,7 +483,7 @@ export function classifyValidationError(message, operation, errorObj) {
             severity: ErrorSeverity.MEDIUM,
             recoverable: ErrorRecoverability.NOT_RECOVERABLE,
             message: 'Invalid parameter format.',
-            hint: 'Please check the parameter format (e.g., date, email, JSON).'
+            hint: 'Please check the parameter format (e.g., date, email, JSON).',
         };
     }
 
@@ -494,7 +494,7 @@ export function classifyValidationError(message, operation, errorObj) {
             severity: ErrorSeverity.MEDIUM,
             recoverable: ErrorRecoverability.NOT_RECOVERABLE,
             message: 'Data schema validation failed.',
-            hint: 'The data structure does not match the expected schema.'
+            hint: 'The data structure does not match the expected schema.',
         };
     }
 
@@ -516,7 +516,7 @@ export function classifyTransactionError(message, code, errorObj) {
             severity: ErrorSeverity.HIGH,
             recoverable: ErrorRecoverability.NOT_RECOVERABLE,
             message: 'Nested transactions are not supported.',
-            hint: 'Please move this operation outside the current transaction context.'
+            hint: 'Please move this operation outside the current transaction context.',
         };
     }
 
@@ -527,7 +527,7 @@ export function classifyTransactionError(message, code, errorObj) {
             severity: ErrorSeverity.MEDIUM,
             recoverable: ErrorRecoverability.RECOVERABLE_WITH_RETRY,
             message: 'Transaction timed out.',
-            hint: 'The operation may have hung due to an unresponsive storage backend.'
+            hint: 'The operation may have hung due to an unresponsive storage backend.',
         };
     }
 
@@ -538,7 +538,7 @@ export function classifyTransactionError(message, code, errorObj) {
             severity: ErrorSeverity.CRITICAL,
             recoverable: ErrorRecoverability.NOT_RECOVERABLE,
             message: 'Transaction rollback failed. Data may be inconsistent.',
-            hint: 'Please refresh the page and check for data corruption.'
+            hint: 'Please refresh the page and check for data corruption.',
         };
     }
 
@@ -549,7 +549,7 @@ export function classifyTransactionError(message, code, errorObj) {
             severity: ErrorSeverity.HIGH,
             recoverable: ErrorRecoverability.NOT_RECOVERABLE,
             message: 'Transaction preparation failed.',
-            hint: 'A backend validation check failed. Please check your data.'
+            hint: 'A backend validation check failed. Please check your data.',
         };
     }
 
@@ -570,7 +570,7 @@ function createClassifiedError(classification) {
         hint: classification.hint || null,
         originalError: classification.originalError,
         context: classification.context || {},
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
     };
 }
 
@@ -585,7 +585,7 @@ function getRateLimitHint(provider) {
         anthropic: 'Rate limit reached. Please wait before making more requests.',
         ollama: 'Local Ollama server is overloaded. Try reducing concurrent requests.',
         lmstudio: 'Local LM Studio server is overloaded. Try reducing concurrent requests.',
-        gemini: 'Rate limit reached. Please wait before making more requests.'
+        gemini: 'Rate limit reached. Please wait before making more requests.',
     };
     return hints[provider.toLowerCase()] || 'Please wait before retrying.';
 }
@@ -599,7 +599,7 @@ function getInvalidKeyHint(provider) {
     const hints = {
         openrouter: 'Check your OpenRouter API key in Settings. Get one at openrouter.ai/keys',
         anthropic: 'Check your Anthropic API key in Settings. Get one at console.anthropic.com',
-        gemini: 'Check your Gemini API key in Settings. Get one at console.cloud.google.com'
+        gemini: 'Check your Gemini API key in Settings. Get one at console.cloud.google.com',
     };
     return hints[provider.toLowerCase()] || 'Check your API key in Settings.';
 }
@@ -613,7 +613,7 @@ function getQuotaExceededHint(provider) {
     const hints = {
         openrouter: 'Check your OpenRouter credits at openrouter.ai/keys',
         anthropic: 'Check your Anthropic usage at console.anthropic.com',
-        gemini: 'Check your Gemini API quota at console.cloud.google.com'
+        gemini: 'Check your Gemini API quota at console.cloud.google.com',
     };
     return hints[provider.toLowerCase()] || 'Check your account quota.';
 }
@@ -628,7 +628,7 @@ function getConnectionHint(provider) {
         ollama: 'Ensure Ollama is running. Try `ollama serve` in terminal.',
         lmstudio: 'Check that LM Studio server is enabled in the app.',
         gemini: 'Check your internet connection and API key.',
-        openrouter: 'Check your internet connection and API key.'
+        openrouter: 'Check your internet connection and API key.',
     };
     return hints[provider.toLowerCase()] || 'Check your connection and settings.';
 }

@@ -49,7 +49,7 @@ async function generateKeyPair(extractable = false) {
             name: RSA_ALGORITHM,
             modulusLength: RSA_MODULUS_LENGTH,
             publicExponent: RSA_PUBLIC_EXPONENT,
-            hash: HASH_ALGORITHM
+            hash: HASH_ALGORITHM,
         },
         extractable,
         ['encrypt', 'decrypt']
@@ -157,7 +157,7 @@ async function generateAESKey() {
     return crypto.subtle.generateKey(
         {
             name: AES_ALGORITHM,
-            length: AES_KEY_LENGTH
+            length: AES_KEY_LENGTH,
         },
         true,
         ['encrypt', 'decrypt']
@@ -205,7 +205,7 @@ async function encrypt(plaintext, recipientPublicKey) {
         algorithm: HYBRID_ALGORITHM_NAME,
         encryptedKey: btoa(String.fromCharCode(...new Uint8Array(encryptedKey))),
         iv: btoa(String.fromCharCode(...iv)),
-        ciphertext: btoa(String.fromCharCode(...new Uint8Array(ciphertext)))
+        ciphertext: btoa(String.fromCharCode(...new Uint8Array(ciphertext))),
     };
 }
 
@@ -232,9 +232,7 @@ async function decrypt(encryptedPackage, recipientPrivateKey) {
         }
 
         // Decrypt the AES key using RSA-OAEP
-        const encryptedKeyBytes = new Uint8Array(
-            [...atob(encryptedKey)].map(c => c.charCodeAt(0))
-        );
+        const encryptedKeyBytes = new Uint8Array([...atob(encryptedKey)].map(c => c.charCodeAt(0)));
         const aesKeyBytes = await crypto.subtle.decrypt(
             { name: RSA_ALGORITHM },
             recipientPrivateKey,
@@ -251,12 +249,8 @@ async function decrypt(encryptedPackage, recipientPrivateKey) {
         );
 
         // Decrypt the ciphertext using AES-GCM
-        const ivBytes = new Uint8Array(
-            [...atob(iv)].map(c => c.charCodeAt(0))
-        );
-        const ciphertextBytes = new Uint8Array(
-            [...atob(ciphertext)].map(c => c.charCodeAt(0))
-        );
+        const ivBytes = new Uint8Array([...atob(iv)].map(c => c.charCodeAt(0)));
+        const ciphertextBytes = new Uint8Array([...atob(ciphertext)].map(c => c.charCodeAt(0)));
 
         const decrypted = await crypto.subtle.decrypt(
             { name: AES_ALGORITHM, iv: ivBytes },
@@ -325,7 +319,7 @@ async function encryptForMultiple(plaintext, recipientKeys) {
         encryptedKeys,
         iv: btoa(String.fromCharCode(...iv)),
         ciphertext: btoa(String.fromCharCode(...new Uint8Array(ciphertext))),
-        recipientIds: Object.keys(encryptedKeys)
+        recipientIds: Object.keys(encryptedKeys),
     };
 }
 
@@ -354,9 +348,7 @@ async function decryptMultiple(encryptedPackage, recipientId, recipientPrivateKe
         }
 
         // Decrypt the AES key using RSA-OAEP
-        const encryptedKeyBytes = new Uint8Array(
-            [...atob(encryptedKey)].map(c => c.charCodeAt(0))
-        );
+        const encryptedKeyBytes = new Uint8Array([...atob(encryptedKey)].map(c => c.charCodeAt(0)));
         const aesKeyBytes = await crypto.subtle.decrypt(
             { name: RSA_ALGORITHM },
             recipientPrivateKey,
@@ -373,12 +365,8 @@ async function decryptMultiple(encryptedPackage, recipientId, recipientPrivateKe
         );
 
         // Decrypt the ciphertext using AES-GCM
-        const ivBytes = new Uint8Array(
-            [...atob(iv)].map(c => c.charCodeAt(0))
-        );
-        const ciphertextBytes = new Uint8Array(
-            [...atob(ciphertext)].map(c => c.charCodeAt(0))
-        );
+        const ivBytes = new Uint8Array([...atob(iv)].map(c => c.charCodeAt(0)));
+        const ciphertextBytes = new Uint8Array([...atob(ciphertext)].map(c => c.charCodeAt(0)));
 
         const decrypted = await crypto.subtle.decrypt(
             { name: AES_ALGORITHM, iv: ivBytes },
@@ -418,7 +406,7 @@ export const HybridEncryption = {
     // Constants
     RSA_ALGORITHM,
     AES_ALGORITHM,
-    HYBRID_ALGORITHM_NAME
+    HYBRID_ALGORITHM_NAME,
 };
 
 // ES Module export

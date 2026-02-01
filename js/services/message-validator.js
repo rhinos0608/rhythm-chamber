@@ -291,7 +291,7 @@ function validateMessage(message, { skipDuplicateCheck = false } = {}) {
     if (typeof message !== 'string') {
         return {
             valid: false,
-            error: 'Message must be a string'
+            error: 'Message must be a string',
         };
     }
 
@@ -299,7 +299,7 @@ function validateMessage(message, { skipDuplicateCheck = false } = {}) {
     if (message.length === 0) {
         return {
             valid: false,
-            error: 'Message cannot be empty'
+            error: 'Message cannot be empty',
         };
     }
 
@@ -307,7 +307,7 @@ function validateMessage(message, { skipDuplicateCheck = false } = {}) {
     if (message.trim().length === 0) {
         return {
             valid: false,
-            error: 'Message cannot contain only whitespace'
+            error: 'Message cannot contain only whitespace',
         };
     }
 
@@ -315,7 +315,7 @@ function validateMessage(message, { skipDuplicateCheck = false } = {}) {
     if (message.length > MAX_MESSAGE_LENGTH) {
         return {
             valid: false,
-            error: `Message too long (max ${MAX_MESSAGE_LENGTH} characters)`
+            error: `Message too long (max ${MAX_MESSAGE_LENGTH} characters)`,
         };
     }
 
@@ -326,7 +326,7 @@ function validateMessage(message, { skipDuplicateCheck = false } = {}) {
             // LRU cache already moved this to MRU position in has()
             return {
                 valid: false,
-                error: 'Duplicate message detected - this message was already processed'
+                error: 'Duplicate message detected - this message was already processed',
             };
         }
     }
@@ -376,7 +376,7 @@ function getCacheStats() {
     return {
         size: _processedMessageHashes.size,
         maxSize: MAX_HASH_CACHE_SIZE,
-        usagePercent: (_processedMessageHashes.size / MAX_HASH_CACHE_SIZE) * 100
+        usagePercent: (_processedMessageHashes.size / MAX_HASH_CACHE_SIZE) * 100,
     };
 }
 
@@ -392,7 +392,7 @@ const MessageValidator = {
     removeProcessedHash,
     clearDuplicateCache,
     getCacheStats,
-    hashMessageContent  // Exported for testing
+    hashMessageContent, // Exported for testing
 };
 
 // ES Module export

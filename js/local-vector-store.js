@@ -22,10 +22,9 @@
  */
 
 // Re-export everything from the new module structure
-export {
-    LocalVectorStore,
-    isSharedArrayBufferAvailable
-} from './vector-store/index.js';
+export { LocalVectorStore, isSharedArrayBufferAvailable } from './vector-store/index.js';
 
 // Log for debugging
-console.log('[LocalVectorStore] Legacy module loaded. Import from js/vector-store/index.js for new code.');
+console.log(
+    '[LocalVectorStore] Legacy module loaded. Import from js/vector-store/index.js for new code.'
+);

@@ -22,13 +22,13 @@ import { Spotify } from '../spotify.js';
 // ==========================================
 
 const PLAYLIST_TYPES = {
-    ERA: 'era',              // Time period playlist
-    ENERGY: 'energy',        // Mood/energy based
-    DISCOVERY: 'discovery',  // New recommendations
-    NOSTALGIA: 'nostalgia',  // Comfort favorites
+    ERA: 'era', // Time period playlist
+    ENERGY: 'energy', // Mood/energy based
+    DISCOVERY: 'discovery', // New recommendations
+    NOSTALGIA: 'nostalgia', // Comfort favorites
     TIME_MACHINE: 'time_machine', // This day in history
-    NIGHT_OWL: 'night_owl',  // Late night favorites
-    MORNING: 'morning'       // Morning listening
+    NIGHT_OWL: 'night_owl', // Late night favorites
+    MORNING: 'morning', // Morning listening
 };
 
 // ==========================================
@@ -37,7 +37,7 @@ const PLAYLIST_TYPES = {
 
 /**
  * Create an era-based playlist from a specific time period
- * 
+ *
  * @param {Array} streams - User streaming history
  * @param {Object} options - Playlist options
  * @param {string} options.startDate - Start date (YYYY-MM-DD)
@@ -70,7 +70,7 @@ function createPlaylistFromEra(streams, options = {}) {
                     name,
                     artist,
                     uri: s.spotify_track_uri || null,
-                    count: 0
+                    count: 0,
                 };
             }
             trackCounts[key].count++;
@@ -90,14 +90,14 @@ function createPlaylistFromEra(streams, options = {}) {
             startDate,
             endDate,
             totalStreamsInEra: eraStreams.length,
-            generatedAt: new Date().toISOString()
-        }
+            generatedAt: new Date().toISOString(),
+        },
     };
 }
 
 /**
  * Create an energy-based playlist
- * 
+ *
  * @param {Array} streams - User streaming history
  * @param {Object} options - Playlist options
  * @param {'high' | 'medium' | 'low'} options.energy - Energy level
@@ -109,9 +109,9 @@ function createEnergyPlaylist(streams, options = {}) {
 
     // Infer energy from time of day (proxy without audio features)
     const timeRanges = {
-        high: { start: 9, end: 18 },    // Daytime
+        high: { start: 9, end: 18 }, // Daytime
         medium: { start: 18, end: 22 }, // Evening
-        low: { start: 22, end: 6 }      // Night/Early morning
+        low: { start: 22, end: 6 }, // Night/Early morning
     };
 
     const range = timeRanges[energy] || timeRanges.medium;
@@ -130,7 +130,8 @@ function createEnergyPlaylist(streams, options = {}) {
     // Get top tracks from filtered streams
     const trackCounts = {};
     for (const s of filteredStreams) {
-        const key = s.spotify_track_uri ||
+        const key =
+            s.spotify_track_uri ||
             `${s.master_metadata_album_artist_name} - ${s.master_metadata_track_name}`;
         if (key) {
             if (!trackCounts[key]) {
@@ -138,7 +139,7 @@ function createEnergyPlaylist(streams, options = {}) {
                     name: s.master_metadata_track_name,
                     artist: s.master_metadata_album_artist_name,
                     uri: s.spotify_track_uri,
-                    count: 0
+                    count: 0,
                 };
             }
             trackCounts[key].count++;
@@ -159,14 +160,14 @@ function createEnergyPlaylist(streams, options = {}) {
         metadata: {
             energy,
             totalStreamsMatched: filteredStreams.length,
-            generatedAt: new Date().toISOString()
-        }
+            generatedAt: new Date().toISOString(),
+        },
     };
 }
 
 /**
  * Suggest new artists based on listening history
- * 
+ *
  * @param {Array} streams - User streaming history
  * @param {Object} options - Options
  * @param {number} [options.limit=20] - Max suggestions
@@ -192,7 +193,7 @@ function suggestNewArtists(streams, options = {}) {
         .map(([artist, count]) => ({
             artist,
             playCount: count,
-            reason: 'You\'ve only listened a few times - give them another chance!'
+            reason: "You've only listened a few times - give them another chance!",
         }));
 
     // Find artists similar to favorites (based on listening patterns)
@@ -209,14 +210,14 @@ function suggestNewArtists(streams, options = {}) {
         suggestions: rareArtists,
         metadata: {
             totalArtistsInHistory: Object.keys(artistCounts).length,
-            generatedAt: new Date().toISOString()
-        }
+            generatedAt: new Date().toISOString(),
+        },
     };
 }
 
 /**
  * Create a "this day in history" playlist
- * 
+ *
  * @param {Array} streams - User streaming history
  * @param {Date} [date=today] - Date to look up
  * @param {Object} [options] - Options
@@ -251,7 +252,7 @@ function createTimeMachinePlaylist(streams, date = new Date(), options = {}) {
                 artist: s.master_metadata_album_artist_name,
                 uri: s.spotify_track_uri,
                 count: 0,
-                years: new Set()
+                years: new Set(),
             };
         }
         trackCounts[key].count++;
@@ -273,16 +274,16 @@ function createTimeMachinePlaylist(streams, date = new Date(), options = {}) {
                 year,
                 streams.slice(0, 5).map(s => ({
                     name: s.master_metadata_track_name,
-                    artist: s.master_metadata_album_artist_name
-                }))
+                    artist: s.master_metadata_album_artist_name,
+                })),
             ])
         ),
         metadata: {
             date: `${targetMonth}-${targetDay}`,
             yearsWithData: Object.keys(byYear),
             totalMatches: matchingStreams.length,
-            generatedAt: new Date().toISOString()
-        }
+            generatedAt: new Date().toISOString(),
+        },
     };
 }
 
@@ -293,7 +294,7 @@ function createTimeMachinePlaylist(streams, date = new Date(), options = {}) {
 /**
  * Create playlist on Spotify
  * Requires user to be authenticated with playlist-modify scope
- * 
+ *
  * @param {Object} playlist - Playlist data from generation
  * @param {Object} [options] - Creation options
  * @returns {Promise<Object>} Created Spotify playlist
@@ -328,8 +329,8 @@ async function createOnSpotify(playlist, options = {}) {
             body: JSON.stringify({
                 name: playlist.name,
                 description: playlist.description,
-                public: isPublic
-            })
+                public: isPublic,
+            }),
         }
     );
 
@@ -340,9 +341,7 @@ async function createOnSpotify(playlist, options = {}) {
     const createdPlaylist = await createResponse.json();
 
     // Add tracks (only those with Spotify URIs)
-    const uris = playlist.tracks
-        .filter(t => t.uri?.startsWith('spotify:track:'))
-        .map(t => t.uri);
+    const uris = playlist.tracks.filter(t => t.uri?.startsWith('spotify:track:')).map(t => t.uri);
 
     if (uris.length > 0) {
         // Spotify limits to 100 tracks per request
@@ -353,7 +352,7 @@ async function createOnSpotify(playlist, options = {}) {
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ uris: batch })
+                    body: JSON.stringify({ uris: batch }),
                 }
             );
         }
@@ -362,13 +361,13 @@ async function createOnSpotify(playlist, options = {}) {
     EventBus.emit('playlist:created', {
         playlistId: createdPlaylist.id,
         trackCount: uris.length,
-        name: playlist.name
+        name: playlist.name,
     });
 
     return {
         ...createdPlaylist,
         tracksAdded: uris.length,
-        tracksSkipped: playlist.tracks.length - uris.length
+        tracksSkipped: playlist.tracks.length - uris.length,
     };
 }
 
@@ -401,8 +400,7 @@ export const PlaylistGenerator = {
     createOnSpotify,
 
     // Types
-    PLAYLIST_TYPES
+    PLAYLIST_TYPES,
 };
-
 
 console.log('[PlaylistGenerator] Playlist generation service loaded');

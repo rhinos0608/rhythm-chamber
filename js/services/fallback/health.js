@@ -43,7 +43,7 @@ export function initializeHealthTracking(providerConfigs) {
             lastFailureTime: authorityStatus.lastFailureTime || 0,
             blacklistExpiry: authorityStatus.blacklistExpiry
                 ? new Date(authorityStatus.blacklistExpiry).toISOString()
-                : null
+                : null,
         });
     }
 
@@ -65,9 +65,10 @@ export function recordProviderSuccess(health, providerName, latencyMs) {
     if (healthRecord) {
         healthRecord.successCount++;
         healthRecord.lastSuccessTime = Date.now();
-        healthRecord.avgLatencyMs = healthRecord.avgLatencyMs === 0
-            ? latencyMs
-            : (healthRecord.avgLatencyMs * 0.9) + (latencyMs * 0.1);
+        healthRecord.avgLatencyMs =
+            healthRecord.avgLatencyMs === 0
+                ? latencyMs
+                : healthRecord.avgLatencyMs * 0.9 + latencyMs * 0.1;
         healthRecord.failureCount = Math.max(0, healthRecord.failureCount - 1);
         healthRecord.health = ProviderHealthAuthority.getStatus(providerName).healthStatus;
     }
@@ -131,7 +132,9 @@ export function blacklistProvider(health, blacklist, providerName, durationMs) {
         healthRecord.blacklistExpiry = new Date(expiry).toISOString();
     }
 
-    console.warn(`[ProviderFallbackChain] Blacklisted ${providerName} for ${durationMs}ms (via ProviderHealthAuthority)`);
+    console.warn(
+        `[ProviderFallbackChain] Blacklisted ${providerName} for ${durationMs}ms (via ProviderHealthAuthority)`
+    );
 }
 
 /**
@@ -153,7 +156,9 @@ export function removeProviderFromBlacklist(health, blacklist, providerName) {
         healthRecord.blacklistExpiry = null;
     }
 
-    console.log(`[ProviderFallbackChain] Removed ${providerName} from blacklist (via ProviderHealthAuthority)`);
+    console.log(
+        `[ProviderFallbackChain] Removed ${providerName} from blacklist (via ProviderHealthAuthority)`
+    );
 }
 
 /**

@@ -18,17 +18,17 @@ export function updateMemoryTab(container) {
     const memoryStats = PerformanceProfiler.getMemoryStatistics();
 
     // Update gauge and stats
-    updateElement(container, 'memory-percentage',
-        `${memoryStats.currentUsage?.toFixed(1) || '--'}%`);
+    updateElement(
+        container,
+        'memory-percentage',
+        `${memoryStats.currentUsage?.toFixed(1) || '--'}%`
+    );
 
     if (memoryStats.currentBytes) {
         const bytes = memoryStats.currentBytes;
-        updateElement(container, 'memory-used',
-            `${(bytes.used / 1024 / 1024).toFixed(1)} MB`);
-        updateElement(container, 'memory-total',
-            `${(bytes.total / 1024 / 1024).toFixed(1)} MB`);
-        updateElement(container, 'memory-limit',
-            `${(bytes.limit / 1024 / 1024).toFixed(1)} MB`);
+        updateElement(container, 'memory-used', `${(bytes.used / 1024 / 1024).toFixed(1)} MB`);
+        updateElement(container, 'memory-total', `${(bytes.total / 1024 / 1024).toFixed(1)} MB`);
+        updateElement(container, 'memory-limit', `${(bytes.limit / 1024 / 1024).toFixed(1)} MB`);
     }
 
     updateElement(container, 'memory-trend', memoryStats.usageTrend || '--');

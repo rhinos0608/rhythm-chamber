@@ -18,14 +18,19 @@ import {
     validateMessageStructure,
     isRateLimited,
     checkAndTrackSequence,
-    isNonceFresh
+    isNonceFresh,
 } from '../message-guards.js';
-import { sendMessage, queuePendingMessage, processPendingMessages, clearPendingMessages } from './message-sender.js';
+import {
+    sendMessage,
+    queuePendingMessage,
+    processPendingMessages,
+    clearPendingMessages,
+} from './message-sender.js';
 import {
     getIsPrimaryTab,
     setIsPrimaryTab,
     handleSecondaryMode,
-    enterSafeMode
+    enterSafeMode,
 } from './authority.js';
 import {
     addCandidate,
@@ -33,23 +38,16 @@ import {
     abortElection,
     setCalledSecondaryMode,
     getHasConcededLeadership,
-    setConcededLeadership
+    setConcededLeadership,
 } from './election.js';
 import {
     getLastLeaderHeartbeat,
     setLastLeaderHeartbeat,
     getLastLeaderVectorClock,
-    setLastLeaderVectorClock
+    setLastLeaderVectorClock,
 } from './heartbeat.js';
-import {
-    setTabWatermark,
-    handleReplayRequest,
-    handleReplayResponse
-} from './watermark.js';
-import {
-    showSafeModeWarningFromRemote,
-    hideSafeModeWarning
-} from './safe-mode.js';
+import { setTabWatermark, handleReplayRequest, handleReplayResponse } from './watermark.js';
+import { showSafeModeWarningFromRemote, hideSafeModeWarning } from './safe-mode.js';
 
 // ==========================================
 // Message Handler State
@@ -93,7 +91,9 @@ async function checkPendingMessages(senderId, expectedSeq) {
 
         // Check if message has expired
         if (now - pending.timestamp > MAX_PENDING_AGE_MS) {
-            console.warn(`[TabCoordination] Pending message seq=${currentSeq} from ${senderId} expired, processing anyway`);
+            console.warn(
+                `[TabCoordination] Pending message seq=${currentSeq} from ${senderId} expired, processing anyway`
+            );
         }
 
         try {
@@ -101,7 +101,10 @@ async function checkPendingMessages(senderId, expectedSeq) {
             await routeMessage(pending.message);
             processed++;
         } catch (error) {
-            console.error(`[TabCoordination] Error processing pending message seq=${currentSeq}:`, error);
+            console.error(
+                `[TabCoordination] Error processing pending message seq=${currentSeq}:`,
+                error
+            );
         }
 
         senderQueue.delete(currentSeq);
@@ -111,12 +114,17 @@ async function checkPendingMessages(senderId, expectedSeq) {
     // Clean up expired messages
     for (const [seq, pending] of senderQueue.entries()) {
         if (now - pending.timestamp > MAX_PENDING_AGE_MS) {
-            console.warn(`[TabCoordination] Expired pending message seq=${seq} from ${senderId}, processing anyway`);
+            console.warn(
+                `[TabCoordination] Expired pending message seq=${seq} from ${senderId}, processing anyway`
+            );
             try {
                 await routeMessage(pending.message);
                 processed++;
             } catch (error) {
-                console.error(`[TabCoordination] Error processing expired message seq=${seq}:`, error);
+                console.error(
+                    `[TabCoordination] Error processing expired message seq=${seq}:`,
+                    error
+                );
             }
             senderQueue.delete(seq);
         }
@@ -148,17 +156,21 @@ function queueOutOfOrderMessage(senderId, seq, message) {
 
     // Limit queue size to prevent memory issues
     if (senderQueue.size >= 50) {
-        console.warn(`[TabCoordination] Pending message queue full for ${senderId}, dropping seq=${seq}`);
+        console.warn(
+            `[TabCoordination] Pending message queue full for ${senderId}, dropping seq=${seq}`
+        );
         return false;
     }
 
     senderQueue.set(seq, {
         message,
-        timestamp: Date.now()
+        timestamp: Date.now(),
     });
 
     if (debugMode) {
-        console.log(`[TabCoordination] Queued out-of-order message seq=${seq} from ${senderId} (${senderQueue.size} pending)`);
+        console.log(
+            `[TabCoordination] Queued out-of-order message seq=${seq} from ${senderId} (${senderQueue.size} pending)`
+        );
     }
 
     return true;
@@ -173,7 +185,7 @@ function queueOutOfOrderMessage(senderId, seq, message) {
  * Returns async function that processes incoming messages
  */
 export function createMessageHandler() {
-    return async (event) => {
+    return async event => {
         try {
             // Validate message structure
             const structureValidation = validateMessageStructure(event.data);
@@ -181,7 +193,16 @@ export function createMessageHandler() {
                 return;
             }
 
-            const { type, tabId, vectorClock: remoteClock, seq, senderId, origin, timestamp, nonce } = event.data;
+            const {
+                type,
+                tabId,
+                vectorClock: remoteClock,
+                seq,
+                senderId,
+                origin,
+                timestamp,
+                nonce,
+            } = event.data;
 
             // Rate limiting
             if (isRateLimited(type)) {
@@ -200,7 +221,7 @@ export function createMessageHandler() {
             }
 
             // Timestamp freshness check
-            const isFresh = timestamp && (Date.now() - timestamp) < 60000;
+            const isFresh = timestamp && Date.now() - timestamp < 60000;
             if (!isFresh) {
                 return;
             }
@@ -216,7 +237,7 @@ export function createMessageHandler() {
                 senderId,
                 localTabId: TAB_ID,
                 debugMode,
-                message: event.data
+                message: event.data,
             });
 
             // Handle out-of-order messages
@@ -242,7 +263,6 @@ export function createMessageHandler() {
             if (ordering.expectedSeq) {
                 await checkPendingMessages(senderId, ordering.expectedSeq);
             }
-
         } catch (error) {
             console.error('[TabCoordination] Message handler error:', error);
         }
@@ -308,7 +328,7 @@ async function handleCandidateMessage(message) {
         await sendMessage({
             type: MESSAGE_TYPES.CLAIM_PRIMARY,
             tabId: TAB_ID,
-            vectorClock: vectorClock.tick()
+            vectorClock: vectorClock.tick(),
         });
     }
 
@@ -373,7 +393,7 @@ async function handleReleasePrimaryMessage(message) {
         console.error('[TabCoordination] Re-election error after RELEASE_PRIMARY:', error, {
             primaryTabId: tabId,
             localTabId: TAB_ID,
-            isPrimaryTab: getIsPrimaryTab()
+            isPrimaryTab: getIsPrimaryTab(),
         });
     });
 }
@@ -398,11 +418,14 @@ async function handleHeartbeatMessage(message) {
     } else {
         // We're primary but another tab is sending heartbeats
         // Assert our primacy to prevent split-brain
-        await sendMessage({
-            type: MESSAGE_TYPES.CLAIM_PRIMARY,
-            tabId: TAB_ID,
-            vectorClock: vectorClock.tick()
-        }, true);
+        await sendMessage(
+            {
+                type: MESSAGE_TYPES.CLAIM_PRIMARY,
+                tabId: TAB_ID,
+                vectorClock: vectorClock.tick(),
+            },
+            true
+        );
     }
 }
 

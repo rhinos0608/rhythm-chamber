@@ -1,18 +1,18 @@
 /**
  * Embeddings Task Manager
- * 
+ *
  * Background processing orchestration for embedding generation:
  * - Web Worker integration for non-blocking processing
  * - Operation Lock integration (embedding_generation lock)
  * - Pause/resume/cancel functionality
  * - Cross-tab coordination via EventBus
  * - Background notification system
- * 
+ *
  * HNW Considerations:
  * - Hierarchy: Central coordinator for all embedding operations
  * - Network: Coordinates with LocalEmbeddings, LocalVectorStore, EventBus
  * - Wave: Manages long-running operations with checkpoints
- * 
+ *
  * @module embeddings/embeddings-task-manager
  */
 
@@ -30,7 +30,7 @@ const TaskState = {
     PAUSED: 'paused',
     COMPLETING: 'completing',
     CANCELLED: 'cancelled',
-    ERROR: 'error'
+    ERROR: 'error',
 };
 
 // ==========================================
@@ -38,13 +38,13 @@ const TaskState = {
 // ==========================================
 
 const CONFIG = {
-    BATCH_SIZE: 10,              // Embeddings per batch
-    CHECKPOINT_INTERVAL: 50,     // Save progress every N items
+    BATCH_SIZE: 10, // Embeddings per batch
+    CHECKPOINT_INTERVAL: 50, // Save progress every N items
     LOCK_NAME: 'embedding_generation',
-    WORKER_TIMEOUT_MS: 30000,    // 30s timeout per batch
-    MIN_INTERVAL_MS: 100,        // Minimum interval between batches (for responsiveness)
-    ETA_INITIAL_CHUNKS: 5,       // Emit first ETA after processing this many chunks
-    ETA_UPDATE_INTERVAL: 10      // Update ETA every N chunks after initial emit
+    WORKER_TIMEOUT_MS: 30000, // 30s timeout per batch
+    MIN_INTERVAL_MS: 100, // Minimum interval between batches (for responsiveness)
+    ETA_INITIAL_CHUNKS: 5, // Emit first ETA after processing this many chunks
+    ETA_UPDATE_INTERVAL: 10, // Update ETA every N chunks after initial emit
 };
 
 // ==========================================
@@ -78,11 +78,13 @@ async function acquireLock() {
         const { OperationLock } = await import('../operation-lock.js');
         const acquired = await OperationLock.acquire(CONFIG.LOCK_NAME, {
             timeout: 5000,
-            maxWait: 60000
+            maxWait: 60000,
         });
         return acquired;
     } catch (e) {
-        console.warn('[EmbeddingsTaskManager] OperationLock not available, proceeding without lock');
+        console.warn(
+            '[EmbeddingsTaskManager] OperationLock not available, proceeding without lock'
+        );
         return true;
     }
 }
@@ -151,7 +153,7 @@ async function saveTextsToIndexedDB(texts) {
                 context: 'checkpoint_save',
                 userFacing: true,
                 userMessage: 'Unable to save progress - database unavailable',
-                recoverable: true
+                recoverable: true,
             });
             return false;
         }
@@ -163,22 +165,26 @@ async function saveTextsToIndexedDB(texts) {
             const request = store.put({
                 key: CHECKPOINT_TEXTS_KEY,
                 value: texts,
-                timestamp: Date.now()
+                timestamp: Date.now(),
             });
 
             request.onsuccess = () => resolve(true);
             request.onerror = () => {
                 const errorMsg = request.error?.message || 'Unknown IndexedDB error';
-                console.error('[EmbeddingsTaskManager] Failed to save texts to IndexedDB:', request.error);
+                console.error(
+                    '[EmbeddingsTaskManager] Failed to save texts to IndexedDB:',
+                    request.error
+                );
 
                 // Emit user-facing error
                 EventBus.emit('embedding:error', {
                     error: errorMsg,
                     context: 'checkpoint_save',
                     userFacing: true,
-                    userMessage: 'Failed to save checkpoint progress. Your data may not be recoverable if interrupted.',
+                    userMessage:
+                        'Failed to save checkpoint progress. Your data may not be recoverable if interrupted.',
                     recoverable: false,
-                    technicalDetails: request.error
+                    technicalDetails: request.error,
                 });
 
                 reject(request.error);
@@ -194,7 +200,7 @@ async function saveTextsToIndexedDB(texts) {
             userFacing: true,
             userMessage: 'Unexpected error while saving checkpoint progress',
             recoverable: true,
-            technicalDetails: e
+            technicalDetails: e,
         });
 
         return false;
@@ -214,7 +220,7 @@ async function loadTextsFromIndexedDB() {
                 context: 'checkpoint_load',
                 userFacing: true,
                 userMessage: 'Unable to recover progress - database unavailable',
-                recoverable: false
+                recoverable: false,
             });
             return null;
         }
@@ -230,7 +236,10 @@ async function loadTextsFromIndexedDB() {
             };
             request.onerror = () => {
                 const errorMsg = request.error?.message || 'Unknown IndexedDB error';
-                console.error('[EmbeddingsTaskManager] Failed to load texts from IndexedDB:', request.error);
+                console.error(
+                    '[EmbeddingsTaskManager] Failed to load texts from IndexedDB:',
+                    request.error
+                );
 
                 // Emit user-facing error
                 EventBus.emit('embedding:error', {
@@ -239,7 +248,7 @@ async function loadTextsFromIndexedDB() {
                     userFacing: true,
                     userMessage: 'Failed to load saved progress. Starting from beginning.',
                     recoverable: true,
-                    technicalDetails: request.error
+                    technicalDetails: request.error,
                 });
 
                 reject(request.error);
@@ -255,7 +264,7 @@ async function loadTextsFromIndexedDB() {
             userFacing: true,
             userMessage: 'Unexpected error while loading saved progress',
             recoverable: true,
-            technicalDetails: e
+            technicalDetails: e,
         });
 
         return null;
@@ -274,7 +283,7 @@ async function clearTextsFromIndexedDB() {
             return;
         }
 
-        return new Promise((resolve) => {
+        return new Promise(resolve => {
             const transaction = db.transaction(CHECKPOINT_IDB_STORE, 'readwrite');
             const store = transaction.objectStore(CHECKPOINT_IDB_STORE);
             const request = store.delete(CHECKPOINT_TEXTS_KEY);
@@ -282,7 +291,10 @@ async function clearTextsFromIndexedDB() {
             request.onsuccess = () => resolve();
             request.onerror = () => {
                 const errorMsg = request.error?.message || 'Unknown IndexedDB error';
-                console.warn('[EmbeddingsTaskManager] Failed to clear texts from IndexedDB:', request.error);
+                console.warn(
+                    '[EmbeddingsTaskManager] Failed to clear texts from IndexedDB:',
+                    request.error
+                );
 
                 // Emit cleanup error (non-critical, but good to know)
                 EventBus.emit('embedding:error', {
@@ -291,7 +303,7 @@ async function clearTextsFromIndexedDB() {
                     userFacing: false, // Cleanup errors are not critical for users
                     userMessage: null,
                     recoverable: true,
-                    technicalDetails: request.error
+                    technicalDetails: request.error,
                 });
 
                 resolve();
@@ -324,7 +336,7 @@ async function saveCheckpoint() {
         processedIndices: currentTask?.processedIndices || [],
         nextIndex: currentTask?.nextIndex || 0,
         textsStoredInIDB: false, // Flag to indicate where texts are stored
-        textsCount: texts.length
+        textsCount: texts.length,
     };
 
     checkpointData = { ...metadata, texts };
@@ -332,16 +344,22 @@ async function saveCheckpoint() {
     try {
         if (textsSize > LOCALSTORAGE_SIZE_THRESHOLD) {
             // Large texts: store in IndexedDB
-            console.log(`[EmbeddingsTaskManager] Texts array too large for localStorage (${(textsSize / 1024 / 1024).toFixed(2)}MB), using IndexedDB`);
+            console.log(
+                `[EmbeddingsTaskManager] Texts array too large for localStorage (${(textsSize / 1024 / 1024).toFixed(2)}MB), using IndexedDB`
+            );
 
             const saved = await saveTextsToIndexedDB(texts);
             if (saved) {
                 metadata.textsStoredInIDB = true;
                 localStorage.setItem(CHECKPOINT_METADATA_KEY, JSON.stringify(metadata));
-                console.log('[EmbeddingsTaskManager] Checkpoint saved (metadata: localStorage, texts: IndexedDB)');
+                console.log(
+                    '[EmbeddingsTaskManager] Checkpoint saved (metadata: localStorage, texts: IndexedDB)'
+                );
             } else {
                 // IndexedDB failed - try localStorage as last resort (may fail for very large data)
-                console.warn('[EmbeddingsTaskManager] IndexedDB unavailable, attempting localStorage fallback');
+                console.warn(
+                    '[EmbeddingsTaskManager] IndexedDB unavailable, attempting localStorage fallback'
+                );
                 metadata.texts = texts;
                 localStorage.setItem(CHECKPOINT_METADATA_KEY, JSON.stringify(metadata));
             }
@@ -353,7 +371,9 @@ async function saveCheckpoint() {
         }
     } catch (e) {
         if (e.name === 'QuotaExceededError' || e.message?.includes('quota')) {
-            console.error('[EmbeddingsTaskManager] localStorage quota exceeded, attempting IndexedDB fallback');
+            console.error(
+                '[EmbeddingsTaskManager] localStorage quota exceeded, attempting IndexedDB fallback'
+            );
 
             // Try IndexedDB as fallback
             try {
@@ -364,18 +384,24 @@ async function saveCheckpoint() {
                     localStorage.setItem(CHECKPOINT_METADATA_KEY, JSON.stringify(metadata));
                     console.log('[EmbeddingsTaskManager] Checkpoint saved via IndexedDB fallback');
                 } else {
-                    console.error('[EmbeddingsTaskManager] Both localStorage and IndexedDB failed - checkpoint not saved');
+                    console.error(
+                        '[EmbeddingsTaskManager] Both localStorage and IndexedDB failed - checkpoint not saved'
+                    );
                     EventBus.emit('embedding:checkpoint_failed', {
                         reason: 'storage_quota_exceeded',
                         textsSize,
                         processedCount,
                         userFacing: true,
-                        userMessage: 'Storage quota exceeded. Progress cannot be saved - if interrupted, you will need to start over.',
-                        recoverable: false
+                        userMessage:
+                            'Storage quota exceeded. Progress cannot be saved - if interrupted, you will need to start over.',
+                        recoverable: false,
                     });
                 }
             } catch (fallbackError) {
-                console.error('[EmbeddingsTaskManager] IndexedDB fallback also failed:', fallbackError);
+                console.error(
+                    '[EmbeddingsTaskManager] IndexedDB fallback also failed:',
+                    fallbackError
+                );
                 EventBus.emit('embedding:checkpoint_failed', {
                     reason: 'all_storage_failed',
                     textsSize,
@@ -383,7 +409,7 @@ async function saveCheckpoint() {
                     userFacing: true,
                     userMessage: 'All storage methods failed. Progress cannot be saved.',
                     recoverable: false,
-                    technicalDetails: fallbackError
+                    technicalDetails: fallbackError,
                 });
             }
         } else {
@@ -446,13 +472,15 @@ async function loadCheckpoint() {
 
         // Validate texts count matches
         if (texts && metadata.textsCount && texts.length !== metadata.textsCount) {
-            console.warn(`[EmbeddingsTaskManager] Texts count mismatch: expected ${metadata.textsCount}, got ${texts.length}`);
+            console.warn(
+                `[EmbeddingsTaskManager] Texts count mismatch: expected ${metadata.textsCount}, got ${texts.length}`
+            );
             return null;
         }
 
         return {
             ...metadata,
-            texts
+            texts,
         };
     } catch (e) {
         console.warn('[EmbeddingsTaskManager] Could not load checkpoint:', e);
@@ -525,7 +553,7 @@ async function startTask(options) {
         onComplete,
         onError,
         processedIndices: [],
-        nextIndex: 0
+        nextIndex: 0,
     };
 
     totalCount = texts.length;
@@ -540,7 +568,7 @@ async function startTask(options) {
     // Start performance tracking
     const stopTimer = PerformanceProfiler.startOperation('embedding_task', {
         category: PerformanceCategory.EMBEDDING_GENERATION,
-        metadata: { totalCount }
+        metadata: { totalCount },
     });
 
     // Subscribe to control events
@@ -555,12 +583,12 @@ async function startTask(options) {
     // Emit task started event
     EventBus.emit('embedding:task_started', {
         taskId: currentTask.id,
-        totalCount
+        totalCount,
     });
 
     try {
         // Initialize embeddings model
-        await LocalEmbeddings.initialize((pct) => {
+        await LocalEmbeddings.initialize(pct => {
             onProgress?.({ phase: 'initializing', percent: pct * 0.2 });
         });
 
@@ -586,41 +614,47 @@ async function startTask(options) {
             const batch = texts.slice(i, Math.min(i + CONFIG.BATCH_SIZE, texts.length));
 
             try {
-                const batchResults = await LocalEmbeddings.getBatchEmbeddings(batch, (done, total) => {
-                    const currentProcessed = i + done;
-                    processedCount = currentProcessed;
-                    onProgress?.({
-                        phase: 'embedding',
-                        processed: currentProcessed,
-                        total: totalCount,
-                        percent: 20 + (currentProcessed / totalCount) * 80
-                    });
-
-                    // ETA calculation and emission
-                    // Emit after ETA_INITIAL_CHUNKS (5), then every ETA_UPDATE_INTERVAL (10) chunks
-                    const shouldEmitInitial = !etaEmitted && currentProcessed >= CONFIG.ETA_INITIAL_CHUNKS;
-                    const shouldEmitUpdate = etaEmitted && (currentProcessed - lastEtaEmitCount) >= CONFIG.ETA_UPDATE_INTERVAL;
-
-                    if (shouldEmitInitial || shouldEmitUpdate) {
-                        const elapsed = Date.now() - currentTask.startTime;
-                        const timePerChunk = elapsed / currentProcessed;
-                        const remainingChunks = totalCount - currentProcessed;
-                        const remainingMs = remainingChunks * timePerChunk;
-                        const remainingSeconds = Math.ceil(remainingMs / 1000);
-
-                        EventBus.emit('embedding:time_estimate', {
-                            remainingSeconds,
-                            remainingMs,
-                            processedChunks: currentProcessed,
-                            totalChunks: totalCount,
-                            elapsedMs: elapsed,
-                            averageChunkMs: timePerChunk
+                const batchResults = await LocalEmbeddings.getBatchEmbeddings(
+                    batch,
+                    (done, total) => {
+                        const currentProcessed = i + done;
+                        processedCount = currentProcessed;
+                        onProgress?.({
+                            phase: 'embedding',
+                            processed: currentProcessed,
+                            total: totalCount,
+                            percent: 20 + (currentProcessed / totalCount) * 80,
                         });
 
-                        etaEmitted = true;
-                        lastEtaEmitCount = currentProcessed;
+                        // ETA calculation and emission
+                        // Emit after ETA_INITIAL_CHUNKS (5), then every ETA_UPDATE_INTERVAL (10) chunks
+                        const shouldEmitInitial =
+                            !etaEmitted && currentProcessed >= CONFIG.ETA_INITIAL_CHUNKS;
+                        const shouldEmitUpdate =
+                            etaEmitted &&
+                            currentProcessed - lastEtaEmitCount >= CONFIG.ETA_UPDATE_INTERVAL;
+
+                        if (shouldEmitInitial || shouldEmitUpdate) {
+                            const elapsed = Date.now() - currentTask.startTime;
+                            const timePerChunk = elapsed / currentProcessed;
+                            const remainingChunks = totalCount - currentProcessed;
+                            const remainingMs = remainingChunks * timePerChunk;
+                            const remainingSeconds = Math.ceil(remainingMs / 1000);
+
+                            EventBus.emit('embedding:time_estimate', {
+                                remainingSeconds,
+                                remainingMs,
+                                processedChunks: currentProcessed,
+                                totalChunks: totalCount,
+                                elapsedMs: elapsed,
+                                averageChunkMs: timePerChunk,
+                            });
+
+                            etaEmitted = true;
+                            lastEtaEmitCount = currentProcessed;
+                        }
                     }
-                });
+                );
 
                 results.push(...batchResults);
             } catch (batchError) {
@@ -632,7 +666,10 @@ async function startTask(options) {
             // Checkpoint periodically
             if ((i + CONFIG.BATCH_SIZE) % CONFIG.CHECKPOINT_INTERVAL === 0) {
                 // Update task state for checkpoint recovery
-                currentTask.processedIndices = Array.from({ length: i + CONFIG.BATCH_SIZE }, (_, idx) => idx);
+                currentTask.processedIndices = Array.from(
+                    { length: i + CONFIG.BATCH_SIZE },
+                    (_, idx) => idx
+                );
                 currentTask.nextIndex = i + CONFIG.BATCH_SIZE;
                 await saveCheckpoint();
             }
@@ -658,7 +695,7 @@ async function startTask(options) {
             errors: errorCount,
             cancelled: cancelRequested,
             duration: Date.now() - currentTask.startTime,
-            embeddings: cancelRequested ? null : results
+            embeddings: cancelRequested ? null : results,
         };
 
         EventBus.emit('embedding:task_complete', finalResult);
@@ -668,7 +705,6 @@ async function startTask(options) {
         currentTask = null;
 
         return finalResult;
-
     } catch (error) {
         taskState = TaskState.ERROR;
         stopTimer();
@@ -683,7 +719,7 @@ async function startTask(options) {
             total: totalCount,
             userFacing: true,
             userMessage: `Embedding generation failed: ${error.message}`,
-            recoverable: false
+            recoverable: false,
         };
 
         EventBus.emit('embedding:task_error', errorResult);
@@ -729,7 +765,7 @@ function getStatus() {
         processed: processedCount,
         total: totalCount,
         errors: errorCount,
-        progress: totalCount > 0 ? (processedCount / totalCount) * 100 : 0
+        progress: totalCount > 0 ? (processedCount / totalCount) * 100 : 0,
     };
 }
 
@@ -762,7 +798,8 @@ async function recoverTask(options = {}) {
     const checkpoint = await loadCheckpoint();
 
     // Validate checkpoint inline since canRecover() is async
-    const isValid = checkpoint &&
+    const isValid =
+        checkpoint &&
         checkpoint.processedCount < checkpoint.totalCount &&
         Array.isArray(checkpoint.texts) &&
         checkpoint.texts.length > 0 &&
@@ -792,7 +829,7 @@ async function recoverTask(options = {}) {
         onComplete,
         onError,
         processedIndices: checkpoint.processedIndices || [],
-        nextIndex: startIndex
+        nextIndex: startIndex,
     };
 
     totalCount = checkpoint.totalCount;
@@ -807,7 +844,7 @@ async function recoverTask(options = {}) {
     // Start performance tracking
     const stopTimer = PerformanceProfiler.startOperation('embedding_task_recovery', {
         category: PerformanceCategory.EMBEDDING_GENERATION,
-        metadata: { totalCount, recoveredFrom: startIndex }
+        metadata: { totalCount, recoveredFrom: startIndex },
     });
 
     // Subscribe to control events
@@ -824,12 +861,12 @@ async function recoverTask(options = {}) {
         taskId: currentTask.id,
         totalCount,
         recovered: true,
-        startIndex
+        startIndex,
     });
 
     try {
         // Initialize embeddings model
-        await LocalEmbeddings.initialize((pct) => {
+        await LocalEmbeddings.initialize(pct => {
             onProgress?.({ phase: 'initializing', percent: pct * 0.2 });
         });
 
@@ -852,45 +889,54 @@ async function recoverTask(options = {}) {
             }
 
             // Process batch
-            const batch = checkpoint.texts.slice(i, Math.min(i + CONFIG.BATCH_SIZE, checkpoint.texts.length));
+            const batch = checkpoint.texts.slice(
+                i,
+                Math.min(i + CONFIG.BATCH_SIZE, checkpoint.texts.length)
+            );
 
             try {
-                const batchResults = await LocalEmbeddings.getBatchEmbeddings(batch, (done, total) => {
-                    const currentProcessed = i + done;
-                    processedCount = currentProcessed;
-                    onProgress?.({
-                        phase: 'embedding',
-                        processed: currentProcessed,
-                        total: totalCount,
-                        percent: 20 + (currentProcessed / totalCount) * 80,
-                        recovered: true
-                    });
-
-                    // ETA calculation and emission (same logic as startTask)
-                    const shouldEmitInitial = !etaEmitted && currentProcessed >= CONFIG.ETA_INITIAL_CHUNKS;
-                    const shouldEmitUpdate = etaEmitted && (currentProcessed - lastEtaEmitCount) >= CONFIG.ETA_UPDATE_INTERVAL;
-
-                    if (shouldEmitInitial || shouldEmitUpdate) {
-                        const elapsed = Date.now() - currentTask.startTime;
-                        const timePerChunk = elapsed / currentProcessed;
-                        const remainingChunks = totalCount - currentProcessed;
-                        const remainingMs = remainingChunks * timePerChunk;
-                        const remainingSeconds = Math.ceil(remainingMs / 1000);
-
-                        EventBus.emit('embedding:time_estimate', {
-                            remainingSeconds,
-                            remainingMs,
-                            processedChunks: currentProcessed,
-                            totalChunks: totalCount,
-                            elapsedMs: elapsed,
-                            averageChunkMs: timePerChunk,
-                            recovered: true
+                const batchResults = await LocalEmbeddings.getBatchEmbeddings(
+                    batch,
+                    (done, total) => {
+                        const currentProcessed = i + done;
+                        processedCount = currentProcessed;
+                        onProgress?.({
+                            phase: 'embedding',
+                            processed: currentProcessed,
+                            total: totalCount,
+                            percent: 20 + (currentProcessed / totalCount) * 80,
+                            recovered: true,
                         });
 
-                        etaEmitted = true;
-                        lastEtaEmitCount = currentProcessed;
+                        // ETA calculation and emission (same logic as startTask)
+                        const shouldEmitInitial =
+                            !etaEmitted && currentProcessed >= CONFIG.ETA_INITIAL_CHUNKS;
+                        const shouldEmitUpdate =
+                            etaEmitted &&
+                            currentProcessed - lastEtaEmitCount >= CONFIG.ETA_UPDATE_INTERVAL;
+
+                        if (shouldEmitInitial || shouldEmitUpdate) {
+                            const elapsed = Date.now() - currentTask.startTime;
+                            const timePerChunk = elapsed / currentProcessed;
+                            const remainingChunks = totalCount - currentProcessed;
+                            const remainingMs = remainingChunks * timePerChunk;
+                            const remainingSeconds = Math.ceil(remainingMs / 1000);
+
+                            EventBus.emit('embedding:time_estimate', {
+                                remainingSeconds,
+                                remainingMs,
+                                processedChunks: currentProcessed,
+                                totalChunks: totalCount,
+                                elapsedMs: elapsed,
+                                averageChunkMs: timePerChunk,
+                                recovered: true,
+                            });
+
+                            etaEmitted = true;
+                            lastEtaEmitCount = currentProcessed;
+                        }
                     }
-                });
+                );
 
                 results.push(...batchResults);
             } catch (batchError) {
@@ -932,7 +978,7 @@ async function recoverTask(options = {}) {
             cancelled: cancelRequested,
             recovered: true,
             duration: Date.now() - currentTask.startTime,
-            embeddings: cancelRequested ? null : results
+            embeddings: cancelRequested ? null : results,
         };
 
         EventBus.emit('embedding:task_complete', finalResult);
@@ -942,7 +988,6 @@ async function recoverTask(options = {}) {
         currentTask = null;
 
         return finalResult;
-
     } catch (error) {
         taskState = TaskState.ERROR;
         stopTimer();
@@ -961,7 +1006,7 @@ async function recoverTask(options = {}) {
             recovered: true,
             userFacing: true,
             userMessage: `Recovery failed: ${error.message}. Try starting from the beginning.`,
-            recoverable: true
+            recoverable: true,
         };
 
         EventBus.emit('embedding:task_error', errorResult);
@@ -1020,7 +1065,7 @@ export const EmbeddingsTaskManager = {
     /**
      * Configuration
      */
-    CONFIG
+    CONFIG,
 };
 
 console.log('[EmbeddingsTaskManager] Module loaded');

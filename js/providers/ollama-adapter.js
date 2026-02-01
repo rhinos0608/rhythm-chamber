@@ -1,12 +1,12 @@
 /**
  * Ollama Provider Adapter
- * 
+ *
  * Thin adapter that wraps the existing Ollama module to conform
  * to the unified provider interface.
- * 
+ *
  * The actual Ollama implementation is in js/ollama.js
  * This adapter just provides the consistent `call()` interface.
- * 
+ *
  * @module providers/ollama-adapter
  */
 
@@ -27,7 +27,9 @@ import { ModuleRegistry } from '../module-registry.js';
 async function call(config, messages, tools, onProgress = null) {
     const Ollama = ModuleRegistry.getModuleSync('Ollama');
     if (!Ollama) {
-        throw new Error('Ollama module not loaded. Ensure ollama.js is included before this adapter.');
+        throw new Error(
+            'Ollama module not loaded. Ensure ollama.js is included before this adapter.'
+        );
     }
 
     // Check if Ollama is available
@@ -40,13 +42,19 @@ async function call(config, messages, tools, onProgress = null) {
     const useStreaming = typeof onProgress === 'function';
 
     // Delegate to the main Ollama module's chatCompletion
-    return await Ollama.chatCompletion(messages, {
-        ...config,
-        stream: useStreaming,
-        onToken: useStreaming ? (token, thinking) => {
-            onProgress({ type: 'token', token, thinking });
-        } : null
-    }, tools);
+    return await Ollama.chatCompletion(
+        messages,
+        {
+            ...config,
+            stream: useStreaming,
+            onToken: useStreaming
+                ? (token, thinking) => {
+                    onProgress({ type: 'token', token, thinking });
+                }
+                : null,
+        },
+        tools
+    );
 }
 
 // ==========================================
@@ -148,9 +156,8 @@ export const OllamaProvider = {
     // Provider info
     name: 'ollama',
     displayName: 'Ollama',
-    type: 'local'
+    type: 'local',
 };
 
 // ES Module export - use ModuleRegistry for access instead of window globals
 console.log('[OllamaProvider] Provider adapter loaded');
-

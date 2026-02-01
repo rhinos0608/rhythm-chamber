@@ -131,7 +131,7 @@ export const ArtifactRenderer = {
     extractArtifact,
     renderArtifact,
     addArtifactToChat,
-    processArtifactResult
+    processArtifactResult,
 };
 
 console.log('[ArtifactRenderer] Module loaded');

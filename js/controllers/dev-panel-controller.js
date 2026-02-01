@@ -142,7 +142,7 @@ export class DevPanelController {
         `;
 
         // Event listeners
-        panel.addEventListener('click', (e) => {
+        panel.addEventListener('click', e => {
             if (e.target.dataset.action === 'close') {
                 DevPanelController.hide();
             } else if (e.target.dataset.tab) {
@@ -244,12 +244,17 @@ export class DevPanelController {
             <div class="rc-dev-events">
                 <h3>Recent Events</h3>
                 <div class="rc-dev-event-list">
-                    ${events.slice(0, 20).map(e => `
+                    ${events
+        .slice(0, 20)
+        .map(
+            e => `
                         <div class="rc-dev-event">
                             <span class="rc-dev-event-name">${e.name}</span>
                             <span class="rc-dev-event-time">${new Date(e.timestamp).toLocaleTimeString()}</span>
                         </div>
-                    `).join('')}
+                    `
+        )
+        .join('')}
                 </div>
             </div>
         `;

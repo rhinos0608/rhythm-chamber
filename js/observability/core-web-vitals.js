@@ -25,7 +25,7 @@ export const WebVitalType = Object.freeze({
     INP: 'inp',
     TTFB: 'ttfb',
     FCP: 'fcp',
-    TTFBP: 'ttfb_plus' // TTFB + network latency
+    TTFBP: 'ttfb_plus', // TTFB + network latency
 });
 
 /**
@@ -36,7 +36,7 @@ export const WebVitalType = Object.freeze({
 export const PerformanceRating = Object.freeze({
     GOOD: { value: 'good', color: '#0C0', threshold: 0 },
     NEEDS_IMPROVEMENT: { value: 'needs-improvement', color: '#CC0', threshold: 1 },
-    POOR: { value: 'poor', color: '#C00', threshold: 2 }
+    POOR: { value: 'poor', color: '#C00', threshold: 2 },
 });
 
 /**
@@ -48,7 +48,7 @@ const VITAL_THRESHOLDS = {
     [WebVitalType.LCP]: { good: 2500, needsImprovement: 4000 },
     [WebVitalType.INP]: { good: 200, needsImprovement: 500 },
     [WebVitalType.TTFB]: { good: 800, needsImprovement: 1800 },
-    [WebVitalType.FCP]: { good: 1800, needsImprovement: 3000 }
+    [WebVitalType.FCP]: { good: 1800, needsImprovement: 3000 },
 };
 
 /**
@@ -131,8 +131,7 @@ export class CoreWebVitalsTracker {
      * @returns {boolean} True if Performance API available
      */
     _isPerformanceAPIAvailable() {
-        return typeof performance !== 'undefined' &&
-            typeof PerformanceObserver !== 'undefined';
+        return typeof performance !== 'undefined' && typeof PerformanceObserver !== 'undefined';
     }
 
     /**
@@ -142,7 +141,7 @@ export class CoreWebVitalsTracker {
     _initializeTracking() {
         try {
             // Create Performance Observer for various metrics
-            const observer = new PerformanceObserver((list) => {
+            const observer = new PerformanceObserver(list => {
                 for (const entry of list.getEntries()) {
                     this._handlePerformanceEntry(entry);
                 }
@@ -186,7 +185,6 @@ export class CoreWebVitalsTracker {
 
             // Track TTFB manually
             this._trackTTFB();
-
         } catch (error) {
             console.error('[CoreWebVitals] Failed to initialize tracking:', error);
             this._enabled = false;
@@ -247,16 +245,12 @@ export class CoreWebVitalsTracker {
             clsValue = latestValue + entry.value;
         }
 
-        const metric = this._createMetric(
-            WebVitalType.CLS,
-            clsValue,
-            {
-                entryType: entry.entryType,
-                hadRecentInput: entry.hadRecentInput,
-                startTime: entry.startTime,
-                value: entry.value
-            }
-        );
+        const metric = this._createMetric(WebVitalType.CLS, clsValue, {
+            entryType: entry.entryType,
+            hadRecentInput: entry.hadRecentInput,
+            startTime: entry.startTime,
+            value: entry.value,
+        });
 
         this._storeMetric(WebVitalType.CLS, metric);
     }
@@ -275,7 +269,7 @@ export class CoreWebVitalsTracker {
                 startTime: entry.startTime,
                 processingStart: entry.processingStart,
                 processingEnd: entry.processingEnd,
-                duration: entry.duration
+                duration: entry.duration,
             }
         );
 
@@ -289,18 +283,14 @@ export class CoreWebVitalsTracker {
      */
     _trackLCP(entry) {
         // LCP can change, so we replace the previous value
-        const metric = this._createMetric(
-            WebVitalType.LCP,
-            entry.startTime,
-            {
-                element: entry.element?.tagName || 'unknown',
-                url: entry.url || '',
-                startTime: entry.startTime,
-                renderTime: entry.renderTime || entry.startTime,
-                loadTime: entry.loadTime || entry.startTime,
-                size: entry.size || 0
-            }
-        );
+        const metric = this._createMetric(WebVitalType.LCP, entry.startTime, {
+            element: entry.element?.tagName || 'unknown',
+            url: entry.url || '',
+            startTime: entry.startTime,
+            renderTime: entry.renderTime || entry.startTime,
+            loadTime: entry.loadTime || entry.startTime,
+            size: entry.size || 0,
+        });
 
         // Replace previous LCP metric (only keep latest)
         this._latestMetrics.set(WebVitalType.LCP, metric);
@@ -313,14 +303,10 @@ export class CoreWebVitalsTracker {
      * @param {PerformanceEntry} entry - FCP entry
      */
     _trackFCP(entry) {
-        const metric = this._createMetric(
-            WebVitalType.FCP,
-            entry.startTime,
-            {
-                name: entry.name,
-                startTime: entry.startTime
-            }
-        );
+        const metric = this._createMetric(WebVitalType.FCP, entry.startTime, {
+            name: entry.name,
+            startTime: entry.startTime,
+        });
 
         // Only store first FCP
         if (this._metrics.get(WebVitalType.FCP).length === 0) {
@@ -340,7 +326,7 @@ export class CoreWebVitalsTracker {
         }
 
         try {
-            const observer = new PerformanceObserver((list) => {
+            const observer = new PerformanceObserver(list => {
                 const entries = list.getEntries();
                 for (const entry of entries) {
                     if (entry.interactionId) {
@@ -364,18 +350,14 @@ export class CoreWebVitalsTracker {
     _handleINPEntry(entry) {
         const inpEntries = this._metrics.get(WebVitalType.INP) || [];
 
-        const metric = this._createMetric(
-            WebVitalType.INP,
-            entry.duration,
-            {
-                eventType: entry.name,
-                interactionId: entry.interactionId,
-                startTime: entry.startTime,
-                processingStart: entry.processingStart,
-                processingEnd: entry.processingEnd,
-                duration: entry.duration
-            }
-        );
+        const metric = this._createMetric(WebVitalType.INP, entry.duration, {
+            eventType: entry.name,
+            interactionId: entry.interactionId,
+            startTime: entry.startTime,
+            processingStart: entry.processingStart,
+            processingEnd: entry.processingEnd,
+            duration: entry.duration,
+        });
 
         // INP is the worst interaction (98th percentile)
         inpEntries.push(metric);
@@ -395,7 +377,7 @@ export class CoreWebVitalsTracker {
         this._latestMetrics.set(WebVitalType.INP, {
             ...metric,
             value: p98Value,
-            percentile: 98
+            percentile: 98,
         });
     }
 
@@ -411,16 +393,12 @@ export class CoreWebVitalsTracker {
         }
 
         const ttfb = navigationEntry.responseStart - navigationEntry.requestStart;
-        const metric = this._createMetric(
-            WebVitalType.TTFB,
-            ttfb,
-            {
-                requestStart: navigationEntry.requestStart,
-                responseStart: navigationEntry.responseStart,
-                domComplete: navigationEntry.domComplete,
-                loadEventEnd: navigationEntry.loadEventEnd
-            }
-        );
+        const metric = this._createMetric(WebVitalType.TTFB, ttfb, {
+            requestStart: navigationEntry.requestStart,
+            responseStart: navigationEntry.responseStart,
+            domComplete: navigationEntry.domComplete,
+            loadEventEnd: navigationEntry.loadEventEnd,
+        });
 
         this._storeMetric(WebVitalType.TTFB, metric);
     }
@@ -437,16 +415,12 @@ export class CoreWebVitalsTracker {
 
             // Store TTFB if not already stored
             if (!this._latestMetrics.has(WebVitalType.TTFB)) {
-                const metric = this._createMetric(
-                    WebVitalType.TTFB,
-                    ttfb,
-                    {
-                        requestStart: entry.requestStart,
-                        responseStart: entry.responseStart,
-                        domComplete: entry.domComplete,
-                        loadEventEnd: entry.loadEventEnd
-                    }
-                );
+                const metric = this._createMetric(WebVitalType.TTFB, ttfb, {
+                    requestStart: entry.requestStart,
+                    responseStart: entry.responseStart,
+                    domComplete: entry.domComplete,
+                    loadEventEnd: entry.loadEventEnd,
+                });
 
                 this._latestMetrics.set(WebVitalType.TTFB, metric);
                 this._storeMetric(WebVitalType.TTFB, metric);
@@ -471,7 +445,7 @@ export class CoreWebVitalsTracker {
             value,
             rating,
             timestamp: Date.now(),
-            metadata
+            metadata,
         };
     }
 
@@ -545,7 +519,7 @@ export class CoreWebVitalsTracker {
         const summary = {
             timestamp: Date.now(),
             enabled: this._enabled,
-            vitals: {}
+            vitals: {},
         };
 
         for (const vitalType of Object.values(WebVitalType)) {
@@ -555,7 +529,7 @@ export class CoreWebVitalsTracker {
             summary.vitals[vitalType] = {
                 latest: latest || null,
                 count: allMetrics.length,
-                statistics: this._calculateStatistics(allMetrics)
+                statistics: this._calculateStatistics(allMetrics),
             };
         }
 
@@ -581,7 +555,7 @@ export class CoreWebVitalsTracker {
             min: values[0],
             max: values[values.length - 1],
             p95: values[Math.floor(values.length * 0.95)],
-            p99: values[Math.floor(values.length * 0.99)]
+            p99: values[Math.floor(values.length * 0.99)],
         };
     }
 
@@ -664,7 +638,7 @@ export class CoreWebVitalsTracker {
             version: '1.0.0',
             exportDate: new Date().toISOString(),
             summary: this.getWebVitalsSummary(),
-            metrics: {}
+            metrics: {},
         };
 
         for (const vitalType of Object.values(WebVitalType)) {

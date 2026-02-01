@@ -26,10 +26,12 @@ export function updateOverviewTab(container) {
     // Memory usage
     if (PerformanceProfiler) {
         const memoryStats = PerformanceProfiler.getMemoryStatistics();
-        updateElement(container, 'metric-memory-usage',
-            `${memoryStats.currentUsage?.toFixed(1) || '--'}%`);
-        updateElement(container, 'metric-memory-trend',
-            memoryStats.usageTrend || 'Stable');
+        updateElement(
+            container,
+            'metric-memory-usage',
+            `${memoryStats.currentUsage?.toFixed(1) || '--'}%`
+        );
+        updateElement(container, 'metric-memory-trend', memoryStats.usageTrend || 'Stable');
     }
 
     // Degradation alerts
@@ -81,7 +83,9 @@ function updateAlertsList(container, alerts) {
     }
 
     const recentAlerts = alerts.slice(-10).reverse();
-    alertsList.innerHTML = recentAlerts.map(alert => `
+    alertsList.innerHTML = recentAlerts
+        .map(
+            alert => `
         <div class="alert-item ${escapeHtml(alert.severity)}">
             <div class="alert-message">${escapeHtml(alert.message)}</div>
             <div class="alert-details">
@@ -89,7 +93,9 @@ function updateAlertsList(container, alerts) {
                 <span class="alert-time">${new Date(alert.timestamp).toLocaleTimeString()}</span>
             </div>
         </div>
-    `).join('');
+    `
+        )
+        .join('');
 }
 
 /**

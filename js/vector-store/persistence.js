@@ -40,7 +40,7 @@ export function createPersistenceManager() {
                 resolve(db);
             };
 
-            request.onupgradeneeded = (event) => {
+            request.onupgradeneeded = event => {
                 const database = event.target.result;
 
                 // Create vectors store
@@ -192,11 +192,16 @@ export function createPersistenceManager() {
             // Wait for transaction to complete before confirming
             await new Promise((resolve, reject) => {
                 transaction.oncomplete = () => {
-                    console.log(`[VectorStore] Cleaned up ${evicted.length} evicted vectors from IndexedDB`);
+                    console.log(
+                        `[VectorStore] Cleaned up ${evicted.length} evicted vectors from IndexedDB`
+                    );
                     resolve();
                 };
                 transaction.onerror = () => {
-                    console.warn('[VectorStore] Failed to clean up evicted vectors:', transaction.error);
+                    console.warn(
+                        '[VectorStore] Failed to clean up evicted vectors:',
+                        transaction.error
+                    );
                     reject(transaction.error);
                 };
             });
@@ -225,6 +230,6 @@ export function createPersistenceManager() {
         isReady,
         get db() {
             return db;
-        }
+        },
     };
 }

@@ -36,9 +36,7 @@ const MAX_NONCES = 1000;
  * @returns {boolean} True if secure context available
  */
 function isSecureContextAvailable() {
-    return typeof window !== 'undefined' &&
-           window.isSecureContext &&
-           crypto?.subtle;
+    return typeof window !== 'undefined' && window.isSecureContext && crypto?.subtle;
 }
 
 // ==========================================
@@ -57,7 +55,7 @@ function getNonceStore() {
         const nonces = JSON.parse(stored);
         // Clean old nonces (keep only recent ones)
         const now = Date.now();
-        const filtered = nonces.filter(n => (now - n.timestamp) < TIMESTAMP_TOLERANCE_MS * 2);
+        const filtered = nonces.filter(n => now - n.timestamp < TIMESTAMP_TOLERANCE_MS * 2);
 
         // Update storage if we cleaned any
         if (filtered.length !== nonces.length) {
@@ -121,7 +119,7 @@ function clearOldNonces() {
         const beforeCount = nonces.length;
 
         // Remove nonces older than 2x tolerance
-        const filtered = nonces.filter(n => (now - n.timestamp) < TIMESTAMP_TOLERANCE_MS * 2);
+        const filtered = nonces.filter(n => now - n.timestamp < TIMESTAMP_TOLERANCE_MS * 2);
 
         localStorage.setItem(NONCE_STORE_KEY, JSON.stringify(filtered));
 
@@ -169,7 +167,7 @@ async function importHMACKey(secret) {
             name: 'HKDF',
             hash: 'SHA-256',
             salt: encoder.encode('rhythm-chamber-hmac-salt'),
-            info: encoder.encode('message-signing')
+            info: encoder.encode('message-signing'),
         },
         keyMaterial,
         { name: 'HMAC', hash: 'SHA-256', length: 256 },
@@ -252,7 +250,7 @@ async function signWithTimestamp(message, secret, options = {}) {
     const payload = JSON.stringify({
         message,
         timestamp,
-        nonce
+        nonce,
     });
 
     const signature = await sign(payload, secret);
@@ -261,7 +259,7 @@ async function signWithTimestamp(message, secret, options = {}) {
         message,
         timestamp,
         nonce,
-        signature: SIGNATURE_HEADER + signature
+        signature: SIGNATURE_HEADER + signature,
     };
 }
 
@@ -307,11 +305,7 @@ async function verify(message, signature, secret) {
  * @returns {Promise<{ valid: boolean, reason?: string }>} Verification result
  */
 async function verifySignedMessage(signedMessage, secret, options = {}) {
-    const {
-        skipTimestampCheck = false,
-        skipNonceCheck = false,
-        customTolerance = null
-    } = options;
+    const { skipTimestampCheck = false, skipNonceCheck = false, customTolerance = null } = options;
 
     // Validate structure
     if (!signedMessage || typeof signedMessage !== 'object') {
@@ -355,7 +349,7 @@ async function verifySignedMessage(signedMessage, secret, options = {}) {
     const payload = JSON.stringify({
         message,
         timestamp,
-        nonce
+        nonce,
     });
 
     try {
@@ -475,7 +469,7 @@ async function createSecurePackage(payload, secret) {
     return {
         version: 1,
         ...signed,
-        encoding: 'utf-8'
+        encoding: 'utf-8',
     };
 }
 
@@ -524,8 +518,8 @@ async function signRequest(request, secret) {
         headers: {
             ...request.headers,
             'X-Rhythm-Signature': SIGNATURE_HEADER + signature,
-            'X-Rhythm-Timestamp': Date.now().toString()
-        }
+            'X-Rhythm-Timestamp': Date.now().toString(),
+        },
     };
 }
 
@@ -558,11 +552,7 @@ async function verifyRequest(request, secret) {
  * @returns {{ valid: boolean, reason?: string }}
  */
 function validateTimestamp(timestamp, options = {}) {
-    const {
-        tolerance = TIMESTAMP_TOLERANCE_MS,
-        minSkew = MIN_TIMESTAMP_MS,
-        now = null
-    } = options;
+    const { tolerance = TIMESTAMP_TOLERANCE_MS, minSkew = MIN_TIMESTAMP_MS, now = null } = options;
 
     if (typeof timestamp !== 'number' || isNaN(timestamp)) {
         return { valid: false, reason: 'invalid_timestamp' };
@@ -624,7 +614,7 @@ async function signBatch(messages, secret) {
     const encoder = new TextEncoder();
 
     const signatures = await Promise.all(
-        messages.map(async (message) => {
+        messages.map(async message => {
             const data = encoder.encode(message);
             const sig = await crypto.subtle.sign('HMAC', key, data);
             const bytes = new Uint8Array(sig);
@@ -688,7 +678,7 @@ export const MessageSecurity = {
 
     // Constants
     TIMESTAMP_TOLERANCE_MS,
-    SIGNATURE_HEADER
+    SIGNATURE_HEADER,
 };
 
 // ES Module export

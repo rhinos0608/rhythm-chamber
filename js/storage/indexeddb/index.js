@@ -28,7 +28,7 @@ export {
     INDEXEDDB_STORES as STORES,
     CONNECTION_CONFIG,
     AUTHORITY_CONFIG,
-    REQUEST_CONFIG
+    REQUEST_CONFIG,
 } from './config.js';
 
 // ==========================================
@@ -41,56 +41,38 @@ export {
     closeDatabase,
     getConnection,
     resetConnectionState,
-    getConnectionStatus
+    getConnectionStatus,
 } from './connection.js';
 
 // ==========================================
 // FALLBACK MANAGEMENT
 // ==========================================
 
-export {
-    isUsingFallback,
-    getStorageBackend,
-    activateFallback
-} from './connection.js';
+export { isUsingFallback, getStorageBackend, activateFallback } from './connection.js';
 
 // ==========================================
 // PRIMITIVE OPERATIONS - READ
 // ==========================================
 
-export {
-    get,
-    getAll,
-    count
-} from './operations/read.js';
+export { get, getAll, count } from './operations/read.js';
 
 // ==========================================
 // PRIMITIVE OPERATIONS - WRITE
 // ==========================================
 
-export {
-    put,
-    clear,
-    delete as deleteRecord
-} from './operations/write.js';
+export { put, clear, delete as deleteRecord } from './operations/write.js';
 
 // ==========================================
 // ADVANCED OPERATIONS
 // ==========================================
 
-export {
-    getAllByIndex,
-    atomicUpdate,
-    transaction
-} from './indexing.js';
+export { getAllByIndex, atomicUpdate, transaction } from './indexing.js';
 
 // ==========================================
 // CONFLICT DETECTION
 // ==========================================
 
-export {
-    detectWriteConflict
-} from './conflict.js';
+export { detectWriteConflict } from './conflict.js';
 
 // ==========================================
 // PUBLIC API (FACADE)
@@ -105,36 +87,18 @@ import {
     getConnectionStatus,
     isUsingFallback,
     getStorageBackend,
-    activateFallback
+    activateFallback,
 } from './connection.js';
 
-import {
-    get,
-    getAll,
-    count
-} from './operations/read.js';
+import { get, getAll, count } from './operations/read.js';
 
-import {
-    put,
-    clear,
-    deleteRecord
-} from './operations/write.js';
+import { put, clear, deleteRecord } from './operations/write.js';
 
-import {
-    getAllByIndex,
-    atomicUpdate,
-    transaction
-} from './indexing.js';
+import { getAllByIndex, atomicUpdate, transaction } from './indexing.js';
 
-import {
-    detectWriteConflict
-} from './conflict.js';
+import { detectWriteConflict } from './conflict.js';
 
-import {
-    INDEXEDDB_NAME,
-    INDEXEDDB_VERSION,
-    INDEXEDDB_STORES
-} from './config.js';
+import { INDEXEDDB_NAME, INDEXEDDB_VERSION, INDEXEDDB_STORES } from './config.js';
 
 // Export IndexedDBCore object for grouped exports (backward compatibility)
 export const IndexedDBCore = {
@@ -168,7 +132,7 @@ export const IndexedDBCore = {
     atomicUpdate,
 
     // Conflict detection
-    detectWriteConflict
+    detectWriteConflict,
 };
 
 console.log('[IndexedDBCore] Core module loaded (refactored)');

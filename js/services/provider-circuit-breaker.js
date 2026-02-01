@@ -1,43 +1,43 @@
 /**
  * Provider Circuit Breaker
- * 
+ *
  * @deprecated This module is DEPRECATED. Use ProviderHealthAuthority instead.
- * 
+ *
  * ProviderHealthAuthority unifies:
  * - Circuit breaker state (this module)
  * - Blacklist management (from ProviderFallbackChain)
  * - Health metrics (from ProviderFallbackChain._providerHealth)
  * - Health status for UI (from ProviderHealthMonitor)
- * 
+ *
  * Migration:
  *   // Before (deprecated):
  *   import { ProviderCircuitBreaker } from './provider-circuit-breaker.js';
  *   ProviderCircuitBreaker.canExecute(provider);
  *   ProviderCircuitBreaker.recordSuccess(provider, latencyMs);
  *   ProviderCircuitBreaker.recordFailure(provider, error);
- * 
+ *
  *   // After (use this):
  *   import { ProviderHealthAuthority } from './provider-health-authority.js';
  *   ProviderHealthAuthority.canExecute(provider);
  *   ProviderHealthAuthority.recordSuccess(provider, latencyMs);
  *   ProviderHealthAuthority.recordFailure(provider, error);
- * 
+ *
  * Key improvements in ProviderHealthAuthority:
  * - Emits CIRCUIT_BREAKER:TRIPPED and CIRCUIT_BREAKER:RECOVERED events (this module didn't!)
  * - Unified blacklist and circuit breaker state (no duplicate tracking)
  * - Single source of truth for all health data
- * 
+ *
  * This module is kept for backwards compatibility during transition.
  * It will be removed in a future version.
- * 
+ *
  * Per-provider circuit breaker to prevent cascade failures when external
  * LLM services are degraded or unavailable.
- * 
+ *
  * HNW Considerations:
  * - Hierarchy: Single authority for provider health decisions
  * - Network: Prevents cascade failures from unhealthy providers
  * - Wave: Time-based cooldown for recovery testing
- * 
+ *
  * @module services/provider-circuit-breaker
  */
 
@@ -52,20 +52,20 @@
  * @enum {string}
  */
 const STATE = {
-    CLOSED: 'closed',     // Normal operation - requests allowed
-    OPEN: 'open',         // Failing - requests blocked
-    HALF_OPEN: 'half_open' // Recovery testing - limited requests
+    CLOSED: 'closed', // Normal operation - requests allowed
+    OPEN: 'open', // Failing - requests blocked
+    HALF_OPEN: 'half_open', // Recovery testing - limited requests
 };
 
 /**
  * Default configuration
  */
 const DEFAULT_CONFIG = {
-    failureThreshold: 5,      // Consecutive failures before opening circuit
-    successThreshold: 2,      // Successes in half-open to close circuit
-    timeout: 60000,           // Cooldown before transitioning to half-open (ms)
-    halfOpenMaxRequests: 3,   // Max requests allowed in half-open state
-    volumeThreshold: 5        // Minimum requests before circuit can open
+    failureThreshold: 5, // Consecutive failures before opening circuit
+    successThreshold: 2, // Successes in half-open to close circuit
+    timeout: 60000, // Cooldown before transitioning to half-open (ms)
+    halfOpenMaxRequests: 3, // Max requests allowed in half-open state
+    volumeThreshold: 5, // Minimum requests before circuit can open
 };
 
 // ==========================================
@@ -103,7 +103,7 @@ function getProviderState(provider) {
             lastFailureTime: null,
             requestCount: 0,
             halfOpenRequests: 0,
-            history: []
+            history: [],
         });
     }
     return providerStates.get(provider);
@@ -136,14 +136,16 @@ function canExecute(provider, config = {}) {
             state.state = STATE.HALF_OPEN;
             state.halfOpenRequests = 0;
             state.successes = 0;
-            console.log(`[ProviderCircuitBreaker] ${provider}: OPEN → HALF_OPEN (cooldown elapsed)`);
+            console.log(
+                `[ProviderCircuitBreaker] ${provider}: OPEN → HALF_OPEN (cooldown elapsed)`
+            );
             return { allowed: true, state: state.state };
         }
         return {
             allowed: false,
             state: state.state,
             reason: `Circuit open for ${provider}. Retry in ${Math.ceil((cfg.timeout - elapsed) / 1000)}s`,
-            cooldownRemaining: cfg.timeout - elapsed
+            cooldownRemaining: cfg.timeout - elapsed,
         };
     }
 
@@ -153,7 +155,7 @@ function canExecute(provider, config = {}) {
             return {
                 allowed: false,
                 state: state.state,
-                reason: `Circuit half-open for ${provider}. Waiting for test requests to complete.`
+                reason: `Circuit half-open for ${provider}. Waiting for test requests to complete.`,
             };
         }
         return { allowed: true, state: state.state };
@@ -220,12 +222,16 @@ function recordFailure(provider, errorMessage = '', config = {}) {
         // Any failure in half-open returns to open
         state.state = STATE.OPEN;
         state.halfOpenRequests = 0;
-        console.warn(`[ProviderCircuitBreaker] ${provider}: HALF_OPEN → OPEN (test request failed: ${errorMessage})`);
+        console.warn(
+            `[ProviderCircuitBreaker] ${provider}: HALF_OPEN → OPEN (test request failed: ${errorMessage})`
+        );
     } else if (state.state === STATE.CLOSED) {
         // Check if we should open the circuit
         if (state.requestCount >= cfg.volumeThreshold && state.failures >= cfg.failureThreshold) {
             state.state = STATE.OPEN;
-            console.warn(`[ProviderCircuitBreaker] ${provider}: CLOSED → OPEN (${state.failures} consecutive failures)`);
+            console.warn(
+                `[ProviderCircuitBreaker] ${provider}: CLOSED → OPEN (${state.failures} consecutive failures)`
+            );
         }
     }
 }
@@ -245,7 +251,7 @@ async function execute(provider, fn, config = {}) {
             success: false,
             error: checkResult.reason,
             blocked: true,
-            state: checkResult.state
+            state: checkResult.state,
         };
     }
 
@@ -297,10 +303,11 @@ function getStatus(provider) {
         isHalfOpen: state.state === STATE.HALF_OPEN,
         isClosed: state.state === STATE.CLOSED,
         lastFailureTime: state.lastFailureTime,
-        cooldownRemaining: state.state === STATE.OPEN && state.lastFailureTime
-            ? Math.max(0, DEFAULT_CONFIG.timeout - (now - state.lastFailureTime))
-            : 0,
-        recentHistory: state.history.slice(-10)
+        cooldownRemaining:
+            state.state === STATE.OPEN && state.lastFailureTime
+                ? Math.max(0, DEFAULT_CONFIG.timeout - (now - state.lastFailureTime))
+                : 0,
+        recentHistory: state.history.slice(-10),
     };
 }
 
@@ -362,8 +369,8 @@ function getHealthMetrics() {
             total: 0,
             healthy: 0,
             degraded: 0,
-            unhealthy: 0
-        }
+            unhealthy: 0,
+        },
     };
 
     for (const provider of providerStates.keys()) {
@@ -371,7 +378,7 @@ function getHealthMetrics() {
         metrics.providers[provider] = {
             state: state.state,
             failureRate: calculateFailureRate(state.history),
-            avgResponseTime: calculateAvgResponseTime(state.history)
+            avgResponseTime: calculateAvgResponseTime(state.history),
         };
 
         metrics.summary.total++;
@@ -429,9 +436,10 @@ export const ProviderCircuitBreaker = {
     // Management
     reset,
     resetAll,
-    forceState
+    forceState,
 };
 
-
-console.warn('[ProviderCircuitBreaker] DEPRECATED: This module is deprecated. Use ProviderHealthAuthority instead.');
+console.warn(
+    '[ProviderCircuitBreaker] DEPRECATED: This module is deprecated. Use ProviderHealthAuthority instead.'
+);
 console.log('[ProviderCircuitBreaker] Module loaded (legacy - prefer ProviderHealthAuthority)');

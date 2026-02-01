@@ -21,12 +21,12 @@ import { DependencyGraph } from './dependency-graph.js';
 // Bootstrap State
 // ==========================================
 
-let bootstrapState = {
+const bootstrapState = {
     phase: 'initializing', // initializing, critical_loaded, services_ready, complete
     criticalLoaded: false,
     servicesReady: false,
     layersLoaded: new Set(),
-    errors: []
+    errors: [],
 };
 
 // ==========================================
@@ -274,7 +274,7 @@ export const BootstrapManager = {
     // State queries
     getBootstrapState,
     isBootstrapComplete,
-    isLayerLoaded
+    isLayerLoaded,
 };
 
 console.log('[BootstrapManager] Module loaded');

@@ -135,7 +135,7 @@ export function initObservabilitySettings() {
  */
 function setupEventDelegation(container) {
     // Handle click events for data-action
-    container.addEventListener('click', (e) => {
+    container.addEventListener('click', e => {
         const button = e.target.closest('[data-action]');
         if (button) {
             const action = button.dataset.action;
@@ -153,7 +153,7 @@ function setupEventDelegation(container) {
     });
 
     // Handle change events for data-change
-    container.addEventListener('change', (e) => {
+    container.addEventListener('change', e => {
         const element = e.target.closest('[data-change]');
         if (element) {
             const action = element.dataset.change;
@@ -249,7 +249,7 @@ async function exportMetrics() {
     try {
         await ObservabilityController.exportNow(format, {
             includeMemory: true,
-            includeWebVitals: true
+            includeWebVitals: true,
         });
         console.log('[ObservabilitySettings] Metrics exported successfully');
     } catch (error) {
@@ -260,7 +260,7 @@ async function exportMetrics() {
 /**
  * Toggle performance monitoring
  * HNW Hierarchy: Persists to IndexedDB for consistent settings source
- * 
+ *
  * @param {boolean} enabled - Whether monitoring is enabled
  */
 async function toggleMonitoring(enabled) {
@@ -270,7 +270,9 @@ async function toggleMonitoring(enabled) {
             console.log('[ObservabilitySettings] Performance monitoring enabled');
         } else {
             PerformanceProfiler.disable();
-            console.log('[ObservabilitySettings] Performance monitoring disabled (<5% CPU savings)');
+            console.log(
+                '[ObservabilitySettings] Performance monitoring disabled (<5% CPU savings)'
+            );
         }
     }
 
@@ -324,7 +326,7 @@ function setUpdateInterval(intervalMs) {
 /**
  * Load observability settings and apply them
  * HNW Hierarchy: Called on app init to respect saved preferences
- * 
+ *
  * @returns {Promise<void>}
  */
 async function loadObservabilitySettings() {
@@ -372,8 +374,7 @@ export const ObservabilitySettings = {
     toggleMonitoring,
     toggleMemoryProfiling,
     setUpdateInterval,
-    loadObservabilitySettings
+    loadObservabilitySettings,
 };
-
 
 console.log('[ObservabilitySettings] Module loaded');

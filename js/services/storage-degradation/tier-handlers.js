@@ -94,48 +94,48 @@ export class TierHandlers {
         this._registerItem(STORAGE_KEYS.PERSONALITY_RESULT, {
             priority: CleanupPriority.NEVER_DELETE,
             category: 'personality',
-            regeneratable: false
+            regeneratable: false,
         });
 
         this._registerItem(STORAGE_KEYS.USER_SETTINGS, {
             priority: CleanupPriority.NEVER_DELETE,
             category: 'settings',
-            regeneratable: false
+            regeneratable: false,
         });
 
         // Active session - never delete
         this._registerItem(STORAGE_KEYS.ACTIVE_SESSION_ID, {
             priority: CleanupPriority.NEVER_DELETE,
             category: 'session',
-            regeneratable: false
+            regeneratable: false,
         });
 
         // Embeddings - regeneratable, high cleanup priority
         this._registerItem(STORAGE_KEYS.EMBEDDING_CACHE, {
             priority: CleanupPriority.AGGRESSIVE,
             category: 'embedding',
-            regeneratable: true
+            regeneratable: true,
         });
 
         // Chat sessions - medium priority based on age
         this._registerItem(STORAGE_KEYS.CHAT_SESSIONS, {
             priority: CleanupPriority.MEDIUM,
             category: 'session',
-            regeneratable: false
+            regeneratable: false,
         });
 
         // Chunks - regeneratable from streams
         this._registerItem(STORAGE_KEYS.AGGREGATED_CHUNKS, {
             priority: CleanupPriority.HIGH,
             category: 'chunk',
-            regeneratable: true
+            regeneratable: true,
         });
 
         // Raw streams - keep recent, aggressive cleanup for old
         this._registerItem(STORAGE_KEYS.RAW_STREAMS, {
             priority: CleanupPriority.HIGH,
             category: 'stream',
-            regeneratable: false
+            regeneratable: false,
         });
     }
 
@@ -150,7 +150,7 @@ export class TierHandlers {
             key,
             ...metadata,
             sizeBytes: 0,
-            lastAccessed: Date.now()
+            lastAccessed: Date.now(),
         });
     }
 
@@ -172,16 +172,18 @@ export class TierHandlers {
         });
 
         // Monitor connection failures from IndexedDB
-        this._eventBus.on('storage:connection_failed', async (payload) => {
+        this._eventBus.on('storage:connection_failed', async payload => {
             await this._onConnectionFailed(payload);
         });
 
         // Monitor connection blocked (upgrade blocked by other tabs)
-        this._eventBus.on('storage:connection_blocked', async (payload) => {
+        this._eventBus.on('storage:connection_blocked', async payload => {
             this._eventBus.emit('UI:TOAST', {
                 type: 'warning',
-                message: payload.message || 'Database upgrade blocked by other tabs. Please close other tabs.',
-                duration: 10000
+                message:
+                    payload.message ||
+                    'Database upgrade blocked by other tabs. Please close other tabs.',
+                duration: 10000,
             });
         });
     }
@@ -207,8 +209,7 @@ export class TierHandlers {
      */
     async _onStorageError(data) {
         // Check if error is quota exceeded
-        if (data.error?.name === 'QuotaExceededError' ||
-            data.error?.message?.includes('quota')) {
+        if (data.error?.name === 'QuotaExceededError' || data.error?.message?.includes('quota')) {
             console.error('[TierHandlers] Quota exceeded error detected');
             await this._handleQuotaExceeded();
         }
@@ -234,7 +235,7 @@ export class TierHandlers {
                 oldTier,
                 newTier: DegradationTier.EMERGENCY,
                 metrics: null,
-                reason: 'connection_failed'
+                reason: 'connection_failed',
             });
         }
 
@@ -254,23 +255,26 @@ export class TierHandlers {
                     {
                         label: 'I Understand - Continue Without Saving',
                         action: 'session_only_mode',
-                        primary: true
+                        primary: true,
                     },
                     {
                         label: 'Retry Connection',
-                        action: 'retry_connection'
+                        action: 'retry_connection',
                     },
                     {
                         label: 'Export Current Chat',
-                        action: 'export_chat'
-                    }
-                ]
+                        action: 'export_chat',
+                    },
+                ],
             });
         }
 
         // Emit storage mode change
         if (this._eventBus) {
-            this._eventBus.emit('STORAGE:SESSION_ONLY_MODE', { enabled: true, reason: 'connection_failed' });
+            this._eventBus.emit('STORAGE:SESSION_ONLY_MODE', {
+                enabled: true,
+                reason: 'connection_failed',
+            });
         }
     }
 
@@ -321,11 +325,14 @@ export class TierHandlers {
                 oldTier,
                 newTier,
                 metrics: null,
-                reason: 'tier_transition'
+                reason: 'tier_transition',
             });
         }
 
-        performance.measure(`storage-tier-${oldTier}-to-${newTier}`, `storage-tier-transition-${oldTier}-to-${newTier}`);
+        performance.measure(
+            `storage-tier-${oldTier}-to-${newTier}`,
+            `storage-tier-transition-${oldTier}-to-${newTier}`
+        );
     }
 
     /**
@@ -339,8 +346,9 @@ export class TierHandlers {
         if (this._eventBus) {
             this._eventBus.emit('UI:TOAST', {
                 type: 'warning',
-                message: 'Storage space is getting low. Old chat sessions may be cleaned up automatically.',
-                duration: 10000
+                message:
+                    'Storage space is getting low. Old chat sessions may be cleaned up automatically.',
+                duration: 10000,
             });
         }
 
@@ -348,7 +356,7 @@ export class TierHandlers {
         if (this._eventBus) {
             this._eventBus.emit('LRU:EVICTION_POLICY', {
                 mode: 'aggressive',
-                targetRatio: 0.7 // Target 70% of current usage
+                targetRatio: 0.7, // Target 70% of current usage
             });
         }
 
@@ -369,18 +377,19 @@ export class TierHandlers {
         if (this._eventBus) {
             this._eventBus.emit('UI:TOAST', {
                 type: 'error',
-                message: 'Storage space is critically low! Old data is being cleaned up. Consider exporting your data.',
+                message:
+                    'Storage space is critically low! Old data is being cleaned up. Consider exporting your data.',
                 duration: 15000,
                 actions: [
                     {
                         label: 'Export Data',
-                        action: 'export_data'
+                        action: 'export_data',
                     },
                     {
                         label: 'Clear Old Sessions',
-                        action: 'clear_sessions'
-                    }
-                ]
+                        action: 'clear_sessions',
+                    },
+                ],
             });
         }
 
@@ -434,17 +443,17 @@ export class TierHandlers {
                     {
                         label: 'Clear Old Data (Keep Active Session)',
                         action: 'clear_old_data',
-                        primary: true
+                        primary: true,
                     },
                     {
                         label: 'Export and Clear',
-                        action: 'export_and_clear'
+                        action: 'export_and_clear',
                     },
                     {
                         label: 'Continue in Session-Only Mode',
-                        action: 'session_only_mode'
-                    }
-                ]
+                        action: 'session_only_mode',
+                    },
+                ],
             });
         }
 
@@ -475,7 +484,7 @@ export class TierHandlers {
         if (this._eventBus) {
             this._eventBus.emit('LRU:EVICTION_POLICY', {
                 mode: 'normal',
-                targetRatio: 1.0
+                targetRatio: 1.0,
             });
         }
     }

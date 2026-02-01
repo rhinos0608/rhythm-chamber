@@ -13,7 +13,7 @@ import { IntentExtractionStrategy } from './tool-strategies/intent-extraction-st
 import { TimeoutBudget } from './timeout-budget-manager.js';
 import { ProviderHealthAuthority } from './provider-health-authority.js';
 
-'use strict';
+('use strict');
 
 // ==========================================
 // Dependencies (injected via init)
@@ -86,13 +86,15 @@ function isRetryableError(err, signal = null) {
     }
 
     const msg = (err.message || '').toLowerCase();
-    return msg.includes('timeout') ||
+    return (
+        msg.includes('timeout') ||
         msg.includes('rate limit') ||
         msg.includes('429') ||
         msg.includes('503') ||
         msg.includes('network') ||
         msg.includes('fetch') ||
-        msg.includes('temporary');
+        msg.includes('temporary')
+    );
 }
 
 /**
@@ -101,7 +103,11 @@ function isRetryableError(err, signal = null) {
  * @returns {boolean} Whether the result has validation errors
  */
 function hasValidationError(result) {
-    return result?.validationErrors && Array.isArray(result.validationErrors) && result.validationErrors.length > 0;
+    return (
+        result?.validationErrors &&
+        Array.isArray(result.validationErrors) &&
+        result.validationErrors.length > 0
+    );
 }
 
 /**
@@ -147,9 +153,9 @@ function getStreamsData() {
 /**
  * Execute LLM-requested tool calls and return the follow-up response message.
  * If a tool fails, returns an early result for the caller to surface.
- * 
+ *
  * CIRCUIT BREAKER: Max 5 function calls per turn, 30s timeout per function.
- * 
+ *
  * @param {object} responseMessage - LLM response message
  * @param {object} providerConfig - Provider configuration
  * @param {string} key - API key
@@ -164,14 +170,17 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
     // Note: CircuitBreaker.resetTurn() is now called at the start of sendMessage()
     // to ensure reset happens for all messages, not just those with tool calls
 
-    console.log('[ToolCallHandlingService] LLM requested tool calls:', responseMessage.tool_calls.map(tc => tc.function.name));
+    console.log(
+        '[ToolCallHandlingService] LLM requested tool calls:',
+        responseMessage.tool_calls.map(tc => tc.function.name)
+    );
 
     // Add assistant's tool call message to conversation
     if (_SessionManager?.addMessageToHistory) {
         await _SessionManager.addMessageToHistory({
             role: 'assistant',
             content: responseMessage.content || null,
-            tool_calls: responseMessage.tool_calls
+            tool_calls: responseMessage.tool_calls,
         });
     }
 
@@ -183,15 +192,18 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
         if (_CircuitBreaker?.check) {
             const breakerCheck = _CircuitBreaker.check();
             if (!breakerCheck.allowed) {
-                console.warn(`[ToolCallHandlingService] Circuit breaker tripped: ${breakerCheck.reason}`);
-                if (onProgress) onProgress({ type: 'circuit_breaker_trip', reason: breakerCheck.reason });
+                console.warn(
+                    `[ToolCallHandlingService] Circuit breaker tripped: ${breakerCheck.reason}`
+                );
+                if (onProgress)
+                    onProgress({ type: 'circuit_breaker_trip', reason: breakerCheck.reason });
                 return {
                     earlyReturn: {
                         status: 'error',
                         content: _CircuitBreaker.getErrorMessage(breakerCheck.reason),
                         role: 'assistant',
-                        isCircuitBreakerError: true
-                    }
+                        isCircuitBreakerError: true,
+                    },
                 };
             }
         }
@@ -203,7 +215,10 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
         try {
             args = rawArgs ? JSON.parse(rawArgs) : {};
         } catch (parseError) {
-            console.warn(`[ToolCallHandlingService] Invalid tool call arguments for ${functionName}:`, rawArgs);
+            console.warn(
+                `[ToolCallHandlingService] Invalid tool call arguments for ${functionName}:`,
+                rawArgs
+            );
 
             if (onProgress) onProgress({ type: 'tool_end', tool: functionName, error: true });
 
@@ -212,8 +227,8 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
                     status: 'error',
                     content: buildToolCodeOnlyError(functionName, rawArgs),
                     role: 'assistant',
-                    isFunctionError: true
-                }
+                    isFunctionError: true,
+                },
             };
         }
 
@@ -244,11 +259,13 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
                 try {
                     // Guard: Check if Functions is available
                     if (!_Functions || typeof _Functions.execute !== 'function') {
-                        throw new Error(`Functions service not available - cannot execute ${functionName}`);
+                        throw new Error(
+                            `Functions service not available - cannot execute ${functionName}`
+                        );
                     }
 
                     result = await _Functions.execute(functionName, args, getStreamsData(), {
-                        signal: functionBudget.signal
+                        signal: functionBudget.signal,
                     });
 
                     // Check if aborted while executing
@@ -261,8 +278,13 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
                     // arguments will always fail. This wastes retry attempts that could be used
                     // for transient network/timeout errors instead.
                     if (hasValidationError(result)) {
-                        console.error(`[ToolCallHandlingService] Validation error for ${functionName} (not retrying):`, result.validationErrors);
-                        lastError = new Error(`Validation failed: ${result.validationErrors.join(', ')}`);
+                        console.error(
+                            `[ToolCallHandlingService] Validation error for ${functionName} (not retrying):`,
+                            result.validationErrors
+                        );
+                        lastError = new Error(
+                            `Validation failed: ${result.validationErrors.join(', ')}`
+                        );
                         // Break immediately - don't waste retry attempts on permanent validation failures
                         break;
                     }
@@ -270,7 +292,10 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
                     // PREMIUM GATE: Check if function requires premium
                     // Do NOT retry premium requirement - show upgrade modal instead
                     if (result?.premium_required) {
-                        console.log(`[ToolCallHandlingService] Premium required for ${functionName}:`, result.error);
+                        console.log(
+                            `[ToolCallHandlingService] Premium required for ${functionName}:`,
+                            result.error
+                        );
                         // PremiumController already showed the modal from within the function
                         // Return early with the error so the LLM can explain to the user
                         return {
@@ -278,15 +303,20 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
                                 status: 'premium_required',
                                 content: result.error || 'This feature requires Premium.',
                                 functionName,
-                                premiumFeatures: result.premiumFeatures
-                            }
+                                premiumFeatures: result.premiumFeatures,
+                            },
                         };
                     }
 
                     // Check for function execution errors in result
                     if (result?.error) {
-                        if (attempt < MAX_FUNCTION_RETRIES && isRetryableError(new Error(result.error), functionBudget.signal)) {
-                            console.warn(`[ToolCallHandlingService] Retryable error for ${functionName} (attempt ${attempt + 1}): ${result.error}`);
+                        if (
+                            attempt < MAX_FUNCTION_RETRIES &&
+                            isRetryableError(new Error(result.error), functionBudget.signal)
+                        ) {
+                            console.warn(
+                                `[ToolCallHandlingService] Retryable error for ${functionName} (attempt ${attempt + 1}): ${result.error}`
+                            );
                             await retryDelay(attempt);
                             lastError = new Error(result.error);
                             continue;
@@ -299,13 +329,21 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
                 } catch (funcError) {
                     lastError = funcError;
 
-                    if (attempt < MAX_FUNCTION_RETRIES && isRetryableError(funcError, functionBudget.signal)) {
-                        console.warn(`[ToolCallHandlingService] Retryable error for ${functionName} (attempt ${attempt + 1}): ${funcError.message}`);
+                    if (
+                        attempt < MAX_FUNCTION_RETRIES &&
+                        isRetryableError(funcError, functionBudget.signal)
+                    ) {
+                        console.warn(
+                            `[ToolCallHandlingService] Retryable error for ${functionName} (attempt ${attempt + 1}): ${funcError.message}`
+                        );
                         await retryDelay(attempt);
                         continue;
                     }
                     // Non-retryable error or last attempt
-                    console.error(`[ToolCallHandlingService] Function execution failed after ${attempt + 1} attempts:`, funcError);
+                    console.error(
+                        `[ToolCallHandlingService] Function execution failed after ${attempt + 1} attempts:`,
+                        funcError
+                    );
                     break;
                 }
             }
@@ -320,28 +358,37 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
                         status: 'error',
                         content: `Function call '${functionName}' failed after ${MAX_FUNCTION_RETRIES + 1} attempts: ${lastError.message}. Please try again.`,
                         role: 'assistant',
-                        isFunctionError: true
-                    }
+                        isFunctionError: true,
+                    },
                 };
             }
 
             // Even if not fully successful, if we have a result, use it (e.g., validation error result)
-            console.log(`[ToolCallHandlingService] Function result:`, result);
+            console.log('[ToolCallHandlingService] Function result:', result);
 
             // EDGE CASE FIX: Distinguish between "intentionally empty" and "unexpectedly empty" results
             // Empty tool results can cause LLM parsing issues on follow-up call
             // A result with { _empty: true } or { result: '' } is intentionally empty (e.g., no data found)
             // A result that is null/undefined/0-length object is unexpectedly empty (likely an error)
-            const isIntentionallyEmpty = result &&
+            const isIntentionallyEmpty =
+                result &&
                 typeof result === 'object' &&
                 (result._empty === true || result._intentionallyEmpty === true);
 
-            const hasValidContent = result !== null && result !== undefined &&
+            const hasValidContent =
+                result !== null &&
+                result !== undefined &&
                 !(typeof result === 'string' && result.trim() === '' && !isIntentionallyEmpty) &&
-                !(typeof result === 'object' && Object.keys(result).length === 0 && !isIntentionallyEmpty);
+                !(
+                    typeof result === 'object' &&
+                    Object.keys(result).length === 0 &&
+                    !isIntentionallyEmpty
+                );
 
             if (!hasValidContent) {
-                console.warn(`[ToolCallHandlingService] Tool ${functionName} returned empty result, using placeholder`);
+                console.warn(
+                    `[ToolCallHandlingService] Tool ${functionName} returned empty result, using placeholder`
+                );
                 result = { result: '(No output)', _empty: true };
             }
 
@@ -357,17 +404,20 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
                     content = JSON.stringify(result);
                 } catch (stringifyError) {
                     // Fallback for circular references or unserializable data
-                    console.warn(`[ToolCallHandlingService] Failed to stringify tool result for ${functionName}:`, stringifyError.message);
+                    console.warn(
+                        `[ToolCallHandlingService] Failed to stringify tool result for ${functionName}:`,
+                        stringifyError.message
+                    );
                     content = JSON.stringify({
                         result: '(Result contains unserializable data)',
-                        _error: 'Unserializable result'
+                        _error: 'Unserializable result',
                     });
                 }
 
                 await _SessionManager.addMessageToHistory({
                     role: 'tool',
                     tool_call_id: toolCall.id,
-                    content: content
+                    content: content,
                 });
             }
 
@@ -386,10 +436,7 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
     const systemPrompt = typeof _buildSystemPrompt === 'function' ? _buildSystemPrompt() : '';
 
     // Make follow-up call with function results
-    const followUpMessages = [
-        { role: 'system', content: systemPrompt },
-        ...updatedHistory
-    ];
+    const followUpMessages = [{ role: 'system', content: systemPrompt }, ...updatedHistory];
 
     // Notify UI: Thinking again (processing tool results)
     if (onProgress) onProgress({ type: 'thinking' });
@@ -402,8 +449,8 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
                 status: 'error',
                 content: 'LLM service not available for processing tool results. Please try again.',
                 role: 'assistant',
-                isFunctionError: true
-            }
+                isFunctionError: true,
+            },
         };
     }
 
@@ -420,8 +467,8 @@ async function handleToolCalls(responseMessage, providerConfig, key, onProgress)
                 content: `Tools executed successfully, but final summary generation failed (${llmError.message}). Please try again.`,
                 role: 'assistant',
                 isFunctionError: true,
-                toolsSucceeded: true
-            }
+                toolsSucceeded: true,
+            },
         };
     }
     // HNW Guard: response.choices may be undefined or empty
@@ -479,7 +526,7 @@ function initToolStrategies() {
         Functions: _Functions,
         SessionManager: _SessionManager,
         FunctionCallingFallback: _FunctionCallingFallback,
-        timeoutMs: _timeoutMs
+        timeoutMs: _timeoutMs,
     };
 
     // Strategies imported at module level via static ES imports
@@ -487,7 +534,7 @@ function initToolStrategies() {
     toolStrategies = [
         new NativeToolStrategy(deps),
         new PromptInjectionStrategy(deps),
-        new IntentExtractionStrategy(deps)
+        new IntentExtractionStrategy(deps),
     ];
 
     // Add identifier for each strategy (used instead of instanceof check)
@@ -501,10 +548,10 @@ function initToolStrategies() {
 /**
  * Handle tool calls with fallback support for models without native function calling.
  * Uses Strategy pattern to delegate to appropriate handler based on capability level.
- * 
+ *
  * SHARED BUDGET: All strategies share a single 30s budget. This prevents 120s hangs
  * from 30s × 4 strategies. Budget is allocated dynamically to each strategy.
- * 
+ *
  * @param {object} responseMessage - LLM response message
  * @param {object} providerConfig - Provider configuration
  * @param {string} key - API key
@@ -547,7 +594,7 @@ async function handleToolCallsWithFallback(
             userMessage,
             streamsData: getStreamsData(),
             buildSystemPrompt: _buildSystemPrompt,
-            callLLM: _callLLM
+            callLLM: _callLLM,
         };
 
         // ==========================================
@@ -569,20 +616,22 @@ async function handleToolCallsWithFallback(
                 candidates.push({
                     strategy,
                     confidence: result.confidence,
-                    reason: result.reason
+                    reason: result.reason,
                 });
             }
         }
 
         // Special case: IntentExtractionStrategy uses getIntentConfidence
-        const intentStrategy = toolStrategies.find(s => s.strategyName === 'IntentExtractionStrategy');
+        const intentStrategy = toolStrategies.find(
+            s => s.strategyName === 'IntentExtractionStrategy'
+        );
         if (intentStrategy?.getIntentConfidence) {
             const intentResult = intentStrategy.getIntentConfidence(userMessage);
             if (intentResult.confidence > 0) {
                 candidates.push({
                     strategy: intentStrategy,
                     confidence: intentResult.confidence,
-                    reason: intentResult.reason
+                    reason: intentResult.reason,
                 });
             }
         }
@@ -592,8 +641,12 @@ async function handleToolCallsWithFallback(
 
         // Log voting results for debugging
         if (candidates.length > 0) {
-            console.log('[ToolCallHandlingService] Strategy voting results:',
-                candidates.map(c => `${c.strategy.strategyName}: ${c.confidence.toFixed(2)} (${c.reason})`));
+            console.log(
+                '[ToolCallHandlingService] Strategy voting results:',
+                candidates.map(
+                    c => `${c.strategy.strategyName}: ${c.confidence.toFixed(2)} (${c.reason})`
+                )
+            );
         }
 
         // ==========================================
@@ -604,7 +657,9 @@ async function handleToolCallsWithFallback(
         if (candidates.length === 0) {
             // No qualifying strategies - check for native tool_calls fallback
             if (responseMessage?.tool_calls?.length > 0) {
-                console.log('[ToolCallHandlingService] Native tool calls found in response (fallback)');
+                console.log(
+                    '[ToolCallHandlingService] Native tool calls found in response (fallback)'
+                );
                 return handleToolCalls(responseMessage, providerConfig, key, onProgress);
             }
             return { responseMessage };
@@ -614,7 +669,9 @@ async function handleToolCallsWithFallback(
         const remainingMs = strategyBudget.remaining();
         context.timeoutMs = Math.min(remainingMs, 10000); // Max 10s per strategy
 
-        console.log(`[ToolCallHandlingService] Racing ${candidates.length} strategies with ${context.timeoutMs}ms budget`);
+        console.log(
+            `[ToolCallHandlingService] Racing ${candidates.length} strategies with ${context.timeoutMs}ms budget`
+        );
 
         // Create shared AbortController for strategy cancellation
         // When one strategy succeeds, others can be aborted to save resources
@@ -624,48 +681,61 @@ async function handleToolCallsWithFallback(
         context.abortSignal = raceAbortController.signal;
 
         // Create race promises for each strategy - wrap to throw on failure so firstSuccess works
-        const racePromises = candidates.map((candidate) => (async () => {
-            // Check if already aborted (another strategy won)
-            if (raceAbortController.signal.aborted) {
-                throw new Error(`${candidate.strategy.strategyName}: Cancelled - another strategy won`);
-            }
+        const racePromises = candidates.map(candidate =>
+            (async () => {
+                // Check if already aborted (another strategy won)
+                if (raceAbortController.signal.aborted) {
+                    throw new Error(
+                        `${candidate.strategy.strategyName}: Cancelled - another strategy won`
+                    );
+                }
 
-            try {
-                const result = await candidate.strategy.execute(context);
+                try {
+                    const result = await candidate.strategy.execute(context);
 
-                // Only return successful results - throw on errors to trigger next strategy
-                if (result && !result.earlyReturn?.status?.includes('error')) {
-                    // Check if any function calls returned errors (even though strategy completed)
-                    if (result.hadFunctionErrors) {
-                        const errorSummary = result.functionErrors
-                            ?.map(e => `${e.function}: ${e.error}`)
-                            .join('; ');
-                        console.warn(`[ToolCallHandlingService] Strategy ${candidate.strategy.strategyName} completed with function errors: ${errorSummary}`);
-                    } else {
-                        console.log(`[ToolCallHandlingService] Strategy ${candidate.strategy.strategyName} succeeded`);
+                    // Only return successful results - throw on errors to trigger next strategy
+                    if (result && !result.earlyReturn?.status?.includes('error')) {
+                        // Check if any function calls returned errors (even though strategy completed)
+                        if (result.hadFunctionErrors) {
+                            const errorSummary = result.functionErrors
+                                ?.map(e => `${e.function}: ${e.error}`)
+                                .join('; ');
+                            console.warn(
+                                `[ToolCallHandlingService] Strategy ${candidate.strategy.strategyName} completed with function errors: ${errorSummary}`
+                            );
+                        } else {
+                            console.log(
+                                `[ToolCallHandlingService] Strategy ${candidate.strategy.strategyName} succeeded`
+                            );
+                        }
+                        // Abort other strategies since we won
+                        raceAbortController.abort();
+                        return result;
                     }
-                    // Abort other strategies since we won
-                    raceAbortController.abort();
-                    return result;
-                }
 
-                // Strategy returned an error - check if it was due to function errors
-                if (result.earlyReturn?.hadFunctionErrors) {
-                    const errorSummary = result.earlyReturn.functionErrors
-                        ?.map(e => `${e.function}: ${e.error}`)
-                        .join('; ') || result.earlyReturn.content;
-                    console.warn(`[ToolCallHandlingService] Strategy ${candidate.strategy.strategyName} failed with function errors: ${errorSummary}`);
-                } else {
-                    console.warn(`[ToolCallHandlingService] Strategy ${candidate.strategy.strategyName} failed: ${result?.earlyReturn?.content || 'Unknown error'}`);
-                }
+                    // Strategy returned an error - check if it was due to function errors
+                    if (result.earlyReturn?.hadFunctionErrors) {
+                        const errorSummary =
+                            result.earlyReturn.functionErrors
+                                ?.map(e => `${e.function}: ${e.error}`)
+                                .join('; ') || result.earlyReturn.content;
+                        console.warn(
+                            `[ToolCallHandlingService] Strategy ${candidate.strategy.strategyName} failed with function errors: ${errorSummary}`
+                        );
+                    } else {
+                        console.warn(
+                            `[ToolCallHandlingService] Strategy ${candidate.strategy.strategyName} failed: ${result?.earlyReturn?.content || 'Unknown error'}`
+                        );
+                    }
 
-                // Throw to let other strategies try
-                throw new Error(result?.earlyReturn?.content || 'Strategy failed');
-            } catch (strategyError) {
-                // Re-throw to let Promise.any try next strategy
-                throw new Error(`${candidate.strategy.strategyName}: ${strategyError.message}`);
-            }
-        })());
+                    // Throw to let other strategies try
+                    throw new Error(result?.earlyReturn?.content || 'Strategy failed');
+                } catch (strategyError) {
+                    // Re-throw to let Promise.any try next strategy
+                    throw new Error(`${candidate.strategy.strategyName}: ${strategyError.message}`);
+                }
+            })()
+        );
 
         // Add timeout promise that rejects - used consistently for both Promise.any and polyfill
         // When timeout occurs, abort all pending strategies
@@ -696,7 +766,7 @@ async function handleToolCallsWithFallback(
                     // Wire up race promises
                     racePromises.forEach((promise, i) => {
                         promise.then(
-                            (result) => {
+                            result => {
                                 // CRITICAL FIX: Atomic check-and-set to prevent race condition
                                 // Multiple promises could resolve in same microtask; only first should call resolve
                                 if (!settled) {
@@ -706,7 +776,7 @@ async function handleToolCallsWithFallback(
                                     resolve(result);
                                 }
                             },
-                            (error) => {
+                            error => {
                                 errors[i] = error;
                                 pendingCount--;
                                 if (pendingCount === 0 && !settled) {
@@ -720,7 +790,7 @@ async function handleToolCallsWithFallback(
 
                     // Wire up timeout promise to compete with strategies
                     // If timeout resolves (rejects) first, it wins; otherwise strategies win
-                    timeoutPromise.catch((timeoutError) => {
+                    timeoutPromise.catch(timeoutError => {
                         // CRITICAL FIX: Atomic check-and-set to prevent race condition
                         if (!settled) {
                             settled = true;
@@ -743,7 +813,6 @@ async function handleToolCallsWithFallback(
             // No function calls to handle
             return { responseMessage };
         }
-
     } finally {
         // Always release budget
         TimeoutBudget.release(strategyBudget);
@@ -787,7 +856,7 @@ const ToolCallHandlingService = {
     // Utilities
     getStreamsData,
     isCodeLikeToolArguments,
-    buildToolCodeOnlyError
+    buildToolCodeOnlyError,
 };
 
 // ES Module export

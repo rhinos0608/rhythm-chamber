@@ -39,7 +39,7 @@ export async function init() {
 
     // Listen for tab coordination changes
     if (TabCoordinator.onAuthorityChange) {
-        TabCoordinator.onAuthorityChange((authority) => {
+        TabCoordinator.onAuthorityChange(authority => {
             if (authority.canWrite) {
                 // Became primary - start processing WAL
                 console.log('[WAL] Became primary tab, starting WAL processing');

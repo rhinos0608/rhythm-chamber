@@ -61,7 +61,7 @@ export function checkSecureContext() {
     if (typeof window !== 'undefined' && window.isSecureContext === false) {
         return {
             secure: false,
-            reason: 'Insecure context: App must be accessed via HTTPS or localhost'
+            reason: 'Insecure context: App must be accessed via HTTPS or localhost',
         };
     }
 
@@ -69,7 +69,7 @@ export function checkSecureContext() {
     if (!crypto?.subtle) {
         return {
             secure: false,
-            reason: 'crypto.subtle unavailable: Cryptographic operations unavailable'
+            reason: 'crypto.subtle unavailable: Cryptographic operations unavailable',
         };
     }
 
@@ -82,7 +82,7 @@ export function checkSecureContext() {
         } catch (e) {
             return {
                 secure: false,
-                reason: 'Cross-origin iframe: Security features restricted'
+                reason: 'Cross-origin iframe: Security features restricted',
             };
         }
 
@@ -90,7 +90,7 @@ export function checkSecureContext() {
         if (window.location.protocol === 'data:' || window.location.protocol === 'blob:') {
             return {
                 secure: false,
-                reason: 'Insecure protocol: data:// or blob:// URLs are not secure'
+                reason: 'Insecure protocol: data:// or blob:// URLs are not secure',
             };
         }
     }
@@ -139,7 +139,7 @@ export function throttle(func, limit) {
         if (!inThrottle) {
             func.apply(this, args);
             inThrottle = true;
-            setTimeout(() => inThrottle = false, limit);
+            setTimeout(() => (inThrottle = false), limit);
         }
     };
 }
@@ -161,7 +161,7 @@ export function deepClone(obj) {
 
     const cloned = {};
     for (const key in obj) {
-        if (obj.hasOwnProperty(key)) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
             cloned[key] = deepClone(obj[key]);
         }
     }
@@ -308,7 +308,7 @@ export async function retry(fn, options = {}) {
         maxAttempts = 3,
         initialDelay = 100,
         maxDelay = 5000,
-        shouldRetry = () => true
+        shouldRetry = () => true,
     } = options;
 
     let lastError;
@@ -347,7 +347,7 @@ export const Common = {
     setNestedValue,
     generateId,
     sleep,
-    retry
+    retry,
 };
 
 console.log('[Common] Common utility functions loaded');

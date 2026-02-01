@@ -35,25 +35,21 @@ export function waitForReplayComplete(timeoutMs = 30000) {
         return Promise.resolve();
     }
 
-    return new Promise((resolve) => {
-        const startTime = Date.now();
-        let timeoutHandle;
-        let eventHandler;
-
-        const cleanup = () => {
-            if (timeoutHandle) clearTimeout(timeoutHandle);
-            if (eventHandler) EventBus.off('wal:replay_complete', eventHandler);
-        };
+    return new Promise(resolve => {
+        function cleanup() {
+            clearTimeout(timeoutHandle);
+            EventBus.off('wal:replay_complete', eventHandler);
+        }
 
         // Set timeout as fallback
-        timeoutHandle = setTimeout(() => {
+        const timeoutHandle = setTimeout(() => {
             cleanup();
             console.warn('[WAL] Timeout waiting for replay to complete, proceeding anyway');
             resolve();
         }, timeoutMs);
 
         // Listen for replay complete event (immediate notification)
-        eventHandler = () => {
+        const eventHandler = () => {
             cleanup();
             resolve();
         };
@@ -122,7 +118,7 @@ export async function queueWrite(operation, args, priority = WalPriority.NORMAL)
     }
 
     // Queue for later processing if in Safe Mode
-    return new Promise((resolveOuter) => {
+    return new Promise(resolveOuter => {
         const entry = createWalEntry(operation, args, priority);
 
         // Store entryId in closure for result tracking
@@ -149,40 +145,42 @@ export async function queueWrite(operation, args, priority = WalPriority.NORMAL)
                 promise: new Promise((res, rej) => {
                     entry.promise = { resolve: res, reject: rej };
                 }),
-                entryId: entryId
+                entryId: entryId,
             });
-        }).then((result) => {
-            // CRITICAL FIX: Use entryId from closure, not result
-            // When operation completes, save result for crash recovery
-            const operationResult = {
-                success: !result?.error,
-                result: result,
-                completedAt: Date.now()
-            };
-            walState.operationResults.set(entryId, operationResult);
-            saveOperationResults();
+        })
+            .then(result => {
+                // CRITICAL FIX: Use entryId from closure, not result
+                // When operation completes, save result for crash recovery
+                const operationResult = {
+                    success: !result?.error,
+                    result: result,
+                    completedAt: Date.now(),
+                };
+                walState.operationResults.set(entryId, operationResult);
+                saveOperationResults();
 
-            // Resolve the inner promise
-            if (result.promise) {
-                result.promise.resolve(operationResult.result);
-            }
-        }).catch((error) => {
-            // CRITICAL FIX: Use entryId from closure, not error
-            // Save error result with preserved stack trace
-            const operationResult = {
-                success: false,
-                error: error.message,
-                stack: error.stack,
-                completedAt: Date.now()
-            };
-            walState.operationResults.set(entryId, operationResult);
-            saveOperationResults();
+                // Resolve the inner promise
+                if (result.promise) {
+                    result.promise.resolve(operationResult.result);
+                }
+            })
+            .catch(error => {
+                // CRITICAL FIX: Use entryId from closure, not error
+                // Save error result with preserved stack trace
+                const operationResult = {
+                    success: false,
+                    error: error.message,
+                    stack: error.stack,
+                    completedAt: Date.now(),
+                };
+                walState.operationResults.set(entryId, operationResult);
+                saveOperationResults();
 
-            // Reject the inner promise
-            if (error.promise) {
-                error.promise.reject(error);
-            }
-        });
+                // Reject the inner promise
+                if (error.promise) {
+                    error.promise.reject(error);
+                }
+            });
     });
 }
 
@@ -216,7 +214,7 @@ export async function waitForResult(entryId, options = {}) {
     const startTime = Date.now();
 
     // Helper to process result consistently (success or failure)
-    const processResult = (operationResult) => {
+    const processResult = operationResult => {
         if (operationResult.success) {
             return operationResult.result;
         }

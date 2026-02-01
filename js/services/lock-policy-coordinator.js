@@ -23,19 +23,19 @@ import { OperationLock } from '../operation-lock.js';
  */
 const CONFLICT_MATRIX = {
     // File processing conflicts with embedding and privacy operations
-    'file_processing': ['embedding_generation', 'privacy_clear'],
+    file_processing: ['embedding_generation', 'privacy_clear'],
 
     // Embedding generation conflicts with file and privacy operations
-    'embedding_generation': ['file_processing', 'privacy_clear'],
+    embedding_generation: ['file_processing', 'privacy_clear'],
 
     // Privacy clear is exclusive - conflicts with everything
-    'privacy_clear': ['*'],
+    privacy_clear: ['*'],
 
     // Spotify fetch conflicts with chat save (session data integrity)
-    'spotify_fetch': ['chat_save'],
+    spotify_fetch: ['chat_save'],
 
     // Chat save conflicts with spotify fetch
-    'chat_save': ['spotify_fetch']
+    chat_save: ['spotify_fetch'],
 };
 
 /**
@@ -48,17 +48,17 @@ const CONFLICT_MATRIX = {
  */
 const OPERATION_LEVELS = {
     // Level 0: System operations (highest priority)
-    'privacy_clear': 0,
-    'file_processing': 0,
-    'embedding_generation': 0,
+    privacy_clear: 0,
+    file_processing: 0,
+    embedding_generation: 0,
 
     // Level 1: Data operations (medium priority)
-    'chat_save': 1,
-    'spotify_fetch': 1,
+    chat_save: 1,
+    spotify_fetch: 1,
 
     // Level 2: User operations (lowest priority)
-    'user_message': 2,
-    'user_query': 2
+    user_message: 2,
+    user_query: 2,
 };
 
 /**
@@ -77,18 +77,18 @@ const RESOLUTION_STRATEGIES = {
     QUEUE: 'queue',
 
     // Force: Cancel existing operation (dangerous, use sparingly)
-    FORCE: 'force'
+    FORCE: 'force',
 };
 
 /**
  * Default resolution strategy per operation
  */
 const DEFAULT_RESOLUTIONS = {
-    'file_processing': RESOLUTION_STRATEGIES.QUEUE,
-    'embedding_generation': RESOLUTION_STRATEGIES.QUEUE,
-    'privacy_clear': RESOLUTION_STRATEGIES.ABORT, // Never queue privacy operations
-    'spotify_fetch': RESOLUTION_STRATEGIES.ABORT,
-    'chat_save': RESOLUTION_STRATEGIES.QUEUE
+    file_processing: RESOLUTION_STRATEGIES.QUEUE,
+    embedding_generation: RESOLUTION_STRATEGIES.QUEUE,
+    privacy_clear: RESOLUTION_STRATEGIES.ABORT, // Never queue privacy operations
+    spotify_fetch: RESOLUTION_STRATEGIES.ABORT,
+    chat_save: RESOLUTION_STRATEGIES.QUEUE,
 };
 
 // ==========================================
@@ -97,7 +97,7 @@ const DEFAULT_RESOLUTIONS = {
 
 /**
  * Check if operations can be acquired together
- * 
+ *
  * @param {string|string[]} requestedOperations - Operation(s) to check
  * @param {string[]} [activeOperations] - Currently active operations (auto-detected if not provided)
  * @returns {{
@@ -122,7 +122,7 @@ function canAcquire(requestedOperations, activeOperations = null) {
             allowed: true,
             conflicts: [],
             resolution: null,
-            reason: 'No active operations'
+            reason: 'No active operations',
         };
     }
 
@@ -134,7 +134,7 @@ function canAcquire(requestedOperations, activeOperations = null) {
             allowed: true,
             conflicts: [],
             resolution: null,
-            reason: 'No conflicts detected'
+            reason: 'No conflicts detected',
         };
     }
 
@@ -145,13 +145,13 @@ function canAcquire(requestedOperations, activeOperations = null) {
         allowed: false,
         conflicts,
         resolution,
-        reason: `Blocked by: ${conflicts.join(', ')}`
+        reason: `Blocked by: ${conflicts.join(', ')}`,
     };
 }
 
 /**
  * Find all conflicts between requested and active operations
- * 
+ *
  * @param {string[]} requested - Requested operations
  * @param {string[]} active - Currently active operations
  * @returns {string[]} Array of conflicting operation names
@@ -187,7 +187,7 @@ function findConflicts(requested, active) {
 
 /**
  * Determine the resolution strategy for conflicts
- * 
+ *
  * @param {string[]} requested - Requested operations
  * @param {string[]} conflicts - Conflicting operations
  * @returns {'abort'|'queue'|'force'}
@@ -212,7 +212,11 @@ function determineResolution(requested, conflicts) {
  */
 function getActiveOperations() {
     // Check window.OperationLock first (for test mocks)
-    if (typeof window !== 'undefined' && window.OperationLock && typeof window.OperationLock.getActiveLocks === 'function') {
+    if (
+        typeof window !== 'undefined' &&
+        window.OperationLock &&
+        typeof window.OperationLock.getActiveLocks === 'function'
+    ) {
         return window.OperationLock.getActiveLocks();
     }
     // Fall back to the imported module
@@ -224,7 +228,7 @@ function getActiveOperations() {
 
 /**
  * Get the full conflict matrix (for debugging/testing)
- * 
+ *
  * @returns {Object}
  */
 function getConflictMatrix() {
@@ -233,16 +237,16 @@ function getConflictMatrix() {
     }
 
     return Object.fromEntries(
-        Object.entries(CONFLICT_MATRIX).map(([operation, conflicts]) => ([
+        Object.entries(CONFLICT_MATRIX).map(([operation, conflicts]) => [
             operation,
-            [...conflicts]  // All CONFLICT_MATRIX values are arrays
-        ]))
+            [...conflicts], // All CONFLICT_MATRIX values are arrays
+        ])
     );
 }
 
 /**
  * Check if two specific operations conflict
- * 
+ *
  * @param {string} op1 - First operation
  * @param {string} op2 - Second operation
  * @returns {boolean}
@@ -253,10 +257,12 @@ function operationsConflict(op1, op2) {
     const conflicts1 = CONFLICT_MATRIX[op1] || [];
     const conflicts2 = CONFLICT_MATRIX[op2] || [];
 
-    return conflicts1.includes(op2) ||
+    return (
+        conflicts1.includes(op2) ||
         conflicts1.includes('*') ||
         conflicts2.includes(op1) ||
-        conflicts2.includes('*');
+        conflicts2.includes('*')
+    );
 }
 
 /**
@@ -336,7 +342,7 @@ function canAcquireInOrder(requestedOperations, activeOperations = null) {
                     allowed: false,
                     conflicts: [actOp],
                     resolution: RESOLUTION_STRATEGIES.ABORT,
-                    reason: `Lock hierarchy violation: ${reqOp} (level ${reqLevel}) cannot be acquired after ${actOp} (level ${actLevel})`
+                    reason: `Lock hierarchy violation: ${reqOp} (level ${reqLevel}) cannot be acquired after ${actOp} (level ${actLevel})`,
                 };
             }
         }
@@ -346,7 +352,7 @@ function canAcquireInOrder(requestedOperations, activeOperations = null) {
         allowed: true,
         conflicts: [],
         resolution: null,
-        reason: 'No conflicts and lock hierarchy satisfied'
+        reason: 'No conflicts and lock hierarchy satisfied',
     };
 }
 
@@ -420,7 +426,7 @@ const LockPolicy = {
     RESOLUTION_STRATEGIES,
 
     // For testing
-    _getActiveOperations: getActiveOperations
+    _getActiveOperations: getActiveOperations,
 };
 
 // ES Module export

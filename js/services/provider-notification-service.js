@@ -20,7 +20,7 @@ export const NotificationType = Object.freeze({
     PROVIDER_RECOVERED: 'provider_recovered',
     PROVIDER_ERROR: 'provider_error',
     PROVIDER_BLACKLISTED: 'provider_blacklisted',
-    ALL_PROVIDERS_FAILED: 'all_providers_failed'
+    ALL_PROVIDERS_FAILED: 'all_providers_failed',
 });
 
 /**
@@ -32,7 +32,7 @@ export const NotificationSeverity = Object.freeze({
     INFO: 'info',
     WARNING: 'warning',
     ERROR: 'error',
-    SUCCESS: 'success'
+    SUCCESS: 'success',
 });
 
 /**
@@ -43,7 +43,7 @@ const PROVIDER_NAMES = {
     openrouter: 'OpenRouter',
     ollama: 'Ollama',
     lmstudio: 'LM Studio',
-    fallback: 'Fallback Mode'
+    fallback: 'Fallback Mode',
 };
 
 /**
@@ -122,9 +122,9 @@ export class ProviderNotificationService {
                 toProvider,
                 reason,
                 latencyMs,
-                timestamp: Date.now()
+                timestamp: Date.now(),
             },
-            actions: this._createFallbackActions(fromProvider, toProvider)
+            actions: this._createFallbackActions(fromProvider, toProvider),
         };
 
         this._showNotification(notification);
@@ -160,14 +160,14 @@ export class ProviderNotificationService {
             label: `Switch back to ${PROVIDER_NAMES[fromProvider] || fromProvider}`,
             action: 'switch_provider',
             provider: fromProvider,
-            primary: false
+            primary: false,
         });
 
         // Add "Settings" action
         actions.push({
             label: 'Open Settings',
             action: 'open_settings',
-            primary: true
+            primary: true,
         });
 
         return actions;
@@ -188,16 +188,16 @@ export class ProviderNotificationService {
             message: `${PROVIDER_NAMES[provider] || provider} is back online`,
             details: {
                 provider,
-                timestamp: Date.now()
+                timestamp: Date.now(),
             },
             actions: [
                 {
                     label: `Switch to ${PROVIDER_NAMES[provider] || provider}`,
                     action: 'switch_provider',
                     provider,
-                    primary: true
-                }
-            ]
+                    primary: true,
+                },
+            ],
         };
 
         this._showNotification(notification);
@@ -223,9 +223,9 @@ export class ProviderNotificationService {
                 provider,
                 expiry,
                 durationMs,
-                timestamp: Date.now()
+                timestamp: Date.now(),
             },
-            actions: this._createBlacklistedActions(provider)
+            actions: this._createBlacklistedActions(provider),
         };
 
         this._showNotification(notification);
@@ -247,7 +247,7 @@ export class ProviderNotificationService {
                 label: `Switch to ${PROVIDER_NAMES[altProvider] || altProvider}`,
                 action: 'switch_provider',
                 provider: altProvider,
-                primary: altProvider === 'ollama' // Prefer local providers
+                primary: altProvider === 'ollama', // Prefer local providers
             });
         }
 
@@ -270,9 +270,9 @@ export class ProviderNotificationService {
             details: {
                 provider,
                 error: error?.message || String(error),
-                timestamp: Date.now()
+                timestamp: Date.now(),
             },
-            actions: this._createErrorActions(provider, error)
+            actions: this._createErrorActions(provider, error),
         };
 
         this._showNotification(notification);
@@ -335,7 +335,7 @@ export class ProviderNotificationService {
                         label: 'Start Ollama',
                         action: 'external_link',
                         url: 'https://ollama.com/',
-                        primary: true
+                        primary: true,
                     });
                 }
                 break;
@@ -346,7 +346,7 @@ export class ProviderNotificationService {
                         label: 'Open LM Studio',
                         action: 'external_link',
                         url: 'https://lmstudio.ai/',
-                        primary: true
+                        primary: true,
                     });
                 }
                 break;
@@ -356,7 +356,7 @@ export class ProviderNotificationService {
                     actions.push({
                         label: 'Update API Key',
                         action: 'open_settings',
-                        primary: true
+                        primary: true,
                     });
                 }
                 break;
@@ -369,7 +369,7 @@ export class ProviderNotificationService {
                 label: `Switch to ${PROVIDER_NAMES[altProvider]}`,
                 action: 'switch_provider',
                 provider: altProvider,
-                primary: false
+                primary: false,
             });
         }
 
@@ -396,20 +396,20 @@ export class ProviderNotificationService {
             message: `Unable to connect to any AI provider. Failed: ${failedProviders}`,
             details: {
                 attempts,
-                timestamp: Date.now()
+                timestamp: Date.now(),
             },
             actions: [
                 {
                     label: 'Check Settings',
                     action: 'open_settings',
-                    primary: true
+                    primary: true,
                 },
                 {
                     label: 'Try Again',
                     action: 'retry',
-                    primary: false
-                }
-            ]
+                    primary: false,
+                },
+            ],
         };
 
         this._showNotification(notification);
@@ -461,11 +461,16 @@ export class ProviderNotificationService {
      */
     _getSeverityIcon(severity) {
         switch (severity) {
-            case NotificationSeverity.ERROR: return '❌';
-            case NotificationSeverity.WARNING: return '⚠️';
-            case NotificationSeverity.SUCCESS: return '✅';
-            case NotificationSeverity.INFO: return 'ℹ️';
-            default: return '📢';
+            case NotificationSeverity.ERROR:
+                return '❌';
+            case NotificationSeverity.WARNING:
+                return '⚠️';
+            case NotificationSeverity.SUCCESS:
+                return '✅';
+            case NotificationSeverity.INFO:
+                return 'ℹ️';
+            default:
+                return '📢';
         }
     }
 

@@ -26,11 +26,12 @@ export async function isProviderAvailable(provider) {
         case 'lmstudio':
             // LM Studio has no built-in detection, so check endpoint
             try {
-                const endpoint = Settings?.get?.()?.llm?.lmstudioEndpoint || 'http://localhost:1234/v1';
+                const endpoint =
+                    Settings?.get?.()?.llm?.lmstudioEndpoint || 'http://localhost:1234/v1';
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 5000);
                 const response = await fetch(`${endpoint}/models`, {
-                    signal: controller.signal
+                    signal: controller.signal,
                 });
                 clearTimeout(timeoutId);
                 return response.ok;
@@ -38,7 +39,7 @@ export async function isProviderAvailable(provider) {
                 return false;
             }
 
-        case 'gemini':
+        case 'gemini': {
             // MEDIUM FIX #15: Verify Gemini API key AND connectivity
             // Previously only checked for API key existence, which could lead to
             // users waiting for timeout before discovering the API is unreachable
@@ -50,18 +51,22 @@ export async function isProviderAvailable(provider) {
             try {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 3000);
-                const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/models', {
-                    headers: { 'Authorization': `Bearer ${geminiApiKey}` },
-                    signal: controller.signal
-                });
+                const response = await fetch(
+                    'https://generativelanguage.googleapis.com/v1beta/openai/models',
+                    {
+                        headers: { Authorization: `Bearer ${geminiApiKey}` },
+                        signal: controller.signal,
+                    }
+                );
                 clearTimeout(timeoutId);
                 return response.ok;
             } catch {
                 // Network error or timeout - API key exists but service unreachable
                 return false;
             }
+        }
 
-        case 'openai-compatible':
+        case 'openai-compatible': {
             // Check for apiUrl configuration
             const openaiCompatibleUrl = Settings?.get?.()?.openaiCompatible?.apiUrl;
             if (!openaiCompatibleUrl) {
@@ -71,22 +76,26 @@ export async function isProviderAvailable(provider) {
             try {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 3000);
-                const response = await fetch(openaiCompatibleUrl.replace('/chat/completions', '/models'), {
-                    signal: controller.signal
-                });
+                const response = await fetch(
+                    openaiCompatibleUrl.replace('/chat/completions', '/models'),
+                    {
+                        signal: controller.signal,
+                    }
+                );
                 clearTimeout(timeoutId);
                 // Accept 200, 401 (auth works but no key), or 404 (no /models endpoint)
                 return response.ok || response.status === 401 || response.status === 404;
             } catch {
                 return false;
             }
+        }
 
         case 'openrouter':
-        default:
+        default: {
             // MEDIUM FIX #15: Verify OpenRouter API key AND connectivity
             // Previously only checked for API key existence
-            const apiKey = Settings?.get?.()?.openrouter?.apiKey ||
-                ConfigLoader.get('openrouter.apiKey');
+            const apiKey =
+                Settings?.get?.()?.openrouter?.apiKey || ConfigLoader.get('openrouter.apiKey');
             if (!apiKey) {
                 return false;
             }
@@ -95,8 +104,8 @@ export async function isProviderAvailable(provider) {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 3000);
                 const response = await fetch('https://openrouter.ai/api/v1/models', {
-                    headers: { 'Authorization': `Bearer ${apiKey}` },
-                    signal: controller.signal
+                    headers: { Authorization: `Bearer ${apiKey}` },
+                    signal: controller.signal,
                 });
                 clearTimeout(timeoutId);
                 return response.ok;
@@ -104,6 +113,7 @@ export async function isProviderAvailable(provider) {
                 // Network error or timeout - API key exists but service unreachable
                 return false;
             }
+        }
     }
 }
 
@@ -114,9 +124,9 @@ export async function isProviderAvailable(provider) {
 export async function getAvailableProviders() {
     const providers = ['openrouter', 'ollama', 'lmstudio', 'gemini', 'openai-compatible'];
     const results = await Promise.all(
-        providers.map(async (name) => ({
+        providers.map(async name => ({
             name,
-            available: await isProviderAvailable(name)
+            available: await isProviderAvailable(name),
         }))
     );
     return results;

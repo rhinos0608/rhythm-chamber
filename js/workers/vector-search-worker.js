@@ -33,7 +33,7 @@
 /**
  * Compute cosine similarity between two vectors
  * Optimized for performance with large vector sets
- * 
+ *
  * @param {number[]} a - First vector
  * @param {number[]} b - Second vector
  * @returns {number} Similarity score between -1 and 1
@@ -87,7 +87,7 @@ function searchVectors(queryVector, vectors, limit, threshold) {
             results.push({
                 id: item.id,
                 score,
-                payload: item.payload
+                payload: item.payload,
             });
         }
     }
@@ -110,7 +110,13 @@ function searchVectors(queryVector, vectors, limit, threshold) {
  * @returns {Array<{id, score, payload}>} Sorted by similarity descending
  */
 function searchVectorsShared(queryVector, sharedVectors, payloads, dimensions, limit, threshold) {
-    if (!queryVector || queryVector.length === 0 || !sharedVectors || !payloads || payloads.length === 0) {
+    if (
+        !queryVector ||
+        queryVector.length === 0 ||
+        !sharedVectors ||
+        !payloads ||
+        payloads.length === 0
+    ) {
         return [];
     }
 
@@ -121,7 +127,9 @@ function searchVectorsShared(queryVector, sharedVectors, payloads, dimensions, l
 
     // Validate query vector dimension consistency
     if (queryVector.length !== dimensions) {
-        throw new Error(`Query vector dimension mismatch. Expected ${dimensions}, got ${queryVector.length}`);
+        throw new Error(
+            `Query vector dimension mismatch. Expected ${dimensions}, got ${queryVector.length}`
+        );
     }
 
     // Validate query vector content
@@ -140,7 +148,9 @@ function searchVectorsShared(queryVector, sharedVectors, payloads, dimensions, l
     const expectedLen = payloads.length * dimensions;
     const vectorArray = new Float32Array(sharedVectors);
     if (vectorArray.length < expectedLen) {
-        throw new Error(`Shared buffer too small. Expected ${expectedLen} floats, got ${vectorArray.length}`);
+        throw new Error(
+            `Shared buffer too small. Expected ${expectedLen} floats, got ${vectorArray.length}`
+        );
     }
 
     const vectorCount = payloads.length;
@@ -152,7 +162,9 @@ function searchVectorsShared(queryVector, sharedVectors, payloads, dimensions, l
 
         // Bounds check before subarray operation
         if (offset + dimensions > vectorArray.length) {
-            throw new Error(`Buffer overflow prevented at vector index ${i}. Offset: ${offset + dimensions}, Buffer length: ${vectorArray.length}`);
+            throw new Error(
+                `Buffer overflow prevented at vector index ${i}. Offset: ${offset + dimensions}, Buffer length: ${vectorArray.length}`
+            );
         }
 
         const vector = vectorArray.subarray(offset, offset + dimensions);
@@ -163,7 +175,7 @@ function searchVectorsShared(queryVector, sharedVectors, payloads, dimensions, l
             results.push({
                 id: payloads[i].id,
                 score,
-                payload: payloads[i].payload
+                payload: payloads[i].payload,
             });
         }
     }
@@ -203,7 +215,7 @@ self.onmessage = function (event) {
             self.postMessage({
                 type: 'error',
                 id: id || 'unknown',
-                message: `Unknown command type: ${type}`
+                message: `Unknown command type: ${type}`,
             });
     }
 };
@@ -233,14 +245,14 @@ function handleSearch(id, { queryVector, vectors, limit = 5, threshold = 0.5 }) 
             stats: {
                 vectorCount: vectors?.length || 0,
                 resultCount: results.length,
-                elapsedMs: Math.round(elapsed * 100) / 100
-            }
+                elapsedMs: Math.round(elapsed * 100) / 100,
+            },
         });
     } catch (error) {
         self.postMessage({
             type: 'error',
             id,
-            message: error.message || 'Search failed'
+            message: error.message || 'Search failed',
         });
     }
 }
@@ -257,7 +269,10 @@ function handleSearch(id, { queryVector, vectors, limit = 5, threshold = 0.5 }) 
  * @param {number} params.limit - Max results
  * @param {number} params.threshold - Min score
  */
-function handleSearchShared(id, { queryVector, sharedVectors, payloads, dimensions, limit = 5, threshold = 0.5 }) {
+function handleSearchShared(
+    id,
+    { queryVector, sharedVectors, payloads, dimensions, limit = 5, threshold = 0.5 }
+) {
     try {
         // Validate parameters before calling searchVectorsShared
         if (!queryVector || !Array.isArray(queryVector)) {
@@ -278,7 +293,9 @@ function handleSearchShared(id, { queryVector, sharedVectors, payloads, dimensio
 
         // Validate query vector dimension consistency
         if (queryVector.length !== dimensions) {
-            throw new Error(`Query vector dimension mismatch. Expected ${dimensions}, got ${queryVector.length}`);
+            throw new Error(
+                `Query vector dimension mismatch. Expected ${dimensions}, got ${queryVector.length}`
+            );
         }
 
         // Validate limit and threshold ranges
@@ -299,7 +316,14 @@ function handleSearchShared(id, { queryVector, sharedVectors, payloads, dimensio
 
         const startTime = performance.now();
 
-        const results = searchVectorsShared(queryVector, sharedVectors, payloads, dimensions, limit, threshold);
+        const results = searchVectorsShared(
+            queryVector,
+            sharedVectors,
+            payloads,
+            dimensions,
+            limit,
+            threshold
+        );
 
         const elapsed = performance.now() - startTime;
 
@@ -311,14 +335,14 @@ function handleSearchShared(id, { queryVector, sharedVectors, payloads, dimensio
                 vectorCount: payloads?.length || 0,
                 resultCount: results.length,
                 elapsedMs: Math.round(elapsed * 100) / 100,
-                sharedMemory: true
-            }
+                sharedMemory: true,
+            },
         });
     } catch (error) {
         self.postMessage({
             type: 'error',
             id,
-            message: `Shared search validation failed: ${error.message}`
+            message: `Shared search validation failed: ${error.message}`,
         });
     }
 }

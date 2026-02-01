@@ -1,9 +1,9 @@
 /**
  * Spotify Data Parser Facade
- * 
+ *
  * This module acts as a facade that delegates all parsing work to a Web Worker.
  * The actual parsing logic lives in js/parser-worker.js.
- * 
+ *
  * @module parser
  */
 
@@ -43,18 +43,18 @@ function terminateWorker() {
 /**
  * Parse a Spotify data export file (.zip or .json)
  * Delegates to Web Worker for off-main-thread processing.
- * 
+ *
  * @param {File} file - The .zip or .json file
  * @param {Function} onProgress - Progress callback (message: string)
  * @param {Array} existingStreams - Optional existing streams for overlap detection
  * @returns {Promise<{streams: Array, chunks: Array, stats: Object}>}
  */
-async function parseSpotifyExport(file, onProgress = () => { }, existingStreams = null) {
+async function parseSpotifyExport(file, onProgress = () => {}, existingStreams = null) {
     return new Promise((resolve, reject) => {
         const worker = getWorker();
 
         // Set up message handler
-        const messageHandler = (e) => {
+        const messageHandler = e => {
             const { type, message, streams, chunks, stats, error, overlap } = e.data;
 
             switch (type) {
@@ -92,7 +92,9 @@ async function parseSpotifyExport(file, onProgress = () => { }, existingStreams 
                     // For now, auto-merge (use unique new streams)
                     // In future, could surface this to UI for user decision
                     console.log('[Parser] Overlap detected:', overlap);
-                    onProgress(`Overlap detected: ${overlap.stats.exactDuplicates} duplicates, ${overlap.stats.uniqueNew} new`);
+                    onProgress(
+                        `Overlap detected: ${overlap.stats.exactDuplicates} duplicates, ${overlap.stats.uniqueNew} new`
+                    );
                     // Re-parse with merge strategy by not passing existingStreams
                     worker.postMessage({ type: 'parse', file, existingStreams: null });
                     break;
@@ -111,7 +113,7 @@ async function parseSpotifyExport(file, onProgress = () => { }, existingStreams 
             }
         };
 
-        const errorHandler = (error) => {
+        const errorHandler = error => {
             worker.removeEventListener('message', messageHandler);
             worker.removeEventListener('error', errorHandler);
             reject(new Error(`Worker error: ${error.message}`));
@@ -129,7 +131,7 @@ async function parseSpotifyExport(file, onProgress = () => { }, existingStreams 
  * Enrich streams with derived metrics.
  * NOTE: This is primarily done in the worker. This function is provided
  * for backwards compatibility if needed for post-processing.
- * 
+ *
  * @param {Array} streams - Parsed streams
  * @returns {Array} Enriched streams
  */
@@ -148,9 +150,8 @@ function enrichStreams(streams) {
     return streams.map(stream => {
         const key = `${stream.trackName}::${stream.artistName}`;
         const estimatedDuration = trackDurations[key] || stream.msPlayed;
-        const completionRate = estimatedDuration > 0
-            ? Math.min(stream.msPlayed / estimatedDuration, 1)
-            : 0;
+        const completionRate =
+            estimatedDuration > 0 ? Math.min(stream.msPlayed / estimatedDuration, 1) : 0;
 
         // Determine play type
         let playType = 'full';
@@ -170,7 +171,7 @@ function enrichStreams(streams) {
             dayOfWeek: date.getDay(),
             month: date.getMonth(),
             year: date.getFullYear(),
-            date: date.toISOString().split('T')[0]
+            date: date.toISOString().split('T')[0],
         };
     });
 }
@@ -179,7 +180,7 @@ function enrichStreams(streams) {
  * Generate weekly and monthly listening chunks.
  * NOTE: This is primarily done in the worker. This function is provided
  * for backwards compatibility if needed for post-processing.
- * 
+ *
  * @param {Array} streams - Enriched streams
  * @returns {Array} Weekly and monthly chunks
  */
@@ -200,7 +201,7 @@ function generateChunks(streams) {
                 streams: [],
                 artists: new Set(),
                 tracks: new Set(),
-                totalMs: 0
+                totalMs: 0,
             };
         }
 
@@ -220,7 +221,7 @@ function generateChunks(streams) {
                 streams: [],
                 artists: new Set(),
                 tracks: new Set(),
-                totalMs: 0
+                totalMs: 0,
             };
         }
 
@@ -231,24 +232,25 @@ function generateChunks(streams) {
     }
 
     // Convert Sets to counts and generate summaries
-    const processChunk = (chunk) => ({
+    const processChunk = chunk => ({
         ...chunk,
         streamCount: chunk.streams.length,
         uniqueArtists: chunk.artists.size,
         uniqueTracks: chunk.tracks.size,
         topArtists: getTopN(chunk.streams, 'artistName', 5),
         topTracks: getTopN(chunk.streams, s => `${s.trackName} - ${s.artistName}`, 5),
-        avgCompletionRate: chunk.streams.length > 0
-            ? chunk.streams.reduce((sum, s) => sum + s.completionRate, 0) / chunk.streams.length
-            : 0,
+        avgCompletionRate:
+            chunk.streams.length > 0
+                ? chunk.streams.reduce((sum, s) => sum + s.completionRate, 0) / chunk.streams.length
+                : 0,
         artists: [...chunk.artists],
         tracks: [...chunk.tracks],
-        summary: generateChunkSummary(chunk)
+        summary: generateChunkSummary(chunk),
     });
 
     return [
         ...Object.values(weeklyChunks).map(processChunk),
-        ...Object.values(monthlyChunks).map(processChunk)
+        ...Object.values(monthlyChunks).map(processChunk),
     ];
 }
 
@@ -260,9 +262,11 @@ function generateChunkSummary(chunk) {
     const period = chunk.type === 'weekly' ? 'week' : 'month';
     const hours = Math.round(chunk.totalMs / 3600000);
 
-    return `During the ${period} of ${chunk.startDate}, listened to ${hours} hours of music. ` +
+    return (
+        `During the ${period} of ${chunk.startDate}, listened to ${hours} hours of music. ` +
         `Top artists: ${topArtists.join(', ')}. ` +
-        `${chunk.artists.size} unique artists, ${chunk.tracks.size} unique tracks.`;
+        `${chunk.artists.size} unique artists, ${chunk.tracks.size} unique tracks.`
+    );
 }
 
 /**
@@ -301,8 +305,7 @@ export const Parser = {
     parseSpotifyExport,
     enrichStreams,
     generateChunks,
-    terminateWorker
+    terminateWorker,
 };
-
 
 console.log('[Parser] Facade module loaded (delegates to parser-worker.js)');

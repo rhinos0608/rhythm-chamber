@@ -24,20 +24,20 @@ export const RETRY_CONFIG = {
     BASE_DELAY_MS: 1000,
     MAX_DELAY_MS: 30000,
     JITTER_MS: 200,
-    EXPONENTIAL_BASE: 2
+    EXPONENTIAL_BASE: 2,
 };
 
 /**
  * Error types classified for retry behavior
  */
 export const ErrorType = {
-    TRANSIENT: 'transient',           // Network glitches, timeouts - retry with backoff
-    RATE_LIMIT: 'rate_limit',        // 429 - retry with longer delays
-    SERVER_ERROR: 'server_error',    // 5xx - retry with backoff
-    CLIENT_ERROR: 'client_error',    // 4xx (except 429) - don't retry
-    AUTHENTICATION: 'auth',          // 401/403 - don't retry, needs user action
-    CIRCUIT_OPEN: 'circuit_open',     // Circuit breaker open - don't retry
-    UNKNOWN: 'unknown'               // Default to transient
+    TRANSIENT: 'transient', // Network glitches, timeouts - retry with backoff
+    RATE_LIMIT: 'rate_limit', // 429 - retry with longer delays
+    SERVER_ERROR: 'server_error', // 5xx - retry with backoff
+    CLIENT_ERROR: 'client_error', // 4xx (except 429) - don't retry
+    AUTHENTICATION: 'auth', // 401/403 - don't retry, needs user action
+    CIRCUIT_OPEN: 'circuit_open', // Circuit breaker open - don't retry
+    UNKNOWN: 'unknown', // Default to transient
 };
 
 /**
@@ -70,8 +70,12 @@ export function classifyError(error) {
     }
 
     // Server errors
-    if (message.includes('500') || message.includes('502') ||
-        message.includes('503') || message.includes('504')) {
+    if (
+        message.includes('500') ||
+        message.includes('502') ||
+        message.includes('503') ||
+        message.includes('504')
+    ) {
         return ErrorType.SERVER_ERROR;
     }
 
@@ -79,8 +83,12 @@ export function classifyError(error) {
     if (name === 'TypeError' && message.includes('fetch')) {
         return ErrorType.TRANSIENT;
     }
-    if (message.includes('network') || message.includes('econnrefused') ||
-        message.includes('etimedout') || message.includes('connection')) {
+    if (
+        message.includes('network') ||
+        message.includes('econnrefused') ||
+        message.includes('etimedout') ||
+        message.includes('connection')
+    ) {
         return ErrorType.TRANSIENT;
     }
 
@@ -136,7 +144,7 @@ export function calculateBackoffForError(attempt, error, config = RETRY_CONFIG) 
         const rateLimitConfig = {
             ...config,
             BASE_DELAY_MS: Math.max(config.BASE_DELAY_MS, 5000), // Minimum 5s
-            JITTER_MS: 1000 // More jitter for rate limits
+            JITTER_MS: 1000, // More jitter for rate limits
         };
         return calculateBackoff(attempt, rateLimitConfig);
     }
@@ -194,7 +202,7 @@ export class RetryContext {
             succeeded: this.attempt > 0 && !this.lastError,
             elapsedTime: this.elapsedTime,
             delays: [...this.delays],
-            totalDelayTime: this.delays.reduce((sum, d) => sum + d, 0)
+            totalDelayTime: this.delays.reduce((sum, d) => sum + d, 0),
         };
     }
 }
@@ -217,7 +225,7 @@ export async function withRetry(fn, options = {}) {
         onRetry = null,
         shouldRetry = null,
         config = RETRY_CONFIG,
-        abortSignal = null
+        abortSignal = null,
     } = options;
 
     const context = new RetryContext(maxRetries, config);
@@ -261,7 +269,7 @@ export async function withRetry(fn, options = {}) {
             const errorType = classifyError(error);
             console.log(
                 `[ResilientRetry] Retry ${context.attempt}/${maxRetries} after ${backoff}ms ` +
-                `(type: ${errorType}, elapsed: ${context.elapsedTime}ms)`
+                    `(type: ${errorType}, elapsed: ${context.elapsedTime}ms)`
             );
 
             // Wait before retry
@@ -325,10 +333,9 @@ export async function withFallback(fns, options = {}) {
 
             // If this is the last function, throw
             if (i === fns.length - 1) {
-                throw new Error(
-                    `All fallbacks exhausted. Last error: ${error.message}`,
-                    { cause: error }
-                );
+                throw new Error(`All fallbacks exhausted. Last error: ${error.message}`, {
+                    cause: error,
+                });
             }
         }
     }
@@ -347,11 +354,13 @@ export const networkRetryStrategy = {
         BASE_DELAY_MS: 1000,
         MAX_DELAY_MS: 10000,
         JITTER_MS: 200,
-        EXPONENTIAL_BASE: 2
+        EXPONENTIAL_BASE: 2,
     },
     onRetry: (error, attempt, delay) => {
-        console.log(`[Network] Retrying request (attempt ${attempt}) in ${delay}ms: ${error.message}`);
-    }
+        console.log(
+            `[Network] Retrying request (attempt ${attempt}) in ${delay}ms: ${error.message}`
+        );
+    },
 };
 
 /**
@@ -363,11 +372,13 @@ export const databaseRetryStrategy = {
         BASE_DELAY_MS: 500,
         MAX_DELAY_MS: 5000,
         JITTER_MS: 100,
-        EXPONENTIAL_BASE: 2
+        EXPONENTIAL_BASE: 2,
     },
     onRetry: (error, attempt, delay) => {
-        console.log(`[Database] Retrying operation (attempt ${attempt}) in ${delay}ms: ${error.message}`);
-    }
+        console.log(
+            `[Database] Retrying operation (attempt ${attempt}) in ${delay}ms: ${error.message}`
+        );
+    },
 };
 
 /**
@@ -379,11 +390,13 @@ export const workerRetryStrategy = {
         BASE_DELAY_MS: 2000,
         MAX_DELAY_MS: 15000,
         JITTER_MS: 500,
-        EXPONENTIAL_BASE: 2
+        EXPONENTIAL_BASE: 2,
     },
     onRetry: (error, attempt, delay) => {
-        console.log(`[Worker] Retrying initialization (attempt ${attempt}) in ${delay}ms: ${error.message}`);
-    }
+        console.log(
+            `[Worker] Retrying initialization (attempt ${attempt}) in ${delay}ms: ${error.message}`
+        );
+    },
 };
 
 /**
@@ -395,7 +408,7 @@ export const providerRetryStrategy = {
         BASE_DELAY_MS: 1000,
         MAX_DELAY_MS: 30000,
         JITTER_MS: 200,
-        EXPONENTIAL_BASE: 2
+        EXPONENTIAL_BASE: 2,
     },
     shouldRetry: (error, attempt) => {
         // Don't retry if circuit is open
@@ -409,8 +422,10 @@ export const providerRetryStrategy = {
         return attempt < 3; // Max 3 retries
     },
     onRetry: (error, attempt, delay) => {
-        console.log(`[Provider] Retrying call (attempt ${attempt}) in ${delay}ms: ${error.message}`);
-    }
+        console.log(
+            `[Provider] Retrying call (attempt ${attempt}) in ${delay}ms: ${error.message}`
+        );
+    },
 };
 
 // Export default
@@ -429,7 +444,7 @@ export default {
     networkRetryStrategy,
     databaseRetryStrategy,
     workerRetryStrategy,
-    providerRetryStrategy
+    providerRetryStrategy,
 };
 
 console.log('[ResilientRetry] Module loaded with unified retry strategies');

@@ -66,11 +66,13 @@ function init(dependencies) {
  * @returns {Object} Provider configuration
  */
 function buildProviderConfig(provider, settings, config) {
-    return _LLMProviderRoutingService?.buildProviderConfig?.(provider, settings, config) || {
-        provider: provider,
-        model: settings.llm?.model || 'default',
-        baseUrl: settings[provider]?.baseUrl || ''
-    };
+    return (
+        _LLMProviderRoutingService?.buildProviderConfig?.(provider, settings, config) || {
+            provider: provider,
+            model: settings.llm?.model || 'default',
+            baseUrl: settings[provider]?.baseUrl || '',
+        }
+    );
 }
 
 /**
@@ -111,7 +113,7 @@ function calculateTokenUsage(params) {
             total: 0,
             contextWindow: 4000,
             usagePercent: 0,
-            warnings: []
+            warnings: [],
         };
     }
 
@@ -169,7 +171,9 @@ const DEFAULT_LLM_TIMEOUT = 60000;
  */
 async function callLLM(providerConfig, apiKey, messages, tools, onProgress, signal, options = {}) {
     if (!_LLMProviderRoutingService?.callLLM) {
-        throw new Error('LLMProviderRoutingService not loaded. Ensure provider modules are included before chat initialization.');
+        throw new Error(
+            'LLMProviderRoutingService not loaded. Ensure provider modules are included before chat initialization.'
+        );
     }
 
     const provider = providerConfig.provider || 'unknown';
@@ -182,15 +186,17 @@ async function callLLM(providerConfig, apiKey, messages, tools, onProgress, sign
     if (!signal) {
         timeoutPromise = new Promise((_, reject) => {
             timeoutId = setTimeout(() => {
-                reject(new TimeoutError('LLM API call timed out', {
-                    timeout,
-                    operation: 'callLLM',
-                    provider,
-                    timeoutType: TimeoutType.READ,
-                    retryable: true,
-                    retryAfter: 2000,
-                    isLocalProvider: isLocalProvider(provider)
-                }));
+                reject(
+                    new TimeoutError('LLM API call timed out', {
+                        timeout,
+                        operation: 'callLLM',
+                        provider,
+                        timeoutType: TimeoutType.READ,
+                        retryable: true,
+                        retryAfter: 2000,
+                        isLocalProvider: isLocalProvider(provider),
+                    })
+                );
             }, timeout);
         });
     }
@@ -199,10 +205,24 @@ async function callLLM(providerConfig, apiKey, messages, tools, onProgress, sign
         // Race between LLM call and timeout
         const response = timeoutPromise
             ? await Promise.race([
-                _LLMProviderRoutingService.callLLM(providerConfig, apiKey, messages, tools, onProgress, signal),
-                timeoutPromise
+                _LLMProviderRoutingService.callLLM(
+                    providerConfig,
+                    apiKey,
+                    messages,
+                    tools,
+                    onProgress,
+                    signal
+                ),
+                timeoutPromise,
             ])
-            : await _LLMProviderRoutingService.callLLM(providerConfig, apiKey, messages, tools, onProgress, signal);
+            : await _LLMProviderRoutingService.callLLM(
+                providerConfig,
+                apiKey,
+                messages,
+                tools,
+                onProgress,
+                signal
+            );
 
         if (timeoutId) clearTimeout(timeoutId);
 
@@ -225,14 +245,17 @@ async function callLLM(providerConfig, apiKey, messages, tools, onProgress, sign
 
         // Wrap other errors with additional context if they appear to be timeout-related
         const errorMessage = error instanceof Error ? error.message : String(error);
-        if (errorMessage.toLowerCase().includes('timeout') || errorMessage.toLowerCase().includes('timed out')) {
+        if (
+            errorMessage.toLowerCase().includes('timeout') ||
+            errorMessage.toLowerCase().includes('timed out')
+        ) {
             throw new TimeoutError('LLM API call timed out', {
                 timeout: Date.now() - llmCallStart,
                 operation: 'callLLM',
                 provider,
                 timeoutType: TimeoutType.READ,
                 retryable: true,
-                retryAfter: 2000
+                retryAfter: 2000,
             });
         }
 
@@ -299,7 +322,7 @@ const LLMApiOrchestrator = {
     TimeoutType,
     isTimeoutError,
     getUserMessage,
-    DEFAULT_LLM_TIMEOUT
+    DEFAULT_LLM_TIMEOUT,
 };
 
 // ES Module export

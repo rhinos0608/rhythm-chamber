@@ -16,9 +16,9 @@
  */
 export const TimeoutType = {
     CONNECTION: 'connection', // Failed to establish connection
-    READ: 'read',           // Timeout while reading response
-    WRITE: 'write',         // Timeout while sending request
-    GENERAL: 'general'      // General/unknown timeout
+    READ: 'read', // Timeout while reading response
+    WRITE: 'write', // Timeout while sending request
+    GENERAL: 'general', // General/unknown timeout
 };
 
 /**
@@ -29,7 +29,7 @@ const TIMEOUT_TYPE_LABELS = {
     [TimeoutType.CONNECTION]: 'Connection',
     [TimeoutType.READ]: 'Read',
     [TimeoutType.WRITE]: 'Write',
-    [TimeoutType.GENERAL]: 'Request'
+    [TimeoutType.GENERAL]: 'Request',
 };
 
 /**
@@ -177,7 +177,7 @@ export class TimeoutError extends Error {
             retryAfter: this.retryAfter,
             timeoutType: this.timeoutType,
             isLocalProvider: this.isLocalProvider,
-            stack: this.stack
+            stack: this.stack,
         };
     }
 
@@ -191,10 +191,10 @@ export class TimeoutError extends Error {
      * @returns {TimeoutError}
      */
     static connection(options = {}) {
-        return new TimeoutError(
-            options.message || 'Connection timed out',
-            { ...options, timeoutType: TimeoutType.CONNECTION }
-        );
+        return new TimeoutError(options.message || 'Connection timed out', {
+            ...options,
+            timeoutType: TimeoutType.CONNECTION,
+        });
     }
 
     /**
@@ -203,10 +203,10 @@ export class TimeoutError extends Error {
      * @returns {TimeoutError}
      */
     static read(options = {}) {
-        return new TimeoutError(
-            options.message || 'Read operation timed out',
-            { ...options, timeoutType: TimeoutType.READ }
-        );
+        return new TimeoutError(options.message || 'Read operation timed out', {
+            ...options,
+            timeoutType: TimeoutType.READ,
+        });
     }
 
     /**
@@ -215,10 +215,10 @@ export class TimeoutError extends Error {
      * @returns {TimeoutError}
      */
     static write(options = {}) {
-        return new TimeoutError(
-            options.message || 'Write operation timed out',
-            { ...options, timeoutType: TimeoutType.WRITE }
-        );
+        return new TimeoutError(options.message || 'Write operation timed out', {
+            ...options,
+            timeoutType: TimeoutType.WRITE,
+        });
     }
 
     /**
@@ -227,10 +227,10 @@ export class TimeoutError extends Error {
      * @returns {TimeoutError}
      */
     static general(options = {}) {
-        return new TimeoutError(
-            options.message || 'Request timed out',
-            { ...options, timeoutType: TimeoutType.GENERAL }
-        );
+        return new TimeoutError(options.message || 'Request timed out', {
+            ...options,
+            timeoutType: TimeoutType.GENERAL,
+        });
     }
 
     /**
@@ -246,21 +246,16 @@ export class TimeoutError extends Error {
 
         // If already a TimeoutError, just merge options
         if (error instanceof TimeoutError) {
-            return new TimeoutError(
-                error.message,
-                { ...error.toJSON(), ...options }
-            );
+            return new TimeoutError(error.message, { ...error.toJSON(), ...options });
         }
 
         // Check if error message indicates timeout
-        const isTimeout = error.message.toLowerCase().includes('timeout') ||
-                         error.message.toLowerCase().includes('timed out');
+        const isTimeout =
+            error.message.toLowerCase().includes('timeout') ||
+            error.message.toLowerCase().includes('timed out');
 
         if (isTimeout) {
-            return new TimeoutError(
-                error.message,
-                { timeout: 60000, ...options }
-            );
+            return new TimeoutError(error.message, { timeout: 60000, ...options });
         }
 
         return null;
@@ -330,7 +325,7 @@ export function getUserMessage(error) {
      * @param {TimeoutType} type - Timeout type
      * @returns {string} Description
      */
-    const getTimeoutDescription = (type) => {
+    const getTimeoutDescription = type => {
         switch (type) {
             case TimeoutType.CONNECTION:
                 return 'connecting to the server';
@@ -406,7 +401,7 @@ export default {
     TimeoutType,
     isTimeoutError,
     getUserMessage,
-    formatTimeoutDuration
+    formatTimeoutDuration,
 };
 
 console.log('[TimeoutError] Module loaded with enhanced timeout error support');

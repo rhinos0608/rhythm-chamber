@@ -100,7 +100,9 @@ export class RecoveryLockManager {
     async validateRecoveryState(request) {
         if (!this._stateMachine) {
             // Allow recovery if state machine unavailable (defensive)
-            console.warn('[RecoveryLockManager] StateMachine unavailable, skipping state validation');
+            console.warn(
+                '[RecoveryLockManager] StateMachine unavailable, skipping state validation'
+            );
             return;
         }
 
@@ -125,7 +127,7 @@ export class RecoveryLockManager {
         this._eventBus.emit('RECOVERY:STARTED', {
             recoveryId: request.id,
             tabId: request.tabId,
-            domain: request.domain
+            domain: request.domain,
         });
     }
 
@@ -145,10 +147,12 @@ export class RecoveryLockManager {
 
         // HNW Hierarchy: Check delegation attempts limit
         if (request.delegationAttempts >= request.maxDelegations) {
-            console.warn(`[RecoveryLockManager] Max delegations (${request.maxDelegations}) reached for recovery ${request.id}`);
+            console.warn(
+                `[RecoveryLockManager] Max delegations (${request.maxDelegations}) reached for recovery ${request.id}`
+            );
             this._eventBus.emit('RECOVERY:DELEGATION_EXHAUSTED', {
                 recoveryId: request.id,
-                attempts: request.delegationAttempts
+                attempts: request.delegationAttempts,
             });
             return { delegated: false, reason: 'max_delegations_reached' };
         }
@@ -175,26 +179,27 @@ export class RecoveryLockManager {
                     // HNW Hierarchy: Pass TTL and delegation tracking
                     expiresAt: request.expiresAt,
                     delegationAttempts: request.delegationAttempts,
-                    maxDelegations: request.maxDelegations
+                    maxDelegations: request.maxDelegations,
                 },
                 vectorClock,
                 sourceTabId: this._tabCoordinator.getTabId(),
-                delegatedAt: Date.now()
+                delegatedAt: Date.now(),
             };
 
             channel.postMessage(delegationMessage);
             channel.close();
 
-            console.log(`[RecoveryLockManager] Delegated recovery ${request.id} to leader tab (attempt ${request.delegationAttempts}/${request.maxDelegations})`);
+            console.log(
+                `[RecoveryLockManager] Delegated recovery ${request.id} to leader tab (attempt ${request.delegationAttempts}/${request.maxDelegations})`
+            );
 
             this._eventBus.emit('RECOVERY:DELEGATED', {
                 recoveryId: request.id,
                 sourceTabId: this._tabCoordinator.getTabId(),
-                delegationAttempt: request.delegationAttempts
+                delegationAttempt: request.delegationAttempts,
             });
 
             return { delegated: true, reason: 'delegated_to_leader' };
-
         } catch (error) {
             console.warn('[RecoveryLockManager] Failed to broadcast recovery:', error);
             return { delegated: false, reason: 'broadcast_failed' };
@@ -226,10 +231,12 @@ export class RecoveryLockManager {
             ...message.request,
             error: new Error(message.request.error),
             tabId: message.sourceTabId,
-            dependencies: []
+            dependencies: [],
         };
 
-        console.log(`[RecoveryLockManager] Processing delegated recovery from tab ${message.sourceTabId}`);
+        console.log(
+            `[RecoveryLockManager] Processing delegated recovery from tab ${message.sourceTabId}`
+        );
 
         // Emit event for coordinator to process
         this._eventBus.emit('RECOVERY:DELEGATED_REQUEST', { request });
@@ -269,13 +276,15 @@ export class RecoveryLockManager {
      */
     setupDelegationListener() {
         if (typeof BroadcastChannel === 'undefined') {
-            console.log('[RecoveryLockManager] BroadcastChannel not available, skipping delegation listener');
+            console.log(
+                '[RecoveryLockManager] BroadcastChannel not available, skipping delegation listener'
+            );
             return;
         }
 
         try {
             this._recoveryChannel = new BroadcastChannel('rhythm_chamber_recovery');
-            this._recoveryChannel.onmessage = async (event) => {
+            this._recoveryChannel.onmessage = async event => {
                 if (event.data?.type === 'RECOVERY_DELEGATION') {
                     await this.handleDelegatedRecovery(event.data);
                 }

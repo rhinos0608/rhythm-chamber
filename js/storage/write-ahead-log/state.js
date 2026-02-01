@@ -14,14 +14,14 @@ import { WalStatus } from './config.js';
  * Encapsulates all mutable state for the WAL system
  */
 export const walState = {
-    entries: [],               // Array of WAL entries
-    sequence: 0,               // Current sequence number
-    isProcessing: false,       // Is WAL being processed
-    isReplaying: false,        // Is WAL being replayed
-    lastReplayTime: 0,         // Last time WAL was replayed
-    batchTimeout: null,        // Batch processing timeout
-    cleanupInterval: null,     // Cleanup interval
-    operationResults: new Map() // Track operation results for crash recovery
+    entries: [], // Array of WAL entries
+    sequence: 0, // Current sequence number
+    isProcessing: false, // Is WAL being processed
+    isReplaying: false, // Is WAL being replayed
+    lastReplayTime: 0, // Last time WAL was replayed
+    batchTimeout: null, // Batch processing timeout
+    cleanupInterval: null, // Cleanup interval
+    operationResults: new Map(), // Track operation results for crash recovery
 };
 
 /**

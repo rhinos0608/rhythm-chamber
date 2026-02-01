@@ -29,7 +29,7 @@ export const INDEXEDDB_STORES = {
     DEMO_PATTERNS: 'demo_patterns',
     DEMO_PERSONALITY: 'demo_personality',
     TRANSACTION_JOURNAL: 'TRANSACTION_JOURNAL',
-    TRANSACTION_COMPENSATION: 'TRANSACTION_COMPENSATION'
+    TRANSACTION_COMPENSATION: 'TRANSACTION_COMPENSATION',
 };
 
 // Connection retry configuration
@@ -37,7 +37,7 @@ export const CONNECTION_CONFIG = {
     maxRetries: 3,
     baseDelayMs: 500,
     maxDelayMs: 5000,
-    backoffMultiplier: 2
+    backoffMultiplier: 2,
 };
 
 // Write authority configuration (HNW)
@@ -49,10 +49,10 @@ export const AUTHORITY_CONFIG = {
     exemptStores: new Set(['migration']),
 
     // Whether to throw or just warn on authority violation
-    strictMode: false
+    strictMode: false,
 };
 
 // Request timeout configuration
 export const REQUEST_CONFIG = {
-    defaultTimeoutMs: 5000
+    defaultTimeoutMs: 5000,
 };

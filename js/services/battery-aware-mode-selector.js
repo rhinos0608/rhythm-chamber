@@ -1,16 +1,16 @@
 /**
  * Battery-Aware Mode Selector Service
- * 
+ *
  * Dynamically selects optimal embedding backend and configuration based on:
  * - Device capabilities (WebGPU, WASM SIMD)
  * - Battery status (level, charging state)
  * - Performance requirements
- * 
+ *
  * HNW Considerations:
  * - Hierarchy: Central authority for embedding mode decisions
  * - Network: Informs LocalEmbeddings of optimal configuration
  * - Wave: Responds to battery events for dynamic switching
- * 
+ *
  * @module services/battery-aware-mode-selector
  */
 
@@ -25,27 +25,27 @@ const MODES = {
         backend: 'wasm',
         quantization: 'q8',
         batchSize: 1,
-        reason: 'low_battery_mode'
+        reason: 'low_battery_mode',
     },
     BALANCED: {
         backend: 'wasm',
         quantization: 'q8',
         batchSize: 4,
-        reason: 'balanced_mode'
+        reason: 'balanced_mode',
     },
     PERFORMANCE: {
-        backend: 'webgpu',  // Will fallback to wasm if not supported
+        backend: 'webgpu', // Will fallback to wasm if not supported
         quantization: 'q8',
         batchSize: 8,
-        reason: 'performance_mode'
-    }
+        reason: 'performance_mode',
+    },
 };
 
 // Battery thresholds
 const BATTERY_THRESHOLDS = {
-    CRITICAL: 0.1,    // 10% - minimal processing
-    LOW: 0.2,         // 20% - low power mode
-    MEDIUM: 0.5       // 50% - balanced mode
+    CRITICAL: 0.1, // 10% - minimal processing
+    LOW: 0.2, // 20% - low power mode
+    MEDIUM: 0.5, // 50% - balanced mode
 };
 
 // ==========================================
@@ -82,7 +82,7 @@ async function checkWebGPUSupport() {
         return {
             supported: isSupported,
             adapterInfo: adapter.info || {},
-            reason: isSupported ? 'WebGPU available' : 'Device request failed'
+            reason: isSupported ? 'WebGPU available' : 'Device request failed',
         };
     } catch (e) {
         return { supported: false, reason: e.message };
@@ -99,8 +99,7 @@ async function checkWebGPUSupport() {
  */
 function checkWASMSupport() {
     try {
-        if (typeof WebAssembly === 'object' &&
-            typeof WebAssembly.instantiate === 'function') {
+        if (typeof WebAssembly === 'object' && typeof WebAssembly.instantiate === 'function') {
             const module = new WebAssembly.Module(
                 Uint8Array.of(0x0, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00)
             );
@@ -155,7 +154,7 @@ async function handleBatteryChange() {
             from: previousMode.reason,
             to: newMode.reason,
             batteryLevel: batteryManager?.level ?? null,
-            charging: batteryManager?.charging ?? null
+            charging: batteryManager?.charging ?? null,
         });
     }
 
@@ -175,7 +174,7 @@ async function getOptimalEmbeddingMode() {
     if (!cachedCapabilities) {
         cachedCapabilities = {
             webgpu: await checkWebGPUSupport(),
-            wasm: checkWASMSupport()
+            wasm: checkWASMSupport(),
         };
     }
 
@@ -184,7 +183,7 @@ async function getOptimalEmbeddingMode() {
     // Get battery info
     let batteryInfo = null;
     try {
-        batteryInfo = batteryManager || await navigator.getBattery?.();
+        batteryInfo = batteryManager || (await navigator.getBattery?.());
     } catch (e) {
         // Battery API not available
     }
@@ -194,7 +193,7 @@ async function getOptimalEmbeddingMode() {
         return {
             ...MODES.PERFORMANCE,
             backend: capabilities.webgpu.supported ? 'webgpu' : 'wasm',
-            capabilities
+            capabilities,
         };
     }
 
@@ -206,7 +205,7 @@ async function getOptimalEmbeddingMode() {
         return {
             ...MODES.PERFORMANCE,
             backend: capabilities.webgpu.supported ? 'webgpu' : 'wasm',
-            capabilities
+            capabilities,
         };
     }
 
@@ -216,7 +215,7 @@ async function getOptimalEmbeddingMode() {
             ...MODES.LOW_POWER,
             batchSize: 1,
             reason: 'critical_battery_mode',
-            capabilities
+            capabilities,
         };
     }
 
@@ -224,7 +223,7 @@ async function getOptimalEmbeddingMode() {
     if (level < BATTERY_THRESHOLDS.LOW) {
         return {
             ...MODES.LOW_POWER,
-            capabilities
+            capabilities,
         };
     }
 
@@ -232,7 +231,7 @@ async function getOptimalEmbeddingMode() {
     if (level < BATTERY_THRESHOLDS.MEDIUM) {
         return {
             ...MODES.BALANCED,
-            capabilities
+            capabilities,
         };
     }
 
@@ -240,7 +239,7 @@ async function getOptimalEmbeddingMode() {
     return {
         ...MODES.PERFORMANCE,
         backend: capabilities.webgpu.supported ? 'webgpu' : 'wasm',
-        capabilities
+        capabilities,
     };
 }
 
@@ -257,7 +256,7 @@ function getBatteryStatus() {
         level: batteryManager.level,
         charging: batteryManager.charging,
         chargingTime: batteryManager.chargingTime,
-        dischargingTime: batteryManager.dischargingTime
+        dischargingTime: batteryManager.dischargingTime,
     };
 }
 
@@ -323,7 +322,7 @@ export const BatteryAwareModeSelector = {
      * Mode constants
      */
     MODES,
-    BATTERY_THRESHOLDS
+    BATTERY_THRESHOLDS,
 };
 
 console.log('[BatteryAwareModeSelector] Module loaded');

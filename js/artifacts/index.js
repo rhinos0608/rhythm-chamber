@@ -1,18 +1,18 @@
 /**
  * Artifacts Facade Module
- * 
+ *
  * Unified entry point for the artifact subsystem.
  * Provides spec creation, validation, and rendering capabilities.
- * 
+ *
  * Usage:
  *   import { Artifacts } from './artifacts/index.js';
- *   
+ *
  *   const spec = Artifacts.createLineChart({ ... });
  *   const validation = Artifacts.validate(spec);
  *   if (validation.valid) {
  *       Artifacts.render(validation.sanitized, container);
  *   }
- * 
+ *
  * @module artifacts
  */
 
@@ -25,7 +25,7 @@ import {
     createLineChart,
     createBarChart,
     createTimeline,
-    createTable
+    createTable,
 } from './artifact-spec.js';
 import { ArtifactValidation, validateArtifactSpec } from './validation.js';
 import { ArtifactRenderer, renderArtifact } from './renderer.js';
@@ -38,7 +38,7 @@ const logger = createLogger('Artifacts');
 
 /**
  * Create and validate an artifact spec in one step
- * 
+ *
  * @param {Object} options - Spec options
  * @returns {{ valid: boolean, spec: Object|null, errors: string[] }}
  */
@@ -50,14 +50,14 @@ function create(options) {
         return {
             valid: validation.valid,
             spec: validation.sanitized,
-            errors: validation.errors
+            errors: validation.errors,
         };
     } catch (err) {
         logger.error('Failed to create artifact', { error: err.message });
         return {
             valid: false,
             spec: null,
-            errors: [err.message]
+            errors: [err.message],
         };
     }
 }
@@ -65,7 +65,7 @@ function create(options) {
 /**
  * Parse artifact spec from AI function call output
  * Validates and sanitizes the spec
- * 
+ *
  * @param {Object} rawSpec - Raw spec from function call
  * @returns {{ valid: boolean, spec: Object|null, errors: string[] }}
  */
@@ -74,7 +74,7 @@ function parseFromFunctionCall(rawSpec) {
         return {
             valid: false,
             spec: null,
-            errors: ['Invalid artifact spec: not an object']
+            errors: ['Invalid artifact spec: not an object'],
         };
     }
 
@@ -87,26 +87,28 @@ function parseFromFunctionCall(rawSpec) {
     return {
         valid: validation.valid,
         spec: validation.sanitized,
-        errors: validation.errors
+        errors: validation.errors,
     };
 }
 
 /**
  * Check if a function call result contains an artifact
- * 
+ *
  * @param {Object} result - Function call result
  * @returns {boolean}
  */
 function hasArtifact(result) {
-    return result &&
+    return (
+        result &&
         typeof result === 'object' &&
         result.artifact &&
-        result.artifact.type === 'artifact';
+        result.artifact.type === 'artifact'
+    );
 }
 
 /**
  * Extract artifact from function call result
- * 
+ *
  * @param {Object} result - Function call result
  * @returns {Object|null} Validated artifact spec or null
  */
@@ -152,7 +154,7 @@ export const Artifacts = {
     // Sub-modules (for advanced usage)
     Spec: ArtifactSpec,
     Validation: ArtifactValidation,
-    Renderer: ArtifactRenderer
+    Renderer: ArtifactRenderer,
 };
 
 // Also export individual items for tree-shaking
@@ -165,7 +167,7 @@ export {
     createTimeline,
     createTable,
     validateArtifactSpec,
-    renderArtifact
+    renderArtifact,
 };
 
 logger.info('Artifacts facade loaded');

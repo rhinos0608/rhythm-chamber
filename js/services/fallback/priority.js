@@ -91,7 +91,7 @@ export function getProviderPriorityOrder(providerConfigs, primaryProvider) {
             circuitState: status.circuitState,
             successRate: status.successRate,
             avgLatencyMs: status.avgLatencyMs,
-            basePriority: config.priority
+            basePriority: config.priority,
         };
     });
 

@@ -1,15 +1,15 @@
 /**
  * Artifact Specification Module
- * 
+ *
  * Defines the ArtifactSpec schema that AI function calls output.
  * Artifacts are scoped, ephemeral visualizations that appear inline in chat.
- * 
+ *
  * Design Philosophy (per user requirements):
  * - Artifacts answer questions, never introduce them
  * - Always scoped to specific question/time range
  * - Always narratively introduced by the AI
  * - Never browsable/galleried - live only in conversation threads
- * 
+ *
  * @module artifacts/artifact-spec
  */
 
@@ -30,16 +30,16 @@ export const ARTIFACT_TYPES = Object.freeze({
     BAR_CHART: 'bar_chart',
     TABLE: 'table',
     TIMELINE: 'timeline',
-    HEATMAP: 'heatmap'
+    HEATMAP: 'heatmap',
 });
 
 /**
  * Field type definitions for chart axes
  */
 export const FIELD_TYPES = Object.freeze({
-    TEMPORAL: 'temporal',      // Date/time values
+    TEMPORAL: 'temporal', // Date/time values
     CATEGORICAL: 'categorical', // Discrete categories (artist names, etc.)
-    QUANTITATIVE: 'quantitative' // Numeric values
+    QUANTITATIVE: 'quantitative', // Numeric values
 });
 
 // ==========================================
@@ -67,7 +67,7 @@ export const MAX_EXPLANATION_LINES = 10;
 
 /**
  * Create a validated ArtifactSpec object
- * 
+ *
  * @param {Object} options - Spec options
  * @param {string} options.kind - Visualization type (line_chart, bar_chart, etc.)
  * @param {string} options.title - Chart title
@@ -85,7 +85,7 @@ export function createSpec({
     view,
     explanation = [],
     subtitle = null,
-    annotations = []
+    annotations = [],
 }) {
     const artifactId = `artifact_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
@@ -96,11 +96,11 @@ export function createSpec({
         subtitle,
         view: {
             kind,
-            ...view
+            ...view,
         },
         data: data || [],
         annotations: annotations || [],
-        explanation: explanation || []
+        explanation: explanation || [],
     };
 
     logger.debug('Created artifact spec', { artifactId, kind, dataRows: spec.data.length });
@@ -110,7 +110,7 @@ export function createSpec({
 
 /**
  * Create a line chart spec
- * 
+ *
  * @param {Object} options - Chart options
  * @param {string} options.title - Chart title
  * @param {Array} options.data - Data array with x/y values
@@ -130,7 +130,7 @@ export function createLineChart({
     xType = FIELD_TYPES.TEMPORAL,
     yDomain = null,
     explanation = [],
-    annotations = []
+    annotations = [],
 }) {
     return createSpec({
         kind: ARTIFACT_TYPES.LINE_CHART,
@@ -139,16 +139,16 @@ export function createLineChart({
         view: {
             x: { field: xField, type: xType },
             y: { field: yField, type: FIELD_TYPES.QUANTITATIVE, domain: yDomain },
-            series: null
+            series: null,
         },
         explanation,
-        annotations
+        annotations,
     });
 }
 
 /**
  * Create a bar chart spec
- * 
+ *
  * @param {Object} options - Chart options
  * @param {string} options.title - Chart title
  * @param {Array} options.data - Data array with category/value
@@ -164,24 +164,30 @@ export function createBarChart({
     categoryField,
     valueField,
     horizontal = true,
-    explanation = []
+    explanation = [],
 }) {
     return createSpec({
         kind: ARTIFACT_TYPES.BAR_CHART,
         title,
         data,
         view: {
-            x: { field: horizontal ? valueField : categoryField, type: horizontal ? FIELD_TYPES.QUANTITATIVE : FIELD_TYPES.CATEGORICAL },
-            y: { field: horizontal ? categoryField : valueField, type: horizontal ? FIELD_TYPES.CATEGORICAL : FIELD_TYPES.QUANTITATIVE },
-            horizontal
+            x: {
+                field: horizontal ? valueField : categoryField,
+                type: horizontal ? FIELD_TYPES.QUANTITATIVE : FIELD_TYPES.CATEGORICAL,
+            },
+            y: {
+                field: horizontal ? categoryField : valueField,
+                type: horizontal ? FIELD_TYPES.CATEGORICAL : FIELD_TYPES.QUANTITATIVE,
+            },
+            horizontal,
         },
-        explanation
+        explanation,
     });
 }
 
 /**
  * Create a timeline spec
- * 
+ *
  * @param {Object} options - Timeline options
  * @param {string} options.title - Timeline title
  * @param {Array} options.events - Event array with date/label
@@ -190,28 +196,22 @@ export function createBarChart({
  * @param {Array<string>} [options.explanation] - Explanation lines
  * @returns {Object} ArtifactSpec
  */
-export function createTimeline({
-    title,
-    events,
-    dateField,
-    labelField,
-    explanation = []
-}) {
+export function createTimeline({ title, events, dateField, labelField, explanation = [] }) {
     return createSpec({
         kind: ARTIFACT_TYPES.TIMELINE,
         title,
         data: events,
         view: {
             dateField,
-            labelField
+            labelField,
         },
-        explanation
+        explanation,
     });
 }
 
 /**
  * Create a table spec
- * 
+ *
  * @param {Object} options - Table options
  * @param {string} options.title - Table title
  * @param {Array} options.data - Row data
@@ -219,20 +219,15 @@ export function createTimeline({
  * @param {Array<string>} [options.explanation] - Explanation lines
  * @returns {Object} ArtifactSpec
  */
-export function createTable({
-    title,
-    data,
-    columns,
-    explanation = []
-}) {
+export function createTable({ title, data, columns, explanation = [] }) {
     return createSpec({
         kind: ARTIFACT_TYPES.TABLE,
         title,
         data,
         view: {
-            columns
+            columns,
         },
-        explanation
+        explanation,
     });
 }
 
@@ -255,7 +250,7 @@ export const ArtifactSpec = {
     createLineChart,
     createBarChart,
     createTimeline,
-    createTable
+    createTable,
 };
 
 logger.info('Module loaded');

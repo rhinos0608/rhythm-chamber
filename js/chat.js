@@ -53,6 +53,7 @@ import { MessageOperations } from './services/message-operations.js';
 
 // Session Manager import
 import { SessionManager } from './services/session-manager.js';
+import { EventBus } from './services/event-bus.js';
 
 // Token Counter import
 import { TokenCounter } from './token-counter.js';
@@ -78,9 +79,9 @@ import { ConversationOrchestrator } from './services/conversation-orchestrator.j
 import { MessageLifecycleCoordinator } from './services/message-lifecycle-coordinator.js';
 
 // HNW Fix: Timeout constants to prevent cascade failures
-const CHAT_API_TIMEOUT_MS = 60000;           // 60 second timeout for cloud API calls
-const LOCAL_LLM_TIMEOUT_MS = 90000;          // 90 second timeout for local LLM providers
-const CHAT_FUNCTION_TIMEOUT_MS = 30000;      // 30 second timeout for function execution
+const CHAT_API_TIMEOUT_MS = 60000; // 60 second timeout for cloud API calls
+const LOCAL_LLM_TIMEOUT_MS = 90000; // 90 second timeout for local LLM providers
+const CHAT_FUNCTION_TIMEOUT_MS = 30000; // 30 second timeout for function execution
 
 // Chat-specific state is now managed by ConversationOrchestrator
 // userContext and streamsData are owned by ConversationOrchestrator
@@ -111,7 +112,7 @@ async function initChat(personality, patterns, summary, streams = null) {
     const userContext = {
         personality,
         patterns,
-        summary
+        summary,
     };
 
     // Initialize SessionManager (handles emergency backup recovery)
@@ -131,7 +132,7 @@ async function initChat(personality, patterns, summary, streams = null) {
             TokenCounter: TokenCounter,
             DataQuery: DataQuery,
             RAG: RAG,
-            Prompts: Prompts
+            Prompts: Prompts,
         });
         ConversationOrchestrator.setUserContext(userContext);
         ConversationOrchestrator.setStreamsData(streams);
@@ -146,17 +147,33 @@ async function initChat(personality, patterns, summary, streams = null) {
             DataQuery: DataQuery,
             RAG: RAG,
             TokenCounter: TokenCounter,
-            ConversationOrchestrator: ConversationOrchestrator
+            ConversationOrchestrator: ConversationOrchestrator,
         });
         // MessageOperations now gets state from ConversationOrchestrator
         // No need to duplicate state here
     }
 
     // Initialize TokenCountingService with dependencies
+    // Load settings async to get user's configured context window
     if (TokenCountingService?.init) {
-        TokenCountingService.init({
-            TokenCounter: TokenCounter
-        });
+        try {
+            const settings = await Settings.getSettingsAsync();
+            TokenCountingService.init({
+                TokenCounter: TokenCounter,
+                contextWindow: settings?.llm?.contextWindow || 4096,
+            });
+            logger.debug(
+                '[Chat] TokenCountingService initialized with contextWindow:',
+                settings?.llm?.contextWindow || 4096
+            );
+        } catch (error) {
+            logger.error('[Chat] Failed to load settings for TokenCountingService:', error);
+            // Initialize with safe defaults
+            TokenCountingService.init({
+                TokenCounter: TokenCounter,
+                contextWindow: 4096,
+            });
+        }
     }
 
     // Initialize ToolCallHandlingService with dependencies
@@ -176,7 +193,7 @@ async function initChat(personality, patterns, summary, streams = null) {
             buildSystemPrompt: (...args) => ConversationOrchestrator?.buildSystemPrompt(...args),
             callLLM: callLLMWrapper,
             ConversationOrchestrator: ConversationOrchestrator,
-            timeoutMs: CHAT_FUNCTION_TIMEOUT_MS
+            timeoutMs: CHAT_FUNCTION_TIMEOUT_MS,
         });
     }
 
@@ -185,7 +202,7 @@ async function initChat(personality, patterns, summary, streams = null) {
         LLMProviderRoutingService.init({
             ProviderInterface: ProviderInterface,
             Settings: Settings,
-            Config: ConfigLoader.getAll()
+            Config: ConfigLoader.getAll(),
         });
     }
 
@@ -193,7 +210,7 @@ async function initChat(personality, patterns, summary, streams = null) {
     if (FallbackResponseService?.init) {
         FallbackResponseService.init({
             MessageOperations: MessageOperations,
-            userContext: userContext
+            userContext: userContext,
         });
     }
 
@@ -212,7 +229,7 @@ async function initChat(personality, patterns, summary, streams = null) {
             Config: ConfigLoader.getAll(),
             Functions: Functions,
             WaveTelemetry: WaveTelemetry,
-            MessageOperations: MessageOperations
+            MessageOperations: MessageOperations,
         });
     }
 
@@ -344,7 +361,13 @@ function getCurrentSessionId() {
  */
 function onSessionUpdate(callback) {
     // Subscribe to all session-related events
-    const sessionEvents = ['session:created', 'session:loaded', 'session:switched', 'session:deleted', 'session:updated'];
+    const sessionEvents = [
+        'session:created',
+        'session:loaded',
+        'session:switched',
+        'session:deleted',
+        'session:updated',
+    ];
     const unsubscribers = sessionEvents.map(eventType => EventBus.on(eventType, callback));
 
     // Return combined unsubscribe function
@@ -368,7 +391,6 @@ async function clearConversation() {
     await SessionManager.clearConversation();
 }
 
-
 // ==========================================
 // Session Persistence Event Handlers
 // HNW Fix: Correct sync/async strategy for tab close
@@ -378,7 +400,11 @@ async function clearConversation() {
 
 // Only register event listeners if SessionManager hasn't already done so
 // This prevents duplicate registration since SessionManager is imported before this code runs
-if (typeof window !== 'undefined' && typeof document !== 'undefined' && !SessionManager.eventListenersRegistered) {
+if (
+    typeof window !== 'undefined' &&
+    typeof document !== 'undefined' &&
+    !SessionManager.eventListenersRegistered
+) {
     // Async save when tab goes hidden (mobile switch, minimize, tab switch)
     // visibilitychange gives us time for async operations
     document.addEventListener('visibilitychange', () => {
@@ -398,7 +424,9 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !Session
 // Helper function to ensure coordinator availability
 function requireCoordinator(coordinatorName, coordinator) {
     if (!coordinator) {
-        throw new Error(`${coordinatorName} is not initialized. Ensure chat.initChat() has been called successfully.`);
+        throw new Error(
+            `${coordinatorName} is not initialized. Ensure chat.initChat() has been called successfully.`
+        );
     }
     if (typeof coordinator.isInitialized === 'function' && !coordinator.isInitialized()) {
         throw new Error('Chat not initialized. Call initChat first.');
@@ -410,32 +438,53 @@ function requireCoordinator(coordinatorName, coordinator) {
 export const Chat = {
     initChat,
     sendMessage: async (...args) => {
-        const coordinator = requireCoordinator('MessageLifecycleCoordinator', MessageLifecycleCoordinator);
+        const coordinator = requireCoordinator(
+            'MessageLifecycleCoordinator',
+            MessageLifecycleCoordinator
+        );
         return coordinator.sendMessage(...args);
     },
     regenerateLastResponse: async (...args) => {
-        const coordinator = requireCoordinator('MessageLifecycleCoordinator', MessageLifecycleCoordinator);
+        const coordinator = requireCoordinator(
+            'MessageLifecycleCoordinator',
+            MessageLifecycleCoordinator
+        );
         return coordinator.regenerateLastResponse(...args);
     },
     deleteMessage: async (...args) => {
-        const coordinator = requireCoordinator('MessageLifecycleCoordinator', MessageLifecycleCoordinator);
+        const coordinator = requireCoordinator(
+            'MessageLifecycleCoordinator',
+            MessageLifecycleCoordinator
+        );
         return coordinator.deleteMessage(...args);
     },
     editMessage: async (...args) => {
-        const coordinator = requireCoordinator('MessageLifecycleCoordinator', MessageLifecycleCoordinator);
+        const coordinator = requireCoordinator(
+            'MessageLifecycleCoordinator',
+            MessageLifecycleCoordinator
+        );
         return coordinator.editMessage(...args);
     },
     clearHistory: async (...args) => {
-        const coordinator = requireCoordinator('MessageLifecycleCoordinator', MessageLifecycleCoordinator);
+        const coordinator = requireCoordinator(
+            'MessageLifecycleCoordinator',
+            MessageLifecycleCoordinator
+        );
         return coordinator.clearHistory(...args);
     },
     clearConversation,
     getHistory: async (...args) => {
-        const coordinator = requireCoordinator('MessageLifecycleCoordinator', MessageLifecycleCoordinator);
+        const coordinator = requireCoordinator(
+            'MessageLifecycleCoordinator',
+            MessageLifecycleCoordinator
+        );
         return coordinator.getHistory(...args);
     },
     setStreamsData: (...args) => {
-        const coordinator = requireCoordinator('ConversationOrchestrator', ConversationOrchestrator);
+        const coordinator = requireCoordinator(
+            'ConversationOrchestrator',
+            ConversationOrchestrator
+        );
         return coordinator.setStreamsData(...args);
     },
     // Session management
@@ -449,7 +498,7 @@ export const Chat = {
     onSessionUpdate,
     // Exposed for testing
     emergencyBackupSync,
-    recoverEmergencyBackup
+    recoverEmergencyBackup,
 };
 
 logger.info('Module loaded');

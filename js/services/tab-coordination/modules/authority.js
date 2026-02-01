@@ -60,7 +60,7 @@ export function getAuthorityLevel() {
         mode: isPrimaryTab ? 'full_access' : 'read_only',
         message: isPrimaryTab
             ? 'Full access - You can make changes'
-            : 'Read-only mode - Another tab has primary control'
+            : 'Read-only mode - Another tab has primary control',
     };
 }
 
@@ -77,7 +77,7 @@ export function notifyAuthorityChange() {
         isPrimary: level.canWrite,
         level: level.level,
         mode: level.mode,
-        message: level.message
+        message: level.message,
     });
 
     for (const listener of authorityChangeListeners) {
@@ -192,18 +192,22 @@ export async function enterSafeMode(reason) {
                 msgEl.textContent =
                     'A critical error occurred in tab coordination. ' +
                     'This tab has been placed in safe mode to prevent data corruption. ' +
-                    'Please refresh the page. Error: ' + reason;
+                    'Please refresh the page. Error: ' +
+                    reason;
             }
         }
     }
 
     const msg = await getSendMessage();
-    msg({
-        type: MESSAGE_TYPES.SAFE_MODE_CHANGED,
-        tabId: TAB_ID,
-        enabled: true,
-        reason
-    }, true);
+    msg(
+        {
+            type: MESSAGE_TYPES.SAFE_MODE_CHANGED,
+            tabId: TAB_ID,
+            enabled: true,
+            reason,
+        },
+        true
+    );
 }
 
 // ==========================================

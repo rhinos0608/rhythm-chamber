@@ -87,7 +87,9 @@ export class MetricsFormatters {
         if (metrics.performance?.categories) {
             for (const [category, data] of Object.entries(metrics.performance.categories)) {
                 if (data.statistics) {
-                    const metricName = this.sanitizeMetricName(`rhythm_chamber_${category}_duration_ms`);
+                    const metricName = this.sanitizeMetricName(
+                        `rhythm_chamber_${category}_duration_ms`
+                    );
                     lines.push(`# HELP ${metricName} Duration for ${category}`);
                     lines.push(`# TYPE ${metricName} gauge`);
                     lines.push(`${metricName} ${data.statistics.avgDuration}`);
@@ -99,16 +101,23 @@ export class MetricsFormatters {
         if (metrics.webVitals?.vitals) {
             for (const [vitalType, vitalData] of Object.entries(metrics.webVitals.vitals)) {
                 if (vitalData.latest) {
-                    const metricName = this.sanitizeMetricName(`rhythm_chamber_web_vital_${vitalType}`);
+                    const metricName = this.sanitizeMetricName(
+                        `rhythm_chamber_web_vital_${vitalType}`
+                    );
                     lines.push(`# HELP ${metricName} Web Vital ${vitalType}`);
                     lines.push(`# TYPE ${metricName} gauge`);
-                    lines.push(`${metricName}{rating="${vitalData.latest.rating}"} ${vitalData.latest.value}`);
+                    lines.push(
+                        `${metricName}{rating="${vitalData.latest.rating}"} ${vitalData.latest.value}`
+                    );
                 }
             }
         }
 
         // Memory metrics
-        if (metrics.memory?.currentUsage != null && typeof metrics.memory.currentUsage === 'number') {
+        if (
+            metrics.memory?.currentUsage != null &&
+            typeof metrics.memory.currentUsage === 'number'
+        ) {
             const metricName = this.sanitizeMetricName('rhythm_chamber_memory_usage_percent');
             lines.push(`# HELP ${metricName} Memory usage percentage`);
             lines.push(`# TYPE ${metricName} gauge`);
@@ -155,7 +164,9 @@ export class MetricsFormatters {
         if (metrics.performance?.categories) {
             for (const [category, data] of Object.entries(metrics.performance.categories)) {
                 if (data.statistics) {
-                    const metricName = this.sanitizeMetricName(`rhythm_chamber.${category}.duration_ms`);
+                    const metricName = this.sanitizeMetricName(
+                        `rhythm_chamber.${category}.duration_ms`
+                    );
                     lines.push(`${metricName}:${data.statistics.avgDuration}|gauge`);
                 }
             }
@@ -165,7 +176,9 @@ export class MetricsFormatters {
         if (metrics.webVitals?.vitals) {
             for (const [vitalType, vitalData] of Object.entries(metrics.webVitals.vitals)) {
                 if (vitalData.latest) {
-                    const metricName = this.sanitizeMetricName(`rhythm_chamber.web_vitals.${vitalType}`);
+                    const metricName = this.sanitizeMetricName(
+                        `rhythm_chamber.web_vitals.${vitalType}`
+                    );
                     lines.push(`${metricName}:${vitalData.latest.value}|gauge`);
                 }
             }
@@ -198,7 +211,7 @@ export class MetricsFormatters {
                 series.push({
                     metric: `rhythm_chamber.${key}`,
                     points: [[now, value]],
-                    type: 'gauge'
+                    type: 'gauge',
                 });
             }
         }
@@ -225,7 +238,7 @@ export class MetricsFormatters {
                     name: `rhythm_chamber.${key}`,
                     value: value,
                     timestamp: now,
-                    type: 'gauge'
+                    type: 'gauge',
                 });
             }
         }
@@ -285,7 +298,7 @@ export class MetricsFormatters {
                     category: measurement.category,
                     name: measurement.name,
                     duration: measurement.duration,
-                    type: 'performance'
+                    type: 'performance',
                 });
             }
         }
@@ -300,7 +313,7 @@ export class MetricsFormatters {
                         name: vitalType,
                         value: vitalData.latest.value,
                         rating: vitalData.latest.rating,
-                        type: 'web_vital'
+                        type: 'web_vital',
                     });
                 }
             }
@@ -343,7 +356,7 @@ export class MetricsFormatters {
             csv: 'text/csv',
             prometheus: 'text/plain',
             influxdb: 'text/plain',
-            statsd: 'text/plain'
+            statsd: 'text/plain',
         };
 
         return mimeTypes[format] || 'text/plain';
@@ -361,7 +374,7 @@ export class MetricsFormatters {
             csv: 'csv',
             prometheus: 'prom',
             influxdb: 'txt',
-            statsd: 'txt'
+            statsd: 'txt',
         };
 
         return extensions[format] || 'txt';

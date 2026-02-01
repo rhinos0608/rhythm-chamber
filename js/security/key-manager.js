@@ -63,7 +63,9 @@ let _sessionActive = false;
 function checkSecureContext() {
     const { secure, reason } = Common.checkSecureContext();
     if (!secure) {
-        logger.warn(`Running in insecure context - cryptographic operations unavailable: ${reason}`);
+        logger.warn(
+            `Running in insecure context - cryptographic operations unavailable: ${reason}`
+        );
     }
     return secure;
 }
@@ -116,7 +118,7 @@ async function generateDeviceFingerprint() {
             const binding = {
                 id: deviceId,
                 origin: location.origin,
-                createdAt: Date.now()
+                createdAt: Date.now(),
             };
             storage.setItem(DEVICE_BINDING_KEY, JSON.stringify(binding));
             logger.info('Created new device binding');
@@ -129,7 +131,7 @@ async function generateDeviceFingerprint() {
         nav?.userAgent || 'unknown',
         nav?.language || 'unknown',
         nav?.hardwareConcurrency || 'unknown',
-        location?.origin || 'unknown'
+        location?.origin || 'unknown',
     ];
 
     const data = components.join('|');
@@ -253,16 +255,14 @@ async function deriveKey(password, salt, algorithm = 'AES-GCM', extractable = fa
     }
 
     // Derive the key
-    const saltBytes = new Uint8Array(
-        salt.match(/[\da-f]{2}/gi)?.map(h => parseInt(h, 16)) || []
-    );
+    const saltBytes = new Uint8Array(salt.match(/[\da-f]{2}/gi)?.map(h => parseInt(h, 16)) || []);
 
     return crypto.subtle.deriveKey(
         {
             name: 'PBKDF2',
             salt: saltBytes,
             iterations: PBKDF2_ITERATIONS,
-            hash: 'SHA-256'
+            hash: 'SHA-256',
         },
         keyMaterial,
         keyParams,
@@ -380,10 +380,13 @@ async function rotateKeys() {
         // Record rotation time
         const storage = typeof localStorage !== 'undefined' ? localStorage : null;
         if (storage) {
-            storage.setItem(KEY_ROTATION_KEY, JSON.stringify({
-                lastRotation: Date.now(),
-                version: getSessionVersion()
-            }));
+            storage.setItem(
+                KEY_ROTATION_KEY,
+                JSON.stringify({
+                    lastRotation: Date.now(),
+                    version: getSessionVersion(),
+                })
+            );
         }
 
         logger.info('Key rotation completed');
@@ -400,10 +403,13 @@ async function rotateKeys() {
 function recordKeyRotation() {
     const storage = typeof localStorage !== 'undefined' ? localStorage : null;
     if (storage) {
-        storage.setItem(KEY_ROTATION_KEY, JSON.stringify({
-            lastRotation: Date.now(),
-            version: getSessionVersion()
-        }));
+        storage.setItem(
+            KEY_ROTATION_KEY,
+            JSON.stringify({
+                lastRotation: Date.now(),
+                version: getSessionVersion(),
+            })
+        );
     }
 }
 
@@ -417,7 +423,9 @@ function recordKeyRotation() {
  */
 async function initializeKeys() {
     if (!_sessionPassword) {
-        throw new Error('Cannot initialize keys: no active session. Call initializeKeySession first.');
+        throw new Error(
+            'Cannot initialize keys: no active session. Call initializeKeySession first.'
+        );
     }
 
     try {
@@ -425,7 +433,7 @@ async function initializeKeys() {
         [_dataEncryptionKey, _signingKey, _sessionKey] = await Promise.all([
             generateDataEncryptionKey(),
             generateSigningKey(),
-            generateSessionKey()
+            generateSessionKey(),
         ]);
 
         _keyCreatedAt = Date.now();
@@ -555,7 +563,8 @@ function clearKeySession() {
     _sessionActive = false;
 
     // Clear session salt
-    const sessionStorage = typeof globalThis.sessionStorage !== 'undefined' ? globalThis.sessionStorage : null;
+    const sessionStorage =
+        typeof globalThis.sessionStorage !== 'undefined' ? globalThis.sessionStorage : null;
     if (sessionStorage) {
         sessionStorage.removeItem(SESSION_SALT_KEY);
     }
@@ -579,7 +588,7 @@ function getSessionInfo() {
         needsRotation: needsRotation(),
         hasDataKey: !!_dataEncryptionKey,
         hasSigningKey: !!_signingKey,
-        hasSessionKey: !!_sessionKey
+        hasSessionKey: !!_sessionKey,
     };
 }
 
@@ -590,7 +599,7 @@ function getSessionInfo() {
 async function getKeyMetadata() {
     if (!_sessionActive) {
         return {
-            active: false
+            active: false,
         };
     }
 
@@ -599,20 +608,20 @@ async function getKeyMetadata() {
         dataKey: {
             algorithm: _dataEncryptionKey?.algorithm?.name || 'unknown',
             extractable: _dataEncryptionKey?.extractable || false,
-            usages: _dataEncryptionKey?.usages || []
+            usages: _dataEncryptionKey?.usages || [],
         },
         signingKey: {
             algorithm: _signingKey?.algorithm?.name || 'unknown',
             extractable: _signingKey?.extractable || false,
-            usages: _signingKey?.usages || []
+            usages: _signingKey?.usages || [],
         },
         sessionKey: {
             algorithm: _sessionKey?.algorithm?.name || 'unknown',
             extractable: _sessionKey?.extractable || false,
-            usages: _sessionKey?.usages || []
+            usages: _sessionKey?.usages || [],
         },
         createdAt: _keyCreatedAt,
-        version: getSessionVersion()
+        version: getSessionVersion(),
     };
 }
 
@@ -641,7 +650,7 @@ export const KeyManager = {
 
     // Constants
     PBKDF2_ITERATIONS,
-    KEY_MAX_AGE_MS
+    KEY_MAX_AGE_MS,
 };
 
 // Default export

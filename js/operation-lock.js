@@ -64,11 +64,13 @@ export {
     LockReleaseError,
     LockForceReleaseError,
     DeadlockError,
-    OPERATIONS
+    OPERATIONS,
 } from './utils/concurrency/lock-manager.js';
 
 // Re-export default as OperationLock
 import { LockManager } from './utils/concurrency/lock-manager.js';
 export default LockManager;
 
-console.log('[OperationLock] Legacy wrapper - re-exporting from js/utils/concurrency/lock-manager.js');
+console.log(
+    '[OperationLock] Legacy wrapper - re-exporting from js/utils/concurrency/lock-manager.js'
+);

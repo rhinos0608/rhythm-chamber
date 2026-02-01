@@ -1,12 +1,12 @@
 /**
  * Data Capabilities Service
- * 
+ *
  * Provides capability-based access control instead of boolean isDemoMode flags.
  * Enables explicit permission checking and makes access boundaries clear.
- * 
+ *
  * HNW Hierarchy: Establishes clear authority boundaries for data access.
  * Instead of scattered "if (isDemoMode)" checks, code uses explicit capabilities.
- * 
+ *
  * @module providers/capabilities
  */
 
@@ -27,7 +27,7 @@ const CAPABILITIES = {
     DELETE_DATA: 'delete_data',
     SHARE_DATA: 'share_data',
     MODIFY_SETTINGS: 'modify_settings',
-    ACCESS_LLM: 'access_llm'
+    ACCESS_LLM: 'access_llm',
 };
 
 /**
@@ -36,7 +36,7 @@ const CAPABILITIES = {
 const DEMO_CAPABILITIES = [
     CAPABILITIES.READ_DEMO_DATA,
     CAPABILITIES.ACCESS_LLM,
-    CAPABILITIES.EXPORT_DATA  // Allow exporting demo cards
+    CAPABILITIES.EXPORT_DATA, // Allow exporting demo cards
 ];
 
 /**
@@ -49,7 +49,7 @@ const USER_CAPABILITIES = [
     CAPABILITIES.DELETE_DATA,
     CAPABILITIES.SHARE_DATA,
     CAPABILITIES.MODIFY_SETTINGS,
-    CAPABILITIES.ACCESS_LLM
+    CAPABILITIES.ACCESS_LLM,
 ];
 
 // ==========================================
@@ -134,7 +134,7 @@ function getStatus() {
     return {
         isDemo: isDemo(),
         activeCapabilities: getActiveCapabilities(),
-        availableCapabilities: Object.values(CAPABILITIES)
+        availableCapabilities: Object.values(CAPABILITIES),
     };
 }
 
@@ -162,7 +162,7 @@ export const DataCapabilities = {
     // Constants
     CAPABILITIES,
     DEMO_CAPABILITIES,
-    USER_CAPABILITIES
+    USER_CAPABILITIES,
 };
 
 // Also export CAPABILITIES directly for easy access

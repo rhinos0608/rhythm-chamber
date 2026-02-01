@@ -1,15 +1,15 @@
 /**
  * Pattern Detection Web Worker
- * 
+ *
  * Offloads pattern detection algorithms to a background thread to maintain
  * 60fps UI responsiveness during analysis of large datasets (100k+ streams).
- * 
+ *
  * Messages:
  *   IN:  { type: 'detect', streams: Array, chunks: Array }
  *   OUT: { type: 'progress', current: number, total: number, message: string }
  *   OUT: { type: 'complete', patterns: Object }
  *   OUT: { type: 'error', error: string }
- * 
+ *
  * @module workers/pattern-worker
  */
 
@@ -41,7 +41,7 @@ function detectComfortDiscoveryRatio(streams) {
         totalPlays: totalPlays,
         playsPerArtist: Math.round(playsPerArtist * 10) / 10,
         isComfortCurator: uniqueArtists > 0 && playsPerArtist > 50,
-        isDiscoveryJunkie: uniqueArtists > 0 && playsPerArtist < 10
+        isDiscoveryJunkie: uniqueArtists > 0 && playsPerArtist < 10,
     };
 }
 
@@ -103,9 +103,9 @@ function detectEras(streams, chunks) {
         eras: eras.map(e => ({
             start: e.start,
             end: e.end,
-            duration: e.weeks
+            duration: e.weeks,
         })),
-        eraCount: eras.length
+        eraCount: eras.length,
     };
 }
 
@@ -141,10 +141,15 @@ function detectTimePatterns(streams) {
     const overlapRatio = overlap / Math.max(morningArtists.size, eveningArtists.size, 1);
 
     return {
-        morningTop: Object.entries(morning).sort((a, b) => b[1] - a[1]).slice(0, 5),
-        eveningTop: Object.entries(evening).sort((a, b) => b[1] - a[1]).slice(0, 5),
+        morningTop: Object.entries(morning)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5),
+        eveningTop: Object.entries(evening)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5),
         overlapRatio: Math.round(overlapRatio * 100),
-        hasMoodEngineerSignal: overlapRatio < 0.3 && morningArtists.size >= 10 && eveningArtists.size >= 10
+        hasMoodEngineerSignal:
+            overlapRatio < 0.3 && morningArtists.size >= 10 && eveningArtists.size >= 10,
     };
 }
 
@@ -179,10 +184,14 @@ function detectSocialPatterns(streams) {
     const overlapRatio = overlap / Math.max(weekdayArtists.size, weekendArtists.size, 1);
 
     return {
-        weekdayTop: Object.entries(weekday).sort((a, b) => b[1] - a[1]).slice(0, 5),
-        weekendTop: Object.entries(weekend).sort((a, b) => b[1] - a[1]).slice(0, 5),
+        weekdayTop: Object.entries(weekday)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5),
+        weekendTop: Object.entries(weekend)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5),
         overlapRatio: Math.round(overlapRatio * 100),
-        hasSocialChameleonSignal: overlapRatio < 0.4
+        hasSocialChameleonSignal: overlapRatio < 0.4,
     };
 }
 
@@ -241,7 +250,7 @@ function detectGhostedArtists(streams) {
             ghosted.push({
                 name: artist,
                 plays: data.plays,
-                lastPlay: data.lastPlay.toISOString().slice(0, 10)
+                lastPlay: data.lastPlay.toISOString().slice(0, 10),
             });
         }
     });
@@ -249,7 +258,7 @@ function detectGhostedArtists(streams) {
     return {
         ghosted: ghosted.sort((a, b) => b.plays - a.plays).slice(0, 10),
         ghostedCount: ghosted.length,
-        activeUntilEnd: activeUntilEnd.length
+        activeUntilEnd: activeUntilEnd.length,
     };
 }
 
@@ -265,8 +274,8 @@ function detectDiscoveryExplosions(streams, chunks) {
     const seenArtists = new Set();
 
     // Sort by date first
-    const sorted = [...streams].sort((a, b) =>
-        new Date(a.ts || a.endTime) - new Date(b.ts || b.endTime)
+    const sorted = [...streams].sort(
+        (a, b) => new Date(a.ts || a.endTime) - new Date(b.ts || b.endTime)
     );
 
     sorted.forEach(s => {
@@ -291,21 +300,22 @@ function detectDiscoveryExplosions(streams, chunks) {
     const months = Object.keys(byMonth).sort();
     const newArtistCounts = months.map(m => byMonth[m].newArtists);
     // Guard against division by zero
-    const avgNewArtists = newArtistCounts.length > 0
-        ? newArtistCounts.reduce((a, b) => a + b, 0) / newArtistCounts.length
-        : 0;
+    const avgNewArtists =
+        newArtistCounts.length > 0
+            ? newArtistCounts.reduce((a, b) => a + b, 0) / newArtistCounts.length
+            : 0;
 
     const explosions = months
         .filter(m => byMonth[m].newArtists > avgNewArtists * 3)
         .map(m => ({
             month: m,
             newArtists: byMonth[m].newArtists,
-            avgForPeriod: Math.round(avgNewArtists)
+            avgForPeriod: Math.round(avgNewArtists),
         }));
 
     return {
         explosions,
-        explosionCount: explosions.length
+        explosionCount: explosions.length,
     };
 }
 
@@ -317,8 +327,8 @@ function detectMoodSearching(streams) {
         return { sessions: 0, hasMoodSearchingSignal: false };
     }
 
-    const sorted = [...streams].sort((a, b) =>
-        new Date(a.ts || a.endTime) - new Date(b.ts || b.endTime)
+    const sorted = [...streams].sort(
+        (a, b) => new Date(a.ts || a.endTime) - new Date(b.ts || b.endTime)
     );
 
     let moodSearchSessions = 0;
@@ -353,7 +363,7 @@ function detectMoodSearching(streams) {
 
     return {
         sessions: moodSearchSessions,
-        hasMoodSearchingSignal: moodSearchSessions >= 3
+        hasMoodSearchingSignal: moodSearchSessions >= 3,
     };
 }
 
@@ -393,7 +403,7 @@ function detectTrueFavorites(streams) {
                 track,
                 artist,
                 plays: data.plays,
-                completionRate: Math.round((data.completed / data.plays) * 100)
+                completionRate: Math.round((data.completed / data.plays) * 100),
             };
         })
         .sort((a, b) => b.plays - a.plays)
@@ -401,7 +411,7 @@ function detectTrueFavorites(streams) {
 
     return {
         favorites,
-        favoritesCount: favorites.length
+        favoritesCount: favorites.length,
     };
 }
 
@@ -441,7 +451,7 @@ function generateDataInsights(streams) {
         totalStreams: streams.length,
         topArtist: topArtist ? { name: topArtist[0], plays: topArtist[1] } : null,
         peakDay: days[peakDayIndex],
-        uniqueArtists: Object.keys(artistPlays).length
+        uniqueArtists: Object.keys(artistPlays).length,
     };
 }
 
@@ -467,15 +477,15 @@ function generatePatternSummary(streams, patterns) {
         streamCount: streams.length,
         dateRange: {
             start: startDate.toISOString().slice(0, 10),
-            end: endDate.toISOString().slice(0, 10)
+            end: endDate.toISOString().slice(0, 10),
         },
         signals: {
             hasEras: (patterns.eras?.eraCount || 0) > 1,
             hasGhosted: (patterns.ghosted?.ghostedCount || 0) > 0,
             hasMoodEngineer: patterns.timePatterns?.hasMoodEngineerSignal || false,
             hasSocialChameleon: patterns.socialPatterns?.hasSocialChameleonSignal || false,
-            hasDiscoveryExplosions: (patterns.discoveryExplosions?.explosionCount || 0) > 0
-        }
+            hasDiscoveryExplosions: (patterns.discoveryExplosions?.explosionCount || 0) > 0,
+        },
     };
 }
 
@@ -499,7 +509,7 @@ function detectAllPatterns(streams, chunks, onProgress = null, onPartial = null)
         'moodSearching',
         'trueFavorites',
         'insights',
-        'summary'
+        'summary',
     ];
     const total = patternNames.length;
     let current = 0;
@@ -561,12 +571,12 @@ self.onmessage = function (e) {
         // Handle heartbeat channel setup (dedicated MessageChannel)
         if (type === 'HEARTBEAT_CHANNEL') {
             // Get port from e.ports[0] (transferred port), fallback to e.data.port
-            heartbeatPort = e.ports && e.ports[0] ? e.ports[0] : (e.data && e.data.port);
-            heartbeatPort.onmessage = function(event) {
+            heartbeatPort = e.ports && e.ports[0] ? e.ports[0] : e.data && e.data.port;
+            heartbeatPort.onmessage = function (event) {
                 if (event.data.type === 'HEARTBEAT') {
                     heartbeatPort.postMessage({
                         type: 'HEARTBEAT_RESPONSE',
-                        timestamp: event.data.timestamp || Date.now()
+                        timestamp: event.data.timestamp || Date.now(),
                     });
                 }
             };
@@ -578,7 +588,7 @@ self.onmessage = function (e) {
         if (type === 'HEARTBEAT') {
             self.postMessage({
                 type: 'HEARTBEAT_RESPONSE',
-                timestamp
+                timestamp,
             });
             return;
         }
@@ -599,7 +609,7 @@ self.onmessage = function (e) {
                         requestId,
                         pattern: patternName,
                         result,
-                        progress: progressPercent
+                        progress: progressPercent,
                     });
                 };
 
@@ -616,9 +626,11 @@ self.onmessage = function (e) {
             type: 'error',
             error: error.message,
             stack: error.stack,
-            requestId: e.data?.requestId
+            requestId: e.data?.requestId,
         });
     }
 };
 
-console.log('[PatternWorker] Worker loaded with partial result streaming and dedicated heartbeat support');
+console.log(
+    '[PatternWorker] Worker loaded with partial result streaming and dedicated heartbeat support'
+);

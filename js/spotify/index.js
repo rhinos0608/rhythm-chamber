@@ -21,7 +21,9 @@ function transformForAnalysis(spotifyData) {
     // EDGE CASE FIX: Validate input structure before transformation
     // Missing validation could cause runtime errors when accessing nested properties
     if (!spotifyData || typeof spotifyData !== 'object') {
-        logger.warn('[Spotify] transformForAnalysis received invalid input, returning empty structure');
+        logger.warn(
+            '[Spotify] transformForAnalysis received invalid input, returning empty structure'
+        );
         return {
             recentStreams: [],
             topArtists: { shortTerm: [], mediumTerm: [], longTerm: [] },
@@ -29,7 +31,7 @@ function transformForAnalysis(spotifyData) {
             profile: { displayName: 'Music Lover', id: null },
             isLiteData: true,
             fetchedAt: new Date().toISOString(),
-            _inputError: 'Invalid input structure'
+            _inputError: 'Invalid input structure',
         };
     }
 
@@ -42,7 +44,7 @@ function transformForAnalysis(spotifyData) {
         msPlayed: item.track?.duration_ms || 180000, // Assume full play
         spotifyTrackUri: item.track?.uri,
         // We don't have skip/shuffle data from API
-        isFromSpotifyApi: true
+        isFromSpotifyApi: true,
     }));
 
     // Extract top artists across time ranges
@@ -52,22 +54,22 @@ function transformForAnalysis(spotifyData) {
             id: a.id,
             genres: a.genres || [],
             popularity: a.popularity,
-            imageUrl: a.images?.[0]?.url
+            imageUrl: a.images?.[0]?.url,
         })),
         mediumTerm: (spotifyData.topArtists?.mediumTerm?.items || []).map(a => ({
             name: a.name,
             id: a.id,
             genres: a.genres || [],
             popularity: a.popularity,
-            imageUrl: a.images?.[0]?.url
+            imageUrl: a.images?.[0]?.url,
         })),
         longTerm: (spotifyData.topArtists?.longTerm?.items || []).map(a => ({
             name: a.name,
             id: a.id,
             genres: a.genres || [],
             popularity: a.popularity,
-            imageUrl: a.images?.[0]?.url
-        }))
+            imageUrl: a.images?.[0]?.url,
+        })),
     };
 
     // Extract top tracks across time ranges
@@ -77,22 +79,22 @@ function transformForAnalysis(spotifyData) {
             artist: t.artists?.[0]?.name || 'Unknown',
             album: t.album?.name,
             id: t.id,
-            popularity: t.popularity
+            popularity: t.popularity,
         })),
         mediumTerm: (spotifyData.topTracks?.mediumTerm?.items || []).map(t => ({
             name: t.name,
             artist: t.artists?.[0]?.name || 'Unknown',
             album: t.album?.name,
             id: t.id,
-            popularity: t.popularity
+            popularity: t.popularity,
         })),
         longTerm: (spotifyData.topTracks?.longTerm?.items || []).map(t => ({
             name: t.name,
             artist: t.artists?.[0]?.name || 'Unknown',
             album: t.album?.name,
             id: t.id,
-            popularity: t.popularity
-        }))
+            popularity: t.popularity,
+        })),
     };
 
     return {
@@ -101,10 +103,10 @@ function transformForAnalysis(spotifyData) {
         topTracks,
         profile: {
             displayName: spotifyData.profile?.display_name || 'Music Lover',
-            id: spotifyData.profile?.id
+            id: spotifyData.profile?.id,
         },
         isLiteData: true, // Flag for pattern detection
-        fetchedAt: new Date().toISOString()
+        fetchedAt: new Date().toISOString(),
     };
 }
 
@@ -113,20 +115,20 @@ function transformForAnalysis(spotifyData) {
  * @param {function} onProgress - Progress callback
  * @returns {Promise<object>} All Spotify data for analysis
  */
-async function fetchSnapshotData(onProgress = () => { }) {
+async function fetchSnapshotData(onProgress = () => {}) {
     const data = {
         recentlyPlayed: null,
         topArtists: {
             shortTerm: null,
             mediumTerm: null,
-            longTerm: null
+            longTerm: null,
         },
         topTracks: {
             shortTerm: null,
             mediumTerm: null,
-            longTerm: null
+            longTerm: null,
         },
-        profile: null
+        profile: null,
     };
 
     try {
@@ -251,7 +253,7 @@ export const Spotify = {
     startBackgroundRefresh: () => RefreshService.startBackgroundRefresh(),
     stopBackgroundRefresh: () => RefreshService.stopBackgroundRefresh(),
     isBackgroundRefreshActive: () => RefreshService.isBackgroundRefreshActive(),
-    checkTokenRefreshNeeded: () => RefreshService.checkTokenRefreshNeeded()
+    checkTokenRefreshNeeded: () => RefreshService.checkTokenRefreshNeeded(),
 };
 
 logger.debug('Spotify module facade loaded');

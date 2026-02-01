@@ -19,20 +19,36 @@ const PROVIDER_ID = {
     LM_STUDIO: 'lmstudio',
     GEMINI: 'gemini',
     OPENROUTER: 'openrouter',
-    OPENAI_COMPATIBLE: 'openai-compatible'
+    OPENAI_COMPATIBLE: 'openai-compatible',
 };
 
 const LLM_PROVIDERS = [
-    { id: PROVIDER_ID.OLLAMA, name: 'Ollama (Local)', description: 'Run AI models on your own hardware - zero data transmission' },
-    { id: PROVIDER_ID.LM_STUDIO, name: 'LM Studio (Local)', description: 'User-friendly local AI with OpenAI-compatible API' },
+    {
+        id: PROVIDER_ID.OLLAMA,
+        name: 'Ollama (Local)',
+        description: 'Run AI models on your own hardware - zero data transmission',
+    },
+    {
+        id: PROVIDER_ID.LM_STUDIO,
+        name: 'LM Studio (Local)',
+        description: 'User-friendly local AI with OpenAI-compatible API',
+    },
     { id: PROVIDER_ID.GEMINI, name: 'Gemini (Google AI Studio)', description: 'Google AI models' },
-    { id: PROVIDER_ID.OPENROUTER, name: 'OpenRouter (Cloud)', description: 'Optional cloud provider for premium models' },
-    { id: PROVIDER_ID.OPENAI_COMPATIBLE, name: 'OpenAI Compatible', description: 'Connect to any OpenAI-compatible API - custom endpoint' }
+    {
+        id: PROVIDER_ID.OPENROUTER,
+        name: 'OpenRouter (Cloud)',
+        description: 'Optional cloud provider for premium models',
+    },
+    {
+        id: PROVIDER_ID.OPENAI_COMPATIBLE,
+        name: 'OpenAI Compatible',
+        description: 'Connect to any OpenAI-compatible API - custom endpoint',
+    },
 ];
 
 const DEFAULT_ENDPOINTS = {
     ollama: 'http://localhost:11434',
-    lmstudio: 'http://localhost:1234/v1'
+    lmstudio: 'http://localhost:1234/v1',
 };
 
 const AVAILABLE_MODELS = {
@@ -43,7 +59,7 @@ const AVAILABLE_MODELS = {
         { id: 'google/gemma-2-9b-it:free', name: 'Gemma 2 9B (Free)', free: true },
         { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini ($)', free: false },
         { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet ($)', free: false },
-        { id: 'openai/gpt-4-turbo', name: 'GPT-4 Turbo ($)', free: false }
+        { id: 'openai/gpt-4-turbo', name: 'GPT-4 Turbo ($)', free: false },
     ],
     gemini: [
         { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Free)', free: true },
@@ -52,27 +68,35 @@ const AVAILABLE_MODELS = {
         { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite (Free)', free: true },
         { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Free)', free: true },
         { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro ($)', free: false },
-        { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro ($)', free: false }
+        { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro ($)', free: false },
     ],
     ollama: [
         { id: 'llama3.1', name: 'Llama 3.1', free: true },
         { id: 'llama3.2', name: 'Llama 3.2', free: true },
         { id: 'mistral', name: 'Mistral', free: true },
         { id: 'gemma2', name: 'Gemma 2', free: true },
-        { id: 'qwen2.5', name: 'Qwen 2.5', free: true }
+        { id: 'qwen2.5', name: 'Qwen 2.5', free: true },
     ],
     lmstudio: [
-        { id: 'lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF', name: 'Llama 3.1 8B', free: true },
-        { id: 'lmstudio-community/Meta-Llama-3.2-3B-Instruct-GGUF', name: 'Llama 3.2 3B', free: true },
+        {
+            id: 'lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF',
+            name: 'Llama 3.1 8B',
+            free: true,
+        },
+        {
+            id: 'lmstudio-community/Meta-Llama-3.2-3B-Instruct-GGUF',
+            name: 'Llama 3.2 3B',
+            free: true,
+        },
         { id: 'lmstudio-community/gemma-2-9b-it-GGUF', name: 'Gemma 2 9B', free: true },
-        { id: 'lmstudio-community/Mistral-7B-Instruct-v0.3-GGUF', name: 'Mistral 7B', free: true }
+        { id: 'lmstudio-community/Mistral-7B-Instruct-v0.3-GGUF', name: 'Mistral 7B', free: true },
     ],
     'openai-compatible': [
         { id: 'gpt-4o-mini', name: 'GPT-4o Mini', free: false },
         { id: 'gpt-4o', name: 'GPT-4o', free: false },
         { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', free: false },
-        { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', free: false }
-    ]
+        { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', free: false },
+    ],
 };
 
 let _cachedSettings = null;
@@ -87,7 +111,11 @@ function buildDefaults() {
 
     return {
         llm: {
-            provider: configOpenrouter.apiKey ? PROVIDER_ID.OPENROUTER : (configGemini.apiKey ? PROVIDER_ID.GEMINI : PROVIDER_ID.OLLAMA),
+            provider: configOpenrouter.apiKey
+                ? PROVIDER_ID.OPENROUTER
+                : configGemini.apiKey
+                    ? PROVIDER_ID.GEMINI
+                    : PROVIDER_ID.OLLAMA,
             openrouterApiKey: configOpenrouter.apiKey || '',
             openrouterModel: configOpenrouter.defaultModel || 'xiaomi/mimo-v2-flash:free',
             geminiApiKey: configGemini.apiKey || '',
@@ -99,15 +127,15 @@ function buildDefaults() {
             openaiCompatibleModel: configOpenAICompatible.defaultModel || 'gpt-4o-mini',
             maxTokens: 4500,
             temperature: configOpenrouter.temperature ?? 0.7,
-            contextWindow: 4096
+            contextWindow: 4096,
         },
         spotify: {
             clientId: configSpotify.clientId || '',
-            redirectUri: configSpotify.redirectUri || ''
+            redirectUri: configSpotify.redirectUri || '',
         },
         tools: {
-            enabledTools: null
-        }
+            enabledTools: null,
+        },
     };
 }
 
@@ -115,7 +143,13 @@ function deepMerge(base, override) {
     if (!override || typeof override !== 'object') return base;
     const out = Array.isArray(base) ? [...base] : { ...base };
     for (const [k, v] of Object.entries(override)) {
-        if (v && typeof v === 'object' && !Array.isArray(v) && base && typeof base[k] === 'object') {
+        if (
+            v &&
+            typeof v === 'object' &&
+            !Array.isArray(v) &&
+            base &&
+            typeof base[k] === 'object'
+        ) {
             out[k] = deepMerge(base[k], v);
         } else {
             out[k] = v;
@@ -227,7 +261,8 @@ function showToast(message, duration = 2000) {
     const el = document.createElement('div');
     el.className = 'toast';
     el.textContent = String(message);
-    el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 14px;border-radius:8px;z-index:99999;max-width:90vw;';
+    el.style.cssText =
+        'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 14px;border-radius:8px;z-index:99999;max-width:90vw;';
     document.body.appendChild(el);
     setTimeout(() => {
         el.remove();
@@ -322,25 +357,39 @@ function hideSessionResetModal() {
 async function confirmSessionReset() {}
 function refreshTravelStatusUI() {}
 function toggleTravelMode() {}
-async function verifyIdentity() { return true; }
+async function verifyIdentity() {
+    return true;
+}
 
 function onProviderChange() {}
-async function checkOllamaConnection() { return false; }
-async function testOllamaConnection() { return false; }
-async function refreshOllamaModels() { return []; }
+async function checkOllamaConnection() {
+    return false;
+}
+async function testOllamaConnection() {
+    return false;
+}
+async function refreshOllamaModels() {
+    return [];
+}
 
 function initCrossTabSync() {
     if (typeof window === 'undefined') return;
-    window.addEventListener('storage', (e) => {
-        if (e.key === 'rhythm_chamber_settings_version' && e.newValue && e.newValue !== e.oldValue) {
-            getSettingsAsync().then(settings => {
-                _cachedSettings = settings;
-                EventBus.emit('settings:changed', settings, { skipEventLog: true });
-            }).catch(err => {
-                console.error('[Settings] Cross-tab reload failed:', err);
-                showToast('Settings sync failed. Refresh page.', 5000);
-                EventBus.emit('settings:sync_failed', { error: err }, { skipEventLog: true });
-            });
+    window.addEventListener('storage', e => {
+        if (
+            e.key === 'rhythm_chamber_settings_version' &&
+            e.newValue &&
+            e.newValue !== e.oldValue
+        ) {
+            getSettingsAsync()
+                .then(settings => {
+                    _cachedSettings = settings;
+                    EventBus.emit('settings:changed', settings, { skipEventLog: true });
+                })
+                .catch(err => {
+                    console.error('[Settings] Cross-tab reload failed:', err);
+                    showToast('Settings sync failed. Refresh page.', 5000);
+                    EventBus.emit('settings:sync_failed', { error: err }, { skipEventLog: true });
+                });
         }
     });
 }
@@ -384,7 +433,7 @@ export const Settings = {
     isToolEnabled,
     AVAILABLE_MODELS,
     LLM_PROVIDERS,
-    DEFAULT_ENDPOINTS
+    DEFAULT_ENDPOINTS,
 };
 
 // Settings is exported as an ES module - no global window assignment

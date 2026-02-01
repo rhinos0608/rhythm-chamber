@@ -88,7 +88,8 @@ export function getTopGenres(streams, limit = 10) {
     let totalWithGenres = 0;
 
     for (const stream of streams) {
-        const artistName = stream.master_metadata_album_artist_name ||
+        const artistName =
+            stream.master_metadata_album_artist_name ||
             stream.artistName ||
             stream._demo_genres?.[0];
 
@@ -114,7 +115,7 @@ export function getTopGenres(streams, limit = 10) {
         .map(([genre, count]) => ({
             genre,
             count,
-            percentage: totalWithGenres > 0 ? Math.round((count / totalWithGenres) * 100) : 0
+            percentage: totalWithGenres > 0 ? Math.round((count / totalWithGenres) * 100) : 0,
         }));
 
     return sortedGenres;

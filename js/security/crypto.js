@@ -69,10 +69,12 @@ let _cachedKeyMaterial = null; // Track what material was used for cache validat
  * @returns {boolean} True if secure context
  */
 function isSecureContext() {
-    return window.isSecureContext ||
+    return (
+        window.isSecureContext ||
         location.protocol === 'https:' ||
         location.hostname === 'localhost' ||
-        location.hostname === '127.0.0.1';
+        location.hostname === '127.0.0.1'
+    );
 }
 
 /**
@@ -83,7 +85,9 @@ function isSecureContext() {
 function checkSecureContext() {
     const { secure } = Common.checkSecureContext();
     if (!secure) {
-        console.warn('[Crypto] Running in insecure context - cryptographic operations may be unavailable');
+        console.warn(
+            '[Crypto] Running in insecure context - cryptographic operations may be unavailable'
+        );
     }
     return secure;
 }
@@ -176,7 +180,7 @@ async function deriveKey(password, salt) {
             name: 'PBKDF2',
             salt: encoder.encode(salt),
             iterations: 100000, // OWASP 2024: appropriate for client-side apps
-            hash: 'SHA-256'
+            hash: 'SHA-256',
         },
         keyMaterial,
         { name: 'AES-GCM', length: 256 },
@@ -255,9 +259,10 @@ async function getDataEncryptionKey() {
  * @returns {Promise<string>} Base64-encoded encrypted data (iv + ciphertext)
  */
 async function encryptData(data, keyOrPassword) {
-    const key = typeof keyOrPassword === 'string'
-        ? await deriveKey(keyOrPassword, getSessionSalt())
-        : keyOrPassword;
+    const key =
+        typeof keyOrPassword === 'string'
+            ? await deriveKey(keyOrPassword, getSessionSalt())
+            : keyOrPassword;
 
     const encoder = new TextEncoder();
     const iv = crypto.getRandomValues(new Uint8Array(12)); // 96-bit IV for AES-GCM
@@ -284,22 +289,17 @@ async function encryptData(data, keyOrPassword) {
  */
 async function decryptData(encryptedData, keyOrPassword) {
     try {
-        const key = typeof keyOrPassword === 'string'
-            ? await deriveKey(keyOrPassword, getSessionSalt())
-            : keyOrPassword;
+        const key =
+            typeof keyOrPassword === 'string'
+                ? await deriveKey(keyOrPassword, getSessionSalt())
+                : keyOrPassword;
 
-        const combined = new Uint8Array(
-            [...atob(encryptedData)].map(c => c.charCodeAt(0))
-        );
+        const combined = new Uint8Array([...atob(encryptedData)].map(c => c.charCodeAt(0)));
 
         const iv = combined.slice(0, 12);
         const ciphertext = combined.slice(12);
 
-        const decrypted = await crypto.subtle.decrypt(
-            { name: 'AES-GCM', iv },
-            key,
-            ciphertext
-        );
+        const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
 
         return new TextDecoder().decode(decrypted);
     } catch (e) {
@@ -327,7 +327,7 @@ async function storeEncryptedCredentials(key, credentials) {
         storage[key] = {
             cipher: encrypted,
             version: getSessionVersion(),
-            updatedAt: Date.now()
+            updatedAt: Date.now(),
         };
         localStorage.setItem(ENCRYPTED_CREDS_KEY, JSON.stringify(storage));
 
@@ -423,7 +423,7 @@ const StorageEncryption = {
      */
     async decrypt(encryptedData, key) {
         return decryptData(encryptedData, key);
-    }
+    },
 };
 
 // ==========================================
@@ -454,7 +454,7 @@ async function waitForReady(timeout = 5000) {
     // Immediately ready since we don't have async initialization
     return Promise.race([
         _readyPromise,
-        new Promise(resolve => setTimeout(() => resolve(false), timeout))
+        new Promise(resolve => setTimeout(() => resolve(false), timeout)),
     ]);
 }
 
@@ -498,10 +498,12 @@ export const Crypto = {
 
     // Constants
     DEVICE_SECRET_KEY,
-    ENCRYPTED_CREDS_KEY
+    ENCRYPTED_CREDS_KEY,
 };
 
 // ES Module export
 export default Crypto;
 
-console.log('[Crypto] Simplified crypto module loaded (~250 lines replacing ~2000 lines of security code)');
+console.log(
+    '[Crypto] Simplified crypto module loaded (~250 lines replacing ~2000 lines of security code)'
+);

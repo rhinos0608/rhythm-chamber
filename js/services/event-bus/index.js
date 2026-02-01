@@ -27,7 +27,7 @@ const PRIORITY = Object.freeze({
     LOW: 0,
     NORMAL: 1,
     HIGH: 2,
-    CRITICAL: 3
+    CRITICAL: 3,
 });
 
 const MAX_TRACE_SIZE = 100;
@@ -36,12 +36,12 @@ const MAX_TRACE_SIZE = 100;
 const EVENT_SCHEMAS = {
     'storage:updated': {
         description: 'Data saved to storage',
-        payload: { store: 'string', key: 'string?', count: 'number?' }
+        payload: { store: 'string', key: 'string?', count: 'number?' },
     },
     'session:created': {
         description: 'New chat session created',
-        payload: { sessionId: 'string', title: 'string?' }
-    }
+        payload: { sessionId: 'string', title: 'string?' },
+    },
 };
 
 // ==========================================
@@ -101,7 +101,8 @@ function getSchemas() {
 function validateAgainstSchema(eventType, payload) {
     const schema = getSchema(eventType);
     if (!schema || !schema.payload) return { valid: true };
-    if (!payload || typeof payload !== 'object') return { valid: false, error: 'Payload must be an object' };
+    if (!payload || typeof payload !== 'object')
+        return { valid: false, error: 'Payload must be an object' };
 
     for (const [key, typeSpec] of Object.entries(schema.payload)) {
         const optional = typeof typeSpec === 'string' && typeSpec.endsWith('?');
@@ -114,12 +115,14 @@ function validateAgainstSchema(eventType, payload) {
         }
 
         if (expectedType === 'array') {
-            if (!Array.isArray(value)) return { valid: false, error: `Field '${key}' must be array` };
+            if (!Array.isArray(value))
+                return { valid: false, error: `Field '${key}' must be array` };
             continue;
         }
 
         if (expectedType === 'object') {
-            if (typeof value !== 'object') return { valid: false, error: `Field '${key}' must be object` };
+            if (typeof value !== 'object')
+                return { valid: false, error: `Field '${key}' must be object` };
             continue;
         }
 
@@ -137,7 +140,14 @@ function validateAgainstSchema(eventType, payload) {
 
 function redactSensitive(value) {
     if (!value || typeof value !== 'object') return value;
-    const SENSITIVE_KEYS = new Set(['apiToken', 'apiKey', 'token', 'password', 'secret', 'authorization']);
+    const SENSITIVE_KEYS = new Set([
+        'apiToken',
+        'apiKey',
+        'token',
+        'password',
+        'secret',
+        'authorization',
+    ]);
     const out = Array.isArray(value) ? [] : {};
     for (const [k, v] of Object.entries(value)) {
         if (SENSITIVE_KEYS.has(k)) {
@@ -155,7 +165,7 @@ function addTrace(eventType, payload, meta) {
     trace.push({
         event: eventType,
         payload: redactSensitive(payload),
-        meta: { ...meta }
+        meta: { ...meta },
     });
     if (trace.length > MAX_TRACE_SIZE) {
         trace.splice(0, trace.length - MAX_TRACE_SIZE);
@@ -184,7 +194,7 @@ function on(eventType, handler, options = {}) {
         handler,
         once: false,
         priority: options.priority ?? PRIORITY.NORMAL,
-        eventType: eventType
+        eventType: eventType,
     };
 
     if (eventType === '*') {
@@ -200,7 +210,7 @@ function on(eventType, handler, options = {}) {
 
 function once(eventType, handler, options = {}) {
     const unsubscribe = on(eventType, handler, options);
-    const list = eventType === '*' ? wildcardSubscribers : (subscribers.get(eventType) || []);
+    const list = eventType === '*' ? wildcardSubscribers : subscribers.get(eventType) || [];
     const sub = list.find(s => s.handler === handler);
     if (sub) sub.once = true;
     return unsubscribe;
@@ -215,7 +225,10 @@ function off(eventType, handler) {
     }
     const list = subscribers.get(eventType);
     if (!list) return;
-    subscribers.set(eventType, list.filter(s => s.handler !== handler));
+    subscribers.set(
+        eventType,
+        list.filter(s => s.handler !== handler)
+    );
 }
 
 function clearAll() {
@@ -265,7 +278,7 @@ async function maybePersistEvent(eventType, payload, meta, options) {
         const stored = await EventLogStore.appendEvent(
             eventType,
             payload,
-            { sequence: meta.sequenceNumber },  // Simplified: just sequence number
+            { sequence: meta.sequenceNumber }, // Simplified: just sequence number
             options.sourceTab || 'local',
             options.domain || 'global'
         );
@@ -274,7 +287,11 @@ async function maybePersistEvent(eventType, payload, meta, options) {
         }
     } catch (e) {
         failedPersistSequences.add(meta.sequenceNumber);
-        EventBus.emit('event:persistence_failed', { eventType, error: e?.message || String(e) }, { skipEventLog: true });
+        EventBus.emit(
+            'event:persistence_failed',
+            { eventType, error: e?.message || String(e) },
+            { skipEventLog: true }
+        );
     }
 }
 
@@ -299,7 +316,9 @@ async function replayEvents(options = {}) {
     eventReplayInProgress = true;
     try {
         const events = await EventLogStore.getEvents(fromSequenceNumber, count);
-        events.sort((a, b) => forward ? (a.sequenceNumber - b.sequenceNumber) : (b.sequenceNumber - a.sequenceNumber));
+        events.sort((a, b) =>
+            forward ? a.sequenceNumber - b.sequenceNumber : b.sequenceNumber - a.sequenceNumber
+        );
         let replayed = 0;
         let errors = 0;
         for (const evt of events) {
@@ -352,7 +371,7 @@ function dispatchHandlers(eventType, payload, meta) {
             handlerErrors.push({
                 eventType,
                 handlerId: sub.id,
-                error: e
+                error: e,
             });
         } finally {
             called++;
@@ -366,11 +385,15 @@ function dispatchHandlers(eventType, payload, meta) {
     if (handlerErrors.length > 0) {
         // Use setTimeout to avoid recursive sync emit issues
         setTimeout(() => {
-            emit('EVENTBUS:HANDLER_ERROR', {
-                originalEvent: eventType,
-                errors: handlerErrors,
-                timestamp: Date.now()
-            }, { priority: PRIORITY.HIGH });
+            emit(
+                'EVENTBUS:HANDLER_ERROR',
+                {
+                    originalEvent: eventType,
+                    errors: handlerErrors,
+                    timestamp: Date.now(),
+                },
+                { priority: PRIORITY.HIGH }
+            );
         }, 0);
     }
 
@@ -394,7 +417,7 @@ function emit(eventType, payload = {}, options = {}) {
         priority: options.priority ?? PRIORITY.NORMAL,
         sequenceNumber: sequenceNumber++,
         isReplay: !!options.skipEventLog,
-        waveId
+        waveId,
     };
 
     const validation = validateAgainstSchema(eventType, payload);
@@ -432,7 +455,7 @@ async function emitAndAwait(eventType, payload = {}, options = {}) {
         priority: options.priority ?? PRIORITY.NORMAL,
         sequenceNumber: sequenceNumber++,
         isReplay: !!options.skipEventLog,
-        waveId: computeWaveId(eventType)
+        waveId: computeWaveId(eventType),
     };
 
     addTrace(eventType, payload, meta);
@@ -469,7 +492,7 @@ async function emitParallel(eventType, payload = {}, options = {}) {
         priority: options.priority ?? PRIORITY.NORMAL,
         sequenceNumber: sequenceNumber++,
         isReplay: !!options.skipEventLog,
-        waveId: computeWaveId(eventType)
+        waveId: computeWaveId(eventType),
     };
 
     addTrace(eventType, payload, meta);
@@ -480,24 +503,26 @@ async function emitParallel(eventType, payload = {}, options = {}) {
         return a.id - b.id;
     });
 
-    const results = await Promise.allSettled(sorted.map(async (sub) => {
-        try {
-            const result = await sub.handler(payload, meta);
-            if (sub.once) off(sub.eventType, sub.handler);
-            return { success: true, result, handler: sub.handler.name || '' };
-        } catch (e) {
-            console.error('[EventBus] Parallel handler error:', e);
-            if (sub.once) off(sub.eventType, sub.handler);
-            return { success: false, error: e, handler: sub.handler.name || '' };
-        }
-    }));
+    const results = await Promise.allSettled(
+        sorted.map(async sub => {
+            try {
+                const result = await sub.handler(payload, meta);
+                if (sub.once) off(sub.eventType, sub.handler);
+                return { success: true, result, handler: sub.handler.name || '' };
+            } catch (e) {
+                console.error('[EventBus] Parallel handler error:', e);
+                if (sub.once) off(sub.eventType, sub.handler);
+                return { success: false, error: e, handler: sub.handler.name || '' };
+            }
+        })
+    );
 
     const failures = results.filter(r => r.status === 'rejected' || (r.value && !r.value.success));
     return {
         success: failures.length === 0,
         total: results.length,
         failed: failures.length,
-        results: results.map(r => r.value || { success: false, error: r.reason, handler: '' })
+        results: results.map(r => r.value || { success: false, error: r.reason, handler: '' }),
     };
 }
 
@@ -565,5 +590,5 @@ export const EventBus = {
 
     // Constants
     PRIORITY,
-    EVENT_SCHEMAS
+    EVENT_SCHEMAS,
 };

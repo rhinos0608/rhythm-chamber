@@ -31,7 +31,7 @@ const WorkerType = {
     EMBEDDING: 'embedding',
     PATTERN: 'pattern',
     VECTOR_SEARCH: 'vector_search',
-    PATTERN_POOL: 'pattern_pool'
+    PATTERN_POOL: 'pattern_pool',
 };
 
 /**
@@ -108,7 +108,7 @@ function registerWorker(type, options = {}) {
         heartbeatTimer: null,
         missedHeartbeats: 0,
         cleanup: options.cleanup || null,
-        initializingPromise: null // Race condition prevention
+        initializingPromise: null, // Race condition prevention
     };
 
     workerRegistry.set(type, entry);
@@ -218,7 +218,10 @@ async function createWorker(type, workerPath, initHandlers) {
                     workerInstance.onerror = null;
                     workerInstance.terminate();
                 } catch (terminateError) {
-                    console.warn(`[WorkerCoordinator] Error terminating failed ${type} worker:`, terminateError);
+                    console.warn(
+                        `[WorkerCoordinator] Error terminating failed ${type} worker:`,
+                        terminateError
+                    );
                 }
             }
 
@@ -227,7 +230,10 @@ async function createWorker(type, workerPath, initHandlers) {
                 try {
                     entry.cleanup();
                 } catch (cleanupError) {
-                    console.warn(`[WorkerCoordinator] Custom cleanup error for ${type}:`, cleanupError);
+                    console.warn(
+                        `[WorkerCoordinator] Custom cleanup error for ${type}:`,
+                        cleanupError
+                    );
                 }
             }
 
@@ -317,7 +323,7 @@ function cleanupIdleWorkers() {
             continue;
         }
 
-        if (entry.instance && (now - entry.lastUsed) > IDLE_THRESHOLD) {
+        if (entry.instance && now - entry.lastUsed > IDLE_THRESHOLD) {
             terminateWorker(type);
             cleaned++;
         }
@@ -412,7 +418,7 @@ function getHealthStatus() {
             age: Date.now() - entry.createdAt,
             idle: Date.now() - entry.lastUsed,
             missedHeartbeats: entry.missedHeartbeats,
-            healthy: entry.missedHeartbeats <= MAX_MISSED_HEARTBEATS
+            healthy: entry.missedHeartbeats <= MAX_MISSED_HEARTBEATS,
         };
     }
 
@@ -454,7 +460,7 @@ function getRegistryInfo() {
             lastUsed: new Date(entry.lastUsed).toISOString(),
             heartbeatInterval: entry.heartbeatInterval,
             heartbeatActive: !!entry.heartbeatTimer,
-            missedHeartbeats: entry.missedHeartbeats
+            missedHeartbeats: entry.missedHeartbeats,
         };
     }
 
@@ -485,7 +491,7 @@ function getStats() {
         active,
         idle: total - active,
         persistent,
-        utilization: total > 0 ? (active / total * 100).toFixed(1) + '%' : '0%'
+        utilization: total > 0 ? ((active / total) * 100).toFixed(1) + '%' : '0%',
     };
 }
 
@@ -504,27 +510,27 @@ function init() {
 
     registerWorker(WorkerType.PARSER, {
         persistent: false,
-        heartbeatInterval: 5000
+        heartbeatInterval: 5000,
     });
 
     registerWorker(WorkerType.EMBEDDING, {
         persistent: true,
-        heartbeatInterval: 10000
+        heartbeatInterval: 10000,
     });
 
     registerWorker(WorkerType.PATTERN, {
         persistent: false,
-        heartbeatInterval: 5000
+        heartbeatInterval: 5000,
     });
 
     registerWorker(WorkerType.VECTOR_SEARCH, {
         persistent: true,
-        heartbeatInterval: 10000
+        heartbeatInterval: 10000,
     });
 
     registerWorker(WorkerType.PATTERN_POOL, {
         persistent: true,
-        heartbeatInterval: 5000
+        heartbeatInterval: 5000,
     });
 
     window.addEventListener('beforeunload', terminateAll);
@@ -578,7 +584,7 @@ export const WorkerCoordinator = {
     enableDebugMode,
     disableDebugMode,
     init,
-    destroy
+    destroy,
 };
 
 export default WorkerCoordinator;

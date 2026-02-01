@@ -64,7 +64,7 @@ export function validateSchema(value, schema) {
     if (schema.required && (value === null || value === undefined)) {
         return {
             valid: false,
-            error: 'Value is required'
+            error: 'Value is required',
         };
     }
 
@@ -131,7 +131,7 @@ export function validateSchema(value, schema) {
     if (schema.type === 'string' && schema.pattern) {
         try {
             if (!_safeRegexTest(normalizedValue, schema.pattern)) {
-                errors.push(`Value does not match required pattern`);
+                errors.push('Value does not match required pattern');
             }
         } catch (error) {
             errors.push(`Pattern validation error: ${error.message}`);
@@ -153,7 +153,7 @@ export function validateSchema(value, schema) {
     return {
         valid: errors.length === 0,
         errors: errors.length > 0 ? errors : undefined,
-        normalizedValue
+        normalizedValue,
     };
 }
 
@@ -184,7 +184,7 @@ function _validateType(value, expectedType) {
             if (expectedType === 'integer' && !Number.isInteger(normalized)) {
                 return {
                     valid: false,
-                    error: `Expected ${expectedType}, got string that cannot be converted to integer`
+                    error: `Expected ${expectedType}, got string that cannot be converted to integer`,
                 };
             }
             return { valid: true, normalizedValue: normalized };
@@ -193,7 +193,7 @@ function _validateType(value, expectedType) {
 
     return {
         valid: false,
-        error: `Expected type ${expectedType}, got ${actualType}`
+        error: `Expected type ${expectedType}, got ${actualType}`,
     };
 }
 
@@ -219,7 +219,9 @@ function _validateEnum(value, enumValues) {
         }
 
         // Only call toLowerCase on string enum values
-        const caseMatch = enumValues.find(e => typeof e === 'string' && e.toLowerCase() === normalized.toLowerCase());
+        const caseMatch = enumValues.find(
+            e => typeof e === 'string' && e.toLowerCase() === normalized.toLowerCase()
+        );
         if (caseMatch) {
             return { valid: true, normalizedValue: caseMatch };
         }
@@ -227,7 +229,7 @@ function _validateEnum(value, enumValues) {
 
     return {
         valid: false,
-        error: `Value must be one of: ${enumValues.join(', ')}`
+        error: `Value must be one of: ${enumValues.join(', ')}`,
     };
 }
 
@@ -245,7 +247,7 @@ function _validateObjectProperties(obj, properties, requiredProperties = []) {
     if (typeof obj !== 'object' || obj === null) {
         return {
             valid: false,
-            errors: ['Value must be an object']
+            errors: ['Value must be an object'],
         };
     }
 
@@ -270,7 +272,7 @@ function _validateObjectProperties(obj, properties, requiredProperties = []) {
 
     return {
         valid: errors.length === 0,
-        errors
+        errors,
     };
 }
 

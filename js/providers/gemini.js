@@ -13,7 +13,7 @@ import { safeJsonParse } from '../utils/safe-json.js';
 // Configuration
 // ==========================================
 
-const GEMINI_TIMEOUT_MS = 60000;  // 60 seconds
+const GEMINI_TIMEOUT_MS = 60000; // 60 seconds
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/openai';
 
 // Supported Gemini models (free tier available)
@@ -26,7 +26,7 @@ const GEMINI_MODELS = {
     'gemini-2.0-flash-exp': { name: 'Gemini 2.0 Flash Experimental', free: true, context: 1000000 },
     'gemini-1.5-flash': { name: 'Gemini 1.5 Flash', free: true, context: 1000000 },
     'gemini-1.5-pro': { name: 'Gemini 1.5 Pro', free: false, context: 2000000 },
-    'gemini-1.5-pro-exp': { name: 'Gemini 1.5 Pro Experimental', free: false, context: 2000000 }
+    'gemini-1.5-pro-exp': { name: 'Gemini 1.5 Pro Experimental', free: false, context: 2000000 },
 };
 
 // ==========================================
@@ -55,7 +55,7 @@ async function call(apiKey, config, messages, tools, onProgress = null) {
         model: config.model || 'gemini-2.5-flash',
         messages,
         max_tokens: config.maxTokens || 8192,
-        temperature: config.temperature ?? 0.7
+        temperature: config.temperature ?? 0.7,
     };
 
     // Add optional parameters if provided
@@ -87,10 +87,10 @@ async function call(apiKey, config, messages, tools, onProgress = null) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
+                Authorization: `Bearer ${apiKey}`,
             },
             body: JSON.stringify(body),
-            signal: controller.signal
+            signal: controller.signal,
         });
 
         // Only clear timeout if it hasn't fired yet
@@ -170,7 +170,7 @@ async function callStreaming(apiKey, config, messages, tools, onToken) {
         messages,
         max_tokens: config.maxTokens || 8192,
         temperature: config.temperature ?? 0.7,
-        stream: true // Enable streaming
+        stream: true, // Enable streaming
     };
 
     // Add optional parameters if provided
@@ -202,10 +202,10 @@ async function callStreaming(apiKey, config, messages, tools, onToken) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
+                Authorization: `Bearer ${apiKey}`,
             },
             body: JSON.stringify(body),
-            signal: controller.signal
+            signal: controller.signal,
         });
 
         // Only clear timeout if it hasn't fired yet
@@ -306,66 +306,196 @@ async function handleStreamingResponse(response, onProgress) {
     let inThinking = false;
     let lastMessage = null;
     let toolCallsAccumulator = [];
-    let toolCallsById = {};
+    const toolCallsById = {};
     let buffer = '';
 
     // MEDIUM FIX #18: Wrap stream processing in try-finally to ensure cleanup
     // If an error occurs mid-stream, reader.cancel() is called to release resources
     try {
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-        // Append to buffer and process complete lines
-        buffer += decoder.decode(value, { stream: true });
+            // Append to buffer and process complete lines
+            buffer += decoder.decode(value, { stream: true });
 
-        // HIGH FIX #7: Buffer overflow protection
-        // Prevent unbounded buffer growth if API never sends newline
-        const MAX_BUFFER_SIZE = 1024 * 1024; // 1MB limit
-        if (buffer.length > MAX_BUFFER_SIZE) {
-            console.error('[Gemini] Buffer overflow detected, closing stream');
-            reader.cancel();
-            throw new Error('Stream buffer overflow - malformed response');
+            // HIGH FIX #7: Buffer overflow protection
+            // Prevent unbounded buffer growth if API never sends newline
+            const MAX_BUFFER_SIZE = 1024 * 1024; // 1MB limit
+            if (buffer.length > MAX_BUFFER_SIZE) {
+                console.error('[Gemini] Buffer overflow detected, closing stream');
+                reader.cancel();
+                throw new Error('Stream buffer overflow - malformed response');
+            }
+
+            const lines = buffer.split('\n');
+
+            // Keep last incomplete line in buffer
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (trimmedLine === '' || trimmedLine === '[DONE]') continue;
+
+                // Handle SSE data: prefix
+                let data = trimmedLine;
+                if (trimmedLine.startsWith('data: ')) {
+                    data = trimmedLine.slice(6);
+                    if (data === '[DONE]') continue;
+                }
+
+                // Skip non-JSON lines
+                if (!data.startsWith('{')) continue;
+
+                // CRITICAL FIX #1: Use safeJsonParse to prevent crash on malformed JSON
+                // If API returns malformed JSON due to network corruption or API bugs,
+                // we skip the chunk instead of crashing the entire stream
+                const parsed = safeJsonParse(data, null);
+                if (!parsed) {
+                    console.debug(
+                        '[Gemini] Failed to parse chunk, skipping:',
+                        data.substring(0, 100)
+                    );
+                    continue;
+                }
+
+                try {
+                    // Handle both streaming delta format AND complete message format
+                    const delta = parsed.choices?.[0]?.delta;
+                    const message = parsed.choices?.[0]?.message;
+
+                    // For complete (non-streaming) responses embedded in stream
+                    if (message?.content && !delta) {
+                        fullContent = message.content;
+                        if (message.tool_calls) {
+                            for (const tc of message.tool_calls) {
+                                toolCallsById[
+                                    tc.id || `call_${Object.keys(toolCallsById).length}`
+                                ] = {
+                                    id: tc.id || `call_${Object.keys(toolCallsById).length}`,
+                                    type: 'function',
+                                    function: {
+                                        name: tc.function?.name || '',
+                                        // CRITICAL FIX #4: Use normalizeToolArguments to handle type confusion
+                                        arguments: normalizeToolArguments(tc.function?.arguments),
+                                    },
+                                };
+                            }
+                        }
+                        lastMessage = parsed;
+                        continue;
+                    }
+
+                    if (delta?.content) {
+                        const token = delta.content;
+
+                        // MEDIUM FIX #17: Detect thinking blocks using proper tag boundary matching
+                        // Use regex to match actual XML-like tags instead of substring search
+                        // This prevents false positives when model outputs "extended_thinking" as normal text
+                        const THINKING_START_TAG = '<extended_thinking>';
+                        const THINKING_END_TAG = '</extended_thinking>';
+
+                        // Check if token contains the start tag
+                        if (token.includes(THINKING_START_TAG)) {
+                            inThinking = true;
+                            const parts = token.split(THINKING_START_TAG);
+                            if (parts[0]) {
+                                fullContent += parts[0];
+                                if (onProgress) onProgress({ type: 'token', token: parts[0] });
+                            }
+                            // Check if end tag is in the same token
+                            if (token.includes(THINKING_END_TAG)) {
+                                const afterStart = parts[1] || '';
+                                const endParts = afterStart.split(THINKING_END_TAG);
+                                thinkingContent += endParts[0] || '';
+                                inThinking = false;
+                                if (onProgress)
+                                    onProgress({ type: 'thinking', content: thinkingContent });
+                                thinkingContent = '';
+                                if (endParts[1]) {
+                                    fullContent += endParts[1];
+                                    if (onProgress)
+                                        onProgress({ type: 'token', token: endParts[1] });
+                                }
+                            } else {
+                                thinkingContent += parts[1] || '';
+                            }
+                            continue;
+                        }
+
+                        if (inThinking) {
+                            thinkingContent += token;
+                            // Check for end tag in thinking content
+                            if (thinkingContent.includes(THINKING_END_TAG)) {
+                                inThinking = false;
+                                const parts = thinkingContent.split(THINKING_END_TAG);
+                                thinkingContent = parts[0] || '';
+                                if (onProgress)
+                                    onProgress({ type: 'thinking', content: thinkingContent });
+                                thinkingContent = '';
+                                if (parts[1]) {
+                                    fullContent += parts[1];
+                                    if (onProgress) onProgress({ type: 'token', token: parts[1] });
+                                }
+                            }
+                        } else {
+                            fullContent += token;
+                            if (onProgress) onProgress({ type: 'token', token });
+                        }
+                    }
+
+                    // Track tool calls in streaming
+                    if (delta?.tool_calls) {
+                        if (onProgress)
+                            onProgress({ type: 'tool_call', toolCalls: delta.tool_calls });
+                        // Accumulate tool calls from streaming chunks
+                        for (const tc of delta.tool_calls) {
+                            const idx = tc.index ?? 0;
+                            if (!toolCallsById[idx]) {
+                                toolCallsById[idx] = {
+                                    id: tc.id || `call_${idx}`,
+                                    type: 'function',
+                                    function: {
+                                        name: tc.function?.name || '',
+                                        arguments: tc.function?.arguments || '',
+                                    },
+                                };
+                            } else {
+                                // Append arguments for chunked tool calls
+                                if (tc.function?.name) {
+                                    toolCallsById[idx].function.name = tc.function.name;
+                                }
+                                if (tc.function?.arguments) {
+                                    toolCallsById[idx].function.arguments += tc.function.arguments;
+                                }
+                            }
+                        }
+                    }
+
+                    lastMessage = parsed;
+                } catch (e) {
+                    // Catch non-parsing errors in message processing logic
+                    // Note: JSON parse errors are now handled by safeJsonParse above
+                    console.debug('[Gemini] Error processing chunk:', e.message);
+                }
+            }
         }
 
-        const lines = buffer.split('\n');
-
-        // Keep last incomplete line in buffer
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-            const trimmedLine = line.trim();
-            if (trimmedLine === '' || trimmedLine === '[DONE]') continue;
-
-            // Handle SSE data: prefix
-            let data = trimmedLine;
-            if (trimmedLine.startsWith('data: ')) {
-                data = trimmedLine.slice(6);
-                if (data === '[DONE]') continue;
+        // Process any remaining buffer content
+        if (buffer.trim()) {
+            let data = buffer.trim();
+            if (data.startsWith('data: ')) {
+                data = data.slice(6);
             }
-
-            // Skip non-JSON lines
-            if (!data.startsWith('{')) continue;
-
-            // CRITICAL FIX #1: Use safeJsonParse to prevent crash on malformed JSON
-            // If API returns malformed JSON due to network corruption or API bugs,
-            // we skip the chunk instead of crashing the entire stream
-            const parsed = safeJsonParse(data, null);
-            if (!parsed) {
-                console.debug('[Gemini] Failed to parse chunk, skipping:', data.substring(0, 100));
-                continue;
-            }
-
-            try {
-
-                // Handle both streaming delta format AND complete message format
-                const delta = parsed.choices?.[0]?.delta;
-                const message = parsed.choices?.[0]?.message;
-
-                // For complete (non-streaming) responses embedded in stream
-                if (message?.content && !delta) {
-                    fullContent = message.content;
-                    if (message.tool_calls) {
+            if (data.startsWith('{')) {
+                // CRITICAL FIX #1: Use safeJsonParse for final buffer too
+                const parsed = safeJsonParse(data, null);
+                if (parsed) {
+                    const message = parsed.choices?.[0]?.message;
+                    if (message?.content) {
+                        fullContent = message.content;
+                    }
+                    if (message?.tool_calls) {
                         for (const tc of message.tool_calls) {
                             toolCallsById[tc.id || `call_${Object.keys(toolCallsById).length}`] = {
                                 id: tc.id || `call_${Object.keys(toolCallsById).length}`,
@@ -373,164 +503,49 @@ async function handleStreamingResponse(response, onProgress) {
                                 function: {
                                     name: tc.function?.name || '',
                                     // CRITICAL FIX #4: Use normalizeToolArguments to handle type confusion
-                                    arguments: normalizeToolArguments(tc.function?.arguments)
-                                }
+                                    arguments: normalizeToolArguments(tc.function?.arguments),
+                                },
                             };
                         }
                     }
                     lastMessage = parsed;
-                    continue;
                 }
-
-                if (delta?.content) {
-                    const token = delta.content;
-
-                    // MEDIUM FIX #17: Detect thinking blocks using proper tag boundary matching
-                    // Use regex to match actual XML-like tags instead of substring search
-                    // This prevents false positives when model outputs "extended_thinking" as normal text
-                    const THINKING_START_TAG = '<extended_thinking>';
-                    const THINKING_END_TAG = '</extended_thinking>';
-
-                    // Check if token contains the start tag
-                    if (token.includes(THINKING_START_TAG)) {
-                        inThinking = true;
-                        const parts = token.split(THINKING_START_TAG);
-                        if (parts[0]) {
-                            fullContent += parts[0];
-                            if (onProgress) onProgress({ type: 'token', token: parts[0] });
-                        }
-                        // Check if end tag is in the same token
-                        if (token.includes(THINKING_END_TAG)) {
-                            const afterStart = parts[1] || '';
-                            const endParts = afterStart.split(THINKING_END_TAG);
-                            thinkingContent += endParts[0] || '';
-                            inThinking = false;
-                            if (onProgress) onProgress({ type: 'thinking', content: thinkingContent });
-                            thinkingContent = '';
-                            if (endParts[1]) {
-                                fullContent += endParts[1];
-                                if (onProgress) onProgress({ type: 'token', token: endParts[1] });
-                            }
-                        } else {
-                            thinkingContent += parts[1] || '';
-                        }
-                        continue;
-                    }
-
-                    if (inThinking) {
-                        thinkingContent += token;
-                        // Check for end tag in thinking content
-                        if (thinkingContent.includes(THINKING_END_TAG)) {
-                            inThinking = false;
-                            const parts = thinkingContent.split(THINKING_END_TAG);
-                            thinkingContent = parts[0] || '';
-                            if (onProgress) onProgress({ type: 'thinking', content: thinkingContent });
-                            thinkingContent = '';
-                            if (parts[1]) {
-                                fullContent += parts[1];
-                                if (onProgress) onProgress({ type: 'token', token: parts[1] });
-                            }
-                        }
-                    } else {
-                        fullContent += token;
-                        if (onProgress) onProgress({ type: 'token', token });
-                    }
-                }
-
-                // Track tool calls in streaming
-                if (delta?.tool_calls) {
-                    if (onProgress) onProgress({ type: 'tool_call', toolCalls: delta.tool_calls });
-                    // Accumulate tool calls from streaming chunks
-                    for (const tc of delta.tool_calls) {
-                        const idx = tc.index ?? 0;
-                        if (!toolCallsById[idx]) {
-                            toolCallsById[idx] = {
-                                id: tc.id || `call_${idx}`,
-                                type: 'function',
-                                function: {
-                                    name: tc.function?.name || '',
-                                    arguments: tc.function?.arguments || ''
-                                }
-                            };
-                        } else {
-                            // Append arguments for chunked tool calls
-                            if (tc.function?.name) {
-                                toolCallsById[idx].function.name = tc.function.name;
-                            }
-                            if (tc.function?.arguments) {
-                                toolCallsById[idx].function.arguments += tc.function.arguments;
-                            }
-                        }
-                    }
-                }
-
-                lastMessage = parsed;
-            } catch (e) {
-                // Catch non-parsing errors in message processing logic
-                // Note: JSON parse errors are now handled by safeJsonParse above
-                console.debug('[Gemini] Error processing chunk:', e.message);
+                // Note: safeJsonParse handles parse errors - no catch needed here
             }
         }
-    }
 
-    // Process any remaining buffer content
-    if (buffer.trim()) {
-        let data = buffer.trim();
-        if (data.startsWith('data: ')) {
-            data = data.slice(6);
+        // Finalize tool calls array
+        toolCallsAccumulator = Object.values(toolCallsById);
+
+        // Build OpenAI-compatible response
+        const responseMessage = {
+            role: 'assistant',
+            content: fullContent || null,
+        };
+
+        // Add tool calls if present
+        if (toolCallsAccumulator.length > 0) {
+            responseMessage.tool_calls = toolCallsAccumulator;
         }
-        if (data.startsWith('{')) {
-            // CRITICAL FIX #1: Use safeJsonParse for final buffer too
-            const parsed = safeJsonParse(data, null);
-            if (parsed) {
-                const message = parsed.choices?.[0]?.message;
-                if (message?.content) {
-                    fullContent = message.content;
-                }
-                if (message?.tool_calls) {
-                    for (const tc of message.tool_calls) {
-                        toolCallsById[tc.id || `call_${Object.keys(toolCallsById).length}`] = {
-                            id: tc.id || `call_${Object.keys(toolCallsById).length}`,
-                            type: 'function',
-                            function: {
-                                name: tc.function?.name || '',
-                                // CRITICAL FIX #4: Use normalizeToolArguments to handle type confusion
-                                arguments: normalizeToolArguments(tc.function?.arguments)
-                            }
-                        };
-                    }
-                }
-                lastMessage = parsed;
-            }
-            // Note: safeJsonParse handles parse errors - no catch needed here
-        }
-    }
 
-    // Finalize tool calls array
-    toolCallsAccumulator = Object.values(toolCallsById);
+        console.log(
+            '[Gemini] Streaming complete - content length:',
+            fullContent.length,
+            'tool_calls:',
+            toolCallsAccumulator.length
+        );
 
-    // Build OpenAI-compatible response
-    const responseMessage = {
-        role: 'assistant',
-        content: fullContent || null
-    };
-
-    // Add tool calls if present
-    if (toolCallsAccumulator.length > 0) {
-        responseMessage.tool_calls = toolCallsAccumulator;
-    }
-
-    console.log('[Gemini] Streaming complete - content length:', fullContent.length, 'tool_calls:', toolCallsAccumulator.length);
-
-    return {
-        choices: [{
-            message: responseMessage,
-            finish_reason: toolCallsAccumulator.length > 0 ? 'tool_calls' : 'stop'
-        }],
-        model: lastMessage?.model,
-        thinking: thinkingContent || undefined,
-        usage: lastMessage?.usage
-    };
+        return {
+            choices: [
+                {
+                    message: responseMessage,
+                    finish_reason: toolCallsAccumulator.length > 0 ? 'tool_calls' : 'stop',
+                },
+            ],
+            model: lastMessage?.model,
+            thinking: thinkingContent || undefined,
+            usage: lastMessage?.usage,
+        };
     } finally {
         // MEDIUM FIX #18: Ensure reader is closed even if an error occurs
         // This prevents resource leaks and hanging connections
@@ -565,9 +580,9 @@ async function validateApiKey(apiKey) {
 
         const response = await fetch(`${GEMINI_API_BASE}/models`, {
             headers: {
-                'Authorization': `Bearer ${apiKey}`
+                Authorization: `Bearer ${apiKey}`,
             },
-            signal: controller.signal
+            signal: controller.signal,
         });
 
         clearTimeout(timeoutId);
@@ -597,9 +612,9 @@ async function listModels(apiKey) {
         const response = await fetch(url.toString(), {
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
+                Authorization: `Bearer ${apiKey}`,
             },
-            signal: controller.signal
+            signal: controller.signal,
         });
 
         clearTimeout(timeoutId);
@@ -636,7 +651,7 @@ function getModelInfo(modelId) {
 function getAvailableModels() {
     return Object.entries(GEMINI_MODELS).map(([id, info]) => ({
         id,
-        ...info
+        ...info,
     }));
 }
 
@@ -674,8 +689,7 @@ export const GeminiProvider = {
     name: 'gemini',
     displayName: 'Gemini (Google AI Studio)',
     type: 'cloud',
-    description: 'Google AI models with native function calling. Gemini 2.0 Flash is free!'
+    description: 'Google AI models with native function calling. Gemini 2.0 Flash is free!',
 };
-
 
 console.log('[GeminiProvider] Provider loaded with OpenAI-compatible endpoint');

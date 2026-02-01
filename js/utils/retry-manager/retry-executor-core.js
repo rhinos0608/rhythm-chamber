@@ -15,7 +15,11 @@
  */
 
 import { DEFAULT_RETRY_CONFIG, classifyError, isRetryable } from './retry-config.js';
-import { calculateBackoffForError, calculateExponentialBackoff, delay } from './retry-strategies.js';
+import {
+    calculateBackoffForError,
+    calculateExponentialBackoff,
+    delay,
+} from './retry-strategies.js';
 
 // Default EventBus instance (fallback if not injected)
 let defaultEventBus = null;
@@ -39,7 +43,11 @@ export function setDefaultEventBus(eventBus) {
  * @param {string} [message] - Timeout error message
  * @returns {Promise<any>} Result of the function
  */
-export async function withTimeout(fn, timeoutMs, message = `Operation timed out after ${timeoutMs}ms`) {
+export async function withTimeout(
+    fn,
+    timeoutMs,
+    message = `Operation timed out after ${timeoutMs}ms`
+) {
     let timeoutId;
 
     const timeoutPromise = new Promise((_, reject) => {
@@ -112,7 +120,7 @@ export class RetryContext {
             elapsedTime: this.elapsedTime,
             delays: [...this.delays],
             totalDelayTime: this.totalDelayTime,
-            errors: [...this.errors]
+            errors: [...this.errors],
         };
     }
 }
@@ -149,13 +157,11 @@ export async function withRetry(fn, options = {}) {
         abortSignal = null,
         timeoutMs = null,
         useJitter = true,
-        eventBus = defaultEventBus
+        eventBus = defaultEventBus,
     } = options;
 
     // CRIT-001: Validate maxRetries to prevent infinite loop
-    if (typeof maxRetries !== 'number' ||
-        !Number.isFinite(maxRetries) ||
-        maxRetries < 0) {
+    if (typeof maxRetries !== 'number' || !Number.isFinite(maxRetries) || maxRetries < 0) {
         throw new Error(`Invalid maxRetries: ${maxRetries}. Must be non-negative finite number.`);
     }
 
@@ -176,7 +182,7 @@ export async function withRetry(fn, options = {}) {
                         callback: 'onFailure',
                         error: callbackError,
                         originalError: error,
-                        context
+                        context,
                     });
                     // Re-throw to surface callback errors
                     throw callbackError;
@@ -187,9 +193,7 @@ export async function withRetry(fn, options = {}) {
 
         try {
             // Execute function (with optional timeout)
-            const result = timeoutMs
-                ? await withTimeout(() => fn(), timeoutMs)
-                : await fn();
+            const result = timeoutMs ? await withTimeout(() => fn(), timeoutMs) : await fn();
 
             context.lastError = null; // Clear error on success
 
@@ -203,7 +207,7 @@ export async function withRetry(fn, options = {}) {
                         callback: 'onSuccess',
                         error: callbackError,
                         result,
-                        context
+                        context,
                     });
                     // Re-throw to surface callback errors
                     throw callbackError;
@@ -225,7 +229,7 @@ export async function withRetry(fn, options = {}) {
                             callback: 'onFailure',
                             error: callbackError,
                             originalError: error,
-                            context
+                            context,
                         });
                         // Re-throw to surface callback errors
                         throw callbackError;
@@ -245,7 +249,7 @@ export async function withRetry(fn, options = {}) {
                             callback: 'onFailure',
                             error: callbackError,
                             originalError: error,
-                            context
+                            context,
                         });
                         // Re-throw to surface callback errors
                         throw callbackError;
@@ -271,7 +275,7 @@ export async function withRetry(fn, options = {}) {
                         callback: 'onRetry',
                         error: callbackError,
                         originalError: error,
-                        context
+                        context,
                     });
                     // Re-throw to surface callback errors
                     throw callbackError;
@@ -284,7 +288,7 @@ export async function withRetry(fn, options = {}) {
             if (DEBUG) {
                 console.log(
                     `[RetryManager] Retry ${context.attempt}/${maxRetries} after ${backoff}ms ` +
-                    `(type: ${errorType}, elapsed: ${context.elapsedTime}ms)`
+                        `(type: ${errorType}, elapsed: ${context.elapsedTime}ms)`
                 );
             }
 
@@ -294,7 +298,7 @@ export async function withRetry(fn, options = {}) {
                 maxRetries,
                 delay: backoff,
                 errorType,
-                errorMessage: error.message
+                errorMessage: error.message,
             });
 
             // Wait before retry

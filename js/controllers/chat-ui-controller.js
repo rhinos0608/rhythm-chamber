@@ -72,8 +72,7 @@ export const ChatUIController = {
     extractArtifact: ArtifactRenderer.extractArtifact,
     renderArtifact: ArtifactRenderer.renderArtifact,
     addArtifactToChat: ArtifactRenderer.addArtifactToChat,
-    processArtifactResult: ArtifactRenderer.processArtifactResult
+    processArtifactResult: ArtifactRenderer.processArtifactResult,
 };
-
 
 console.log('[ChatUIController] Controller loaded (refactored into modules)');

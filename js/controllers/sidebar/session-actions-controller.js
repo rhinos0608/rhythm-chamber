@@ -206,7 +206,9 @@ async function confirmDeleteChat() {
 async function handleSessionRename(sessionId) {
     // Guard against concurrent rename operations (RENDER GUARD FIX)
     if (renameInProgress) {
-        console.warn('[SessionActionsController] Rename already in progress, ignoring duplicate request');
+        console.warn(
+            '[SessionActionsController] Rename already in progress, ignoring duplicate request'
+        );
         return;
     }
 
@@ -265,7 +267,7 @@ async function handleSessionRename(sessionId) {
             await SessionListController.renderSessionList();
         };
 
-        currentRenameKeydownHandler = (e) => {
+        currentRenameKeydownHandler = e => {
             if (e.key === 'Enter') {
                 input.blur();
             } else if (e.key === 'Escape') {
@@ -362,7 +364,7 @@ export const SessionActionsController = {
     getPendingDeleteId,
     isRenameInProgress,
     cancelRename,
-    destroy
+    destroy,
 };
 
 console.log('[SessionActionsController] Session actions controller loaded');

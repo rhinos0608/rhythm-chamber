@@ -140,9 +140,9 @@ export async function fetchAudioFeaturesFromSpotify(trackIds, accessToken) {
     try {
         const response = await fetch(url, {
             headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'application/json'
-            }
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+            },
         });
 
         if (!response.ok) {
@@ -160,7 +160,7 @@ export async function fetchAudioFeaturesFromSpotify(trackIds, accessToken) {
         const featuresMap = {};
 
         // Process audio features for each track
-        for (const track of (data.audio_features || [])) {
+        for (const track of data.audio_features || []) {
             if (track && track.id) {
                 const features = {
                     tempo: Math.round(track.tempo), // BPM
@@ -175,7 +175,7 @@ export async function fetchAudioFeaturesFromSpotify(trackIds, accessToken) {
                     speechiness: Math.round(track.speechiness * 100),
                     loudness: Math.round(track.loudness * 10) / 10, // dB
                     durationMs: track.duration_ms,
-                    timeSignature: track.time_signature
+                    timeSignature: track.time_signature,
                 };
 
                 featuresMap[track.id] = features;
@@ -186,7 +186,6 @@ export async function fetchAudioFeaturesFromSpotify(trackIds, accessToken) {
         }
 
         return featuresMap;
-
     } catch (e) {
         logger.warn('Failed to fetch audio features:', e);
         throw e;

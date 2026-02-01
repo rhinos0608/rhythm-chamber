@@ -24,15 +24,15 @@ const REGEX_CONFIG = {
     // Dangerous regex patterns that could cause catastrophic backtracking
     DANGEROUS_PATTERNS: [
         // Nested quantifiers - catches ((a+)+, ((a*)+, (a+)+, etc.
-        /\(.*[+*]\)\s*[+*]/,     // (...quantifier)quantifier
+        /\(.*[+*]\)\s*[+*]/, // (...quantifier)quantifier
         /\(.*[+*]\)\s*\([^)]*\)\s*[+*]/, // (...quantifier)(...)quantifier
-        /\(\([^)]*[*+][^)]*\)[*+]/,      // Double nested with inner quantifier
-        /\(\?:.*[*+]\)\s*[*+]/,          // Non-capturing with nested quantifier
-        /\(\?=.*[*+]\)\s*[*+]/,          // Lookahead with nested quantifier
-        /\(\!.*[*+]\)\s*[*+]/,           // Negative lookahead with nested quantifier
+        /\(\([^)]*[*+][^)]*\)[*+]/, // Double nested with inner quantifier
+        /\(\?:.*[*+]\)\s*[*+]/, // Non-capturing with nested quantifier
+        /\(\?=.*[*+]\)\s*[*+]/, // Lookahead with nested quantifier
+        /\(!.*[*+]\)\s*[*+]/, // Negative lookahead with nested quantifier
         // Complex overlapping patterns
-        /\(.+\)\[.*\]\{.*\}\{.*\}/,      // Complex nested quantifiers
-        /\[.*\]\[.*\]\{.*\}\{.*\}/       // Multiple nested quantifiers
+        /\(.+\)\[.*\]\{.*\}\{.*\}/, // Complex nested quantifiers
+        /\[.*\]\[.*\]\{.*\}\{.*\}/, // Multiple nested quantifiers
     ],
 
     // Character classes that are safe
@@ -47,8 +47,8 @@ const REGEX_CONFIG = {
         '^[a-fA-F0-9]+$',
         '^[\\s\\S]*$',
         '^.+$',
-        '^.*$'
-    ])
+        '^.*$',
+    ]),
 };
 
 /**
@@ -72,7 +72,7 @@ function _detectNestedQuantifiers(pattern) {
             if (/[*+{]/.test(innerContent)) {
                 return {
                     hasNestedQuantifiers: true,
-                    details: `Group with quantifier followed by outer quantifier: ${match[0]}`
+                    details: `Group with quantifier followed by outer quantifier: ${match[0]}`,
                 };
             }
         }
@@ -84,7 +84,7 @@ function _detectNestedQuantifiers(pattern) {
         const match = pattern.match(doubleNested);
         return {
             hasNestedQuantifiers: true,
-            details: `Double-nested quantifier pattern: ${match ? match[0] : '((a+)+)'}`
+            details: `Double-nested quantifier pattern: ${match ? match[0] : '((a+)+)'}`,
         };
     }
 
@@ -94,18 +94,18 @@ function _detectNestedQuantifiers(pattern) {
         const match = pattern.match(consecutiveQuantifiers);
         return {
             hasNestedQuantifiers: true,
-            details: `Consecutive quantifiers after group: ${match ? match[0] : ')+'}`
+            details: `Consecutive quantifiers after group: ${match ? match[0] : ')+'}`,
         };
     }
 
     // Pattern 4: Lookahead/lookbehind with nested quantifier AND outer quantifier
     // e.g., (?=a+)+ but NOT (?=a+) (which is safe)
-    const lookaroundNested = /(\(\?=|\(\!|\(\?<=|\(\?<!)([^)]*[*+{][^)]*)\)\s*[*+{]/;
+    const lookaroundNested = /(\(\?=|\(!|\(\?<=|\(\?<!)([^)]*[*+{][^)]*)\)\s*[*+{]/;
     if (lookaroundNested.test(pattern)) {
         const match = pattern.match(lookaroundNested);
         return {
             hasNestedQuantifiers: true,
-            details: `Lookahead/lookbehind with nested quantifier: ${match ? match[0] : '(?=a+)+'}`
+            details: `Lookahead/lookbehind with nested quantifier: ${match ? match[0] : '(?=a+)+'}`,
         };
     }
 
@@ -147,7 +147,7 @@ function _detectNestedQuantifiers(pattern) {
                             // This is nested quantifier!
                             return {
                                 hasNestedQuantifiers: true,
-                                details: `Nested quantifiers: group ending at position ${i} has inner quantifier and outer quantifier`
+                                details: `Nested quantifiers: group ending at position ${i} has inner quantifier and outer quantifier`,
                             };
                         }
                     }
@@ -177,18 +177,18 @@ function _validateRegexPattern(pattern) {
     if (astCheck.hasNestedQuantifiers) {
         return {
             safe: false,
-            reason: `unsafe: Pattern contains nested quantifiers (ReDoS risk): ${astCheck.details}`
+            reason: `unsafe: Pattern contains nested quantifiers (ReDoS risk): ${astCheck.details}`,
         };
     }
 
     // Check for lookahead with quantifiers that can cause ReDoS
     // e.g., a+(?=a+) - the lookahead can cause exponential backtracking
-    const lookaheadWithQuantifier = /[*+{][^)]*(\(\?=|\(\!)[^)]*[*+{]/;
+    const lookaheadWithQuantifier = /[*+{][^)]*(\(\?=|\(!)[^)]*[*+{]/;
     if (lookaheadWithQuantifier.test(pattern)) {
         const match = pattern.match(lookaheadWithQuantifier);
         return {
             safe: false,
-            reason: `unsafe: Pattern contains lookahead with quantifiers (ReDoS risk): ${match ? match[0] : 'a+(?=a+)'}`
+            reason: `unsafe: Pattern contains lookahead with quantifiers (ReDoS risk): ${match ? match[0] : 'a+(?=a+)'}`,
         };
     }
 
@@ -197,7 +197,7 @@ function _validateRegexPattern(pattern) {
         if (dangerous.test(pattern)) {
             return {
                 safe: false,
-                reason: `unsafe: Pattern contains dangerous construct: ${dangerous}`
+                reason: `unsafe: Pattern contains dangerous construct: ${dangerous}`,
             };
         }
     }
@@ -207,7 +207,7 @@ function _validateRegexPattern(pattern) {
     if (quantifierCount > 5) {
         return {
             safe: false,
-            reason: 'unsafe: Pattern contains too many quantifiers (potential ReDoS risk)'
+            reason: 'unsafe: Pattern contains too many quantifiers (potential ReDoS risk)',
         };
     }
 
@@ -216,7 +216,7 @@ function _validateRegexPattern(pattern) {
     if (alternationCount > 10) {
         return {
             safe: false,
-            reason: 'unsafe: Pattern contains too many alternations (potential ReDoS risk)'
+            reason: 'unsafe: Pattern contains too many alternations (potential ReDoS risk)',
         };
     }
 
@@ -225,7 +225,7 @@ function _validateRegexPattern(pattern) {
     if (nestedGroupQuantifiers > 3) {
         return {
             safe: false,
-            reason: 'unsafe: Pattern contains nested groups with quantifiers (potential ReDoS risk)'
+            reason: 'unsafe: Pattern contains nested groups with quantifiers (potential ReDoS risk)',
         };
     }
 
@@ -289,5 +289,5 @@ export {
     _validateRegexPattern,
     _createSafeRegex,
     _safeRegexTest,
-    REGEX_CONFIG
+    REGEX_CONFIG,
 };

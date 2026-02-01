@@ -18,7 +18,7 @@ export {
     ProviderFallbackChain,
     ProviderPriority,
     ProviderHealth,
-    default
+    default,
 } from './fallback/index.js';
 
 // Re-export the default singleton

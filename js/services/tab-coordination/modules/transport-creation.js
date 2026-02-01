@@ -11,11 +11,7 @@
 
 import { CHANNEL_NAME } from '../constants.js';
 import { SharedWorkerCoordinator } from '../../../workers/shared-worker-coordinator.js';
-import {
-    setTransport,
-    setBroadcastChannel,
-    setSharedWorkerFallback
-} from './message-sender.js';
+import { setTransport, setBroadcastChannel, setSharedWorkerFallback } from './message-sender.js';
 
 // ==========================================
 // Transport Creation
@@ -29,10 +25,12 @@ export function createTransport(useSharedWorker = false) {
     if (useSharedWorker) {
         // Create SharedWorker-based transport
         const transport = {
-            postMessage: (msg) => SharedWorkerCoordinator.postMessage(msg),
-            addEventListener: (type, handler) => SharedWorkerCoordinator.addEventListener(type, handler),
-            removeEventListener: (type, handler) => SharedWorkerCoordinator.removeEventListener(type, handler),
-            close: () => SharedWorkerCoordinator.close()
+            postMessage: msg => SharedWorkerCoordinator.postMessage(msg),
+            addEventListener: (type, handler) =>
+                SharedWorkerCoordinator.addEventListener(type, handler),
+            removeEventListener: (type, handler) =>
+                SharedWorkerCoordinator.removeEventListener(type, handler),
+            close: () => SharedWorkerCoordinator.close(),
         };
 
         setTransport(transport);
@@ -43,10 +41,10 @@ export function createTransport(useSharedWorker = false) {
     // Create BroadcastChannel-based transport
     const broadcastChannel = new BroadcastChannel(CHANNEL_NAME);
     const transport = {
-        postMessage: (msg) => broadcastChannel.postMessage(msg),
+        postMessage: msg => broadcastChannel.postMessage(msg),
         addEventListener: (type, handler) => broadcastChannel.addEventListener(type, handler),
         removeEventListener: (type, handler) => broadcastChannel.removeEventListener(type, handler),
-        close: () => broadcastChannel.close()
+        close: () => broadcastChannel.close(),
     };
 
     setTransport(transport);

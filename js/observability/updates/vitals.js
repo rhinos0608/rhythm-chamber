@@ -20,7 +20,7 @@ export function updateWebVitalsTab(container) {
         WebVitalType.FID,
         WebVitalType.CLS,
         WebVitalType.INP,
-        WebVitalType.TTFB
+        WebVitalType.TTFB,
     ];
 
     vitalsTypes.forEach(type => {

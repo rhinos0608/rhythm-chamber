@@ -34,9 +34,11 @@ const VERIFICATION_CACHE_DURATION = 24 * 60 * 60 * 1000;
  * @returns {boolean} True if verification is required
  */
 function isVerificationEnabled() {
-    return ConfigLoader.get('PRODUCTION_BUILD', false) === true ||
+    return (
+        ConfigLoader.get('PRODUCTION_BUILD', false) === true ||
         ConfigLoader.get('PAYMENT_MODE', '') === 'production' ||
-        ConfigLoader.get('ENABLE_LICENSE_VERIFICATION', false) === true;
+        ConfigLoader.get('ENABLE_LICENSE_VERIFICATION', false) === true
+    );
 }
 
 /**
@@ -103,7 +105,7 @@ function getCachedVerification() {
         if (cacheData) {
             const cached = JSON.parse(cacheData);
             // Check if cache is still valid
-            if (cached.timestamp && (Date.now() - cached.timestamp) < VERIFICATION_CACHE_DURATION) {
+            if (cached.timestamp && Date.now() - cached.timestamp < VERIFICATION_CACHE_DURATION) {
                 return cached;
             }
         }
@@ -126,7 +128,7 @@ function saveVerificationCache(verification) {
     try {
         const cached = {
             ...verification,
-            timestamp: Date.now()
+            timestamp: Date.now(),
         };
         localStorage.setItem(LICENSE_CACHE_KEY, JSON.stringify(cached));
     } catch (e) {
@@ -170,7 +172,7 @@ async function verifyLicenseKey(licenseKey, options = {}) {
         return {
             valid: false,
             error: 'INVALID_KEY',
-            message: 'License key is required and must be a string'
+            message: 'License key is required and must be a string',
         };
     }
 
@@ -183,7 +185,7 @@ async function verifyLicenseKey(licenseKey, options = {}) {
                 valid: cached.valid,
                 tier: cached.tier,
                 license: cached.license,
-                cached: true
+                cached: true,
             };
         }
     }
@@ -195,15 +197,15 @@ async function verifyLicenseKey(licenseKey, options = {}) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'User-Agent': 'RhythmChamber/1.0'
+                'User-Agent': 'RhythmChamber/1.0',
             },
             body: JSON.stringify({
                 licenseKey,
                 timestamp: Date.now(),
                 // Include fingerprint for additional validation
-                fingerprint: generateDeviceFingerprint()
+                fingerprint: generateDeviceFingerprint(),
             }),
-            signal
+            signal,
         });
 
         if (!response.ok) {
@@ -211,14 +213,14 @@ async function verifyLicenseKey(licenseKey, options = {}) {
                 return {
                     valid: false,
                     error: 'NOT_FOUND',
-                    message: 'License key not found'
+                    message: 'License key not found',
                 };
             }
             if (response.status === 410) {
                 return {
                     valid: false,
                     error: 'REVOKED',
-                    message: 'License key has been revoked'
+                    message: 'License key has been revoked',
                 };
             }
             throw new Error(`Verification failed: ${response.status}`);
@@ -232,7 +234,7 @@ async function verifyLicenseKey(licenseKey, options = {}) {
                 valid: true,
                 licenseKey,
                 tier: result.license.tier,
-                license: result.license
+                license: result.license,
             });
 
             // Store license locally
@@ -242,22 +244,21 @@ async function verifyLicenseKey(licenseKey, options = {}) {
                 valid: true,
                 tier: result.license.tier,
                 license: result.license,
-                verifiedAt: result.verifiedAt || new Date().toISOString()
+                verifiedAt: result.verifiedAt || new Date().toISOString(),
             };
         }
 
         return {
             valid: false,
             error: result.error || 'INVALID',
-            message: result.message || 'License key is invalid'
+            message: result.message || 'License key is invalid',
         };
-
     } catch (e) {
         if (e.name === 'AbortError') {
             return {
                 valid: false,
                 error: 'ABORTED',
-                message: 'Verification was cancelled'
+                message: 'Verification was cancelled',
             };
         }
 
@@ -273,7 +274,7 @@ async function verifyLicenseKey(licenseKey, options = {}) {
                 licenseKey,
                 tier: localResult.tier,
                 license: localResult.license,
-                local: true
+                local: true,
             });
         }
 
@@ -298,7 +299,7 @@ async function verifyLicenseLocally(licenseKey) {
                 tier: parsed.tier,
                 activatedAt: parsed.activatedAt || new Date().toISOString(),
                 validUntil: parsed.validUntil || null,
-                local: true // Mark as locally verified
+                local: true, // Mark as locally verified
             };
 
             saveStoredLicense(license);
@@ -308,21 +309,20 @@ async function verifyLicenseLocally(licenseKey) {
                 tier: license.tier,
                 license,
                 local: true,
-                warning: 'License verified locally (no server connection)'
+                warning: 'License verified locally (no server connection)',
             };
         }
 
         return {
             valid: false,
             error: 'INVALID_FORMAT',
-            message: 'License key format is invalid'
+            message: 'License key format is invalid',
         };
-
     } catch (e) {
         return {
             valid: false,
             error: 'PARSE_ERROR',
-            message: 'Could not parse license key'
+            message: 'Could not parse license key',
         };
     }
 }
@@ -342,7 +342,7 @@ async function verifyStoredLicense(options = {}) {
         return {
             valid: false,
             error: 'NO_LICENSE',
-            message: 'No license stored'
+            message: 'No license stored',
         };
     }
 
@@ -354,7 +354,7 @@ async function verifyStoredLicense(options = {}) {
                 valid: false,
                 error: 'EXPIRED',
                 message: 'License has expired',
-                tier: stored.tier
+                tier: stored.tier,
             };
         }
     }
@@ -365,7 +365,7 @@ async function verifyStoredLicense(options = {}) {
             valid: true,
             tier: stored.tier,
             license: stored,
-            local: true
+            local: true,
         };
     }
 
@@ -376,7 +376,7 @@ async function verifyStoredLicense(options = {}) {
             valid: cached.valid,
             tier: cached.tier,
             license: cached.license,
-            cached: true
+            cached: true,
         };
     }
 
@@ -387,7 +387,7 @@ async function verifyStoredLicense(options = {}) {
         tier: stored.tier,
         license: stored,
         local: true,
-        warning: 'Server verification not yet implemented'
+        warning: 'Server verification not yet implemented',
     };
 }
 
@@ -408,8 +408,8 @@ async function activateLicense(licenseKey, options = {}) {
             const event = new CustomEvent('licenseActivated', {
                 detail: {
                     tier: result.tier,
-                    license: result.license
-                }
+                    license: result.license,
+                },
             });
             window.dispatchEvent(event);
         }
@@ -460,7 +460,7 @@ function generateDeviceFingerprint() {
         navigator.userAgent,
         navigator.language,
         screen.width + 'x' + screen.height,
-        new Date().getTimezoneOffset()
+        new Date().getTimezoneOffset(),
     ];
 
     // Simple hash function
@@ -468,7 +468,7 @@ function generateDeviceFingerprint() {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
         const char = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
+        hash = (hash << 5) - hash + char;
         hash = hash & hash; // Convert to 32bit integer
     }
 
@@ -500,7 +500,7 @@ async function getLicenseStatus() {
         return {
             hasLicense: false,
             tier: 'sovereign',
-            verified: false
+            verified: false,
         };
     }
 
@@ -511,7 +511,7 @@ async function getLicenseStatus() {
         tier: stored.tier,
         verified: verification.valid,
         validUntil: stored.validUntil || null,
-        isExpired: stored.validUntil ? new Date(stored.validUntil) < new Date() : false
+        isExpired: stored.validUntil ? new Date(stored.validUntil) < new Date() : false,
     };
 }
 
@@ -541,7 +541,7 @@ export const LicenseService = {
 
     // Utilities
     generateDeviceFingerprint,
-    getVerificationEndpoint
+    getVerificationEndpoint,
 };
 
 logger.info('Module loaded - License verification service initialized');

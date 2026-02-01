@@ -1,14 +1,14 @@
 /**
  * Embedding Worker for Rhythm Chamber
- * 
+ *
  * Offloads heavy chunk creation from the main UI thread to prevent jank.
- * 
+ *
  * Message Interface:
  * - Input: { type: 'createChunks', streams: Array }
  * - Output: { type: 'progress', current: number, total: number, message: string }
  * - Output: { type: 'complete', chunks: Array }
  * - Output: { type: 'error', message: string }
- * 
+ *
  * Note: Qdrant API calls remain on main thread (requires fetch + auth headers).
  */
 
@@ -31,7 +31,11 @@ self.onmessage = function (event) {
             break;
 
         default:
-            self.postMessage({ type: 'error', message: `Unknown message type: ${type}`, requestId: requestId || null });
+            self.postMessage({
+                type: 'error',
+                message: `Unknown message type: ${type}`,
+                requestId: requestId || null,
+            });
     }
 };
 
@@ -61,14 +65,22 @@ function createChunks(streams, requestId) {
         // Issue 6 fix: Validate timestamp before creating Date object
         const timestamp = stream.ts || stream.endTime;
         if (!timestamp) {
-            console.warn('[EmbeddingWorker] Stream missing timestamp, skipping stream at index:', idx);
-            return;  // Skip this stream - equivalent to continue in forEach
+            console.warn(
+                '[EmbeddingWorker] Stream missing timestamp, skipping stream at index:',
+                idx
+            );
+            return; // Skip this stream - equivalent to continue in forEach
         }
 
         const date = new Date(timestamp);
         if (isNaN(date.getTime())) {
-            console.warn('[EmbeddingWorker] Invalid date for stream at index:', idx, 'timestamp:', timestamp);
-            return;  // Skip this stream
+            console.warn(
+                '[EmbeddingWorker] Invalid date for stream at index:',
+                idx,
+                'timestamp:',
+                timestamp
+            );
+            return; // Skip this stream
         }
 
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -112,14 +124,14 @@ function createChunks(streams, requestId) {
             .slice(0, 10)
             .map(([name, count]) => `${name} (${count} plays)`);
 
-        const hours = Math.round(totalMs / 3600000 * 10) / 10;
+        const hours = Math.round((totalMs / 3600000) * 10) / 10;
         const [year, monthNum] = month.split('-');
         const monthName = getMonthName(parseInt(year), parseInt(monthNum));
 
         chunks.push({
             type: 'monthly_summary',
             text: `In ${monthName}, user listened for ${hours} hours with ${monthStreams.length} plays. Top artists: ${topArtists.join(', ')}. Top tracks: ${topTracks.join(', ')}.`,
-            metadata: { month, plays: monthStreams.length, hours }
+            metadata: { month, plays: monthStreams.length, hours },
         });
 
         // Report progress
@@ -176,17 +188,20 @@ function createChunks(streams, requestId) {
             .slice(0, 5)
             .map(([name, count]) => `${name} (${count})`);
 
-        const hours = Math.round(totalMs / 3600000 * 10) / 10;
+        const hours = Math.round((totalMs / 3600000) * 10) / 10;
 
         chunks.push({
             type: 'artist_profile',
             text: `Artist: ${artist}. Total plays: ${artistStreams.length}. Listening time: ${hours} hours. First listened: ${formatDate(firstListen)}. Last listened: ${formatDate(lastListen)}. Top tracks: ${topTracks.join(', ')}.`,
-            metadata: { artist, plays: artistStreams.length, hours }
+            metadata: { artist, plays: artistStreams.length, hours },
         });
 
         // Report progress
         const artistProgress = 60 + Math.round((artistIdx / topArtistEntries.length) * 40);
-        postProgress(artistProgress, `Processed artist ${artistIdx + 1}/${topArtistEntries.length}`);
+        postProgress(
+            artistProgress,
+            `Processed artist ${artistIdx + 1}/${topArtistEntries.length}`
+        );
     });
 
     postProgress(100, `Created ${chunks.length} chunks`);
@@ -198,8 +213,20 @@ function createChunks(streams, requestId) {
  * Get month name without relying on Intl (for worker compatibility)
  */
 function getMonthName(year, month) {
-    const months = ['January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'];
+    const months = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+    ];
     return `${months[month - 1]} ${year}`;
 }
 

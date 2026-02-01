@@ -1,16 +1,16 @@
 /**
  * Shared Worker Coordinator
- * 
+ *
  * Client-side coordinator for the SharedWorker fallback when BroadcastChannel
  * is unavailable. Provides the same API surface as BroadcastChannel for
  * seamless integration with TabCoordination.
- * 
+ *
  * Features:
  * - Unified message interface matching BroadcastChannel
  * - Automatic reconnection on worker death
  * - Heartbeat for liveness detection
  * - Graceful degradation if SharedWorker unavailable
- * 
+ *
  * @module workers/shared-worker-coordinator
  */
 
@@ -100,7 +100,7 @@ async function connect() {
     return new Promise((resolve, reject) => {
         try {
             sharedWorker = new SharedWorker(WORKER_URL, {
-                name: 'rhythm-chamber-coordinator'
+                name: 'rhythm-chamber-coordinator',
             });
 
             workerPort = sharedWorker.port;
@@ -109,12 +109,12 @@ async function connect() {
             workerPort.onmessage = handleWorkerMessage;
 
             // Set up error handler
-            sharedWorker.onerror = (error) => {
+            sharedWorker.onerror = error => {
                 console.error('[SharedWorkerCoordinator] Worker error:', error);
                 handleWorkerError(error);
             };
 
-            workerPort.onmessageerror = (error) => {
+            workerPort.onmessageerror = error => {
                 console.error('[SharedWorkerCoordinator] Message error:', error);
             };
 
@@ -122,7 +122,7 @@ async function connect() {
             workerPort.start();
 
             // Wait for connection acknowledgment
-            const connectionHandler = (event) => {
+            const connectionHandler = event => {
                 if (event.data?.type === 'CONNECTED') {
                     clearTimeout(timeout);
                     portId = event.data.portId;
@@ -132,7 +132,7 @@ async function connect() {
                     // Register this tab
                     postMessage({
                         type: 'REGISTER',
-                        tabId
+                        tabId,
                     });
 
                     // Start heartbeat
@@ -152,7 +152,6 @@ async function connect() {
             }, WORKER_TIMEOUTS.CLAIM_ACK_TIMEOUT_MS); // Reuse 3s timeout for connection
 
             workerPort.addEventListener('message', connectionHandler);
-
         } catch (error) {
             console.error('[SharedWorkerCoordinator] Connection error:', error);
             reject(error);
@@ -174,7 +173,7 @@ function postMessage(message) {
         workerPort.postMessage({
             ...message,
             type: 'BROADCAST',
-            tabId
+            tabId,
         });
         return true;
     } catch (error) {
@@ -218,7 +217,7 @@ function close() {
             // Notify worker of disconnect
             workerPort.postMessage({
                 type: 'DISCONNECT',
-                tabId
+                tabId,
             });
         } catch (e) {
             // Ignore errors during close
@@ -264,7 +263,7 @@ function getStatus() {
         connected: isConnected,
         portId,
         tabId,
-        reconnectAttempts
+        reconnectAttempts,
     };
 }
 
@@ -294,15 +293,15 @@ async function claimPrimary() {
 
         // Store pending claim
         pendingClaims.set(claimId, {
-            resolve: (result) => {
+            resolve: result => {
                 clearTimeout(timeout);
                 resolve(result);
             },
-            reject: (error) => {
+            reject: error => {
                 clearTimeout(timeout);
                 reject(error);
             },
-            timestamp: Date.now()
+            timestamp: Date.now(),
         });
 
         // MEDIUM FIX Issue #14: Add disconnect handler to clean up pending claim
@@ -325,7 +324,7 @@ async function claimPrimary() {
             workerPort.postMessage({
                 type: 'CLAIM_PRIMARY',
                 tabId,
-                claimId
+                claimId,
             });
         } catch (error) {
             clearTimeout(timeout);
@@ -351,7 +350,7 @@ function releasePrimary() {
     try {
         workerPort.postMessage({
             type: 'RELEASE_PRIMARY',
-            tabId
+            tabId,
         });
         return true;
     } catch (error) {
@@ -388,27 +387,31 @@ function handleWorkerMessage(event) {
                 pendingClaim.resolve({
                     granted: true,
                     leaderId: message.leaderId,
-                    reason: null
+                    reason: null,
                 });
             } else {
-                console.log(`[SharedWorkerCoordinator] Leadership rejected - ${message.reason} (claimId: ${claimId})`);
+                console.log(
+                    `[SharedWorkerCoordinator] Leadership rejected - ${message.reason} (claimId: ${claimId})`
+                );
                 pendingClaim.resolve({
                     granted: false,
                     leaderId: message.currentLeader,
-                    reason: message.reason
+                    reason: message.reason,
                 });
             }
         } else {
-            console.warn(`[SharedWorkerCoordinator] Received ${message.type} for unknown claim: ${claimId}`);
+            console.warn(
+                `[SharedWorkerCoordinator] Received ${message.type} for unknown claim: ${claimId}`
+            );
         }
-        return;  // Don't forward ACK messages to listeners
+        return; // Don't forward ACK messages to listeners
     }
 
     // Create a BroadcastChannel-like event object
     const syntheticEvent = {
         data: message,
         origin: 'SharedWorker',
-        source: null
+        source: null,
     };
 
     // Notify all listeners
@@ -457,7 +460,9 @@ function handleWorkerError(error) {
 async function attemptReconnect() {
     while (reconnectAttempts < WORKER_TIMEOUTS.MAX_RECONNECT_ATTEMPTS) {
         reconnectAttempts++;
-        console.log(`[SharedWorkerCoordinator] Reconnection attempt ${reconnectAttempts}/${WORKER_TIMEOUTS.MAX_RECONNECT_ATTEMPTS}`);
+        console.log(
+            `[SharedWorkerCoordinator] Reconnection attempt ${reconnectAttempts}/${WORKER_TIMEOUTS.MAX_RECONNECT_ATTEMPTS}`
+        );
 
         await new Promise(resolve => setTimeout(resolve, WORKER_TIMEOUTS.RECONNECT_DELAY_MS));
 
@@ -483,7 +488,7 @@ function startHeartbeat() {
             try {
                 workerPort.postMessage({
                     type: 'HEARTBEAT',
-                    tabId
+                    tabId,
                 });
             } catch (error) {
                 console.error('[SharedWorkerCoordinator] Heartbeat failed:', error);
@@ -515,8 +520,8 @@ const SharedWorkerCoordinator = {
     removeEventListener,
     close,
     getStatus,
-    claimPrimary,  // NEW: ACK-based leadership claim
-    releasePrimary  // NEW: Leadership release
+    claimPrimary, // NEW: ACK-based leadership claim
+    releasePrimary, // NEW: Leadership release
 };
 
 export { SharedWorkerCoordinator };

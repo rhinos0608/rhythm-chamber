@@ -57,8 +57,8 @@ const TEMPLATES = [
             patternSignals: ['eras', 'ghosted_artists', 'discovery_explosions'],
             ageRange: '16-22',
             collectionPeriod: '2019-2023',
-            sourceId: 'demo_data' // Links to DemoData module
-        }
+            sourceId: 'demo_data', // Links to DemoData module
+        },
     },
     {
         id: 'gym_rat',
@@ -76,7 +76,7 @@ const TEMPLATES = [
             patternSignals: ['high_repeat', 'time_patterns'],
             ageRange: '22-35',
             collectionPeriod: '2020-2024',
-            sourceId: 'placeholder'
+            sourceId: 'placeholder',
         },
 
         // Placeholder personality for UI rendering
@@ -85,16 +85,17 @@ const TEMPLATES = [
             name: 'Comfort Curator',
             emoji: '🛋️',
             tagline: 'You know what you love.',
-            description: 'Same high-energy tracks on repeat. You\'ve built the perfect pump-up playlist and you\'re sticking with it.',
+            description:
+                "Same high-energy tracks on repeat. You've built the perfect pump-up playlist and you're sticking with it.",
             evidence: [
                 'Top 15 tracks account for 73% of listening time',
                 'Peak listening: 5-7 AM (pre-workout ritual)',
                 'Average 127 plays per favorite artist',
-                'Skip rate under 5% - you know what you want'
+                'Skip rate under 5% - you know what you want',
             ],
             isDemoData: true,
-            isPlaceholder: true
-        }
+            isPlaceholder: true,
+        },
     },
     {
         id: 'college_dj',
@@ -112,7 +113,7 @@ const TEMPLATES = [
             patternSignals: ['discovery_explosions', 'high_diversity', 'late_night'],
             ageRange: '18-24',
             collectionPeriod: '2021-2024',
-            sourceId: 'placeholder'
+            sourceId: 'placeholder',
         },
 
         placeholderPersonality: {
@@ -120,16 +121,17 @@ const TEMPLATES = [
             name: 'Discovery Junkie',
             emoji: '🔭',
             tagline: 'Always hunting for the next sound.',
-            description: 'Your library is a graveyard of one-play wonders. You\'re always chasing that feeling of discovering something new.',
+            description:
+                "Your library is a graveyard of one-play wonders. You're always chasing that feeling of discovering something new.",
             evidence: [
                 '342 new artists discovered in one year',
                 'Average plays per artist: 4.2 (always moving on)',
                 'Peak discovery month: October (new semester energy)',
-                '67% of streams after 10 PM'
+                '67% of streams after 10 PM',
             ],
             isDemoData: true,
-            isPlaceholder: true
-        }
+            isPlaceholder: true,
+        },
     },
     {
         id: 'new_parent',
@@ -147,7 +149,7 @@ const TEMPLATES = [
             patternSignals: ['era_transition', 'time_shift', 'genre_pivot'],
             ageRange: '28-40',
             collectionPeriod: '2018-2023',
-            sourceId: 'placeholder'
+            sourceId: 'placeholder',
         },
 
         placeholderPersonality: {
@@ -155,16 +157,17 @@ const TEMPLATES = [
             name: 'Emotional Archaeologist',
             emoji: '🏛️',
             tagline: 'You mark time through sound.',
-            description: 'Your library is a timeline. There\'s a clear before and after - the music you discovered with your kids is now woven into your identity.',
+            description:
+                "Your library is a timeline. There's a clear before and after - the music you discovered with your kids is now woven into your identity.",
             evidence: [
                 'Distinct era boundary: March 2021 (life change)',
-                'New genre cluster: children\'s music + ambient',
+                "New genre cluster: children's music + ambient",
                 'Sleep-friendly listening increased 340%',
-                '5 artists ghosted completely post-transition'
+                '5 artists ghosted completely post-transition',
             ],
             isDemoData: true,
-            isPlaceholder: true
-        }
+            isPlaceholder: true,
+        },
     },
     {
         id: 'jazz_convert',
@@ -182,7 +185,7 @@ const TEMPLATES = [
             patternSignals: ['recent_discovery', 'genre_shift', 'deep_listening'],
             ageRange: '30-50',
             collectionPeriod: '2019-2024',
-            sourceId: 'placeholder'
+            sourceId: 'placeholder',
         },
 
         placeholderPersonality: {
@@ -190,16 +193,17 @@ const TEMPLATES = [
             name: 'Discovery Junkie',
             emoji: '🔭',
             tagline: 'Always hunting for the next sound.',
-            description: 'You just discovered a whole new world of music. Jazz opened a door you didn\'t know existed.',
+            description:
+                "You just discovered a whole new world of music. Jazz opened a door you didn't know existed.",
             evidence: [
                 'Major genre shift in 2022 - jazz went from 2% to 45%',
                 '89 new jazz artists in 18 months',
                 'Average session length tripled (deep listening)',
-                'Instrumental music now dominates evenings'
+                'Instrumental music now dominates evenings',
             ],
             isDemoData: true,
-            isPlaceholder: true
-        }
+            isPlaceholder: true,
+        },
     },
     {
         id: 'party_host',
@@ -217,7 +221,7 @@ const TEMPLATES = [
             patternSignals: ['weekend_heavy', 'social_listening', 'crowd_pleasers'],
             ageRange: '21-35',
             collectionPeriod: '2020-2024',
-            sourceId: 'placeholder'
+            sourceId: 'placeholder',
         },
 
         placeholderPersonality: {
@@ -225,16 +229,17 @@ const TEMPLATES = [
             name: 'Social Chameleon',
             emoji: '🎭',
             tagline: 'Your music shifts by context.',
-            description: 'Weekday you listens to indie. Weekend you plays crowd-pleasers. Your music adapts to the social situation.',
+            description:
+                'Weekday you listens to indie. Weekend you plays crowd-pleasers. Your music adapts to the social situation.',
             evidence: [
                 'Weekend listening is 3x higher than weekdays',
                 'Only 23% overlap between solo and social tracks',
                 'Party playlist plays spike Friday-Sunday',
-                'Shared listening sessions detected'
+                'Shared listening sessions detected',
             ],
             isDemoData: true,
-            isPlaceholder: true
-        }
+            isPlaceholder: true,
+        },
     },
     {
         id: 'road_tripper',
@@ -252,7 +257,7 @@ const TEMPLATES = [
             patternSignals: ['long_sessions', 'time_patterns', 'mood_playlists'],
             ageRange: '25-45',
             collectionPeriod: '2019-2024',
-            sourceId: 'placeholder'
+            sourceId: 'placeholder',
         },
 
         placeholderPersonality: {
@@ -260,16 +265,17 @@ const TEMPLATES = [
             name: 'Mood Engineer',
             emoji: '🎚️',
             tagline: 'You use music to create a feeling.',
-            description: 'You don\'t just listen - you curate. Your playlists match your drives. Road trip music hits different.',
+            description:
+                "You don't just listen - you curate. Your playlists match your drives. Road trip music hits different.",
             evidence: [
                 'Average session length: 2.3 hours (driving patterns)',
                 'Morning music vs evening music: 15% overlap only',
                 'Long-form content (podcasts) during commutes',
-                'Summer listening peaks (road trip season)'
+                'Summer listening peaks (road trip season)',
             ],
             isDemoData: true,
-            isPlaceholder: true
-        }
+            isPlaceholder: true,
+        },
     },
     {
         id: 'nostalgic_millennial',
@@ -287,7 +293,7 @@ const TEMPLATES = [
             patternSignals: ['high_repeat', 'old_favorites', 'nostalgia_listening'],
             ageRange: '28-40',
             collectionPeriod: '2018-2024',
-            sourceId: 'placeholder'
+            sourceId: 'placeholder',
         },
 
         placeholderPersonality: {
@@ -295,17 +301,18 @@ const TEMPLATES = [
             name: 'Comfort Curator',
             emoji: '🛋️',
             tagline: 'You know what you love.',
-            description: 'Your top artists haven\'t changed in 15 years. You\'re loyal, and there\'s nothing wrong with that.',
+            description:
+                "Your top artists haven't changed in 15 years. You're loyal, and there's nothing wrong with that.",
             evidence: [
                 'Top 20 artists are all from 2000-2010',
                 'New music discovery < 5% of total listening',
                 'Comfort playlists get 400+ replays each',
-                'Release date average: 2007'
+                'Release date average: 2007',
             ],
             isDemoData: true,
-            isPlaceholder: true
-        }
-    }
+            isPlaceholder: true,
+        },
+    },
 ];
 
 // ==========================================
@@ -423,11 +430,7 @@ class TemplateProfileStore {
         const genreLower = genre.toLowerCase();
 
         return this.list()
-            .filter(t =>
-                t.metadata.genres.some(g =>
-                    g.toLowerCase().includes(genreLower)
-                )
-            )
+            .filter(t => t.metadata.genres.some(g => g.toLowerCase().includes(genreLower)))
             .slice(0, limit);
     }
 
@@ -440,13 +443,13 @@ class TemplateProfileStore {
         this._ensureInitialized();
         const patternLower = patternType.toLowerCase().replace(/_/g, ' ');
 
-        return this.list()
-            .filter(t =>
-                t.metadata.patternSignals.some(p =>
+        return this.list().filter(t =>
+            t.metadata.patternSignals.some(
+                p =>
                     p.toLowerCase().replace(/_/g, ' ').includes(patternLower) ||
                     patternLower.includes(p.toLowerCase().replace(/_/g, ' '))
-                )
-            );
+            )
+        );
     }
 
     /**
@@ -458,11 +461,11 @@ class TemplateProfileStore {
         this._ensureInitialized();
         const typeLower = personalityType.toLowerCase().replace(/\s+/g, '_');
 
-        return this.list()
-            .filter(t =>
+        return this.list().filter(
+            t =>
                 t.metadata.personalityType.toLowerCase() === typeLower ||
                 t.metadata.personalityType.toLowerCase().includes(typeLower.replace(/_/g, ' '))
-            );
+        );
     }
 
     /**
@@ -522,4 +525,3 @@ const templateStore = new TemplateProfileStore();
 export { templateStore as TemplateProfileStore, TemplateProfileStore as TemplateProfileStoreClass };
 
 logger.info('Module loaded');
-

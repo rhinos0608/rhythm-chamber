@@ -30,10 +30,12 @@ import { PremiumGatekeeper } from './services/premium-gatekeeper.js';
  */
 function isProductionBuild() {
     if (typeof window === 'undefined') return false;
-    return ConfigLoader.get('PRODUCTION_BUILD', false) === true ||
+    return (
+        ConfigLoader.get('PRODUCTION_BUILD', false) === true ||
         ConfigLoader.get('PAYMENT_MODE', '') === 'curator' ||
         ConfigLoader.get('PAYMENT_MODE', '') === 'chamber' ||
-        ConfigLoader.get('PAYMENT_MODE', '') === 'production';
+        ConfigLoader.get('PAYMENT_MODE', '') === 'production'
+    );
 }
 
 /**
@@ -70,7 +72,6 @@ async function checkLicenseStatus() {
         // - Device binding (prevents sharing)
         // - Tier validity
         return license.valid;
-
     } catch (e) {
         // Handle verification errors
         console.warn('[Payments] License verification failed:', e);
@@ -124,7 +125,7 @@ async function getPremiumStatus() {
         const tierNames = {
             sovereign: 'The Sovereign',
             curator: 'The Curator',
-            chamber: 'The Chamber'
+            chamber: 'The Chamber',
         };
 
         return {
@@ -134,7 +135,9 @@ async function getPremiumStatus() {
             productionBuild: true,
             activatedAt,
             expiresAt,
-            description: hasLicense ? `${tierNames[tier]} Tier - Premium Features Enabled` : 'The Sovereign Tier - Upgrade for Premium Features'
+            description: hasLicense
+                ? `${tierNames[tier]} Tier - Premium Features Enabled`
+                : 'The Sovereign Tier - Upgrade for Premium Features',
         };
     }
 
@@ -145,7 +148,7 @@ async function getPremiumStatus() {
         productionBuild: false,
         activatedAt: new Date().toISOString(),
         description: 'MVP Free Tier - All Features Enabled',
-        note: 'Cryptographic license verification enabled for production builds'
+        note: 'Cryptographic license verification enabled for production builds',
     };
 }
 
@@ -164,7 +167,7 @@ function upgradeToPremium() {
     }
 
     if (Settings?.showToast) {
-        Settings.showToast("All features are free during MVP! Enjoy! 🎉");
+        Settings.showToast('All features are free during MVP! Enjoy! 🎉');
     }
 }
 
@@ -172,7 +175,7 @@ function upgradeToPremium() {
  * Placeholder for activation (no-op for MVP)
  */
 function activatePremium() {
-    console.log("[Payments] All features enabled (MVP Free Tier)");
+    console.log('[Payments] All features enabled (MVP Free Tier)');
 }
 
 /**
@@ -209,7 +212,7 @@ async function handlePaymentReturn() {
         return {
             success: true,
             status: 'success',
-            tier: license.tier
+            tier: license.tier,
         };
     }
 
@@ -228,15 +231,15 @@ export const Payments = {
     handlePaymentReturn,
 
     // Lemon Squeezy checkout methods
-    startMonthlyCheckout: async (options) => {
+    startMonthlyCheckout: async options => {
         const { LemonSqueezyService } = await import('./services/lemon-squeezy-service.js');
         return LemonSqueezyService.openMonthlyCheckout(options);
     },
-    startYearlyCheckout: async (options) => {
+    startYearlyCheckout: async options => {
         const { LemonSqueezyService } = await import('./services/lemon-squeezy-service.js');
         return LemonSqueezyService.openYearlyCheckout(options);
     },
-    startLifetimeCheckout: async (options) => {
+    startLifetimeCheckout: async options => {
         const { LemonSqueezyService } = await import('./services/lemon-squeezy-service.js');
         return LemonSqueezyService.openLifetimeCheckout(options);
     },
@@ -253,18 +256,28 @@ export const Payments = {
         sovereign: {
             name: 'The Sovereign',
             price: '$0',
-            features: ['Full Local Analysis', 'BYOI Chat (Your Models/Keys)', 'Basic Cards', 'Personality Reveal', '100% Client-Side', '1 Free Playlist']
+            features: [
+                'Full Local Analysis',
+                'BYOI Chat (Your Models/Keys)',
+                'Basic Cards',
+                'Personality Reveal',
+                '100% Client-Side',
+                '1 Free Playlist',
+            ],
         },
         chamber: {
             name: 'The Chamber',
             price: '$4.99/mo or $39/yr',
             status: 'available',
-            features: ['Unlimited Playlists', 'Metadata Enrichment', 'Semantic Search', 'AI Playlist Curator', 'Monthly Insights (coming soon)']
-        }
-    }
+            features: [
+                'Unlimited Playlists',
+                'Metadata Enrichment',
+                'Semantic Search',
+                'AI Playlist Curator',
+                'Monthly Insights (coming soon)',
+            ],
+        },
+    },
 };
 
-
 console.log('[Payments] Module loaded - Cryptographic license verification enabled');
-
-

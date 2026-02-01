@@ -183,7 +183,7 @@ export default {
     escapeJs,
     safeHtml,
     isPotentiallyDangerous,
-    sanitizeHtml
+    sanitizeHtml,
 };
 
 console.log('[HtmlEscape] HTML escape utility loaded');

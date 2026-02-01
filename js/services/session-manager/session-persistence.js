@@ -50,7 +50,11 @@ function safeJsonParse(str, fallback) {
  */
 function generateSessionTitle(messages) {
     const firstUserMsg = messages.find(m => m.role === 'user');
-    if (firstUserMsg?.content && typeof firstUserMsg.content === 'string' && firstUserMsg.content.trim().length > 0) {
+    if (
+        firstUserMsg?.content &&
+        typeof firstUserMsg.content === 'string' &&
+        firstUserMsg.content.trim().length > 0
+    ) {
         const chars = Array.from(firstUserMsg.content.trim());
         const title = chars.slice(0, 50).join('');
         return chars.length > 50 ? title + '...' : title;
@@ -79,9 +83,13 @@ export async function saveCurrentSession() {
     try {
         const systemMessages = messages.filter(m => m.role === 'system');
         const nonSystemMessages = messages.filter(m => m.role !== 'system');
-        const messagesToSave = messages.length > MAX_SAVED_MESSAGES
-            ? [...systemMessages, ...nonSystemMessages.slice(-(MAX_SAVED_MESSAGES - systemMessages.length))]
-            : messages;
+        const messagesToSave =
+            messages.length > MAX_SAVED_MESSAGES
+                ? [
+                    ...systemMessages,
+                    ...nonSystemMessages.slice(-(MAX_SAVED_MESSAGES - systemMessages.length)),
+                ]
+                : messages;
 
         // Get personality from AppState (ES module, not global)
         // FIX: AppState.get() only accepts top-level domain names, not dotted paths
@@ -98,8 +106,8 @@ export async function saveCurrentSession() {
             metadata: {
                 personalityName: personality.name || 'Unknown',
                 personalityEmoji: personality.emoji || '🎵',
-                isLiteMode
-            }
+                isLiteMode,
+            },
         };
 
         await Storage.saveSession(session);
@@ -185,7 +193,7 @@ export function emergencyBackupSync() {
         sessionId: currentSessionId,
         createdAt: SessionState.getCurrentSessionCreatedAt(),
         messages: messages.slice(-100),
-        timestamp: Date.now()
+        timestamp: Date.now(),
     };
 
     try {
@@ -239,7 +247,11 @@ export async function recoverEmergencyBackup() {
                 existing.createdAt = backup.createdAt || existing.createdAt;
                 await Storage.saveSession(existing);
                 saveSuccess = true;
-                console.log('[SessionPersistence] Recovered', backupCount - existingCount, 'messages');
+                console.log(
+                    '[SessionPersistence] Recovered',
+                    backupCount - existingCount,
+                    'messages'
+                );
             } else {
                 saveSuccess = true;
             }
@@ -248,7 +260,7 @@ export async function recoverEmergencyBackup() {
                 id: backup.sessionId,
                 title: 'Recovered Chat',
                 createdAt: backup.createdAt,
-                messages: backup.messages
+                messages: backup.messages,
             });
             saveSuccess = true;
             console.log('[SessionPersistence] Created session from emergency backup');

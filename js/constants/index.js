@@ -25,7 +25,7 @@ import {
     PERCENTAGE_MULTIPLIER,
     SCORE_PRECISION,
     COVERAGE_LEVELS,
-    TELEMETRY_LIMITS
+    TELEMETRY_LIMITS,
 } from './percentages.js';
 import SESSION from '../constants/session.js';
 
@@ -39,7 +39,7 @@ export {
     PERCENTAGE_MULTIPLIER,
     SCORE_PRECISION,
     COVERAGE_LEVELS,
-    TELEMETRY_LIMITS
+    TELEMETRY_LIMITS,
 } from './percentages.js';
 export { SESSION } from '../constants/session.js';
 

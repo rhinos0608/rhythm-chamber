@@ -11,11 +11,14 @@ async function generateCard(personality) {
     // Some browsers/environments may not support 2D context (e.g., headless browsers,
     // certain extensions, or when hardware acceleration is disabled)
     if (!ctx) {
-        throw new Error('Canvas 2D context not available - card generation failed. ' +
-            'This may occur in headless browsers or with certain browser extensions.');
+        throw new Error(
+            'Canvas 2D context not available - card generation failed. ' +
+                'This may occur in headless browsers or with certain browser extensions.'
+        );
     }
 
-    const width = 600, height = 400;
+    const width = 600,
+        height = 400;
     canvas.width = width;
     canvas.height = height;
 
@@ -77,12 +80,12 @@ function getShareURL() {
 /**
  * Share the personality card using the Web Share API
  * Falls back to download if Web Share is not available
- * 
+ *
  * Web Share API enables native sharing to:
  * - iOS: Messages, AirDrop, Instagram, Twitter, WhatsApp, etc.
  * - Android: Any installed app that accepts shares
  * - Desktop: Native share dialogs (on supported browsers)
- * 
+ *
  * @param {Object} personality - The personality object
  * @param {Object} options - Optional configuration
  * @param {boolean} options.includeFile - Include the image file (default: true)
@@ -90,10 +93,7 @@ function getShareURL() {
  * @returns {Promise<'shared'|'downloaded'|'cancelled'>} Result of the share action
  */
 async function shareCard(personality, options = {}) {
-    const {
-        includeFile = true,
-        fallbackToDownload = true
-    } = options;
+    const { includeFile = true, fallbackToDownload = true } = options;
 
     // Generate the card image
     let canvas;
@@ -113,7 +113,7 @@ async function shareCard(personality, options = {}) {
                 reject(new Error('Canvas toBlob timeout - canvas may be tainted'));
             }, 5000);
 
-            canvas.toBlob((result) => {
+            canvas.toBlob(result => {
                 clearTimeout(timeoutId);
                 if (result) {
                     resolve(result);
@@ -137,7 +137,9 @@ async function shareCard(personality, options = {}) {
                 return 'failed';
             }
         }
-        throw new Error(`Failed to generate shareable image for personality "${personality?.name || 'unknown'}". The canvas may be tainted by cross-origin content.`);
+        throw new Error(
+            `Failed to generate shareable image for personality "${personality?.name || 'unknown'}". The canvas may be tainted by cross-origin content.`
+        );
     }
 
     // Verify blob was created successfully
@@ -145,7 +147,7 @@ async function shareCard(personality, options = {}) {
         console.error('[Cards] toBlob returned null - canvas may be tainted or corrupted', {
             personality: personality?.name,
             canvasWidth: canvas?.width,
-            canvasHeight: canvas?.height
+            canvasHeight: canvas?.height,
         });
         // Fall back to download if sharing fails due to blob issue
         if (fallbackToDownload) {
@@ -158,7 +160,9 @@ async function shareCard(personality, options = {}) {
                 return 'failed';
             }
         }
-        throw new Error(`Failed to generate shareable image for personality "${personality?.name || 'unknown'}". The canvas may be tainted by cross-origin content.`);
+        throw new Error(
+            `Failed to generate shareable image for personality "${personality?.name || 'unknown'}". The canvas may be tainted by cross-origin content.`
+        );
     }
 
     const file = new File([blob], 'rhythm-chamber-personality.png', { type: 'image/png' });
@@ -171,7 +175,7 @@ async function shareCard(personality, options = {}) {
     const shareData = {
         title: 'My Music Personality',
         text: `I'm ${article} ${personality.name}. Discover yours:`,
-        url: getShareURL()
+        url: getShareURL(),
     };
 
     // Add the image file if supported and requested
@@ -194,7 +198,7 @@ async function shareCard(personality, options = {}) {
                 const textOnlyShare = {
                     title: shareData.title,
                     text: shareData.text,
-                    url: shareData.url
+                    url: shareData.url,
                 };
                 await navigator.share(textOnlyShare);
                 return 'shared';
@@ -227,4 +231,3 @@ async function shareCard(personality, options = {}) {
 export const Cards = { generateCard, downloadCard, shareCard, getShareURL };
 
 console.log('[Cards] Module loaded');
-

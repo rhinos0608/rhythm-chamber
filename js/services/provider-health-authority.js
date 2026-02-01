@@ -35,9 +35,9 @@ import { EventBus } from './event-bus.js';
  * @enum {string}
  */
 export const CircuitState = Object.freeze({
-    CLOSED: 'closed',      // Normal operation - requests allowed
-    OPEN: 'open',          // Failing - requests blocked
-    HALF_OPEN: 'half_open' // Recovery testing - limited requests
+    CLOSED: 'closed', // Normal operation - requests allowed
+    OPEN: 'open', // Failing - requests blocked
+    HALF_OPEN: 'half_open', // Recovery testing - limited requests
 });
 
 /**
@@ -45,11 +45,11 @@ export const CircuitState = Object.freeze({
  * @enum {string}
  */
 export const HealthStatus = Object.freeze({
-    HEALTHY: 'healthy',        // Provider working normally
-    DEGRADED: 'degraded',      // Provider slow but functional
-    UNHEALTHY: 'unhealthy',    // Provider failing
+    HEALTHY: 'healthy', // Provider working normally
+    DEGRADED: 'degraded', // Provider slow but functional
+    UNHEALTHY: 'unhealthy', // Provider failing
     BLACKLISTED: 'blacklisted', // Provider temporarily blocked
-    UNKNOWN: 'unknown'         // Status not yet determined
+    UNKNOWN: 'unknown', // Status not yet determined
 });
 
 /**
@@ -57,22 +57,22 @@ export const HealthStatus = Object.freeze({
  */
 const DEFAULT_CONFIG = Object.freeze({
     // Circuit breaker thresholds
-    failureThreshold: 5,       // Consecutive failures before opening circuit
-    successThreshold: 2,       // Successes in half-open to close circuit
-    volumeThreshold: 5,        // Minimum requests before circuit can open
-    
+    failureThreshold: 5, // Consecutive failures before opening circuit
+    successThreshold: 2, // Successes in half-open to close circuit
+    volumeThreshold: 5, // Minimum requests before circuit can open
+
     // Timing
-    cooldownMs: 60000,         // Time in OPEN state before trying HALF_OPEN
+    cooldownMs: 60000, // Time in OPEN state before trying HALF_OPEN
     blacklistDurationMs: 300000, // 5 minutes default blacklist
-    
+
     // Half-open constraints
-    halfOpenMaxRequests: 3,    // Max concurrent requests in half-open state
-    
+    halfOpenMaxRequests: 3, // Max concurrent requests in half-open state
+
     // Latency thresholds
-    degradedLatencyMs: 5000,   // Latency above this = DEGRADED status
-    
+    degradedLatencyMs: 5000, // Latency above this = DEGRADED status
+
     // History
-    historySize: 100           // Max entries in request history
+    historySize: 100, // Max entries in request history
 });
 
 // ==========================================
@@ -145,7 +145,7 @@ function createHealthRecord(provider) {
         blacklistExpiry: null,
         halfOpenRequests: 0,
         requestCount: 0,
-        history: []
+        history: [],
     };
 }
 
@@ -171,29 +171,29 @@ function deriveHealthStatus(state) {
     if (state.blacklistExpiry && Date.now() < state.blacklistExpiry) {
         return HealthStatus.BLACKLISTED;
     }
-    
+
     // Circuit state mapping
     if (state.circuitState === CircuitState.OPEN) {
         return HealthStatus.UNHEALTHY;
     }
-    
+
     if (state.circuitState === CircuitState.HALF_OPEN) {
         return HealthStatus.DEGRADED;
     }
-    
+
     // In CLOSED state, check performance metrics
     const total = state.totalSuccesses + state.totalFailures;
     if (total === 0) {
         return HealthStatus.UNKNOWN;
     }
-    
+
     const successRate = state.totalSuccesses / total;
-    
+
     // High latency = degraded
     if (state.avgLatencyMs > config.degradedLatencyMs) {
         return HealthStatus.DEGRADED;
     }
-    
+
     // Success rate thresholds
     if (successRate >= 0.8) {
         return HealthStatus.HEALTHY;
@@ -221,7 +221,7 @@ function trimHistory(history) {
  */
 function notifyHealthUpdate(provider, state) {
     const snapshot = getProviderSnapshot(provider);
-    
+
     for (const callback of healthUpdateCallbacks) {
         try {
             callback(provider, snapshot);
@@ -239,13 +239,13 @@ function notifyHealthUpdate(provider, state) {
  */
 function emitCircuitEvent(eventType, provider, details = {}) {
     const eventName = `CIRCUIT_BREAKER:${eventType}`;
-    
+
     EventBus.emit(eventName, {
         provider,
         timestamp: Date.now(),
-        ...details
+        ...details,
     });
-    
+
     console.log(`[ProviderHealthAuthority] Emitted ${eventName} for ${provider}`);
 }
 
@@ -256,104 +256,106 @@ function emitCircuitEvent(eventType, provider, details = {}) {
 /**
  * Check if a request can be made to a provider
  * Returns whether the request is allowed based on circuit state and blacklist
- * 
+ *
  * @param {string} provider - Provider name
  * @returns {{ allowed: boolean, state: CircuitState, reason?: string, cooldownRemaining?: number }}
  */
 export function canExecute(provider) {
     const state = getOrCreateState(provider);
     const now = Date.now();
-    
+
     // Check blacklist first
     if (state.blacklistExpiry && now < state.blacklistExpiry) {
         return {
             allowed: false,
             state: state.circuitState,
             reason: `Provider ${provider} is blacklisted`,
-            blacklistRemaining: state.blacklistExpiry - now
+            blacklistRemaining: state.blacklistExpiry - now,
         };
     } else if (state.blacklistExpiry && now >= state.blacklistExpiry) {
         // Blacklist expired - clear it
         state.blacklistExpiry = null;
     }
-    
+
     // CLOSED state - always allow
     if (state.circuitState === CircuitState.CLOSED) {
         return { allowed: true, state: state.circuitState };
     }
-    
+
     // OPEN state - check if cooldown elapsed
     if (state.circuitState === CircuitState.OPEN) {
         const elapsed = now - state.circuitOpenedAt;
-        
+
         if (elapsed >= config.cooldownMs) {
             // Transition to HALF_OPEN
             state.circuitState = CircuitState.HALF_OPEN;
             state.halfOpenRequests = 0;
             state.consecutiveSuccesses = 0;
             state.healthStatus = deriveHealthStatus(state);
-            
-            console.log(`[ProviderHealthAuthority] ${provider}: OPEN → HALF_OPEN (cooldown elapsed)`);
-            
+
+            console.log(
+                `[ProviderHealthAuthority] ${provider}: OPEN → HALF_OPEN (cooldown elapsed)`
+            );
+
             return { allowed: true, state: state.circuitState };
         }
-        
+
         return {
             allowed: false,
             state: state.circuitState,
             reason: `Circuit open for ${provider}. Retry in ${Math.ceil((config.cooldownMs - elapsed) / 1000)}s`,
-            cooldownRemaining: config.cooldownMs - elapsed
+            cooldownRemaining: config.cooldownMs - elapsed,
         };
     }
-    
+
     // HALF_OPEN state - limit concurrent requests
     if (state.circuitState === CircuitState.HALF_OPEN) {
         if (state.halfOpenRequests >= config.halfOpenMaxRequests) {
             return {
                 allowed: false,
                 state: state.circuitState,
-                reason: `Circuit half-open for ${provider}. Waiting for test requests to complete.`
+                reason: `Circuit half-open for ${provider}. Waiting for test requests to complete.`,
             };
         }
-        
+
         return { allowed: true, state: state.circuitState };
     }
-    
+
     return { allowed: true, state: state.circuitState };
 }
 
 /**
  * Record a successful request
  * Updates metrics and potentially closes the circuit
- * 
+ *
  * @param {string} provider - Provider name
  * @param {number} [durationMs=0] - Request duration in milliseconds
  */
 export function recordSuccess(provider, durationMs = 0) {
     const state = getOrCreateState(provider);
     const now = Date.now();
-    
+
     // Update metrics
     state.requestCount++;
     state.totalSuccesses++;
     state.consecutiveFailures = 0; // Reset failure streak
     state.lastSuccessTime = now;
-    
+
     // Update latency (exponential moving average)
     if (state.avgLatencyMs === 0) {
         state.avgLatencyMs = durationMs;
     } else {
-        state.avgLatencyMs = (state.avgLatencyMs * 0.9) + (durationMs * 0.1);
+        state.avgLatencyMs = state.avgLatencyMs * 0.9 + durationMs * 0.1;
     }
-    
+
     // Record in history
     state.history.push({ timestamp: now, success: true, durationMs });
     trimHistory(state.history);
-    
+
     // Handle HALF_OPEN state
     if (state.circuitState === CircuitState.HALF_OPEN) {
         state.consecutiveSuccesses++;
-        
+
         if (state.consecutiveSuccesses >= config.successThreshold) {
             // Circuit recovered!
             const previousState = state.circuitState;
@@ -361,34 +363,34 @@ export function recordSuccess(provider, durationMs = 0) {
             state.consecutiveSuccesses = 0;
             state.halfOpenRequests = 0;
             state.circuitOpenedAt = 0;
-            
+
             console.log(`[ProviderHealthAuthority] ${provider}: HALF_OPEN → CLOSED (recovered)`);
-            
+
             // Emit recovery event (this was missing from the old circuit breaker!)
             emitCircuitEvent('RECOVERED', provider, {
                 previousState,
-                successCount: state.totalSuccesses
+                successCount: state.totalSuccesses,
             });
         }
     }
-    
+
     // Update derived health status
     state.healthStatus = deriveHealthStatus(state);
-    
+
     // Emit health update event
     EventBus.emit('PROVIDER:HEALTH_UPDATE', {
         provider,
         health: state.healthStatus,
-        circuitState: state.circuitState
+        circuitState: state.circuitState,
     });
-    
+
     notifyHealthUpdate(provider, state);
 }
 
 /**
  * Record a failed request
  * Updates metrics and potentially opens the circuit
- * 
+ *
  * @param {string} provider - Provider name
  * @param {string|Error} [error] - Error message or Error object
  */
@@ -396,71 +398,75 @@ export function recordFailure(provider, error) {
     const state = getOrCreateState(provider);
     const now = Date.now();
     const errorMessage = error instanceof Error ? error.message : String(error || 'Unknown error');
-    
+
     // Update metrics
     state.requestCount++;
     state.totalFailures++;
     state.consecutiveFailures++;
     state.consecutiveSuccesses = 0; // Reset success streak
     state.lastFailureTime = now;
-    
+
     // Record in history
     state.history.push({ timestamp: now, success: false, error: errorMessage });
     trimHistory(state.history);
-    
+
     // Handle state transitions
     if (state.circuitState === CircuitState.HALF_OPEN) {
         // Any failure in half-open → back to OPEN
         state.circuitState = CircuitState.OPEN;
         state.circuitOpenedAt = now;
         state.halfOpenRequests = 0;
-        
-        console.warn(`[ProviderHealthAuthority] ${provider}: HALF_OPEN → OPEN (test request failed: ${errorMessage})`);
-        
+
+        console.warn(
+            `[ProviderHealthAuthority] ${provider}: HALF_OPEN → OPEN (test request failed: ${errorMessage})`
+        );
+
         // Emit tripped event
         emitCircuitEvent('TRIPPED', provider, {
             reason: 'half_open_failure',
             error: errorMessage,
-            consecutiveFailures: state.consecutiveFailures
+            consecutiveFailures: state.consecutiveFailures,
         });
-        
     } else if (state.circuitState === CircuitState.CLOSED) {
         // Check if we should open the circuit
-        if (state.requestCount >= config.volumeThreshold && 
-            state.consecutiveFailures >= config.failureThreshold) {
-            
+        if (
+            state.requestCount >= config.volumeThreshold &&
+            state.consecutiveFailures >= config.failureThreshold
+        ) {
             state.circuitState = CircuitState.OPEN;
             state.circuitOpenedAt = now;
-            
-            console.warn(`[ProviderHealthAuthority] ${provider}: CLOSED → OPEN (${state.consecutiveFailures} consecutive failures)`);
-            
+
+            console.warn(
+                `[ProviderHealthAuthority] ${provider}: CLOSED → OPEN (${state.consecutiveFailures} consecutive failures)`
+            );
+
             // Emit tripped event (THIS WAS THE MISSING EVENT!)
             emitCircuitEvent('TRIPPED', provider, {
                 reason: 'failure_threshold',
                 error: errorMessage,
                 consecutiveFailures: state.consecutiveFailures,
-                failureThreshold: config.failureThreshold
+                failureThreshold: config.failureThreshold,
             });
         }
     }
-    
+
     // Update derived health status
     state.healthStatus = deriveHealthStatus(state);
-    
+
     // Emit health update event
     EventBus.emit('PROVIDER:HEALTH_UPDATE', {
         provider,
         health: state.healthStatus,
-        circuitState: state.circuitState
+        circuitState: state.circuitState,
     });
-    
+
     notifyHealthUpdate(provider, state);
 }
 
 /**
  * Mark a half-open request as started (increment counter)
  * Call this BEFORE executing the request in half-open state
- * 
+ *
  * @param {string} provider - Provider name
  */
 export function markHalfOpenRequestStarted(provider) {
@@ -473,7 +479,7 @@ export function markHalfOpenRequestStarted(provider) {
 /**
  * Mark a half-open request as completed (decrement counter)
  * Call this in finally block after executing request in half-open state
- * 
+ *
  * @param {string} provider - Provider name
  */
 export function markHalfOpenRequestCompleted(provider) {
@@ -489,25 +495,25 @@ export function markHalfOpenRequestCompleted(provider) {
 
 /**
  * Blacklist a provider for a duration
- * 
+ *
  * @param {string} provider - Provider name
  * @param {number} [durationMs] - Duration in milliseconds (default: config.blacklistDurationMs)
  */
 export function blacklist(provider, durationMs = config.blacklistDurationMs) {
     const state = getOrCreateState(provider);
     const expiry = Date.now() + durationMs;
-    
+
     state.blacklistExpiry = expiry;
     state.healthStatus = HealthStatus.BLACKLISTED;
-    
+
     console.warn(`[ProviderHealthAuthority] Blacklisted ${provider} for ${durationMs}ms`);
-    
+
     EventBus.emit('PROVIDER:BLACKLISTED', {
         provider,
         expiry: new Date(expiry).toISOString(),
-        durationMs
+        durationMs,
     });
-    
+
     notifyHealthUpdate(provider, state);
 }
 
@@ -545,21 +551,21 @@ export function unblacklist(provider) {
 
 /**
  * Check if a provider is currently blacklisted
- * 
+ *
  * @param {string} provider - Provider name
  * @returns {boolean}
  */
 export function isBlacklisted(provider) {
     const state = providerStates.get(provider);
     if (!state || !state.blacklistExpiry) return false;
-    
+
     const now = Date.now();
     if (now >= state.blacklistExpiry) {
         // Expired - clean up using helper
         clearBlacklistExpiry(provider, state, 'expired');
         return false;
     }
-    
+
     return true;
 }
 
@@ -569,14 +575,14 @@ export function isBlacklisted(provider) {
 
 /**
  * Get current status for a provider
- * 
+ *
  * @param {string} provider - Provider name
  * @returns {Object} Provider status
  */
 export function getStatus(provider) {
     const state = getOrCreateState(provider);
     const now = Date.now();
-    
+
     return {
         provider,
         circuitState: state.circuitState,
@@ -585,9 +591,10 @@ export function getStatus(provider) {
         consecutiveSuccesses: state.consecutiveSuccesses,
         totalSuccesses: state.totalSuccesses,
         totalFailures: state.totalFailures,
-        successRate: state.totalSuccesses + state.totalFailures > 0
-            ? state.totalSuccesses / (state.totalSuccesses + state.totalFailures)
-            : 0,
+        successRate:
+            state.totalSuccesses + state.totalFailures > 0
+                ? state.totalSuccesses / (state.totalSuccesses + state.totalFailures)
+                : 0,
         avgLatencyMs: Math.round(state.avgLatencyMs),
         lastSuccessTime: state.lastSuccessTime,
         lastFailureTime: state.lastFailureTime,
@@ -596,22 +603,23 @@ export function getStatus(provider) {
         isClosed: state.circuitState === CircuitState.CLOSED,
         isBlacklisted: state.blacklistExpiry ? now < state.blacklistExpiry : false,
         blacklistExpiry: state.blacklistExpiry,
-        cooldownRemaining: state.circuitState === CircuitState.OPEN && state.circuitOpenedAt
-            ? Math.max(0, config.cooldownMs - (now - state.circuitOpenedAt))
-            : 0,
-        recentHistory: state.history.slice(-10)
+        cooldownRemaining:
+            state.circuitState === CircuitState.OPEN && state.circuitOpenedAt
+                ? Math.max(0, config.cooldownMs - (now - state.circuitOpenedAt))
+                : 0,
+        recentHistory: state.history.slice(-10),
     };
 }
 
 /**
  * Get a snapshot of provider health for UI
- * 
+ *
  * @param {string} provider - Provider name
  * @returns {Object} Provider health snapshot
  */
 export function getProviderSnapshot(provider) {
     const status = getStatus(provider);
-    
+
     return {
         provider: status.provider,
         status: status.healthStatus,
@@ -625,13 +633,13 @@ export function getProviderSnapshot(provider) {
         blacklistExpiry: status.blacklistExpiry
             ? new Date(status.blacklistExpiry).toISOString()
             : null,
-        cooldownRemaining: status.cooldownRemaining
+        cooldownRemaining: status.cooldownRemaining,
     };
 }
 
 /**
  * Get status of all tracked providers
- * 
+ *
  * @returns {Object} Map of provider names to status
  */
 export function getAllStatus() {
@@ -644,7 +652,7 @@ export function getAllStatus() {
 
 /**
  * Get health snapshot for all providers (for UI)
- * 
+ *
  * @returns {Object} Map of provider names to health snapshots
  */
 export function getAllSnapshots() {
@@ -657,7 +665,7 @@ export function getAllSnapshots() {
 
 /**
  * Get health summary across all providers
- * 
+ *
  * @returns {Object} Summary statistics
  */
 export function getHealthSummary() {
@@ -666,20 +674,30 @@ export function getHealthSummary() {
     let unhealthy = 0;
     let blacklisted = 0;
     let unknown = 0;
-    
+
     for (const state of providerStates.values()) {
         switch (state.healthStatus) {
-            case HealthStatus.HEALTHY: healthy++; break;
-            case HealthStatus.DEGRADED: degraded++; break;
-            case HealthStatus.UNHEALTHY: unhealthy++; break;
-            case HealthStatus.BLACKLISTED: blacklisted++; break;
-            case HealthStatus.UNKNOWN: unknown++; break;
+            case HealthStatus.HEALTHY:
+                healthy++;
+                break;
+            case HealthStatus.DEGRADED:
+                degraded++;
+                break;
+            case HealthStatus.UNHEALTHY:
+                unhealthy++;
+                break;
+            case HealthStatus.BLACKLISTED:
+                blacklisted++;
+                break;
+            case HealthStatus.UNKNOWN:
+                unknown++;
+                break;
         }
     }
-    
+
     const total = providerStates.size;
     let overallStatus = HealthStatus.UNKNOWN;
-    
+
     if (total === 0) {
         overallStatus = HealthStatus.UNKNOWN;
     } else if (blacklisted > 0 || unhealthy > 0) {
@@ -689,7 +707,7 @@ export function getHealthSummary() {
     } else if (healthy === total) {
         overallStatus = HealthStatus.HEALTHY;
     }
-    
+
     return {
         total,
         healthy,
@@ -697,7 +715,7 @@ export function getHealthSummary() {
         unhealthy,
         blacklisted,
         unknown,
-        overallStatus
+        overallStatus,
     };
 }
 
@@ -707,7 +725,7 @@ export function getHealthSummary() {
 
 /**
  * Reset a provider's circuit breaker and health state
- * 
+ *
  * @param {string} provider - Provider name
  */
 export function reset(provider) {
@@ -725,16 +743,16 @@ export function resetAll() {
 
 /**
  * Force a provider into a specific circuit state (for testing/recovery)
- * 
+ *
  * @param {string} provider - Provider name
  * @param {CircuitState} newState - Target state
  */
 export function forceState(provider, newState) {
     const state = getOrCreateState(provider);
     const oldState = state.circuitState;
-    
+
     state.circuitState = newState;
-    
+
     if (newState === CircuitState.CLOSED) {
         state.consecutiveFailures = 0;
         state.consecutiveSuccesses = 0;
@@ -746,17 +764,17 @@ export function forceState(provider, newState) {
         state.halfOpenRequests = 0;
         state.consecutiveSuccesses = 0;
     }
-    
+
     state.healthStatus = deriveHealthStatus(state);
-    
+
     console.warn(`[ProviderHealthAuthority] ${provider}: Force ${oldState} → ${newState}`);
-    
+
     notifyHealthUpdate(provider, state);
 }
 
 /**
  * Update configuration
- * 
+ *
  * @param {Object} newConfig - Partial config to merge
  */
 export function configure(newConfig) {
@@ -766,7 +784,7 @@ export function configure(newConfig) {
 
 /**
  * Get current configuration
- * 
+ *
  * @returns {Object} Current config
  */
 export function getConfig() {
@@ -779,7 +797,7 @@ export function getConfig() {
 
 /**
  * Register a callback for health updates
- * 
+ *
  * @param {Function} callback - Function(provider, snapshot) to call on updates
  * @returns {Function} Unsubscribe function
  */
@@ -793,7 +811,7 @@ export function onHealthUpdate(callback) {
 
 /**
  * Unregister a health update callback
- * 
+ *
  * @param {Function} callback - Callback to remove
  */
 export function offHealthUpdate(callback) {
@@ -807,53 +825,53 @@ export function offHealthUpdate(callback) {
 /**
  * Execute a function with circuit breaker protection
  * Combines canExecute check, execution, and recording atomically
- * 
+ *
  * @param {string} provider - Provider name
  * @param {Function} fn - Async function to execute
  * @returns {Promise<{ success: boolean, result?: any, error?: string, blocked?: boolean, durationMs?: number }>}
  */
 export async function execute(provider, fn) {
     const checkResult = canExecute(provider);
-    
+
     if (!checkResult.allowed) {
         return {
             success: false,
             error: checkResult.reason,
             blocked: true,
-            state: checkResult.state
+            state: checkResult.state,
         };
     }
-    
+
     const state = getOrCreateState(provider);
     if (state.circuitState === CircuitState.HALF_OPEN) {
         markHalfOpenRequestStarted(provider);
     }
-    
+
     const startTime = Date.now();
-    
+
     try {
         const result = await fn();
         const durationMs = Date.now() - startTime;
-        
+
         recordSuccess(provider, durationMs);
-        
+
         return {
             success: true,
             result,
             durationMs,
-            state: state.circuitState
+            state: state.circuitState,
         };
     } catch (error) {
         const durationMs = Date.now() - startTime;
         const message = error instanceof Error ? error.message : String(error);
-        
+
         recordFailure(provider, message);
-        
+
         return {
             success: false,
             error: message,
             durationMs,
-            state: state.circuitState
+            state: state.circuitState,
         };
     } finally {
         if (state.circuitState === CircuitState.HALF_OPEN) {
@@ -871,7 +889,7 @@ export const ProviderHealthAuthority = {
     CircuitState,
     HealthStatus,
     DEFAULT_CONFIG,
-    
+
     // Core operations
     canExecute,
     execute,
@@ -879,29 +897,29 @@ export const ProviderHealthAuthority = {
     recordFailure,
     markHalfOpenRequestStarted,
     markHalfOpenRequestCompleted,
-    
+
     // Blacklist management
     blacklist,
     unblacklist,
     isBlacklisted,
-    
+
     // Status & metrics
     getStatus,
     getProviderSnapshot,
     getAllStatus,
     getAllSnapshots,
     getHealthSummary,
-    
+
     // Management
     reset,
     resetAll,
     forceState,
     configure,
     getConfig,
-    
+
     // UI integration
     onHealthUpdate,
-    offHealthUpdate
+    offHealthUpdate,
 };
 
 console.log('[ProviderHealthAuthority] Module loaded - Single source of truth for provider health');

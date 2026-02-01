@@ -45,7 +45,7 @@ export const ProfileStorage = {
         const profiles = await this._getProfilesMap();
         profiles[profile.id] = {
             ...profile,
-            savedAt: new Date().toISOString()
+            savedAt: new Date().toISOString(),
         };
 
         await this._storage.saveSetting('saved_profiles', profiles);
@@ -58,8 +58,8 @@ export const ProfileStorage = {
      */
     async getAllProfiles() {
         const profiles = await this._getProfilesMap();
-        return Object.values(profiles).sort((a, b) =>
-            new Date(b.savedAt || 0) - new Date(a.savedAt || 0)
+        return Object.values(profiles).sort(
+            (a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0)
         );
     },
 
@@ -140,5 +140,5 @@ export const ProfileStorage = {
         await this._storage.saveSetting('saved_profiles', {});
         await this._storage.saveSetting('active_profile_id', null);
         console.log('[ProfileStorage] All profiles cleared');
-    }
+    },
 };

@@ -17,7 +17,7 @@ import {
     getIsPrimaryTab,
     setIsPrimaryTab,
     notifyAuthorityChange,
-    handleSecondaryMode
+    handleSecondaryMode,
 } from './authority.js';
 
 // Lazy import to avoid circular dependency with watermark
@@ -182,11 +182,14 @@ export async function claimPrimary() {
 
     // Immediately write to localStorage for late-joining tabs to detect
     try {
-        localStorage.setItem('rhythm_chamber_tab_election', JSON.stringify({
-            tabId: TAB_ID,
-            timestamp: Date.now(),
-            isPrimary: true
-        }));
+        localStorage.setItem(
+            'rhythm_chamber_tab_election',
+            JSON.stringify({
+                tabId: TAB_ID,
+                timestamp: Date.now(),
+                isPrimary: true,
+            })
+        );
     } catch (e) {
         // localStorage might not be available
     }

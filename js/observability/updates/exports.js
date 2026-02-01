@@ -22,7 +22,9 @@ export function updateExportsTab(container) {
     if (scheduledJobs.length === 0) {
         scheduledList.innerHTML = '<div class="no-scheduled">No scheduled exports</div>';
     } else {
-        scheduledList.innerHTML = scheduledJobs.map(job => `
+        scheduledList.innerHTML = scheduledJobs
+            .map(
+                job => `
             <div class="scheduled-job" data-job-id="${escapeHtml(job.id)}">
                 <div class="job-name">${escapeHtml(job.name)}</div>
                 <div class="job-info">
@@ -35,7 +37,9 @@ export function updateExportsTab(container) {
                     <button class="btn btn-sm" data-action="delete-job" data-job-id="${escapeHtml(job.id)}">Delete</button>
                 </div>
             </div>
-        `).join('');
+        `
+            )
+            .join('');
     }
 
     // Update external services list
@@ -45,7 +49,9 @@ export function updateExportsTab(container) {
     if (services.length === 0) {
         servicesList.innerHTML = '<div class="no-services">No external services configured</div>';
     } else {
-        servicesList.innerHTML = services.map(service => `
+        servicesList.innerHTML = services
+            .map(
+                service => `
             <div class="service-config" data-endpoint="${escapeHtml(service.endpoint)}">
                 <div class="service-name">${escapeHtml(service.service)}</div>
                 <div class="service-endpoint">${escapeHtml(service.endpoint)}</div>
@@ -53,7 +59,9 @@ export function updateExportsTab(container) {
                     <button class="btn btn-sm" data-action="remove-service" data-endpoint="${escapeHtml(service.endpoint)}">Remove</button>
                 </div>
             </div>
-        `).join('');
+        `
+            )
+            .join('');
     }
 }
 

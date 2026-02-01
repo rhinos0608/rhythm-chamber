@@ -28,14 +28,16 @@ import { PerformanceProfiler, PerformanceCategory } from '../services/performanc
 function getOrCreateEncryptionConfig() {
     // SECURITY: Never read encryption keys from localStorage - vulnerable to XSS attacks
     // Return null immediately to prevent insecure credential storage
-    console.warn('[ObservabilityInit] SECURITY WARNING: Metrics encryption not configured. ' +
-        'External service credentials will be stored in plain text in localStorage. ' +
-        'CRITICAL: Reading encryption secrets from localStorage is insecure and vulnerable to XSS attacks. ' +
-        'For production use, consider safer alternatives: ' +
-        '(1) Prompt for password at runtime, ' +
-        '(2) Use a session-derived key, ' +
-        '(3) Derive/store key server-side. ' +
-        'Do NOT attempt to provide encryption config via localStorage for security reasons.');
+    console.warn(
+        '[ObservabilityInit] SECURITY WARNING: Metrics encryption not configured. ' +
+            'External service credentials will be stored in plain text in localStorage. ' +
+            'CRITICAL: Reading encryption secrets from localStorage is insecure and vulnerable to XSS attacks. ' +
+            'For production use, consider safer alternatives: ' +
+            '(1) Prompt for password at runtime, ' +
+            '(2) Use a session-derived key, ' +
+            '(3) Derive/store key server-side. ' +
+            'Do NOT attempt to provide encryption config via localStorage for security reasons.'
+    );
 
     return null;
 }
@@ -61,7 +63,7 @@ export async function initObservability(userOptions = {}) {
             coreWebVitals,
             metricsExporter,
             observabilityController,
-            isInitialized: true
+            isInitialized: true,
         };
     }
 
@@ -70,7 +72,7 @@ export async function initObservability(userOptions = {}) {
         webVitalsEnabled: true,
         profilingEnabled: true,
         exportEnabled: true,
-        dashboardEnabled: true
+        dashboardEnabled: true,
     };
 
     const options = { ...defaultOptions, ...userOptions };
@@ -80,7 +82,7 @@ export async function initObservability(userOptions = {}) {
         if (options.webVitalsEnabled) {
             coreWebVitals = new CoreWebVitalsTracker({
                 enabled: options.enabled,
-                maxMetrics: 100
+                maxMetrics: 100,
             });
             console.log('[ObservabilityInit] Core Web Vitals Tracker initialized');
         }
@@ -91,9 +93,12 @@ export async function initObservability(userOptions = {}) {
             const encryptionConfig = getOrCreateEncryptionConfig();
             metricsExporter = await MetricsExporter.create({
                 enabled: options.enabled,
-                encryptionConfig: encryptionConfig
+                encryptionConfig: encryptionConfig,
             });
-            console.log('[ObservabilityInit] Metrics Exporter initialized' + (encryptionConfig ? ' with encryption' : ' (encryption not configured)'));
+            console.log(
+                '[ObservabilityInit] Metrics Exporter initialized' +
+                    (encryptionConfig ? ' with encryption' : ' (encryption not configured)')
+            );
         }
 
         // Initialize Observability Controller
@@ -101,7 +106,7 @@ export async function initObservability(userOptions = {}) {
             observabilityController = new ObservabilityController({
                 coreWebVitals,
                 metricsExporter,
-                updateInterval: 5000
+                updateInterval: 5000,
             });
             console.log('[ObservabilityInit] Observability Controller initialized');
         }
@@ -118,9 +123,8 @@ export async function initObservability(userOptions = {}) {
             coreWebVitals,
             metricsExporter,
             observabilityController,
-            isInitialized: true
+            isInitialized: true,
         };
-
     } catch (error) {
         console.error('[ObservabilityInit] Failed to initialize observability:', error);
         return {
@@ -128,7 +132,7 @@ export async function initObservability(userOptions = {}) {
             metricsExporter: null,
             observabilityController: null,
             isInitialized: false,
-            error
+            error,
         };
     }
 }
@@ -149,7 +153,7 @@ function setupEventBusIntegration() {
         // Note: chat:message_sent is defined in schema but not currently emitted
         // EventBus.on('chat:message_sent', handleChatMessageSent),
         EventBus.on('pattern:all_complete', handlePatternDetectionComplete),
-        EventBus.on('embedding:generation_complete', handleEmbeddingGenerated)
+        EventBus.on('embedding:generation_complete', handleEmbeddingGenerated),
     ];
 
     console.log('[ObservabilityInit] EventBus integration setup complete');
@@ -167,35 +171,35 @@ function setupPerformanceBudgets() {
     PerformanceProfiler.setPerformanceBudget(PerformanceCategory.CHAT, {
         threshold: 5000, // 5 seconds for LLM calls
         action: 'warn',
-        degradationThreshold: 50 // 50% increase triggers alert
+        degradationThreshold: 50, // 50% increase triggers alert
     });
 
     // Storage performance budget
     PerformanceProfiler.setPerformanceBudget(PerformanceCategory.STORAGE, {
         threshold: 100, // 100ms for storage operations
         action: 'warn',
-        degradationThreshold: 50
+        degradationThreshold: 50,
     });
 
     // Pattern detection budget
     PerformanceProfiler.setPerformanceBudget(PerformanceCategory.PATTERN_DETECTION, {
         threshold: 300, // 300ms for pattern algorithms
         action: 'warn',
-        degradationThreshold: 50
+        degradationThreshold: 50,
     });
 
     // Semantic search budget
     PerformanceProfiler.setPerformanceBudget(PerformanceCategory.SEMANTIC_SEARCH, {
         threshold: 200, // 200ms for vector search
         action: 'warn',
-        degradationThreshold: 50
+        degradationThreshold: 50,
     });
 
     // Embedding generation budget
     PerformanceProfiler.setPerformanceBudget(PerformanceCategory.EMBEDDING_GENERATION, {
         threshold: 500, // 500ms for embedding generation
         action: 'warn',
-        degradationThreshold: 50
+        degradationThreshold: 50,
     });
 
     console.log('[ObservabilityInit] Performance budgets configured');
@@ -215,8 +219,8 @@ function handleDataStreamsLoaded(payload) {
         category: PerformanceCategory.STORAGE,
         metadata: {
             streamCount: payload.streams?.length || 0,
-            timingNote: 'Actual timing should be provided in payload.duration'
-        }
+            timingNote: 'Actual timing should be provided in payload.duration',
+        },
     });
 
     // If actual timing is available in payload, use it
@@ -237,8 +241,8 @@ function handleChatMessageSent(payload) {
         metadata: {
             messageLength: payload.message?.length || 0,
             hasFunctionCalls: payload.functionCalls?.length > 0,
-            timingNote: 'Actual timing should be provided in payload.duration'
-        }
+            timingNote: 'Actual timing should be provided in payload.duration',
+        },
     });
 
     // If actual timing is available in payload, use it
@@ -259,8 +263,8 @@ function handlePatternDetectionComplete(payload) {
         metadata: {
             patternCount: Object.keys(payload.patterns || {}).length,
             streamCount: payload.streamCount || 0,
-            timingNote: 'Actual timing should be provided in payload.duration'
-        }
+            timingNote: 'Actual timing should be provided in payload.duration',
+        },
     });
 
     // If actual timing is available in payload, use it
@@ -281,8 +285,8 @@ function handleEmbeddingGenerated(payload) {
         metadata: {
             embeddingCount: payload.count || 1,
             dimension: payload.dimension || 384,
-            timingNote: 'Actual timing should be provided in payload.duration'
-        }
+            timingNote: 'Actual timing should be provided in payload.duration',
+        },
     });
 
     // If actual timing is available in payload, use it
@@ -303,7 +307,7 @@ export function getObservability() {
         coreWebVitals,
         metricsExporter,
         observabilityController,
-        isInitialized
+        isInitialized,
     };
 }
 

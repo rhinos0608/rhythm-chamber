@@ -36,7 +36,7 @@ export {
     sanitizeStack,
     sanitizeContext,
     SENSITIVE_PATTERNS,
-    SAFE_CONTEXT_FIELDS
+    SAFE_CONTEXT_FIELDS,
 } from './error-handling/error-sanitizer.js';
 
 // Error Classification
@@ -50,15 +50,11 @@ export {
     classifyTransactionError,
     ErrorType,
     ErrorSeverity,
-    ErrorRecoverability
+    ErrorRecoverability,
 } from './error-handling/error-classifier.js';
 
 // Error Formatting
-export {
-    formatForUser,
-    formatForLog,
-    formatForToast
-} from './error-handling/error-formatter.js';
+export { formatForUser, formatForLog, formatForToast } from './error-handling/error-formatter.js';
 
 // Error Recovery
 export {
@@ -68,7 +64,7 @@ export {
     isSevere,
     isRecoverable,
     requiresUserAction,
-    handleBatchErrors
+    handleBatchErrors,
 } from './error-handling/error-recovery.js';
 
 // ==========================================
@@ -79,13 +75,13 @@ import {
     classifyError as _classifyError,
     ErrorType as _ErrorType,
     ErrorSeverity as _ErrorSeverity,
-    ErrorRecoverability as _ErrorRecoverability
+    ErrorRecoverability as _ErrorRecoverability,
 } from './error-handling/error-classifier.js';
 
 import {
     formatForUser as _formatForUser,
     formatForLog as _formatForLog,
-    formatForToast as _formatForToast
+    formatForToast as _formatForToast,
 } from './error-handling/error-formatter.js';
 
 import {
@@ -95,7 +91,7 @@ import {
     isSevere as _isSevere,
     isRecoverable as _isRecoverable,
     requiresUserAction as _requiresUserAction,
-    handleBatchErrors as _handleBatchErrors
+    handleBatchErrors as _handleBatchErrors,
 } from './error-handling/error-recovery.js';
 
 // ==========================================
@@ -133,7 +129,7 @@ export const ErrorHandler = {
     // Constants
     ErrorType: _ErrorType,
     ErrorSeverity: _ErrorSeverity,
-    ErrorRecoverability: _ErrorRecoverability
+    ErrorRecoverability: _ErrorRecoverability,
 };
 
 // ES Module export

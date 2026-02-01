@@ -63,7 +63,7 @@ export function createWorkerManager(searchFallback) {
         initStartTime = Date.now();
 
         // Start initialization - set promise IMMEDIATELY before any async code
-        workerInitPromise = new Promise((resolve) => {
+        workerInitPromise = new Promise(resolve => {
             try {
                 // Check if we're in a context where workers can be created
                 if (typeof Worker === 'undefined') {
@@ -77,7 +77,7 @@ export function createWorkerManager(searchFallback) {
                 // Track if worker successfully initialized
                 let workerStarted = false;
 
-                worker.onmessage = (event) => {
+                worker.onmessage = event => {
                     workerStarted = true;
                     const { type, id, results, stats, message } = event.data;
 
@@ -94,12 +94,12 @@ export function createWorkerManager(searchFallback) {
                             if (!isNaN(timestamp) && timestamp > 0) {
                                 age = {
                                     extracted: lastPart,
-                                    ageMs: now - timestamp
+                                    ageMs: now - timestamp,
                                 };
                             } else {
                                 age = {
                                     raw: id,
-                                    parseError: `Could not parse timestamp from: ${lastPart}`
+                                    parseError: `Could not parse timestamp from: ${lastPart}`,
                                 };
                             }
                         } else {
@@ -112,7 +112,7 @@ export function createWorkerManager(searchFallback) {
                             timestamp: now,
                             requestAge: age,
                             pendingSearches: Array.from(pendingSearches.keys()),
-                            reason: 'Search already completed, timed out, or cancelled'
+                            reason: 'Search already completed, timed out, or cancelled',
                         });
                         return;
                     }
@@ -121,7 +121,9 @@ export function createWorkerManager(searchFallback) {
 
                     if (type === 'results') {
                         if (stats) {
-                            console.log(`[VectorStore] Worker search: ${stats.vectorCount} vectors in ${stats.elapsedMs}ms`);
+                            console.log(
+                                `[VectorStore] Worker search: ${stats.vectorCount} vectors in ${stats.elapsedMs}ms`
+                            );
                         }
                         pending.resolve(results);
                     } else if (type === 'error') {
@@ -130,19 +132,23 @@ export function createWorkerManager(searchFallback) {
                     }
                 };
 
-                worker.onerror = (error) => {
+                worker.onerror = error => {
                     // Determine if this is a network/loading error vs runtime error
-                    const isNetworkError = !workerStarted ||
-                        (error.message && (
-                            error.message.includes('NetworkError') ||
-                            error.message.includes('Failed to fetch') ||
-                            error.message.includes('Failed to load') ||
-                            error.message.includes('Script error')
-                        ));
+                    const isNetworkError =
+                        !workerStarted ||
+                        (error.message &&
+                            (error.message.includes('NetworkError') ||
+                                error.message.includes('Failed to fetch') ||
+                                error.message.includes('Failed to load') ||
+                                error.message.includes('Script error')));
 
                     if (isNetworkError) {
-                        console.warn('[VectorStore] Worker failed to load (offline or network error). Using sync fallback.');
-                        console.warn('[VectorStore] This is expected when offline - vector search will use main thread.');
+                        console.warn(
+                            '[VectorStore] Worker failed to load (offline or network error). Using sync fallback.'
+                        );
+                        console.warn(
+                            '[VectorStore] This is expected when offline - vector search will use main thread.'
+                        );
                     } else {
                         console.error('[VectorStore] Worker runtime error:', error);
                     }
@@ -169,13 +175,18 @@ export function createWorkerManager(searchFallback) {
                 resolve(worker);
             } catch (e) {
                 // Handle synchronous errors (e.g., CSP blocking Worker creation)
-                const isSecurityError = e.name === 'SecurityError' ||
-                    e.message?.includes('Content Security Policy');
+                const isSecurityError =
+                    e.name === 'SecurityError' || e.message?.includes('Content Security Policy');
 
                 if (isSecurityError) {
-                    console.warn('[VectorStore] Worker blocked by security policy, using sync fallback');
+                    console.warn(
+                        '[VectorStore] Worker blocked by security policy, using sync fallback'
+                    );
                 } else {
-                    console.warn('[VectorStore] Failed to initialize worker, using sync fallback:', e.message);
+                    console.warn(
+                        '[VectorStore] Failed to initialize worker, using sync fallback:',
+                        e.message
+                    );
                 }
 
                 workerInitPromise = null;
@@ -248,16 +259,16 @@ export function createWorkerManager(searchFallback) {
             }, WORKER_TIMEOUT_MS);
 
             pendingSearches.set(requestId, {
-                resolve: (results) => {
+                resolve: results => {
                     clearTimeout(timeout);
                     resolve(results);
                 },
-                reject: (error) => {
+                reject: error => {
                     clearTimeout(timeout);
                     // Fallback to sync on worker error
                     console.warn('[VectorStore] Worker failed, falling back to sync:', error);
                     resolve(searchFallback(queryVector, limit, threshold));
-                }
+                },
             });
 
             // Try SharedArrayBuffer first for zero-copy transfer
@@ -271,7 +282,7 @@ export function createWorkerManager(searchFallback) {
                     payloads: sharedData.payloads,
                     dimensions: sharedData.dimensions,
                     limit,
-                    threshold
+                    threshold,
                 });
                 return;
             }
@@ -283,7 +294,7 @@ export function createWorkerManager(searchFallback) {
                 queryVector,
                 vectors: vectorArray,
                 limit,
-                threshold
+                threshold,
             });
         });
     }
@@ -305,6 +316,6 @@ export function createWorkerManager(searchFallback) {
         generateRequestId,
         get pendingSearches() {
             return pendingSearches;
-        }
+        },
     };
 }

@@ -1,6 +1,6 @@
 /**
  * Operation Lock Error Classes
- * 
+ *
  * Standardized error types for lock acquisition failures across the hierarchy.
  * Provides structured error information for better recovery and debugging.
  */
@@ -110,7 +110,9 @@ class LockForceReleaseError extends Error {
      * @param {string} reason - Reason for force release
      */
     constructor(releasedOperations, reason) {
-        super(`Emergency lock release executed: ${releasedOperations.join(', ')} - Reason: ${reason}`);
+        super(
+            `Emergency lock release executed: ${releasedOperations.join(', ')} - Reason: ${reason}`
+        );
 
         this.name = 'LockForceReleaseError';
         this.releasedOperations = releasedOperations;
@@ -126,7 +128,7 @@ class LockForceReleaseError extends Error {
 
 /**
  * Error thrown when a deadlock is detected (circular lock dependency)
- * 
+ *
  * HNW Hierarchy: Detects circular dependencies in lock acquisition to prevent
  * indefinite hangs where Operation A waits for B, and B waits for A.
  */
@@ -173,17 +175,18 @@ export {
     LockTimeoutError,
     LockReleaseError,
     LockForceReleaseError,
-    DeadlockError
+    DeadlockError,
 };
 
 // CommonJS export for compatibility
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {
+// Note: In ESM environments, `module` may be unavailable. Some bundlers expose it on globalThis.
+const cjsModule = typeof globalThis !== 'undefined' ? globalThis.module : undefined;
+if (cjsModule?.exports) {
+    cjsModule.exports = {
         LockAcquisitionError,
         LockTimeoutError,
         LockReleaseError,
         LockForceReleaseError,
-        DeadlockError
+        DeadlockError,
     };
 }
-

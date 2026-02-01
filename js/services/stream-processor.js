@@ -79,7 +79,7 @@ function createTokenWarningEvent(message, tokenInfo, truncated = false) {
         type: 'token_warning',
         message,
         tokenInfo,
-        truncated
+        truncated,
     };
 }
 
@@ -91,7 +91,7 @@ function createTokenWarningEvent(message, tokenInfo, truncated = false) {
 function createTokenUpdateEvent(tokenInfo) {
     return {
         type: 'token_update',
-        tokenInfo
+        tokenInfo,
     };
 }
 
@@ -103,7 +103,7 @@ function createTokenUpdateEvent(tokenInfo) {
 function createErrorEvent(message) {
     return {
         type: 'error',
-        message
+        message,
     };
 }
 
@@ -163,7 +163,7 @@ async function processStream(response, onProgress) {
                                 onProgress({
                                     type: 'content',
                                     content: chunk,
-                                    fullContent: content
+                                    fullContent: content,
                                 });
                             }
                         }
@@ -199,7 +199,7 @@ function processNonStream(response, onProgress) {
             type: 'content',
             content,
             fullContent: content,
-            complete: true
+            complete: true,
         });
     }
 
@@ -250,7 +250,7 @@ const StreamProcessor = {
     processStream,
     processNonStream,
     notifyProgress,
-    showErrorToast
+    showErrorToast,
 };
 
 // ES Module export

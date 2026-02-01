@@ -12,8 +12,8 @@
 // ==========================================
 
 export const PROVIDER_TIMEOUTS = {
-    cloud: 60000,    // 60s for cloud APIs (OpenRouter, Gemini, OpenAI-Compatible)
-    local: 90000     // 90s for local LLMs (Ollama, LM Studio)
+    cloud: 60000, // 60s for cloud APIs (OpenRouter, Gemini, OpenAI-Compatible)
+    local: 90000, // 90s for local LLMs (Ollama, LM Studio)
 };
 
 // ==========================================
@@ -21,10 +21,10 @@ export const PROVIDER_TIMEOUTS = {
 // ==========================================
 
 export const RETRY_CONFIG = {
-    MAX_RETRIES: 3,           // Maximum number of retry attempts
-    BASE_DELAY_MS: 1000,      // Base delay for exponential backoff (1s)
-    MAX_DELAY_MS: 10000,      // Maximum delay between retries (10s)
-    JITTER_MS: 100            // Random jitter to avoid thundering herd
+    MAX_RETRIES: 3, // Maximum number of retry attempts
+    BASE_DELAY_MS: 1000, // Base delay for exponential backoff (1s)
+    MAX_DELAY_MS: 10000, // Maximum delay between retries (10s)
+    JITTER_MS: 100, // Random jitter to avoid thundering herd
 };
 
 // ==========================================

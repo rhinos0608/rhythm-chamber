@@ -52,7 +52,7 @@ async function createPlaylist(streams, options = {}) {
         return {
             gated: true,
             playlist: null,
-            remaining: access.quotaRemaining ?? 0
+            remaining: access.quotaRemaining ?? 0,
         };
     }
 
@@ -91,7 +91,7 @@ async function createPlaylist(streams, options = {}) {
     return {
         gated: false,
         playlist,
-        remaining: newRemaining
+        remaining: newRemaining,
     };
 }
 
@@ -123,7 +123,7 @@ async function createOnSpotify(streams, options = {}) {
         return {
             gated: true,
             spotifyPlaylist: null,
-            remaining: access.quotaRemaining ?? 0
+            remaining: access.quotaRemaining ?? 0,
         };
     }
 
@@ -151,7 +151,7 @@ async function createOnSpotify(streams, options = {}) {
     // Record usage only for sovereign tier (free users)
     if (access.tier === 'sovereign') {
         await PremiumQuota.recordPlaylistCreation();
-        logger.info(`Spotify playlist created successfully. Quota tracked for sovereign tier.`);
+        logger.info('Spotify playlist created successfully. Quota tracked for sovereign tier.');
     } else {
         logger.info('Spotify playlist created successfully (premium user, no quota tracking)');
     }
@@ -159,7 +159,7 @@ async function createOnSpotify(streams, options = {}) {
     return {
         gated: false,
         spotifyPlaylist,
-        playlist
+        playlist,
     };
 }
 
@@ -173,8 +173,7 @@ export const PlaylistService = {
     getQuotaStatus,
 
     // Re-export types from PlaylistGenerator
-    PLAYLIST_TYPES: PlaylistGenerator.PLAYLIST_TYPES
+    PLAYLIST_TYPES: PlaylistGenerator.PLAYLIST_TYPES,
 };
-
 
 logger.info('Module loaded - Premium-gated playlist service');

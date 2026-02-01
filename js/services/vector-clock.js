@@ -1,14 +1,14 @@
 /**
  * Vector Clock Module
- * 
+ *
  * Provides causal ordering and conflict detection for distributed state
  * across multiple browser tabs or concurrent operations.
- * 
+ *
  * HNW Considerations:
  * - Hierarchy: Single source of truth for version ordering
  * - Network: Enables conflict detection across tabs
  * - Wave: Tracks temporal causality of state changes
- * 
+ *
  * @module services/vector-clock
  */
 
@@ -20,7 +20,7 @@
 
 /**
  * Vector Clock for tracking causal ordering
- * 
+ *
  * A vector clock tracks a mapping of process/tab IDs to their logical timestamps.
  * This allows detection of concurrent updates that may require conflict resolution.
  */
@@ -90,17 +90,14 @@ export class VectorClock {
      */
     compare(otherClock) {
         if (!otherClock || typeof otherClock !== 'object') {
-            return 'after';  // Assume we're after if other is invalid
+            return 'after'; // Assume we're after if other is invalid
         }
 
         let hasGreater = false;
         let hasLesser = false;
 
         // Get all unique process IDs
-        const allProcessIds = new Set([
-            ...Object.keys(this.clock),
-            ...Object.keys(otherClock)
-        ]);
+        const allProcessIds = new Set([...Object.keys(this.clock), ...Object.keys(otherClock)]);
 
         for (const processId of allProcessIds) {
             const ours = this.clock[processId] || 0;
@@ -111,13 +108,13 @@ export class VectorClock {
         }
 
         if (hasGreater && hasLesser) {
-            return 'concurrent';  // Neither strictly before nor after
+            return 'concurrent'; // Neither strictly before nor after
         } else if (hasGreater) {
-            return 'after';  // We happened strictly after
+            return 'after'; // We happened strictly after
         } else if (hasLesser) {
-            return 'before';  // We happened strictly before
+            return 'before'; // We happened strictly before
         } else {
-            return 'equal';  // Clocks are identical
+            return 'equal'; // Clocks are identical
         }
     }
 
@@ -163,7 +160,7 @@ export class VectorClock {
     serialize() {
         return JSON.stringify({
             processId: this.processId,
-            clock: this.clock
+            clock: this.clock,
         });
     }
 
@@ -290,7 +287,7 @@ export class VersionedData {
             data: this.data,
             clock: this.clock.toJSON(),
             processId: this.clock.processId,
-            timestamp: this.timestamp
+            timestamp: this.timestamp,
         };
     }
 
@@ -315,8 +312,7 @@ export class VersionedData {
 
 export const VectorClockModule = {
     VectorClock,
-    VersionedData
+    VersionedData,
 };
-
 
 console.log('[VectorClock] Module loaded');

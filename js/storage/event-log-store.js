@@ -24,13 +24,13 @@ const EVENT_LOG_STORE = 'event_log';
 const CHECKPOINT_STORE = 'event_checkpoint';
 
 const COMPACTION_CONFIG = {
-    maxEvents: 10000,              // Maximum events before compaction
-    checkpointInterval: 100,       // Create checkpoint every N events
+    maxEvents: 10000, // Maximum events before compaction
+    checkpointInterval: 100, // Create checkpoint every N events
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
-    minEventsAfterCheckpoint: 50   // Minimum events to keep after checkpoint
+    minEventsAfterCheckpoint: 50, // Minimum events to keep after checkpoint
 };
 
-const MAX_CONNECTION_RETRIES = 5;  // Maximum retry attempts for blocked connections
+const MAX_CONNECTION_RETRIES = 5; // Maximum retry attempts for blocked connections
 
 // ==========================================
 // Event Schema
@@ -115,29 +115,39 @@ async function initEventLogStores(retryCount = 0) {
             EventBus.emit('storage:connection_blocked', {
                 reason: 'upgrade_blocked',
                 message: 'Event log database upgrade blocked by other tabs',
-                retryCount: retryCount + 1
+                retryCount: retryCount + 1,
             });
 
             // Check if we've exceeded max retries
             if (retryCount >= MAX_CONNECTION_RETRIES) {
-                console.error(`[EventLogStore] Max retries (${MAX_CONNECTION_RETRIES}) exceeded. Giving up.`);
-                cachedDbPromise = null;  // Clear failed promise from cache
-                reject(new Error(`Database connection blocked after ${MAX_CONNECTION_RETRIES} retry attempts`));
+                console.error(
+                    `[EventLogStore] Max retries (${MAX_CONNECTION_RETRIES}) exceeded. Giving up.`
+                );
+                cachedDbPromise = null; // Clear failed promise from cache
+                reject(
+                    new Error(
+                        `Database connection blocked after ${MAX_CONNECTION_RETRIES} retry attempts`
+                    )
+                );
                 return;
             }
 
             // Retry with exponential backoff
             const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
-            console.log(`[EventLogStore] Retrying connection in ${delay}ms (attempt ${retryCount + 1}/${MAX_CONNECTION_RETRIES})`);
+            console.log(
+                `[EventLogStore] Retrying connection in ${delay}ms (attempt ${retryCount + 1}/${MAX_CONNECTION_RETRIES})`
+            );
 
             setTimeout(() => {
                 // Clear cache and retry
                 cachedDbPromise = null;
-                initEventLogStores(retryCount + 1).then(resolve).catch(reject);
+                initEventLogStores(retryCount + 1)
+                    .then(resolve)
+                    .catch(reject);
             }, delay);
         };
 
-        request.onupgradeneeded = (event) => {
+        request.onupgradeneeded = event => {
             const db = event.target.result;
 
             // Create stores if they don't exist during upgrade
@@ -161,7 +171,7 @@ async function initEventLogStores(retryCount = 0) {
                 console.warn('[EventLogStore] Database version changed, closing connection');
                 EventBus.emit('storage:connection_blocked', {
                     reason: 'version_change',
-                    message: 'Event log database version changed'
+                    message: 'Event log database version changed',
                 });
                 db.close();
                 // Clear cache on version change
@@ -205,7 +215,7 @@ async function appendEvent(eventType, payload, vectorClock, sourceTab, domain = 
         timestamp: Date.now(),
         sequenceNumber,
         sourceTab,
-        domain
+        domain,
     };
 
     return new Promise((resolve, reject) => {
@@ -314,7 +324,7 @@ async function createCheckpoint(sequenceNumber, metadata = {}) {
         id: `checkpoint_${sequenceNumber}`,
         sequenceNumber,
         timestamp: Date.now(),
-        metadata
+        metadata,
     };
 
     return new Promise((resolve, reject) => {
@@ -371,7 +381,9 @@ async function compactEventLog() {
     }
 
     if (totalCount < COMPACTION_CONFIG.maxEvents) {
-        console.log(`[EventLogStore] Only ${totalCount} events, below compaction threshold of ${COMPACTION_CONFIG.maxEvents}`);
+        console.log(
+            `[EventLogStore] Only ${totalCount} events, below compaction threshold of ${COMPACTION_CONFIG.maxEvents}`
+        );
         return { deleted: 0, kept: totalCount };
     }
 
@@ -458,7 +470,9 @@ async function compactEventLog() {
                 const finalCountReq = store.count();
                 finalCountReq.onsuccess = () => {
                     const finalCount = finalCountReq.result;
-                    console.log(`[EventLogStore] Compaction complete: deleted ${deleted}, kept ${finalCount}`);
+                    console.log(
+                        `[EventLogStore] Compaction complete: deleted ${deleted}, kept ${finalCount}`
+                    );
                     resolve({ deleted, kept: finalCount });
                 };
                 finalCountReq.onerror = () => {
@@ -499,7 +513,7 @@ async function checkCompaction() {
         const result = await compactEventLog();
         EventBus.emit('storage:event_log_compacted', {
             deleted: result.deleted,
-            kept: result.kept
+            kept: result.kept,
         });
         return true;
     }
@@ -513,10 +527,7 @@ async function checkCompaction() {
  */
 async function getEventLogStats() {
     // Use Promise.allSettled for better error handling - both operations complete even if one fails
-    const results = await Promise.allSettled([
-        countEvents(),
-        getLatestCheckpoint()
-    ]);
+    const results = await Promise.allSettled([countEvents(), getLatestCheckpoint()]);
 
     const totalCount = results[0].status === 'fulfilled' ? results[0].value : 0;
     const latestCheckpoint = results[1].status === 'fulfilled' ? results[1].value : null;
@@ -525,7 +536,7 @@ async function getEventLogStats() {
         totalEvents: totalCount,
         latestCheckpointSequence: latestCheckpoint?.sequenceNumber ?? -1,
         latestCheckpointTimestamp: latestCheckpoint?.timestamp ?? null,
-        compactionThreshold: COMPACTION_CONFIG.maxEvents
+        compactionThreshold: COMPACTION_CONFIG.maxEvents,
     };
 }
 
@@ -593,7 +604,7 @@ export const EventLogStore = {
     // Configuration
     COMPACTION_CONFIG,
     EVENT_LOG_STORE,
-    CHECKPOINT_STORE
+    CHECKPOINT_STORE,
 };
 
 console.log('[EventLogStore] Event log persistence initialized');

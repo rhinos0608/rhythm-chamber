@@ -62,10 +62,10 @@ export class ExportStrategies {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                ...(options.headers || {})
+                ...(options.headers || {}),
             },
             body: requestData,
-            signal: AbortSignal.timeout(options.timeout || this._timeout)
+            signal: AbortSignal.timeout(options.timeout || this._timeout),
         });
 
         return this.handleResponse(response);
@@ -90,10 +90,10 @@ export class ExportStrategies {
         const response = await fetch(url, {
             method: 'GET',
             headers: {
-                'Accept': 'application/json',
-                ...(options.headers || {})
+                Accept: 'application/json',
+                ...(options.headers || {}),
             },
-            signal: AbortSignal.timeout(options.timeout || this._timeout)
+            signal: AbortSignal.timeout(options.timeout || this._timeout),
         });
 
         return this.handleResponse(response);
@@ -110,8 +110,8 @@ export class ExportStrategies {
     async batchExport(endpoint, data, options = {}) {
         const {
             batchSize = 100,
-            formatBatch = (batch) => JSON.stringify(batch),
-            delay = 0
+            formatBatch = batch => JSON.stringify(batch),
+            delay = 0,
         } = options;
 
         this.validateEndpoint(endpoint);
@@ -131,7 +131,7 @@ export class ExportStrategies {
                     batchNumber,
                     success: true,
                     result,
-                    itemCount: batch.length
+                    itemCount: batch.length,
                 });
 
                 // Add delay between batches if specified
@@ -144,7 +144,7 @@ export class ExportStrategies {
                     batchNumber,
                     success: false,
                     error: error.message,
-                    itemCount: batch.length
+                    itemCount: batch.length,
                 });
             }
         }
@@ -163,7 +163,7 @@ export class ExportStrategies {
         const {
             maxRetries = this._maxRetries,
             useExponentialBackoff = false,
-            jitter = 0.1
+            jitter = 0.1,
         } = options;
 
         let lastError;
@@ -186,7 +186,9 @@ export class ExportStrategies {
 
                 // Calculate retry delay
                 const delay = this.calculateRetryDelay(attempt + 1, useExponentialBackoff, jitter);
-                console.warn(`[ExportStrategies] Export failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms...`);
+                console.warn(
+                    `[ExportStrategies] Export failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms...`
+                );
 
                 await this._sleep(delay);
             }
@@ -209,7 +211,7 @@ export class ExportStrategies {
             csv: 'text/csv',
             prometheus: 'text/plain',
             influxdb: 'text/plain',
-            statsd: 'text/plain'
+            statsd: 'text/plain',
         };
 
         const extensions = {
@@ -217,7 +219,7 @@ export class ExportStrategies {
             csv: 'csv',
             prometheus: 'prom',
             influxdb: 'txt',
-            statsd: 'txt'
+            statsd: 'txt',
         };
 
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -318,7 +320,7 @@ export class ExportStrategies {
         // Add jitter to prevent thundering herd
         if (jitter > 0) {
             const jitterAmount = delay * jitter;
-            delay = delay - (jitterAmount / 2) + (Math.random() * jitterAmount);
+            delay = delay - jitterAmount / 2 + Math.random() * jitterAmount;
         }
 
         return Math.max(delay, 100); // Minimum 100ms delay
@@ -336,7 +338,7 @@ export class ExportStrategies {
             /timeout/i,
             /ECONNRESET/i,
             /ETIMEDOUT/i,
-            /5\d\d/ // 5xx server errors
+            /5\d\d/, // 5xx server errors
         ];
 
         const errorMessage = error.message || '';
@@ -369,26 +371,22 @@ export class ExportStrategies {
 
         for (const service of services) {
             try {
-                const result = await this.pushExport(
-                    service.endpoint,
-                    data,
-                    {
-                        ...options,
-                        headers: { ...options.headers, ...service.headers }
-                    }
-                );
+                const result = await this.pushExport(service.endpoint, data, {
+                    ...options,
+                    headers: { ...options.headers, ...service.headers },
+                });
 
                 results.push({
                     service: service.endpoint,
                     success: true,
-                    result
+                    result,
                 });
             } catch (error) {
                 console.error(`[ExportStrategies] Failed to export to ${service.endpoint}:`, error);
                 results.push({
                     service: service.endpoint,
                     success: false,
-                    error: error.message
+                    error: error.message,
                 });
             }
         }

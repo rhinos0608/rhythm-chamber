@@ -1,13 +1,13 @@
 /**
  * Module Registry for Dynamic Imports
- * 
+ *
  * Centralizes dynamically loaded modules to eliminate window pollution.
  * Provides async getModule() API with lazy loading support.
- * 
+ *
  * Usage:
  *   import { ModuleRegistry } from './module-registry.js';
  *   const RAG = await ModuleRegistry.getModule('RAG');
- * 
+ *
  * @module module-registry
  */
 
@@ -65,7 +65,8 @@ const ModuleRegistry = {
                 const moduleExports = await loader();
 
                 // Get the specific export (named or default)
-                const moduleInstance = moduleExports[exportName] || moduleExports.default || moduleExports;
+                const moduleInstance =
+                    moduleExports[exportName] || moduleExports.default || moduleExports;
 
                 this._modules.set(name, moduleInstance);
                 this._pending.delete(name);
@@ -108,9 +109,7 @@ const ModuleRegistry = {
      * @returns {Promise<Map<string, any>>} Map of loaded modules
      */
     async preloadModules(names) {
-        const results = await Promise.allSettled(
-            names.map(name => this.getModule(name))
-        );
+        const results = await Promise.allSettled(names.map(name => this.getModule(name)));
 
         const loaded = new Map();
         names.forEach((name, index) => {
@@ -132,11 +131,11 @@ const ModuleRegistry = {
 
     /**
      * Check which modules are registered (but may not be loaded yet)
-     * @returns {string[]} Array of registered module names  
+     * @returns {string[]} Array of registered module names
      */
     getRegisteredModules() {
         return Array.from(this._loaders.keys());
-    }
+    },
 };
 
 // Freeze to prevent modification

@@ -22,7 +22,7 @@ export const SAFE_CONTEXT_FIELDS = [
     'code',
     'status',
     'attempt',
-    'maxRetries'
+    'maxRetries',
 ];
 
 /**
@@ -40,7 +40,7 @@ export const SENSITIVE_PATTERNS = {
     // Bearer tokens (short and long variants)
     // Reduced minimum length to catch shorter tokens in tests
     // More strict pattern to avoid false positives
-    bearerToken: /Bearer\s+[a-zA-Z0-9_\-\.=]{5,}/gi,
+    bearerToken: /Bearer\s+[a-zA-Z0-9_\-.=]{5,}/gi,
 
     // Passwords in various formats
     // Enhanced to catch more variations while avoiding bypasses
@@ -60,7 +60,7 @@ export const SENSITIVE_PATTERNS = {
 
     // Secret keys
     // Enhanced to prevent bypasses
-    secret: /secret["']?\s*[:=]\s*["']?[^\s"']{4,}/gi
+    secret: /secret["']?\s*[:=]\s*["']?[^\s"']{4,}/gi,
 };
 
 /**

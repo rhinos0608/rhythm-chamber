@@ -98,7 +98,7 @@ export const SidebarController = {
 
     // Utilities
     escapeHtml,
-    appendMessage
+    appendMessage,
 };
 
 /**

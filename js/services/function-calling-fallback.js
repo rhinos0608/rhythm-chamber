@@ -28,10 +28,10 @@ import { Functions } from '../functions/index.js';
  * Fallback capability levels
  */
 export const CAPABILITY_LEVELS = {
-    NATIVE: 1,           // Native OpenAI-style function calling
+    NATIVE: 1, // Native OpenAI-style function calling
     PROMPT_INJECTION: 2, // Function definitions injected into prompt
-    REGEX_PARSING: 3,    // Parse structured output from natural language
-    DIRECT_QUERY: 4      // Extract intent and run function directly
+    REGEX_PARSING: 3, // Parse structured output from natural language
+    DIRECT_QUERY: 4, // Extract intent and run function directly
 };
 
 /**
@@ -40,44 +40,84 @@ export const CAPABILITY_LEVELS = {
 const TOOL_CAPABLE_MODELS = {
     openrouter: [
         // OpenAI models
-        'gpt-4', 'gpt-4-turbo', 'gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo',
+        'gpt-4',
+        'gpt-4-turbo',
+        'gpt-4o',
+        'gpt-4o-mini',
+        'gpt-3.5-turbo',
         // Anthropic
-        'claude-3', 'claude-3.5', 'claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku',
+        'claude-3',
+        'claude-3.5',
+        'claude-3-opus',
+        'claude-3-sonnet',
+        'claude-3-haiku',
         // Google
-        'gemini-pro', 'gemini-1.5', 'gemini-2',
+        'gemini-pro',
+        'gemini-1.5',
+        'gemini-2',
         // Mistral
-        'mistral-large', 'mistral-medium', 'mistral-small',
+        'mistral-large',
+        'mistral-medium',
+        'mistral-small',
         // Cohere
-        'command-r', 'command-r-plus',
+        'command-r',
+        'command-r-plus',
         // Qwen
-        'qwen-2.5', 'qwen2.5',
+        'qwen-2.5',
+        'qwen2.5',
         // DeepSeek
-        'deepseek', 'deepseek-chat', 'deepseek-coder'
+        'deepseek',
+        'deepseek-chat',
+        'deepseek-coder',
     ],
     gemini: [
         // Google Gemini models (Google AI Studio)
-        'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro',
-        'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-exp',
-        'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.5-pro-exp',
-        'gemini-pro', 'gemini-flash'
+        'gemini-2.5-flash',
+        'gemini-2.5-flash-lite',
+        'gemini-2.5-pro',
+        'gemini-2.0-flash',
+        'gemini-2.0-flash-lite',
+        'gemini-2.0-flash-exp',
+        'gemini-1.5-flash',
+        'gemini-1.5-pro',
+        'gemini-1.5-pro-exp',
+        'gemini-pro',
+        'gemini-flash',
     ],
     ollama: [
         // From ollama.js TOOL_CAPABLE_MODELS, expanded
-        'llama3.2', 'llama3.1', 'llama3.3',
-        'mistral', 'mistral-nemo', 'mixtral',
-        'qwen2.5', 'qwen2.5-coder',
-        'deepseek-r1', 'deepseek-coder', 'deepseek-v2',
-        'command-r', 'command-r-plus',
-        'granite3-dense', 'granite3.1-dense',
-        'hermes3', 'nemotron'
+        'llama3.2',
+        'llama3.1',
+        'llama3.3',
+        'mistral',
+        'mistral-nemo',
+        'mixtral',
+        'qwen2.5',
+        'qwen2.5-coder',
+        'deepseek-r1',
+        'deepseek-coder',
+        'deepseek-v2',
+        'command-r',
+        'command-r-plus',
+        'granite3-dense',
+        'granite3.1-dense',
+        'hermes3',
+        'nemotron',
     ],
     lmstudio: [
         // LM Studio uses GGUF models - tool support depends on the base model
         // These are base model identifiers that typically support tools
-        'llama-3', 'llama3', 'mistral', 'mixtral',
-        'qwen2', 'qwen2.5', 'deepseek', 'command-r',
-        'hermes', 'nous-hermes'
-    ]
+        'llama-3',
+        'llama3',
+        'mistral',
+        'mixtral',
+        'qwen2',
+        'qwen2.5',
+        'deepseek',
+        'command-r',
+        'hermes',
+        'nous-hermes',
+    ],
 };
 
 /**
@@ -93,7 +133,7 @@ const FUNCTION_CALL_PATTERNS = {
     // JSON object with name and arguments (less reliable)
     // NOTE: This is a last-resort fallback pattern. It only captures the function name and
     // the start of the arguments object; the arguments payload is parsed using brace balancing.
-    jsonObject: /\{\s*"name"\s*:\s*"(\w+)"\s*,\s*"arguments"\s*:\s*\{/gi
+    jsonObject: /\{\s*"name"\s*:\s*"(\w+)"\s*,\s*"arguments"\s*:\s*\{/gi,
 };
 
 /**
@@ -102,52 +142,55 @@ const FUNCTION_CALL_PATTERNS = {
 const INTENT_PATTERNS = [
     // Top artists queries
     {
-        pattern: /(?:top|favorite|most\s+(?:played|listened))\s+artists?\s+(?:in|from|during|for)?\s*(\d{4})?/i,
+        pattern:
+            /(?:top|favorite|most\s+(?:played|listened))\s+artists?\s+(?:in|from|during|for)?\s*(\d{4})?/i,
         function: 'get_top_artists',
-        extractArgs: (match) => ({ year: match[1] ? parseInt(match[1]) : new Date().getFullYear() })
+        extractArgs: match => ({ year: match[1] ? parseInt(match[1]) : new Date().getFullYear() }),
     },
     // Top tracks queries
     {
-        pattern: /(?:top|favorite|most\s+(?:played|listened))\s+(?:tracks?|songs?)\s+(?:in|from|during|for)?\s*(\d{4})?/i,
+        pattern:
+            /(?:top|favorite|most\s+(?:played|listened))\s+(?:tracks?|songs?)\s+(?:in|from|during|for)?\s*(\d{4})?/i,
         function: 'get_top_tracks',
-        extractArgs: (match) => ({ year: match[1] ? parseInt(match[1]) : new Date().getFullYear() })
+        extractArgs: match => ({ year: match[1] ? parseInt(match[1]) : new Date().getFullYear() }),
     },
     // Artist history
     {
-        pattern: /(?:when\s+did\s+I\s+(?:start|stop|first|last)\s+listen(?:ing)?\s+to|history\s+(?:of|for))\s+["']?([^"'?]+)["']?/i,
+        pattern:
+            /(?:when\s+did\s+I\s+(?:start|stop|first|last)\s+listen(?:ing)?\s+to|history\s+(?:of|for))\s+["']?([^"'?]+)["']?/i,
         function: 'get_artist_history',
-        extractArgs: (match) => ({ artist_name: match[1].trim() })
+        extractArgs: match => ({ artist_name: match[1].trim() }),
     },
     // Listening stats
     {
         pattern: /(?:listening\s+)?stats?\s+(?:in|from|for)?\s*(\d{4})?/i,
         function: 'get_listening_stats',
-        extractArgs: (match) => ({ year: match[1] ? parseInt(match[1]) : undefined })
+        extractArgs: match => ({ year: match[1] ? parseInt(match[1]) : undefined }),
     },
     // Compare periods
     {
         pattern: /compare\s+(\d{4})\s+(?:and|vs?\.?|versus|to|with)\s+(\d{4})/i,
         function: 'compare_periods',
-        extractArgs: (match) => ({ year1: parseInt(match[1]), year2: parseInt(match[2]) })
+        extractArgs: match => ({ year1: parseInt(match[1]), year2: parseInt(match[2]) }),
     },
     // Search tracks
     {
         pattern: /(?:search|find|look\s+for)\s+(?:track|song)\s+["']?([^"'?]+)["']?/i,
         function: 'search_tracks',
-        extractArgs: (match) => ({ track_name: match[1].trim() })
+        extractArgs: match => ({ track_name: match[1].trim() }),
     },
     // Listening clock
     {
         pattern: /(?:when|what\s+time|time\s+of\s+day)\s+do\s+I\s+(?:usually\s+)?listen/i,
         function: 'get_listening_clock',
-        extractArgs: () => ({})
+        extractArgs: () => ({}),
     },
     // Ghosted artists
     {
         pattern: /(?:artists?\s+I\s+(?:stopped|quit|don't)\s+listen(?:ing)?|ghosted\s+artists?)/i,
         function: 'get_bottom_artists',
-        extractArgs: () => ({ min_plays: 50 })
-    }
+        extractArgs: () => ({ min_plays: 50 }),
+    },
 ];
 
 // ==========================================
@@ -164,7 +207,7 @@ export function detectCapabilityLevel(provider, model) {
     if (!provider || !model) {
         return {
             level: CAPABILITY_LEVELS.DIRECT_QUERY,
-            reason: 'Missing provider or model configuration'
+            reason: 'Missing provider or model configuration',
         };
     }
 
@@ -184,7 +227,7 @@ export function detectCapabilityLevel(provider, model) {
     if (isToolCapable) {
         return {
             level: CAPABILITY_LEVELS.NATIVE,
-            reason: `Model ${model} supports native function calling`
+            reason: `Model ${model} supports native function calling`,
         };
     }
 
@@ -192,14 +235,14 @@ export function detectCapabilityLevel(provider, model) {
     if (normalizedProvider === 'openrouter') {
         return {
             level: CAPABILITY_LEVELS.NATIVE,
-            reason: 'OpenRouter - attempting native function calling'
+            reason: 'OpenRouter - attempting native function calling',
         };
     }
 
     // For local providers with unknown models, use prompt injection
     return {
         level: CAPABILITY_LEVELS.PROMPT_INJECTION,
-        reason: `Model ${model} not confirmed for native function calling, using prompt injection`
+        reason: `Model ${model} not confirmed for native function calling, using prompt injection`,
     };
 }
 
@@ -226,20 +269,24 @@ export function supportsNativeFunctionCalling(provider, model) {
 export function buildFunctionDefinitionsText(tools) {
     if (!tools || tools.length === 0) return '';
 
-    const definitions = tools.map(tool => {
-        const fn = tool.function;
-        const params = fn.parameters?.properties || {};
-        const required = fn.parameters?.required || [];
+    const definitions = tools
+        .map(tool => {
+            const fn = tool.function;
+            const params = fn.parameters?.properties || {};
+            const required = fn.parameters?.required || [];
 
-        const paramList = Object.entries(params).map(([name, schema]) => {
-            const isRequired = required.includes(name);
-            const typeInfo = schema.type || 'any';
-            const desc = schema.description || '';
-            return `  - ${name} (${typeInfo}${isRequired ? ', required' : ', optional'}): ${desc}`;
-        }).join('\n');
+            const paramList = Object.entries(params)
+                .map(([name, schema]) => {
+                    const isRequired = required.includes(name);
+                    const typeInfo = schema.type || 'any';
+                    const desc = schema.description || '';
+                    return `  - ${name} (${typeInfo}${isRequired ? ', required' : ', optional'}): ${desc}`;
+                })
+                .join('\n');
 
-        return `### ${fn.name}\n${fn.description}\nParameters:\n${paramList || '  (none)'}`;
-    }).join('\n\n');
+            return `### ${fn.name}\n${fn.description}\nParameters:\n${paramList || '  (none)'}`;
+        })
+        .join('\n\n');
 
     return definitions;
 }
@@ -296,13 +343,13 @@ export function buildLevel2Request(messages, tools) {
         // Append the function definitions to the existing system message
         modifiedMessages[systemMessageIndex] = {
             ...modifiedMessages[systemMessageIndex],
-            content: modifiedMessages[systemMessageIndex].content + addition
+            content: modifiedMessages[systemMessageIndex].content + addition,
         };
     } else {
         // No system message exists - prepend a new one with the function definitions
         modifiedMessages.unshift({
             role: 'system',
-            content: addition.trim() // Trim since addition starts with newlines
+            content: addition.trim(), // Trim since addition starts with newlines
         });
     }
 
@@ -328,7 +375,7 @@ export function parseFunctionCallsFromText(content) {
         let depth = 0;
         let inString = false;
 
-        const isEscaped = (index) => {
+        const isEscaped = index => {
             let backslashCount = 0;
             let cursor = index - 1;
             while (cursor >= 0 && text[cursor] === '\\') {
@@ -370,7 +417,7 @@ export function parseFunctionCallsFromText(content) {
             if (parsed.name) {
                 calls.push({
                     name: parsed.name,
-                    arguments: parsed.arguments || {}
+                    arguments: parsed.arguments || {},
                 });
             }
         } catch (e) {
@@ -388,7 +435,7 @@ export function parseFunctionCallsFromText(content) {
             if (parsed.name) {
                 calls.push({
                     name: parsed.name,
-                    arguments: parsed.arguments || {}
+                    arguments: parsed.arguments || {},
                 });
             }
         } catch (e) {
@@ -407,7 +454,9 @@ export function parseFunctionCallsFromText(content) {
         const argsString = extractArgumentsObject(content, argsStartIndex);
 
         if (!argsString) {
-            console.warn('[FunctionFallback] Failed to locate balanced arguments for JSON function call');
+            console.warn(
+                '[FunctionFallback] Failed to locate balanced arguments for JSON function call'
+            );
             continue;
         }
 
@@ -415,7 +464,7 @@ export function parseFunctionCallsFromText(content) {
             const args = JSON.parse(argsString);
             calls.push({
                 name: functionName,
-                arguments: args
+                arguments: args,
             });
         } catch (e) {
             console.warn('[FunctionFallback] Failed to parse JSON function call arguments');
@@ -441,7 +490,7 @@ export function extractQueryIntent(message) {
                 console.log(`[FunctionFallback] Level 4: Extracted intent for ${fnName}`, args);
                 return {
                     function: fnName,
-                    arguments: args
+                    arguments: args,
                 };
             } catch (e) {
                 console.warn(`[FunctionFallback] Failed to extract args for ${fnName}:`, e);
@@ -474,20 +523,20 @@ export async function executeFunctionCalls(calls, streams) {
                 const result = await Functions.execute(call.name, call.arguments, streams);
                 results.push({
                     name: call.name,
-                    result: result
+                    result: result,
                 });
                 console.log(`[FunctionFallback] Executed ${call.name}:`, result);
             } else {
                 results.push({
                     name: call.name,
-                    result: { error: 'Functions module not available' }
+                    result: { error: 'Functions module not available' },
                 });
             }
         } catch (error) {
             console.error(`[FunctionFallback] Error executing ${call.name}:`, error);
             results.push({
                 name: call.name,
-                result: { error: error.message }
+                result: { error: error.message },
             });
         }
     }
@@ -503,10 +552,12 @@ export async function executeFunctionCalls(calls, streams) {
 export function buildFunctionResultsMessage(results) {
     if (!results || results.length === 0) return '';
 
-    const formatted = results.map(({ name, result }) => {
-        const resultStr = JSON.stringify(result, null, 2);
-        return `<function_result name="${name}">\n${resultStr}\n</function_result>`;
-    }).join('\n\n');
+    const formatted = results
+        .map(({ name, result }) => {
+            const resultStr = JSON.stringify(result, null, 2);
+            return `<function_result name="${name}">\n${resultStr}\n</function_result>`;
+        })
+        .join('\n\n');
 
     return `Here are the function results:\n\n${formatted}\n\nPlease use this data to provide an insightful response to the user's question.`;
 }
@@ -518,7 +569,7 @@ export function buildFunctionResultsMessage(results) {
 /**
  * Handle function calling with fallback support
  * This is the main entry point for the fallback system
- * 
+ *
  * @param {object} options - Options
  * @param {string} options.provider - LLM provider
  * @param {string} options.model - Model name
@@ -534,7 +585,7 @@ export async function handleFunctionCallingWithFallback({
     messages,
     tools,
     streams,
-    response
+    response,
 }) {
     // Detect capability level
     const { level, reason } = detectCapabilityLevel(provider, model);
@@ -548,7 +599,7 @@ export async function handleFunctionCallingWithFallback({
             level: CAPABILITY_LEVELS.NATIVE,
             calls: toolCalls,
             results: null, // Let chat.js handle execution
-            needsFollowup: true
+            needsFollowup: true,
         };
     }
 
@@ -557,31 +608,31 @@ export async function handleFunctionCallingWithFallback({
     const parsedCalls = parseFunctionCallsFromText(content);
 
     if (parsedCalls.length > 0) {
-        console.log(`[FunctionFallback] Level 2/3: Parsed ${parsedCalls.length} function calls from text`);
+        console.log(
+            `[FunctionFallback] Level 2/3: Parsed ${parsedCalls.length} function calls from text`
+        );
         const results = await executeFunctionCalls(parsedCalls, streams);
         return {
             level: CAPABILITY_LEVELS.PROMPT_INJECTION,
             calls: parsedCalls,
             results: results,
-            needsFollowup: true // Need to send results back to model
+            needsFollowup: true, // Need to send results back to model
         };
     }
 
     // Level 4: Extract intent from the last user message
-    const lastUserMessage = messages
-        .filter(m => m.role === 'user')
-        .pop();
+    const lastUserMessage = messages.filter(m => m.role === 'user').pop();
 
     if (lastUserMessage) {
         const intent = extractQueryIntent(lastUserMessage.content);
         if (intent) {
-            console.log(`[FunctionFallback] Level 4: Extracted intent from user message`);
+            console.log('[FunctionFallback] Level 4: Extracted intent from user message');
             const results = await executeFunctionCalls([intent], streams);
             return {
                 level: CAPABILITY_LEVELS.DIRECT_QUERY,
                 calls: [intent],
                 results: results,
-                needsFollowup: false // We'll inject results directly
+                needsFollowup: false, // We'll inject results directly
             };
         }
     }
@@ -591,7 +642,7 @@ export async function handleFunctionCallingWithFallback({
         level: level,
         calls: [],
         results: [],
-        needsFollowup: false
+        needsFollowup: false,
     };
 }
 
@@ -621,8 +672,7 @@ export const FunctionCallingFallback = {
     buildFunctionResultsMessage,
 
     // Main handler
-    handleFunctionCallingWithFallback
+    handleFunctionCallingWithFallback,
 };
-
 
 console.log('[FunctionCallingFallback] Service loaded');

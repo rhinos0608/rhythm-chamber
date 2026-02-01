@@ -1,12 +1,12 @@
 /**
  * Artifact Validation Module
- * 
+ *
  * Validates ArtifactSpec objects against schema to prevent:
  * - Malicious or malformed specs
  * - Oversized data arrays
  * - Unknown field injection
  * - XSS via text fields
- * 
+ *
  * @module artifacts/validation
  */
 
@@ -16,7 +16,7 @@ import {
     FIELD_TYPES,
     MAX_DATA_ROWS,
     MAX_ANNOTATIONS,
-    MAX_EXPLANATION_LINES
+    MAX_EXPLANATION_LINES,
 } from './artifact-spec.js';
 
 const logger = createLogger('ArtifactValidation');
@@ -33,7 +33,7 @@ const ALLOWED_TOP_LEVEL_FIELDS = new Set([
     'view',
     'data',
     'annotations',
-    'explanation'
+    'explanation',
 ]);
 
 const ALLOWED_VIEW_FIELDS = new Set([
@@ -44,14 +44,10 @@ const ALLOWED_VIEW_FIELDS = new Set([
     'horizontal',
     'columns',
     'dateField',
-    'labelField'
+    'labelField',
 ]);
 
-const ALLOWED_AXIS_FIELDS = new Set([
-    'field',
-    'type',
-    'domain'
-]);
+const ALLOWED_AXIS_FIELDS = new Set(['field', 'type', 'domain']);
 
 // ==========================================
 // Validation Functions
@@ -59,7 +55,7 @@ const ALLOWED_AXIS_FIELDS = new Set([
 
 /**
  * Validate an ArtifactSpec object
- * 
+ *
  * @param {Object} spec - The spec to validate
  * @returns {{ valid: boolean, errors: string[], sanitized: Object|null }}
  */
@@ -135,7 +131,7 @@ export function validateArtifactSpec(spec) {
 
 /**
  * Validate the view configuration
- * 
+ *
  * @param {Object} view - View object
  * @returns {string[]} Array of error messages
  */
@@ -202,7 +198,7 @@ function validateView(view) {
 
 /**
  * Validate an axis configuration
- * 
+ *
  * @param {Object} axis - Axis object
  * @param {string} name - Axis name (x or y)
  * @returns {string[]} Array of error messages
@@ -242,7 +238,7 @@ function validateAxis(axis, name) {
 
 /**
  * Validate data array
- * 
+ *
  * @param {Array} data - Data array
  * @returns {string[]} Array of error messages
  */
@@ -270,7 +266,7 @@ function validateData(data) {
 
 /**
  * Validate annotations array
- * 
+ *
  * @param {Array} annotations - Annotations array
  * @returns {string[]} Array of error messages
  */
@@ -306,7 +302,7 @@ function validateAnnotations(annotations) {
 
 /**
  * Validate explanation array
- * 
+ *
  * @param {Array} explanation - Explanation lines
  * @returns {string[]} Array of error messages
  */
@@ -343,7 +339,7 @@ function validateExplanation(explanation) {
 
 /**
  * Escape HTML special characters
- * 
+ *
  * @param {string} str - String to escape
  * @returns {string} Escaped string
  */
@@ -361,7 +357,7 @@ function escapeHtml(str) {
 
 /**
  * Create a sanitized copy of the spec with HTML escaped
- * 
+ *
  * @param {Object} spec - Validated spec
  * @returns {Object} Sanitized copy
  */
@@ -375,16 +371,16 @@ function sanitizeSpec(spec) {
         data: spec.data.slice(0, MAX_DATA_ROWS),
         annotations: (spec.annotations || []).slice(0, MAX_ANNOTATIONS).map(ann => ({
             ...ann,
-            label: escapeHtml(ann.label)
+            label: escapeHtml(ann.label),
         })),
-        explanation: (spec.explanation || []).slice(0, MAX_EXPLANATION_LINES).map(escapeHtml)
+        explanation: (spec.explanation || []).slice(0, MAX_EXPLANATION_LINES).map(escapeHtml),
     };
 
     // Sanitize column labels for tables
     if (sanitized.view.columns) {
         sanitized.view.columns = sanitized.view.columns.map(col => ({
             field: col.field,
-            label: escapeHtml(col.label)
+            label: escapeHtml(col.label),
         }));
     }
 
@@ -400,7 +396,7 @@ export const ArtifactValidation = {
     escapeHtml,
     MAX_DATA_ROWS,
     MAX_ANNOTATIONS,
-    MAX_EXPLANATION_LINES
+    MAX_EXPLANATION_LINES,
 };
 
 logger.info('Module loaded');

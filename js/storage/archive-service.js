@@ -28,7 +28,7 @@ const ARCHIVE_CONFIG = {
     ARCHIVE_STORE: 'archived_streams',
 
     // Minimum streams to keep (never archive below this count)
-    minStreamsToKeep: 100
+    minStreamsToKeep: 100,
 };
 
 // ==========================================
@@ -61,13 +61,17 @@ async function ensureArchiveStore() {
  */
 async function archiveOldStreams(options = {}) {
     const cutoffDate = options.cutoffDate
-        ? (options.cutoffDate instanceof Date ? options.cutoffDate : new Date(options.cutoffDate))
+        ? options.cutoffDate instanceof Date
+            ? options.cutoffDate
+            : new Date(options.cutoffDate)
         : new Date(Date.now() - ARCHIVE_CONFIG.defaultRetentionMs);
 
     const cutoffTimestamp = cutoffDate.getTime();
     const dryRun = options.dryRun ?? false;
 
-    console.log(`[ArchiveService] ${dryRun ? 'Dry run: ' : ''}Archiving streams before ${cutoffDate.toISOString()}`);
+    console.log(
+        `[ArchiveService] ${dryRun ? 'Dry run: ' : ''}Archiving streams before ${cutoffDate.toISOString()}`
+    );
 
     try {
         // Get current streams
@@ -76,7 +80,13 @@ async function archiveOldStreams(options = {}) {
 
         if (streams.length === 0) {
             console.log('[ArchiveService] No streams to archive');
-            return { archived: 0, kept: 0, savedBytes: 0, archivedOldest: null, archivedNewest: null };
+            return {
+                archived: 0,
+                kept: 0,
+                savedBytes: 0,
+                archivedOldest: null,
+                archivedNewest: null,
+            };
         }
 
         // Separate streams into keep and archive
@@ -93,7 +103,10 @@ async function archiveOldStreams(options = {}) {
         }
 
         // Ensure we keep minimum streams
-        if (toKeep.length < ARCHIVE_CONFIG.minStreamsToKeep && streams.length >= ARCHIVE_CONFIG.minStreamsToKeep) {
+        if (
+            toKeep.length < ARCHIVE_CONFIG.minStreamsToKeep &&
+            streams.length >= ARCHIVE_CONFIG.minStreamsToKeep
+        ) {
             // Sort by date and keep the most recent
             const sorted = [...streams].sort((a, b) => {
                 const dateA = parseStreamDate(a.ts)?.getTime() || 0;
@@ -120,7 +133,13 @@ async function archiveOldStreams(options = {}) {
 
         if (toArchive.length === 0) {
             console.log('[ArchiveService] No streams older than cutoff to archive');
-            return { archived: 0, kept: streams.length, savedBytes: 0, archivedOldest: null, archivedNewest: null };
+            return {
+                archived: 0,
+                kept: streams.length,
+                savedBytes: 0,
+                archivedOldest: null,
+                archivedNewest: null,
+            };
         }
 
         // Calculate saved bytes
@@ -137,11 +156,11 @@ async function archiveOldStreams(options = {}) {
             kept: toKeep.length,
             savedBytes,
             archivedOldest: archiveDates[0]?.toISOString() || null,
-            archivedNewest: archiveDates[archiveDates.length - 1]?.toISOString() || null
+            archivedNewest: archiveDates[archiveDates.length - 1]?.toISOString() || null,
         };
 
         if (dryRun) {
-            console.log(`[ArchiveService] Dry run result:`, result);
+            console.log('[ArchiveService] Dry run result:', result);
             return result;
         }
 
@@ -157,14 +176,14 @@ async function archiveOldStreams(options = {}) {
             key: 'archived_streams_data',
             streams: mergedArchive,
             lastArchiveDate: new Date().toISOString(),
-            totalArchived: mergedArchive.length
+            totalArchived: mergedArchive.length,
         });
 
         // Update current streams (keep only non-archived)
         await IndexedDBCore.put(ARCHIVE_CONFIG.STREAMS_STORE, {
             id: 'all',
             data: toKeep,
-            savedAt: new Date().toISOString()
+            savedAt: new Date().toISOString(),
         });
 
         console.log(`[ArchiveService] Archived ${toArchive.length} streams, kept ${toKeep.length}`);
@@ -174,7 +193,7 @@ async function archiveOldStreams(options = {}) {
             savedBytes,
             archivedCount: toArchive.length,
             keptCount: toKeep.length,
-            type: 'stream_archival'
+            type: 'stream_archival',
         });
 
         return result;
@@ -211,11 +230,15 @@ function parseStreamDate(ts) {
  */
 async function restoreFromArchive(options = {}) {
     const afterDate = options.afterDate
-        ? (options.afterDate instanceof Date ? options.afterDate : new Date(options.afterDate))
+        ? options.afterDate instanceof Date
+            ? options.afterDate
+            : new Date(options.afterDate)
         : null;
     const clearArchive = options.clearArchive ?? true;
 
-    console.log(`[ArchiveService] Restoring from archive${afterDate ? ` after ${afterDate.toISOString()}` : ''}`);
+    console.log(
+        `[ArchiveService] Restoring from archive${afterDate ? ` after ${afterDate.toISOString()}` : ''}`
+    );
 
     try {
         // Get archived streams
@@ -233,7 +256,7 @@ async function restoreFromArchive(options = {}) {
         if (!validationResult.valid) {
             const error = new Error(
                 `Archive data integrity check failed: ${validationResult.reason}. ` +
-                `Restore aborted to prevent data pollution.`
+                    'Restore aborted to prevent data pollution.'
             );
             error.code = 'ARCHIVE_INTEGRITY_FAILED';
             error.validationResult = validationResult;
@@ -241,7 +264,9 @@ async function restoreFromArchive(options = {}) {
         }
 
         if (validationResult.invalidCount > 0) {
-            console.warn(`[ArchiveService] Found ${validationResult.invalidCount} invalid entries in archive, filtering them out`);
+            console.warn(
+                `[ArchiveService] Found ${validationResult.invalidCount} invalid entries in archive, filtering them out`
+            );
         }
 
         // Use only validated streams
@@ -284,7 +309,7 @@ async function restoreFromArchive(options = {}) {
         await IndexedDBCore.put(ARCHIVE_CONFIG.STREAMS_STORE, {
             id: 'all',
             data: mergedStreams,
-            savedAt: new Date().toISOString()
+            savedAt: new Date().toISOString(),
         });
 
         // Update or clear archive
@@ -295,18 +320,20 @@ async function restoreFromArchive(options = {}) {
                 key: 'archived_streams_data',
                 streams: remaining,
                 lastArchiveDate: archiveRecord.lastArchiveDate,
-                totalArchived: remaining.length
+                totalArchived: remaining.length,
             });
         }
 
-        console.log(`[ArchiveService] Restored ${toRestore.length} streams, ${remaining.length} remaining in archive`);
+        console.log(
+            `[ArchiveService] Restored ${toRestore.length} streams, ${remaining.length} remaining in archive`
+        );
 
         // Emit restore event
         EventBus.emit('storage:archive_restored', {
             restoredCount: toRestore.length,
             remainingCount: remaining.length,
             validated: true,
-            filteredCount: validationResult.invalidCount
+            filteredCount: validationResult.invalidCount,
         });
 
         return { restored: toRestore.length, remaining: remaining.length };
@@ -325,7 +352,12 @@ async function restoreFromArchive(options = {}) {
  */
 function validateArchiveData(archivedStreams) {
     if (!Array.isArray(archivedStreams)) {
-        return { valid: false, validStreams: [], invalidCount: 0, reason: 'Archive data is not an array' };
+        return {
+            valid: false,
+            validStreams: [],
+            invalidCount: 0,
+            reason: 'Archive data is not an array',
+        };
     }
 
     if (archivedStreams.length === 0) {
@@ -365,7 +397,9 @@ function validateArchiveData(archivedStreams) {
         const currentYear = new Date().getFullYear();
         if (year < 2000 || year > currentYear + 1) {
             invalidCount++;
-            console.warn(`[ArchiveService] Invalid stream at index ${i}: timestamp out of reasonable range (${year})`);
+            console.warn(
+                `[ArchiveService] Invalid stream at index ${i}: timestamp out of reasonable range (${year})`
+            );
             continue;
         }
 
@@ -374,7 +408,9 @@ function validateArchiveData(archivedStreams) {
         const hasArtist = stream.artistName || stream.master_metadata_album_artist_name;
         if (!hasTrack && !hasArtist) {
             // Some entries might not have these, log but don't fail
-            console.warn(`[ArchiveService] Stream at index ${i} missing track/artist info, but allowing through`);
+            console.warn(
+                `[ArchiveService] Stream at index ${i} missing track/artist info, but allowing through`
+            );
         }
 
         validStreams.push(stream);
@@ -387,7 +423,7 @@ function validateArchiveData(archivedStreams) {
             valid: false,
             validStreams,
             invalidCount,
-            reason: `Too many invalid entries (${invalidCount}/${archivedStreams.length})`
+            reason: `Too many invalid entries (${invalidCount}/${archivedStreams.length})`,
         };
     }
 
@@ -417,7 +453,7 @@ async function getArchiveStats() {
             oldestDate: dates[0]?.toISOString() || null,
             newestDate: dates[dates.length - 1]?.toISOString() || null,
             sizeBytes: JSON.stringify(archivedStreams).length,
-            lastArchiveDate: archiveRecord.lastArchiveDate
+            lastArchiveDate: archiveRecord.lastArchiveDate,
         };
     } catch (error) {
         console.error('[ArchiveService] Failed to get archive stats:', error);
@@ -456,8 +492,7 @@ export const ArchiveService = {
     clearArchive,
 
     // Configuration
-    CONFIG: ARCHIVE_CONFIG
+    CONFIG: ARCHIVE_CONFIG,
 };
-
 
 console.log('[ArchiveService] Archive service loaded');

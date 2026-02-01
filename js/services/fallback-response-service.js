@@ -1,9 +1,9 @@
 /**
  * Fallback Response Service
- * 
+ *
  * Generates fallback responses when API is unavailable.
  * Extracted from chat.js to separate fallback concerns from chat orchestration.
- * 
+ *
  * @module services/fallback-response-service
  */
 
@@ -43,7 +43,7 @@ function setUserContext(context) {
 
 /**
  * Generate a fallback response when API is unavailable
- * 
+ *
  * @param {string} message - User message
  * @param {string|null} queryContext - Query context from generateQueryContext
  * @returns {string} Fallback response
@@ -56,7 +56,7 @@ function generateFallbackResponse(message, queryContext) {
 
     // Guard: Return safe default if userContext not initialized
     if (!_userContext || !_userContext.personality) {
-        return `I'm unable to process your request right now. Please try again after the chat is fully initialized.`;
+        return "I'm unable to process your request right now. Please try again after the chat is fully initialized.";
     }
 
     // Fallback if MessageOperations not available
@@ -70,7 +70,7 @@ function generateFallbackResponse(message, queryContext) {
 
         // Check for time period data
         if (queryContext.includes('DATA FOR')) {
-            const topArtistMatch = queryContext.match(/1\. ([^\(]+) \((\d+) plays\)/);
+            const topArtistMatch = queryContext.match(/1\. ([^(]+) \((\d+) plays\)/);
             const hoursMatch = queryContext.match(/Listening time: (\d+) hours/);
             const periodMatch = queryContext.match(/DATA FOR ([^:]+):/);
 
@@ -106,8 +106,12 @@ function generateFallbackResponse(message, queryContext) {
     }
 
     // Existing fallback logic for common patterns
-    if (lowerMessage.includes('2020') || lowerMessage.includes('2021') ||
-        lowerMessage.includes('2022') || lowerMessage.includes('2023')) {
+    if (
+        lowerMessage.includes('2020') ||
+        lowerMessage.includes('2021') ||
+        lowerMessage.includes('2022') ||
+        lowerMessage.includes('2023')
+    ) {
         const year = message.match(/20\d{2}/)?.[0];
         if (patterns.eras && patterns.eras.eras.length > 0) {
             const era = patterns.eras.eras.find(e => e.start.includes(year));
@@ -123,7 +127,7 @@ function generateFallbackResponse(message, queryContext) {
             const ghost = patterns.ghostedArtists.ghosted[0];
             return `${ghost.artist} stands out — you played them ${ghost.totalPlays} times, then just... stopped ${ghost.daysSince} days ago. That's a significant shift. Something changed?`;
         }
-        return `I can see some artists you've moved on from, but the full picture needs the chat API. Your personality type suggests you process music emotionally, so these changes might be meaningful.`;
+        return "I can see some artists you've moved on from, but the full picture needs the chat API. Your personality type suggests you process music emotionally, so these changes might be meaningful.";
     }
 
     if (lowerMessage.includes('favorite') || lowerMessage.includes('love')) {
@@ -135,13 +139,14 @@ function generateFallbackResponse(message, queryContext) {
 
     // Default response - provider-aware messaging
     const currentProvider = Settings?.getSettings?.()?.llm?.provider || 'openrouter';
-    const providerHint = currentProvider === 'openrouter'
-        ? 'connect an OpenRouter API key in settings'
-        : currentProvider === 'lmstudio'
-            ? 'ensure LM Studio is running with a model loaded'
-            : currentProvider === 'ollama'
-                ? 'ensure Ollama is running (ollama serve)'
-                : 'configure an LLM provider in settings';
+    const providerHint =
+        currentProvider === 'openrouter'
+            ? 'connect an OpenRouter API key in settings'
+            : currentProvider === 'lmstudio'
+                ? 'ensure LM Studio is running with a model loaded'
+                : currentProvider === 'ollama'
+                    ? 'ensure Ollama is running (ollama serve)'
+                    : 'configure an LLM provider in settings';
 
     return `As ${personality.name}, ${personality.tagline.toLowerCase()} ${personality.allEvidence?.[0] || ''}\n\nTo explore deeper questions, ${providerHint}. Until then, I can tell you about your patterns: ${patterns.summary?.totalHours || 'many'} hours of music across ${patterns.summary?.uniqueArtists || 'many'} artists.`;
 }
@@ -156,7 +161,7 @@ const FallbackResponseService = {
     setUserContext,
 
     // Core operations
-    generateFallbackResponse
+    generateFallbackResponse,
 };
 
 // ES Module export

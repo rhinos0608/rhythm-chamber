@@ -1,12 +1,12 @@
 /**
  * Main Application Entry Point
- * 
+ *
  * This is the single ES Module entry point for the application.
  * It handles:
  * 1. Security initialization (fail-fast if not secure)
  * 2. Import ALL modules in dependency order
  * 3. Application startup
- * 
+ *
  * @module main
  */
 
@@ -20,18 +20,18 @@
 import { configureLogger, LOG_LEVELS, createLogger } from './utils/logger.js';
 
 // Detect development environment
-const isDevelopment = typeof window !== 'undefined' && (
-  window.location?.hostname === 'localhost' ||
-  window.location?.hostname === '127.0.0.1' ||
-  window.location?.protocol === 'file:'
-);
+const isDevelopment =
+    typeof window !== 'undefined' &&
+    (window.location?.hostname === 'localhost' ||
+        window.location?.hostname === '127.0.0.1' ||
+        window.location?.protocol === 'file:');
 
 // Configure logger based on environment
 // - Development: DEBUG level (verbose logging for debugging)
 // - Production: INFO level (only important state changes and above)
 configureLogger({
-  level: isDevelopment ? LOG_LEVELS.DEBUG : LOG_LEVELS.INFO,
-  releaseStage: isDevelopment ? 'development' : 'production'
+    level: isDevelopment ? LOG_LEVELS.DEBUG : LOG_LEVELS.INFO,
+    releaseStage: isDevelopment ? 'development' : 'production',
 });
 
 // Create module-specific logger
@@ -47,7 +47,7 @@ const logger = createLogger('Main');
  * This polyfill uses Promise.resolve().then() as a fallback
  */
 if (typeof queueMicrotask !== 'function') {
-    window.queueMicrotask = function(callback) {
+    window.queueMicrotask = function (callback) {
         Promise.resolve().then(callback);
     };
     logger.debug('queueMicrotask polyfill installed for older browser support');
@@ -199,7 +199,6 @@ import { ErrorBoundary, installGlobalErrorHandler } from './services/error-bound
 
 logger.debug('All modules imported via ES modules');
 
-
 // ==========================================
 // Wave Telemetry Initialization
 // ==========================================
@@ -213,12 +212,11 @@ function initializeWaveTelemetry() {
         'file_uploaded',
         'pattern:all_complete',
         'embedding:generation_complete',
-        'streams:processed'
+        'streams:processed',
     ];
     WaveTelemetry.setCriticalEvents(criticalEvents);
     logger.debug('Wave telemetry initialized with critical events:', criticalEvents);
 }
-
 
 // ==========================================
 // Error UI for Security Failures
@@ -272,7 +270,8 @@ function showSecurityError(reason) {
 
         // Message
         const message = document.createElement('p');
-        message.style.cssText = 'max-width: 500px; margin-bottom: 1.5rem; color: var(--text-muted, #6c757d);';
+        message.style.cssText =
+            'max-width: 500px; margin-bottom: 1.5rem; color: var(--text-muted, #6c757d);';
         message.textContent = reason;
         errorDiv.appendChild(message);
 
@@ -295,7 +294,11 @@ function showSecurityError(reason) {
 
         const causesList = document.createElement('ul');
         causesList.style.cssText = 'margin: 0; padding-left: 1.5rem;';
-        ['Page loaded in an iframe', 'Non-secure protocol (must use HTTPS, localhost, or file://)', 'Browser security features disabled'].forEach(cause => {
+        [
+            'Page loaded in an iframe',
+            'Non-secure protocol (must use HTTPS, localhost, or file://)',
+            'Browser security features disabled',
+        ].forEach(cause => {
             const li = document.createElement('li');
             li.textContent = cause;
             causesList.appendChild(li);
@@ -371,8 +374,10 @@ function showLoadingError(error) {
 
     // Message
     const message = document.createElement('p');
-    message.style.cssText = 'max-width: 500px; margin-bottom: 1.5rem; color: var(--text-muted, #6c757d);';
-    message.textContent = 'An error occurred while loading the application. This may be due to a network issue or browser compatibility.';
+    message.style.cssText =
+        'max-width: 500px; margin-bottom: 1.5rem; color: var(--text-muted, #6c757d);';
+    message.textContent =
+        'An error occurred while loading the application. This may be due to a network issue or browser compatibility.';
     errorDiv.appendChild(message);
 
     // Details panel
@@ -479,9 +484,9 @@ async function loadHeavyModulesOnIntent() {
                     'OllamaProvider',
                     'RAG',
                     'LocalVectorStore',
-                    'LocalEmbeddings'
+                    'LocalEmbeddings',
                 ]),
-                preloadTimeoutPromise
+                preloadTimeoutPromise,
             ]);
 
             logger.debug('Heavy modules loaded via ModuleRegistry');
@@ -490,12 +495,12 @@ async function loadHeavyModulesOnIntent() {
             const lvsModule = ModuleRegistry.getModuleSync('LocalVectorStore');
             if (lvsModule?.LocalVectorStore) {
                 const initTimeoutPromise = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Module loading timeout')), MODULE_LOAD_TIMEOUT)
+                    setTimeout(
+                        () => reject(new Error('Module loading timeout')),
+                        MODULE_LOAD_TIMEOUT
+                    )
                 );
-                await Promise.race([
-                    lvsModule.LocalVectorStore.init(),
-                    initTimeoutPromise
-                ]);
+                await Promise.race([lvsModule.LocalVectorStore.init(), initTimeoutPromise]);
                 logger.debug('LocalVectorStore worker initialized');
             }
 
@@ -517,7 +522,6 @@ async function loadHeavyModulesOnIntent() {
 
     return heavyModulesLoading;
 }
-
 
 /**
  * Initialize the application after security passes
@@ -564,7 +568,7 @@ async function bootstrap() {
             logger.debug('Crypto module ready (self-initializing)');
             securityReport = {
                 overallState: 'ready',
-                warnings: []
+                warnings: [],
             };
         } else {
             logger.debug('Security check bypassed due to Safe Mode:', safeModeReason);
@@ -581,15 +585,47 @@ async function bootstrap() {
         // Register heavy modules with ModuleRegistry for lazy loading
         // These are NOT preloaded at startup - loaded on user intent instead
         ModuleRegistry.register('Ollama', () => import('./ollama.js'), 'Ollama');
-        ModuleRegistry.register('OllamaProvider', () => import('./providers/ollama-adapter.js'), 'OllamaProvider');
-        ModuleRegistry.register('OpenRouterProvider', () => import('./providers/openrouter.js'), 'OpenRouterProvider');
-        ModuleRegistry.register('GeminiProvider', () => import('./providers/gemini.js'), 'GeminiProvider');
-        ModuleRegistry.register('LMStudioProvider', () => import('./providers/lmstudio.js'), 'LMStudioProvider');
-        ModuleRegistry.register('OpenAICompatibleProvider', () => import('./providers/openai-compatible.js'), 'OpenAICompatibleProvider');
+        ModuleRegistry.register(
+            'OllamaProvider',
+            () => import('./providers/ollama-adapter.js'),
+            'OllamaProvider'
+        );
+        ModuleRegistry.register(
+            'OpenRouterProvider',
+            () => import('./providers/openrouter.js'),
+            'OpenRouterProvider'
+        );
+        ModuleRegistry.register(
+            'GeminiProvider',
+            () => import('./providers/gemini.js'),
+            'GeminiProvider'
+        );
+        ModuleRegistry.register(
+            'LMStudioProvider',
+            () => import('./providers/lmstudio.js'),
+            'LMStudioProvider'
+        );
+        ModuleRegistry.register(
+            'OpenAICompatibleProvider',
+            () => import('./providers/openai-compatible.js'),
+            'OpenAICompatibleProvider'
+        );
         ModuleRegistry.register('RAG', () => import('./rag.js'), 'RAG');
-        ModuleRegistry.register('LocalVectorStore', () => import('./local-vector-store.js'), 'LocalVectorStore');
-        ModuleRegistry.register('LocalEmbeddings', () => import('./local-embeddings.js'), 'LocalEmbeddings');
-        ModuleRegistry.register('StorageDegradationManager', () => import('./services/storage-degradation-manager.js'), 'default');
+        ModuleRegistry.register(
+            'LocalVectorStore',
+            () => import('./local-vector-store.js'),
+            'LocalVectorStore'
+        );
+        ModuleRegistry.register(
+            'LocalEmbeddings',
+            () => import('./local-embeddings.js'),
+            'LocalEmbeddings'
+        );
+        ModuleRegistry.register(
+            'StorageDegradationManager',
+            () => import('./services/storage-degradation-manager.js'),
+            'default'
+        );
 
         // Heavy modules are now loaded on-demand when user shows intent
         // (clicks "Start Analysis" or enters Chat tab)

@@ -40,7 +40,7 @@ const DEPENDENCY_LAYERS = {
         './storage/profiles.js',
         './storage.js',
         './state/app-state.js',
-        './operation-lock.js'
+        './operation-lock.js',
     ],
 
     // Layer 1: Core Services (depend only on Layer 0)
@@ -55,7 +55,7 @@ const DEPENDENCY_LAYERS = {
         './storage/quota-monitor.js',
         './services/circuit-breaker.js',
         './security/secure-token-store.js',
-        './services/error-boundary.js'
+        './services/error-boundary.js',
     ],
 
     // Layer 2: Data Processing (depend on Layer 0-1)
@@ -70,7 +70,7 @@ const DEPENDENCY_LAYERS = {
         './providers/provider-interface.js',
         './providers/openrouter.js',
         './providers/lmstudio.js',
-        './providers/gemini.js'
+        './providers/gemini.js',
     ],
 
     // Layer 3: Business Logic (depend on Layer 0-2)
@@ -96,7 +96,7 @@ const DEPENDENCY_LAYERS = {
         './services/llm-provider-routing-service.js',
         './services/token-counting-service.js',
         './services/tool-call-handling-service.js',
-        './services/fallback-response-service.js'
+        './services/fallback-response-service.js',
     ],
 
     // Layer 4: Controllers (UI layer, depend on all lower layers)
@@ -108,7 +108,7 @@ const DEPENDENCY_LAYERS = {
         './controllers/file-upload-controller.js',
         './controllers/spotify-controller.js',
         './controllers/demo-controller.js',
-        './controllers/reset-controller.js'
+        './controllers/reset-controller.js',
     ],
 
     // Layer 5: Optional Features (loaded on demand)
@@ -121,8 +121,8 @@ const DEPENDENCY_LAYERS = {
         './local-embeddings.js',
         './settings.js',
         './payments.js',
-        './pricing.js'
-    ]
+        './pricing.js',
+    ],
 };
 
 // ==========================================
@@ -182,7 +182,8 @@ async function loadLayer(layerModules, importContext) {
         }
 
         try {
-            const module = await import(modulePath, importContext);
+            const resolvedPath = importContext ? new URL(modulePath, importContext).href : modulePath;
+            const module = await import(resolvedPath);
             markModuleLoaded(modulePath, module);
             loaded[modulePath] = module;
         } catch (error) {
@@ -229,7 +230,7 @@ function getInitializationOrder() {
         'LAYER_2_PROCESSING',
         'LAYER_3_BUSINESS_LOGIC',
         'LAYER_4_CONTROLLERS',
-        'LAYER_5_OPTIONAL'
+        'LAYER_5_OPTIONAL',
     ];
 }
 
@@ -267,7 +268,7 @@ export const DependencyGraph = {
 
     // Initialization order
     getInitializationOrder,
-    getAllModulesOrdered
+    getAllModulesOrdered,
 };
 
 console.log('[DependencyGraph] Module loaded');

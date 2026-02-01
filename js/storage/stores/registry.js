@@ -39,7 +39,7 @@ export function supportsTransactions(storeName) {
     const exemptStores = [
         STORES.MIGRATION,
         STORES.TRANSACTION_JOURNAL,
-        STORES.TRANSACTION_COMPENSATION
+        STORES.TRANSACTION_COMPENSATION,
     ];
     return !exemptStores.includes(storeName);
 }
@@ -55,98 +55,98 @@ export function getStoreMetadata(storeName) {
             name: STORES.STREAMS,
             description: 'Spotify streaming history',
             keyPath: 'id',
-            autoIncrement: false
+            autoIncrement: false,
         },
         [STORES.CHUNKS]: {
             name: STORES.CHUNKS,
             description: 'Processed text chunks for RAG',
             keyPath: 'id',
-            autoIncrement: true
+            autoIncrement: true,
         },
         [STORES.EMBEDDINGS]: {
             name: STORES.EMBEDDINGS,
             description: 'Vector embeddings for semantic search',
             keyPath: 'id',
-            autoIncrement: true
+            autoIncrement: true,
         },
         [STORES.PERSONALITY]: {
             name: STORES.PERSONALITY,
             description: 'Personality analysis results',
             keyPath: 'id',
-            autoIncrement: false
+            autoIncrement: false,
         },
         [STORES.SETTINGS]: {
             name: STORES.SETTINGS,
             description: 'Application settings',
             keyPath: 'key',
-            autoIncrement: false
+            autoIncrement: false,
         },
         [STORES.CHAT_SESSIONS]: {
             name: STORES.CHAT_SESSIONS,
             description: 'Chat session history',
             keyPath: 'id',
-            autoIncrement: false
+            autoIncrement: false,
         },
         [STORES.CONFIG]: {
             name: STORES.CONFIG,
             description: 'Configuration data',
             keyPath: 'key',
-            autoIncrement: false
+            autoIncrement: false,
         },
         [STORES.TOKENS]: {
             name: STORES.TOKENS,
             description: 'OAuth tokens (encrypted)',
             keyPath: 'key',
-            autoIncrement: false
+            autoIncrement: false,
         },
         [STORES.MIGRATION]: {
             name: STORES.MIGRATION,
             description: 'Migration state tracking',
             keyPath: 'id',
-            autoIncrement: false
+            autoIncrement: false,
         },
         [STORES.EVENT_LOG]: {
             name: STORES.EVENT_LOG,
             description: 'Event log for cross-tab coordination',
             keyPath: 'id',
-            autoIncrement: false
+            autoIncrement: false,
         },
         [STORES.EVENT_CHECKPOINT]: {
             name: STORES.EVENT_CHECKPOINT,
             description: 'Event log checkpoint for recovery',
             keyPath: 'id',
-            autoIncrement: false
+            autoIncrement: false,
         },
         [STORES.DEMO_STREAMS]: {
             name: STORES.DEMO_STREAMS,
             description: 'Demo mode streaming data',
             keyPath: 'id',
-            autoIncrement: true
+            autoIncrement: true,
         },
         [STORES.DEMO_PATTERNS]: {
             name: STORES.DEMO_PATTERNS,
             description: 'Demo mode pattern data',
             keyPath: 'id',
-            autoIncrement: false
+            autoIncrement: false,
         },
         [STORES.DEMO_PERSONALITY]: {
             name: STORES.DEMO_PERSONALITY,
             description: 'Demo mode personality result',
             keyPath: 'id',
-            autoIncrement: false
+            autoIncrement: false,
         },
         [STORES.TRANSACTION_JOURNAL]: {
             name: STORES.TRANSACTION_JOURNAL,
             description: 'Two-phase commit transaction journal',
             keyPath: 'id',
-            autoIncrement: true
+            autoIncrement: true,
         },
         [STORES.TRANSACTION_COMPENSATION]: {
             name: STORES.TRANSACTION_COMPENSATION,
             description: 'Transaction compensation log',
             keyPath: 'id',
-            autoIncrement: true
-        }
+            autoIncrement: true,
+        },
     };
 
     return metadata[storeName] || null;

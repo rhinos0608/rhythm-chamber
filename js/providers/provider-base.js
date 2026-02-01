@@ -57,7 +57,8 @@ export class ProviderBase {
             }
 
             // Validate required fields
-            const hasRequiredFields = stream.ts &&
+            const hasRequiredFields =
+                stream.ts &&
                 stream.master_metadata_track_name &&
                 stream.master_metadata_album_artist_name;
 
@@ -85,7 +86,7 @@ export class ProviderBase {
             comfortDiscovery: patterns.comfortDiscovery || null,
             timePatterns: patterns.timePatterns || null,
             socialPatterns: patterns.socialPatterns || null,
-            ghostedArtists: patterns.ghostedArtists || null
+            ghostedArtists: patterns.ghostedArtists || null,
         };
 
         // Remove null sections
@@ -110,8 +111,8 @@ export class ProviderBase {
 
         // Validate required personality fields
         const requiredFields = ['type', 'name', 'emoji', 'tagline'];
-        const hasRequiredFields = requiredFields.every(field =>
-            personality[field] && typeof personality[field] === 'string'
+        const hasRequiredFields = requiredFields.every(
+            field => personality[field] && typeof personality[field] === 'string'
         );
 
         if (!hasRequiredFields) {
@@ -124,7 +125,7 @@ export class ProviderBase {
             name: personality.name,
             emoji: personality.emoji,
             tagline: personality.tagline,
-            insights: Array.isArray(personality.insights) ? personality.insights : []
+            insights: Array.isArray(personality.insights) ? personality.insights : [],
         };
     }
 
@@ -143,7 +144,7 @@ export class ProviderBase {
             totalStreams: Validation.ensureNumber(summary.totalStreams, 0),
             uniqueArtists: Validation.ensureNumber(summary.uniqueArtists, 0),
             listeningHours: Validation.ensureNumber(summary.listeningHours, 0),
-            yearsActive: Validation.ensureNumber(summary.yearsActive, 0)
+            yearsActive: Validation.ensureNumber(summary.yearsActive, 0),
         };
 
         return normalized;
@@ -158,7 +159,7 @@ export class ProviderBase {
             totalStreams: 0,
             uniqueArtists: 0,
             listeningHours: 0,
-            yearsActive: 0
+            yearsActive: 0,
         };
     }
 
@@ -171,7 +172,7 @@ export class ProviderBase {
         const eventName = `data:${dataType}_loaded`;
         this.eventBus.emit(eventName, {
             source: this.providerType,
-            ...metadata
+            ...metadata,
         });
     }
 

@@ -46,34 +46,24 @@ export class RecoveryStrategies {
      */
     _initializeRecoveryHandlers() {
         // Security domain handlers
-        this._recoveryHandlers.set(RecoveryDomain.SECURITY, [
-            this._handleSecurityError.bind(this)
-        ]);
+        this._recoveryHandlers.set(RecoveryDomain.SECURITY, [this._handleSecurityError.bind(this)]);
 
         // Storage domain handlers
-        this._recoveryHandlers.set(RecoveryDomain.STORAGE, [
-            this._handleStorageError.bind(this)
-        ]);
+        this._recoveryHandlers.set(RecoveryDomain.STORAGE, [this._handleStorageError.bind(this)]);
 
         // UI domain handlers
-        this._recoveryHandlers.set(RecoveryDomain.UI, [
-            this._handleUIError.bind(this)
-        ]);
+        this._recoveryHandlers.set(RecoveryDomain.UI, [this._handleUIError.bind(this)]);
 
         // Operational domain handlers
         this._recoveryHandlers.set(RecoveryDomain.OPERATIONAL, [
-            this._handleOperationalError.bind(this)
+            this._handleOperationalError.bind(this),
         ]);
 
         // Network domain handlers
-        this._recoveryHandlers.set(RecoveryDomain.NETWORK, [
-            this._handleNetworkError.bind(this)
-        ]);
+        this._recoveryHandlers.set(RecoveryDomain.NETWORK, [this._handleNetworkError.bind(this)]);
 
         // Provider domain handlers
-        this._recoveryHandlers.set(RecoveryDomain.PROVIDER, [
-            this._handleProviderError.bind(this)
-        ]);
+        this._recoveryHandlers.set(RecoveryDomain.PROVIDER, [this._handleProviderError.bind(this)]);
     }
 
     /**
@@ -89,7 +79,7 @@ export class RecoveryStrategies {
         this._eventBus.emit('SECURITY:RECOVERY', {
             error: data.error,
             context: data.context,
-            action: data.recoveryAction || 'default'
+            action: data.recoveryAction || 'default',
         });
     }
 
@@ -114,7 +104,7 @@ export class RecoveryStrategies {
         this._eventBus.emit('STORAGE:RECOVERY', {
             error: data.error,
             context: data.context,
-            action: data.recoveryAction || 'fallback'
+            action: data.recoveryAction || 'fallback',
         });
 
         const errorName = data.error?.name || '';
@@ -127,18 +117,22 @@ export class RecoveryStrategies {
         }
 
         // Handle IndexedDB connection errors - retry then fallback
-        if (errorName === 'InvalidStateError' ||
+        if (
+            errorName === 'InvalidStateError' ||
             errorMessage.includes('connection') ||
-            errorMessage.includes('database')) {
+            errorMessage.includes('database')
+        ) {
             await this._handleConnectionError(data);
             return;
         }
 
         // Handle transaction/lock errors - retry with backoff
-        if (errorName === 'TransactionInactiveError' ||
+        if (
+            errorName === 'TransactionInactiveError' ||
             errorName === 'AbortError' ||
             errorMessage.includes('transaction') ||
-            errorMessage.includes('lock')) {
+            errorMessage.includes('lock')
+        ) {
             await this._handleTransactionError(data);
             return;
         }
@@ -147,7 +141,7 @@ export class RecoveryStrategies {
         console.warn('[RecoveryStrategies] Unknown storage error type:', errorName, errorMessage);
         this._eventBus.emit('STORAGE:UNKNOWN_ERROR', {
             error: data.error,
-            context: data.context
+            context: data.context,
         });
     }
 
@@ -172,7 +166,7 @@ export class RecoveryStrategies {
         // Emit quota exceeded event for UI notification
         this._eventBus.emit('STORAGE:QUOTA_EXCEEDED', {
             error: data.error,
-            context: data.context
+            context: data.context,
         });
 
         // Attempt emergency cleanup
@@ -182,20 +176,24 @@ export class RecoveryStrategies {
                 const cleanupResult = await StorageDegradationManager.triggerEmergencyCleanup();
 
                 if (cleanupResult?.success && cleanupResult.bytesFreed > 0) {
-                    console.log('[RecoveryStrategies] Cleanup freed', cleanupResult.bytesFreed, 'bytes');
+                    console.log(
+                        '[RecoveryStrategies] Cleanup freed',
+                        cleanupResult.bytesFreed,
+                        'bytes'
+                    );
 
                     // Emit cleanup success event
                     this._eventBus.emit('STORAGE:CLEANUP_SUCCESS', {
                         bytesFreed: cleanupResult.bytesFreed,
                         itemsDeleted: cleanupResult.itemsDeleted,
-                        operations: cleanupResult.operationsPerformed
+                        operations: cleanupResult.operationsPerformed,
                     });
 
                     // Retry the original operation after cleanup
                     this._eventBus.emit('STORAGE:RETRY_OPERATION', {
                         error: data.error,
                         context: data.context,
-                        reason: 'after_cleanup'
+                        reason: 'after_cleanup',
                     });
                     return;
                 }
@@ -209,7 +207,7 @@ export class RecoveryStrategies {
         this._eventBus.emit('STORAGE:ENTER_EMERGENCY_MODE', {
             error: data.error,
             context: data.context,
-            reason: 'quota_exceeded_cleanup_failed'
+            reason: 'quota_exceeded_cleanup_failed',
         });
     }
 
@@ -230,7 +228,7 @@ export class RecoveryStrategies {
             error: data.error,
             context: data.context,
             attempts: currentAttempt,
-            recoverable: currentAttempt <= maxRetries
+            recoverable: currentAttempt <= maxRetries,
         });
 
         // If we haven't exhausted retries, schedule retry with exponential backoff
@@ -238,7 +236,9 @@ export class RecoveryStrategies {
         if (currentAttempt <= maxRetries) {
             const delayMs = Math.min(1000 * Math.pow(2, currentAttempt - 1), 5000);
 
-            console.log(`[RecoveryStrategies] Scheduling connection retry ${currentAttempt + 1}/${maxRetries} in ${delayMs}ms`);
+            console.log(
+                `[RecoveryStrategies] Scheduling connection retry ${currentAttempt + 1}/${maxRetries} in ${delayMs}ms`
+            );
 
             // Emit retry event with delay
             this._eventBus.emit('STORAGE:RETRY_CONNECTION', {
@@ -246,7 +246,7 @@ export class RecoveryStrategies {
                 context: { ...data.context, attempt: currentAttempt + 1 },
                 delayMs,
                 attempt: currentAttempt + 1,
-                maxAttempts: maxRetries
+                maxAttempts: maxRetries,
             });
 
             // Schedule retry operation
@@ -254,7 +254,7 @@ export class RecoveryStrategies {
                 this._eventBus.emit('STORAGE:RETRY_OPERATION', {
                     error: data.error,
                     context: { ...data.context, attempt: currentAttempt + 1 },
-                    reason: 'connection_retry'
+                    reason: 'connection_retry',
                 });
             }, delayMs);
         } else {
@@ -279,7 +279,9 @@ export class RecoveryStrategies {
         if (currentAttempt <= maxTransactionRetries) {
             const delayMs = 100 * Math.pow(2, currentAttempt - 1);
 
-            console.log(`[RecoveryStrategies] Retrying transaction ${currentAttempt}/${maxTransactionRetries} after ${delayMs}ms`);
+            console.log(
+                `[RecoveryStrategies] Retrying transaction ${currentAttempt}/${maxTransactionRetries} after ${delayMs}ms`
+            );
 
             // Emit retry event with exponential backoff
             this._eventBus.emit('STORAGE:RETRY_OPERATION', {
@@ -288,13 +290,13 @@ export class RecoveryStrategies {
                 delayMs,
                 reason: 'transaction_retry',
                 attempt: currentAttempt + 1,
-                maxAttempts: maxTransactionRetries + 1
+                maxAttempts: maxTransactionRetries + 1,
             });
 
             // Schedule the retry
             setTimeout(() => {
                 this._eventBus.emit('STORAGE:EXECUTE_TRANSACTION', {
-                    context: { ...data.context, attempt: currentAttempt + 1 }
+                    context: { ...data.context, attempt: currentAttempt + 1 },
                 });
             }, delayMs);
         } else {
@@ -304,7 +306,7 @@ export class RecoveryStrategies {
             this._eventBus.emit('STORAGE:TRANSACTION_FAILED', {
                 error: data.error,
                 context: data.context,
-                attempts: currentAttempt
+                attempts: currentAttempt,
             });
         }
     }
@@ -327,38 +329,39 @@ export class RecoveryStrategies {
             this._eventBus.emit('STORAGE:FALLBACK_ACTIVATED', {
                 mode: fallbackResult?.backend?.getMode?.() || 'unknown',
                 stats: fallbackResult?.backend?.getStats?.() || {},
-                reason: data.error?.message || 'connection_failure'
+                reason: data.error?.message || 'connection_failure',
             });
 
             // Notify user about fallback mode
             this._eventBus.emit('UI:TOAST', {
                 type: 'warning',
-                message: 'Storage unavailable. Using temporary storage - your data will not persist after closing this tab.',
+                message:
+                    'Storage unavailable. Using temporary storage - your data will not persist after closing this tab.',
                 duration: 15000,
                 actions: [
                     { label: 'Retry Connection', action: 'retry_storage_connection' },
-                    { label: 'Export Data', action: 'export_current_data' }
-                ]
+                    { label: 'Export Data', action: 'export_current_data' },
+                ],
             });
-
         } catch (fallbackError) {
             console.error('[RecoveryStrategies] Failed to activate fallback:', fallbackError);
 
             // Emit fallback failure event
             this._eventBus.emit('STORAGE:FALLBACK_FAILED', {
                 error: fallbackError,
-                originalError: data.error
+                originalError: data.error,
             });
 
             // Show critical error to user
             this._eventBus.emit('UI:MODAL', {
                 type: 'critical',
                 title: 'Storage Unavailable',
-                message: 'The application cannot store data due to a persistent storage error. Please refresh the page or try a different browser.',
+                message:
+                    'The application cannot store data due to a persistent storage error. Please refresh the page or try a different browser.',
                 options: [
                     { label: 'Refresh Page', action: 'refresh_page', primary: true },
-                    { label: 'Export Current Session', action: 'export_session' }
-                ]
+                    { label: 'Export Current Session', action: 'export_session' },
+                ],
             });
         }
     }
@@ -376,7 +379,7 @@ export class RecoveryStrategies {
         this._eventBus.emit('UI:RECOVERY', {
             error: data.error,
             context: data.context,
-            widgetId: data.widgetId
+            widgetId: data.widgetId,
         });
     }
 
@@ -393,7 +396,7 @@ export class RecoveryStrategies {
         this._eventBus.emit('OPERATIONAL:RECOVERY', {
             error: data.error,
             context: data.context,
-            retryable: data.retryable !== false
+            retryable: data.retryable !== false,
         });
     }
 
@@ -410,7 +413,7 @@ export class RecoveryStrategies {
         this._eventBus.emit('NETWORK:RECOVERY', {
             error: data.error,
             url: data.url,
-            retryable: true
+            retryable: true,
         });
     }
 
@@ -427,7 +430,7 @@ export class RecoveryStrategies {
         this._eventBus.emit('PROVIDER:RECOVERY', {
             error: data.error,
             provider: data.provider,
-            fallbackAvailable: data.fallbackAvailable
+            fallbackAvailable: data.fallbackAvailable,
         });
     }
 
@@ -473,9 +476,9 @@ export class RecoveryStrategies {
     getDependencyHandlerName(dependency) {
         // Map dependencies to handler names (will be resolved by coordinator)
         const handlerMap = {
-            'operation_lock': 'operation_lock',
-            'state_validation': 'state_validation',
-            'tab_coordination': 'tab_coordination'
+            operation_lock: 'operation_lock',
+            state_validation: 'state_validation',
+            tab_coordination: 'tab_coordination',
         };
         return handlerMap[dependency] || null;
     }

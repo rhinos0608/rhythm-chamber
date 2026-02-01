@@ -16,7 +16,7 @@ import { Common } from '../utils/common.js';
 // Constants
 // ==========================================
 
-const QUOTA_WARNING_THRESHOLD = 0.80; // 80% usage triggers warning
+const QUOTA_WARNING_THRESHOLD = 0.8; // 80% usage triggers warning
 const QUOTA_CRITICAL_THRESHOLD = 0.95; // 95% usage triggers critical
 const UPDATE_INTERVAL_MS = 30000; // Update every 30 seconds
 
@@ -26,7 +26,7 @@ const UPDATE_INTERVAL_MS = 30000; // Update every 30 seconds
 
 let cachedEstimate = null;
 let updateInterval = null;
-let listeners = [];
+const listeners = [];
 
 // ==========================================
 // Core Functions
@@ -44,13 +44,13 @@ async function getStorageEstimate() {
             return {
                 used: estimate.usage || 0,
                 quota: estimate.quota || 0,
-                available: (estimate.quota || 0) - (estimate.usage || 0)
+                available: (estimate.quota || 0) - (estimate.usage || 0),
             };
         }
 
         // Fallback for older browsers (Chrome < 55)
         if (navigator.webkitTemporaryStorage) {
-            return new Promise((resolve) => {
+            return new Promise(resolve => {
                 navigator.webkitTemporaryStorage.queryUsageAndQuota(
                     (used, quota) => resolve({ used, quota, available: quota - used }),
                     () => resolve({ used: 0, quota: 0, available: 0 })
@@ -94,9 +94,7 @@ async function getQuotaStatus() {
     const estimate = await getStorageEstimate();
     cachedEstimate = estimate;
 
-    const percentUsed = estimate.quota > 0
-        ? (estimate.used / estimate.quota) * 100
-        : 0;
+    const percentUsed = estimate.quota > 0 ? (estimate.used / estimate.quota) * 100 : 0;
 
     let status = 'ok';
     if (percentUsed >= QUOTA_CRITICAL_THRESHOLD * 100) {
@@ -105,9 +103,10 @@ async function getQuotaStatus() {
         status = 'warning';
     }
 
-    const displayText = estimate.quota > 0
-        ? `Using ${formatBytes(estimate.used)} of ${formatBytes(estimate.quota)} total`
-        : 'Storage quota unknown';
+    const displayText =
+        estimate.quota > 0
+            ? `Using ${formatBytes(estimate.used)} of ${formatBytes(estimate.quota)} total`
+            : 'Storage quota unknown';
 
     return {
         used: estimate.used,
@@ -118,7 +117,7 @@ async function getQuotaStatus() {
         quotaFormatted: formatBytes(estimate.quota),
         percentUsed: Math.round(percentUsed * 10) / 10, // 1 decimal place
         status,
-        displayText
+        displayText,
     };
 }
 
@@ -152,7 +151,7 @@ async function updateSettingsDisplay() {
     const status = await getQuotaStatus();
 
     // Find or create quota display in settings
-    let container = document.getElementById('quota-display-settings');
+    const container = document.getElementById('quota-display-settings');
     if (!container) {
         // Settings modal may not be open, that's OK
         return;
@@ -164,9 +163,13 @@ async function updateSettingsDisplay() {
         <div class="quota-info">
             <div class="quota-bar-container">
                 <div class="quota-bar" style="width: ${Math.min(status.percentUsed, 100)}%;
-                    background: ${status.status === 'critical' ? 'var(--error, #e74c3c)' :
-            status.status === 'warning' ? 'var(--warning, #f39c12)' :
-                'var(--accent, #3498db)'};"></div>
+                    background: ${
+    status.status === 'critical'
+        ? 'var(--error, #e74c3c)'
+        : status.status === 'warning'
+            ? 'var(--warning, #f39c12)'
+            : 'var(--accent, #3498db)'
+};"></div>
             </div>
             <span class="quota-text">${escapeHtml(status.displayText)}</span>
             <span class="quota-percent ${status.status}">${status.percentUsed.toFixed(1)}%</span>
@@ -215,10 +218,7 @@ async function updateHeaderWarning() {
  * Update all quota displays
  */
 async function updateQuotaDisplay() {
-    await Promise.all([
-        updateSettingsDisplay(),
-        updateHeaderWarning()
-    ]);
+    await Promise.all([updateSettingsDisplay(), updateHeaderWarning()]);
 
     // Notify listeners
     const status = await getQuotaStatus();
@@ -310,8 +310,7 @@ export const QuotaMonitor = {
 
     // Constants
     QUOTA_WARNING_THRESHOLD,
-    QUOTA_CRITICAL_THRESHOLD
+    QUOTA_CRITICAL_THRESHOLD,
 };
-
 
 console.log('[QuotaMonitor] Module loaded');

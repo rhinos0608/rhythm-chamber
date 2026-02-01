@@ -2,14 +2,16 @@
  * Intent Extraction Strategy (Level 4)
  * Extracts intent from user message and executes functions directly
  * Used as last resort when model cannot produce function calls
- * 
+ *
  * @module tool-strategies/intent-extraction-strategy
  */
 
 import { BaseToolStrategy } from './base-strategy.js';
 
 export class IntentExtractionStrategy extends BaseToolStrategy {
-    get level() { return 4; }
+    get level() {
+        return 4;
+    }
 
     canHandle(responseMessage, capabilityLevel) {
         // This strategy is a last resort with lower confidence
@@ -57,7 +59,7 @@ export class IntentExtractionStrategy extends BaseToolStrategy {
             userMessage,
             streamsData,
             buildSystemPrompt,
-            callLLM
+            callLLM,
         } = context;
 
         // HNW Guard: Check FunctionCallingFallback exists before calling extractQueryIntent
@@ -70,7 +72,9 @@ export class IntentExtractionStrategy extends BaseToolStrategy {
         // HNW Guard: Also verify executeFunctionCalls exists before we proceed
         const fc = this.FunctionCallingFallback;
         if (typeof fc.executeFunctionCalls !== 'function') {
-            console.warn('[IntentExtractionStrategy] FunctionCallingFallback.executeFunctionCalls not available');
+            console.warn(
+                '[IntentExtractionStrategy] FunctionCallingFallback.executeFunctionCalls not available'
+            );
             return { responseMessage };
         }
 
@@ -80,7 +84,9 @@ export class IntentExtractionStrategy extends BaseToolStrategy {
             return { responseMessage };
         }
 
-        console.log(`[IntentExtractionStrategy] Level 4: Extracted intent "${intent.function}" from user message`);
+        console.log(
+            `[IntentExtractionStrategy] Level 4: Extracted intent "${intent.function}" from user message`
+        );
 
         if (onProgress) {
             onProgress({ type: 'fallback_intent', level: 4, function: intent.function });
@@ -112,8 +118,8 @@ export class IntentExtractionStrategy extends BaseToolStrategy {
                     status: 'error',
                     content: `Function calls failed: ${execError.message}. Please try again or select a different model.`,
                     role: 'assistant',
-                    isFunctionError: true
-                }
+                    isFunctionError: true,
+                },
             };
         }
 
@@ -126,34 +132,44 @@ export class IntentExtractionStrategy extends BaseToolStrategy {
 
         if (result && !result.result?.error) {
             // Inject results into the response for a data-grounded answer
-            const resultsMessage = this.FunctionCallingFallback?.buildFunctionResultsMessage?.(safeResults) ||
+            const resultsMessage =
+                this.FunctionCallingFallback?.buildFunctionResultsMessage?.(safeResults) ||
                 `Function results: ${JSON.stringify(safeResults, null, 2)}`;
 
             // Make a new call with the data context
             const enrichedMessages = [
                 { role: 'system', content: buildSystemPrompt() },
                 ...this.getHistory(),
-                { role: 'user', content: resultsMessage, isSystem: true }
+                { role: 'user', content: resultsMessage, isSystem: true },
             ];
 
             if (onProgress) onProgress({ type: 'thinking' });
 
             try {
-                const enrichedResponse = await callLLM(providerConfig, key, enrichedMessages, undefined);
+                const enrichedResponse = await callLLM(
+                    providerConfig,
+                    key,
+                    enrichedMessages,
+                    undefined
+                );
                 // HNW Fix: Safely handle missing choices array
-                const choices = Array.isArray(enrichedResponse?.choices) ? enrichedResponse.choices : [];
+                const choices = Array.isArray(enrichedResponse?.choices)
+                    ? enrichedResponse.choices
+                    : [];
                 const message = choices[0]?.message;
                 if (message) {
                     return { responseMessage: message };
                 }
                 // Fallback if no message in response
-                console.warn('[IntentExtractionStrategy] No message in enrichedResponse, using data context');
+                console.warn(
+                    '[IntentExtractionStrategy] No message in enrichedResponse, using data context'
+                );
                 const dataContext = JSON.stringify(result?.result ?? {}, null, 2);
                 return {
                     responseMessage: {
                         role: 'assistant',
-                        content: `${responseMessage?.content || ''}\n\n**Data from your listening history:**\n\`\`\`json\n${dataContext}\n\`\`\``
-                    }
+                        content: `${responseMessage?.content || ''}\n\n**Data from your listening history:**\n\`\`\`json\n${dataContext}\n\`\`\``,
+                    },
                 };
             } catch (error) {
                 console.error('[IntentExtractionStrategy] Enriched response failed:', error);
@@ -162,8 +178,8 @@ export class IntentExtractionStrategy extends BaseToolStrategy {
                 return {
                     responseMessage: {
                         role: 'assistant',
-                        content: `${responseMessage?.content || ''}\n\n**Data from your listening history:**\n\`\`\`json\n${dataContext}\n\`\`\``
-                    }
+                        content: `${responseMessage?.content || ''}\n\n**Data from your listening history:**\n\`\`\`json\n${dataContext}\n\`\`\``,
+                    },
                 };
             }
         }

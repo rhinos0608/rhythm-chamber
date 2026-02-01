@@ -30,9 +30,14 @@ export async function getAllByIndex(storeName, indexName, direction = 'next') {
         const allRecords = await FallbackBackend.getAll(storeName);
         // Fallback: simple sort by updatedAt or timestamp if available
         // This provides basic functionality without full index support
-        const sortBy = indexName === 'updatedAt' ? 'updatedAt' :
-                      indexName === 'timestamp' ? 'timestamp' :
-                      indexName === 'startDate' ? 'startDate' : null;
+        const sortBy =
+            indexName === 'updatedAt'
+                ? 'updatedAt'
+                : indexName === 'timestamp'
+                    ? 'timestamp'
+                    : indexName === 'startDate'
+                        ? 'startDate'
+                        : null;
         if (sortBy) {
             const isReverse = direction === 'prev' || direction === 'prevunique';
             allRecords.sort((a, b) => {
@@ -55,7 +60,7 @@ export async function getAllByIndex(storeName, indexName, direction = 'next') {
             const request = index.openCursor(null, direction);
 
             const results = [];
-            request.onsuccess = (event) => {
+            request.onsuccess = event => {
                 const cursor = event.target.result;
                 if (cursor) {
                     results.push(cursor.value);
@@ -97,7 +102,7 @@ export async function atomicUpdate(storeName, key, modifier) {
         let modifierThrew = false;
         let modifierError = null;
 
-        request.onsuccess = (event) => {
+        request.onsuccess = event => {
             const cursor = event.target.result;
             if (cursor) {
                 const currentValue = cursor.value;
@@ -115,7 +120,10 @@ export async function atomicUpdate(storeName, key, modifier) {
                 } catch (error) {
                     modifierThrew = true;
                     modifierError = error;
-                    console.error('[IndexedDB] atomicUpdate modifier threw, aborting transaction:', error);
+                    console.error(
+                        '[IndexedDB] atomicUpdate modifier threw, aborting transaction:',
+                        error
+                    );
                     transaction.abort();
                     reject(error);
                     return;
@@ -126,7 +134,7 @@ export async function atomicUpdate(storeName, key, modifier) {
                 const stampedValue = {
                     ...newValue,
                     _writeEpoch: clockState,
-                    _writerId: writeVectorClock.processId
+                    _writerId: writeVectorClock.processId,
                 };
                 const updateReq = cursor.update(stampedValue);
                 updateReq.onerror = () => reject(updateReq.error);
@@ -140,7 +148,10 @@ export async function atomicUpdate(storeName, key, modifier) {
                 } catch (error) {
                     modifierThrew = true;
                     modifierError = error;
-                    console.error('[IndexedDB] atomicUpdate modifier threw (new key), aborting transaction:', error);
+                    console.error(
+                        '[IndexedDB] atomicUpdate modifier threw (new key), aborting transaction:',
+                        error
+                    );
                     transaction.abort();
                     reject(error);
                     return;
@@ -150,7 +161,7 @@ export async function atomicUpdate(storeName, key, modifier) {
                 const stampedValue = {
                     ...newValue,
                     _writeEpoch: clockState,
-                    _writerId: writeVectorClock.processId
+                    _writerId: writeVectorClock.processId,
                 };
                 const putRequest = store.put(stampedValue);
                 putRequest.onsuccess = () => resolve(stampedValue);
@@ -196,13 +207,13 @@ export async function transaction(storeName, mode, operations) {
         // by binding the storeName to FallbackBackend methods. This ensures the
         // operations callback can use the same API as IndexedDB objectStore.
         const fallbackStore = {
-            put: (data) => FallbackBackend.put(storeName, data),
-            get: (key) => FallbackBackend.get(storeName, key),
-            delete: (key) => FallbackBackend.delete(storeName, key),
-            clear: () => FallbackBackend.clear(storeName)
+            put: data => FallbackBackend.put(storeName, data),
+            get: key => FallbackBackend.get(storeName, key),
+            delete: key => FallbackBackend.delete(storeName, key),
+            clear: () => FallbackBackend.clear(storeName),
         };
 
-        return new Promise((resolve) => {
+        return new Promise(resolve => {
             try {
                 operations(fallbackStore);
             } catch (e) {

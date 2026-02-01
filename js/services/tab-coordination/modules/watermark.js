@@ -79,7 +79,7 @@ export function startWatermarkBroadcast() {
             console.error('[TabCoordination] Watermark broadcast error:', error, {
                 isPrimaryTab: getIsPrimaryTab(),
                 watermark: lastEventWatermark,
-                vectorClock: vectorClock.toJSON()
+                vectorClock: vectorClock.toJSON(),
             });
         });
     }, WATERMARK_BROADCAST_MS);
@@ -105,7 +105,7 @@ async function broadcastWatermark() {
         type: MESSAGE_TYPES.EVENT_WATERMARK,
         tabId: TAB_ID,
         watermark: lastEventWatermark,
-        vectorClock: vectorClock.tick()
+        vectorClock: vectorClock.tick(),
     });
 }
 
@@ -120,7 +120,7 @@ export function updateEventWatermark(watermark) {
             console.error('[TabCoordination] Event watermark update error:', error, {
                 watermark,
                 isPrimaryTab: getIsPrimaryTab(),
-                vectorClock: vectorClock.toJSON()
+                vectorClock: vectorClock.toJSON(),
             });
         });
     }
@@ -144,7 +144,7 @@ export async function handleReplayRequest(requestingTabId, fromWatermark) {
             type: MESSAGE_TYPES.REPLAY_RESPONSE,
             tabId: TAB_ID,
             events,
-            vectorClock: vectorClock.tick()
+            vectorClock: vectorClock.tick(),
         });
     } catch (error) {
         console.error('[TabCoordination] Error handling replay request:', error);
@@ -161,7 +161,7 @@ export async function handleReplayResponse(events) {
         for (const event of events) {
             await EventBus.emit(event.type, event.payload, {
                 skipEventLog: true,
-                domain: event.domain || 'global'
+                domain: event.domain || 'global',
             });
         }
 
@@ -187,7 +187,7 @@ export async function requestEventReplay(fromWatermark) {
         type: MESSAGE_TYPES.REPLAY_REQUEST,
         tabId: TAB_ID,
         fromWatermark,
-        vectorClock: vectorClock.tick()
+        vectorClock: vectorClock.tick(),
     });
 }
 

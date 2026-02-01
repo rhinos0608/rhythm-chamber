@@ -1,9 +1,9 @@
 /**
  * Token Counting Service
- * 
+ *
  * Handles token counting, context window management, and truncation strategies.
  * Extracted from chat.js to separate token concerns from chat orchestration.
- * 
+ *
  * @module services/token-counting-service
  */
 
@@ -72,7 +72,7 @@ function countTokens(text) {
 
 /**
  * Calculate token usage for a request
- * 
+ *
  * @param {Object} params - Request parameters
  * @param {string} params.systemPrompt - System prompt
  * @param {Array} params.messages - Chat messages
@@ -91,7 +91,7 @@ function calculateTokenUsage(params) {
             total: 0,
             contextWindow: getContextWindow(),
             usagePercent: 0,
-            warnings: []
+            warnings: [],
         };
     }
 
@@ -100,7 +100,7 @@ function calculateTokenUsage(params) {
 
 /**
  * Get recommended action based on token usage
- * 
+ *
  * @param {Object} tokenInfo - Token information from calculateTokenUsage
  * @returns {Object} Recommended action with action type and message
  */
@@ -114,7 +114,7 @@ function getRecommendedAction(tokenInfo) {
 
 /**
  * Truncate request to target token count
- * 
+ *
  * @param {Object} params - Parameters to truncate
  * @param {number} targetTokens - Target token count
  * @returns {Object} Truncated parameters
@@ -129,7 +129,7 @@ function truncateToTarget(params, targetTokens) {
 
 /**
  * Process token usage and apply strategies if needed
- * 
+ *
  * @param {Object} params - Request parameters
  * @param {function} onProgress - Progress callback (optional)
  * @returns {Object} Processed result with token info and potentially modified params
@@ -146,7 +146,9 @@ function processTokenUsage(params, onProgress = null) {
 
         // Log warnings
         tokenInfo.warnings.forEach(warning => {
-            console.warn(`[TokenCountingService] Token warning [${warning.level}]: ${warning.message}`);
+            console.warn(
+                `[TokenCountingService] Token warning [${warning.level}]: ${warning.message}`
+            );
         });
 
         // Apply truncation strategy if needed
@@ -163,14 +165,14 @@ function processTokenUsage(params, onProgress = null) {
                     type: 'token_warning',
                     message: 'Context too large - conversation truncated',
                     tokenInfo: tokenInfo,
-                    truncated: true
+                    truncated: true,
                 });
             }
 
             return {
                 tokenInfo,
                 params: truncatedParams,
-                truncated: true
+                truncated: true,
             };
         } else if (recommended.action === 'warn_user') {
             // Just warn the user but proceed
@@ -179,7 +181,7 @@ function processTokenUsage(params, onProgress = null) {
                     type: 'token_warning',
                     message: recommended.message,
                     tokenInfo: tokenInfo,
-                    truncated: false
+                    truncated: false,
                 });
             }
         }
@@ -189,14 +191,14 @@ function processTokenUsage(params, onProgress = null) {
     if (onProgress) {
         onProgress({
             type: 'token_update',
-            tokenInfo: tokenInfo
+            tokenInfo: tokenInfo,
         });
     }
 
     return {
         tokenInfo,
         params: params,
-        truncated: false
+        truncated: false,
     };
 }
 
@@ -243,7 +245,7 @@ const TokenCountingService = {
     processTokenUsage,
 
     // UI operations
-    resetDisplay
+    resetDisplay,
 };
 
 // ES Module export

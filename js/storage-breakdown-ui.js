@@ -31,7 +31,7 @@ function createStorageBreakdownHTML(breakdown, metrics) {
         WARNING: 'var(--color-warning, #facc15)',
         CRITICAL: 'var(--color-error, #f87171)',
         EXCEEDED: 'var(--color-error, #ef4444)',
-        EMERGENCY: 'var(--color-error, #dc2626)'
+        EMERGENCY: 'var(--color-error, #dc2626)',
     };
 
     const tierLabels = {
@@ -39,7 +39,7 @@ function createStorageBreakdownHTML(breakdown, metrics) {
         WARNING: '⚠️ Warning',
         CRITICAL: '🔴 Critical',
         EXCEEDED: '❌ Exceeded',
-        EMERGENCY: '🚨 Emergency'
+        EMERGENCY: '🚨 Emergency',
     };
 
     const tier = metrics?.tier || 'NORMAL';
@@ -84,11 +84,15 @@ function createStorageBreakdownHTML(breakdown, metrics) {
                 </button>
             </div>
             
-            ${breakdown?.embeddingsFrozen ? `
+            ${
+    breakdown?.embeddingsFrozen
+        ? `
                 <div class="storage-warning">
                     <span>⚠️ Embedding generation paused due to storage constraints</span>
                 </div>
-            ` : ''}
+            `
+        : ''
+}
         </div>
     `;
 }
@@ -107,22 +111,23 @@ function createCategoryRows(breakdown) {
         { key: 'chunks', icon: '📦', label: 'Data Chunks' },
         { key: 'streams', icon: '🎵', label: 'Music Streams' },
         { key: 'personality', icon: '👤', label: 'Personality' },
-        { key: 'settings', icon: '⚙️', label: 'Settings' }
+        { key: 'settings', icon: '⚙️', label: 'Settings' },
     ];
 
-    return categories.map(cat => {
-        const data = breakdown[cat.key];
-        if (!data) return '';
+    return categories
+        .map(cat => {
+            const data = breakdown[cat.key];
+            if (!data) return '';
 
-        const priorityColors = {
-            never: 'var(--color-info, #60a5fa)',
-            low: 'var(--color-success, #4ade80)',
-            medium: 'var(--color-warning, #facc15)',
-            high: 'var(--color-warning, #f59e0b)',
-            aggressive: 'var(--color-error, #f87171)'
-        };
+            const priorityColors = {
+                never: 'var(--color-info, #60a5fa)',
+                low: 'var(--color-success, #4ade80)',
+                medium: 'var(--color-warning, #facc15)',
+                high: 'var(--color-warning, #f59e0b)',
+                aggressive: 'var(--color-error, #f87171)',
+            };
 
-        return `
+            return `
             <div class="storage-category-row">
                 <span class="category-icon">${cat.icon}</span>
                 <span class="category-label">${cat.label}</span>
@@ -136,7 +141,8 @@ function createCategoryRows(breakdown) {
                 <span class="category-percent">${data.percentage || 0}%</span>
             </div>
         `;
-    }).join('');
+        })
+        .join('');
 }
 
 // Use formatBytes from Common utilities
@@ -200,9 +206,8 @@ function handleDataAction(event) {
  * @returns {Promise<void>}
  */
 async function render(container) {
-    const containerEl = typeof container === 'string'
-        ? document.querySelector(container)
-        : container;
+    const containerEl =
+        typeof container === 'string' ? document.querySelector(container) : container;
 
     if (!containerEl) {
         console.warn('[StorageBreakdownUI] Container not found');
@@ -211,7 +216,7 @@ async function render(container) {
 
     try {
         // Get storage degradation manager
-        const manager = _storageDegradationManager || await getStorageDegradationManager();
+        const manager = _storageDegradationManager || (await getStorageDegradationManager());
 
         // EDGE CASE FIX: Validate manager availability before using
         // If getStorageDegradationManager() throws or returns null, we need to handle gracefully
@@ -232,9 +237,8 @@ async function render(container) {
         // SAFE: createStorageBreakdownHTML() returns static HTML with no user input
         containerEl.innerHTML = createStorageBreakdownHTML(breakdown, {
             ...metrics,
-            tier: manager.getCurrentTier?.() || 'NORMAL'
+            tier: manager.getCurrentTier?.() || 'NORMAL',
         });
-
     } catch (error) {
         console.error('[StorageBreakdownUI] Failed to render:', error);
         // Use DOM APIs to prevent XSS - don't use innerHTML with error.message
@@ -242,7 +246,8 @@ async function render(container) {
         errorPanel.className = 'storage-breakdown-panel error';
 
         const errorMessage = document.createElement('p');
-        errorMessage.textContent = 'Failed to load storage breakdown: ' + (error.message || 'Unknown error');
+        errorMessage.textContent =
+            'Failed to load storage breakdown: ' + (error.message || 'Unknown error');
         errorPanel.appendChild(errorMessage);
 
         const retryButton = document.createElement('button');
@@ -272,7 +277,7 @@ async function refresh() {
  */
 async function cleanup(category) {
     try {
-        const manager = _storageDegradationManager || await getStorageDegradationManager();
+        const manager = _storageDegradationManager || (await getStorageDegradationManager());
 
         // EDGE CASE FIX: Validate manager before using
         if (!manager || typeof manager.triggerCleanup !== 'function') {
@@ -290,15 +295,21 @@ async function cleanup(category) {
         } else if (category === 'all') {
             // Full cleanup with HIGH priority
             const result = await manager.triggerCleanup(3);
-            showToast(`Cleaned ${result.itemsDeleted} items, freed ${formatBytes(result.bytesFreed)}`);
+            showToast(
+                `Cleaned ${result.itemsDeleted} items, freed ${formatBytes(result.bytesFreed)}`
+            );
         } else if (category === 'sessions' || category === 'streams' || category === 'chunks') {
             // Category-specific cleanup with MEDIUM priority
             const result = await manager.triggerCleanup(2);
-            showToast(`Cleaned ${result.itemsDeleted} items, freed ${formatBytes(result.bytesFreed)}`);
+            showToast(
+                `Cleaned ${result.itemsDeleted} items, freed ${formatBytes(result.bytesFreed)}`
+            );
         } else {
             // Unknown category, perform general cleanup
             const result = await manager.triggerCleanup(2);
-            showToast(`Cleaned ${result.itemsDeleted} items, freed ${formatBytes(result.bytesFreed)}`);
+            showToast(
+                `Cleaned ${result.itemsDeleted} items, freed ${formatBytes(result.bytesFreed)}`
+            );
         }
 
         await refresh();
@@ -320,7 +331,7 @@ async function showCleanupModal() {
         return;
     }
 
-    const manager = _storageDegradationManager || await getStorageDegradationManager();
+    const manager = _storageDegradationManager || (await getStorageDegradationManager());
 
     // EDGE CASE FIX: Validate manager before using
     if (!manager || typeof manager.getStorageBreakdown !== 'function') {
@@ -393,7 +404,9 @@ function hideCleanupModal() {
  * Run cleanup for selected categories
  */
 async function runSelectedCleanup() {
-    const checkboxes = document.querySelectorAll('#storage-cleanup-modal input[name="cleanup"]:checked');
+    const checkboxes = document.querySelectorAll(
+        '#storage-cleanup-modal input[name="cleanup"]:checked'
+    );
     const categories = Array.from(checkboxes).map(cb => cb.value);
 
     if (categories.length === 0) {
@@ -405,7 +418,7 @@ async function runSelectedCleanup() {
     showToast('Starting cleanup...');
 
     try {
-        const manager = _storageDegradationManager || await getStorageDegradationManager();
+        const manager = _storageDegradationManager || (await getStorageDegradationManager());
 
         // EDGE CASE FIX: Validate manager before using
         if (!manager || typeof manager.triggerCleanup !== 'function') {
@@ -440,7 +453,6 @@ async function runSelectedCleanup() {
 
         showToast(`Cleaned ${totalDeleted} items, freed ${formatBytes(totalFreed)}`);
         await refresh();
-
     } catch (error) {
         console.error('[StorageBreakdownUI] Selected cleanup failed:', error);
         showToast('Cleanup failed: ' + error.message);
@@ -741,7 +753,7 @@ export const StorageBreakdownUI = {
     cleanup,
     showCleanupModal,
     hideCleanupModal,
-    runSelectedCleanup
+    runSelectedCleanup,
 };
 
 console.log('[StorageBreakdownUI] Component loaded');

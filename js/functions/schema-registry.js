@@ -37,7 +37,7 @@ function getAllSchemas() {
         ...(AnalyticsQuerySchemas || []),
         ...(ArtifactQuerySchemas || []),
         ...(PlaylistQuerySchemas || []),
-        ...(SemanticQuerySchemas || [])
+        ...(SemanticQuerySchemas || []),
     ];
 }
 
@@ -87,7 +87,9 @@ export const SchemaRegistry = {
                 enabledTools.includes(schema.function.name)
             );
 
-            console.log(`[SchemaRegistry] Using ${filtered.length}/${allSchemas.length} enabled tools`);
+            console.log(
+                `[SchemaRegistry] Using ${filtered.length}/${allSchemas.length} enabled tools`
+            );
             return filtered;
         }
 
@@ -177,7 +179,7 @@ export const SchemaRegistry = {
      */
     isTemplateFunction(functionName) {
         return getTemplateFunctionNames().includes(functionName);
-    }
+    },
 };
 
 console.log('[SchemaRegistry] Module loaded');

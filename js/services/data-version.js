@@ -39,7 +39,7 @@ function generate() {
             streams: Array.isArray(safeActive.streams) ? safeActive.streams : [],
             patterns: safeActive.patterns || {},
             personality: safeActive.personality || {},
-            isDemoMode: !!safeActive.isDemoMode
+            isDemoMode: !!safeActive.isDemoMode,
         };
     } else if (AppState.get) {
         const state = AppState.get();
@@ -51,14 +51,14 @@ function generate() {
                 streams: Array.isArray(safeState.demo?.streams) ? safeState.demo.streams : [],
                 patterns: safeState.demo?.patterns || {},
                 personality: safeState.demo?.personality || {},
-                isDemoMode: true
+                isDemoMode: true,
             };
         } else {
             data = {
                 streams: Array.isArray(safeState.data?.streams) ? safeState.data.streams : [],
                 patterns: safeState.data?.patterns || {},
                 personality: safeState.data?.personality || {},
-                isDemoMode: false
+                isDemoMode: false,
             };
         }
     }
@@ -78,7 +78,7 @@ function generate() {
         personalityType,
         isDemoMode: data.isDemoMode || false,
         generatedAt: new Date().toISOString(),
-        hash: computeHash(streamCount, lastStreamDate, personalityType, data.isDemoMode)
+        hash: computeHash(streamCount, lastStreamDate, personalityType, data.isDemoMode),
     };
 }
 
@@ -96,7 +96,7 @@ function computeHash(streamCount, lastStreamDate, personalityType, isDemoMode) {
         String(streamCount),
         lastStreamDate || 'none',
         personalityType,
-        isDemoMode ? 'demo' : 'real'
+        isDemoMode ? 'demo' : 'real',
     ];
 
     // Simple string hash (not cryptographic, just for comparison)
@@ -104,7 +104,7 @@ function computeHash(streamCount, lastStreamDate, personalityType, isDemoMode) {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
         const char = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
+        hash = (hash << 5) - hash + char;
         hash = hash & hash; // Convert to 32-bit integer
     }
     return Math.abs(hash).toString(36);
@@ -197,7 +197,7 @@ function checkRegenerationContext(message) {
     if (staleResult.isStale) {
         return {
             shouldWarn: true,
-            message: getStaleMessage(staleResult)
+            message: getStaleMessage(staleResult),
         };
     }
 
@@ -216,8 +216,7 @@ export const DataVersion = {
     // Helpers
     getStaleMessage,
     tagMessage,
-    checkRegenerationContext
+    checkRegenerationContext,
 };
-
 
 console.log('[DataVersion] Module loaded');

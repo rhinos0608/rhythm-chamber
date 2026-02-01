@@ -62,7 +62,9 @@ export async function processWal() {
     try {
         // Sort entries by priority and sequence
         const sortedEntries = walState.entries
-            .filter(entry => entry.status === WalStatus.PENDING || entry.status === WalStatus.FAILED)
+            .filter(
+                entry => entry.status === WalStatus.PENDING || entry.status === WalStatus.FAILED
+            )
             .sort((a, b) => {
                 const priorityDiff = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
                 if (priorityDiff !== 0) return priorityDiff;
@@ -90,7 +92,11 @@ export async function processWal() {
                     if (canEncrypt()) {
                         // CRITICAL FIX: Use executeOperationForReplay for idempotency
                         // This converts 'add' to 'put' during WAL replay to prevent ConstraintError
-                        const result = await executeOperationForReplay(entry.operation, entry.args, walState.isReplaying);
+                        const result = await executeOperationForReplay(
+                            entry.operation,
+                            entry.args,
+                            walState.isReplaying
+                        );
 
                         entry.status = WalStatus.COMMITTED;
                         entry.error = null;
@@ -99,7 +105,7 @@ export async function processWal() {
                         const operationResult = {
                             success: true,
                             result: result,
-                            completedAt: Date.now()
+                            completedAt: Date.now(),
                         };
                         walState.operationResults.set(entry.id, operationResult);
                         saveOperationResults();
@@ -120,7 +126,9 @@ export async function processWal() {
                         entry.error = 'Encryption unavailable';
 
                         // Don't resolve yet - will retry
-                        console.log(`[WAL] ⚠ Deferred: ${entry.operation} (${entry.sequence}) - Safe Mode active`);
+                        console.log(
+                            `[WAL] ⚠ Deferred: ${entry.operation} (${entry.sequence}) - Safe Mode active`
+                        );
                     }
                 } catch (error) {
                     entry.status = WalStatus.FAILED;
@@ -130,7 +138,7 @@ export async function processWal() {
                     const operationResult = {
                         success: false,
                         error: entry.error,
-                        completedAt: Date.now()
+                        completedAt: Date.now(),
                     };
                     walState.operationResults.set(entry.id, operationResult);
                     saveOperationResults();
@@ -143,9 +151,13 @@ export async function processWal() {
                         if (entry.promise?.reject) {
                             entry.promise.reject(error);
                         }
-                        console.error(`[WAL] ✗ Failed after ${entry.attempts} attempts: ${entry.operation}`);
+                        console.error(
+                            `[WAL] ✗ Failed after ${entry.attempts} attempts: ${entry.operation}`
+                        );
                     } else {
-                        console.warn(`[WAL] ⚠ Retry (${entry.attempts}/${CONFIG.MAX_ATTEMPTS}): ${entry.operation}`);
+                        console.warn(
+                            `[WAL] ⚠ Retry (${entry.attempts}/${CONFIG.MAX_ATTEMPTS}): ${entry.operation}`
+                        );
                     }
                 }
             }
@@ -155,13 +167,14 @@ export async function processWal() {
 
             // Check if encryption became available mid-batch
             if (canEncrypt()) {
-                console.log('[WAL] Encryption now available, processing remaining entries immediately');
+                console.log(
+                    '[WAL] Encryption now available, processing remaining entries immediately'
+                );
             }
         }
 
         // Cleanup committed entries
         cleanupWal();
-
     } catch (error) {
         console.error('[WAL] Error processing WAL:', error);
     } finally {

@@ -58,7 +58,7 @@ async function processQueue() {
                 reject(err);
             } finally {
                 if (isCritical) {
-                    const hasPendingCritical = storageQueue.some((item) => item.isCritical);
+                    const hasPendingCritical = storageQueue.some(item => item.isCritical);
                     criticalOperationInProgress = hasPendingCritical;
                 }
             }

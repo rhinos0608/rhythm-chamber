@@ -25,7 +25,7 @@ export function getWalStats() {
         isProcessing: walState.isProcessing,
         isReplaying: walState.isReplaying,
         lastReplayTime: walState.lastReplayTime,
-        sequence: walState.sequence
+        sequence: walState.sequence,
     };
 
     for (const entry of walState.entries) {

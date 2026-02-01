@@ -26,8 +26,8 @@ import { SESSION } from '../../constants/session.js';
 // ==========================================
 
 // L2: Use shared constants instead of duplicated values
-const MAX_SAVED_MESSAGES = SESSION.MAX_SAVED_MESSAGES;  // Maximum messages saved per session
-const IN_MEMORY_MAX = MAX_SAVED_MESSAGES * 2;  // In-memory limit (2x for better UX)
+const MAX_SAVED_MESSAGES = SESSION.MAX_SAVED_MESSAGES; // Maximum messages saved per session
+const IN_MEMORY_MAX = MAX_SAVED_MESSAGES * 2; // In-memory limit (2x for better UX)
 
 // ==========================================
 // State
@@ -107,7 +107,7 @@ export function getSessionData() {
     const snapshot = {
         id: _sessionData.id,
         messages: deepCloneMessages(_sessionData.messages),
-        _version: _sessionData._version
+        _version: _sessionData._version,
     };
     // Freeze the snapshot to prevent any mutations
     return Object.freeze(snapshot);
@@ -122,7 +122,7 @@ export function setSessionData(data) {
     _sessionData = {
         id: data.id || null,
         messages: deepCloneMessages(data.messages),
-        _version: 0  // Reset version on direct set
+        _version: 0, // Reset version on direct set
     };
     // Also update current session ID for consistency
     currentSessionId = data.id || null;
@@ -158,9 +158,10 @@ export function syncSessionIdToAppState(sessionId) {
 export async function updateSessionData(options) {
     // Support both old API (updaterFn function) and new API (options object)
     const updaterFn = typeof options === 'function' ? options : options.updaterFn;
-    const expectedVersion = (typeof options === 'object' && options !== null && 'expectedVersion' in options)
-        ? options.expectedVersion
-        : undefined;
+    const expectedVersion =
+        typeof options === 'object' && options !== null && 'expectedVersion' in options
+            ? options.expectedVersion
+            : undefined;
 
     return _sessionDataMutex.runExclusive(async () => {
         const currentData = getSessionData();
@@ -170,7 +171,7 @@ export async function updateSessionData(options) {
         if (expectedVersion !== undefined && currentData._version !== expectedVersion) {
             console.warn(
                 `[SessionState] Version mismatch: expected ${expectedVersion}, got ${currentData._version}. ` +
-                `Update rejected to prevent lost data.`
+                    'Update rejected to prevent lost data.'
             );
             return { success: false, version: currentData._version };
         }
@@ -181,7 +182,7 @@ export async function updateSessionData(options) {
         _sessionData = {
             id: newData.id || null,
             messages: deepCloneMessages(newData.messages),
-            _version: newVersion
+            _version: newVersion,
         };
 
         // Session data is now only available via ES module exports
@@ -262,7 +263,7 @@ export async function addMessageToHistory(message) {
     DataVersion.tagMessage(message);
 
     // Use updateSessionData for mutex protection
-    await updateSessionData((currentData) => {
+    await updateSessionData(currentData => {
         // EDGE CASE FIX: Implement in-memory sliding window
         // Keep system messages and recent messages to prevent unbounded memory growth
         // Use a higher limit in memory than on disk (2x) for better UX
@@ -274,14 +275,18 @@ export async function addMessageToHistory(message) {
         let newMessages;
         if (nonSystemMessages.length >= IN_MEMORY_MAX - systemMessages.length) {
             // Drop oldest non-system message to make room
-            newMessages = [...systemMessages, ...nonSystemMessages.slice(-(IN_MEMORY_MAX - systemMessages.length - 1)), message];
+            newMessages = [
+                ...systemMessages,
+                ...nonSystemMessages.slice(-(IN_MEMORY_MAX - systemMessages.length - 1)),
+                message,
+            ];
         } else {
             newMessages = [...existingMessages, message];
         }
 
         return {
             id: currentData.id,
-            messages: newMessages
+            messages: newMessages,
         };
     });
 }
@@ -304,7 +309,7 @@ export async function addMessagesToHistory(messages) {
     messages.forEach(msg => DataVersion.tagMessage(msg));
 
     // Use updateSessionData for mutex protection - adds all messages in one transaction
-    await updateSessionData((currentData) => {
+    await updateSessionData(currentData => {
         // EDGE CASE FIX: Implement in-memory sliding window
         // Keep system messages and recent messages to prevent unbounded memory growth
         const existingMessages = currentData.messages || [];
@@ -312,7 +317,10 @@ export async function addMessagesToHistory(messages) {
         const nonSystemMessages = existingMessages.filter(m => m.role !== 'system');
 
         // Add all new messages at once
-        const newNonSystemMessages = [...nonSystemMessages, ...messages.filter(m => m.role !== 'system')];
+        const newNonSystemMessages = [
+            ...nonSystemMessages,
+            ...messages.filter(m => m.role !== 'system'),
+        ];
         const newSystemMessages = [...systemMessages, ...messages.filter(m => m.role === 'system')];
 
         // Truncate if needed - create new object (cannot mutate frozen currentData)
@@ -320,7 +328,7 @@ export async function addMessagesToHistory(messages) {
         if (newNonSystemMessages.length >= IN_MEMORY_MAX - newSystemMessages.length) {
             newMessages = [
                 ...newSystemMessages,
-                ...newNonSystemMessages.slice(-(IN_MEMORY_MAX - newSystemMessages.length))
+                ...newNonSystemMessages.slice(-(IN_MEMORY_MAX - newSystemMessages.length)),
             ];
         } else {
             newMessages = [...newSystemMessages, ...newNonSystemMessages];
@@ -328,7 +336,7 @@ export async function addMessagesToHistory(messages) {
 
         return {
             id: currentData.id,
-            messages: newMessages
+            messages: newMessages,
         };
     });
 }
@@ -342,16 +350,17 @@ export async function addMessagesToHistory(messages) {
  */
 export async function removeMessageFromHistory(index) {
     let success = false;
-    await updateSessionData((currentData) => {
+    await updateSessionData(currentData => {
         // TD-7: Comprehensive bounds checking
         // 1. Check messages array exists
         // 2. Check index is a valid number (not NaN, null, undefined)
         // 3. Check index is within array bounds [0, length)
         // Note: Number.isInteger() handles null, undefined, NaN, floats correctly
-        const isValidIndex = currentData.messages &&
-                             Number.isInteger(index) &&
-                             index >= 0 &&
-                             index < currentData.messages.length;
+        const isValidIndex =
+            currentData.messages &&
+            Number.isInteger(index) &&
+            index >= 0 &&
+            index < currentData.messages.length;
 
         if (isValidIndex) {
             // Create new array without the removed item (cannot mutate frozen currentData)
@@ -360,7 +369,7 @@ export async function removeMessageFromHistory(index) {
             success = true;
             return {
                 id: currentData.id,
-                messages: newMessages
+                messages: newMessages,
             };
         }
         return currentData;
@@ -375,12 +384,12 @@ export async function removeMessageFromHistory(index) {
  * @returns {Promise<void>}
  */
 export async function truncateHistory(length) {
-    await updateSessionData((currentData) => {
+    await updateSessionData(currentData => {
         // Create new object (cannot mutate frozen currentData)
         if (currentData.messages) {
             return {
                 id: currentData.id,
-                messages: currentData.messages.slice(0, length)
+                messages: currentData.messages.slice(0, length),
             };
         }
         return currentData;
@@ -394,11 +403,11 @@ export async function truncateHistory(length) {
  * @returns {Promise<void>}
  */
 export async function replaceHistory(messages) {
-    await updateSessionData((currentData) => {
+    await updateSessionData(currentData => {
         // Create new object (cannot mutate frozen currentData)
         return {
             id: currentData.id,
-            messages: [...messages]
+            messages: [...messages],
         };
     });
 }

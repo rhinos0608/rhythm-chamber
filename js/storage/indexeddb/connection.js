@@ -43,7 +43,7 @@ export async function initDatabase(options = {}) {
             // Emit event for UI notification
             EventBus.emit('storage:connection_blocked', {
                 reason: 'upgrade_blocked',
-                message: 'Database upgrade blocked by other tabs. Please close other tabs.'
+                message: 'Database upgrade blocked by other tabs. Please close other tabs.',
             });
             options.onBlocked?.();
         };
@@ -63,18 +63,18 @@ export async function initDatabase(options = {}) {
                 }
             };
 
-            indexedDBConnection.onerror = (event) => {
+            indexedDBConnection.onerror = event => {
                 console.error('[IndexedDB] Database error:', event.target.error);
                 EventBus.emit('storage:error', {
                     type: 'database_error',
-                    error: event.target.error?.message || 'Unknown database error'
+                    error: event.target.error?.message || 'Unknown database error',
                 });
             };
 
             resolve(indexedDBConnection);
         };
 
-        request.onupgradeneeded = (event) => {
+        request.onupgradeneeded = event => {
             const database = event.target.result;
             runMigrations(database, event.oldVersion, event.newVersion);
         };
@@ -142,7 +142,7 @@ export async function initDatabaseWithRetry(options = {}) {
             // Success - reset state
             connectionAttempts = 0;
             EventBus.emit('storage:connection_established', {
-                attempts: attempt
+                attempts: attempt,
             });
 
             return connection;
@@ -158,7 +158,8 @@ export async function initDatabaseWithRetry(options = {}) {
             if (attempt < maxAttempts) {
                 // Calculate exponential backoff delay
                 const delay = Math.min(
-                    CONNECTION_CONFIG.baseDelayMs * Math.pow(CONNECTION_CONFIG.backoffMultiplier, attempt - 1),
+                    CONNECTION_CONFIG.baseDelayMs *
+                        Math.pow(CONNECTION_CONFIG.backoffMultiplier, attempt - 1),
                     CONNECTION_CONFIG.maxDelayMs
                 );
 
@@ -166,7 +167,7 @@ export async function initDatabaseWithRetry(options = {}) {
                     attempt,
                     maxAttempts,
                     nextRetryMs: delay,
-                    error: error.message
+                    error: error.message,
                 });
 
                 await new Promise(resolve => setTimeout(resolve, delay));
@@ -186,11 +187,13 @@ export async function initDatabaseWithRetry(options = {}) {
     EventBus.emit('storage:connection_failed', {
         attempts: connectionAttempts,
         error: lastError?.message || 'Unknown error',
-        recoverable: false
+        recoverable: false,
     });
 
     console.error(`[IndexedDB] All ${maxAttempts} connection attempts failed`);
-    throw new Error(`Failed to connect to IndexedDB after ${maxAttempts} attempts: ${lastError?.message}`);
+    throw new Error(
+        `Failed to connect to IndexedDB after ${maxAttempts} attempts: ${lastError?.message}`
+    );
 }
 
 /**
@@ -210,7 +213,7 @@ async function activateFallback() {
     // Emit fallback activation event
     EventBus.emit('storage:fallback_activated', {
         mode: FallbackBackend.getMode(),
-        stats: FallbackBackend.getStats()
+        stats: FallbackBackend.getStats(),
     });
 
     return { fallback: true, backend: FallbackBackend };
@@ -236,7 +239,7 @@ export function getStorageBackend() {
         return {
             type: 'fallback',
             fallbackMode: mode,
-            stats: stats
+            stats: stats,
         };
     }
     return { type: 'indexeddb' };
@@ -261,7 +264,7 @@ export function getConnectionStatus() {
     return {
         isConnected: indexedDBConnection !== null,
         isFailed: isConnectionFailed,
-        attempts: connectionAttempts
+        attempts: connectionAttempts,
     };
 }
 

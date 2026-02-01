@@ -48,7 +48,7 @@ export function isKeySessionActive() {
 export function getSharedState() {
     return {
         debugMode,
-        isSecureContext: isKeySessionActive()
+        isSecureContext: isKeySessionActive(),
     };
 }
 

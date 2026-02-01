@@ -82,7 +82,7 @@ export {
     logRetrySummary,
     createRetryLogger,
     retryStatistics,
-    RetryManager as default
+    RetryManager as default,
 } from './retry-manager/index.js';
 
 console.log('[RetryManager] Unified retry utility loaded (modular architecture)');

@@ -38,7 +38,7 @@ export const PatternWorkerPool = {
      * @param {Object} options - Configuration options
      * @returns {Promise<void>}
      */
-    init: (options) => Internal.initializePool(options),
+    init: options => Internal.initializePool(options),
 
     /**
      * Detect all patterns using parallel workers
@@ -66,15 +66,14 @@ export const PatternWorkerPool = {
      * @param {number} newWorkerCount - New worker count
      * @returns {number} New worker count
      */
-    resize: (newWorkerCount) => Internal.resizePool(newWorkerCount),
+    resize: newWorkerCount => Internal.resizePool(newWorkerCount),
 
     /**
      * Get speedup factor
      * @param {number} activeWorkers - Number of active workers
      * @returns {number} Speedup factor
      */
-    getSpeedupFactor: (activeWorkers) =>
-        PoolManagement.getSpeedupFactor(activeWorkers),
+    getSpeedupFactor: activeWorkers => PoolManagement.getSpeedupFactor(activeWorkers),
 
     /**
      * Check if paused due to backpressure
@@ -89,22 +88,19 @@ export const PatternWorkerPool = {
      * Register callback for backpressure events
      * @param {Function} callback - Callback function
      */
-    onBackpressure: (callback) =>
-        TaskDistribution.onBackpressure(callback),
+    onBackpressure: callback => TaskDistribution.onBackpressure(callback),
 
     /**
      * Register callback for result consumption
      * @param {Function} callback - Callback function
      */
-    onResultConsumed: (callback) =>
-        TaskDistribution.onResultConsumed(callback),
+    onResultConsumed: callback => TaskDistribution.onResultConsumed(callback),
 
     /**
      * Get memory configuration
      * @returns {Object} Memory config
      */
-    getMemoryConfig: () =>
-        PoolManagement.getMemoryConfig(Internal.getPoolStatus().workerCount),
+    getMemoryConfig: () => PoolManagement.getMemoryConfig(Internal.getPoolStatus().workerCount),
 
     /**
      * Partition data for workers
@@ -112,8 +108,7 @@ export const PatternWorkerPool = {
      * @param {number} numPartitions - Number of partitions
      * @returns {Array} Partitioned data
      */
-    partitionData: (data, numPartitions) =>
-        PoolManagement.partitionData(data, numPartitions),
+    partitionData: (data, numPartitions) => PoolManagement.partitionData(data, numPartitions),
 
     /**
      * Pattern groups for worker distribution
@@ -123,7 +118,7 @@ export const PatternWorkerPool = {
     /**
      * Whether SharedArrayBuffer is available
      */
-    SHARED_MEMORY_AVAILABLE: PoolManagement.SHARED_MEMORY_AVAILABLE
+    SHARED_MEMORY_AVAILABLE: PoolManagement.SHARED_MEMORY_AVAILABLE,
 };
 
 // ==========================================
@@ -140,7 +135,7 @@ export {
     stopHeartbeat,
     sendHeartbeat,
     setupHeartbeatChannel,
-    registerUnloadHandler
+    registerUnloadHandler,
 } from './pattern-worker-pool/worker-lifecycle.js';
 
 // Pool Management exports
@@ -151,7 +146,7 @@ export {
     getStatus,
     getSpeedupFactor,
     getMemoryConfig,
-    resizePool
+    resizePool,
 } from './pattern-worker-pool/pool-management.js';
 
 // Task Distribution exports
@@ -166,7 +161,7 @@ export {
     onBackpressure,
     onResultConsumed,
     cleanupPendingRequests,
-    initializeTaskDistribution
+    initializeTaskDistribution,
 } from './pattern-worker-pool/task-distribution.js';
 
 // ==========================================
@@ -174,7 +169,11 @@ export {
 // ==========================================
 
 // Pool Management constants
-export { DEFAULT_WORKER_COUNT, SHARED_MEMORY_AVAILABLE, MEMORY_CONFIG } from './pattern-worker-pool/pool-management.js';
+export {
+    DEFAULT_WORKER_COUNT,
+    SHARED_MEMORY_AVAILABLE,
+    MEMORY_CONFIG,
+} from './pattern-worker-pool/pool-management.js';
 
 // Task Distribution constants
 export { PATTERN_GROUPS } from './pattern-worker-pool/task-distribution.js';
@@ -182,7 +181,7 @@ export { PATTERN_GROUPS } from './pattern-worker-pool/task-distribution.js';
 // Task Distribution threshold constants (with CONST suffix)
 export {
     BACKPRESSURE_THRESHOLD_CONST as BACKPRESSURE_THRESHOLD,
-    BACKPRESSURE_RESUME_THRESHOLD_CONST as BACKPRESSURE_RESUME_THRESHOLD
+    BACKPRESSURE_RESUME_THRESHOLD_CONST as BACKPRESSURE_RESUME_THRESHOLD,
 } from './pattern-worker-pool/task-distribution.js';
 
 // ==========================================

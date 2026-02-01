@@ -73,7 +73,8 @@ function showToast(message, type = 'info', duration = 3000) {
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     toast.textContent = String(message);
-    toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 14px;border-radius:8px;z-index:99999;max-width:90vw;';
+    toast.style.cssText =
+        'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 14px;border-radius:8px;z-index:99999;max-width:90vw;';
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), duration);
 }
@@ -128,12 +129,37 @@ function registerContainerServices() {
  * Each controller declares its dependencies for better clarity
  */
 const CONTROLLER_DEPENDENCIES = Object.freeze({
-    FileUploadController: ['Storage', 'AppState', 'OperationLock', 'Patterns', 'Personality', 'ViewController', 'showToast'],
-    SpotifyController: ['Storage', 'AppState', 'Spotify', 'Patterns', 'Personality', 'ViewController', 'showToast'],
+    FileUploadController: [
+        'Storage',
+        'AppState',
+        'OperationLock',
+        'Patterns',
+        'Personality',
+        'ViewController',
+        'showToast',
+    ],
+    SpotifyController: [
+        'Storage',
+        'AppState',
+        'Spotify',
+        'Patterns',
+        'Personality',
+        'ViewController',
+        'showToast',
+    ],
     DemoController: ['AppState', 'DemoData', 'ViewController', 'Patterns', 'showToast'],
-    ResetController: ['Storage', 'AppState', 'Spotify', 'Chat', 'OperationLock', 'ViewController', 'showToast', 'FileUploadController'],
+    ResetController: [
+        'Storage',
+        'AppState',
+        'Spotify',
+        'Chat',
+        'OperationLock',
+        'ViewController',
+        'showToast',
+        'FileUploadController',
+    ],
     SidebarController: ['AppState', 'Storage', 'ViewController', 'showToast'],
-    ChatUIController: ['AppState', 'Storage', 'ViewController', 'showToast']
+    ChatUIController: ['AppState', 'Storage', 'ViewController', 'showToast'],
 });
 
 function initializeControllers() {
@@ -207,7 +233,7 @@ function bindAuthorityUI() {
     if (typeof document === 'undefined') return;
 
     // Listen for authority changes via EventBus instead of direct callback
-    EventBus.on('tab:authority_changed', (data) => {
+    EventBus.on('tab:authority_changed', data => {
         const isPrimary = data.isPrimary;
         const level = data.level;
 
@@ -316,7 +342,7 @@ function bindFileUpload() {
     // Set up file input change listener
     const fileInput = document.getElementById('file-input');
     if (fileInput) {
-        fileInput.addEventListener('change', async (event) => {
+        fileInput.addEventListener('change', async event => {
             const file = event.target.files?.[0];
             if (file) {
                 await FileUploadController.handleFileUpload(file);
@@ -337,7 +363,7 @@ function bindFileUpload() {
     // Set up drag-and-drop on upload zone
     const uploadZone = document.getElementById('upload-zone');
     if (uploadZone) {
-        uploadZone.addEventListener('dragover', (e) => {
+        uploadZone.addEventListener('dragover', e => {
             e.preventDefault();
             uploadZone.classList.add('drag-over');
         });
@@ -346,7 +372,7 @@ function bindFileUpload() {
             uploadZone.classList.remove('drag-over');
         });
 
-        uploadZone.addEventListener('drop', async (e) => {
+        uploadZone.addEventListener('drop', async e => {
             e.preventDefault();
             uploadZone.classList.remove('drag-over');
             const file = e.dataTransfer?.files?.[0];
@@ -413,7 +439,7 @@ function bindFileUpload() {
         };
 
         chatSend.addEventListener('click', sendChatMessage);
-        chatInput.addEventListener('keydown', (e) => {
+        chatInput.addEventListener('keydown', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendChatMessage();
@@ -426,7 +452,7 @@ function bindFileUpload() {
     // FIX: Suggestion chips had data-question attributes but no click handlers
     const chatSuggestions = document.getElementById('chat-suggestions');
     if (chatSuggestions) {
-        chatSuggestions.addEventListener('click', (e) => {
+        chatSuggestions.addEventListener('click', e => {
             const chip = e.target.closest('.suggestion-chip');
             if (!chip) return;
 
@@ -492,7 +518,7 @@ function bindFileUpload() {
     const resetConfirmBtn = document.getElementById('reset-confirm-btn');
     const resetConfirmInput = document.getElementById('reset-confirm-input');
     if (resetConfirmBtn && resetConfirmInput) {
-        resetConfirmInput.addEventListener('input', (e) => {
+        resetConfirmInput.addEventListener('input', e => {
             resetConfirmBtn.disabled = e.target.value !== 'DELETE';
         });
 
@@ -511,7 +537,9 @@ function bindFileUpload() {
     }
 
     // Set up cancel buttons for modals
-    const cancelBtns = document.querySelectorAll('[data-action="hide-reset-modal"], [data-action="hide-delete-modal"], [data-action="close-multi-tab-modal"]');
+    const cancelBtns = document.querySelectorAll(
+        '[data-action="hide-reset-modal"], [data-action="hide-delete-modal"], [data-action="close-multi-tab-modal"]'
+    );
     cancelBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const modal = btn.closest('.modal-overlay');
@@ -532,7 +560,6 @@ function bindFileUpload() {
         });
         console.log('[App] Delete chat confirm listener bound');
     }
-
 
     // Set up privacy dashboard button
     const privacyDashboardBtn = document.getElementById('privacy-dashboard-btn');
@@ -595,11 +622,10 @@ function bindFileUpload() {
     });
     console.log('[App] Tools modal close listeners bound');
 
-
     // Set up provider selection change handler
     const providerSelect = document.getElementById('setting-provider');
     if (providerSelect) {
-        providerSelect.addEventListener('change', (e) => {
+        providerSelect.addEventListener('change', e => {
             // Hide all provider-specific fields
             document.querySelectorAll('.provider-fields').forEach(el => {
                 el.style.display = 'none';
@@ -618,7 +644,7 @@ function bindFileUpload() {
     const temperatureValue = document.getElementById('temperature-value');
     const temperatureLabel = document.getElementById('temperature-label');
     if (temperatureSlider && temperatureValue && temperatureLabel) {
-        temperatureSlider.addEventListener('input', (e) => {
+        temperatureSlider.addEventListener('input', e => {
             const val = parseFloat(e.target.value);
             temperatureValue.textContent = val.toFixed(1);
 
@@ -640,8 +666,10 @@ function bindFileUpload() {
     const saveSettingsBtn = document.querySelector('[data-action="save-settings"]');
     if (saveSettingsBtn) {
         saveSettingsBtn.addEventListener('click', async () => {
+            /** @type {import('../settings.js').Settings|undefined} */
+            let Settings;
             try {
-                const { Settings } = await import('../settings.js');
+                ({ Settings } = await import('../settings.js'));
                 const settings = await Settings.getSettingsAsync();
 
                 // Get selected provider
@@ -687,7 +715,9 @@ function bindFileUpload() {
 
                 if (selectedProvider === 'openai-compatible') {
                     const openaiKey = document.getElementById('setting-openai-compatible-apikey');
-                    const openaiEndpoint = document.getElementById('setting-openai-compatible-endpoint');
+                    const openaiEndpoint = document.getElementById(
+                        'setting-openai-compatible-endpoint'
+                    );
                     const openaiModel = document.getElementById('setting-openai-compatible-model');
                     if (!openaiKey?.value?.trim()) {
                         Settings.showToast('API key is required', 'error');
@@ -770,157 +800,165 @@ function bindFileUpload() {
     // Populate settings modal when opened
     const settingsBtn = document.getElementById('settings-btn');
     if (settingsBtn) {
-        settingsBtn.addEventListener('click', async () => {
-            const { Settings } = await import('../settings.js');
-            const settings = await Settings.getSettingsAsync();
+        settingsBtn.addEventListener(
+            'click',
+            async () => {
+                const { Settings } = await import('../settings.js');
+                const settings = await Settings.getSettingsAsync();
 
-            // Populate provider selection
-            const providerSelect = document.getElementById('setting-provider');
-            if (providerSelect && settings?.llm?.provider) {
-                providerSelect.value = settings.llm.provider;
-            }
-
-            // Populate OpenRouter settings
-            const openrouterKey = document.getElementById('setting-openrouter-apikey');
-            const openrouterModelSelect = document.getElementById('setting-openrouter-model');
-            if (openrouterKey && settings?.llm?.openrouterApiKey) {
-                openrouterKey.value = settings.llm.openrouterApiKey;
-            }
-
-            // Populate OpenRouter model dropdown
-            if (openrouterModelSelect && Settings.AVAILABLE_MODELS?.openrouter) {
-                openrouterModelSelect.innerHTML = Settings.AVAILABLE_MODELS.openrouter.map(model =>
-                    `<option value="${model.id}">${model.name}</option>`
-                ).join('');
-
-                if (settings?.llm?.openrouterModel) {
-                    openrouterModelSelect.value = settings.llm.openrouterModel;
-                } else {
-                    openrouterModelSelect.value = 'xiaomi/mimo-v2-flash:free';
+                // Populate provider selection
+                const providerSelect = document.getElementById('setting-provider');
+                if (providerSelect && settings?.llm?.provider) {
+                    providerSelect.value = settings.llm.provider;
                 }
-            }
 
-            // Populate Gemini settings
-            const geminiKey = document.getElementById('setting-gemini-apikey');
-            const geminiModelSelect = document.getElementById('setting-gemini-model');
-            if (geminiKey && settings?.llm?.geminiApiKey) {
-                geminiKey.value = settings.llm.geminiApiKey;
-            }
-
-            // Populate Gemini model dropdown
-            if (geminiModelSelect && Settings.AVAILABLE_MODELS?.gemini) {
-                geminiModelSelect.innerHTML = Settings.AVAILABLE_MODELS.gemini.map(model =>
-                    `<option value="${model.id}">${model.name}</option>`
-                ).join('');
-
-                if (settings?.llm?.geminiModel) {
-                    geminiModelSelect.value = settings.llm.geminiModel;
-                } else {
-                    geminiModelSelect.value = 'gemini-2.5-flash';
+                // Populate OpenRouter settings
+                const openrouterKey = document.getElementById('setting-openrouter-apikey');
+                const openrouterModelSelect = document.getElementById('setting-openrouter-model');
+                if (openrouterKey && settings?.llm?.openrouterApiKey) {
+                    openrouterKey.value = settings.llm.openrouterApiKey;
                 }
-            }
 
-            // Populate OpenAI Compatible settings
-            const openaiKey = document.getElementById('setting-openai-compatible-apikey');
-            const openaiEndpoint = document.getElementById('setting-openai-compatible-endpoint');
-            const openaiModelSelect = document.getElementById('setting-openai-compatible-model');
-            if (openaiKey && settings?.llm?.openaiCompatibleApiKey) {
-                openaiKey.value = settings.llm.openaiCompatibleApiKey;
-            }
-            if (openaiEndpoint && settings?.llm?.openaiCompatibleEndpoint) {
-                openaiEndpoint.value = settings.llm.openaiCompatibleEndpoint;
-            } else if (openaiEndpoint) {
-                openaiEndpoint.value = 'https://api.openai.com/v1';
-            }
+                // Populate OpenRouter model dropdown
+                if (openrouterModelSelect && Settings.AVAILABLE_MODELS?.openrouter) {
+                    openrouterModelSelect.innerHTML = Settings.AVAILABLE_MODELS.openrouter
+                        .map(model => `<option value="${model.id}">${model.name}</option>`)
+                        .join('');
 
-            // Populate OpenAI-compatible model dropdown
-            if (openaiModelSelect && Settings.AVAILABLE_MODELS?.['openai-compatible']) {
-                openaiModelSelect.innerHTML = Settings.AVAILABLE_MODELS['openai-compatible'].map(model =>
-                    `<option value="${model.id}">${model.name}</option>`
-                ).join('');
-
-                if (settings?.llm?.openaiCompatibleModel) {
-                    openaiModelSelect.value = settings.llm.openaiCompatibleModel;
-                } else {
-                    openaiModelSelect.value = 'gpt-4o-mini';
-                }
-            }
-
-            // Populate Ollama settings
-            const ollamaEndpoint = document.getElementById('setting-ollama-endpoint');
-            if (ollamaEndpoint && settings?.llm?.ollamaEndpoint) {
-                ollamaEndpoint.value = settings.llm.ollamaEndpoint;
-            } else if (ollamaEndpoint) {
-                ollamaEndpoint.value = 'http://localhost:11434';
-            }
-            const ollamaModel = document.getElementById('setting-ollama-model');
-            if (ollamaModel && settings?.llm?.ollamaModel) {
-                ollamaModel.value = settings.llm.ollamaModel;
-            } else if (ollamaModel) {
-                ollamaModel.value = 'llama3.2';
-            }
-
-            // Populate LM Studio settings
-            const lmstudioEndpoint = document.getElementById('setting-lmstudio-endpoint');
-            if (lmstudioEndpoint && settings?.llm?.lmstudioEndpoint) {
-                lmstudioEndpoint.value = settings.llm.lmstudioEndpoint;
-            } else if (lmstudioEndpoint) {
-                lmstudioEndpoint.value = 'http://localhost:1234/v1';
-            }
-            const lmstudioModel = document.getElementById('setting-lmstudio-model');
-            if (lmstudioModel && settings?.llm?.lmstudioModel) {
-                lmstudioModel.value = settings.llm.lmstudioModel;
-            } else if (lmstudioModel) {
-                lmstudioModel.value = 'local-model';
-            }
-
-            // Populate max tokens
-            const maxTokensInput = document.getElementById('setting-max-tokens');
-            if (maxTokensInput && settings?.llm?.maxTokens) {
-                maxTokensInput.value = settings.llm.maxTokens;
-            } else if (maxTokensInput) {
-                maxTokensInput.value = 4500;
-            }
-
-            // Populate temperature slider
-            const temperatureInput = document.getElementById('setting-temperature');
-            const temperatureValue = document.getElementById('temperature-value');
-            const temperatureLabel = document.getElementById('temperature-label');
-            if (temperatureInput && settings?.llm?.temperature !== undefined) {
-                temperatureInput.value = settings.llm.temperature;
-                // Update display
-                if (temperatureValue && temperatureLabel) {
-                    const val = settings.llm.temperature;
-                    temperatureValue.textContent = val.toFixed(1);
-                    if (val < 0.4) {
-                        temperatureLabel.textContent = 'Focused';
-                    } else if (val < 1.0) {
-                        temperatureLabel.textContent = 'Balanced';
-                    } else if (val < 1.6) {
-                        temperatureLabel.textContent = 'Creative';
+                    if (settings?.llm?.openrouterModel) {
+                        openrouterModelSelect.value = settings.llm.openrouterModel;
                     } else {
-                        temperatureLabel.textContent = 'Very Creative';
+                        openrouterModelSelect.value = 'xiaomi/mimo-v2-flash:free';
                     }
                 }
-            } else if (temperatureInput) {
-                temperatureInput.value = 0.7;
-                if (temperatureValue && temperatureLabel) {
-                    temperatureValue.textContent = '0.7';
-                    temperatureLabel.textContent = 'Balanced';
+
+                // Populate Gemini settings
+                const geminiKey = document.getElementById('setting-gemini-apikey');
+                const geminiModelSelect = document.getElementById('setting-gemini-model');
+                if (geminiKey && settings?.llm?.geminiApiKey) {
+                    geminiKey.value = settings.llm.geminiApiKey;
                 }
-            }
 
-            // Populate Spotify client ID
-            const spotifyClientId = document.getElementById('setting-spotify-clientid');
-            if (spotifyClientId && settings?.spotify?.clientId) {
-                spotifyClientId.value = settings.spotify.clientId;
-            }
+                // Populate Gemini model dropdown
+                if (geminiModelSelect && Settings.AVAILABLE_MODELS?.gemini) {
+                    geminiModelSelect.innerHTML = Settings.AVAILABLE_MODELS.gemini
+                        .map(model => `<option value="${model.id}">${model.name}</option>`)
+                        .join('');
 
-            // Trigger provider change to show correct fields
-            if (providerSelect) {
-                providerSelect.dispatchEvent(new Event('change'));
-            }
-        }, { once: false }); // Allow multiple opens
+                    if (settings?.llm?.geminiModel) {
+                        geminiModelSelect.value = settings.llm.geminiModel;
+                    } else {
+                        geminiModelSelect.value = 'gemini-2.5-flash';
+                    }
+                }
+
+                // Populate OpenAI Compatible settings
+                const openaiKey = document.getElementById('setting-openai-compatible-apikey');
+                const openaiEndpoint = document.getElementById(
+                    'setting-openai-compatible-endpoint'
+                );
+                const openaiModelSelect = document.getElementById(
+                    'setting-openai-compatible-model'
+                );
+                if (openaiKey && settings?.llm?.openaiCompatibleApiKey) {
+                    openaiKey.value = settings.llm.openaiCompatibleApiKey;
+                }
+                if (openaiEndpoint && settings?.llm?.openaiCompatibleEndpoint) {
+                    openaiEndpoint.value = settings.llm.openaiCompatibleEndpoint;
+                } else if (openaiEndpoint) {
+                    openaiEndpoint.value = 'https://api.openai.com/v1';
+                }
+
+                // Populate OpenAI-compatible model dropdown
+                if (openaiModelSelect && Settings.AVAILABLE_MODELS?.['openai-compatible']) {
+                    openaiModelSelect.innerHTML = Settings.AVAILABLE_MODELS['openai-compatible']
+                        .map(model => `<option value="${model.id}">${model.name}</option>`)
+                        .join('');
+
+                    if (settings?.llm?.openaiCompatibleModel) {
+                        openaiModelSelect.value = settings.llm.openaiCompatibleModel;
+                    } else {
+                        openaiModelSelect.value = 'gpt-4o-mini';
+                    }
+                }
+
+                // Populate Ollama settings
+                const ollamaEndpoint = document.getElementById('setting-ollama-endpoint');
+                if (ollamaEndpoint && settings?.llm?.ollamaEndpoint) {
+                    ollamaEndpoint.value = settings.llm.ollamaEndpoint;
+                } else if (ollamaEndpoint) {
+                    ollamaEndpoint.value = 'http://localhost:11434';
+                }
+                const ollamaModel = document.getElementById('setting-ollama-model');
+                if (ollamaModel && settings?.llm?.ollamaModel) {
+                    ollamaModel.value = settings.llm.ollamaModel;
+                } else if (ollamaModel) {
+                    ollamaModel.value = 'llama3.2';
+                }
+
+                // Populate LM Studio settings
+                const lmstudioEndpoint = document.getElementById('setting-lmstudio-endpoint');
+                if (lmstudioEndpoint && settings?.llm?.lmstudioEndpoint) {
+                    lmstudioEndpoint.value = settings.llm.lmstudioEndpoint;
+                } else if (lmstudioEndpoint) {
+                    lmstudioEndpoint.value = 'http://localhost:1234/v1';
+                }
+                const lmstudioModel = document.getElementById('setting-lmstudio-model');
+                if (lmstudioModel && settings?.llm?.lmstudioModel) {
+                    lmstudioModel.value = settings.llm.lmstudioModel;
+                } else if (lmstudioModel) {
+                    lmstudioModel.value = 'local-model';
+                }
+
+                // Populate max tokens
+                const maxTokensInput = document.getElementById('setting-max-tokens');
+                if (maxTokensInput && settings?.llm?.maxTokens) {
+                    maxTokensInput.value = settings.llm.maxTokens;
+                } else if (maxTokensInput) {
+                    maxTokensInput.value = 4500;
+                }
+
+                // Populate temperature slider
+                const temperatureInput = document.getElementById('setting-temperature');
+                const temperatureValue = document.getElementById('temperature-value');
+                const temperatureLabel = document.getElementById('temperature-label');
+                if (temperatureInput && settings?.llm?.temperature !== undefined) {
+                    temperatureInput.value = settings.llm.temperature;
+                    // Update display
+                    if (temperatureValue && temperatureLabel) {
+                        const val = settings.llm.temperature;
+                        temperatureValue.textContent = val.toFixed(1);
+                        if (val < 0.4) {
+                            temperatureLabel.textContent = 'Focused';
+                        } else if (val < 1.0) {
+                            temperatureLabel.textContent = 'Balanced';
+                        } else if (val < 1.6) {
+                            temperatureLabel.textContent = 'Creative';
+                        } else {
+                            temperatureLabel.textContent = 'Very Creative';
+                        }
+                    }
+                } else if (temperatureInput) {
+                    temperatureInput.value = 0.7;
+                    if (temperatureValue && temperatureLabel) {
+                        temperatureValue.textContent = '0.7';
+                        temperatureLabel.textContent = 'Balanced';
+                    }
+                }
+
+                // Populate Spotify client ID
+                const spotifyClientId = document.getElementById('setting-spotify-clientid');
+                if (spotifyClientId && settings?.spotify?.clientId) {
+                    spotifyClientId.value = settings.spotify.clientId;
+                }
+
+                // Trigger provider change to show correct fields
+                if (providerSelect) {
+                    providerSelect.dispatchEvent(new Event('change'));
+                }
+            },
+            { once: false }
+        ); // Allow multiple opens
     }
 }
 
@@ -933,7 +971,11 @@ async function validateExistingLicense() {
         const result = await LemonSqueezyService.validateLicense(license.licenseKey);
         if (!result.valid && result.error === 'EXPIRED') {
             localStorage.removeItem('rhythm_chamber_license');
-            showToast('Your Premium license has expired. Please renew to continue using Premium features.', 'warning', 6000);
+            showToast(
+                'Your Premium license has expired. Please renew to continue using Premium features.',
+                'warning',
+                6000
+            );
         }
     } catch (e) {
         void e;
@@ -993,7 +1035,12 @@ async function restoreViewState() {
         const chunks = await Storage.getChunks?.();
         const patterns = await Storage.getPatterns?.();
 
-        console.log('[App] Loaded persisted data - streams:', streams?.length || 0, 'patterns:', !!patterns);
+        console.log(
+            '[App] Loaded persisted data - streams:',
+            streams?.length || 0,
+            'patterns:',
+            !!patterns
+        );
 
         // Update AppState with the persisted personality AND data
         // Include ALL fields needed by ViewController.showReveal()
@@ -1009,25 +1056,25 @@ async function restoreViewState() {
                 score: personality.score,
                 confidence: personality.confidence,
                 secondaryType: personality.secondaryType,
-                breakdown: personality.breakdown
+                breakdown: personality.breakdown,
             };
 
             // Update data domain with ALL persisted data (personality, streams, chunks, patterns)
             // If patterns storage is not available, reconstruct minimal patterns from personality.summary
             // (personality.summary contains the patterns summary that was embedded during processing)
-            const restoredPatterns = patterns || (personality.summary ? { summary: personality.summary } : null);
+            const restoredPatterns =
+                patterns || (personality.summary ? { summary: personality.summary } : null);
 
             AppState.update('data', {
                 personality: personalityData,
                 streams: streams || null,
                 chunks: chunks || null,
-                patterns: restoredPatterns
+                patterns: restoredPatterns,
             });
             AppState.update('view', { current: 'reveal' });
 
             console.log('[App] AppState updated with personality and data');
         }
-
 
         // Wait for next tick to ensure AppState updates propagate
         await new Promise(resolve => queueMicrotask(resolve));
@@ -1048,7 +1095,11 @@ async function restoreViewState() {
 async function init() {
     const secure = Crypto.checkSecureContext?.();
     if (secure === false) {
-        showToast('Running in limited mode (insecure context). Use HTTPS or localhost.', 'warning', 6000);
+        showToast(
+            'Running in limited mode (insecure context). Use HTTPS or localhost.',
+            'warning',
+            6000
+        );
     }
 
     await AppState.init();
@@ -1090,7 +1141,7 @@ async function init() {
             DataQuery,
             TokenCounter,
             Functions,
-            RAG
+            RAG,
         });
         console.log('[App] MessageOperations initialized with RAG');
     } catch (e) {
@@ -1099,7 +1150,7 @@ async function init() {
             DataQuery,
             TokenCounter,
             Functions,
-            RAG: null
+            RAG: null,
         });
     }
 
@@ -1130,7 +1181,7 @@ async function init() {
 
     await validateExistingLicense();
 
-    window.addEventListener('unhandledrejection', (event) => {
+    window.addEventListener('unhandledrejection', event => {
         showToast(`Error: ${event.reason?.message || String(event.reason)}`, 'error', 5000);
     });
 }

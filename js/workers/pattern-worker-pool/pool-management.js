@@ -57,10 +57,12 @@ const SHARED_MEMORY_AVAILABLE = isSharedArrayBufferAvailable();
 const MEMORY_CONFIG = {
     useSharedMemory: SHARED_MEMORY_AVAILABLE,
     partitionData: !SHARED_MEMORY_AVAILABLE, // Fallback: partition instead of duplicate
-    logMemoryUsage: true
+    logMemoryUsage: true,
 };
 
-console.log(`[PoolManagement] Memory mode: ${SHARED_MEMORY_AVAILABLE ? 'SharedArrayBuffer' : 'Partitioned'}`);
+console.log(
+    `[PoolManagement] Memory mode: ${SHARED_MEMORY_AVAILABLE ? 'SharedArrayBuffer' : 'Partitioned'}`
+);
 
 // ==========================================
 // Public API
@@ -85,17 +87,22 @@ export function calculateOptimalWorkerCount(options = {}) {
 
     if (deviceMemory <= 2) {
         memoryAdjustedMax = Math.min(computedMax, 2); // Low memory: max 2 workers
-        console.log(`[PoolManagement] Low memory device (${deviceMemory}GB), limiting to ${memoryAdjustedMax} workers`);
+        console.log(
+            `[PoolManagement] Low memory device (${deviceMemory}GB), limiting to ${memoryAdjustedMax} workers`
+        );
     } else if (deviceMemory <= 4) {
         memoryAdjustedMax = Math.min(computedMax, 3); // Medium memory: max 3 workers
     }
 
-    const requestedCount = (typeof options.workerCount === 'number' && options.workerCount > 0)
-        ? options.workerCount
-        : null;
+    const requestedCount =
+        typeof options.workerCount === 'number' && options.workerCount > 0
+            ? options.workerCount
+            : null;
     const workerCount = requestedCount ?? Math.min(DEFAULT_WORKER_COUNT, memoryAdjustedMax);
 
-    console.log(`[PoolManagement] Optimal worker count: ${workerCount} (${hardwareConcurrency} cores, ${deviceMemory}GB RAM)`);
+    console.log(
+        `[PoolManagement] Optimal worker count: ${workerCount} (${hardwareConcurrency} cores, ${deviceMemory}GB RAM)`
+    );
 
     return workerCount;
 }
@@ -125,7 +132,9 @@ export function partitionData(data, numPartitions) {
     if (MEMORY_CONFIG.logMemoryUsage) {
         const originalSize = JSON.stringify(data).length;
         const partitionedSize = partitions.reduce((sum, p) => sum + JSON.stringify(p).length, 0);
-        console.log(`[PoolManagement] Memory: ${(originalSize / 1024).toFixed(1)}KB original → ${(partitionedSize / 1024).toFixed(1)}KB partitioned (${numPartitions} partitions)`);
+        console.log(
+            `[PoolManagement] Memory: ${(originalSize / 1024).toFixed(1)}KB original → ${(partitionedSize / 1024).toFixed(1)}KB partitioned (${numPartitions} partitions)`
+        );
     }
 
     return partitions;
@@ -148,7 +157,7 @@ export function getStatus(state) {
         // Backpressure status
         pendingResultCount: state.pendingResultCount || 0,
         paused: state.paused || false,
-        backpressureThreshold: state.backpressureThreshold || 50
+        backpressureThreshold: state.backpressureThreshold || 50,
     };
 }
 
@@ -177,10 +186,11 @@ export function getMemoryConfig(workerCount) {
         useSharedMemory: MEMORY_CONFIG.useSharedMemory,
         partitionData: MEMORY_CONFIG.partitionData,
         workerCount,
-        crossOriginIsolated: typeof crossOriginIsolated !== 'undefined' ? crossOriginIsolated : 'unknown',
+        crossOriginIsolated:
+            typeof crossOriginIsolated !== 'undefined' ? crossOriginIsolated : 'unknown',
         recommendation: SHARED_MEMORY_AVAILABLE
             ? 'SharedArrayBuffer enabled - optimal memory usage'
-            : 'Add COOP/COEP headers for SharedArrayBuffer: Cross-Origin-Opener-Policy: same-origin, Cross-Origin-Embedder-Policy: require-corp'
+            : 'Add COOP/COEP headers for SharedArrayBuffer: Cross-Origin-Opener-Policy: same-origin, Cross-Origin-Embedder-Policy: require-corp',
     };
 }
 
@@ -227,8 +237,4 @@ export function resizePool(workers, targetCount, createWorkerFn, terminateWorker
 // Exports
 // ==========================================
 
-export {
-    DEFAULT_WORKER_COUNT,
-    SHARED_MEMORY_AVAILABLE,
-    MEMORY_CONFIG
-};
+export { DEFAULT_WORKER_COUNT, SHARED_MEMORY_AVAILABLE, MEMORY_CONFIG };

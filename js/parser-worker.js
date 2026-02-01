@@ -12,7 +12,11 @@ function ensureJsZipReady() {
         jszipReadyPromise = new Promise((resolve, reject) => {
             try {
                 if (typeof self.JSZip === 'undefined') {
-                    importScripts(JSZIP_LOCAL_PATH);
+                    if (typeof self.importScripts === 'function') {
+                        self.importScripts(JSZIP_LOCAL_PATH);
+                    } else {
+                        throw new Error('importScripts is not available in this environment.');
+                    }
                 }
 
                 if (typeof self.JSZip === 'undefined') {
@@ -33,12 +37,12 @@ function ensureJsZipReady() {
 // HNW Fix: Tight validation to prevent silent data corruption
 // ==========================================
 
-const MAX_FILE_SIZE_MB = 500;          // 500MB limit
-const MAX_STREAMS = 1_000_000;         // 1M play limit
-const MIN_VALID_RATIO = 0.95;          // 95% must be valid (not 50%)
-const CHUNK_SIZE_MB = 10;              // NEW: Process in 10MB chunks
-const MB = 1024 * 1024;                // Bytes in 1MB
-const MEMORY_THRESHOLD = 0.75;         // NEW: 75% RAM usage threshold
+const MAX_FILE_SIZE_MB = 500; // 500MB limit
+const MAX_STREAMS = 1_000_000; // 1M play limit
+const MIN_VALID_RATIO = 0.95; // 95% must be valid (not 50%)
+const CHUNK_SIZE_MB = 10; // NEW: Process in 10MB chunks
+const MB = 1024 * 1024; // Bytes in 1MB
+const MEMORY_THRESHOLD = 0.75; // NEW: 75% RAM usage threshold
 
 // MEDIUM FIX Issue #22: Validate JSON string size before parsing
 // JSON.parse() can crash the worker if given a very large string
@@ -51,10 +55,10 @@ let pauseResolve = null;
 
 // HNW Wave: Sliding window backpressure state
 // Prevents message queue overflow by waiting for ACKs from main thread
-const MAX_PENDING_ACKS = 5;      // Max messages awaiting ACK
-let pendingAcks = 0;             // Current pending ACK count
-let ackId = 0;                   // Rolling ACK ID
-const ackResolvers = new Map();  // ackId -> resolve function
+const MAX_PENDING_ACKS = 5; // Max messages awaiting ACK
+let pendingAcks = 0; // Current pending ACK count
+let ackId = 0; // Rolling ACK ID
+const ackResolvers = new Map(); // ackId -> resolve function
 
 // Cross-browser memory fallback: chunk-counting for Firefox/Safari
 let processedItemCount = 0;
@@ -90,8 +94,8 @@ async function safeJsonParse(json) {
     if (json.length > MAX_JSON_STRING_SIZE_BYTES) {
         throw new Error(
             `JSON string too large: ${(json.length / 1024 / 1024).toFixed(1)}MB ` +
-            `exceeds ${MAX_JSON_STRING_SIZE_BYTES / 1024 / 1024}MB limit. ` +
-            `Please use a smaller data export.`
+                `exceeds ${MAX_JSON_STRING_SIZE_BYTES / 1024 / 1024}MB limit. ` +
+                'Please use a smaller data export.'
         );
     }
 
@@ -125,13 +129,16 @@ async function safeJsonParse(json) {
         // where the timeout callback may already be queued. Without .catch(), this causes
         // an unhandled rejection error in the console.
         const timeoutPromise = new Promise((_, reject) => {
-            timeoutId = setTimeout(() => reject(new Error(`JSON parsing timeout after ${MAX_JSON_PARSE_TIME_MS}ms`)), MAX_JSON_PARSE_TIME_MS);
+            timeoutId = setTimeout(
+                () => reject(new Error(`JSON parsing timeout after ${MAX_JSON_PARSE_TIME_MS}ms`)),
+                MAX_JSON_PARSE_TIME_MS
+            );
         }).catch(err => {
             // Silently swallow timeout rejection - this promise lost the race
             // The error is already handled by the Promise.race above
         });
 
-        const parsePromise = new Promise((resolve) => {
+        const parsePromise = new Promise((resolve, reject) => {
             // Use setTimeout to allow the event loop to process the timeout
             setTimeout(() => {
                 try {
@@ -150,7 +157,7 @@ async function safeJsonParse(json) {
         if (error.message?.includes('timeout')) {
             throw new Error(
                 `JSON parsing exceeded ${MAX_JSON_PARSE_TIME_MS}ms timeout. ` +
-                `File may be too large or malformed.`
+                    'File may be too large or malformed.'
             );
         }
         throw error;
@@ -166,7 +173,7 @@ async function safeJsonParse(json) {
 }
 
 // Make safeJsonParse async-safe for the worker context
-const safeJsonParseSync = (json) => {
+const safeJsonParseSync = json => {
     // Synchronous version for use in non-async contexts
     if (typeof json !== 'string') {
         throw new Error('safeJsonParseSync requires a string input');
@@ -175,7 +182,7 @@ const safeJsonParseSync = (json) => {
     if (json.length > MAX_JSON_STRING_SIZE_BYTES) {
         throw new Error(
             `JSON string too large: ${(json.length / 1024 / 1024).toFixed(1)}MB ` +
-            `exceeds ${MAX_JSON_STRING_SIZE_BYTES / 1024 / 1024}MB limit.`
+                `exceeds ${MAX_JSON_STRING_SIZE_BYTES / 1024 / 1024}MB limit.`
         );
     }
 
@@ -199,7 +206,9 @@ const safeJsonParseSync = (json) => {
  * @param {number} metric - Usage metric for logging
  */
 async function pauseForMemory(reason, metric) {
-    console.log(`[Worker] Memory pressure detected (${reason}: ${Math.round(metric * 100)}%) - pausing...`);
+    console.log(
+        `[Worker] Memory pressure detected (${reason}: ${Math.round(metric * 100)}%) - pausing...`
+    );
     self.postMessage({ type: 'memory_warning', reason, metric });
 
     // RACE CONDITION FIX: Set pause flag BEFORE waiting to ensure no new operations start
@@ -289,7 +298,7 @@ async function postWithBackpressure(message) {
  * NEW: Handle pause/resume and ACK signals from main thread
  * HNW Wave: Backpressure coordination
  */
-self.addEventListener('message', (e) => {
+self.addEventListener('message', e => {
     if (e.data.type === 'pause') {
         isPaused = true;
     } else if (e.data.type === 'resume') {
@@ -343,8 +352,8 @@ function validateFile(file) {
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
         throw new Error(
             `File too large: ${(file.size / 1024 / 1024).toFixed(1)}MB ` +
-            `exceeds ${MAX_FILE_SIZE_MB}MB limit. ` +
-            `Please split your data export or contact support.`
+                `exceeds ${MAX_FILE_SIZE_MB}MB limit. ` +
+                'Please split your data export or contact support.'
         );
     }
 }
@@ -361,8 +370,8 @@ function validateStreams(streams) {
     if (streams.length > MAX_STREAMS) {
         throw new Error(
             `Too many streams: ${streams.length.toLocaleString()} ` +
-            `exceeds limit of ${MAX_STREAMS.toLocaleString()}. ` +
-            `Please use a smaller data export.`
+                `exceeds limit of ${MAX_STREAMS.toLocaleString()}. ` +
+                'Please use a smaller data export.'
         );
     }
 
@@ -371,10 +380,10 @@ function validateStreams(streams) {
 
     if (ratio < MIN_VALID_RATIO) {
         throw new Error(
-            `File does not appear to be valid Spotify data. ` +
-            `Only ${(ratio * 100).toFixed(1)}% of entries match expected format ` +
-            `(need ${MIN_VALID_RATIO * 100}%). ` +
-            `Please ensure this is an official Spotify data export.`
+            'File does not appear to be valid Spotify data. ' +
+                `Only ${(ratio * 100).toFixed(1)}% of entries match expected format ` +
+                `(need ${MIN_VALID_RATIO * 100}%). ` +
+                'Please ensure this is an official Spotify data export.'
         );
     }
 
@@ -383,7 +392,7 @@ function validateStreams(streams) {
         totalCount: streams.length,
         validCount: validStreams.length,
         invalidCount: streams.length - validStreams.length,
-        validRatio: ratio
+        validRatio: ratio,
     };
 }
 
@@ -397,14 +406,12 @@ function detectTemporalOverlap(newStreams, existingStreams) {
     }
 
     // Get date ranges
-    const getDateRange = (streams) => {
+    const getDateRange = streams => {
         const dates = streams
             .map(s => new Date(s.playedAt || s.ts || s.endTime))
             .filter(d => !isNaN(d.getTime()))
             .sort((a, b) => a - b);
-        return dates.length > 0
-            ? { start: dates[0], end: dates[dates.length - 1] }
-            : null;
+        return dates.length > 0 ? { start: dates[0], end: dates[dates.length - 1] } : null;
     };
 
     const existingRange = getDateRange(existingStreams);
@@ -457,33 +464,32 @@ function detectTemporalOverlap(newStreams, existingStreams) {
         overlapPeriod: {
             start: overlapStart.toISOString().split('T')[0],
             end: overlapEnd.toISOString().split('T')[0],
-            days: overlapDays
+            days: overlapDays,
         },
         existingRange: {
             start: existingRange.start.toISOString().split('T')[0],
-            end: existingRange.end.toISOString().split('T')[0]
+            end: existingRange.end.toISOString().split('T')[0],
         },
         newRange: {
             start: newRange.start.toISOString().split('T')[0],
-            end: newRange.end.toISOString().split('T')[0]
+            end: newRange.end.toISOString().split('T')[0],
         },
         stats: {
             totalNew: newStreams.length,
             exactDuplicates: duplicates.length,
             uniqueNew: uniqueNew.length,
-            existingCount: existingStreams.length
+            existingCount: existingStreams.length,
         },
         // Pre-computed results for each strategy
         strategies: {
-            merge: uniqueNew,  // Only add truly new streams (recommended)
-            replace: newStreams,  // Replace everything with new data
-            keep: []  // Keep existing, ignore new entirely
-        }
+            merge: uniqueNew, // Only add truly new streams (recommended)
+            replace: newStreams, // Replace everything with new data
+            keep: [], // Keep existing, ignore new entirely
+        },
     };
 }
 
-
-self.onmessage = async (e) => {
+self.onmessage = async e => {
     // Validate message format before processing
     if (!e.data || typeof e.data !== 'object') {
         console.error('[Parser] Invalid message format');
@@ -527,8 +533,8 @@ async function parseJsonFile(file, existingStreams = null) {
     if (file.size > MAX_JSON_STRING_SIZE_BYTES) {
         throw new Error(
             `JSON file too large: ${(file.size / 1024 / 1024).toFixed(1)}MB ` +
-            `exceeds ${MAX_JSON_STRING_SIZE_BYTES / 1024 / 1024}MB limit. ` +
-            `Please use a smaller data export.`
+                `exceeds ${MAX_JSON_STRING_SIZE_BYTES / 1024 / 1024}MB limit. ` +
+                'Please use a smaller data export.'
         );
     }
 
@@ -538,8 +544,8 @@ async function parseJsonFile(file, existingStreams = null) {
     if (text.length > MAX_JSON_STRING_SIZE_BYTES) {
         throw new Error(
             `JSON content too large: ${(text.length / 1024 / 1024).toFixed(1)}MB ` +
-            `exceeds ${MAX_JSON_STRING_SIZE_BYTES / 1024 / 1024}MB limit. ` +
-            `Please use a smaller data export.`
+                `exceeds ${MAX_JSON_STRING_SIZE_BYTES / 1024 / 1024}MB limit. ` +
+                'Please use a smaller data export.'
         );
     }
 
@@ -551,7 +557,7 @@ async function parseJsonFile(file, existingStreams = null) {
     }
 
     postProgress(`Found ${data.length} streams, validating...`);
-    
+
     // Validate streams with 95% threshold
     let validation;
     try {
@@ -560,11 +566,11 @@ async function parseJsonFile(file, existingStreams = null) {
         self.postMessage({ type: 'error', error: validationError.message });
         return;
     }
-    
+
     if (validation.invalidCount > 0) {
         postProgress(`${validation.invalidCount} invalid entries filtered out`);
     }
-    
+
     const normalized = validation.validStreams.map(stream => normalizeStream(stream, file.name));
 
     // Check for overlap with existing data
@@ -580,8 +586,8 @@ async function parseJsonFile(file, existingStreams = null) {
                     ...overlap,
                     // Don't send full strategies - too much data
                     // Main thread will re-process based on decision
-                    strategies: undefined
-                }
+                    strategies: undefined,
+                },
             });
             return; // Wait for user decision
         }
@@ -613,11 +619,10 @@ async function parseJsonFile(file, existingStreams = null) {
             fileCount: 1,
             validationStats: {
                 validRatio: validation.validRatio,
-                invalidCount: validation.invalidCount
-            }
-        }
+                invalidCount: validation.invalidCount,
+            },
+        },
     });
-
 }
 
 /**
@@ -627,7 +632,8 @@ async function parseZipFile(file, existingStreams = null) {
     await ensureJsZipReady();
     postProgress('Extracting archive...');
 
-    const zip = await JSZip.loadAsync(file);
+    const JSZipLib = await ensureJsZipReady();
+    const zip = await JSZipLib.loadAsync(file);
 
     // Find streaming history files
     const streamingFiles = [];
@@ -647,7 +653,7 @@ async function parseZipFile(file, existingStreams = null) {
     postProgress(`Found ${streamingFiles.length} history files...`);
 
     // NEW: Process files in chunks to manage memory
-    let allRawStreams = [];
+    const allRawStreams = [];
 
     for (let i = 0; i < streamingFiles.length; i++) {
         const { path, entry } = streamingFiles[i];
@@ -660,9 +666,9 @@ async function parseZipFile(file, existingStreams = null) {
         if (content.length > MAX_JSON_STRING_SIZE_BYTES) {
             throw new Error(
                 `JSON file in archive too large: ${(content.length / 1024 / 1024).toFixed(1)}MB ` +
-                `File: ${path}. ` +
-                `Exceeds ${MAX_JSON_STRING_SIZE_BYTES / 1024 / 1024}MB limit. ` +
-                `Please use a smaller data export.`
+                    `File: ${path}. ` +
+                    `Exceeds ${MAX_JSON_STRING_SIZE_BYTES / 1024 / 1024}MB limit. ` +
+                    'Please use a smaller data export.'
             );
         }
 
@@ -681,7 +687,9 @@ async function parseZipFile(file, existingStreams = null) {
                 await checkMemoryAndPause();
 
                 // Send progress update
-                postProgress(`Processing chunk ${Math.floor(j / 10000) + 1}/${Math.ceil(data.length / 10000)} of file ${i + 1}...`);
+                postProgress(
+                    `Processing chunk ${Math.floor(j / 10000) + 1}/${Math.ceil(data.length / 10000)} of file ${i + 1}...`
+                );
             }
         } else {
             for (const item of data) {
@@ -694,7 +702,7 @@ async function parseZipFile(file, existingStreams = null) {
             type: 'partial',
             fileIndex: i + 1,
             totalFiles: streamingFiles.length,
-            streamCount: allRawStreams.length
+            streamCount: allRawStreams.length,
         });
     }
 
@@ -707,9 +715,7 @@ async function parseZipFile(file, existingStreams = null) {
     }
 
     // Normalize valid streams
-    let allStreams = validation.validStreams.map(stream =>
-        normalizeStream(stream, 'zip')
-    );
+    let allStreams = validation.validStreams.map(stream => normalizeStream(stream, 'zip'));
 
     // Check for overlap with existing data
     if (existingStreams && existingStreams.length > 0) {
@@ -722,8 +728,8 @@ async function parseZipFile(file, existingStreams = null) {
                 type: 'overlap_detected',
                 overlap: {
                     ...overlap,
-                    strategies: undefined // Don't send full data over worker boundary
-                }
+                    strategies: undefined, // Don't send full data over worker boundary
+                },
             });
             return; // Wait for user decision
         }
@@ -758,12 +764,11 @@ async function parseZipFile(file, existingStreams = null) {
             fileCount: streamingFiles.length,
             validationStats: {
                 validRatio: validation.validRatio,
-                invalidCount: validation.invalidCount
-            }
-        }
+                invalidCount: validation.invalidCount,
+            },
+        },
     });
 }
-
 
 /**
  * Post progress update with pause state checking
@@ -797,7 +802,7 @@ function normalizeStream(stream, filePath) {
             offline: stream.offline || false,
             reason_start: stream.reason_start,
             reason_end: stream.reason_end,
-            source: 'extended'
+            source: 'extended',
         };
     }
 
@@ -813,7 +818,7 @@ function normalizeStream(stream, filePath) {
         offline: false,
         reason_start: null,
         reason_end: null,
-        source: 'basic'
+        source: 'basic',
     };
 }
 
@@ -834,9 +839,8 @@ function enrichStreams(streams) {
     return streams.map(stream => {
         const key = `${stream.trackName}::${stream.artistName}`;
         const estimatedDuration = trackDurations[key] || stream.msPlayed;
-        const completionRate = estimatedDuration > 0
-            ? Math.min(stream.msPlayed / estimatedDuration, 1)
-            : 0;
+        const completionRate =
+            estimatedDuration > 0 ? Math.min(stream.msPlayed / estimatedDuration, 1) : 0;
 
         let playType = 'full';
         if (stream.msPlayed < 30000) playType = 'skip';
@@ -860,7 +864,7 @@ function enrichStreams(streams) {
             timezoneOffset: date.getTimezoneOffset(),
             month: date.getMonth(),
             year: date.getFullYear(),
-            date: date.toISOString().split('T')[0]
+            date: date.toISOString().split('T')[0],
         };
     });
 }
@@ -884,7 +888,7 @@ function generateChunks(streams) {
                 streams: [],
                 artists: new Set(),
                 tracks: new Set(),
-                totalMs: 0
+                totalMs: 0,
             };
         }
 
@@ -903,7 +907,7 @@ function generateChunks(streams) {
                 streams: [],
                 artists: new Set(),
                 tracks: new Set(),
-                totalMs: 0
+                totalMs: 0,
             };
         }
 
@@ -913,7 +917,7 @@ function generateChunks(streams) {
         monthlyChunks[monthKey].totalMs += stream.msPlayed;
     }
 
-    const processChunk = (chunk) => ({
+    const processChunk = chunk => ({
         id: chunk.id,
         type: chunk.type,
         startDate: chunk.startDate,
@@ -923,14 +927,15 @@ function generateChunks(streams) {
         totalMs: chunk.totalMs,
         topArtists: getTopN(chunk.streams, 'artistName', 5),
         topTracks: getTopN(chunk.streams, s => `${s.trackName} - ${s.artistName}`, 5),
-        avgCompletionRate: chunk.streams.reduce((sum, s) => sum + s.completionRate, 0) / chunk.streams.length,
+        avgCompletionRate:
+            chunk.streams.reduce((sum, s) => sum + s.completionRate, 0) / chunk.streams.length,
         artists: [...chunk.artists],
-        tracks: [...chunk.tracks]
+        tracks: [...chunk.tracks],
     });
 
     return [
         ...Object.values(weeklyChunks).map(processChunk),
-        ...Object.values(monthlyChunks).map(processChunk)
+        ...Object.values(monthlyChunks).map(processChunk),
     ];
 }
 

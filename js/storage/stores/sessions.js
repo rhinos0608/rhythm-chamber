@@ -26,7 +26,7 @@ export async function saveSession(session) {
             ...session,
             updatedAt: now,
             createdAt: session.createdAt || now,
-            messageCount: session.messages?.length || 0
+            messageCount: session.messages?.length || 0,
         };
         const result = await IndexedDBCore.put(STORES.CHAT_SESSIONS, data);
         return result;
@@ -127,8 +127,8 @@ export async function searchSessions(query) {
         }
         // Search in messages
         if (session.messages) {
-            return session.messages.some(msg =>
-                msg.content && msg.content.toLowerCase().includes(lowerQuery)
+            return session.messages.some(
+                msg => msg.content && msg.content.toLowerCase().includes(lowerQuery)
             );
         }
         return false;

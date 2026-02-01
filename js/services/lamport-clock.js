@@ -1,12 +1,12 @@
 /**
  * Lamport Clock
- * 
+ *
  * Logical clock implementation for distributed systems.
  * Eliminates clock skew issues in cross-tab leader election.
- * 
+ *
  * HNW Network: Provides happened-before ordering guarantees
  * across tabs without relying on wall-clock time.
- * 
+ *
  * @module services/lamport-clock
  */
 
@@ -51,7 +51,9 @@ function tick() {
 function update(receivedTimestamp) {
     // Input validation: ensure receivedTimestamp is a finite numeric value
     if (!Number.isFinite(receivedTimestamp)) {
-        throw new TypeError(`LamportClock.update() received invalid timestamp: ${receivedTimestamp}. Expected a finite number.`);
+        throw new TypeError(
+            `LamportClock.update() received invalid timestamp: ${receivedTimestamp}. Expected a finite number.`
+        );
     }
     counter = Math.max(counter, receivedTimestamp) + 1;
     return counter;
@@ -82,7 +84,7 @@ function stamp(data) {
     return {
         ...data,
         lamportTimestamp: tick(),
-        senderId: localId
+        senderId: localId,
     };
 }
 
@@ -101,7 +103,7 @@ function receive(message) {
 /**
  * Compare two timestamped messages
  * Returns negative if a < b, positive if a > b, zero if equal
- * 
+ *
  * @param {Object} a - First message with lamportTimestamp and senderId
  * @param {Object} b - Second message with lamportTimestamp and senderId
  * @returns {number}
@@ -158,7 +160,7 @@ function getStatus() {
     return {
         counter,
         localId: localId.substring(0, 8) + '...',
-        fullId: localId
+        fullId: localId,
     };
 }
 
@@ -196,8 +198,7 @@ export const LamportClock = {
     min,
 
     // Diagnostics
-    getStatus
+    getStatus,
 };
-
 
 console.log('[LamportClock] Logical clock loaded');

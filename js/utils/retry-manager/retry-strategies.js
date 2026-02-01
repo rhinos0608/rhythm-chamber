@@ -36,10 +36,7 @@ export function calculateExponentialBackoff(attempt, config = DEFAULT_RETRY_CONF
  * @returns {number} Delay in milliseconds
  */
 export function calculateLinearBackoff(attempt, config = DEFAULT_RETRY_CONFIG) {
-    const linearDelay = Math.min(
-        config.baseDelayMs * (attempt + 1),
-        config.maxDelayMs
-    );
+    const linearDelay = Math.min(config.baseDelayMs * (attempt + 1), config.maxDelayMs);
     return linearDelay;
 }
 
@@ -93,7 +90,7 @@ export function calculateBackoffForError(attempt, error, config = DEFAULT_RETRY_
         const rateLimitConfig = {
             ...config,
             baseDelayMs: Math.max(config.baseDelayMs, 5000), // Minimum 5s
-            jitterMs: 1000 // More jitter for rate limits
+            jitterMs: 1000, // More jitter for rate limits
         };
         return calculateBackoffWithJitter(attempt, rateLimitConfig);
     }

@@ -20,7 +20,7 @@ export class DIContainer {
         this._modules = new Map();
         this._dependencyGraph = {
             services: [],
-            controllers: {}
+            controllers: {},
         };
         this._dependencyChains = new Map();
     }
@@ -77,7 +77,7 @@ export class DIContainer {
         this._factories.set(name, {
             Factory,
             dependencies,
-            singleton: options.singleton === true
+            singleton: options.singleton === true,
         });
 
         this._trackServiceDependency(name, dependencies);
@@ -101,7 +101,7 @@ export class DIContainer {
         this._modules.set(name, {
             dependencies,
             initialize,
-            initialized: false
+            initialized: false,
         });
 
         return this;
@@ -204,14 +204,18 @@ export class DIContainer {
             throw new Error(`Controller '${controllerName}' not found`);
         }
         if (typeof controller.init !== 'function') {
-            throw new Error(`Controller '${controllerName}' is not initializable (missing init method)`);
+            throw new Error(
+                `Controller '${controllerName}' is not initializable (missing init method)`
+            );
         }
 
         const dependencies = {};
         for (const name of depNames) {
             const dep = this.get(name);
             if (!dep) {
-                throw new Error(`Dependency '${name}' not found for controller '${controllerName}'`);
+                throw new Error(
+                    `Dependency '${name}' not found for controller '${controllerName}'`
+                );
             }
             dependencies[name] = dep;
         }
@@ -241,7 +245,9 @@ export class DIContainer {
         // Validate all dependencies are available
         const missing = module.dependencies.filter(dep => !this.has(dep));
         if (missing.length > 0) {
-            throw new Error(`Module '${moduleName}' has missing dependencies: ${missing.join(', ')}`);
+            throw new Error(
+                `Module '${moduleName}' has missing dependencies: ${missing.join(', ')}`
+            );
         }
 
         // Resolve dependencies
@@ -340,7 +346,7 @@ export class DIContainer {
     getDependencyGraph() {
         return {
             services: [...this._dependencyGraph.services],
-            controllers: { ...this._dependencyGraph.controllers }
+            controllers: { ...this._dependencyGraph.controllers },
         };
     }
 
@@ -356,7 +362,7 @@ export class DIContainer {
                 name,
                 type: 'factory',
                 dependencies: factory.dependencies,
-                singleton: factory.singleton
+                singleton: factory.singleton,
             };
         }
 
@@ -364,7 +370,7 @@ export class DIContainer {
             return {
                 name,
                 type: 'controller',
-                dependencies: this._dependencyGraph.controllers[name]
+                dependencies: this._dependencyGraph.controllers[name],
             };
         }
 
@@ -372,7 +378,7 @@ export class DIContainer {
             return {
                 name,
                 type: 'instance',
-                dependencies: []
+                dependencies: [],
             };
         }
 
@@ -468,7 +474,7 @@ export class DIContainer {
             moduleCount: this._modules.size,
             singletonCount: this._singletons.size,
             initializedControllers,
-            initializedModules
+            initializedModules,
         };
     }
 
@@ -487,7 +493,7 @@ export class DIContainer {
         this._modules.clear();
         this._dependencyGraph = {
             services: [],
-            controllers: {}
+            controllers: {},
         };
         this._dependencyChains.clear();
     }
@@ -524,7 +530,7 @@ export const LegacyContainer = {
 
     initController(controllerName, depNames) {
         return Container.initController(controllerName, depNames);
-    }
+    },
 };
 
 export default DIContainer;

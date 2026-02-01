@@ -31,8 +31,11 @@ function filterByDateRange(streams, params) {
         // No date filtering specified
         if (params.year) {
             return {
-                filtered: streams.filter(s => s.year === parseInt(params.year) &&
-                    (params.month === undefined || s.month === parseInt(params.month) - 1))
+                filtered: streams.filter(
+                    s =>
+                        s.year === parseInt(params.year) &&
+                        (params.month === undefined || s.month === parseInt(params.month) - 1)
+                ),
             };
         }
         return { filtered: streams };
@@ -42,7 +45,7 @@ function filterByDateRange(streams, params) {
         filtered: streams.filter(s => {
             const streamDate = new Date(s.date);
             return streamDate >= dateRange.startDate && streamDate <= dateRange.endDate;
-        })
+        }),
     };
 }
 
@@ -59,7 +62,9 @@ function executeGetBottomTracks(args, streams) {
 
     const filtered = result.filtered;
     if (filtered.length === 0) {
-        return { error: `No data found for ${validation.formatPeriodLabel({ year, month, quarter })}.` };
+        return {
+            error: `No data found for ${validation.formatPeriodLabel({ year, month, quarter })}.`,
+        };
     }
 
     // Aggregate by track
@@ -85,8 +90,8 @@ function executeGetBottomTracks(args, streams) {
             rank: i + 1,
             name: t.name,
             artist: t.artist,
-            plays: t.plays
-        }))
+            plays: t.plays,
+        })),
     };
 }
 
@@ -99,7 +104,9 @@ function executeGetBottomArtists(args, streams) {
 
     const filtered = result.filtered;
     if (filtered.length === 0) {
-        return { error: `No data found for ${validation.formatPeriodLabel({ year, month, quarter })}.` };
+        return {
+            error: `No data found for ${validation.formatPeriodLabel({ year, month, quarter })}.`,
+        };
     }
 
     // Aggregate by artist
@@ -123,8 +130,8 @@ function executeGetBottomArtists(args, streams) {
         bottom_artists: sorted.map((a, i) => ({
             rank: i + 1,
             name: a.name,
-            plays: a.plays
-        }))
+            plays: a.plays,
+        })),
     };
 }
 
@@ -155,9 +162,12 @@ function executeGetListeningClock(args, streams) {
             hourly_breakdown: hourlyData.map((plays, hour) => ({
                 hour: `${hour.toString().padStart(2, '0')}:00`,
                 plays,
-                percentage: Math.round((plays / total) * 100)
+                percentage: Math.round((plays / total) * 100),
             })),
-            peak_hour: `${hourlyData.indexOf(Math.max(...hourlyData)).toString().padStart(2, '0')}:00`
+            peak_hour: `${hourlyData
+                .indexOf(Math.max(...hourlyData))
+                .toString()
+                .padStart(2, '0')}:00`,
         };
     }
 
@@ -166,7 +176,7 @@ function executeGetListeningClock(args, streams) {
         morning: { hours: [6, 7, 8, 9, 10, 11], plays: 0, label: 'Morning (6am-12pm)' },
         afternoon: { hours: [12, 13, 14, 15, 16, 17], plays: 0, label: 'Afternoon (12pm-6pm)' },
         evening: { hours: [18, 19, 20, 21, 22, 23], plays: 0, label: 'Evening (6pm-12am)' },
-        night: { hours: [0, 1, 2, 3, 4, 5], plays: 0, label: 'Night (12am-6am)' }
+        night: { hours: [0, 1, 2, 3, 4, 5], plays: 0, label: 'Night (12am-6am)' },
     };
 
     for (const s of filtered) {
@@ -180,18 +190,20 @@ function executeGetListeningClock(args, streams) {
     }
 
     const total = filtered.length;
-    const breakdown = Object.entries(periods).map(([name, data]) => ({
-        period: name,
-        label: data.label,
-        plays: data.plays,
-        percentage: Math.round((data.plays / total) * 100)
-    })).sort((a, b) => b.plays - a.plays);
+    const breakdown = Object.entries(periods)
+        .map(([name, data]) => ({
+            period: name,
+            label: data.label,
+            plays: data.plays,
+            percentage: Math.round((data.plays / total) * 100),
+        }))
+        .sort((a, b) => b.plays - a.plays);
 
     return {
         period: validation.formatPeriodLabel({ year, month }),
         grouped_by: 'period',
         period_breakdown: breakdown,
-        peak_period: breakdown[0].period
+        peak_period: breakdown[0].period,
     };
 }
 
@@ -246,7 +258,7 @@ function executeGetListeningStreaks(args, streams) {
         min_streak_filter: min_streak_days,
         longest_streak: streaks[0] || null,
         notable_streaks: streaks.slice(0, 5),
-        streak_count: streaks.length
+        streak_count: streaks.length,
     };
 }
 
@@ -259,7 +271,9 @@ function executeGetTimeByArtist(args, streams) {
 
     const filtered = result.filtered;
     if (filtered.length === 0) {
-        return { error: `No data found for ${validation.formatPeriodLabel({ year, month, quarter })}.` };
+        return {
+            error: `No data found for ${validation.formatPeriodLabel({ year, month, quarter })}.`,
+        };
     }
 
     // Aggregate time by artist
@@ -287,8 +301,8 @@ function executeGetTimeByArtist(args, streams) {
             name: a.name,
             minutes: Math.round(a.minutes),
             plays: a.plays,
-            percentage: Math.round((a.minutes / totalMinutes) * 100)
-        }))
+            percentage: Math.round((a.minutes / totalMinutes) * 100),
+        })),
     };
 }
 
@@ -316,8 +330,7 @@ function executeGetPlatformStats(args, streams) {
     }
 
     const total = filtered.length;
-    const sorted = Object.values(platformData)
-        .sort((a, b) => b.plays - a.plays);
+    const sorted = Object.values(platformData).sort((a, b) => b.plays - a.plays);
 
     return {
         period: validation.formatPeriodLabel({ year }),
@@ -325,9 +338,9 @@ function executeGetPlatformStats(args, streams) {
             platform: p.platform,
             plays: p.plays,
             minutes: Math.round(p.minutes),
-            percentage: Math.round((p.plays / total) * 100)
+            percentage: Math.round((p.plays / total) * 100),
         })),
-        primary_platform: sorted[0]?.platform
+        primary_platform: sorted[0]?.platform,
     };
 }
 
@@ -340,15 +353,11 @@ function executeGetDiscoveryStats(args, streams) {
     const { year, breakdown = 'monthly' } = args;
 
     if (!year) {
-        return { error: "Year is required for discovery stats." };
+        return { error: 'Year is required for discovery stats.' };
     }
 
     // Get all artists before the target year
-    const priorArtists = new Set(
-        streams
-            .filter(s => s.year < year)
-            .map(s => s.artistName)
-    );
+    const priorArtists = new Set(streams.filter(s => s.year < year).map(s => s.artistName));
 
     // Get streams for target year
     const yearStreams = streams.filter(s => s.year === parseInt(year));
@@ -357,7 +366,9 @@ function executeGetDiscoveryStats(args, streams) {
     }
 
     if (breakdown === 'monthly') {
-        const monthlyDiscovery = Array(12).fill(null).map(() => new Set());
+        const monthlyDiscovery = Array(12)
+            .fill(null)
+            .map(() => new Set());
         const seenThisYear = new Set();
 
         // Sort by date to track first appearance
@@ -370,25 +381,41 @@ function executeGetDiscoveryStats(args, streams) {
             }
         }
 
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const monthNames = [
+            'Jan',
+            'Feb',
+            'Mar',
+            'Apr',
+            'May',
+            'Jun',
+            'Jul',
+            'Aug',
+            'Sep',
+            'Oct',
+            'Nov',
+            'Dec',
+        ];
         const monthlyBreakdown = monthlyDiscovery.map((artists, i) => ({
             month: monthNames[i],
             new_artists: artists.size,
-            examples: [...artists].slice(0, 3)
+            examples: [...artists].slice(0, 3),
         }));
 
         // Guard against empty array access
-        const peakMonth = monthlyBreakdown.length > 0
-            ? monthlyBreakdown.reduce((max, curr) =>
-                curr.new_artists > max.new_artists ? curr : max, monthlyBreakdown[0])
-            : null;
+        const peakMonth =
+            monthlyBreakdown.length > 0
+                ? monthlyBreakdown.reduce(
+                    (max, curr) => (curr.new_artists > max.new_artists ? curr : max),
+                    monthlyBreakdown[0]
+                )
+                : null;
 
         return {
             year,
             total_new_artists: seenThisYear.size,
             monthly_breakdown: monthlyBreakdown,
             peak_discovery_month: peakMonth.month,
-            peak_discovery_count: peakMonth.new_artists
+            peak_discovery_count: peakMonth.new_artists,
         };
     }
 
@@ -412,8 +439,8 @@ function executeGetDiscoveryStats(args, streams) {
         quarterly_breakdown: Object.entries(quarterlyDiscovery).map(([q, artists]) => ({
             quarter: q,
             new_artists: artists.size,
-            examples: [...artists].slice(0, 3)
-        }))
+            examples: [...artists].slice(0, 3),
+        })),
     };
 }
 
@@ -433,7 +460,7 @@ function executeGetSkipPatterns(args, streams) {
     const hasSkipData = filtered.some(s => s.skipped !== undefined);
     if (!hasSkipData) {
         return {
-            error: "Skip data not available. This data is only present in extended streaming history exports."
+            error: 'Skip data not available. This data is only present in extended streaming history exports.',
         };
     }
 
@@ -460,7 +487,7 @@ function executeGetSkipPatterns(args, streams) {
         return {
             period: validation.formatPeriodLabel({ year }),
             overall_skip_rate: overallSkipRate,
-            most_skipped_artists: sorted
+            most_skipped_artists: sorted,
         };
     }
 
@@ -488,7 +515,7 @@ function executeGetSkipPatterns(args, streams) {
     return {
         period: validation.formatPeriodLabel({ year }),
         overall_skip_rate: overallSkipRate,
-        most_skipped_tracks: sorted
+        most_skipped_tracks: sorted,
     };
 }
 
@@ -508,7 +535,7 @@ function executeGetShuffleHabits(args, streams) {
     const hasShuffleData = filtered.some(s => s.shuffle !== undefined);
     if (!hasShuffleData) {
         return {
-            error: "Shuffle data not available. This data is only present in extended streaming history exports."
+            error: 'Shuffle data not available. This data is only present in extended streaming history exports.',
         };
     }
 
@@ -523,8 +550,12 @@ function executeGetShuffleHabits(args, streams) {
             shuffled_plays: shuffledCount,
             intentional_plays: intentionalCount,
             shuffle_percentage: shuffleRate,
-            listening_style: shuffleRate > 60 ? 'Shuffle Explorer' :
-                shuffleRate < 30 ? 'Intentional Selector' : 'Balanced Listener'
+            listening_style:
+                shuffleRate > 60
+                    ? 'Shuffle Explorer'
+                    : shuffleRate < 30
+                        ? 'Intentional Selector'
+                        : 'Balanced Listener',
         };
     }
 
@@ -541,20 +572,23 @@ function executeGetShuffleHabits(args, streams) {
         // Most intentionally listened
         const mostIntentional = Object.values(artistShuffle)
             .filter(a => a.total >= 10)
-            .map(a => ({ ...a, intentional_rate: Math.round(((a.total - a.shuffled) / a.total) * 100) }))
+            .map(a => ({
+                ...a,
+                intentional_rate: Math.round(((a.total - a.shuffled) / a.total) * 100),
+            }))
             .sort((a, b) => b.intentional_rate - a.intentional_rate)
             .slice(0, 5);
 
         return {
             period: validation.formatPeriodLabel({ year }),
             shuffle_percentage: shuffleRate,
-            most_intentional_artists: mostIntentional
+            most_intentional_artists: mostIntentional,
         };
     }
 
     return {
         period: validation.formatPeriodLabel({ year }),
-        shuffle_percentage: shuffleRate
+        shuffle_percentage: shuffleRate,
     };
 }
 
@@ -571,7 +605,9 @@ function executeGetPeakListeningDay(args, streams) {
     }
 
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const dayData = Array(7).fill(null).map(() => ({ plays: 0, minutes: 0 }));
+    const dayData = Array(7)
+        .fill(null)
+        .map(() => ({ plays: 0, minutes: 0 }));
 
     for (const s of filtered) {
         const day = s.dayOfWeek !== undefined ? s.dayOfWeek : new Date(s.date).getDay();
@@ -583,20 +619,21 @@ function executeGetPeakListeningDay(args, streams) {
         day: dayNames[i],
         plays: data.plays,
         minutes: Math.round(data.minutes),
-        value: metric === 'minutes' ? data.minutes : data.plays
+        value: metric === 'minutes' ? data.minutes : data.plays,
     }));
 
     // Guard against empty array access
-    const peakDay = breakdown.length > 0
-        ? breakdown.reduce((max, curr) => curr.value > max.value ? curr : max, breakdown[0])
-        : null;
+    const peakDay =
+        breakdown.length > 0
+            ? breakdown.reduce((max, curr) => (curr.value > max.value ? curr : max), breakdown[0])
+            : null;
 
     return {
         period: validation.formatPeriodLabel({ year }),
         metric: metric,
         daily_breakdown: breakdown,
         peak_day: peakDay.day,
-        peak_value: metric === 'minutes' ? Math.round(peakDay.minutes) : peakDay.plays
+        peak_value: metric === 'minutes' ? Math.round(peakDay.minutes) : peakDay.plays,
     };
 }
 
@@ -639,7 +676,7 @@ function executeGetCompletionRate(args, streams) {
             return {
                 period: validation.formatPeriodLabel({ year }),
                 overall_completion_rate: overallRate,
-                highest_completion_artists: sorted
+                highest_completion_artists: sorted,
             };
         }
 
@@ -647,12 +684,12 @@ function executeGetCompletionRate(args, streams) {
             period: validation.formatPeriodLabel({ year }),
             total_plays: filtered.length,
             completed_plays: completedCount,
-            overall_completion_rate: overallRate
+            overall_completion_rate: overallRate,
         };
     }
 
     return {
-        error: "Completion data requires skip tracking. This is only available in extended streaming history exports."
+        error: 'Completion data requires skip tracking. This is only available in extended streaming history exports.',
     };
 }
 
@@ -672,7 +709,7 @@ function executeGetOfflineListening(args, streams) {
     const hasOfflineData = filtered.some(s => s.offline !== undefined);
     if (!hasOfflineData) {
         return {
-            error: "Offline data not available. This data is only present in extended streaming history exports."
+            error: 'Offline data not available. This data is only present in extended streaming history exports.',
         };
     }
 
@@ -698,7 +735,7 @@ function executeGetOfflineListening(args, streams) {
         total_plays: filtered.length,
         offline_plays: offlineStreams.length,
         offline_percentage: offlineRate,
-        top_offline_tracks: topOffline
+        top_offline_tracks: topOffline,
     };
 }
 
@@ -722,9 +759,7 @@ export const AnalyticsExecutors = {
     get_shuffle_habits: executeGetShuffleHabits,
     get_peak_listening_day: executeGetPeakListeningDay,
     get_completion_rate: executeGetCompletionRate,
-    get_offline_listening: executeGetOfflineListening
+    get_offline_listening: executeGetOfflineListening,
 };
 
-
 console.log('[AnalyticsExecutors] Module loaded');
-

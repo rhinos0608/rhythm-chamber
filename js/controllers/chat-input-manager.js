@@ -23,7 +23,7 @@ const VALID_TOOL_NAMES = [
     'DataQuery',
     'PatternAnalyzer',
     'PersonalityClassifier',
-    'StreamProcessor'
+    'StreamProcessor',
 ];
 
 // ==========================================
@@ -64,7 +64,9 @@ function getInputValue() {
     // Use Array.from to properly handle Unicode surrogate pairs (emojis, rare CJK chars)
     // which prevents splitting multi-byte characters during truncation
     if (value.length > MAX_MESSAGE_LENGTH) {
-        console.warn(`[ChatInputManager] Message exceeds ${MAX_MESSAGE_LENGTH} characters, truncating`);
+        console.warn(
+            `[ChatInputManager] Message exceeds ${MAX_MESSAGE_LENGTH} characters, truncating`
+        );
         const chars = Array.from(value);
         if (chars.length > MAX_MESSAGE_LENGTH) {
             return chars.slice(0, MAX_MESSAGE_LENGTH).join('');
@@ -106,17 +108,24 @@ function hideSuggestions() {
 function clearMessages() {
     const messages = document.getElementById(CHAT_UI_MESSAGE_CONTAINER_ID);
     if (!messages) {
-        console.error('[ChatInputManager] Messages container not found:', CHAT_UI_MESSAGE_CONTAINER_ID);
+        console.error(
+            '[ChatInputManager] Messages container not found:',
+            CHAT_UI_MESSAGE_CONTAINER_ID
+        );
         return;
     }
 
     // SAFE: Static HTML with no user input
-    messages.innerHTML = '<div class="message assistant">What would you like to explore about your listening patterns?</div>';
+    messages.innerHTML =
+        '<div class="message assistant">What would you like to explore about your listening patterns?</div>';
 
     // Show suggestions again
     const suggestions = document.getElementById(CHAT_UI_SUGGESTIONS_ID);
     if (!suggestions) {
-        console.warn('[ChatInputManager] Suggestions element not found when clearing messages:', CHAT_UI_SUGGESTIONS_ID);
+        console.warn(
+            '[ChatInputManager] Suggestions element not found when clearing messages:',
+            CHAT_UI_SUGGESTIONS_ID
+        );
         return;
     }
     suggestions.style.display = '';
@@ -132,7 +141,7 @@ export const ChatInputManager = {
     hideSuggestions,
     clearMessages,
     isValidToolName,
-    MAX_MESSAGE_LENGTH
+    MAX_MESSAGE_LENGTH,
 };
 
 console.log('[ChatInputManager] Module loaded');

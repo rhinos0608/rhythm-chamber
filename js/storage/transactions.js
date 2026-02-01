@@ -59,7 +59,7 @@ export async function runTransaction(storeNames, mode, callback) {
 export async function batchOperations(operations) {
     const storeNames = [...new Set(operations.map(op => op.store))];
 
-    return runTransaction(storeNames, 'readwrite', async (tx) => {
+    return runTransaction(storeNames, 'readwrite', async tx => {
         const results = [];
 
         for (const op of operations) {
@@ -90,7 +90,7 @@ export async function batchOperations(operations) {
  * @returns {Promise<void>}
  */
 export async function clearStores(storeNames) {
-    return runTransaction(storeNames, 'readwrite', async (tx) => {
+    return runTransaction(storeNames, 'readwrite', async tx => {
         for (const storeName of storeNames) {
             await tx.objectStore(storeName).clear();
         }
@@ -105,7 +105,7 @@ export async function clearStores(storeNames) {
  * @returns {Promise<number>} Number of records copied
  */
 export async function copyStore(sourceStore, targetStore, filterFn = null) {
-    return runTransaction([sourceStore, targetStore], 'readwrite', async (tx) => {
+    return runTransaction([sourceStore, targetStore], 'readwrite', async tx => {
         const source = tx.objectStore(sourceStore);
         const target = tx.objectStore(targetStore);
 
@@ -131,7 +131,7 @@ export async function copyStore(sourceStore, targetStore, filterFn = null) {
  * @returns {Promise<number>} Number of records moved
  */
 export async function moveStore(sourceStore, targetStore, filterFn = null) {
-    return runTransaction([sourceStore, targetStore], 'readwrite', async (tx) => {
+    return runTransaction([sourceStore, targetStore], 'readwrite', async tx => {
         const source = tx.objectStore(sourceStore);
         const target = tx.objectStore(targetStore);
 
@@ -187,6 +187,6 @@ export async function getTransactionStats() {
         active: false,
         pending: 0,
         completed: 0,
-        failed: 0
+        failed: 0,
     };
 }

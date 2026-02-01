@@ -52,6 +52,11 @@ const listeners = [];
 let recursionDepth = 0;
 const MAX_RECURSION_DEPTH = 100;
 
+/**
+ * Prevent deferred processing storms - only one setTimeout pending at a time
+ */
+let deferredProcessingPending = false;
+
 // ==========================================
 // Metrics State
 // ==========================================
@@ -126,9 +131,15 @@ async function processNext() {
 
     // CRITICAL FIX #1: Check recursion depth to prevent stack overflow
     if (recursionDepth >= MAX_RECURSION_DEPTH) {
-        console.error('[TurnQueue] Max recursion depth reached, deferring processing');
-        // Defer to next event loop to allow stack to clear
-        setTimeout(() => processNext().catch(e => console.error('[TurnQueue] Deferred processing failed:', e)), 100);
+        if (!deferredProcessingPending) {
+            deferredProcessingPending = true;
+            console.error('[TurnQueue] Max recursion depth reached, deferring processing');
+            // Defer to next event loop to allow stack to clear
+            setTimeout(() => {
+                deferredProcessingPending = false;
+                processNext().catch(e => console.error('[TurnQueue] Deferred processing failed:', e));
+            }, 100);
+        }
         return;
     }
 
@@ -218,17 +229,46 @@ async function processNext() {
             }
         }
     } finally {
+        // CRITICAL FIX: Reset counter when queue drains and prevent negative counter
+        if (queue.length === 0 && recursionDepth > 0) {
+            console.log(`[TurnQueue] Queue drained, resetting recursion depth from ${recursionDepth} to 0`);
+            recursionDepth = 0;
+
+            // CRITICAL: Don't decrement - we already reset
+            // Also clear the current turn and isProcessing flag
+            currentTurn = null;
+            isProcessing = false;
+
+            // CRITICAL: Return early since queue is empty - no more work to do
+            // Don't call processNext() here - it will be called when new items arrive
+            return;
+        }
+
+        // Only reach here if queue has items
         // Always reset processing flag, even if an error occurred
         // This ensures the queue doesn't get stuck in a processing state
-        recursionDepth--;
         currentTurn = null;
         isProcessing = false;
 
-        // FIX M3: Direct call instead of setTimeout
-        // The isProcessing check at the top of processNext() prevents re-entry race conditions
-        // This ensures deterministic sequencing without setTimeout's timing uncertainty
-        // Error handling is done by the promise chain of each individual turn
-        processNext().catch(e => console.error('[TurnQueue] Next turn failed:', e));
+        // Check if we need to defer to next tick to prevent stack overflow
+        if (recursionDepth >= MAX_RECURSION_DEPTH) {
+            recursionDepth--;
+            if (!deferredProcessingPending) {
+                deferredProcessingPending = true;
+                console.warn('[TurnQueue] Max recursion depth in finally, deferring to next tick');
+                setTimeout(() => {
+                    deferredProcessingPending = false;
+                    processNext().catch(e => console.error('[TurnQueue] Deferred failed:', e));
+                }, 100);
+            }
+        } else {
+            recursionDepth--;
+            // FIX M3: Direct call instead of setTimeout
+            // The isProcessing check at the top of processNext() prevents re-entry race conditions
+            // This ensures deterministic sequencing without setTimeout's timing uncertainty
+            // Error handling is done by the promise chain of each individual turn
+            processNext().catch(e => console.error('[TurnQueue] Next turn failed:', e));
+        }
     }
 }
 

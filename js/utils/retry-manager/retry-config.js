@@ -16,17 +16,17 @@
  * Error types for retry behavior determination
  */
 export const ErrorType = {
-    TRANSIENT: 'transient',           // Network glitches, timeouts - retry with backoff
-    RATE_LIMIT: 'rate_limit',        // 429 - retry with longer delays
-    SERVER_ERROR: 'server_error',    // 5xx - retry with backoff
-    CLIENT_ERROR: 'client_error',    // 4xx (except 429) - don't retry
-    AUTHENTICATION: 'auth',          // 401/403 - don't retry, needs user action
-    CIRCUIT_OPEN: 'circuit_open',     // Circuit breaker open - don't retry
-    QUOTA_EXCEEDED: 'quota',          // QuotaExceededError - don't retry
-    INVALID_STATE: 'invalid_state',   // InvalidStateError - don't retry
-    TIMEOUT: 'timeout',              // Timeout errors - retry with backoff
-    ABORTED: 'aborted',              // AbortError - don't retry (intentional cancellation)
-    UNKNOWN: 'unknown'               // Default to transient
+    TRANSIENT: 'transient', // Network glitches, timeouts - retry with backoff
+    RATE_LIMIT: 'rate_limit', // 429 - retry with longer delays
+    SERVER_ERROR: 'server_error', // 5xx - retry with backoff
+    CLIENT_ERROR: 'client_error', // 4xx (except 429) - don't retry
+    AUTHENTICATION: 'auth', // 401/403 - don't retry, needs user action
+    CIRCUIT_OPEN: 'circuit_open', // Circuit breaker open - don't retry
+    QUOTA_EXCEEDED: 'quota', // QuotaExceededError - don't retry
+    INVALID_STATE: 'invalid_state', // InvalidStateError - don't retry
+    TIMEOUT: 'timeout', // Timeout errors - retry with backoff
+    ABORTED: 'aborted', // AbortError - don't retry (intentional cancellation)
+    UNKNOWN: 'unknown', // Default to transient
 };
 
 /**
@@ -67,20 +67,31 @@ export function classifyError(error) {
     }
 
     // Authentication errors
-    if (message.includes('401') || message.includes('403') ||
-        message.includes('unauthorized') || message.includes('forbidden')) {
+    if (
+        message.includes('401') ||
+        message.includes('403') ||
+        message.includes('unauthorized') ||
+        message.includes('forbidden')
+    ) {
         return ErrorType.AUTHENTICATION;
     }
 
     // Rate limit errors
-    if (message.includes('429') || message.includes('rate limit') ||
-        message.includes('too many requests')) {
+    if (
+        message.includes('429') ||
+        message.includes('rate limit') ||
+        message.includes('too many requests')
+    ) {
         return ErrorType.RATE_LIMIT;
     }
 
     // Server errors
-    if (message.includes('500') || message.includes('502') ||
-        message.includes('503') || message.includes('504')) {
+    if (
+        message.includes('500') ||
+        message.includes('502') ||
+        message.includes('503') ||
+        message.includes('504')
+    ) {
         return ErrorType.SERVER_ERROR;
     }
 
@@ -93,9 +104,13 @@ export function classifyError(error) {
     if (name === 'TypeError' && message.includes('fetch')) {
         return ErrorType.TRANSIENT;
     }
-    if (message.includes('network') || message.includes('econnrefused') ||
-        message.includes('etimedout') || message.includes('connection') ||
-        message.includes('enotfound')) {
+    if (
+        message.includes('network') ||
+        message.includes('econnrefused') ||
+        message.includes('etimedout') ||
+        message.includes('connection') ||
+        message.includes('enotfound')
+    ) {
         return ErrorType.TRANSIENT;
     }
 
@@ -114,7 +129,7 @@ export function isRetryable(error) {
         ErrorType.TRANSIENT,
         ErrorType.RATE_LIMIT,
         ErrorType.SERVER_ERROR,
-        ErrorType.TIMEOUT
+        ErrorType.TIMEOUT,
     ].includes(errorType);
 }
 
@@ -127,7 +142,7 @@ export const DEFAULT_RETRY_CONFIG = {
     maxDelayMs: 30000,
     jitterMs: 200,
     exponentialBase: 2,
-    timeoutMs: 30000
+    timeoutMs: 30000,
 };
 
 /**
@@ -143,7 +158,7 @@ export const RetryStrategies = {
         maxDelayMs: 10000,
         jitterMs: 200,
         exponentialBase: 2,
-        timeoutMs: 30000
+        timeoutMs: 30000,
     },
 
     /**
@@ -155,7 +170,7 @@ export const RetryStrategies = {
         maxDelayMs: 5000,
         jitterMs: 100,
         exponentialBase: 2,
-        timeoutMs: 5000
+        timeoutMs: 5000,
     },
 
     /**
@@ -167,7 +182,7 @@ export const RetryStrategies = {
         maxDelayMs: 5000,
         jitterMs: 50,
         exponentialBase: 2,
-        timeoutMs: 5000
+        timeoutMs: 5000,
     },
 
     /**
@@ -179,7 +194,7 @@ export const RetryStrategies = {
         maxDelayMs: 5000,
         jitterMs: 100,
         exponentialBase: 2,
-        timeoutMs: 10000
+        timeoutMs: 10000,
     },
 
     /**
@@ -191,7 +206,7 @@ export const RetryStrategies = {
         maxDelayMs: 30000,
         jitterMs: 200,
         exponentialBase: 2,
-        timeoutMs: 60000
+        timeoutMs: 60000,
     },
 
     /**
@@ -203,7 +218,7 @@ export const RetryStrategies = {
         maxDelayMs: 15000,
         jitterMs: 500,
         exponentialBase: 2,
-        timeoutMs: 10000
+        timeoutMs: 10000,
     },
 
     /**
@@ -215,7 +230,7 @@ export const RetryStrategies = {
         maxDelayMs: 1000,
         jitterMs: 50,
         exponentialBase: 2,
-        timeoutMs: 2000
+        timeoutMs: 2000,
     },
 
     /**
@@ -227,7 +242,7 @@ export const RetryStrategies = {
         maxDelayMs: 10000,
         jitterMs: 100,
         exponentialBase: 2,
-        timeoutMs: 15000
+        timeoutMs: 15000,
     },
 
     /**
@@ -239,6 +254,6 @@ export const RetryStrategies = {
         maxDelayMs: 3000,
         jitterMs: 200,
         exponentialBase: 2,
-        timeoutMs: 5000
-    }
+        timeoutMs: 5000,
+    },
 };

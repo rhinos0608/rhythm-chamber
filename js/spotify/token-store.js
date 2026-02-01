@@ -12,7 +12,7 @@ const logger = createLogger('Spotify:TokenStore');
 const STORAGE_KEYS = {
     ACCESS_TOKEN: 'spotify_access_token',
     REFRESH_TOKEN: 'spotify_refresh_token',
-    TOKEN_EXPIRY: 'spotify_token_expiry'
+    TOKEN_EXPIRY: 'spotify_token_expiry',
 };
 
 /**
@@ -57,7 +57,10 @@ export class TokenStore {
                     if (payload.exp && typeof payload.exp === 'number') {
                         // Use JWT exp as source of truth (in seconds since epoch)
                         calculatedExpiry = payload.exp * 1000;
-                        logger.debug('Using JWT exp claim for token expiry:', new Date(calculatedExpiry).toISOString());
+                        logger.debug(
+                            'Using JWT exp claim for token expiry:',
+                            new Date(calculatedExpiry).toISOString()
+                        );
                     }
                 }
             } catch (e) {
@@ -76,18 +79,26 @@ export class TokenStore {
             throw new Error('Secure token vault unavailable. Use HTTPS/localhost to continue.');
         }
 
-        const storedAccess = await SecureTokenStore.store('spotify_access_token', data.access_token, {
-            expiresIn: expiresInMs,
-            metadata: { source: 'spotify_oauth' }
-        });
+        const storedAccess = await SecureTokenStore.store(
+            'spotify_access_token',
+            data.access_token,
+            {
+                expiresIn: expiresInMs,
+                metadata: { source: 'spotify_oauth' },
+            }
+        );
         if (!storedAccess) {
             throw new Error('Failed to store Spotify access token securely.');
         }
 
         if (data.refresh_token) {
-            const storedRefresh = await SecureTokenStore.store('spotify_refresh_token', data.refresh_token, {
-                metadata: { source: 'spotify_oauth' }
-            });
+            const storedRefresh = await SecureTokenStore.store(
+                'spotify_refresh_token',
+                data.refresh_token,
+                {
+                    metadata: { source: 'spotify_oauth' },
+                }
+            );
             if (!storedRefresh) {
                 throw new Error('Failed to store Spotify refresh token securely.');
             }
@@ -101,7 +112,11 @@ export class TokenStore {
      * @returns {Promise<object>} Object with token and expiry
      */
     static async loadAccessToken() {
-        if (this.#accessTokenCache && this.#accessTokenExpiry && Date.now() < this.#accessTokenExpiry) {
+        if (
+            this.#accessTokenCache &&
+            this.#accessTokenExpiry &&
+            Date.now() < this.#accessTokenExpiry
+        ) {
             return { token: this.#accessTokenCache, expiry: this.#accessTokenExpiry };
         }
 
@@ -156,7 +171,7 @@ export class TokenStore {
     static async hasValidToken() {
         const { token, expiry } = await this.loadAccessToken();
         if (!token || !expiry) return false;
-        return Date.now() < (expiry - 300000); // 5 minute buffer
+        return Date.now() < expiry - 300000; // 5 minute buffer
     }
 
     /**

@@ -171,7 +171,7 @@ export class ObservabilityController {
         this._container = DashboardUI.createDashboardUI(this._container);
 
         // Setup tabs and get references for backward compatibility
-        const tabsResult = setupTabs(this._container, (tabName) => {
+        const tabsResult = setupTabs(this._container, tabName => {
             this._updateTabContent(tabName);
         });
         this._tabCleanup = tabsResult.clear;
@@ -185,9 +185,9 @@ export class ObservabilityController {
             onClearMetrics: () => this._clearMetrics(),
             onAddScheduledExport: () => this._addScheduledExport(),
             onAddExternalService: () => this._addExternalService(),
-            onPauseJob: (jobId) => this._pauseJob(jobId),
-            onDeleteJob: (jobId) => this._deleteJob(jobId),
-            onRemoveService: (endpoint) => this._removeService(endpoint)
+            onPauseJob: jobId => this._pauseJob(jobId),
+            onDeleteJob: jobId => this._deleteJob(jobId),
+            onRemoveService: endpoint => this._removeService(endpoint),
         });
     }
 
@@ -212,7 +212,7 @@ export class ObservabilityController {
 
         await this.exportNow(format, {
             includeMemory,
-            includeWebVitals: includeVitals
+            includeWebVitals: includeVitals,
         });
 
         // Show feedback
@@ -456,7 +456,7 @@ export class ObservabilityController {
             filters: options.filters || {},
             includeMemory: options.includeMemory !== false,
             includeWebVitals: options.includeWebVitals !== false,
-            aggregationWindow: options.aggregationWindow || 5
+            aggregationWindow: options.aggregationWindow || 5,
         };
 
         try {

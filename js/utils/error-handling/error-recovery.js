@@ -23,21 +23,18 @@ import { sanitizeMessage } from './error-sanitizer.js';
  * @returns {Object} Log entry for external processing
  */
 export function log(classifiedError, options = {}) {
-    const {
-        includeStack = true,
-        includeContext = true,
-        silent = false
-    } = options;
+    const { includeStack = true, includeContext = true, silent = false } = options;
 
     // Determine if we're in production (no stack traces in production)
-    const isProduction = typeof process !== 'undefined' && process.env?.NODE_ENV === 'production';
+    const nodeEnv = typeof globalThis !== 'undefined' ? globalThis.process?.env?.NODE_ENV : undefined;
+    const isProduction = nodeEnv === 'production';
     const shouldIncludeStack = includeStack && !isProduction;
 
     const logEntry = {
         type: classifiedError.type,
         severity: classifiedError.severity,
         message: classifiedError.message,
-        timestamp: classifiedError.timestamp
+        timestamp: classifiedError.timestamp,
     };
 
     if (includeContext && classifiedError.context) {
@@ -54,13 +51,14 @@ export function log(classifiedError, options = {}) {
     }
 
     // Route to appropriate console method based on severity
-    const consoleMethod = {
-        [ErrorSeverity.CRITICAL]: console.error,
-        [ErrorSeverity.HIGH]: console.error,
-        [ErrorSeverity.MEDIUM]: console.warn,
-        [ErrorSeverity.LOW]: console.info,
-        [ErrorSeverity.INFO]: console.log
-    }[classifiedError.severity] || console.error;
+    const consoleMethod =
+        {
+            [ErrorSeverity.CRITICAL]: console.error,
+            [ErrorSeverity.HIGH]: console.error,
+            [ErrorSeverity.MEDIUM]: console.warn,
+            [ErrorSeverity.LOW]: console.info,
+            [ErrorSeverity.INFO]: console.log,
+        }[classifiedError.severity] || console.error;
 
     const logMessage = `[${classifiedError.type}] ${classifiedError.message}`;
 
@@ -72,7 +70,7 @@ export function log(classifiedError, options = {}) {
 
     // Only log stack trace in non-production environments
     // SECURITY: Stack traces expose internal structure and file paths
-    const isDevelopment = typeof process !== 'undefined' && process.env?.NODE_ENV === 'development';
+    const isDevelopment = nodeEnv === 'development';
     if (shouldIncludeStack && isDevelopment && classifiedError.originalError?.stack) {
         console.group('Stack Trace');
         console.trace(classifiedError.originalError);
@@ -94,18 +92,14 @@ export function log(classifiedError, options = {}) {
  * @returns {Promise<{success: boolean, attempt: number, message?: string}>}
  */
 export async function attemptRecovery(classifiedError, options = {}) {
-    const {
-        maxRetries = 3,
-        retryDelayMs = 1000,
-        retryCallback = null
-    } = options;
+    const { maxRetries = 3, retryDelayMs = 1000, retryCallback = null } = options;
 
     // Check if error is recoverable
     if (classifiedError.recoverable === ErrorRecoverability.NOT_RECOVERABLE) {
         return {
             success: false,
             attempt: 0,
-            message: 'Error is not recoverable'
+            message: 'Error is not recoverable',
         };
     }
 
@@ -113,7 +107,7 @@ export async function attemptRecovery(classifiedError, options = {}) {
         return {
             success: false,
             attempt: 0,
-            message: 'User action required for recovery'
+            message: 'User action required for recovery',
         };
     }
 
@@ -122,7 +116,7 @@ export async function attemptRecovery(classifiedError, options = {}) {
         return {
             success: false,
             attempt: 0,
-            message: 'No retry callback provided'
+            message: 'No retry callback provided',
         };
     }
 
@@ -139,20 +133,23 @@ export async function attemptRecovery(classifiedError, options = {}) {
             return {
                 success: true,
                 attempt,
-                message: `Recovery successful on attempt ${attempt}`
+                message: `Recovery successful on attempt ${attempt}`,
             };
         } catch (retryError) {
             // Log retry attempt with sanitized error
             // SECURITY: Sanitize retry error to prevent sensitive data leakage
             const sanitizedRetryError = sanitizeMessage(String(retryError?.message || retryError));
-            console.warn(`[ErrorHandler] Retry attempt ${attempt}/${maxRetries} failed:`, sanitizedRetryError);
+            console.warn(
+                `[ErrorHandler] Retry attempt ${attempt}/${maxRetries} failed:`,
+                sanitizedRetryError
+            );
 
             // Check if this was the last attempt
             if (attempt === maxRetries) {
                 return {
                     success: false,
                     attempt,
-                    message: `Recovery failed after ${maxRetries} attempts`
+                    message: `Recovery failed after ${maxRetries} attempts`,
                 };
             }
         }
@@ -161,7 +158,7 @@ export async function attemptRecovery(classifiedError, options = {}) {
     return {
         success: false,
         attempt: maxRetries,
-        message: 'All retry attempts exhausted'
+        message: 'All retry attempts exhausted',
     };
 }
 
@@ -181,8 +178,10 @@ export function isType(classifiedError, errorType) {
  * @returns {boolean} True if error is critical or high
  */
 export function isSevere(classifiedError) {
-    return classifiedError?.severity === ErrorSeverity.CRITICAL ||
-           classifiedError?.severity === ErrorSeverity.HIGH;
+    return (
+        classifiedError?.severity === ErrorSeverity.CRITICAL ||
+        classifiedError?.severity === ErrorSeverity.HIGH
+    );
 }
 
 /**
@@ -191,8 +190,10 @@ export function isSevere(classifiedError) {
  * @returns {boolean} True if error can be recovered
  */
 export function isRecoverable(classifiedError) {
-    return classifiedError?.recoverable === ErrorRecoverability.RECOVERABLE ||
-           classifiedError?.recoverable === ErrorRecoverability.RECOVERABLE_WITH_RETRY;
+    return (
+        classifiedError?.recoverable === ErrorRecoverability.RECOVERABLE ||
+        classifiedError?.recoverable === ErrorRecoverability.RECOVERABLE_WITH_RETRY
+    );
 }
 
 /**
@@ -216,9 +217,7 @@ export async function handleBatchErrors(errors, context = {}) {
     // FIX: Use dynamic import() instead of require() to avoid circular dependency
     const { classifyError } = await import('./error-classifier.js');
 
-    const classifiedErrors = errors.map(error =>
-        classifyError(error, context)
-    );
+    const classifiedErrors = errors.map(error => classifyError(error, context));
 
     // Group by type
     const grouped = {};
@@ -231,15 +230,19 @@ export async function handleBatchErrors(errors, context = {}) {
 
     // Find highest severity
     const severities = classifiedErrors.map(e => e.severity);
-    const maxSeverity = severities.includes(ErrorSeverity.CRITICAL) ? ErrorSeverity.CRITICAL :
-                       severities.includes(ErrorSeverity.HIGH) ? ErrorSeverity.HIGH :
-                       severities.includes(ErrorSeverity.MEDIUM) ? ErrorSeverity.MEDIUM :
-                       ErrorSeverity.LOW;
+    const maxSeverity = severities.includes(ErrorSeverity.CRITICAL)
+        ? ErrorSeverity.CRITICAL
+        : severities.includes(ErrorSeverity.HIGH)
+            ? ErrorSeverity.HIGH
+            : severities.includes(ErrorSeverity.MEDIUM)
+                ? ErrorSeverity.MEDIUM
+                : ErrorSeverity.LOW;
 
     // Check if all are recoverable
-    const allRecoverable = classifiedErrors.every(e =>
-        e.recoverable === ErrorRecoverability.RECOVERABLE ||
-        e.recoverable === ErrorRecoverability.RECOVERABLE_WITH_RETRY
+    const allRecoverable = classifiedErrors.every(
+        e =>
+            e.recoverable === ErrorRecoverability.RECOVERABLE ||
+            e.recoverable === ErrorRecoverability.RECOVERABLE_WITH_RETRY
     );
 
     return {
@@ -248,6 +251,6 @@ export async function handleBatchErrors(errors, context = {}) {
         maxSeverity,
         allRecoverable,
         summary: `${errors.length} error(s) occurred. See details for more information.`,
-        errors: classifiedErrors
+        errors: classifiedErrors,
     };
 }

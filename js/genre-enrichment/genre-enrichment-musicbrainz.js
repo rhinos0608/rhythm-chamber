@@ -140,7 +140,9 @@ export async function processApiQueue() {
 
         // Log warning if max iterations reached
         if (iterations >= LIMITS.MAX_ITERATIONS && API_QUEUE.length > 0) {
-            logger.warn(`Queue processing stopped at max iterations (${LIMITS.MAX_ITERATIONS}), ${API_QUEUE.length} artists remaining`);
+            logger.warn(
+                `Queue processing stopped at max iterations (${LIMITS.MAX_ITERATIONS}), ${API_QUEUE.length} artists remaining`
+            );
         }
     } finally {
         apiProcessing = false;
@@ -174,8 +176,8 @@ export async function fetchGenreFromMusicBrainz(artistName) {
 
     const searchResponse = await fetch(searchUrl, {
         headers: {
-            'User-Agent': 'RhythmChamber/1.0 (https://rhythmchamber.com)'
-        }
+            'User-Agent': 'RhythmChamber/1.0 (https://rhythmchamber.com)',
+        },
     });
 
     if (!searchResponse.ok) {
@@ -199,8 +201,8 @@ export async function fetchGenreFromMusicBrainz(artistName) {
 
     const rgResponse = await fetch(rgUrl, {
         headers: {
-            'User-Agent': 'RhythmChamber/1.0 (https://rhythmchamber.com)'
-        }
+            'User-Agent': 'RhythmChamber/1.0 (https://rhythmchamber.com)',
+        },
     });
 
     if (!rgResponse.ok) {
@@ -211,8 +213,8 @@ export async function fetchGenreFromMusicBrainz(artistName) {
 
     // Step 4: Aggregate genres from release groups
     const genreCounts = {};
-    for (const rg of (rgData['release-groups'] || [])) {
-        for (const genre of (rg.genres || [])) {
+    for (const rg of rgData['release-groups'] || []) {
+        for (const genre of rg.genres || []) {
             genreCounts[genre.name] = (genreCounts[genre.name] || 0) + genre.count;
         }
     }
@@ -257,6 +259,6 @@ export function getQueueState() {
     return {
         queueLength: API_QUEUE.length,
         isProcessing: apiProcessing,
-        queuedArtists: [...API_QUEUE] // Return copy
+        queuedArtists: [...API_QUEUE], // Return copy
     };
 }

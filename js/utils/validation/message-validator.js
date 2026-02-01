@@ -25,7 +25,7 @@ import { hashMessageContent } from '../crypto-hashing.js';
 const MESSAGE_CONFIG = {
     MIN_LENGTH: 1,
     MAX_LENGTH: 50000,
-    MAX_HASH_CACHE_SIZE: 1000
+    MAX_HASH_CACHE_SIZE: 1000,
 };
 
 /**
@@ -36,7 +36,7 @@ const MESSAGE_CONFIG = {
  */
 let _lruHead = null; // Most recently used
 let _lruTail = null; // Least recently used
-let _lruCache = new Map(); // hash -> node
+const _lruCache = new Map(); // hash -> node
 let _lruSize = 0;
 
 // ==========================================
@@ -75,7 +75,7 @@ export async function validateMessage(message, options = {}) {
     const {
         skipDuplicateCheck = false,
         minLength = MESSAGE_CONFIG.MIN_LENGTH,
-        maxLength = MESSAGE_CONFIG.MAX_LENGTH
+        maxLength = MESSAGE_CONFIG.MAX_LENGTH,
     } = options;
 
     const errors = [];
@@ -84,7 +84,7 @@ export async function validateMessage(message, options = {}) {
     if (typeof message !== 'string') {
         return {
             valid: false,
-            error: 'Message must be a string'
+            error: 'Message must be a string',
         };
     }
 
@@ -92,7 +92,7 @@ export async function validateMessage(message, options = {}) {
     if (message.length === 0) {
         return {
             valid: false,
-            error: 'Message cannot be empty'
+            error: 'Message cannot be empty',
         };
     }
 
@@ -100,7 +100,7 @@ export async function validateMessage(message, options = {}) {
     if (message.length < minLength) {
         return {
             valid: false,
-            error: `Message must be at least ${minLength} character${minLength === 1 ? '' : 's'}`
+            error: `Message must be at least ${minLength} character${minLength === 1 ? '' : 's'}`,
         };
     }
 
@@ -108,7 +108,7 @@ export async function validateMessage(message, options = {}) {
     if (message.trim().length === 0) {
         return {
             valid: false,
-            error: 'Message cannot contain only whitespace'
+            error: 'Message cannot contain only whitespace',
         };
     }
 
@@ -116,7 +116,7 @@ export async function validateMessage(message, options = {}) {
     if (message.length > maxLength) {
         return {
             valid: false,
-            error: `Message too long (max ${maxLength} characters)`
+            error: `Message too long (max ${maxLength} characters)`,
         };
     }
 
@@ -126,7 +126,7 @@ export async function validateMessage(message, options = {}) {
         if (_lruCache.has(messageHash)) {
             return {
                 valid: false,
-                error: 'Duplicate message detected - this message was already processed'
+                error: 'Duplicate message detected - this message was already processed',
             };
         }
     }
@@ -165,7 +165,7 @@ export async function trackProcessedMessage(message) {
             hash: messageHash,
             timestamp: now,
             prev: null,
-            next: _lruHead
+            next: _lruHead,
         };
 
         if (_lruHead) {

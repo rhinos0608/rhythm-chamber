@@ -27,10 +27,17 @@ function shouldEncrypt(key, value) {
 
     // Check for sensitive key patterns
     const sensitivePatterns = [
-        'apikey', 'apitoken', 'token', 'secret', 'password',
-        'credential', 'refresh', 'access', 'auth',
-        'chat_',           // Chat history - restored from old pattern
-        'conversation.'    // Conversation data
+        'apikey',
+        'apitoken',
+        'token',
+        'secret',
+        'password',
+        'credential',
+        'refresh',
+        'access',
+        'auth',
+        'chat_', // Chat history - restored from old pattern
+        'conversation.', // Conversation data
     ];
 
     const keyLower = key.toLowerCase();
@@ -92,10 +99,7 @@ async function getConfig(key, defaultValue = null) {
     try {
         // Try IndexedDBCore if available
         if (IndexedDBCore) {
-            const result = await IndexedDBCore.get(
-                IndexedDBCore.STORES.CONFIG,
-                key
-            );
+            const result = await IndexedDBCore.get(IndexedDBCore.STORES.CONFIG, key);
             if (result) {
                 // Check if data is encrypted
                 if (result.value && result.value.encrypted === true) {
@@ -123,13 +127,20 @@ async function getConfig(key, defaultValue = null) {
                             error.key = key;
                             throw error;
                         }
-
                     } catch (decryptError) {
                         // CRITICAL: Decryption failure - emit security event and propagate
                         // Single point of emission for all decryption failures
-                        const securityEvent = { key, timestamp: Date.now(), critical: true, error: decryptError.message };
+                        const securityEvent = {
+                            key,
+                            timestamp: Date.now(),
+                            critical: true,
+                            error: decryptError.message,
+                        };
                         EventBus.emit('security:decryption_failed', securityEvent);
-                        console.error(`[ConfigAPI] CRITICAL: Decryption threw error for sensitive key '${key}':`, decryptError);
+                        console.error(
+                            `[ConfigAPI] CRITICAL: Decryption threw error for sensitive key '${key}':`,
+                            decryptError
+                        );
                         throw decryptError;
                     }
                 }
@@ -194,20 +205,26 @@ async function setConfig(key, value) {
                 // Wrap encrypted data in metadata object
                 valueToStore = {
                     encrypted: true,
-                    keyVersion: 1,  // Key version for future rotation support
-                    migrationVersion: MIGRATION_VERSION,  // Migration version for tracking
-                    value: encrypted
+                    keyVersion: 1, // Key version for future rotation support
+                    migrationVersion: MIGRATION_VERSION, // Migration version for tracking
+                    value: encrypted,
                 };
 
                 console.log(`[ConfigAPI] Successfully encrypted data for key '${key}'`);
-
             } catch (encryptError) {
                 // SECURITY FIX (CRITICAL Issue #3): Fail closed - do NOT fall back to plaintext
                 // Previous implementation silently fell back to plaintext on encryption failure
                 // This exposed sensitive data when crypto operations were blocked/corrupted
 
                 // Check if this is truly sensitive data that requires encryption
-                const sensitiveKeyPatterns = ['apikey', 'apitoken', 'token', 'secret', 'password', 'credential'];
+                const sensitiveKeyPatterns = [
+                    'apikey',
+                    'apitoken',
+                    'token',
+                    'secret',
+                    'password',
+                    'credential',
+                ];
                 const isSensitive = sensitiveKeyPatterns.some(pattern =>
                     key.toLowerCase().includes(pattern)
                 );
@@ -216,8 +233,8 @@ async function setConfig(key, value) {
                     // CRITICAL: Throw error instead of falling back to plaintext
                     const error = new Error(
                         `Encryption failed for sensitive data '${key}'. ` +
-                        `Cannot proceed without encryption to prevent data exposure. ` +
-                        `Error: ${encryptError.message}`
+                            'Cannot proceed without encryption to prevent data exposure. ' +
+                            `Error: ${encryptError.message}`
                     );
                     error.code = 'ENCRYPTION_FAILED_FOR_SENSITIVE_DATA';
                     error.key = key;
@@ -228,15 +245,20 @@ async function setConfig(key, value) {
                         key,
                         timestamp: Date.now(),
                         critical: true,
-                        error: encryptError.message
+                        error: encryptError.message,
                     });
 
-                    console.error(`[ConfigAPI] CRITICAL: Encryption failed for sensitive key '${key}' - throwing to prevent plaintext storage`);
+                    console.error(
+                        `[ConfigAPI] CRITICAL: Encryption failed for sensitive key '${key}' - throwing to prevent plaintext storage`
+                    );
                     throw error;
                 }
 
                 // For non-sensitive data, log warning and continue with plaintext
-                console.warn(`[ConfigAPI] Encryption failed for non-sensitive key '${key}', storing plaintext:`, encryptError);
+                console.warn(
+                    `[ConfigAPI] Encryption failed for non-sensitive key '${key}', storing plaintext:`,
+                    encryptError
+                );
                 valueToStore = value;
             }
         }
@@ -246,7 +268,7 @@ async function setConfig(key, value) {
             await IndexedDBCore.put(IndexedDBCore.STORES.CONFIG, {
                 key,
                 value: valueToStore,
-                updatedAt: new Date().toISOString()
+                updatedAt: new Date().toISOString(),
             });
             return;
         }
@@ -255,10 +277,11 @@ async function setConfig(key, value) {
         if (!valueToStore?.encrypted) {
             localStorage.setItem(key, JSON.stringify(valueToStore));
         } else {
-            console.warn(`[ConfigAPI] Cannot store encrypted data in localStorage for key '${key}'`);
+            console.warn(
+                `[ConfigAPI] Cannot store encrypted data in localStorage for key '${key}'`
+            );
             throw new Error('Encrypted data requires IndexedDB');
         }
-
     } catch (err) {
         console.warn(`[ConfigAPI] Error setting config '${key}':`, err);
         // Try localStorage as last resort (only for non-encrypted data)
@@ -266,7 +289,9 @@ async function setConfig(key, value) {
             if (!value?.encrypted) {
                 localStorage.setItem(key, JSON.stringify(value));
             } else {
-                console.error(`[ConfigAPI] Cannot store encrypted data in localStorage for key '${key}'`);
+                console.error(
+                    `[ConfigAPI] Cannot store encrypted data in localStorage for key '${key}'`
+                );
             }
         } catch (e) {
             console.error(`[ConfigAPI] Failed to set config '${key}':`, e);
@@ -321,9 +346,7 @@ async function removeConfig(key) {
 async function getAllConfig() {
     try {
         if (IndexedDBCore) {
-            const records = await IndexedDBCore.getAll(
-                IndexedDBCore.STORES.CONFIG
-            );
+            const records = await IndexedDBCore.getAll(IndexedDBCore.STORES.CONFIG);
             const config = {};
             for (const record of records) {
                 config[record.key] = record.value;
@@ -405,7 +428,7 @@ async function migrateToEncryptedStorage() {
             failed: 0,
             skipped: 0,
             failedKeys: [],
-            hasInconsistentState: false
+            hasInconsistentState: false,
         };
 
         // MEDIUM FIX Issue #23: First pass - identify what needs to be migrated
@@ -455,9 +478,10 @@ async function migrateToEncryptedStorage() {
                     result.successful++;
                     pendingWrites.push(key);
                 } else {
-                    throw new Error('Encryption verification failed - data not encrypted after setConfig');
+                    throw new Error(
+                        'Encryption verification failed - data not encrypted after setConfig'
+                    );
                 }
-
             } catch (recordError) {
                 // Log individual record failure but continue processing
                 console.error(`[Migration] Failed to migrate '${key}':`, recordError);
@@ -467,14 +491,23 @@ async function migrateToEncryptedStorage() {
                 // MEDIUM FIX Issue #23: Check if this failure creates inconsistent security state
                 // If encryption failed but we have the key as a known sensitive pattern,
                 // we now have plaintext where encryption was expected
-                const sensitiveKeyPatterns = ['apikey', 'apitoken', 'token', 'secret', 'password', 'credential'];
+                const sensitiveKeyPatterns = [
+                    'apikey',
+                    'apitoken',
+                    'token',
+                    'secret',
+                    'password',
+                    'credential',
+                ];
                 const isSensitive = sensitiveKeyPatterns.some(pattern =>
                     key.toLowerCase().includes(pattern)
                 );
 
                 if (isSensitive) {
                     result.hasInconsistentState = true;
-                    console.error(`[Migration] CRITICAL: Sensitive key '${key}' failed encryption - INCONSISTENT SECURITY STATE`);
+                    console.error(
+                        `[Migration] CRITICAL: Sensitive key '${key}' failed encryption - INCONSISTENT SECURITY STATE`
+                    );
                 }
             }
         }
@@ -482,32 +515,37 @@ async function migrateToEncryptedStorage() {
         // MEDIUM FIX Issue #23: Final state validation
         // If any failed keys were sensitive, report the inconsistent state
         if (result.hasInconsistentState) {
-            console.error('[Migration] WARNING: Migration completed but left inconsistent security state!');
-            console.error('[Migration] Some sensitive data may be plaintext while other data is encrypted.');
+            console.error(
+                '[Migration] WARNING: Migration completed but left inconsistent security state!'
+            );
+            console.error(
+                '[Migration] Some sensitive data may be plaintext while other data is encrypted.'
+            );
             console.error('[Migration] Failed keys:', result.failedKeys);
-            console.error('[Migration] RECOMMENDATION: Review failed keys and manually retry migration');
+            console.error(
+                '[Migration] RECOMMENDATION: Review failed keys and manually retry migration'
+            );
         }
 
         // Log completion
-        console.log(`[Migration] Migration complete:`);
+        console.log('[Migration] Migration complete:');
         console.log(`[Migration] - Successful: ${result.successful}`);
         console.log(`[Migration] - Failed: ${result.failed}`);
         console.log(`[Migration] - Skipped: ${result.skipped}`);
 
         if (result.failed > 0) {
-            console.warn(`[Migration] Failed keys:`, result.failedKeys);
+            console.warn('[Migration] Failed keys:', result.failedKeys);
         }
 
         // MEDIUM FIX Issue #23: Emit event for monitoring
         if (result.hasInconsistentState) {
             EventBus.emit('security:migration_inconsistent', {
                 failedKeys: result.failedKeys,
-                timestamp: Date.now()
+                timestamp: Date.now(),
             });
         }
 
         return result;
-
     } catch (error) {
         console.error('[Migration] Migration failed:', error);
         return {
@@ -515,7 +553,7 @@ async function migrateToEncryptedStorage() {
             failed: 0,
             skipped: 0,
             failedKeys: [],
-            error: error.message
+            error: error.message,
         };
     }
 }
@@ -535,15 +573,14 @@ async function getToken(key) {
             return await SecureTokenStore.retrieve(key);
         }
         if (SecureTokenStore) {
-            console.warn(`[ConfigAPI] SecureTokenStore unavailable; token access blocked for '${key}'.`);
+            console.warn(
+                `[ConfigAPI] SecureTokenStore unavailable; token access blocked for '${key}'.`
+            );
             return null;
         }
 
         if (IndexedDBCore) {
-            const result = await IndexedDBCore.get(
-                IndexedDBCore.STORES.TOKENS,
-                key
-            );
+            const result = await IndexedDBCore.get(IndexedDBCore.STORES.TOKENS, key);
             return result ? result.value : null;
         }
 
@@ -565,7 +602,7 @@ async function setToken(key, value) {
     try {
         if (SecureTokenStore?.isAvailable?.()) {
             const stored = await SecureTokenStore.store(key, value, {
-                metadata: { source: 'config_api' }
+                metadata: { source: 'config_api' },
             });
             if (!stored) {
                 throw new Error('SecureTokenStore refused token write');
@@ -573,7 +610,9 @@ async function setToken(key, value) {
             return;
         }
         if (SecureTokenStore) {
-            console.warn(`[ConfigAPI] SecureTokenStore unavailable; token write blocked for '${key}'.`);
+            console.warn(
+                `[ConfigAPI] SecureTokenStore unavailable; token write blocked for '${key}'.`
+            );
             return;
         }
 
@@ -581,7 +620,7 @@ async function setToken(key, value) {
             await IndexedDBCore.put(IndexedDBCore.STORES.TOKENS, {
                 key,
                 value,
-                updatedAt: new Date().toISOString()
+                updatedAt: new Date().toISOString(),
             });
             return;
         }
@@ -652,8 +691,7 @@ export const ConfigAPI = {
     getToken,
     setToken,
     removeToken,
-    clearAllTokens
+    clearAllTokens,
 };
-
 
 console.log('[ConfigAPI] Unified config API loaded');

@@ -88,7 +88,7 @@ export class RAGCheckpointManager {
     async saveCheckpoint(data) {
         const checkpoint = {
             ...data,
-            timestamp: Date.now()
+            timestamp: Date.now(),
         };
 
         // Try to encrypt checkpoint
@@ -154,7 +154,7 @@ export class RAGCheckpointManager {
             id,
             state,
             timestamp: Date.now(),
-            version: 1
+            version: 1,
         };
 
         await this.saveCheckpoint(checkpoint);
@@ -263,7 +263,7 @@ export class RAGCheckpointManager {
             id: checkpoint.id,
             timestamp: checkpoint.timestamp,
             version: checkpoint.version,
-            hasState: !!checkpoint.state
+            hasState: !!checkpoint.state,
         };
     }
 

@@ -1,11 +1,11 @@
 /**
  * AppState - Centralized State Management
- * 
+ *
  * HNW-Based Design:
  * - Hierarchy: Single source of truth, explicit mutation authority
  * - Network: Subscribe pattern for loose coupling, frozen immutable state
  * - Wave: Batched async updates, predictable notification timing
- * 
+ *
  * @module AppState
  */
 
@@ -16,35 +16,35 @@
 const INITIAL_STATE = {
     // View state - current screen/stage
     view: {
-        current: 'upload',  // 'upload' | 'processing' | 'reveal' | 'lite-reveal' | 'chat'
-        previous: null
+        current: 'upload', // 'upload' | 'processing' | 'reveal' | 'lite-reveal' | 'chat'
+        previous: null,
     },
 
     // Data state - processed music data
     data: {
-        streams: null,      // Raw listening history
-        chunks: null,       // Aggregated chunks
-        patterns: null,     // Detected patterns
-        personality: null,  // Classified personality
-        dataHash: null      // For staleness detection
+        streams: null, // Raw listening history
+        chunks: null, // Aggregated chunks
+        patterns: null, // Detected patterns
+        personality: null, // Classified personality
+        dataHash: null, // For staleness detection
     },
 
     // Lite mode state - Spotify API quick snapshot
     lite: {
         isLiteMode: false,
         liteData: null,
-        litePatterns: null
+        litePatterns: null,
     },
 
     // UI state - visual/interaction state
     ui: {
         sidebarCollapsed: false,
         currentSessionId: null,
-        authorityLevel: 'primary',  // 'primary' | 'secondary' for multi-tab coordination
+        authorityLevel: 'primary', // 'primary' | 'secondary' for multi-tab coordination
         isReadOnlyMode: false,
         resetButton: {
-            visible: false  // Reset button visibility state
-        }
+            visible: false, // Reset button visibility state
+        },
     },
 
     // Operations state - background processing
@@ -53,7 +53,7 @@ const INITIAL_STATE = {
         processingProgress: 0,
         processingMessage: '',
         error: null,
-        safeMode: false  // Security modules in fallback mode
+        safeMode: false, // Security modules in fallback mode
     },
 
     // Demo mode state - sandboxed sample data
@@ -63,8 +63,8 @@ const INITIAL_STATE = {
         // Demo data lives here, NOT in the main 'data' domain
         streams: null,
         patterns: null,
-        personality: null
-    }
+        personality: null,
+    },
 };
 
 // Valid domain names for update validation
@@ -75,10 +75,10 @@ const VALID_DOMAINS = Object.keys(INITIAL_STATE);
 // ==========================================
 
 let _state = null;
-let _subscribers = new Set();
+const _subscribers = new Set();
 let _pendingNotification = false;
 let _debugMode = false;
-let _changedDomains = new Set();
+const _changedDomains = new Set();
 
 // ==========================================
 // Freeze Configuration
@@ -90,19 +90,23 @@ let _changedDomains = new Set();
  */
 const isDevelopment = (() => {
     // Check for explicit NODE_ENV (most reliable in build systems)
-    if (typeof process !== 'undefined' && process.env) {
-        return process.env.NODE_ENV === 'development';
+    const nodeEnv = typeof globalThis !== 'undefined' ? globalThis.process?.env?.NODE_ENV : undefined;
+    if (nodeEnv) {
+        return nodeEnv === 'development';
     }
     // Check for build-time global (common pattern)
-    if (typeof __DEV__ !== 'undefined') {
-        return __DEV__;
+    const devFlag = typeof globalThis !== 'undefined' ? globalThis.__DEV__ : undefined;
+    if (typeof devFlag !== 'undefined') {
+        return devFlag;
     }
     // Check for common development indicators
     if (typeof window !== 'undefined') {
         // Check localhost URL
-        if (window.location.hostname === 'localhost' ||
+        if (
+            window.location.hostname === 'localhost' ||
             window.location.hostname === '127.0.0.1' ||
-            window.location.hostname === '') {
+            window.location.hostname === ''
+        ) {
             return true;
         }
         // Check for devtools
@@ -248,7 +252,7 @@ function scheduleNotification() {
                     totalSubscribers,
                     changedDomains: changedArray,
                     errorMessage: err.message || String(err),
-                    errorStack: err.stack
+                    errorStack: err.stack,
                 };
                 errors.push(errorInfo);
                 console.error('[AppState] Subscriber error:', errorInfo);
@@ -258,7 +262,9 @@ function scheduleNotification() {
 
         // FIX Issue #4: Log summary if any errors occurred
         if (errors.length > 0) {
-            console.warn(`[AppState] ${errors.length}/${totalSubscribers} subscriber(s) threw errors during notification for domains: ${changedArray.join(', ')}`);
+            console.warn(
+                `[AppState] ${errors.length}/${totalSubscribers} subscriber(s) threw errors during notification for domains: ${changedArray.join(', ')}`
+            );
         }
     });
 }
@@ -352,7 +358,9 @@ const AppState = {
         }
 
         if (!VALID_DOMAINS.includes(domain)) {
-            console.error(`[AppState] Unknown domain: ${domain}. Valid domains: ${VALID_DOMAINS.join(', ')}`);
+            console.error(
+                `[AppState] Unknown domain: ${domain}. Valid domains: ${VALID_DOMAINS.join(', ')}`
+            );
             return this.get();
         }
 
@@ -388,7 +396,7 @@ const AppState = {
     subscribe(callback) {
         if (typeof callback !== 'function') {
             console.error('[AppState] Subscribe callback must be a function');
-            return () => { };
+            return () => {};
         }
 
         _subscribers.add(callback);
@@ -418,7 +426,7 @@ const AppState = {
         const current = _state?.view?.current;
         return this.update('view', {
             current: viewName,
-            previous: current
+            previous: current,
         });
     },
 
@@ -467,7 +475,7 @@ const AppState = {
             isProcessing,
             processingMessage: message,
             processingProgress: progress,
-            error: isProcessing ? null : _state?.operations?.error // Clear error when starting
+            error: isProcessing ? null : _state?.operations?.error, // Clear error when starting
         });
     },
 
@@ -477,7 +485,7 @@ const AppState = {
      */
     setError(error) {
         return this.update('operations', {
-            error: error ? (error.message || String(error)) : null
+            error: error ? error.message || String(error) : null,
         });
     },
 
@@ -490,7 +498,7 @@ const AppState = {
         return this.update('lite', {
             isLiteMode: true,
             liteData,
-            litePatterns
+            litePatterns,
         });
     },
 
@@ -532,7 +540,7 @@ const AppState = {
                 streams: deepClone(_state.demo.streams),
                 patterns: deepClone(_state.demo.patterns),
                 personality: deepClone(_state.demo.personality),
-                isDemoMode: true
+                isDemoMode: true,
             };
         }
 
@@ -541,7 +549,7 @@ const AppState = {
             streams: deepClone(_state.data.streams),
             patterns: deepClone(_state.data.patterns),
             personality: deepClone(_state.data.personality),
-            isDemoMode: false
+            isDemoMode: false,
         };
     },
 
@@ -599,9 +607,9 @@ const AppState = {
         return {
             isDevelopment,
             deepFreezeEnabled: ENABLE_DEEP_FREEZE,
-            largeDataDomains: [...LARGE_DATA_DOMAINS]
+            largeDataDomains: [...LARGE_DATA_DOMAINS],
         };
-    }
+    },
 };
 
 // ==========================================
@@ -612,4 +620,3 @@ const AppState = {
 export { AppState, INITIAL_STATE, VALID_DOMAINS };
 
 console.log('[AppState] Centralized state management module loaded');
-

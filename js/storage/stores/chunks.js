@@ -19,7 +19,7 @@ import { STORES } from './registry.js';
  */
 export async function saveChunks(chunks) {
     return queuedOperation(async () => {
-        await IndexedDBCore.transaction(STORES.CHUNKS, 'readwrite', (store) => {
+        await IndexedDBCore.transaction(STORES.CHUNKS, 'readwrite', store => {
             for (const chunk of chunks) {
                 store.put(chunk);
             }
@@ -111,10 +111,15 @@ export async function getChunksByStream(streamId) {
         request.onerror = () => {
             // Fallback to full scan for databases without the index
             // This maintains backward compatibility with older databases
-            console.warn('[Chunks] Index query failed, falling back to full scan:', request.error?.message);
-            getChunks().then(chunks => {
-                resolve(chunks.filter(chunk => chunk.streamId === streamId));
-            }).catch(reject);
+            console.warn(
+                '[Chunks] Index query failed, falling back to full scan:',
+                request.error?.message
+            );
+            getChunks()
+                .then(chunks => {
+                    resolve(chunks.filter(chunk => chunk.streamId === streamId));
+                })
+                .catch(reject);
         };
     });
 }

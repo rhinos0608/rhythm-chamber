@@ -38,16 +38,16 @@ let currentAbortController = null;
  * Higher priority patterns appear first
  */
 const PATTERN_ORDER = [
-    'comfortDiscovery',     // Foundation pattern - comfort vs novelty
-    'listeningEras',        // Era identification
-    'timeOfDay',            // Time-based preferences
-    'weekdayWeekend',       // Social context patterns
-    'emotionalJourney',     // Mood/energy patterns
-    'ghostedArtists',       // Abandoned favorites
-    'artistLoyalty',        // Long-term artist relationships
-    'genreEvolution',       // Genre diversity over time
-    'seasonalPatterns',     // Seasonal listening changes
-    'bingeSessions'         // Intensive listening sessions
+    'comfortDiscovery', // Foundation pattern - comfort vs novelty
+    'listeningEras', // Era identification
+    'timeOfDay', // Time-based preferences
+    'weekdayWeekend', // Social context patterns
+    'emotionalJourney', // Mood/energy patterns
+    'ghostedArtists', // Abandoned favorites
+    'artistLoyalty', // Long-term artist relationships
+    'genreEvolution', // Genre diversity over time
+    'seasonalPatterns', // Seasonal listening changes
+    'bingeSessions', // Intensive listening sessions
 ];
 
 // ==========================================
@@ -57,7 +57,7 @@ const PATTERN_ORDER = [
 /**
  * Start streaming pattern detection
  * Emits patterns one-by-one as they are detected
- * 
+ *
  * @param {Array} streams - User streaming history
  * @param {Object} [options] - Detection options
  * @param {number} [options.delay=500] - Delay between pattern emissions (ms)
@@ -106,7 +106,7 @@ async function startStream(streams, options = {}) {
                         patternName,
                         result,
                         index: detectedPatterns.size,
-                        total: PATTERN_ORDER.length
+                        total: PATTERN_ORDER.length,
                     });
 
                     // Direct callback if provided
@@ -120,7 +120,10 @@ async function startStream(streams, options = {}) {
                     }
                 }
             } catch (patternError) {
-                console.warn(`[PatternStream] Failed to detect ${patternName}:`, patternError.message);
+                console.warn(
+                    `[PatternStream] Failed to detect ${patternName}:`,
+                    patternError.message
+                );
             }
         }
 
@@ -132,9 +135,11 @@ async function startStream(streams, options = {}) {
             EventBus.emit('pattern:aborted', {
                 patterns: allPatterns,
                 duration,
-                aborted: true
+                aborted: true,
             });
-            console.log(`[PatternStream] Aborted after ${detectedPatterns.size} patterns in ${duration}ms`);
+            console.log(
+                `[PatternStream] Aborted after ${detectedPatterns.size} patterns in ${duration}ms`
+            );
             return allPatterns;
         }
 
@@ -142,7 +147,7 @@ async function startStream(streams, options = {}) {
         EventBus.emit('pattern:all_complete', {
             patterns: allPatterns,
             duration,
-            aborted: false
+            aborted: false,
         });
 
         if (onComplete) {
@@ -151,7 +156,6 @@ async function startStream(streams, options = {}) {
 
         console.log(`[PatternStream] Completed ${detectedPatterns.size} patterns in ${duration}ms`);
         return allPatterns;
-
     } finally {
         isStreaming = false;
         currentAbortController = null;
@@ -161,7 +165,7 @@ async function startStream(streams, options = {}) {
 /**
  * Detect a single pattern type
  * Maps pattern names to detection functions
- * 
+ *
  * @param {Object} Patterns - Patterns module
  * @param {string} patternName - Pattern to detect
  * @param {Array} streams - Streaming data
@@ -179,7 +183,7 @@ async function detectSinglePattern(Patterns, patternName, streams) {
         artistLoyalty: () => Patterns.detectArtistLoyalty?.(streams), // Not implemented yet
         genreEvolution: () => Patterns.detectGenreEvolution?.(streams), // Not implemented yet
         seasonalPatterns: () => Patterns.detectSeasonalPatterns?.(streams), // Not implemented yet
-        bingeSessions: () => Patterns.detectBingeSessions?.(streams) // Not implemented yet
+        bingeSessions: () => Patterns.detectBingeSessions?.(streams), // Not implemented yet
     };
 
     const detector = detectors[patternName];
@@ -237,7 +241,7 @@ function getProgress() {
     return {
         detected,
         total,
-        percentage: Math.round((detected / total) * 100)
+        percentage: Math.round((detected / total) * 100),
     };
 }
 
@@ -280,8 +284,7 @@ export const PatternStream = {
     getProgress,
 
     // Constants
-    PATTERN_ORDER
+    PATTERN_ORDER,
 };
-
 
 console.log('[PatternStream] Pattern streaming service loaded');

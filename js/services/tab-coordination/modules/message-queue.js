@@ -31,6 +31,11 @@ let isProcessingQueue = false;
 let recursionDepth = 0;
 const MAX_RECURSION_DEPTH = 100;
 
+/**
+ * Prevent deferred processing storms - only one setTimeout pending at a time
+ */
+let deferredProcessingPending = false;
+
 // ==========================================
 // Queue Operations
 // ==========================================
@@ -101,9 +106,15 @@ export async function processMessageQueue() {
 
     // CRITICAL FIX #1: Check recursion depth to prevent stack overflow
     if (recursionDepth >= MAX_RECURSION_DEPTH) {
-        console.error('[MessageQueue] Max recursion depth reached, deferring processing');
-        // Defer to next event loop to allow stack to clear
-        setTimeout(() => processMessageQueue().catch(e => console.error('[MessageQueue] Deferred processing failed:', e)), 100);
+        if (!deferredProcessingPending) {
+            deferredProcessingPending = true;
+            console.error('[MessageQueue] Max recursion depth reached, deferring processing');
+            // Defer to next event loop to allow stack to clear
+            setTimeout(() => {
+                deferredProcessingPending = false;
+                processMessageQueue().catch(e => console.error('[MessageQueue] Deferred processing failed:', e));
+            }, 100);
+        }
         return;
     }
 
@@ -156,11 +167,40 @@ export async function processMessageQueue() {
             }
         }
     } finally {
-        recursionDepth--;
+        // CRITICAL FIX: Reset counter when queue drains and prevent negative counter
+        if (messageQueue.length === 0 && recursionDepth > 0) {
+            console.log(`[MessageQueue] Queue drained, resetting recursion depth from ${recursionDepth} to 0`);
+            recursionDepth = 0;
+
+            // CRITICAL: Don't decrement - we already reset
+            // Also clear the isProcessingQueue flag
+            isProcessingQueue = false;
+
+            // CRITICAL: Return early since queue is empty - no more work to do
+            // Don't call processMessageQueue() here - it will be called when new items arrive
+            return;
+        }
+
+        // Only reach here if queue has items
         isProcessingQueue = false;
-        // RACE CONDITION FIX: Continue processing if messages were added during processing
-        // This ensures the queue is drained completely before returning
-        processMessageQueue().catch(e => console.error('[MessageQueue] Next batch failed:', e));
+
+        // Check if we need to defer to next tick to prevent stack overflow
+        if (recursionDepth >= MAX_RECURSION_DEPTH) {
+            recursionDepth--;
+            if (!deferredProcessingPending) {
+                deferredProcessingPending = true;
+                console.warn('[MessageQueue] Max recursion depth in finally, deferring to next tick');
+                setTimeout(() => {
+                    deferredProcessingPending = false;
+                    processMessageQueue().catch(e => console.error('[MessageQueue] Deferred failed:', e));
+                }, 100);
+            }
+        } else {
+            recursionDepth--;
+            // RACE CONDITION FIX: Continue processing if messages were added during processing
+            // This ensures the queue is drained completely before returning
+            processMessageQueue().catch(e => console.error('[MessageQueue] Next batch failed:', e));
+        }
     }
 }
 

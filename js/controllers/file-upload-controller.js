@@ -85,12 +85,14 @@ async function handleFileUpload(file) {
         'application/zip',
         'application/json',
         'application/x-zip-compressed',
-        'text/plain'
+        'text/plain',
     ];
 
     // Check MIME type
     if (!validMimeTypes.includes(file.type)) {
-        _showToast(`Invalid file type: ${file.type || 'unknown'}. Please upload a .zip or .json file.`);
+        _showToast(
+            `Invalid file type: ${file.type || 'unknown'}. Please upload a .zip or .json file.`
+        );
         return;
     }
 
@@ -103,9 +105,9 @@ async function handleFileUpload(file) {
 
         // ZIP magic bytes: 0x50 0x4B (PK) - either 0x504B0304 or 0x504B0506 or 0x504B0708
         const validZipSignatures = [
-            [0x50, 0x4B, 0x03, 0x04], // Local file header
-            [0x50, 0x4B, 0x05, 0x06], // End of central directory
-            [0x50, 0x4B, 0x07, 0x08]  // Data descriptor
+            [0x50, 0x4b, 0x03, 0x04], // Local file header
+            [0x50, 0x4b, 0x05, 0x06], // End of central directory
+            [0x50, 0x4b, 0x07, 0x08], // Data descriptor
         ];
 
         const isValidZip = validZipSignatures.some(sig =>
@@ -153,7 +155,9 @@ async function handleFileUpload(file) {
 
             // Optional: Show recovery suggestion
             if (lockError.getRecoverySuggestion) {
-                console.log(`[FileUploadController] Recovery: ${lockError.getRecoverySuggestion()}`);
+                console.log(
+                    `[FileUploadController] Recovery: ${lockError.getRecoverySuggestion()}`
+                );
             }
         } else {
             // Unexpected error type
@@ -187,7 +191,6 @@ async function handleFileUpload(file) {
 
         // Process file with Web Worker
         await processWithWorker(file);
-
     } catch (error) {
         console.error('[FileUploadController] Upload failed:', error);
         if (_ViewController && _showToast) {
@@ -224,7 +227,7 @@ async function processWithWorker(file) {
         activeWorker = new Worker('js/parser-worker.js');
 
         // Set up message handler
-        activeWorker.onmessage = async (e) => {
+        activeWorker.onmessage = async e => {
             try {
                 await handleWorkerMessage(e, resolve, reject);
             } catch (error) {
@@ -233,7 +236,7 @@ async function processWithWorker(file) {
         };
 
         // Set up error handler
-        activeWorker.onerror = (err) => {
+        activeWorker.onerror = err => {
             console.error('[FileUploadController] Worker error:', err);
             reject(new Error(err.message || 'Worker error'));
         };
@@ -255,7 +258,8 @@ async function processWithWorker(file) {
  * Handle worker messages
  */
 async function handleWorkerMessage(e, resolve, reject) {
-    const { type, message, streams, chunks, error, partialStreams, fileIndex, totalFiles, usage } = e.data;
+    const { type, message, streams, chunks, error, partialStreams, fileIndex, totalFiles, usage } =
+        e.data;
 
     switch (type) {
         case 'progress':
@@ -303,7 +307,9 @@ async function handleWorkerMessage(e, resolve, reject) {
 function handleMemoryWarning(usage) {
     const usagePercent = Math.round(usage * 100);
     if (_ViewController) {
-        _ViewController.updateProgress(`Low on memory (${usagePercent}%) - pausing to avoid crash...`);
+        _ViewController.updateProgress(
+            `Low on memory (${usagePercent}%) - pausing to avoid crash...`
+        );
     }
     console.warn(`[FileUploadController] Memory warning: ${usagePercent}% usage`);
 }
@@ -328,7 +334,9 @@ async function handlePartialSave(partialStreams, fileIndex, totalFiles, streamCo
                 await _Storage.appendStreams(partialStreams);
             }
             if (_ViewController) {
-                _ViewController.updateProgress(`Parsing file ${fileIndex}/${totalFiles}... (${streamCount.toLocaleString()} streams)`);
+                _ViewController.updateProgress(
+                    `Parsing file ${fileIndex}/${totalFiles}... (${streamCount.toLocaleString()} streams)`
+                );
             }
         },
         {
@@ -336,9 +344,9 @@ async function handlePartialSave(partialStreams, fileIndex, totalFiles, streamCo
             fallback: null,
             rethrow: false,
             telemetry: _WaveTelemetry,
-            onError: (err) => {
+            onError: err => {
                 console.warn('[FileUploadController] Failed to save partial streams:', err);
-            }
+            },
         }
     );
 }
@@ -354,7 +362,7 @@ async function handleProcessingComplete(streams, chunks) {
             if (_AppState) {
                 _AppState.update('data', {
                     streams: streams,
-                    chunks: chunks
+                    chunks: chunks,
                 });
             }
 
@@ -403,10 +411,10 @@ async function handleProcessingComplete(streams, chunks) {
             fallback: null,
             rethrow: true,
             telemetry: _WaveTelemetry,
-            onError: (error) => {
+            onError: error => {
                 console.error('[FileUploadController] Processing completion failed:', error);
                 _showToast('Failed to complete file processing. Please try again.');
-            }
+            },
         }
     );
 }
@@ -488,7 +496,7 @@ function getProcessingState() {
     return {
         isProcessing: !!activeWorker,
         hasLock: !!currentFileLockId,
-        workerActive: activeWorker !== null
+        workerActive: activeWorker !== null,
     };
 }
 
@@ -535,8 +543,7 @@ export const FileUploadController = {
     handleFileUpload,
     cancelProcessing,
     getProcessingState,
-    cleanupWorker
+    cleanupWorker,
 };
-
 
 console.log('[FileUploadController] Controller loaded - race condition fixed');

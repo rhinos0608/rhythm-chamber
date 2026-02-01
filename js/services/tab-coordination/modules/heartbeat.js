@@ -13,11 +13,7 @@
 import { DeviceDetection } from '../../device-detection.js';
 import { WaveTelemetry } from '../../wave-telemetry.js';
 import { MESSAGE_TYPES, TAB_ID, vectorClock } from '../constants.js';
-import {
-    getHeartbeatIntervalMs,
-    getMaxMissedHeartbeats,
-    TimingConfig
-} from '../timing.js';
+import { getHeartbeatIntervalMs, getMaxMissedHeartbeats, TimingConfig } from '../timing.js';
 import { sendMessage } from './message-sender.js';
 import { getIsPrimaryTab } from './authority.js';
 import { initiateReElection } from './election.js';
@@ -136,8 +132,8 @@ async function sendHeartbeat() {
         vectorClock: currentVectorClock,
         deviceInfo: {
             isMobile: DeviceDetection.isMobile(),
-            networkQuality: DeviceDetection.getNetworkState().quality
-        }
+            networkQuality: DeviceDetection.getNetworkState().quality,
+        },
     });
 }
 

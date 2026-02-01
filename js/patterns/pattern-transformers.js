@@ -14,7 +14,9 @@ export function generateDataInsights(streams) {
     if (!streams || streams.length === 0) return null;
 
     // 1. Basic Counts
-    const totalMinutes = Math.round(streams.reduce((sum, s) => sum + (s?.msPlayed || 0), 0) / 60000);
+    const totalMinutes = Math.round(
+        streams.reduce((sum, s) => sum + (s?.msPlayed || 0), 0) / 60000
+    );
     const uniqueArtists = new Set(streams.filter(s => s != null).map(s => s.artistName)).size;
 
     // 2. Top Artist & Percentile
@@ -33,11 +35,11 @@ export function generateDataInsights(streams) {
 
     // Heuristic for "Top X%" based on global Spotify listening averages
     // This is estimated for fun since we don't have global data
-    let percentile = "Top 5%";
-    if (topArtistMinutes > 5000) percentile = "Top 0.05%";
-    else if (topArtistMinutes > 2000) percentile = "Top 0.5%";
-    else if (topArtistMinutes > 1000) percentile = "Top 1%";
-    else if (topArtistMinutes > 500) percentile = "Top 2%";
+    let percentile = 'Top 5%';
+    if (topArtistMinutes > 5000) percentile = 'Top 0.05%';
+    else if (topArtistMinutes > 2000) percentile = 'Top 0.5%';
+    else if (topArtistMinutes > 1000) percentile = 'Top 1%';
+    else if (topArtistMinutes > 500) percentile = 'Top 2%';
 
     // 3. Peak Listening Day
     const dayCounts = {};
@@ -57,9 +59,9 @@ export function generateDataInsights(streams) {
         topArtist: {
             name: topArtistName,
             minutes: topArtistMinutes,
-            percentile
+            percentile,
         },
-        peakDay
+        peakDay,
     };
 }
 
@@ -71,12 +73,17 @@ export function generateDataInsights(streams) {
  * @returns {Object} Summary with total streams, hours, unique artists/tracks, date range
  */
 export function generatePatternSummary(streams, patterns) {
-    const totalHours = Math.round(streams.reduce((sum, s) => sum + (s?.msPlayed || 0), 0) / 3600000);
+    const totalHours = Math.round(
+        streams.reduce((sum, s) => sum + (s?.msPlayed || 0), 0) / 3600000
+    );
     const uniqueArtists = new Set(streams.filter(s => s != null).map(s => s.artistName)).size;
-    const uniqueTracks = new Set(streams.filter(s => s != null).map(s => `${s.trackName}::${s.artistName}`)).size;
+    const uniqueTracks = new Set(
+        streams.filter(s => s != null).map(s => `${s.trackName}::${s.artistName}`)
+    ).size;
 
     const firstDate = streams.length > 0 ? new Date(streams[0].playedAt) : new Date();
-    const lastDate = streams.length > 0 ? new Date(streams[streams.length - 1].playedAt) : new Date();
+    const lastDate =
+        streams.length > 0 ? new Date(streams[streams.length - 1].playedAt) : new Date();
     const spanDays = Math.round((lastDate - firstDate) / (24 * 60 * 60 * 1000));
 
     // Create detailed insights
@@ -90,9 +97,9 @@ export function generatePatternSummary(streams, patterns) {
         dateRange: {
             start: firstDate.toISOString().split('T')[0],
             end: lastDate.toISOString().split('T')[0],
-            days: spanDays
+            days: spanDays,
         },
-        insights // Pass insights up
+        insights, // Pass insights up
     };
 }
 
@@ -117,6 +124,6 @@ export function generateLiteSummary(liteData, patterns) {
         diversitySignal: patterns.diversity?.signal,
         stabilitySignal: patterns.tasteStability?.signal,
         isLiteData: true,
-        fetchedAt: liteData.fetchedAt
+        fetchedAt: liteData.fetchedAt,
     };
 }

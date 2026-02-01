@@ -60,7 +60,7 @@ export function escapeHTMLEntities(str) {
 
     // Escape in the correct order to avoid double-escaping
     return str
-        .replace(/&/g, '&amp;')   // Must be first to avoid double-escaping
+        .replace(/&/g, '&amp;') // Must be first to avoid double-escaping
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
@@ -174,18 +174,26 @@ export function validateURL(url, options = {}) {
      */
     if (!allowedProtocols.includes(protocol)) {
         // Check if it's a known dangerous protocol for better error message
-        const dangerousProtocols = ['javascript:', 'data:', 'vbscript:', 'file:', 'about:', 'chrome:', 'chrome-extension:'];
+        const dangerousProtocols = [
+            'javascript:',
+            'data:',
+            'vbscript:',
+            'file:',
+            'about:',
+            'chrome:',
+            'chrome-extension:',
+        ];
 
         if (dangerousProtocols.includes(protocol)) {
             return {
                 valid: false,
-                error: `Dangerous protocol "${protocol}" is not allowed for security reasons`
+                error: `Dangerous protocol "${protocol}" is not allowed for security reasons`,
             };
         }
 
         return {
             valid: false,
-            error: `URL protocol "${protocol}" is not allowed. Allowed protocols are: ${allowedProtocols.join(', ')}`
+            error: `URL protocol "${protocol}" is not allowed. Allowed protocols are: ${allowedProtocols.join(', ')}`,
         };
     }
 
@@ -197,7 +205,7 @@ export function validateURL(url, options = {}) {
         if (!allowedProtocols.includes(url.protocol)) {
             return {
                 valid: false,
-                error: `URL protocol must be one of: ${allowedProtocols.join(', ')}`
+                error: `URL protocol must be one of: ${allowedProtocols.join(', ')}`,
             };
         }
 

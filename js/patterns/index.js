@@ -33,7 +33,7 @@ export function detectAllPatterns(streams, chunks) {
             genreEvolution: { hasEvolution: false },
             eras: { hasEras: false },
             evidence: [],
-            summary: 'No data available for pattern detection'
+            summary: 'No data available for pattern detection',
         };
     }
 
@@ -45,7 +45,7 @@ export function detectAllPatterns(streams, chunks) {
         ghostedArtists: Extractors.detectGhostedArtists(streams),
         discoveryExplosions: Extractors.detectDiscoveryExplosions(streams, chunks),
         moodSearching: Validators.detectMoodSearching(streams),
-        trueFavorites: Validators.detectTrueFavorites(streams)
+        trueFavorites: Validators.detectTrueFavorites(streams),
     };
 
     // Collect evidence descriptions
@@ -79,7 +79,7 @@ export function detectAllPatterns(streams, chunks) {
     return {
         ...patterns,
         evidence,
-        summary: Transformers.generatePatternSummary(streams, patterns)
+        summary: Transformers.generatePatternSummary(streams, patterns),
     };
 }
 
@@ -115,5 +115,5 @@ export const Patterns = {
     // Cache & Async
     detectAllPatterns,
     detectAllPatternsAsync: Cache.detectAllPatternsAsync,
-    cleanupPatternWorker: Cache.cleanupPatternWorker
+    cleanupPatternWorker: Cache.cleanupPatternWorker,
 };

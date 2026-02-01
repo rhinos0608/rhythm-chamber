@@ -133,9 +133,10 @@ async function canCreatePlaylist() {
     return {
         allowed: remaining > 0,
         remaining,
-        reason: remaining === 0
-            ? `You've used your ${limit} free playlist. Upgrade to Premium for unlimited playlists.`
-            : null
+        reason:
+            remaining === 0
+                ? `You've used your ${limit} free playlist. Upgrade to Premium for unlimited playlists.`
+                : null,
     };
 }
 
@@ -181,13 +182,17 @@ async function getQuotaStatus() {
         playlists: {
             used: quota.playlists || 0,
             limit: isPremium ? Infinity : QUOTA_LIMITS.playlist_generation,
-            remaining: isPremium ? Infinity : Math.max(0, QUOTA_LIMITS.playlist_generation - (quota.playlists || 0))
+            remaining: isPremium
+                ? Infinity
+                : Math.max(0, QUOTA_LIMITS.playlist_generation - (quota.playlists || 0)),
         },
         semantic_search: {
             used: quota.semantic_search || 0,
             limit: isPremium ? Infinity : QUOTA_LIMITS.semantic_search,
-            remaining: isPremium ? Infinity : Math.max(0, QUOTA_LIMITS.semantic_search - (quota.semantic_search || 0))
-        }
+            remaining: isPremium
+                ? Infinity
+                : Math.max(0, QUOTA_LIMITS.semantic_search - (quota.semantic_search || 0)),
+        },
     };
 }
 
@@ -259,7 +264,7 @@ async function getRemaining(feature) {
 function showQuotaToast(feature, remaining) {
     const featureNames = {
         semantic_search: 'semantic search',
-        playlist_generation: 'playlist generation'
+        playlist_generation: 'playlist generation',
     };
 
     const featureName = featureNames[feature] || feature;
@@ -327,8 +332,7 @@ export const PremiumQuota = {
     setPlaylistCount,
 
     // Limits (read-only)
-    QUOTA_LIMITS
+    QUOTA_LIMITS,
 };
-
 
 logger.info('Module loaded - Premium quota management initialized');

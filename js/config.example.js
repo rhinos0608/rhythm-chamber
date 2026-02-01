@@ -24,7 +24,7 @@ const Config = {
     // Gemini (Google AI Studio) - FREE tier available!
     // Get your API key from: https://aistudio.google.com/apikey
     gemini: {
-        apiKey: 'your-gemini-api-key-here',  // Starts with AIzaSy...
+        apiKey: 'your-gemini-api-key-here', // Starts with AIzaSy...
 
         // Model selection (all support function calling)
         // Free tier: 'gemini-2.5-flash' (default), 'gemini-2.0-flash', 'gemini-1.5-flash'
@@ -34,13 +34,13 @@ const Config = {
         // Chat parameters
         maxTokens: 8192,
         temperature: 0.7,
-        topP: 0.9
+        topP: 0.9,
     },
 
     // OpenRouter API Configuration (access to multiple AI models)
     // Get your API key from: https://openrouter.ai/keys
     openrouter: {
-        apiKey: 'your-openrouter-api-key-here',  // Starts with sk-or-v1-...
+        apiKey: 'your-openrouter-api-key-here', // Starts with sk-or-v1-...
         apiUrl: 'https://openrouter.ai/api/v1/chat/completions',
 
         // Model selection
@@ -50,7 +50,7 @@ const Config = {
 
         // Chat parameters
         maxTokens: 4500,
-        temperature: 0.7
+        temperature: 0.7,
     },
 
     // ==========================================
@@ -62,9 +62,9 @@ const Config = {
         redirectUri: window.location.origin + '/app.html',
         // Required scopes for Quick Snapshot
         scopes: [
-            'user-read-recently-played',  // Last 50 recently played tracks
-            'user-top-read'               // Top artists and tracks
-        ]
+            'user-read-recently-played', // Last 50 recently played tracks
+            'user-top-read', // Top artists and tracks
+        ],
     },
 
     // ==========================================
@@ -74,9 +74,9 @@ const Config = {
     stripe: {
         publishableKey: 'pk_test_your-publishable-key',
         prices: {
-            lifetime: 'price_lifetime_id',  // $5 one-time payment
-            monthly: 'price_monthly_id'     // $2/month subscription
-        }
+            lifetime: 'price_lifetime_id', // $5 one-time payment
+            monthly: 'price_monthly_id', // $2/month subscription
+        },
     },
 
     // ==========================================
@@ -84,6 +84,6 @@ const Config = {
     // ==========================================
     app: {
         name: 'Rhythm Chamber',
-        url: window.location.origin
-    }
+        url: window.location.origin,
+    },
 };

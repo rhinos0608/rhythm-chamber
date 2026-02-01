@@ -37,24 +37,29 @@ import { OPERATIONS } from './utils/concurrency/lock-manager.js';
 const EMBEDDING_EVENT_SCHEMAS = {
     'embedding:model_loaded': {
         description: 'Embedding model fully loaded',
-        payload: { model: 'string', backend: 'string', quantization: 'string?', loadTimeMs: 'number' }
+        payload: {
+            model: 'string',
+            backend: 'string',
+            quantization: 'string?',
+            loadTimeMs: 'number',
+        },
     },
     'embedding:mode_change': {
         description: 'Embedding mode changed (battery-aware switching)',
-        payload: { from: 'string', to: 'string', batteryLevel: 'number?', charging: 'boolean?' }
+        payload: { from: 'string', to: 'string', batteryLevel: 'number?', charging: 'boolean?' },
     },
     'embedding:generation_start': {
         description: 'Embedding generation started',
-        payload: { count: 'number', mode: 'string' }
+        payload: { count: 'number', mode: 'string' },
     },
     'embedding:generation_complete': {
         description: 'Embedding generation completed',
-        payload: { count: 'number', durationMs: 'number', avgTimePerEmbedding: 'number' }
+        payload: { count: 'number', durationMs: 'number', avgTimePerEmbedding: 'number' },
     },
     'embedding:error': {
         description: 'Embedding error occurred',
-        payload: { error: 'string', context: 'string?' }
-    }
+        payload: { error: 'string', context: 'string?' },
+    },
 };
 
 // ==========================================
@@ -79,8 +84,8 @@ const MODEL_NAME = 'Xenova/all-MiniLM-L6-v2';
  */
 const QUANTIZATION_CONFIG = {
     enabled: true,
-    dtype: 'q8',  // INT8 quantization
-    fallbackToFp32: false
+    dtype: 'q8', // INT8 quantization
+    fallbackToFp32: false,
 };
 
 // ==========================================
@@ -92,7 +97,7 @@ let isLoading = false;
 let loadProgress = 0;
 let loadError = null;
 let isInitialized = false;
-let currentBackend = null;  // 'webgpu' or 'wasm'
+let currentBackend = null; // 'webgpu' or 'wasm'
 
 // Module-level cache for dynamically loaded Transformers.js library
 let cachedTransformers = null;
@@ -143,8 +148,12 @@ async function loadTransformersJS() {
             console.log('[LocalEmbeddings] Loaded via import map');
         } catch (importMapError) {
             // Fallback: direct CDN import
-            console.warn('[LocalEmbeddings] Import map not available, using direct CDN URL:', importMapError);
-            module = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js');
+            console.warn(
+                '[LocalEmbeddings] Import map not available, using direct CDN URL:',
+                importMapError
+            );
+            module =
+                await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js');
             console.log('[LocalEmbeddings] Loaded via direct CDN URL');
         }
 
@@ -160,15 +169,17 @@ async function loadTransformersJS() {
         // Create a transformers object with the expected structure
         const transformers = {
             pipeline: module.pipeline,
-            env: module.env
+            env: module.env,
         };
 
         // Cache for subsequent calls
         cachedTransformers = transformers;
 
-        console.log('[LocalEmbeddings] Transformers.js loaded successfully, pipeline type:', typeof transformers.pipeline);
+        console.log(
+            '[LocalEmbeddings] Transformers.js loaded successfully, pipeline type:',
+            typeof transformers.pipeline
+        );
         return transformers;
-
     } catch (e) {
         console.error('[LocalEmbeddings] Failed to load Transformers.js:', e);
         throw new Error('Failed to load Transformers.js from CDN: ' + e.message);
@@ -199,7 +210,7 @@ async function checkWebGPUSupport() {
         return {
             supported: isSupported,
             adapterInfo: adapter.info || {},
-            reason: isSupported ? 'WebGPU available' : 'Device request failed'
+            reason: isSupported ? 'WebGPU available' : 'Device request failed',
         };
     } catch (e) {
         return { supported: false, reason: e.message };
@@ -211,8 +222,7 @@ async function checkWebGPUSupport() {
  */
 function checkWASMSupport() {
     try {
-        if (typeof WebAssembly === 'object' &&
-            typeof WebAssembly.instantiate === 'function') {
+        if (typeof WebAssembly === 'object' && typeof WebAssembly.instantiate === 'function') {
             const module = new WebAssembly.Module(
                 Uint8Array.of(0x0, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00)
             );
@@ -229,11 +239,91 @@ function checkWASMSupport() {
 // ==========================================
 
 /**
+ * Check if sufficient storage quota is available for model download
+ * @param {number} requiredMB - Required space in MB (default: 25MB for model + overhead)
+ * @returns {Promise<{available: boolean, quotaMB?: number, usageMB?: number}>}
+ */
+async function checkStorageQuota(requiredMB = 25) {
+    try {
+        if ('storage' in navigator && 'estimate' in navigator.storage) {
+            const estimate = await navigator.storage.estimate();
+            const usageMB = (estimate.usage || 0) / (1024 * 1024);
+            const quotaMB = (estimate.quota || Infinity) / (1024 * 1024);
+            const availableMB = quotaMB - usageMB;
+
+            console.log(`[LocalEmbeddings] Storage: ${usageMB.toFixed(2)}MB used, ${quotaMB.toFixed(2)}MB quota, ${availableMB.toFixed(2)}MB available`);
+
+            if (availableMB < requiredMB) {
+                console.warn(`[LocalEmbeddings] Insufficient storage: need ${requiredMB}MB, have ${availableMB.toFixed(2)}MB`);
+                return {
+                    available: false,
+                    quotaMB,
+                    usageMB,
+                    availableMB,
+                };
+            }
+
+            return {
+                available: true,
+                quotaMB,
+                usageMB,
+                availableMB,
+            };
+        }
+    } catch (e) {
+        console.warn('[LocalEmbeddings] Could not check storage quota:', e.message);
+    }
+
+    // Assume sufficient storage if quota API unavailable
+    return { available: true };
+}
+
+/**
+ * Retry helper with exponential backoff
+ * @param {Function} fn - Async function to retry
+ * @param {number} maxRetries - Maximum retry attempts
+ * @param {number} baseDelayMs - Base delay between retries
+ * @returns {Promise<*>} Result of the function
+ */
+async function retryWithBackoff(fn, maxRetries = 3, baseDelayMs = 1000) {
+    let lastError;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            return await fn();
+        } catch (error) {
+            lastError = error;
+
+            // Check if error is retryable
+            const isRetryable =
+                error.message?.includes('network') ||
+                error.message?.includes('timeout') ||
+                error.message?.includes('ENOTFOUND') ||
+                error.message?.includes('ECONNRESET') ||
+                error.message?.includes('fetch') ||
+                error.name === 'TypeError';
+
+            if (!isRetryable || attempt === maxRetries) {
+                throw error;
+            }
+
+            // Exponential backoff with jitter
+            const delay = baseDelayMs * Math.pow(2, attempt) + Math.random() * 500;
+            console.warn(`[LocalEmbeddings] Retry ${attempt + 1}/${maxRetries} after ${delay.toFixed(0)}ms: ${error.message}`);
+
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+
+    throw lastError;
+}
+
+/**
  * Initialize the embedding model
  * @param {Function} onProgress - Progress callback (0-100)
  * @returns {Promise<boolean>} True if initialization successful
  */
-async function initialize(onProgress = () => { }) {
+async function initialize(onProgress = () => {}) {
     // Register embedding event schemas with EventBus (decentralized schema management)
     EventBus.registerSchemas(EMBEDDING_EVENT_SCHEMAS);
 
@@ -250,14 +340,18 @@ async function initialize(onProgress = () => { }) {
         lockId = await OperationLock.acquireWithTimeout(OPERATIONS.EMBEDDING_GENERATION, 60000);
     } catch (lockError) {
         if (lockError.code === 'LOCK_TIMEOUT') {
-            console.warn('[LocalEmbeddings] Timeout acquiring initialization lock, another initialization may be in progress');
+            console.warn(
+                '[LocalEmbeddings] Timeout acquiring initialization lock, another initialization may be in progress'
+            );
             // Wait a bit and check if initialization completed
             await new Promise(resolve => setTimeout(resolve, 1000));
             if (isInitialized && pipeline) {
                 onProgress(100);
                 return true;
             }
-            throw new Error('Embedding initialization timeout - another initialization may be in progress');
+            throw new Error(
+                'Embedding initialization timeout - another initialization may be in progress'
+            );
         }
         throw lockError;
     }
@@ -275,12 +369,22 @@ async function initialize(onProgress = () => { }) {
 
         // Start performance tracking
         const stopInitTimer = PerformanceProfiler.startOperation('embedding_initialize', {
-            category: PerformanceCategory.EMBEDDING_INITIALIZATION
+            category: PerformanceCategory.EMBEDDING_INITIALIZATION,
         });
         const startTime = performance.now();
 
         try {
             onProgress(5);
+
+            // Check storage quota before downloading model
+            const quotaCheck = await checkStorageQuota(25);
+            if (!quotaCheck.available) {
+                throw new Error(
+                    `Insufficient storage for model download. Need ~25MB, but only ${quotaCheck.availableMB?.toFixed(2) || 'unknown'}MB available. ` +
+                    `Please free up space or use a different browser.`
+                );
+            }
+            onProgress(10);
 
             // Load Transformers.js (now protected by lock)
             const transformers = await loadTransformersJS();
@@ -299,23 +403,25 @@ async function initialize(onProgress = () => { }) {
             console.log(`[LocalEmbeddings] Using ${device} backend`);
             onProgress(20);
 
-            // Create feature extraction pipeline
+            // Create feature extraction pipeline with retry logic
             // With INT8 quantization: ~6MB download (was ~22MB with fp32)
-            pipeline = await transformers.pipeline('feature-extraction', MODEL_NAME, {
-                device,
-                quantized: QUANTIZATION_CONFIG.enabled,
-                dtype: QUANTIZATION_CONFIG.dtype,
-                progress_callback: (progress) => {
-                    if (progress.status === 'progress') {
-                        // Model download progress (20-90%)
-                        const pct = 20 + Math.round(progress.progress * 0.7);
-                        loadProgress = pct;
-                        onProgress(pct);
-                    } else if (progress.status === 'done') {
-                        onProgress(95);
-                    }
-                }
-            });
+            pipeline = await retryWithBackoff(async () => {
+                return await transformers.pipeline('feature-extraction', MODEL_NAME, {
+                    device,
+                    quantized: QUANTIZATION_CONFIG.enabled,
+                    dtype: QUANTIZATION_CONFIG.dtype,
+                    progress_callback: progress => {
+                        if (progress.status === 'progress') {
+                            // Model download progress (20-90%)
+                            const pct = 20 + Math.round(progress.progress * 0.7);
+                            loadProgress = pct;
+                            onProgress(pct);
+                        } else if (progress.status === 'done') {
+                            onProgress(95);
+                        }
+                    },
+                });
+            }, 3, 2000);
 
             onProgress(100);
             isInitialized = true;
@@ -330,12 +436,13 @@ async function initialize(onProgress = () => { }) {
                 model: MODEL_NAME,
                 backend: device,
                 quantization: QUANTIZATION_CONFIG.dtype,
-                loadTimeMs: Math.round(loadTimeMs)
+                loadTimeMs: Math.round(loadTimeMs),
             });
 
-            console.log(`[LocalEmbeddings] Model loaded successfully in ${Math.round(loadTimeMs)}ms`);
+            console.log(
+                `[LocalEmbeddings] Model loaded successfully in ${Math.round(loadTimeMs)}ms`
+            );
             return true;
-
         } catch (e) {
             console.error('[LocalEmbeddings] Initialization failed:', e);
             loadError = e.message;
@@ -345,7 +452,7 @@ async function initialize(onProgress = () => { }) {
             // Emit error event
             EventBus.emit('embedding:error', {
                 error: e.message,
-                context: 'initialization'
+                context: 'initialization',
             });
 
             // Stop timer even on failure
@@ -381,8 +488,11 @@ async function getEmbedding(text, timeoutMs = 30000) {
     const output = await Promise.race([
         pipeline(text, { pooling: 'mean', normalize: true }),
         new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`Embedding generation timeout after ${timeoutMs}ms`)), timeoutMs)
-        )
+            setTimeout(
+                () => reject(new Error(`Embedding generation timeout after ${timeoutMs}ms`)),
+                timeoutMs
+            )
+        ),
     ]);
 
     // Convert to regular array
@@ -395,7 +505,7 @@ async function getEmbedding(text, timeoutMs = 30000) {
  * @param {Function} onProgress - Progress callback (processed, total)
  * @returns {Promise<number[][]>} Array of embedding vectors
  */
-async function getBatchEmbeddings(texts, onProgress = () => { }) {
+async function getBatchEmbeddings(texts, onProgress = () => {}) {
     if (!isInitialized || !pipeline) {
         throw new Error('LocalEmbeddings not initialized. Call initialize() first.');
     }
@@ -403,18 +513,18 @@ async function getBatchEmbeddings(texts, onProgress = () => { }) {
     // Start performance tracking
     const stopGenTimer = PerformanceProfiler.startOperation('embedding_batch_generate', {
         category: PerformanceCategory.EMBEDDING_GENERATION,
-        metadata: { count: texts.length }
+        metadata: { count: texts.length },
     });
     const startTime = performance.now();
 
     // Emit generation start event
     EventBus.emit('embedding:generation_start', {
         count: texts.length,
-        mode: currentBackend || 'unknown'
+        mode: currentBackend || 'unknown',
     });
 
     const embeddings = [];
-    let validCount = 0;  // Track successfully generated embeddings
+    let validCount = 0; // Track successfully generated embeddings
 
     try {
         for (let i = 0; i < texts.length; i++) {
@@ -427,7 +537,7 @@ async function getBatchEmbeddings(texts, onProgress = () => { }) {
 
             const output = await pipeline(text, { pooling: 'mean', normalize: true });
             embeddings.push(Array.from(output.data));
-            validCount++;  // Increment only for successful embeddings
+            validCount++; // Increment only for successful embeddings
 
             onProgress(i + 1, texts.length);
         }
@@ -443,7 +553,7 @@ async function getBatchEmbeddings(texts, onProgress = () => { }) {
             successCount: validCount,
             skippedCount: texts.length - validCount,
             durationMs: Math.round(durationMs),
-            avgTimePerEmbedding: Math.round(avgTimePerEmbedding)
+            avgTimePerEmbedding: Math.round(avgTimePerEmbedding),
         });
 
         return embeddings;
@@ -451,7 +561,7 @@ async function getBatchEmbeddings(texts, onProgress = () => { }) {
         stopGenTimer();
         EventBus.emit('embedding:error', {
             error: e.message,
-            context: 'batch_generation'
+            context: 'batch_generation',
         });
         throw e;
     }
@@ -473,7 +583,7 @@ const LocalEmbeddings = {
             supported: wasmSupported || webGPU.supported,
             webgpu: webGPU,
             wasm: wasmSupported,
-            recommendedBackend: webGPU.supported ? 'webgpu' : (wasmSupported ? 'wasm' : null)
+            recommendedBackend: webGPU.supported ? 'webgpu' : wasmSupported ? 'wasm' : null,
         };
     },
 
@@ -507,7 +617,7 @@ const LocalEmbeddings = {
             isLoading,
             loadProgress,
             loadError,
-            modelName: MODEL_NAME
+            modelName: MODEL_NAME,
         };
     },
 
@@ -526,14 +636,15 @@ const LocalEmbeddings = {
             name: MODEL_NAME,
             dimensions: 384,
             downloadSize: '~22MB',
-            description: 'Sentence embeddings for semantic similarity'
+            description: 'Sentence embeddings for semantic similarity',
         };
-    }
+    },
 };
 
 // ES Module export
 export { LocalEmbeddings };
 
 // ES Module export - use ModuleRegistry for access instead of window globals
-console.log('[LocalEmbeddings] Module loaded. Call LocalEmbeddings.isSupported() to check compatibility.');
-
+console.log(
+    '[LocalEmbeddings] Module loaded. Call LocalEmbeddings.isSupported() to check compatibility.'
+);
