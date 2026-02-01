@@ -12,8 +12,8 @@ import { describe, it, expect, vi } from 'vitest';
 // Mock EventBus to avoid import chain issues
 vi.mock('../../js/services/event-bus.js', () => ({
   EventBus: {
-    emit: vi.fn()
-  }
+    emit: vi.fn(),
+  },
 }));
 
 describe('Transaction Composition Root Integration', () => {
@@ -31,7 +31,7 @@ describe('Transaction Composition Root Integration', () => {
       isFatalState,
       getFatalState,
       isInTransaction,
-      getTransactionDepth
+      getTransactionDepth,
     } = await import('../../js/storage/transaction/index.js');
 
     // Verify all exports exist
@@ -76,14 +76,17 @@ describe('Transaction Composition Root Integration', () => {
       prepare: async () => {},
       commit: async () => {},
       rollback: async () => {},
-      recover: async () => {}
+      recover: async () => {},
     };
 
     // Execute transaction
-    const result = await tx.run(async (ctx) => {
-      ctx.put('test-store', 'key1', 'value1');
-      ctx.put('test-store', 'key2', 'value2');
-    }, [mockResource]);
+    const result = await tx.run(
+      async ctx => {
+        ctx.put('test-store', 'key1', 'value1');
+        ctx.put('test-store', 'key2', 'value2');
+      },
+      [mockResource]
+    );
 
     // Verify result
     expect(result.success).toBe(true);
@@ -106,14 +109,19 @@ describe('Transaction Composition Root Integration', () => {
       rollback: async () => {
         rollbackCalled = true;
       },
-      recover: async () => {}
+      recover: async () => {},
     };
 
     // Execute transaction that fails
-    await expect(tx.run(async (ctx) => {
-      ctx.put('test-store', 'key1', 'value1');
-      throw new Error('Test error');
-    }, [mockResource])).rejects.toThrow('Test error');
+    await expect(
+      tx.run(
+        async ctx => {
+          ctx.put('test-store', 'key1', 'value1');
+          throw new Error('Test error');
+        },
+        [mockResource]
+      )
+    ).rejects.toThrow('Test error');
 
     // Verify rollback was called
     expect(rollbackCalled).toBe(true);
@@ -128,7 +136,7 @@ describe('Transaction Composition Root Integration', () => {
       prepare: async () => {},
       commit: async () => {},
       rollback: async () => {},
-      recover: async () => {}
+      recover: async () => {},
     };
 
     // Begin transaction
@@ -148,11 +156,8 @@ describe('Transaction Composition Root Integration', () => {
   });
 
   it('should integrate with state management', async () => {
-    const {
-      TransactionStateManager,
-      NestedTransactionGuard,
-      clearFatalState
-    } = await import('../../js/storage/transaction/index.js');
+    const { TransactionStateManager, NestedTransactionGuard, clearFatalState } =
+      await import('../../js/storage/transaction/index.js');
 
     // Clear any existing state
     clearFatalState();

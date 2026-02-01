@@ -16,8 +16,8 @@ tests/
 **/*.spec.js
 
 # Documentation
-docs/
-**/*.md
+# docs/  # Temporarily disabled to enable markdown indexing
+# **/*.md  # Temporarily disabled to enable markdown indexing
 
 # Git
 .git/

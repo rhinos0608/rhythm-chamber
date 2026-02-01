@@ -10,7 +10,8 @@
  */
 export const schema = {
   name: 'list_indexed_files',
-  description: 'List all files that have been indexed for semantic search, including chunk counts, types of chunks, and last modified timestamps.',
+  description:
+    'List all files that have been indexed for semantic search, including chunk counts, types of chunks, and last modified timestamps.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -18,21 +19,21 @@ export const schema = {
         type: 'string',
         enum: ['all', 'controllers', 'services', 'utils', 'storage', 'providers'],
         description: 'Filter by HNW architecture layer',
-        default: 'all'
+        default: 'all',
       },
       includeChunks: {
         type: 'boolean',
         description: 'Include individual chunk details for each file',
-        default: false
+        default: false,
       },
       format: {
         type: 'string',
         enum: ['summary', 'detailed', 'json'],
         description: 'Output format',
-        default: 'summary'
-      }
-    }
-  }
+        default: 'summary',
+      },
+    },
+  },
 };
 
 /**
@@ -44,18 +45,20 @@ export const handler = async (args, projectRoot, indexer, server) => {
   // Check if indexer is available
   if (!indexer) {
     return {
-      content: [{
-        type: 'text',
-        text: `# Indexed Files Not Available
+      content: [
+        {
+          type: 'text',
+          text: `# Indexed Files Not Available
 
 The semantic search indexer has not been initialized.
 
 **To fix:**
 1. Ensure the MCP server was started with semantic search enabled
 2. Check that indexing completed successfully
-`
-      }],
-      isError: true
+`,
+        },
+      ],
+      isError: true,
     };
   }
 
@@ -65,9 +68,10 @@ The semantic search indexer has not been initialized.
 
     if (files.length === 0) {
       return {
-        content: [{
-          type: 'text',
-          text: `# No Indexed Files
+        content: [
+          {
+            type: 'text',
+            text: `# No Indexed Files
 
 No files are currently indexed. This could mean:
 1. Indexing has not been performed yet
@@ -76,8 +80,9 @@ No files are currently indexed. This could mean:
 
 **Current stats:**
 ${formatStats(indexer.getStats())}
-`
-        }]
+`,
+          },
+        ],
       };
     }
 
@@ -90,34 +95,39 @@ ${formatStats(indexer.getStats())}
     // Format output
     if (format === 'json') {
       return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify(filteredFiles, null, 2)
-        }]
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(filteredFiles, null, 2),
+          },
+        ],
       };
     }
 
     return {
-      content: [{
-        type: 'text',
-        text: formatFileList(filteredFiles, filter, includeChunks, indexer)
-      }]
+      content: [
+        {
+          type: 'text',
+          text: formatFileList(filteredFiles, filter, includeChunks, indexer),
+        },
+      ],
     };
-
   } catch (error) {
     console.error('[list_indexed_files] Error:', error);
 
     return {
-      content: [{
-        type: 'text',
-        text: `# Error Listing Indexed Files
+      content: [
+        {
+          type: 'text',
+          text: `# Error Listing Indexed Files
 
 **Error:** ${error.message}
 
 **Suggestion:** Check that the indexer is properly initialized and indexing has completed.
-`
-      }],
-      isError: true
+`,
+        },
+      ],
+      isError: true,
     };
   }
 };
@@ -131,7 +141,7 @@ function formatFileList(files, filter, includeChunks, indexer) {
   // Get overall stats
   const stats = indexer.getStats();
 
-  lines.push(`# Indexed Files`);
+  lines.push('# Indexed Files');
   lines.push('');
   lines.push(`**Filter:** ${filter === 'all' ? 'All layers' : filter}`);
   lines.push(`**Files:** ${files.length}`);
@@ -148,8 +158,8 @@ function formatFileList(files, filter, includeChunks, indexer) {
   for (const [layer, layerFiles] of Object.entries(byLayer)) {
     lines.push(`## ${layer}`);
     lines.push('');
-    lines.push(`| File | Chunks | Types | Last Modified |`);
-    lines.push(`|------|--------|-------|---------------|`);
+    lines.push('| File | Chunks | Types | Last Modified |');
+    lines.push('|------|--------|-------|---------------|');
 
     for (const file of layerFiles) {
       const types = getChunkTypes(file);
@@ -171,7 +181,7 @@ function formatFileList(files, filter, includeChunks, indexer) {
   }
 
   // Chunk type distribution
-  lines.push(`## Chunk Type Distribution`);
+  lines.push('## Chunk Type Distribution');
   lines.push('');
 
   const typeCounts = getTypeDistribution(files);
@@ -183,12 +193,14 @@ function formatFileList(files, filter, includeChunks, indexer) {
   }
 
   lines.push('');
-  lines.push(`---`);
+  lines.push('---');
   lines.push('');
-  lines.push(`**Index Information:`);
+  lines.push('**Index Information:');
   lines.push(`- Version: ${stats.vectorStore?.version || 1}`);
   lines.push(`- Embedding Source: ${stats.embeddingSource || 'unknown'}`);
-  lines.push(`- Last Indexed: ${stats.lastIndexed ? new Date(stats.lastIndexed).toLocaleString() : 'Never'}`);
+  lines.push(
+    `- Last Indexed: ${stats.lastIndexed ? new Date(stats.lastIndexed).toLocaleString() : 'Never'}`
+  );
 
   return lines.join('\n');
 }
@@ -199,7 +211,7 @@ function formatFileList(files, filter, includeChunks, indexer) {
 function formatStats(stats) {
   const lines = [];
 
-  lines.push(`**Index Statistics:**`);
+  lines.push('**Index Statistics:**');
   lines.push(`- Total Files: ${stats.filesIndexed || 0}`);
   lines.push(`- Total Chunks: ${stats.chunksIndexed || 0}`);
   lines.push(`- Dependencies Graph: ${stats.dependencyGraph?.symbols || 0} symbols`);
@@ -220,7 +232,7 @@ function groupByLayer(files) {
     'Utils (js/utils/)': [],
     'Storage (js/storage/)': [],
     'Tests (tests/)': [],
-    'Other': []
+    Other: [],
   };
 
   for (const file of files) {

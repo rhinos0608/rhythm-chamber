@@ -22,7 +22,7 @@ const cache = new CacheManager();
  */
 const EMOJIS = {
   WARNING: '⚠️',
-  ARROW_DOWN: '↓'
+  ARROW_DOWN: '↓',
 };
 
 /**
@@ -31,47 +31,179 @@ const EMOJIS = {
  */
 const BUILT_IN_METHODS = new Set([
   // Array methods
-  'push', 'pop', 'shift', 'unshift', 'splice', 'slice', 'concat',
-  'forEach', 'map', 'filter', 'reduce', 'reduceRight', 'find', 'findIndex',
-  'some', 'every', 'includes', 'indexOf', 'lastIndexOf', 'join', 'sort',
-  'reverse', 'flat', 'flatMap', 'entries', 'keys', 'values', 'at', 'fill',
-  'copyWithin', 'toString', 'toLocaleString', 'length',
+  'push',
+  'pop',
+  'shift',
+  'unshift',
+  'splice',
+  'slice',
+  'concat',
+  'forEach',
+  'map',
+  'filter',
+  'reduce',
+  'reduceRight',
+  'find',
+  'findIndex',
+  'some',
+  'every',
+  'includes',
+  'indexOf',
+  'lastIndexOf',
+  'join',
+  'sort',
+  'reverse',
+  'flat',
+  'flatMap',
+  'entries',
+  'keys',
+  'values',
+  'at',
+  'fill',
+  'copyWithin',
+  'toString',
+  'toLocaleString',
+  'length',
   // Object methods
-  'keys', 'values', 'entries', 'hasOwnProperty', 'propertyIsEnumerable',
-  'isPrototypeOf', 'toString', 'toLocaleString', 'assign', 'create',
-  'defineProperty', 'defineProperties', 'freeze', 'seal', 'preventExtensions',
-  'isFrozen', 'isSealed', 'isExtensible', 'getOwnPropertyDescriptor',
-  'getOwnPropertyDescriptors', 'getOwnPropertyNames', 'getOwnPropertySymbols',
-  'fromEntries', 'groupBy',
+  'keys',
+  'values',
+  'entries',
+  'hasOwnProperty',
+  'propertyIsEnumerable',
+  'isPrototypeOf',
+  'toString',
+  'toLocaleString',
+  'assign',
+  'create',
+  'defineProperty',
+  'defineProperties',
+  'freeze',
+  'seal',
+  'preventExtensions',
+  'isFrozen',
+  'isSealed',
+  'isExtensible',
+  'getOwnPropertyDescriptor',
+  'getOwnPropertyDescriptors',
+  'getOwnPropertyNames',
+  'getOwnPropertySymbols',
+  'fromEntries',
+  'groupBy',
   // String methods
-  'charAt', 'charCodeAt', 'codePointAt', 'concat', 'endsWith', 'includes',
-  'indexOf', 'lastIndexOf', 'localeCompare', 'match', 'matchAll', 'normalize',
-  'padEnd', 'padStart', 'repeat', 'replace', 'replaceAll', 'search', 'slice',
-  'split', 'startsWith', 'substring', 'toLocaleLowerCase', 'toLocaleUpperCase',
-  'toLowerCase', 'toUpperCase', 'trim', 'trimEnd', 'trimStart', 'toString',
-  'valueOf', 'length',
+  'charAt',
+  'charCodeAt',
+  'codePointAt',
+  'concat',
+  'endsWith',
+  'includes',
+  'indexOf',
+  'lastIndexOf',
+  'localeCompare',
+  'match',
+  'matchAll',
+  'normalize',
+  'padEnd',
+  'padStart',
+  'repeat',
+  'replace',
+  'replaceAll',
+  'search',
+  'slice',
+  'split',
+  'startsWith',
+  'substring',
+  'toLocaleLowerCase',
+  'toLocaleUpperCase',
+  'toLowerCase',
+  'toUpperCase',
+  'trim',
+  'trimEnd',
+  'trimStart',
+  'toString',
+  'valueOf',
+  'length',
   // Number methods
-  'toExponential', 'toFixed', 'toPrecision', 'toString', 'valueOf',
+  'toExponential',
+  'toFixed',
+  'toPrecision',
+  'toString',
+  'valueOf',
   // Math methods
-  'abs', 'acos', 'acosh', 'asin', 'asinh', 'atan', 'atan2', 'atanh',
-  'cbrt', 'ceil', 'clz32', 'cos', 'cosh', 'exp', 'expm1', 'floor',
-  'fround', 'hypot', 'imul', 'log', 'log10', 'log1p', 'log2', 'max',
-  'min', 'pow', 'random', 'round', 'sign', 'sin', 'sinh', 'sqrt', 'tan',
-  'tanh', 'trunc',
+  'abs',
+  'acos',
+  'acosh',
+  'asin',
+  'asinh',
+  'atan',
+  'atan2',
+  'atanh',
+  'cbrt',
+  'ceil',
+  'clz32',
+  'cos',
+  'cosh',
+  'exp',
+  'expm1',
+  'floor',
+  'fround',
+  'hypot',
+  'imul',
+  'log',
+  'log10',
+  'log1p',
+  'log2',
+  'max',
+  'min',
+  'pow',
+  'random',
+  'round',
+  'sign',
+  'sin',
+  'sinh',
+  'sqrt',
+  'tan',
+  'tanh',
+  'trunc',
   // Promise methods
-  'then', 'catch', 'finally',
+  'then',
+  'catch',
+  'finally',
   // Map/Set methods
-  'add', 'delete', 'clear', 'has', 'get', 'set',
+  'add',
+  'delete',
+  'clear',
+  'has',
+  'get',
+  'set',
   // Console methods
-  'log', 'warn', 'error', 'info', 'debug', 'trace', 'table', 'dir', 'count',
-  'countReset', 'group', 'groupEnd', 'groupCollapsed', 'time', 'timeLog',
-  'timeEnd', 'assert', 'clear',
+  'log',
+  'warn',
+  'error',
+  'info',
+  'debug',
+  'trace',
+  'table',
+  'dir',
+  'count',
+  'countReset',
+  'group',
+  'groupEnd',
+  'groupCollapsed',
+  'time',
+  'timeLog',
+  'timeEnd',
+  'assert',
+  'clear',
   // JSON methods
-  'parse', 'stringify',
+  'parse',
+  'stringify',
   // Common utility methods
-  'bind', 'call', 'apply',
+  'bind',
+  'call',
+  'apply',
   // Async/await related (these are handled separately)
-  'then', 'catch'
+  'then',
+  'catch',
 ]);
 
 /**
@@ -98,47 +230,48 @@ function isBuiltInMethod(funcName) {
  */
 export const schema = {
   name: 'trace_execution_flow',
-  description: 'Trace execution flow from a function with async pattern support and circular dependency detection',
+  description:
+    'Trace execution flow from a function with async pattern support and circular dependency detection',
   inputSchema: {
     type: 'object',
     properties: {
       startFunction: {
         type: 'string',
-        description: 'Function name to start tracing'
+        description: 'Function name to start tracing',
       },
       filePath: {
         type: 'string',
-        description: 'File containing the function'
+        description: 'File containing the function',
       },
       maxDepth: {
         type: 'number',
         default: 5,
-        description: 'Maximum traversal depth (1-10)'
+        description: 'Maximum traversal depth (1-10)',
       },
       includeAsync: {
         type: 'boolean',
         default: true,
-        description: 'Include async patterns'
+        description: 'Include async patterns',
       },
       detectCycles: {
         type: 'boolean',
         default: true,
-        description: 'Detect circular flows'
+        description: 'Detect circular flows',
       },
       filterBuiltIns: {
         type: 'boolean',
         default: true,
-        description: 'Filter out built-in JavaScript methods (console.log, Array methods, etc.)'
+        description: 'Filter out built-in JavaScript methods (console.log, Array methods, etc.)',
       },
       format: {
         type: 'string',
         enum: ['text', 'mermaid', 'json'],
         default: 'text',
-        description: 'Output format'
-      }
+        description: 'Output format',
+      },
     },
-    required: ['startFunction', 'filePath']
-  }
+    required: ['startFunction', 'filePath'],
+  },
 };
 
 /**
@@ -153,10 +286,10 @@ function validatePath(projectRoot, targetPath) {
 
   if (!resolved.startsWith(normalizedRoot)) {
     throw new Error(
-      `[trace_execution_flow] Path traversal detected: Target path is outside project root\n` +
-      `Requested: ${targetPath}\n` +
-      `Resolved: ${resolved}\n` +
-      `Project root: ${normalizedRoot}`
+      '[trace_execution_flow] Path traversal detected: Target path is outside project root\n' +
+        `Requested: ${targetPath}\n` +
+        `Resolved: ${resolved}\n` +
+        `Project root: ${normalizedRoot}`
     );
   }
 
@@ -171,7 +304,7 @@ export const handler = async (args, projectRoot) => {
     includeAsync = true,
     detectCycles = true,
     filterBuiltIns = true,
-    format = 'text'
+    format = 'text',
   } = args;
 
   logger.info('trace_execution_flow called with:', {
@@ -181,7 +314,7 @@ export const handler = async (args, projectRoot) => {
     includeAsync,
     detectCycles,
     filterBuiltIns,
-    format
+    format,
   });
 
   try {
@@ -199,7 +332,7 @@ export const handler = async (args, projectRoot) => {
       maxDepth,
       includeAsync,
       detectCycles,
-      filterBuiltIns
+      filterBuiltIns,
     });
 
     // Format output
@@ -218,7 +351,7 @@ export const handler = async (args, projectRoot) => {
     }
 
     return {
-      content: [{ type: 'text', text: output }]
+      content: [{ type: 'text', text: output }],
     };
   } catch (error) {
     logger.error('Error in trace_execution_flow:', error);
@@ -238,7 +371,7 @@ function traceExecutionFlow(filePath, functionName, options) {
   if (stats.size > MAX_FILE_SIZE) {
     throw new Error(
       `[trace_execution_flow] File too large (${Math.round(stats.size / 1024 / 1024)}MB). ` +
-      `Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB.`
+        `Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB.`
     );
   }
 
@@ -249,7 +382,7 @@ function traceExecutionFlow(filePath, functionName, options) {
   const ext = filePath.endsWith('.ts') || filePath.endsWith('.tsx') ? 'typescript' : null;
   const ast = parse(content, {
     sourceType: 'module',
-    plugins: [...(ext ? [ext] : []), 'jsx']
+    plugins: [...(ext ? [ext] : []), 'jsx'],
   });
 
   // Find starting function
@@ -259,7 +392,11 @@ function traceExecutionFlow(filePath, functionName, options) {
   }
 
   // Extract import mappings for cross-file tracing
-  const importMappings = extractImportMappings(ast, filePath.replace(projectRoot + '/', ''), projectRoot);
+  const importMappings = extractImportMappings(
+    ast,
+    filePath.replace(projectRoot + '/', ''),
+    projectRoot
+  );
 
   // DEBUG: Log import mappings
   logger.info(`[trace_execution_flow] Extracted ${importMappings.size} import mappings`);
@@ -283,7 +420,7 @@ function traceExecutionFlow(filePath, functionName, options) {
     filePath,
     projectRoot,
     importMappings,
-    fileCache
+    fileCache,
   });
 
   // Extract async patterns
@@ -293,11 +430,11 @@ function traceExecutionFlow(filePath, functionName, options) {
     startFunction: {
       name: functionName,
       file: filePath.replace(projectRoot + '/', ''),
-      line: startFunc.node.loc.start.line
+      line: startFunc.node.loc.start.line,
     },
     callGraph,
     asyncPatterns,
-    summary: calculateFlowSummary(callGraph, asyncPatterns)
+    summary: calculateFlowSummary(callGraph, asyncPatterns),
   };
 }
 
@@ -339,9 +476,11 @@ function findFunctionDeclaration(ast, functionName) {
     VariableDeclarator(path) {
       if (path.node.id && path.node.id.name === functionName) {
         // Only match if it's actually a function
-        if (path.node.init &&
-            (path.node.init.type === 'FunctionExpression' ||
-             path.node.init.type === 'ArrowFunctionExpression')) {
+        if (
+          path.node.init &&
+          (path.node.init.type === 'FunctionExpression' ||
+            path.node.init.type === 'ArrowFunctionExpression')
+        ) {
           if (bestScore < 6) {
             bestMatch = path;
             bestScore = 6;
@@ -352,9 +491,10 @@ function findFunctionDeclaration(ast, functionName) {
     // Handle ES6 class methods (e.g., class Foo { bar() {} })
     ClassMethod(path) {
       const key = path.node.key;
-      const matches = (key.type === 'Identifier' && key.name === functionName) ||
-                      (key.type === 'StringLiteral' && key.value === functionName) ||
-                      (key.type === 'PrivateIdentifier' && `#${key.name}` === functionName);
+      const matches =
+        (key.type === 'Identifier' && key.name === functionName) ||
+        (key.type === 'StringLiteral' && key.value === functionName) ||
+        (key.type === 'PrivateIdentifier' && `#${key.name}` === functionName);
 
       if (matches && bestScore < 8) {
         bestMatch = path;
@@ -364,13 +504,16 @@ function findFunctionDeclaration(ast, functionName) {
     // Handle object methods (e.g., { sendMessage() {...} })
     ObjectMethod(path) {
       const key = path.node.key;
-      const matches = (key.type === 'Identifier' && key.name === functionName) ||
-                      (key.type === 'StringLiteral' && key.value === functionName);
+      const matches =
+        (key.type === 'Identifier' && key.name === functionName) ||
+        (key.type === 'StringLiteral' && key.value === functionName);
 
       // Handle computed properties
       if (key.type === 'ComputedProperty' && key.value) {
-        if ((key.value.type === 'StringLiteral' && key.value.value === functionName) ||
-            (key.value.type === 'Identifier' && key.value.name === functionName)) {
+        if (
+          (key.value.type === 'StringLiteral' && key.value.value === functionName) ||
+          (key.value.type === 'Identifier' && key.value.name === functionName)
+        ) {
           if (bestScore < 5) {
             bestMatch = path;
             bestScore = 5;
@@ -390,21 +533,23 @@ function findFunctionDeclaration(ast, functionName) {
       const value = path.node.value;
 
       // Handle inline functions
-      const isInlineFunction = value.type === 'ArrowFunctionExpression' ||
-                              value.type === 'FunctionExpression';
+      const isInlineFunction =
+        value.type === 'ArrowFunctionExpression' || value.type === 'FunctionExpression';
 
       // Handle function references
-      const isFunctionReference = value.type === 'Identifier' &&
-                                  value.name === functionName;
+      const isFunctionReference = value.type === 'Identifier' && value.name === functionName;
 
       if (isInlineFunction || isFunctionReference) {
-        const matches = (key.type === 'Identifier' && key.name === functionName) ||
-                        (key.type === 'StringLiteral' && key.value === functionName);
+        const matches =
+          (key.type === 'Identifier' && key.name === functionName) ||
+          (key.type === 'StringLiteral' && key.value === functionName);
 
         // Handle computed properties
         if (key.type === 'ComputedProperty' && key.value) {
-          if ((key.value.type === 'StringLiteral' && key.value.value === functionName) ||
-              (key.value.type === 'Identifier' && key.value.name === functionName)) {
+          if (
+            (key.value.type === 'StringLiteral' && key.value.value === functionName) ||
+            (key.value.type === 'Identifier' && key.value.name === functionName)
+          ) {
             if (bestScore < 4) {
               bestMatch = path;
               bestScore = 4;
@@ -418,7 +563,7 @@ function findFunctionDeclaration(ast, functionName) {
           bestScore = 4;
         }
       }
-    }
+    },
   });
 
   return bestMatch;
@@ -451,15 +596,23 @@ function extractImportMappings(ast, currentFile, projectRoot) {
 
         // SECURITY: Validate path is within project root (prevent path traversal)
         const resolvedNormalized = resolve(resolvedFile);
-        if (!resolvedNormalized.startsWith(normalizedProjectRoot + '/') &&
-            !resolvedNormalized.startsWith(normalizedProjectRoot + '\\') &&
-            resolvedNormalized !== normalizedProjectRoot) {
-          logger.warn(`[trace_execution_flow] Import outside project root: ${source} -> ${resolvedFile}`);
+        if (
+          !resolvedNormalized.startsWith(normalizedProjectRoot + '/') &&
+          !resolvedNormalized.startsWith(normalizedProjectRoot + '\\') &&
+          resolvedNormalized !== normalizedProjectRoot
+        ) {
+          logger.warn(
+            `[trace_execution_flow] Import outside project root: ${source} -> ${resolvedFile}`
+          );
           return; // Skip this import
         }
 
         // Check if it's a .js file (add extension if missing)
-        if (!resolvedFile.endsWith('.js') && !resolvedFile.endsWith('.mjs') && !resolvedFile.endsWith('.cjs')) {
+        if (
+          !resolvedFile.endsWith('.js') &&
+          !resolvedFile.endsWith('.mjs') &&
+          !resolvedFile.endsWith('.cjs')
+        ) {
           const withJsExt = resolvedFile + '.js';
           if (existsSync(withJsExt)) {
             resolvedFile = withJsExt;
@@ -488,25 +641,25 @@ function extractImportMappings(ast, currentFile, projectRoot) {
           imports.set(spec.local.name, {
             source: resolvedFile,
             importedName: 'default',
-            originalSource: source
+            originalSource: source,
           });
         } else if (spec.type === 'ImportSpecifier') {
           // `import { Foo } from 'module'` - local name is spec.local.name
           imports.set(spec.local.name, {
             source: resolvedFile,
             importedName: spec.imported.name,
-            originalSource: source
+            originalSource: source,
           });
         } else if (spec.type === 'ImportNamespaceSpecifier') {
           // `import * as Foo from 'module'`
           imports.set(spec.local.name, {
             source: resolvedFile,
             importedName: '*',
-            originalSource: source
+            originalSource: source,
           });
         }
       }
-    }
+    },
   });
 
   return imports;
@@ -523,9 +676,11 @@ function findInImportedModule(importInfo, funcName, objectName, projectRoot) {
     // SECURITY: Validate path is within project root (defense-in-depth)
     const normalizedProjectRoot = resolve(projectRoot);
     const normalizedSource = resolve(importInfo.source);
-    if (!normalizedSource.startsWith(normalizedProjectRoot + '/') &&
-        !normalizedSource.startsWith(normalizedProjectRoot + '\\') &&
-        normalizedSource !== normalizedProjectRoot) {
+    if (
+      !normalizedSource.startsWith(normalizedProjectRoot + '/') &&
+      !normalizedSource.startsWith(normalizedProjectRoot + '\\') &&
+      normalizedSource !== normalizedProjectRoot
+    ) {
       logger.warn(`[trace_execution_flow] Import path outside project root: ${importInfo.source}`);
       return null;
     }
@@ -541,21 +696,26 @@ function findInImportedModule(importInfo, funcName, objectName, projectRoot) {
     }
 
     if (stats.size > MAX_FILE_SIZE) {
-      logger.warn(`[trace_execution_flow] Imported file too large (${stats.size} bytes): ${importInfo.source}`);
+      logger.warn(
+        `[trace_execution_flow] Imported file too large (${stats.size} bytes): ${importInfo.source}`
+      );
       return null;
     }
 
-    logger.info(`[trace_execution_flow] findInImportedModule: source=${importInfo.source}, funcName=${funcName}, objectName=${objectName}`);
+    logger.info(
+      `[trace_execution_flow] findInImportedModule: source=${importInfo.source}, funcName=${funcName}, objectName=${objectName}`
+    );
     const content = readFileSync(importInfo.source, 'utf-8');
 
-    const ext = importInfo.source.endsWith('.ts') || importInfo.source.endsWith('.tsx') ? 'typescript' : null;
+    const ext =
+      importInfo.source.endsWith('.ts') || importInfo.source.endsWith('.tsx') ? 'typescript' : null;
     const importedAst = parse(content, {
       sourceType: 'module',
-      plugins: [...(ext ? [ext] : []), 'jsx']
+      plugins: [...(ext ? [ext] : []), 'jsx'],
     });
 
     // First, try to find as a direct function/class
-    let result = findFunctionDeclaration(importedAst, funcName);
+    const result = findFunctionDeclaration(importedAst, funcName);
     if (result) {
       logger.info(`[trace_execution_flow] Found as direct function: ${funcName}`);
       return result;
@@ -574,11 +734,13 @@ function findInImportedModule(importInfo, funcName, objectName, projectRoot) {
         },
         // Also check for exported classes
         ExportNamedDeclaration(path) {
-          if (path.node.declaration?.type === 'ClassDeclaration' &&
-              path.node.declaration.id?.name === objectName) {
+          if (
+            path.node.declaration?.type === 'ClassDeclaration' &&
+            path.node.declaration.id?.name === objectName
+          ) {
             classPath = path;
           }
-        }
+        },
       });
 
       if (classPath) {
@@ -586,13 +748,16 @@ function findInImportedModule(importInfo, funcName, objectName, projectRoot) {
         const classBody = classPath.node.body || classPath.node.declaration?.body;
         if (classBody && classBody.body) {
           for (const method of classBody.body) {
-            if (method.type === 'ClassMethod' &&
-                method.key?.name === funcName) {
-              logger.info(`[trace_execution_flow] FOUND class method: ${funcName} at line ${method.loc?.start.line}`);
+            if (method.type === 'ClassMethod' && method.key?.name === funcName) {
+              logger.info(
+                `[trace_execution_flow] FOUND class method: ${funcName} at line ${method.loc?.start.line}`
+              );
               return method;
             }
           }
-          logger.info(`[trace_execution_flow] Method ${funcName} NOT FOUND in ${classBody.body.length} methods`);
+          logger.info(
+            `[trace_execution_flow] Method ${funcName} NOT FOUND in ${classBody.body.length} methods`
+          );
         }
       }
     }
@@ -609,7 +774,18 @@ function findInImportedModule(importInfo, funcName, objectName, projectRoot) {
  * Now supports cross-file tracing via import resolution
  */
 function buildCallGraph(ast, startFunc, options) {
-  const { maxDepth, includeAsync, detectCycles, filterBuiltIns, visited, path, filePath, projectRoot, importMappings, fileCache } = options;
+  const {
+    maxDepth,
+    includeAsync,
+    detectCycles,
+    filterBuiltIns,
+    visited,
+    path,
+    filePath,
+    projectRoot,
+    importMappings,
+    fileCache,
+  } = options;
   const graph = [];
 
   // HARD LIMIT: Prevent stack overflow
@@ -643,7 +819,9 @@ function buildCallGraph(ast, startFunc, options) {
       if (!funcName) return;
 
       // DEBUG: Log call detection
-      logger.info(`[trace_execution_flow] Call detected: funcName=${funcName}, isMemberCall=${isMemberCall}, objectName=${objectName}`);
+      logger.info(
+        `[trace_execution_flow] Call detected: funcName=${funcName}, isMemberCall=${isMemberCall}, objectName=${objectName}`
+      );
 
       // Skip built-in methods to reduce noise (if enabled)
       if (filterBuiltIns && isBuiltInMethod(funcName)) return;
@@ -661,7 +839,7 @@ function buildCallGraph(ast, startFunc, options) {
           line: callPath.node.loc.start.line,
           type: 'call',
           async: isAsync,
-          circular: true
+          circular: true,
         });
         return;
       }
@@ -678,7 +856,7 @@ function buildCallGraph(ast, startFunc, options) {
         type: 'call',
         async: isAsync,
         circular: false,
-        children: []
+        children: [],
       };
 
       // Try to find the target function and recurse
@@ -691,11 +869,15 @@ function buildCallGraph(ast, startFunc, options) {
       // with the same name in the current file when we actually want the method
       // from the imported class.
       if (isMemberCall && objectName && importMappings) {
-        logger.info(`[trace_execution_flow] Member call: objectName=${objectName}, funcName=${funcName}`);
+        logger.info(
+          `[trace_execution_flow] Member call: objectName=${objectName}, funcName=${funcName}`
+        );
         logger.info(`[trace_execution_flow] importMappings.size=${importMappings.size}`);
         const importInfo = importMappings.get(objectName);
         if (importInfo) {
-          logger.info(`[trace_execution_flow] Found import for ${objectName}: source=${importInfo.source}`);
+          logger.info(
+            `[trace_execution_flow] Found import for ${objectName}: source=${importInfo.source}`
+          );
           // Check cache first
           const cacheKey = importInfo.source;
           if (fileCache && fileCache.has(cacheKey)) {
@@ -709,16 +891,24 @@ function buildCallGraph(ast, startFunc, options) {
           } else {
             // Parse and cache the imported file
             try {
-              const targetFuncInfo = findInImportedModule(importInfo, funcName, objectName, projectRoot);
+              const targetFuncInfo = findInImportedModule(
+                importInfo,
+                funcName,
+                objectName,
+                projectRoot
+              );
               if (targetFuncInfo) {
                 targetFunc = targetFuncInfo;
                 targetFile = importInfo.source;
                 // Parse the full AST for recursion
                 const content = readFileSync(importInfo.source, 'utf-8');
-                const ext = importInfo.source.endsWith('.ts') || importInfo.source.endsWith('.tsx') ? 'typescript' : null;
+                const ext =
+                  importInfo.source.endsWith('.ts') || importInfo.source.endsWith('.tsx')
+                    ? 'typescript'
+                    : null;
                 targetAst = parse(content, {
                   sourceType: 'module',
-                  plugins: [...(ext ? [ext] : []), 'jsx']
+                  plugins: [...(ext ? [ext] : []), 'jsx'],
                 });
                 // Cache for future use
                 if (fileCache) {
@@ -760,7 +950,7 @@ function buildCallGraph(ast, startFunc, options) {
           filePath: targetFile,
           projectRoot,
           importMappings: childImportMappings,
-          fileCache
+          fileCache,
         });
 
         // Mark as cross-file call if applicable
@@ -771,7 +961,7 @@ function buildCallGraph(ast, startFunc, options) {
       }
 
       graph.push(node);
-    }
+    },
   });
 
   return graph;
@@ -789,35 +979,36 @@ function extractAsyncPatterns(ast, functionPath, filePath) {
         type: 'await',
         line: path.node.loc.start.line,
         file: filePath,
-        context: extractContext(path)
+        context: extractContext(path),
       });
     },
 
     CallExpression(path) {
       // Promise.then()
-      if (path.node.callee.type === 'MemberExpression' &&
-          path.node.callee.property.name === 'then') {
+      if (
+        path.node.callee.type === 'MemberExpression' &&
+        path.node.callee.property.name === 'then'
+      ) {
         patterns.push({
           type: 'promise_then',
           line: path.node.loc.start.line,
           file: filePath,
-          context: extractContext(path)
+          context: extractContext(path),
         });
       }
 
       // Callbacks
       for (const arg of path.node.arguments) {
-        if (arg.type === 'FunctionExpression' ||
-            arg.type === 'ArrowFunctionExpression') {
+        if (arg.type === 'FunctionExpression' || arg.type === 'ArrowFunctionExpression') {
           patterns.push({
             type: 'callback',
             line: arg.loc.start.line,
             file: filePath,
-            context: extractContext(path)
+            context: extractContext(path),
           });
         }
       }
-    }
+    },
   });
 
   return patterns;
@@ -833,7 +1024,7 @@ function extractContext(path) {
 
   return {
     startLine: start,
-    endLine: end
+    endLine: end,
   };
 }
 
@@ -846,7 +1037,7 @@ function calculateFlowSummary(callGraph, asyncPatterns) {
     maxDepth: calculateDepth(callGraph),
     asyncOperations: asyncPatterns.length,
     circularFlows: countCircularFlows(callGraph),
-    crossFileCalls: countCrossFileCalls(callGraph)
+    crossFileCalls: countCrossFileCalls(callGraph),
   };
 }
 
@@ -961,7 +1152,9 @@ function formatCallTree(nodes, indent) {
     const circularMarker = node.circular ? ` ${EMOJIS.WARNING} CIRCULAR` : '';
     const crossFileMarker = node.crossFile ? ` 📄 ${node.sourceFile}` : '';
 
-    lines.push(`${prefix}${indent + 1}. **${node.function}** [line ${node.line}]${crossFileMarker}`);
+    lines.push(
+      `${prefix}${indent + 1}. **${node.function}** [line ${node.line}]${crossFileMarker}`
+    );
     lines.push(`${prefix}   ${asyncMarker}${circularMarker}`);
 
     if (node.children && node.children.length > 0) {
@@ -992,7 +1185,9 @@ function formatExecutionFlowMermaid(flow) {
       const id = `N${nodeId++}`;
       nodeIdMap.set(node.function, id);
 
-      const label = node.circular ? `${node.function}<br/>${EMOJIS.WARNING} CIRCULAR` : node.function;
+      const label = node.circular
+        ? `${node.function}<br/>${EMOJIS.WARNING} CIRCULAR`
+        : node.function;
       const style = node.async ? '(async)' : '';
 
       lines.push(`  ${id}["${label}"]${style}`);

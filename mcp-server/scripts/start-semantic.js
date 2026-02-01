@@ -33,21 +33,21 @@ const LM_STUDIO_ENDPOINT = process.env.RC_LMSTUDIO_ENDPOINT || 'http://localhost
 async function checkLMStudio() {
   try {
     const response = await fetch(`${LM_STUDIO_ENDPOINT}/models`, {
-      signal: AbortSignal.timeout(5000)
+      signal: AbortSignal.timeout(5000),
     });
 
     if (response.ok) {
       const data = await response.json();
 
       // Check if embedding model is loaded
-      const hasEmbedding = data.data?.some(m =>
-        m.id.includes(EMBEDDING_MODEL) || m.id.includes('embedding')
+      const hasEmbedding = data.data?.some(
+        m => m.id.includes(EMBEDDING_MODEL) || m.id.includes('embedding')
       );
 
       return {
         available: true,
         hasEmbedding,
-        models: data.data?.map(m => m.id) || []
+        models: data.data?.map(m => m.id) || [],
       };
     }
 
@@ -63,10 +63,12 @@ async function checkLMStudio() {
 function formatModels(models) {
   if (models.length === 0) return 'None';
 
-  return models.map(m => {
-    const isEmbedding = m.includes('embedding') || m.includes(EMBEDDING_MODEL);
-    return `  ${isEmbedding ? '✓' : ' '} ${m}`;
-  }).join('\n');
+  return models
+    .map(m => {
+      const isEmbedding = m.includes('embedding') || m.includes(EMBEDDING_MODEL);
+      return `  ${isEmbedding ? '✓' : ' '} ${m}`;
+    })
+    .join('\n');
 }
 
 /**
@@ -140,17 +142,17 @@ async function main() {
     env: {
       ...process.env,
       RC_SEMANTIC_SEARCH: 'true',
-      RC_LMSTUDIO_ENDPOINT: LM_STUDIO_ENDPOINT
-    }
+      RC_LMSTUDIO_ENDPOINT: LM_STUDIO_ENDPOINT,
+    },
   });
 
   // Handle process events
-  serverProcess.on('error', (error) => {
+  serverProcess.on('error', error => {
     console.error('Failed to start server:', error);
     process.exit(1);
   });
 
-  serverProcess.on('exit', (code) => {
+  serverProcess.on('exit', code => {
     console.error('');
     console.error(`MCP Server exited with code ${code}`);
     process.exit(code);

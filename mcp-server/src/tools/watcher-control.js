@@ -23,7 +23,7 @@ Actions:
       action: {
         type: 'string',
         enum: ['start', 'stop', 'status', 'restart'],
-        description: 'Action to perform'
+        description: 'Action to perform',
       },
       config: {
         type: 'object',
@@ -33,26 +33,26 @@ Actions:
             type: 'number',
             description: 'Milliseconds to wait after last change (default: 300)',
             minimum: 100,
-            maximum: 5000
+            maximum: 5000,
           },
           coalesceWindow: {
             type: 'number',
             description: 'Milliseconds window to batch changes (default: 1000)',
             minimum: 500,
-            maximum: 10000
+            maximum: 10000,
           },
           ignore: {
             type: 'array',
             description: 'Additional ignore patterns',
             items: {
-              type: 'string'
-            }
-          }
-        }
-      }
+              type: 'string',
+            },
+          },
+        },
+      },
     },
-    required: ['action']
-  }
+    required: ['action'],
+  },
 };
 
 /**
@@ -67,10 +67,10 @@ export async function handler(args, projectRoot, semanticIndexer, mcpServer) {
       content: [
         {
           type: 'text',
-          text: 'Error: Semantic search is not enabled. Cannot control file watcher.'
-        }
+          text: 'Error: Semantic search is not enabled. Cannot control file watcher.',
+        },
       ],
-      isError: true
+      isError: true,
     };
   }
 
@@ -93,10 +93,10 @@ export async function handler(args, projectRoot, semanticIndexer, mcpServer) {
           content: [
             {
               type: 'text',
-              text: `Error: Unknown action '${action}'. Valid actions: start, stop, status, restart`
-            }
+              text: `Error: Unknown action '${action}'. Valid actions: start, stop, status, restart`,
+            },
           ],
-          isError: true
+          isError: true,
         };
     }
   } catch (error) {
@@ -105,10 +105,10 @@ export async function handler(args, projectRoot, semanticIndexer, mcpServer) {
       content: [
         {
           type: 'text',
-          text: `Error: ${error.message}`
-        }
+          text: `Error: ${error.message}`,
+        },
       ],
-      isError: true
+      isError: true,
     };
   }
 }
@@ -122,9 +122,9 @@ async function handleStart(indexer, config) {
       content: [
         {
           type: 'text',
-          text: 'File watcher is already running. Use "status" action to check current state or "restart" to apply new configuration.'
-        }
-      ]
+          text: 'File watcher is already running. Use "status" action to check current state or "restart" to apply new configuration.',
+        },
+      ],
     };
   }
 
@@ -134,9 +134,9 @@ async function handleStart(indexer, config) {
     content: [
       {
         type: 'text',
-        text: formatStatus(indexer.watcher.getStatus(), 'File watcher started successfully')
-      }
-    ]
+        text: formatStatus(indexer.watcher.getStatus(), 'File watcher started successfully'),
+      },
+    ],
   };
 }
 
@@ -149,9 +149,9 @@ async function handleStop(indexer) {
       content: [
         {
           type: 'text',
-          text: 'File watcher is not running.'
-        }
-      ]
+          text: 'File watcher is not running.',
+        },
+      ],
     };
   }
 
@@ -161,10 +161,11 @@ async function handleStop(indexer) {
     content: [
       {
         type: 'text',
-        text: 'File watcher stopped successfully.\n\n' +
-              'Note: The watcher has processed all pending changes before stopping.'
-      }
-    ]
+        text:
+          'File watcher stopped successfully.\n\n' +
+          'Note: The watcher has processed all pending changes before stopping.',
+      },
+    ],
   };
 }
 
@@ -177,10 +178,11 @@ async function handleStatus(indexer) {
       content: [
         {
           type: 'text',
-          text: 'File watcher is not initialized.\n\n' +
-                'To start the watcher, use the watcher_control tool with action="start".'
-        }
-      ]
+          text:
+            'File watcher is not initialized.\n\n' +
+            'To start the watcher, use the watcher_control tool with action="start".',
+        },
+      ],
     };
   }
 
@@ -190,9 +192,9 @@ async function handleStatus(indexer) {
     content: [
       {
         type: 'text',
-        text: formatStatus(status, 'File Watcher Status')
-      }
-    ]
+        text: formatStatus(status, 'File Watcher Status'),
+      },
+    ],
   };
 }
 
@@ -214,10 +216,10 @@ async function handleRestart(indexer, config) {
       content: [
         {
           type: 'text',
-          text: 'Error: Failed to initialize file watcher'
-        }
+          text: 'Error: Failed to initialize file watcher',
+        },
       ],
-      isError: true
+      isError: true,
     };
   }
 
@@ -225,9 +227,12 @@ async function handleRestart(indexer, config) {
     content: [
       {
         type: 'text',
-        text: formatStatus(indexer.watcher.getStatus(), wasRunning ? 'File watcher restarted' : 'File watcher started')
-      }
-    ]
+        text: formatStatus(
+          indexer.watcher.getStatus(),
+          wasRunning ? 'File watcher restarted' : 'File watcher started'
+        ),
+      },
+    ],
   };
 }
 
@@ -235,10 +240,7 @@ async function handleRestart(indexer, config) {
  * Format status for display
  */
 function formatStatus(status, title) {
-  const lines = [
-    `# ${title}`,
-    ''
-  ];
+  const lines = [`# ${title}`, ''];
 
   // Running state
   lines.push('## State');
@@ -247,9 +249,7 @@ function formatStatus(status, title) {
 
   if (status.running) {
     const uptime = Math.floor(status.uptime / 1000);
-    const uptimeStr = uptime > 60
-      ? `${Math.floor(uptime / 60)}m ${uptime % 60}s`
-      : `${uptime}s`;
+    const uptimeStr = uptime > 60 ? `${Math.floor(uptime / 60)}m ${uptime % 60}s` : `${uptime}s`;
     lines.push(`- **Uptime**: ${uptimeStr}`);
   }
 
@@ -260,11 +260,11 @@ function formatStatus(status, title) {
   lines.push(`- **Debounce Delay**: ${status.config.debounceDelay}ms`);
   lines.push(`- **Coalesce Window**: ${status.config.coalesceWindow}ms`);
   lines.push(`- **Max Queue Size**: ${status.config.maxQueueSize}`);
-  lines.push(`- **Patterns**:`);
+  lines.push('- **Patterns**:');
   for (const pattern of status.config.patterns) {
     lines.push(`  - ${pattern}`);
   }
-  lines.push(`- **Ignore Patterns**:`);
+  lines.push('- **Ignore Patterns**:');
   for (const pattern of status.config.ignore) {
     lines.push(`  - ${pattern}`);
   }
@@ -279,7 +279,7 @@ function formatStatus(status, title) {
   lines.push(`- **Errors**: ${status.stats.errors}`);
 
   if (status.stats.lastError) {
-    lines.push(`- **Last Error**:`);
+    lines.push('- **Last Error**:');
     lines.push(`  - Code: ${status.stats.lastError.code}`);
     lines.push(`  - Message: ${status.stats.lastError.message}`);
     lines.push(`  - Context: ${status.stats.lastError.context}`);

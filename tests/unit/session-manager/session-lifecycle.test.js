@@ -31,15 +31,15 @@ SessionLifecycle.initialize({
   getSessionData: SessionState.getSessionData,
   setSessionData: SessionState.setSessionData,
   updateSessionData: SessionState.updateSessionData,
-  getHistory: SessionState.getHistory
+  getHistory: SessionState.getHistory,
 });
 
 // Mock dependencies
 vi.mock('../../../js/services/event-bus.js', () => ({
   EventBus: {
     emit: vi.fn(),
-    registerSchemas: vi.fn()
-  }
+    registerSchemas: vi.fn(),
+  },
 }));
 
 vi.mock('../../../js/storage.js', () => ({
@@ -49,46 +49,46 @@ vi.mock('../../../js/storage.js', () => ({
     deleteSession: vi.fn(),
     getAllSessions: vi.fn(),
     setConfig: vi.fn(),
-    getConfig: vi.fn()
-  }
+    getConfig: vi.fn(),
+  },
 }));
 
 vi.mock('../../../js/state/app-state.js', () => ({
   AppState: {
     get: vi.fn(),
     set: vi.fn(),
-    update: vi.fn()
-  }
+    update: vi.fn(),
+  },
 }));
 
 vi.mock('../../../js/services/session-lock-manager.js', () => ({
   default: {
-    acquireProcessingLock: vi.fn(() => Promise.resolve({ locked: true, currentSessionId: null }))
-  }
+    acquireProcessingLock: vi.fn(() => Promise.resolve({ locked: true, currentSessionId: null })),
+  },
 }));
 
 vi.mock('../../../js/services/session-manager/session-persistence.js', () => ({
   saveCurrentSession: vi.fn(() => Promise.resolve(true)),
   flushPendingSaveAsync: vi.fn(() => Promise.resolve()),
-  saveConversation: vi.fn(() => { }),
-  emergencyBackupSync: vi.fn(() => { }),
-  recoverEmergencyBackup: vi.fn(() => Promise.resolve(false))
+  saveConversation: vi.fn(() => {}),
+  emergencyBackupSync: vi.fn(() => {}),
+  recoverEmergencyBackup: vi.fn(() => Promise.resolve(false)),
 }));
 
 // Mock localStorage
 const localStorageMock = (() => {
   let store = {};
   return {
-    getItem: vi.fn((key) => store[key] || null),
+    getItem: vi.fn(key => store[key] || null),
     setItem: vi.fn((key, value) => {
       store[key] = value.toString();
     }),
-    removeItem: vi.fn((key) => {
+    removeItem: vi.fn(key => {
       delete store[key];
     }),
     clear: vi.fn(() => {
       store = {};
-    })
+    }),
   };
 })();
 
@@ -126,7 +126,7 @@ describe('SessionLifecycle Module', () => {
       getSessionData: SessionState.getSessionData,
       setSessionData: SessionState.setSessionData,
       updateSessionData: SessionState.updateSessionData,
-      getHistory: SessionState.getHistory
+      getHistory: SessionState.getHistory,
     });
   });
 
@@ -140,13 +140,15 @@ describe('SessionLifecycle Module', () => {
 
       expect(sessionId).toBeTruthy();
       expect(typeof sessionId).toBe('string');
-      expect(sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+      expect(sessionId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      );
     });
 
     it('should create session with initial messages', async () => {
       const initialMessages = [
         { role: 'user', content: 'Hello' },
-        { role: 'assistant', content: 'Hi there!' }
+        { role: 'assistant', content: 'Hi there!' },
       ];
 
       const sessionId = await SessionLifecycle.createSession(initialMessages);
@@ -176,10 +178,7 @@ describe('SessionLifecycle Module', () => {
     it('should save session ID to storage', async () => {
       const sessionId = await SessionLifecycle.createSession();
 
-      expect(Storage.setConfig).toHaveBeenCalledWith(
-        expect.any(String),
-        sessionId
-      );
+      expect(Storage.setConfig).toHaveBeenCalledWith(expect.any(String), sessionId);
     });
 
     it('should sync session ID to AppState', async () => {
@@ -195,7 +194,7 @@ describe('SessionLifecycle Module', () => {
       expect(EventBus.emit).toHaveBeenCalledWith(
         'session:created',
         expect.objectContaining({
-          sessionId: expect.any(String)
+          sessionId: expect.any(String),
         })
       );
     });
@@ -218,10 +217,12 @@ describe('SessionLifecycle Module', () => {
 
     it('should reset message limit warning flag for new sessions', async () => {
       // First session with many messages
-      const manyMessages = Array(95).fill(null).map((_, i) => ({
-        role: 'user',
-        content: `Message ${i}`
-      }));
+      const manyMessages = Array(95)
+        .fill(null)
+        .map((_, i) => ({
+          role: 'user',
+          content: `Message ${i}`,
+        }));
 
       await SessionLifecycle.createSession(manyMessages);
 
@@ -241,7 +242,7 @@ describe('SessionLifecycle Module', () => {
         id: testSessionId,
         title: 'Test Chat',
         createdAt: '2024-01-27T12:00:00Z',
-        messages: [{ role: 'user', content: 'Test' }]
+        messages: [{ role: 'user', content: 'Test' }],
       };
 
       Storage.getSession.mockResolvedValue(mockSession);
@@ -271,7 +272,7 @@ describe('SessionLifecycle Module', () => {
       const corruptedSession = {
         id: testSessionId,
         // Missing required fields
-        messages: 'not-an-array'
+        messages: 'not-an-array',
       };
 
       Storage.getSession.mockResolvedValue(corruptedSession);
@@ -286,7 +287,7 @@ describe('SessionLifecycle Module', () => {
         id: testSessionId,
         title: 'Test Chat',
         createdAt: '2024-01-27T12:00:00Z',
-        messages: [{ role: 'user', content: 'Test' }]
+        messages: [{ role: 'user', content: 'Test' }],
       };
 
       Storage.getSession.mockResolvedValue(mockSession);
@@ -296,7 +297,7 @@ describe('SessionLifecycle Module', () => {
       expect(EventBus.emit).toHaveBeenCalledWith(
         'session:loaded',
         expect.objectContaining({
-          sessionId: testSessionId
+          sessionId: testSessionId,
         })
       );
     });
@@ -306,17 +307,14 @@ describe('SessionLifecycle Module', () => {
         id: testSessionId,
         title: 'Test Chat',
         createdAt: '2024-01-27T12:00:00Z',
-        messages: []
+        messages: [],
       };
 
       Storage.getSession.mockResolvedValue(mockSession);
 
       await SessionLifecycle.activateSession(testSessionId);
 
-      expect(Storage.setConfig).toHaveBeenCalledWith(
-        expect.any(String),
-        testSessionId
-      );
+      expect(Storage.setConfig).toHaveBeenCalledWith(expect.any(String), testSessionId);
     });
 
     it('should sync to AppState on load', async () => {
@@ -324,7 +322,7 @@ describe('SessionLifecycle Module', () => {
         id: testSessionId,
         title: 'Test Chat',
         createdAt: '2024-01-27T12:00:00Z',
-        messages: []
+        messages: [],
       };
 
       Storage.getSession.mockResolvedValue(mockSession);
@@ -356,7 +354,7 @@ describe('SessionLifecycle Module', () => {
         id: targetId,
         title: 'Target Chat',
         createdAt: '2024-01-27T12:00:00Z',
-        messages: []
+        messages: [],
       };
 
       Storage.getSession.mockResolvedValue(mockTargetSession);
@@ -369,7 +367,7 @@ describe('SessionLifecycle Module', () => {
 
     it('should save current session before switching', async () => {
       const currentId = await SessionLifecycle.createSession([
-        { role: 'user', content: 'Current session' }
+        { role: 'user', content: 'Current session' },
       ]);
       const targetId = '9f4eee4b-a7e0-477f-a3fe-6cd1d3aa821b';
 
@@ -377,7 +375,7 @@ describe('SessionLifecycle Module', () => {
         id: targetId,
         title: 'Target Chat',
         createdAt: '2024-01-27T12:00:00Z',
-        messages: []
+        messages: [],
       };
 
       Storage.getSession.mockResolvedValue(mockTargetSession);
@@ -396,7 +394,7 @@ describe('SessionLifecycle Module', () => {
         id: targetId,
         title: 'Target Chat',
         createdAt: '2024-01-27T12:00:00Z',
-        messages: []
+        messages: [],
       };
 
       Storage.getSession.mockResolvedValue(mockTargetSession);
@@ -407,7 +405,7 @@ describe('SessionLifecycle Module', () => {
         'session:switched',
         expect.objectContaining({
           fromSessionId: currentId,
-          toSessionId: targetId
+          toSessionId: targetId,
         })
       );
     });
@@ -432,9 +430,7 @@ describe('SessionLifecycle Module', () => {
     });
 
     it('should handle save errors during switch', async () => {
-      const currentId = await SessionLifecycle.createSession([
-        { role: 'user', content: 'Test' }
-      ]);
+      const currentId = await SessionLifecycle.createSession([{ role: 'user', content: 'Test' }]);
       const targetId = '9f4eee4b-a7e0-477f-a3fe-6cd1d3aa821b';
 
       Storage.saveSession.mockRejectedValue(new Error('Save failed'));
@@ -443,7 +439,7 @@ describe('SessionLifecycle Module', () => {
         id: targetId,
         title: 'Target Chat',
         createdAt: '2024-01-27T12:00:00Z',
-        messages: []
+        messages: [],
       };
 
       Storage.getSession.mockResolvedValue(mockTargetSession);
@@ -507,7 +503,7 @@ describe('SessionLifecycle Module', () => {
       expect(EventBus.emit).toHaveBeenCalledWith(
         'session:deleted',
         expect.objectContaining({
-          sessionId: testSessionId
+          sessionId: testSessionId,
         })
       );
     });
@@ -531,7 +527,7 @@ describe('SessionLifecycle Module', () => {
         id: testSessionId,
         title: 'Old Title',
         createdAt: '2024-01-27T12:00:00Z',
-        messages: []
+        messages: [],
       };
 
       Storage.getSession.mockResolvedValue(mockSession);
@@ -544,7 +540,7 @@ describe('SessionLifecycle Module', () => {
       expect(Storage.saveSession).toHaveBeenCalledWith(
         expect.objectContaining({
           id: testSessionId,
-          title: newTitle
+          title: newTitle,
         })
       );
     });
@@ -569,7 +565,7 @@ describe('SessionLifecycle Module', () => {
         id: testSessionId,
         title: 'Old Title',
         createdAt: '2024-01-27T12:00:00Z',
-        messages: []
+        messages: [],
       };
 
       Storage.getSession.mockResolvedValue(mockSession);
@@ -581,7 +577,7 @@ describe('SessionLifecycle Module', () => {
         'session:updated',
         expect.objectContaining({
           sessionId: testSessionId,
-          field: 'title'
+          field: 'title',
         })
       );
     });
@@ -591,7 +587,7 @@ describe('SessionLifecycle Module', () => {
         id: testSessionId,
         title: 'Old Title',
         createdAt: '2024-01-27T12:00:00Z',
-        messages: []
+        messages: [],
       };
 
       Storage.getSession.mockResolvedValue(mockSession);
@@ -610,7 +606,7 @@ describe('SessionLifecycle Module', () => {
   describe('clearAllSessions', () => {
     it('should clear conversation and create new session', async () => {
       const currentId = await SessionLifecycle.createSession([
-        { role: 'user', content: 'Test message' }
+        { role: 'user', content: 'Test message' },
       ]);
 
       // Verify we have messages
@@ -628,9 +624,7 @@ describe('SessionLifecycle Module', () => {
     });
 
     it('should save current session before clearing', async () => {
-      await SessionLifecycle.createSession([
-        { role: 'user', content: 'Test message' }
-      ]);
+      await SessionLifecycle.createSession([{ role: 'user', content: 'Test message' }]);
 
       await SessionLifecycle.clearAllSessions();
 
@@ -648,15 +642,13 @@ describe('SessionLifecycle Module', () => {
       expect(EventBus.emit).toHaveBeenCalledWith(
         'session:created',
         expect.objectContaining({
-          sessionId: expect.any(String)
+          sessionId: expect.any(String),
         })
       );
     });
 
     it('should handle save errors gracefully', async () => {
-      await SessionLifecycle.createSession([
-        { role: 'user', content: 'Test' }
-      ]);
+      await SessionLifecycle.createSession([{ role: 'user', content: 'Test' }]);
 
       Storage.saveSession.mockRejectedValue(new Error('Save failed'));
 
@@ -685,7 +677,7 @@ describe('SessionLifecycle Module', () => {
 
     it('should maintain state integrity through switches', async () => {
       const session1 = await SessionLifecycle.createSession([
-        { role: 'user', content: 'Session 1' }
+        { role: 'user', content: 'Session 1' },
       ]);
 
       const session2Id = 'bf4eee4b-a7e0-477f-a3fe-6cd1d3aa821d';
@@ -693,7 +685,7 @@ describe('SessionLifecycle Module', () => {
         id: session2Id,
         title: 'Session 2',
         createdAt: '2024-01-27T12:00:00Z',
-        messages: [{ role: 'user', content: 'Session 2' }]
+        messages: [{ role: 'user', content: 'Session 2' }],
       };
 
       Storage.getSession.mockResolvedValue(mockSession2);
@@ -706,7 +698,7 @@ describe('SessionLifecycle Module', () => {
         id: session1,
         title: 'Session 1',
         createdAt: '2024-01-27T12:00:00Z',
-        messages: [{ role: 'user', content: 'Session 1' }]
+        messages: [{ role: 'user', content: 'Session 1' }],
       };
 
       Storage.getSession.mockResolvedValue(mockSession1);
@@ -722,9 +714,7 @@ describe('SessionLifecycle Module', () => {
 
   describe('Session Cleanup', () => {
     it('should handle cleanup on session deletion', async () => {
-      const currentId = await SessionLifecycle.createSession([
-        { role: 'user', content: 'Test' }
-      ]);
+      const currentId = await SessionLifecycle.createSession([{ role: 'user', content: 'Test' }]);
 
       Storage.deleteSession.mockResolvedValue(undefined);
 
@@ -807,9 +797,7 @@ describe('SessionLifecycle Module', () => {
       // Test that lifecycle operations work through proper abstraction
       // even when we only use the lifecycle API
 
-      const sessionId = await SessionLifecycle.createSession([
-        { role: 'user', content: 'Test' }
-      ]);
+      const sessionId = await SessionLifecycle.createSession([{ role: 'user', content: 'Test' }]);
 
       // Operations should complete without errors
       expect(sessionId).toBeTruthy();
@@ -828,7 +816,7 @@ describe('SessionLifecycle Module', () => {
   describe('Memory Leak Prevention', () => {
     it('should clean up resources on session switch', async () => {
       const currentId = await SessionLifecycle.createSession([
-        { role: 'user', content: 'Current session' }
+        { role: 'user', content: 'Current session' },
       ]);
       const targetId = '9f4eee4b-a7e0-477f-a3fe-6cd1d3aa821b';
 
@@ -836,7 +824,7 @@ describe('SessionLifecycle Module', () => {
         id: targetId,
         title: 'Target Chat',
         createdAt: '2024-01-27T12:00:00Z',
-        messages: []
+        messages: [],
       };
 
       Storage.getSession.mockResolvedValue(mockTargetSession);
@@ -852,7 +840,7 @@ describe('SessionLifecycle Module', () => {
       const sessions = [
         '9f4eee4b-a7e0-477f-a3fe-6cd1d3aa821a',
         '9f4eee4b-a7e0-477f-a3fe-6cd1d3aa821b',
-        '9f4eee4b-a7e0-477f-a3fe-6cd1d3aa821c'
+        '9f4eee4b-a7e0-477f-a3fe-6cd1d3aa821c',
       ];
 
       for (const sessionId of sessions) {
@@ -860,7 +848,7 @@ describe('SessionLifecycle Module', () => {
           id: sessionId,
           title: `Chat ${sessionId}`,
           createdAt: '2024-01-27T12:00:00Z',
-          messages: []
+          messages: [],
         };
 
         Storage.getSession.mockResolvedValue(mockSession);

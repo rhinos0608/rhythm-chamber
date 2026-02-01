@@ -10,7 +10,9 @@
     "semantic:start": "node scripts/start-semantic.js",
     "test": "node --test",
     "build": "echo 'No build step required for JS'",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --cache",
+    "lint:fix": "eslint . --fix --cache"
   },
   "keywords": [
     "mcp",

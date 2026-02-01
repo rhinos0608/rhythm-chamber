@@ -18,7 +18,7 @@ const HNW_RULES = {
     title: 'Layer Violation',
     description: 'Dependencies must follow HNW hierarchy: Controllers → Services → Providers',
     why: 'Bypassing layers creates tight coupling, makes testing difficult, and breaks the clear command chain',
-    confidence: 'HIGH',  // AST-based analysis is reliable
+    confidence: 'HIGH', // AST-based analysis is reliable
     impact: 'HIGH',
   },
   NETWORK_001: {
@@ -27,7 +27,7 @@ const HNW_RULES = {
     title: 'EventBus Not Used',
     description: 'Cross-module communication should use EventBus',
     why: 'Direct imports create tight coupling; EventBus enables loose coupling and better testability',
-    confidence: 'MEDIUM',  // Heuristic based on import count
+    confidence: 'MEDIUM', // Heuristic based on import count
     impact: 'MEDIUM',
   },
   WAVE_001: {
@@ -36,7 +36,7 @@ const HNW_RULES = {
     title: 'TabCoordinator Not Used',
     description: 'Cross-tab coordination must use TabCoordinator',
     why: 'Direct IndexedDB writes from non-primary tabs cause data corruption and race conditions',
-    confidence: 'HIGH',  // Clear pattern detection
+    confidence: 'HIGH', // Clear pattern detection
     impact: 'CRITICAL',
   },
 };
@@ -74,7 +74,7 @@ export class HNWAnalyzer {
       filePath: relativePath,
       layer,
       compliance: this.checkHNWCompliance(layer, imports, resolvedImports, relativePath),
-      imports: imports.map((imp) => imp.source),
+      imports: imports.map(imp => imp.source),
       exports: {
         named: exports.named.length,
         default: exports.default ? 1 : 0,
@@ -223,15 +223,9 @@ export class HNWAnalyzer {
     }
 
     // Check for EventBus usage (Network principle)
-    const usesEventBus = imports.some((imp) =>
-      imp.source.includes('event-bus.js')
-    );
+    const usesEventBus = imports.some(imp => imp.source.includes('event-bus.js'));
 
-    if (
-      (layer === 'controllers' || layer === 'services') &&
-      !usesEventBus &&
-      imports.length > 1
-    ) {
+    if ((layer === 'controllers' || layer === 'services') && !usesEventBus && imports.length > 1) {
       const rule = this.rules.NETWORK_001;
       const evidence = this.extractImportListEvidence(fileContent, imports);
 
@@ -253,7 +247,7 @@ export class HNWAnalyzer {
     return {
       score: Math.max(0, score.max - score.deducted),
       violations,
-      compliant: violations.filter((v) => v.severity === 'error').length === 0,
+      compliant: violations.filter(v => v.severity === 'error').length === 0,
     };
   }
 
@@ -334,9 +328,7 @@ export class HNWAnalyzer {
       isValid,
       fromLayer,
       toLayer,
-      reason: isValid
-        ? null
-        : `${fromLayer} cannot depend on ${toLayer}`,
+      reason: isValid ? null : `${fromLayer} cannot depend on ${toLayer}`,
     };
   }
 

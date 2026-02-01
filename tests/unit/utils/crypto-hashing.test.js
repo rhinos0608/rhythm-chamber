@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { hashMessageContent, clearHashCache, getHashCacheSize, MessageHashCache } from '../../../js/utils/crypto-hashing.js';
+import {
+  hashMessageContent,
+  clearHashCache,
+  getHashCacheSize,
+  MessageHashCache,
+} from '../../../js/utils/crypto-hashing.js';
 
 describe('Crypto Hashing', () => {
   beforeEach(() => {

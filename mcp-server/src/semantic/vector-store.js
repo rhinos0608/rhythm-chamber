@@ -31,14 +31,14 @@ const DEFAULT_DIM = 768;
  */
 export class VectorStore {
   constructor(options = {}) {
-    this.vectors = new Map();           // chunkId -> Float32Array
-    this.metadata = new Map();          // chunkId -> metadata
+    this.vectors = new Map(); // chunkId -> Float32Array
+    this.metadata = new Map(); // chunkId -> metadata
     this.chunkCount = 0;
     this.dimension = options.dimension || DEFAULT_DIM;
     this.upgradeThreshold = options.upgradeThreshold || UPGRADE_THRESHOLD;
     this.useSqlite = false;
     this.dbPath = options.dbPath;
-    this._upgradeWarned = false;        // Track if we've warned about sqlite upgrade
+    this._upgradeWarned = false; // Track if we've warned about sqlite upgrade
   }
 
   /**
@@ -52,9 +52,13 @@ export class VectorStore {
         embedding = new Float32Array(embedding);
       } else if (typeof embedding === 'object' && embedding !== null) {
         // Corrupted embedding: object with numeric keys
-        throw new Error(`Invalid embedding type for ${chunkId}: expected Float32Array or Array, got object with numeric keys. This may indicate cache corruption.`);
+        throw new Error(
+          `Invalid embedding type for ${chunkId}: expected Float32Array or Array, got object with numeric keys. This may indicate cache corruption.`
+        );
       } else {
-        throw new Error(`Invalid embedding type for ${chunkId}: expected Float32Array or Array, got ${typeof embedding}`);
+        throw new Error(
+          `Invalid embedding type for ${chunkId}: expected Float32Array or Array, got ${typeof embedding}`
+        );
       }
     }
 
@@ -62,8 +66,8 @@ export class VectorStore {
     if (embedding.length !== this.dimension) {
       throw new Error(
         `Embedding dimension mismatch for ${chunkId}: ` +
-        `expected ${this.dimension} dimensions, got ${embedding.length}. ` +
-        `This may indicate a model change or cache corruption.`
+          `expected ${this.dimension} dimensions, got ${embedding.length}. ` +
+          'This may indicate a model change or cache corruption.'
       );
     }
 
@@ -71,14 +75,16 @@ export class VectorStore {
     this.metadata.set(chunkId, {
       ...metadata,
       chunkId,
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
     });
 
     this.chunkCount = this.vectors.size;
 
     // Check if we need to upgrade to sqlite (warn only once)
     if (!this.useSqlite && !this._upgradeWarned && this.chunkCount >= this.upgradeThreshold) {
-      console.error(`[VectorStore] Chunk count (${this.chunkCount}) >= threshold (${this.upgradeThreshold}), consider upgrading to sqlite-vec`);
+      console.error(
+        `[VectorStore] Chunk count (${this.chunkCount}) >= threshold (${this.upgradeThreshold}), consider upgrading to sqlite-vec`
+      );
       this._upgradeWarned = true;
     }
   }
@@ -149,7 +155,9 @@ export class VectorStore {
    */
   setDimension(dimension) {
     if (this.dimension !== dimension && this.chunkCount > 0) {
-      console.warn(`[VectorStore] Dimension mismatch detected! Existing vectors have ${this.dimension} dims, but trying to use ${dimension} dims. Clearing vector store.`);
+      console.warn(
+        `[VectorStore] Dimension mismatch detected! Existing vectors have ${this.dimension} dims, but trying to use ${dimension} dims. Clearing vector store.`
+      );
       this.clear();
       this.dimension = dimension;
       return true; // Indicate that store was cleared
@@ -169,11 +177,7 @@ export class VectorStore {
    * Search for similar vectors
    */
   search(queryEmbedding, options = {}) {
-    const {
-      limit = 10,
-      threshold = DEFAULT_THRESHOLD,
-      filters = {}
-    } = options;
+    const { limit = 10, threshold = DEFAULT_THRESHOLD, filters = {} } = options;
 
     if (!(queryEmbedding instanceof Float32Array)) {
       queryEmbedding = new Float32Array(queryEmbedding);
@@ -183,8 +187,8 @@ export class VectorStore {
     if (queryEmbedding.length !== this.dimension) {
       throw new Error(
         `Query embedding dimension (${queryEmbedding.length}) does not match ` +
-        `vector store dimension (${this.dimension}). Model may have switched. ` +
-        `Clear cache and reindex if needed.`
+          `vector store dimension (${this.dimension}). Model may have switched. ` +
+          'Clear cache and reindex if needed.'
       );
     }
 
@@ -205,7 +209,7 @@ export class VectorStore {
         results.push({
           chunkId,
           similarity,
-          metadata
+          metadata,
         });
       }
     }
@@ -322,14 +326,10 @@ export class VectorStore {
    * duplicate API calls when retrying with different thresholds.
    */
   async searchByText(query, embeddings, options = {}) {
-    const {
-      queryText = null,
-      queryEmbedding = null,
-      ...remainingOptions
-    } = options;
+    const { queryText = null, queryEmbedding = null, ...remainingOptions } = options;
 
     // Generate embedding if not provided (allows caching across retries)
-    const embedding = queryEmbedding || await embeddings.getEmbedding(query);
+    const embedding = queryEmbedding || (await embeddings.getEmbedding(query));
     const results = this.search(embedding, remainingOptions);
 
     // Apply symbol name boost if query text is provided
@@ -351,7 +351,7 @@ export class VectorStore {
             return {
               ...r,
               similarity: boostedSim,
-              nameMatchBoost: boostedSim - r.similarity
+              nameMatchBoost: boostedSim - r.similarity,
             };
           }
 
@@ -376,7 +376,7 @@ export class VectorStore {
       dimension: this.dimension,
       useSqlite: this.useSqlite,
       memoryBytes: this._estimateMemoryUsage(),
-      upgradeThreshold: this.upgradeThreshold
+      upgradeThreshold: this.upgradeThreshold,
     };
   }
 
@@ -389,7 +389,7 @@ export class VectorStore {
       chunkCount: this.chunkCount,
       dimension: this.dimension,
       vectors: {},
-      metadata: {}
+      metadata: {},
     };
 
     for (const [chunkId, vector] of this.vectors.entries()) {
@@ -408,7 +408,7 @@ export class VectorStore {
    * Import data
    */
   import(data) {
-    this.clear();  // This resets _upgradeWarned flag
+    this.clear(); // This resets _upgradeWarned flag
 
     if (data.version !== 1) {
       throw new Error(`Unsupported vector store version: ${data.version}`);
@@ -460,7 +460,7 @@ export class VectorStore {
         results.push({
           chunkId: otherId,
           similarity,
-          metadata: this.metadata.get(otherId)
+          metadata: this.metadata.get(otherId),
         });
       }
     }
@@ -480,7 +480,7 @@ export class VectorStore {
         chunks.push({
           chunkId,
           metadata,
-          vector: this.vectors.get(chunkId)
+          vector: this.vectors.get(chunkId),
         });
       }
     }
@@ -514,7 +514,7 @@ export class VectorStore {
         chunks.push({
           chunkId,
           metadata,
-          vector: this.vectors.get(chunkId)
+          vector: this.vectors.get(chunkId),
         });
       }
     }
@@ -531,7 +531,10 @@ export class VectorStore {
 
       // Only add if not already present or if newer
       const existing = this.metadata.get(chunkId);
-      if (!existing || (metadata.updatedAt && existing.updatedAt && metadata.updatedAt > existing.updatedAt)) {
+      if (
+        !existing ||
+        (metadata.updatedAt && existing.updatedAt && metadata.updatedAt > existing.updatedAt)
+      ) {
         this.upsert(chunkId, vector, metadata);
       }
     }

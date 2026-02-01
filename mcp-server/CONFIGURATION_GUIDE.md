@@ -6,11 +6,11 @@
 
 Claude Code supports three MCP configuration scopes:
 
-| Scope | Location | Purpose | Version Control |
-|-------|----------|---------|-----------------|
-| **Local** | `~/.claude.json` (project-specific) | Private to you, project-specific | ❌ No |
-| **Project** | `.mcp.json` (project root) | Shared with team via version control | ✅ Yes |
-| **User** | `~/.claude.json` (global) | Available across all your projects | ❌ No |
+| Scope       | Location                            | Purpose                              | Version Control |
+| ----------- | ----------------------------------- | ------------------------------------ | --------------- |
+| **Local**   | `~/.claude.json` (project-specific) | Private to you, project-specific     | ❌ No           |
+| **Project** | `.mcp.json` (project root)          | Shared with team via version control | ✅ Yes          |
+| **User**    | `~/.claude.json` (global)           | Available across all your projects   | ❌ No           |
 
 **Recommendation**: Use **Project scope** for team collaboration (`.mcp.json`).
 
@@ -45,9 +45,7 @@ Create `.mcp.json` in your project root with this structure:
   "mcpServers": {
     "rhythm-chamber": {
       "command": "node",
-      "args": [
-        "/Users/rhinesharar/rhythm-chamber/mcp-server/server.js"
-      ],
+      "args": ["/Users/rhinesharar/rhythm-chamber/mcp-server/server.js"],
       "env": {
         "RC_PROJECT_ROOT": "/Users/rhinesharar/rhythm-chamber",
         "RC_MCP_CACHE_DIR": "/Users/rhinesharar/rhythm-chamber/.mcp-cache",
@@ -59,6 +57,7 @@ Create `.mcp.json` in your project root with this structure:
 ```
 
 **Key differences from Claude Desktop**:
+
 - No `"type": "stdio"` field needed for stdio servers
 - File is `.mcp.json` (not `claude_desktop_config.json`)
 - Located at project root (not user config directory)
@@ -91,21 +90,25 @@ node mcp-server/examples/test-server.js
 Once configured, you can use these tools in Claude Code:
 
 ### 1. get_module_info
+
 Analyze a specific module's structure, imports, exports, and HNW compliance.
 
 **Example**: "Analyze the chat-ui-controller.js module for HNW compliance"
 
 ### 2. find_dependencies
+
 Trace dependency relationships starting from a module.
 
 **Example**: "Find all dependencies from main.js with depth 3"
 
 ### 3. search_architecture
+
 Search the codebase for architecture patterns and HNW compliance issues.
 
 **Example**: "Search for EventBus usage across all controllers"
 
 ### 4. validate_hnw_compliance
+
 Validate HNW architecture compliance for files or layers.
 
 **Example**: "Validate HNW compliance for all controllers"
@@ -119,9 +122,7 @@ Claude Code supports environment variable expansion in `.mcp.json`, allowing tea
   "mcpServers": {
     "rhythm-chamber": {
       "command": "node",
-      "args": [
-        "${PROJECT_ROOT}/mcp-server/server.js"
-      ],
+      "args": ["${PROJECT_ROOT}/mcp-server/server.js"],
       "env": {
         "RC_PROJECT_ROOT": "${PROJECT_ROOT}",
         "RC_MCP_CACHE_DIR": "${PROJECT_ROOT}/.mcp-cache",
@@ -133,10 +134,12 @@ Claude Code supports environment variable expansion in `.mcp.json`, allowing tea
 ```
 
 **Supported syntax:**
+
 - `${VAR}` - Expands to environment variable `VAR`
 - `${VAR:-default}` - Expands to `VAR` if set, otherwise uses `default`
 
 **Expansion locations:**
+
 - `command` - The server executable path
 - `args` - Command-line arguments
 - `env` - Environment variables passed to the server
@@ -147,11 +150,11 @@ Claude Code supports environment variable expansion in `.mcp.json`, allowing tea
 
 ### Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `RC_PROJECT_ROOT` | Yes | - | Absolute path to project root |
-| `RC_MCP_CACHE_DIR` | No | `{RC_PROJECT_ROOT}/.mcp-cache` | Directory for cache storage |
-| `NODE_ENV` | No | `production` | Set to 'development' for verbose logging |
+| Variable           | Required | Default                        | Description                              |
+| ------------------ | -------- | ------------------------------ | ---------------------------------------- |
+| `RC_PROJECT_ROOT`  | Yes      | -                              | Absolute path to project root            |
+| `RC_MCP_CACHE_DIR` | No       | `{RC_PROJECT_ROOT}/.mcp-cache` | Directory for cache storage              |
+| `NODE_ENV`         | No       | `production`                   | Set to 'development' for verbose logging |
 
 ### Performance Tuning
 
@@ -159,8 +162,8 @@ For large codebases (>1000 files), you can tune cache sizes in `src/utils/parser
 
 ```javascript
 const parser = new ASTParser({
-  max: 1000,             // Increase cache size
-  ttl: 600000,           // 10 minutes TTL
+  max: 1000, // Increase cache size
+  ttl: 600000, // 10 minutes TTL
   maxSize: 100 * 1024 * 1024, // 100MB memory limit
 });
 ```
@@ -194,6 +197,7 @@ Once configured, verify the server is running within Claude Code:
 ### Test MCP Tools
 
 Ask Claude Code questions like:
+
 - "Analyze the chat-ui-controller.js module for HNW compliance"
 - "Find all dependencies from main.js with depth 3"
 - "Search for EventBus usage across all controllers"
@@ -208,6 +212,7 @@ Ask Claude Code questions like:
 **Problem**: Claude Code can't connect to the MCP server.
 
 **Solution**:
+
 1. Check the path in `args` is absolute (not relative)
 2. Verify the server.js file exists
 3. Check server status with `/mcp` in Claude Code
@@ -221,6 +226,7 @@ Ask Claude Code questions like:
 **Problem**: Can't read project files.
 
 **Solution**:
+
 1. Ensure `RC_PROJECT_ROOT` is set correctly in `.mcp.json`
 2. Check file permissions on the project directory
 3. Verify the user has read access to all source files
@@ -230,6 +236,7 @@ Ask Claude Code questions like:
 **Problem**: Server fails to start when Claude Code loads.
 
 **Solution**:
+
 1. Check for syntax errors in `.mcp.json`:
    ```bash
    cat .mcp.json | jq  # Validate JSON syntax
@@ -251,6 +258,7 @@ Ask Claude Code questions like:
 **Problem**: Cache is corrupted or out of date.
 
 **Solution**:
+
 ```bash
 # Clear the cache
 rm -rf .mcp-cache
@@ -262,6 +270,7 @@ rm -rf .mcp-cache
 **Problem**: Server connects but tools don't show up.
 
 **Solution**:
+
 1. Check `/mcp` status in Claude Code
 2. Verify server is returning tool schemas correctly
 3. Restart Claude Code to force reconnection
@@ -272,13 +281,17 @@ rm -rf .mcp-cache
 ## Performance Tips
 
 ### 1. Use Specific File Paths
+
 Instead of "analyze the controllers", use "analyze js/controllers/chat-ui-controller.js" for faster results.
 
 ### 2. Limit Search Depth
+
 When using `find_dependencies`, start with `maxDepth: 2` and increase only if needed.
 
 ### 3. Filter by Layer
+
 Use `filterByLayer` to focus on specific architectural layers:
+
 ```javascript
 {
   "startModule": "js/main.js",
@@ -287,7 +300,9 @@ Use `filterByLayer` to focus on specific architectural layers:
 ```
 
 ### 4. Enable Caching
+
 The server automatically caches:
+
 - AST parse results (500 entries, 5min TTL)
 - File scan results (by options)
 - Analysis results (until files change)
@@ -327,6 +342,7 @@ const validDependencies = {
 ### Path Traversal Protection ✅
 
 The server includes built-in path traversal protection:
+
 - All resolved paths validated against project root
 - `../../../etc/passwd` attacks blocked
 - Warning logged for blocked attempts
@@ -334,6 +350,7 @@ The server includes built-in path traversal protection:
 ### Cache Isolation
 
 Each project root has its own cache directory:
+
 - Prevents cache poisoning between projects
 - Automatic cache invalidation on file changes
 - Safe for multi-project workspaces
@@ -341,6 +358,7 @@ Each project root has its own cache directory:
 ### No Code Execution
 
 The MCP server:
+
 - ✅ Only reads and analyzes code
 - ✅ Does not execute any code
 - ✅ Does not modify any files
@@ -349,6 +367,7 @@ The MCP server:
 ## Support
 
 For issues or questions:
+
 1. Check the test suite: `node mcp-server/tests/test-on-real-codebase.js`
 2. Review logs: Set `NODE_ENV=development` for verbose output
 3. See documentation: `mcp-server/README.md`

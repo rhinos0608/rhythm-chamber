@@ -26,21 +26,21 @@ async function testMCPServer() {
     },
   });
 
-  server.stderr.on('data', (data) => {
+  server.stderr.on('data', data => {
     console.error(`[SERVER] ${data}`);
   });
 
-  server.on('error', (error) => {
+  server.on('error', error => {
     console.error('Failed to start server:', error);
     process.exit(1);
   });
 
-  server.on('exit', (code) => {
+  server.on('exit', code => {
     console.log(`\nServer exited with code ${code}`);
   });
 
   // Wait a bit for server to start
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  await new Promise(resolve => setTimeout(resolve, 1000));
 
   console.log('\n✅ Server started successfully!');
   console.log('\nNext steps:');

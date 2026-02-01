@@ -28,13 +28,13 @@ Both use 768 dimensions for seamless compatibility.
 
 ### Performance Characteristics
 
-| Metric | Value |
-|--------|-------|
-| **Speed** | ⚡ Fast (20-30ms per 1K tokens) |
-| **Quality** | 🟢 Excellent (75-85% Top-5 accuracy) |
-| **RAM Usage** | ~600-800MB (models + embeddings) |
-| **CPU Load** | Moderate during indexing |
-| **Reliability** | ✅ 100% (Transformers.js only) |
+| Metric          | Value                                |
+| --------------- | ------------------------------------ |
+| **Speed**       | ⚡ Fast (20-30ms per 1K tokens)      |
+| **Quality**     | 🟢 Excellent (75-85% Top-5 accuracy) |
+| **RAM Usage**   | ~600-800MB (models + embeddings)     |
+| **CPU Load**    | Moderate during indexing             |
+| **Reliability** | ✅ 100% (Transformers.js only)       |
 
 ---
 
@@ -110,6 +110,7 @@ fi
 ```
 
 Make it executable:
+
 ```bash
 chmod +x restart-semantic-search.sh
 ```
@@ -131,6 +132,7 @@ echo "Testing semantic search..."
 ```
 
 Expected results:
+
 - ✅ Returns 5 relevant code chunks
 - ✅ Similarity scores: 75-85%
 - ✅ Correct file locations and context
@@ -144,23 +146,27 @@ Expected results:
 **Architecture:** Transformers.js-only (LM Studio deprecated)
 
 **Code Model (jina-code):**
+
 - ✅ Specifically trained for code understanding
 - ✅ 8,192 token context (longer functions fit)
 - ✅ 768 dimensions (rich semantic space)
 - ✅ Excellent for JavaScript/TypeScript
 
 **Fallback (gte-base):**
+
 - ✅ Reliable general-purpose embeddings
 - ✅ Same 768 dimensions (seamless fallback)
 - ✅ Proven track record
 
 **Combined Pros:**
+
 - ✅ 100% reliable (Transformers.js only)
 - ✅ High accuracy (75-85% Top-5)
 - ✅ No external dependencies (no LM Studio)
 - ✅ Better code understanding than general models
 
 **Trade-offs:**
+
 - ⚠️ More RAM (~600-800MB for both models)
 - ⚠️ Slower than MiniLM (but higher quality)
 
@@ -171,10 +177,12 @@ Expected results:
 ### Deprecated: LM Studio Integration
 
 **Previously Tested:**
+
 - `text-embedding-nomic-embed-text-v1.5` (768 dim)
 - `text-embedding-qwen3-embedding-0.6b` (768 dim)
 
 **Why Deprecated:**
+
 - ❌ Batch embedding API unstable
 - ❌ Frequent fallback to Transformers.js
 - ❌ Adds complexity without reliability gain
@@ -188,21 +196,21 @@ Expected results:
 
 ### Indexing Performance
 
-| Model | Dimensions | Time (408 files) | Reliability | Status |
-|-------|------------|------------------|-------------|--------|
-| jina-code + gte-base | 768 | ~4-5 min | ✅ 100% | ✅ Current |
-| gte-base only | 768 | ~4 min | ✅ 100% | ✅ Fallback |
-| MiniLM-L6-v2 | 384 | ~3 min | ✅ 100% | ⚠️ Legacy |
-| LM Studio Nomic | 768 | Falls back | ❌ Unstable | ❌ Deprecated |
+| Model                | Dimensions | Time (408 files) | Reliability | Status        |
+| -------------------- | ---------- | ---------------- | ----------- | ------------- |
+| jina-code + gte-base | 768        | ~4-5 min         | ✅ 100%     | ✅ Current    |
+| gte-base only        | 768        | ~4 min           | ✅ 100%     | ✅ Fallback   |
+| MiniLM-L6-v2         | 384        | ~3 min           | ✅ 100%     | ⚠️ Legacy     |
+| LM Studio Nomic      | 768        | Falls back       | ❌ Unstable | ❌ Deprecated |
 
 ### Search Quality
 
-| Query Type | jina-code Results | gte-base Results |
-|------------|-------------------|------------------|
-| Session management | 85% similarity | 80% similarity |
-| Authentication | 80% similarity | 75% similarity |
-| Error handling | 82% similarity | 78% similarity |
-| Code patterns | 88% similarity | 75% similarity |
+| Query Type         | jina-code Results | gte-base Results |
+| ------------------ | ----------------- | ---------------- |
+| Session management | 85% similarity    | 80% similarity   |
+| Authentication     | 80% similarity    | 75% similarity   |
+| Error handling     | 82% similarity    | 78% similarity   |
+| Code patterns      | 88% similarity    | 75% similarity   |
 
 ---
 
@@ -213,6 +221,7 @@ Expected results:
 **Cause:** Old cache (384-dim MiniLM) vs current models (768-dim)
 
 **Fix:**
+
 ```bash
 # Clear cache and restart
 rm -rf .mcp-cache/semantic-embeddings.json
@@ -225,6 +234,7 @@ node server.js
 **Normal:** First-time indexing takes 4-5 minutes (downloads models + builds index)
 
 **Check progress:**
+
 ```bash
 tail -f .restart-log | grep "Indexed"
 ```
@@ -234,6 +244,7 @@ tail -f .restart-log | grep "Indexed"
 **Cause:** Cache write failure or dimension mismatch
 
 **Fix:**
+
 ```bash
 # Check logs
 tail -50 .restart-log
@@ -253,11 +264,13 @@ rm -rf .mcp-cache/*
 ### Why Transformers.js Only?
 
 **Previous LM Studio Integration Issues:**
+
 - Batch requests (17K chunks) frequently aborted
 - Silent failures requiring fallback to Transformers.js
 - Unreliable for production use
 
 **Current Benefits:**
+
 - ✅ 100% reliable (no external dependencies)
 - ✅ Consistent performance
 - ✅ No GPU required
@@ -265,6 +278,7 @@ rm -rf .mcp-cache/*
 - ✅ Simpler architecture
 
 **Model Selection:**
+
 - Code files → jinaai/jina-embeddings-v2-base-code
 - General text → Xenova/gte-base (fallback)
 - Both use 768 dimensions for compatibility
@@ -274,6 +288,7 @@ rm -rf .mcp-cache/*
 ## 🎯 Optimization Tips
 
 ### For Development/Fast Iteration
+
 ```bash
 # Current setup (jina-code + gte-base)
 # Warm cache loads in <5 seconds
@@ -282,6 +297,7 @@ rm -rf .mcp-cache/*
 ```
 
 ### For Maximum Performance
+
 ```bash
 # Current setup is already optimized
 # Both models loaded in memory for fast switching
@@ -296,11 +312,13 @@ rm -rf .mcp-cache/*
 ### Regular Tasks
 
 **Weekly:**
+
 - Check indexing logs for errors
 - Verify semantic search quality
 - Monitor cache size (~40-60MB typical for 768-dim embeddings)
 
 **After Code Changes:**
+
 ```bash
 # If adding/removing many files
 rm -rf .mcp-cache/semantic-embeddings.json
@@ -308,6 +326,7 @@ rm -rf .mcp-cache/semantic-embeddings.json
 ```
 
 **Performance Monitoring:**
+
 ```bash
 # Check server resource usage
 ps aux | grep "node.*server.js"
@@ -342,11 +361,13 @@ tail -f .restart-log
 ## 📖 References
 
 ### Research Sources
+
 - [MTEB Leaderboard](https://huggingface.co/spaces/mteb/leaderboard) - Embedding model benchmarks
 - [SuperMemory Benchmark](https://supermemory.ai/blog/best-open-source-embedding-models-benchmarked-and-ranked/) - Model comparison
 - [Nomic Technical Report](https://static.ai/reports/2024_Nomic_Embed_Text_Technical_Report.pdf) - Nomic v1 research
 
 ### Key Findings
+
 - jinaai/jina-embeddings-v2-base-code: Best for code (8192 context, 768 dim)
 - Xenova/gte-base: Reliable fallback, good general-purpose (512 context, 768 dim)
 - Transformers.js: 100% reliable, no external dependencies
@@ -356,11 +377,13 @@ tail -f .restart-log
 ## 📞 Support
 
 **Issues?** Check:
+
 1. Server logs: `.restart-log`
 2. Cache directory: `.mcp-cache/`
 3. Configuration: `src/semantic/embeddings.js`
 
 **Common Fixes:**
+
 1. Dimension mismatch → Clear cache, restart
 2. Server crash → Check logs, verify RAM
 3. Poor results → Wait for full indexing to complete

@@ -17,13 +17,15 @@ export class HealthMonitor {
     this.fileWatcher = fileWatcher;
     this.options = {
       checkInterval: 60000, // 1 minute default
-      autoHeal: true,        // Auto-recover when issues detected
-      ...options
+      autoHeal: true, // Auto-recover when issues detected
+      ...options,
     };
 
     this.timer = null;
+    this.initialTimer = null;
     this.lastCheck = null;
     this.issueCount = 0;
+    this._checkInProgress = false;
   }
 
   /**
@@ -35,7 +37,9 @@ export class HealthMonitor {
       return;
     }
 
-    console.error(`[HealthMonitor] Starting health checks every ${this.options.checkInterval}ms...`);
+    console.error(
+      `[HealthMonitor] Starting health checks every ${this.options.checkInterval}ms...`
+    );
 
     this.timer = setInterval(() => {
       this._checkHealth().catch(error => {
@@ -44,7 +48,7 @@ export class HealthMonitor {
     }, this.options.checkInterval);
 
     // Run initial check after a short delay
-    setTimeout(() => {
+    this.initialTimer = setTimeout(() => {
       this._checkHealth().catch(error => {
         console.error('[HealthMonitor] Initial health check failed:', error);
       });
@@ -58,8 +62,14 @@ export class HealthMonitor {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
-      console.error('[HealthMonitor] Health monitor stopped');
     }
+
+    if (this.initialTimer) {
+      clearTimeout(this.initialTimer);
+      this.initialTimer = null;
+    }
+
+    console.error('[HealthMonitor] Health monitor stopped');
   }
 
   /**
@@ -67,65 +77,75 @@ export class HealthMonitor {
    * @private
    */
   async _checkHealth() {
-    const issues = [];
-    const stats = this.indexer.stats || {};
-    const now = Date.now();
-    this.lastCheck = now;
-
-    // Check 1: Vector store mismatch
-    const vectorCount = this.indexer.vectorStore?.chunkCount || 0;
-    const expectedCount = stats.chunksIndexed || 0;
-    if (vectorCount !== expectedCount && expectedCount > 0) {
-      const missing = expectedCount - vectorCount;
-      issues.push({
-        type: 'vector_mismatch',
-        severity: 'HIGH',
-        message: `${missing} chunks indexed but not stored in vector store`,
-        missing,
-        action: 'reindex_missing'
-      });
+    if (this._checkInProgress) {
+      return;
     }
 
-    // Check 2: Cache degradation
-    if (stats.cacheFailures > 0 && stats.filesIndexed > 0) {
-      const failureRate = stats.cacheFailures / stats.filesIndexed;
-      const lastFailureTime = stats.lastCacheFailureTime || 0;
-      const failureAge = now - lastFailureTime;
-      const isRecent = failureAge < 3600000; // 1 hour
+    this._checkInProgress = true;
 
-      if (failureRate > 0.1 && isRecent) {
+    try {
+      const issues = [];
+      const stats = this.indexer.stats || {};
+      const now = Date.now();
+      this.lastCheck = now;
+
+      // Check 1: Vector store mismatch
+      const vectorCount = this.indexer.vectorStore?.chunkCount || 0;
+      const expectedCount = stats.chunksIndexed || 0;
+      if (vectorCount < expectedCount && expectedCount > 0) {
+        const missing = expectedCount - vectorCount;
         issues.push({
-          type: 'cache_degradation',
-          severity: 'MEDIUM',
-          message: `Cache failure rate: ${(failureRate * 100).toFixed(1)}% (${stats.cacheFailures}/${stats.filesIndexed} files)`,
-          failureRate,
-          action: 'reindex_corrupted'
+          type: 'vector_mismatch',
+          severity: 'HIGH',
+          message: `${missing} chunks indexed but not stored in vector store`,
+          missing,
+          action: 'reindex_missing',
         });
       }
-    }
 
-    // Check 3: Stale indexer (indexed but not cached)
-    const cacheStats = this.indexer.cache?.getStats() || {};
-    if (stats.filesIndexed > 0 && cacheStats.fileCount === 0) {
-      issues.push({
-        type: 'stale_cache',
-        severity: 'HIGH',
-        message: 'Files indexed but cache is empty - cache was cleared',
-        action: 'reindex_all'
-      });
-    }
+      // Check 2: Cache degradation
+      if (stats.cacheFailures > 0 && stats.filesIndexed > 0) {
+        const failureRate = stats.cacheFailures / stats.filesIndexed;
+        const lastFailureTime = stats.lastCacheFailureTime || 0;
+        const failureAge = now - lastFailureTime;
+        const isRecent = failureAge < 3600000; // 1 hour
 
-    // Handle detected issues
-    if (issues.length > 0) {
-      this.issueCount++;
-      console.error(`[HealthMonitor] ⚠️  Detected ${issues.length} issue(s):`);
-      for (const issue of issues) {
-        console.error(`  - [${issue.severity}] ${issue.message}`);
+        if (failureRate > 0.1 && isRecent) {
+          issues.push({
+            type: 'cache_degradation',
+            severity: 'MEDIUM',
+            message: `Cache failure rate: ${(failureRate * 100).toFixed(1)}% (${stats.cacheFailures}/${stats.filesIndexed} files)`,
+            failureRate,
+            action: 'reindex_corrupted',
+          });
+        }
       }
 
-      if (this.options.autoHeal) {
-        await this._autoRecover(issues);
+      // Check 3: Stale indexer (indexed but not cached)
+      const cacheStats = this.indexer.cache?.getStats() || {};
+      if (stats.filesIndexed > 0 && cacheStats.fileCount === 0) {
+        issues.push({
+          type: 'stale_cache',
+          severity: 'HIGH',
+          message: 'Files indexed but cache is empty - cache was cleared',
+          action: 'reindex_all',
+        });
       }
+
+      // Handle detected issues
+      if (issues.length > 0) {
+        this.issueCount++;
+        console.error(`[HealthMonitor] ⚠️  Detected ${issues.length} issue(s):`);
+        for (const issue of issues) {
+          console.error(`  - [${issue.severity}] ${issue.message}`);
+        }
+
+        if (this.options.autoHeal) {
+          await this._autoRecover(issues);
+        }
+      }
+    } finally {
+      this._checkInProgress = false;
     }
   }
 
@@ -140,22 +160,25 @@ export class HealthMonitor {
     for (const issue of issues) {
       try {
         switch (issue.action) {
-          case 'reindex_missing':
+          case 'reindex_missing': {
             // Reindex only files with missing vector data
             const filesWithMissing = await this._findFilesWithMissingChunks();
             if (filesWithMissing.length > 0) {
-              console.error(`[HealthMonitor] Reindexing ${filesWithMissing.length} files with missing chunks...`);
+              console.error(
+                `[HealthMonitor] Reindexing ${filesWithMissing.length} files with missing chunks...`
+              );
               await this.indexer.reindexFiles(filesWithMissing);
               console.error(`[HealthMonitor] ✅ Recovered ${filesWithMissing.length} files`);
             }
             break;
+          }
 
           case 'reindex_corrupted':
             // Cache has high failure rate, need full reindex with cache bypass
             console.error('[HealthMonitor] Cache corrupted, forcing full reindex...');
             await this.indexer.indexAll({
               force: true,
-              bypassCache: true
+              bypassCache: true,
             });
             console.error('[HealthMonitor] ✅ Full reindex completed');
             break;
@@ -185,22 +208,24 @@ export class HealthMonitor {
       return filesWithMissing;
     }
 
-    // Get all cached files
-    const cachedFiles = this.indexer.cache.getCachedFiles ?
-                      this.indexer.cache.getCachedFiles().map(entry => entry.file) :
-                      [];
+    // EmbeddingCache.getCachedFiles() returns file path strings.
+    const cachedFiles = this.indexer.cache.getCachedFiles
+      ? this.indexer.cache.getCachedFiles()
+      : [];
 
     for (const file of cachedFiles) {
-      try {
-        const chunks = this.indexer.vectorStore.getByFile(file);
-        const cachedData = this.indexer.cache.get(file);
+      if (!file) {
+        continue;
+      }
 
-        // If cache has data but vector store doesn't match
-        const expectedChunks = cachedData?.chunks?.length || 0;
-        if (chunks.length < expectedChunks) {
+      try {
+        const storedChunks = this.indexer.vectorStore.getByFile(file);
+        const expectedChunkIds = this.indexer.cache.getFileChunks(file) || [];
+
+        if (storedChunks.length < expectedChunkIds.length) {
           filesWithMissing.push(file);
         }
-      } catch (error) {
+      } catch {
         // Error accessing file data indicates corruption
         filesWithMissing.push(file);
       }
@@ -217,7 +242,7 @@ export class HealthMonitor {
       lastCheck: this.lastCheck,
       issueCount: this.issueCount,
       isMonitoring: this.timer !== null,
-      checkInterval: this.options.checkInterval
+      checkInterval: this.options.checkInterval,
     };
   }
 }

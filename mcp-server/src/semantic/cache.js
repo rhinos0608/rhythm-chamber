@@ -14,7 +14,7 @@ import { join, dirname } from 'path';
  * Current cache format version
  * Increment this when cache structure changes incompatibly
  */
-const CACHE_VERSION = 2;  // Bumped from 1 to 2 for modelVersion tracking
+const CACHE_VERSION = 2; // Bumped from 1 to 2 for modelVersion tracking
 
 /**
  * Default cache filename
@@ -32,7 +32,7 @@ export class EmbeddingCache {
     this.compression = options.compression === true;
 
     // In-memory cache (not LRU - full cache until invalidated)
-    this.files = new Map();       // filePath -> { mtime, chunks[] }
+    this.files = new Map(); // filePath -> { mtime, chunks[] }
     this.embeddings = new HybridEmbeddingMap();
 
     // Model version tracking for cache invalidation
@@ -40,16 +40,17 @@ export class EmbeddingCache {
 
     this.loaded = false;
     this.dirty = false;
-    this._saveLock = null;  // Concurrency control for save()
+    this._saveLock = null; // In-memory concurrency control for save()
+    this._fileLock = null; // File handle for filesystem-level advisory lock
 
     // Save statistics for monitoring and debugging
     this.stats = {
       savesSucceeded: 0,
-      savesSkipped: 0,  // Track no-op saves (when dirty=false)
+      savesSkipped: 0, // Track no-op saves (when dirty=false)
       savesFailed: 0,
       lastSaveError: null,
       lastSaveTime: null,
-      lastSaveTimestamp: null
+      lastSaveTimestamp: null,
     };
   }
 
@@ -106,7 +107,9 @@ export class EmbeddingCache {
 
       // Validate version - delete old cache on mismatch
       if (data.version !== CACHE_VERSION) {
-        console.error(`[Cache] Cache version mismatch: ${data.version} vs ${CACHE_VERSION}, deleting old cache`);
+        console.error(
+          `[Cache] Cache version mismatch: ${data.version} vs ${CACHE_VERSION}, deleting old cache`
+        );
         await unlink(this.cacheFile).catch(() => {}); // Best effort delete
         return false;
       }
@@ -115,7 +118,9 @@ export class EmbeddingCache {
       // This ensures embeddings from different models aren't mixed
       if (this.modelVersion !== null && data.modelVersion !== undefined) {
         if (data.modelVersion !== this.modelVersion) {
-          console.error(`[Cache] Model version mismatch: cache has "${data.modelVersion}" but current is "${this.modelVersion}", deleting old cache`);
+          console.error(
+            `[Cache] Model version mismatch: cache has "${data.modelVersion}" but current is "${this.modelVersion}", deleting old cache`
+          );
           await unlink(this.cacheFile).catch(() => {}); // Best effort delete
           return false;
         }
@@ -146,7 +151,10 @@ export class EmbeddingCache {
             if (Array.isArray(chunkData.embedding)) {
               // Standard array format - convert to Float32Array
               chunkData.embedding = new Float32Array(chunkData.embedding);
-            } else if (typeof chunkData.embedding === 'object' && !Array.isArray(chunkData.embedding)) {
+            } else if (
+              typeof chunkData.embedding === 'object' &&
+              !Array.isArray(chunkData.embedding)
+            ) {
               // Corrupted cache: object with numeric keys instead of array
               // This happens when Float32Array was serialized without Array.from()
               // RECOVERY: Convert object with numeric keys back to array
@@ -170,7 +178,9 @@ export class EmbeddingCache {
               // Already Float32Array (shouldn't happen from JSON but handle it)
               // Already in correct format, nothing to do
             } else {
-              console.warn(`[Cache] Unexpected embedding type for ${chunkId}: ${typeof chunkData.embedding}`);
+              console.warn(
+                `[Cache] Unexpected embedding type for ${chunkId}: ${typeof chunkData.embedding}`
+              );
               corruptedCount++;
               delete data.embeddings[chunkId];
               continue;
@@ -182,16 +192,22 @@ export class EmbeddingCache {
 
         // Log recovery and corruption statistics for visibility
         if (recoveredCount > 0) {
-          console.error(`[Cache] Recovered ${recoveredCount} embeddings from object format (Float32Array serialization bug)`);
-          this.dirty = true;  // Mark dirty to save repaired cache
+          console.error(
+            `[Cache] Recovered ${recoveredCount} embeddings from object format (Float32Array serialization bug)`
+          );
+          this.dirty = true; // Mark dirty to save repaired cache
         }
         if (corruptedCount > 0) {
           const corruptionRate = ((corruptedCount / totalCount) * 100).toFixed(1);
-          console.error(`[Cache] WARNING: ${corruptedCount}/${totalCount} embeddings corrupted and discarded (${corruptionRate}%)`);
-          console.error(`[Cache] Corrupted embeddings will be regenerated on next indexing run`);
-          this.dirty = true;  // Mark dirty to save cleaned cache
+          console.error(
+            `[Cache] WARNING: ${corruptedCount}/${totalCount} embeddings corrupted and discarded (${corruptionRate}%)`
+          );
+          console.error('[Cache] Corrupted embeddings will be regenerated on next indexing run');
+          this.dirty = true; // Mark dirty to save cleaned cache
         }
-        console.error(`[Cache] Loaded ${loadedCount} embeddings from cache${recoveredCount > 0 ? ` (${recoveredCount} recovered)` : ''}`);
+        console.error(
+          `[Cache] Loaded ${loadedCount} embeddings from cache${recoveredCount > 0 ? ` (${recoveredCount} recovered)` : ''}`
+        );
       }
 
       return true;
@@ -202,7 +218,8 @@ export class EmbeddingCache {
       // Move corrupted file for analysis instead of deleting
       if (existsSync(this.cacheFile)) {
         // Add random suffix to prevent collisions
-        const backupFile = this.cacheFile + `.corrupted.${Date.now()}.${Math.random().toString(36).slice(2)}`;
+        const backupFile =
+          this.cacheFile + `.corrupted.${Date.now()}.${Math.random().toString(36).slice(2)}`;
         try {
           await rename(this.cacheFile, backupFile);
           console.error('[Cache] Backed up corrupted cache to:', backupFile);
@@ -232,9 +249,9 @@ export class EmbeddingCache {
         .map(f => ({
           name: f,
           path: join(this.cacheDir, f),
-          time: parseInt(f.split('.').pop()) || 0
+          time: parseInt(f.split('.').pop()) || 0,
         }))
-        .sort((a, b) => b.time - a.time);  // Newest first
+        .sort((a, b) => b.time - a.time); // Newest first
 
       // Keep only last 5 backups
       const toDelete = backups.slice(5);
@@ -245,6 +262,84 @@ export class EmbeddingCache {
     } catch (error) {
       console.error('[Cache] Failed to cleanup old backups:', error.message);
     }
+  }
+
+  /**
+   * Acquire filesystem-level advisory lock for this cache file
+   * Uses exclusive file creation for cross-process protection
+   * @returns {Promise<function>} Release function that MUST be called when done
+   * @private
+   */
+  async _acquireFileLock() {
+    const lockFile = this.cacheFile + '.lock';
+    const lockId = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const maxAttempts = 10;
+    const retryDelay = 100; // ms
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        // Try to create lock file exclusively (fails if exists)
+        const handle = await open(lockFile, 'wx'); // 'wx' = create new file, fail if exists
+
+        // Write our lock ID to the file
+        await handle.writeFile(lockId, 'utf-8');
+        await handle.sync(); // Ensure it's written to disk
+
+        console.error(`[Cache] Acquired file lock for ${this.cacheFile} (ID: ${lockId})`);
+
+        // Return release function
+        return async () => {
+          try {
+            await handle.close();
+            await unlink(lockFile);
+            console.error(`[Cache] Released file lock for ${this.cacheFile}`);
+          } catch (error) {
+            // Best effort cleanup - lock may have been stolen by another process
+            console.warn(`[Cache] Failed to release file lock: ${error.message}`);
+          }
+        };
+      } catch (error) {
+        if (error.code === 'EEXIST') {
+          // Lock file exists - check if it's stale (process died)
+          try {
+            const lockContent = await readFile(lockFile, 'utf-8');
+            const lockPid = parseInt(lockContent.split('-')[0]);
+
+            // Check if the locking process is still running
+            try {
+              process.kill(lockPid, 0); // Signal 0 checks if process exists
+              // Process is still alive - wait and retry
+              if (attempt < maxAttempts - 1) {
+                console.warn(`[Cache] File lock held by PID ${lockPid}, waiting... (${attempt + 1}/${maxAttempts})`);
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+                continue;
+              } else {
+                throw new Error(`Failed to acquire file lock after ${maxAttempts} attempts (held by PID ${lockPid})`);
+              }
+            } catch (killError) {
+              // Process is dead - steal the lock
+              console.warn(`[Cache] Stale lock detected (PID ${lockPid} not running), stealing lock`);
+              await unlink(lockFile);
+              continue; // Retry acquisition
+            }
+          } catch (readError) {
+            // Can't read lock file - try to delete and retry
+            console.warn(`[Cache] Corrupt lock file, removing and retrying`);
+            try {
+              await unlink(lockFile);
+            } catch (unlinkError) {
+              // Ignore unlink errors
+            }
+            continue;
+          }
+        } else {
+          // Other error (permissions, disk full, etc.)
+          throw new Error(`Failed to acquire file lock: ${error.message}`);
+        }
+      }
+    }
+
+    throw new Error('Failed to acquire file lock: max attempts exceeded');
   }
 
   /**
@@ -313,9 +408,12 @@ export class EmbeddingCache {
     }
 
     let resolveLock;
-    this._saveLock = new Promise(resolve => { resolveLock = resolve; });
+    this._saveLock = new Promise(resolve => {
+      resolveLock = resolve;
+    });
 
     const startTime = Date.now();
+    let releaseFileLock = null;
 
     try {
       // Now check dirty flag while holding lock
@@ -324,12 +422,20 @@ export class EmbeddingCache {
         return false;
       }
 
+      // FIX #4: Acquire filesystem-level lock for cross-process protection
+      try {
+        releaseFileLock = await this._acquireFileLock();
+      } catch (lockError) {
+        console.error(`[Cache] Failed to acquire file lock: ${lockError.message}`);
+        // Continue without file lock - will rely on in-memory lock and atomic rename
+      }
+
       const data = {
         version: CACHE_VERSION,
         timestamp: Date.now(),
-        modelVersion: this.modelVersion,  // Track embedding model for cache invalidation
+        modelVersion: this.modelVersion, // Track embedding model for cache invalidation
         files: {},
-        embeddings: {}
+        embeddings: {},
       };
 
       // CRITICAL: Create snapshots while holding lock
@@ -364,13 +470,13 @@ export class EmbeddingCache {
           // FIX #1: Validate JSON before renaming
           // This ensures we only rename valid, complete JSON files
           const written = await readFile(tempFile, 'utf-8');
-          JSON.parse(written);  // Will throw if invalid
+          JSON.parse(written); // Will throw if invalid
 
           // CRITICAL: Sync to disk to ensure data is actually written
           // Without this, the rename can happen before data is flushed, causing data loss
           const handle = await open(tempFile, 'r');
           try {
-            await handle.datasync();  // Sync data + metadata to disk
+            await handle.datasync(); // Sync data + metadata to disk
           } finally {
             await handle.close();
           }
@@ -388,9 +494,10 @@ export class EmbeddingCache {
           this.stats.lastSaveTime = saveTime;
           this.stats.lastSaveTimestamp = new Date().toISOString();
 
-          console.error(`[Cache] Saved cache (${Object.keys(data.embeddings).length} chunks, ${saveTime}ms${attempt > 0 ? `, attempt ${attempt + 1}` : ''})`);
+          console.error(
+            `[Cache] Saved cache (${Object.keys(data.embeddings).length} chunks, ${saveTime}ms${attempt > 0 ? `, attempt ${attempt + 1}` : ''})`
+          );
           return true;
-
         } catch (error) {
           lastError = error;
 
@@ -409,7 +516,9 @@ export class EmbeddingCache {
 
           // Exponential backoff: 1s, 2s, 4s
           const delay = Math.pow(2, attempt) * 1000;
-          console.error(`[Cache] Save attempt ${attempt + 1} failed: ${error.message}, retrying in ${delay}ms...`);
+          console.error(
+            `[Cache] Save attempt ${attempt + 1} failed: ${error.message}, retrying in ${delay}ms...`
+          );
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
@@ -423,17 +532,28 @@ export class EmbeddingCache {
         message: this._sanitizeErrorMessage(lastError.message),
         code: lastError.code,
         name: lastError.name,
-        time: new Date().toISOString()
+        time: new Date().toISOString(),
       };
       this.stats.lastSaveTime = saveTime;
       this.stats.lastSaveTimestamp = new Date().toISOString();
 
-      console.error(`[Cache] Failed to save cache after ${maxRetries} attempts (${saveTime}ms):`, lastError.message);
+      console.error(
+        `[Cache] Failed to save cache after ${maxRetries} attempts (${saveTime}ms):`,
+        lastError.message
+      );
 
       // FIX #3: Throw error instead of silent failure
       throw new Error(`Cache save failed after ${maxRetries} attempts: ${lastError.message}`);
-
     } finally {
+      // FIX #4: Release file lock if acquired
+      if (releaseFileLock) {
+        try {
+          await releaseFileLock();
+        } catch (releaseError) {
+          console.error('[Cache] Error releasing file lock:', releaseError.message);
+        }
+      }
+
       this._saveLock = null;
       resolveLock();
     }
@@ -510,7 +630,9 @@ export class EmbeddingCache {
 
     // Detect corruption: Object with numeric keys (from old/broken cache)
     if (typeof embedding === 'object' && !Array.isArray(embedding)) {
-      console.error(`[Cache] Corrupted embedding detected for ${chunkId}: has object with numeric keys instead of Array/Float32Array`);
+      console.error(
+        `[Cache] Corrupted embedding detected for ${chunkId}: has object with numeric keys instead of Array/Float32Array`
+      );
       // Invalidate and remove corrupted entry
       this.invalidateChunk(chunkId);
       return null;
@@ -555,7 +677,7 @@ export class EmbeddingCache {
         text: chunk.text,
         type: chunk.type,
         name: chunk.name,
-        metadata: chunk.metadata
+        metadata: chunk.metadata,
       };
 
       // Only store embedding if it's valid (non-null and has elements)
@@ -571,7 +693,7 @@ export class EmbeddingCache {
     this.files.set(filePath, {
       mtime: fileMtime,
       chunks: chunkIds,
-      chunkCount: chunkIds.length
+      chunkCount: chunkIds.length,
     });
 
     this.dirty = true;
@@ -635,7 +757,7 @@ export class EmbeddingCache {
       chunkCount: totalChunks,
       approximateSize: totalSize,
       dirty: this.dirty,
-      modelVersion: this.modelVersion
+      modelVersion: this.modelVersion,
     };
   }
 
@@ -648,9 +770,11 @@ export class EmbeddingCache {
     // Only clear when changing from one non-null model version to another
     // This prevents clearing the cache on first initialization
     if (this.modelVersion !== null && this.modelVersion !== modelVersion) {
-      console.error(`[Cache] Model version changing from "${this.modelVersion}" to "${modelVersion}", clearing cache`);
+      console.error(
+        `[Cache] Model version changing from "${this.modelVersion}" to "${modelVersion}", clearing cache`
+      );
       this.modelVersion = modelVersion;
-      this.clear();  // Clear cache to prevent mixing embeddings from different models
+      this.clear(); // Clear cache to prevent mixing embeddings from different models
     } else {
       // First time setting the model version (or same version) - just set it without clearing
       this.modelVersion = modelVersion;

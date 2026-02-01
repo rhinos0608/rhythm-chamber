@@ -40,7 +40,7 @@ function parseArgs(args) {
   const options = {
     debounce: 300,
     coalesce: 1000,
-    maxQueue: 1000
+    maxQueue: 1000,
   };
 
   for (let i = 1; i < args.length; i++) {
@@ -135,10 +135,7 @@ function formatStatus(state, title) {
     return `# ${title}\n\nFile watcher is not initialized.\n\nTo start the watcher, run:\n  node watcher-control.js start`;
   }
 
-  const lines = [
-    `# ${title}`,
-    ''
-  ];
+  const lines = [`# ${title}`, ''];
 
   // Running state
   lines.push('## State');
@@ -147,9 +144,7 @@ function formatStatus(state, title) {
 
   if (state.uptime) {
     const uptime = Math.floor(state.uptime / 1000);
-    const uptimeStr = uptime > 60
-      ? `${Math.floor(uptime / 60)}m ${uptime % 60}s`
-      : `${uptime}s`;
+    const uptimeStr = uptime > 60 ? `${Math.floor(uptime / 60)}m ${uptime % 60}s` : `${uptime}s`;
     lines.push(`- **Uptime**: ${uptimeStr}`);
   }
 
@@ -163,14 +158,14 @@ function formatStatus(state, title) {
     lines.push(`- **Max Queue Size**: ${state.config.maxQueueSize}`);
 
     if (state.config.patterns) {
-      lines.push(`- **Patterns**:`);
+      lines.push('- **Patterns**:');
       for (const pattern of state.config.patterns) {
         lines.push(`  - ${pattern}`);
       }
     }
 
     if (state.config.ignore) {
-      lines.push(`- **Ignore Patterns**:`);
+      lines.push('- **Ignore Patterns**:');
       for (const pattern of state.config.ignore) {
         lines.push(`  - ${pattern}`);
       }
@@ -188,7 +183,7 @@ function formatStatus(state, title) {
     lines.push(`- **Errors**: ${state.stats.errors || 0}`);
 
     if (state.stats.lastError) {
-      lines.push(`- **Last Error**:`);
+      lines.push('- **Last Error**:');
       lines.push(`  - Code: ${state.stats.lastError.code}`);
       lines.push(`  - Message: ${state.stats.lastError.message}`);
       if (state.stats.lastError.context) {
@@ -237,11 +232,7 @@ async function executeWatcherAction(action, config, projectRoot, cacheDir) {
   // Create indexer instance
   const indexer = new CodeIndexer(projectRoot, {
     cacheDir,
-    patterns: [
-      'js/**/*.js',
-      'mcp-server/src/**/*.js',
-      'tests/**/*.js'
-    ],
+    patterns: ['js/**/*.js', 'mcp-server/src/**/*.js', 'tests/**/*.js'],
     ignore: [
       '**/node_modules/**',
       '**/dist/**',
@@ -249,8 +240,8 @@ async function executeWatcherAction(action, config, projectRoot, cacheDir) {
       '**/.mcp-cache/**',
       '**/*.test.js',
       '**/*.spec.js',
-      '**/coverage/**'
-    ]
+      '**/coverage/**',
+    ],
   });
 
   // Initialize indexer
@@ -268,7 +259,9 @@ async function executeWatcherAction(action, config, projectRoot, cacheDir) {
     case 'start':
       if (indexer.watcher && indexer.watcher.isRunning()) {
         console.log('File watcher is already running.');
-        console.log('\nUse "status" to check current state or "restart" to apply new configuration.');
+        console.log(
+          '\nUse "status" to check current state or "restart" to apply new configuration.'
+        );
         return;
       }
 
@@ -287,7 +280,7 @@ async function executeWatcherAction(action, config, projectRoot, cacheDir) {
       console.log('\nNote: The watcher has processed all pending changes before stopping.');
       break;
 
-    case 'status':
+    case 'status': {
       if (!indexer.watcher) {
         const state = loadWatcherState(cacheDir);
         console.log(formatStatus(state, 'File Watcher Status'));
@@ -299,8 +292,9 @@ async function executeWatcherAction(action, config, projectRoot, cacheDir) {
       const status = indexer.watcher.getStatus();
       console.log(formatStatus(status, 'File Watcher Status'));
       break;
+    }
 
-    case 'restart':
+    case 'restart': {
       const wasRunning = indexer.watcher && indexer.watcher.isRunning();
 
       if (wasRunning) {
@@ -314,8 +308,14 @@ async function executeWatcherAction(action, config, projectRoot, cacheDir) {
         process.exit(1);
       }
 
-      console.log(formatStatus(indexer.watcher.getStatus(), wasRunning ? 'File watcher restarted' : 'File watcher started'));
+      console.log(
+        formatStatus(
+          indexer.watcher.getStatus(),
+          wasRunning ? 'File watcher restarted' : 'File watcher started'
+        )
+      );
       break;
+    }
 
     default:
       console.error(`Unknown action: ${action}`);
@@ -326,7 +326,9 @@ async function executeWatcherAction(action, config, projectRoot, cacheDir) {
   // Keep process alive if watcher is running
   if (action === 'start' || action === 'restart') {
     console.log('\nWatcher is running. Press Ctrl+C to stop.');
-    console.log('(The watcher will continue running in the background if this process is killed)\n');
+    console.log(
+      '(The watcher will continue running in the background if this process is killed)\n'
+    );
   }
 }
 

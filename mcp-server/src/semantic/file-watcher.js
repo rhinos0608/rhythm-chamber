@@ -20,26 +20,20 @@ import { existsSync } from 'fs';
  * Default configuration options
  */
 const DEFAULT_OPTIONS = {
-  debounceDelay: 300,      // ms to wait after last change
-  coalesceWindow: 1000,     // ms window to batch changes
-  maxQueueSize: 1000,       // max pending changes
-  statsInterval: 300000,    // 5 minutes
-  ignore: [
-    '**/node_modules/**',
-    '**/dist/**',
-    '**/build/**',
-    '**/.mcp-cache/**',
-    '**/.git/**'
-  ]
+  debounceDelay: 300, // ms to wait after last change
+  coalesceWindow: 1000, // ms window to batch changes
+  maxQueueSize: 1000, // max pending changes
+  statsInterval: 300000, // 5 minutes
+  ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.mcp-cache/**', '**/.git/**'],
 };
 
 /**
  * Critical error codes that should stop the watcher
  */
 const CRITICAL_ERRORS = new Set([
-  'ENOSPC',     // File watch limit exceeded
-  'EACCES',     // Permission denied on critical directory
-  'EINTR'       // Interrupted system call
+  'ENOSPC', // File watch limit exceeded
+  'EACCES', // Permission denied on critical directory
+  'EINTR', // Interrupted system call
 ]);
 
 /**
@@ -54,10 +48,7 @@ export class FileWatcher {
     this.options = {
       ...DEFAULT_OPTIONS,
       ...options,
-      ignore: [
-        ...DEFAULT_OPTIONS.ignore,
-        ...(options.ignore || [])
-      ]
+      ignore: [...DEFAULT_OPTIONS.ignore, ...(options.ignore || [])],
     };
 
     // State
@@ -81,7 +72,7 @@ export class FileWatcher {
       errors: 0,
       lastError: null,
       startTime: null,
-      lastActivityTime: null
+      lastActivityTime: null,
     };
 
     // Activity log (last 10 events)
@@ -187,14 +178,14 @@ export class FileWatcher {
         coalesceWindow: this.options.coalesceWindow,
         maxQueueSize: this.options.maxQueueSize,
         patterns: this.indexer.patterns,
-        ignore: this.options.ignore
+        ignore: this.options.ignore,
       },
       stats: { ...this.stats },
       queue: {
         size: this.changeQueue.size,
-        nextProcessTime: this.nextProcessTime
+        nextProcessTime: this.nextProcessTime,
       },
-      recentActivity: [...this.activityLog]
+      recentActivity: [...this.activityLog],
     };
   }
 
@@ -215,19 +206,19 @@ export class FileWatcher {
       cwd: this.projectRoot,
       ignored: this.options.ignore,
       persistent: true,
-      ignoreInitial: true,  // Don't emit events for initial scan
+      ignoreInitial: true, // Don't emit events for initial scan
       awaitWriteFinish: {
         stabilityThreshold: 200,
-        pollInterval: 100
-      }
+        pollInterval: 100,
+      },
     });
 
     // Set up event handlers
     this.watcher
-      .on('add', (path) => this._handleFileEvent('add', path))
-      .on('change', (path) => this._handleFileEvent('change', path))
-      .on('unlink', (path) => this._handleFileEvent('unlink', path))
-      .on('error', (error) => this._handleError(error, 'chokidar'))
+      .on('add', path => this._handleFileEvent('add', path))
+      .on('change', path => this._handleFileEvent('change', path))
+      .on('unlink', path => this._handleFileEvent('unlink', path))
+      .on('error', error => this._handleError(error, 'chokidar'))
       .on('ready', () => console.error('[FileWatcher] Ready for changes'));
   }
 
@@ -282,7 +273,7 @@ export class FileWatcher {
     // Clear existing timer for this file
     if (this.debounceTimers.has(filePath)) {
       clearTimeout(this.debounceTimers.get(filePath));
-      this.debounceTimers.delete(filePath);  // CRITICAL: Delete immediately
+      this.debounceTimers.delete(filePath); // CRITICAL: Delete immediately
     }
 
     // Set new timer
@@ -300,7 +291,9 @@ export class FileWatcher {
 
         // Check if queue is getting large
         if (this.changeQueue.size >= this.options.maxQueueSize) {
-          console.error(`[FileWatcher] Queue size (${this.changeQueue.size}) at limit, processing immediately`);
+          console.error(
+            `[FileWatcher] Queue size (${this.changeQueue.size}) at limit, processing immediately`
+          );
           this._processChangeQueue();
           return;
         }
@@ -323,7 +316,9 @@ export class FileWatcher {
 
     // CRITICAL: Safety check - prevent unbounded timer growth
     if (this.debounceTimers.size > this.options.maxQueueSize * 2) {
-      console.error(`[FileWatcher] Timer count (${this.debounceTimers.size}) exceeds safety threshold, forcing immediate processing`);
+      console.error(
+        `[FileWatcher] Timer count (${this.debounceTimers.size}) exceeds safety threshold, forcing immediate processing`
+      );
       this._processChangeQueue();
     }
   }
@@ -395,7 +390,9 @@ export class FileWatcher {
 
         // Requeue failed deletions for retry
         if (failedDeletions.length > 0) {
-          console.warn(`[FileWatcher] Requeueing ${failedDeletions.length} failed deletions for retry`);
+          console.warn(
+            `[FileWatcher] Requeueing ${failedDeletions.length} failed deletions for retry`
+          );
           for (const relPath of failedDeletions) {
             this.changeQueue.set(join(this.projectRoot, relPath), Date.now());
           }
@@ -413,19 +410,25 @@ export class FileWatcher {
       await this.indexer._saveCache();
 
       this.stats.batchesProcessed++;
-      console.error(`[FileWatcher] Batch complete: ${toReindex.length} reindexed, ${toDelete.length} removed`);
+      console.error(
+        `[FileWatcher] Batch complete: ${toReindex.length} reindexed, ${toDelete.length} removed`
+      );
 
       // CRITICAL: Check error rate and alert if degraded
       const totalProcessed = this.stats.filesChanged + this.stats.batchesProcessed;
-      if (totalProcessed > 10) { // Only check after minimum sample size
+      if (totalProcessed > 10) {
+        // Only check after minimum sample size
         const errorRate = this.stats.errors / totalProcessed;
         if (errorRate > 0.5) {
-          console.error(`[FileWatcher] ⚠️  HIGH ERROR RATE: ${(errorRate * 100).toFixed(1)}% (${this.stats.errors}/${totalProcessed}) - Consider stopping watcher`);
+          console.error(
+            `[FileWatcher] ⚠️  HIGH ERROR RATE: ${(errorRate * 100).toFixed(1)}% (${this.stats.errors}/${totalProcessed}) - Consider stopping watcher`
+          );
         } else if (errorRate > 0.2) {
-          console.warn(`[FileWatcher] Elevated error rate: ${(errorRate * 100).toFixed(1)}% (${this.stats.errors}/${totalProcessed})`);
+          console.warn(
+            `[FileWatcher] Elevated error rate: ${(errorRate * 100).toFixed(1)}% (${this.stats.errors}/${totalProcessed})`
+          );
         }
       }
-
     } catch (error) {
       console.error('[FileWatcher] Batch processing error:', error);
       this._handleError(error, 'batch-processing');
@@ -446,7 +449,7 @@ export class FileWatcher {
         code: errorCode,
         message: error.message,
         context,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
 
       // Stop watcher
@@ -463,7 +466,7 @@ export class FileWatcher {
         code: errorCode,
         message: error.message,
         context,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     }
   }
@@ -487,7 +490,7 @@ export class FileWatcher {
     this.activityLog.push({
       event,
       file: relPath,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     // Keep only last N entries
@@ -512,7 +515,9 @@ export class FileWatcher {
    */
   _logStats() {
     const memory = this._getMemoryUsage();
-    const uptime = this.stats.startTime ? Math.floor((Date.now() - this.stats.startTime) / 1000) : 0;
+    const uptime = this.stats.startTime
+      ? Math.floor((Date.now() - this.stats.startTime) / 1000)
+      : 0;
 
     console.error('[FileWatcher] Stats:', {
       uptime: `${uptime}s`,
@@ -521,7 +526,7 @@ export class FileWatcher {
       totalReindexed: this.stats.totalFilesReindexed,
       errors: this.stats.errors,
       queueSize: this.changeQueue.size,
-      memory
+      memory,
     });
   }
 
@@ -534,7 +539,7 @@ export class FileWatcher {
     return {
       heapUsed: `${(usage.heapUsed / 1024 / 1024).toFixed(2)} MB`,
       heapTotal: `${(usage.heapTotal / 1024 / 1024).toFixed(2)} MB`,
-      rss: `${(usage.rss / 1024 / 1024).toFixed(2)} MB`
+      rss: `${(usage.rss / 1024 / 1024).toFixed(2)} MB`,
     };
   }
 }

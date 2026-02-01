@@ -66,7 +66,7 @@ function validateChunkFilePath(filePath, projectRoot) {
 const PRIORITIES = {
   HIGH: 100,
   MEDIUM: 50,
-  LOW: 0
+  LOW: 0,
 };
 
 /**
@@ -77,7 +77,7 @@ const COMPLEXITY_THRESHOLDS = {
   EXTRACT_FUNCTION_CYCLOMATIC: 15,
   EXTRACT_FUNCTION_COGNITIVE: 18,
   EXTRACT_ASYNC_CYCLOMATIC: 10,
-  SIMPLIFY_CONDITIONALS: 10
+  SIMPLIFY_CONDITIONALS: 10,
 };
 
 /**
@@ -102,7 +102,7 @@ const OUTPUT_MESSAGES = {
   PRIORITY: 'Priority',
   CYCLOMATIC: 'Cyclomatic Complexity',
   COGNITIVE: 'Cognitive Complexity',
-  MAINTAINABILITY: 'Maintainability Index'
+  MAINTAINABILITY: 'Maintainability Index',
 };
 
 /**
@@ -116,7 +116,7 @@ const EMOJIS = {
   SUCCESS: '✅',
   INFO: 'ℹ️',
   ARROW_DOWN: '↓',
-  CHECKMARK: '✓'
+  CHECKMARK: '✓',
 };
 
 /**
@@ -128,10 +128,10 @@ function validatePath(projectRoot, targetPath) {
 
   if (!resolved.startsWith(normalizedRoot)) {
     throw new Error(
-      `[suggest_refactoring] Path traversal detected: Target path is outside project root\n` +
-      `Requested: ${targetPath}\n` +
-      `Resolved: ${resolved}\n` +
-      `Project root: ${normalizedRoot}`
+      '[suggest_refactoring] Path traversal detected: Target path is outside project root\n' +
+        `Requested: ${targetPath}\n` +
+        `Resolved: ${resolved}\n` +
+        `Project root: ${normalizedRoot}`
     );
   }
 
@@ -147,61 +147,74 @@ function validatePath(projectRoot, targetPath) {
  */
 export const schema = {
   name: 'suggest_refactoring',
-  description: 'Generate complexity-based refactoring suggestions with HNW compliance checks and before/after examples',
+  description:
+    'Generate complexity-based refactoring suggestions with HNW compliance checks and before/after examples',
   inputSchema: {
     type: 'object',
     properties: {
       target: {
-        description: 'File or directory to analyze. Paths are relative to project root. Examples: "js/utils/file-scanner.js" or { "filePath": "js/utils/file-scanner.js" } or { "directory": "js/utils" }',
+        description:
+          'File or directory to analyze. Paths are relative to project root. Examples: "js/utils/file-scanner.js" or { "filePath": "js/utils/file-scanner.js" } or { "directory": "js/utils" }',
         oneOf: [
-          { type: 'string', description: 'File path as string (e.g., "js/controllers/chat-ui-controller.js")' },
+          {
+            type: 'string',
+            description: 'File path as string (e.g., "js/controllers/chat-ui-controller.js")',
+          },
           {
             type: 'object',
-            description: 'Object with filePath or directory property for explicit type specification',
+            description:
+              'Object with filePath or directory property for explicit type specification',
             properties: {
-              filePath: { type: 'string', description: 'File path (e.g., "js/controllers/chat-ui-controller.js")' },
-              directory: { type: 'string', description: 'Directory path to analyze all JS files within (e.g., "js/controllers")' }
+              filePath: {
+                type: 'string',
+                description: 'File path (e.g., "js/controllers/chat-ui-controller.js")',
+              },
+              directory: {
+                type: 'string',
+                description:
+                  'Directory path to analyze all JS files within (e.g., "js/controllers")',
+              },
             },
-            additionalProperties: false
-          }
-        ]
+            additionalProperties: false,
+          },
+        ],
       },
       complexityThreshold: {
         type: 'number',
         default: 10,
-        description: 'Cyclomatic complexity threshold'
+        description: 'Cyclomatic complexity threshold',
       },
       includeHNWCheck: {
         type: 'boolean',
         default: true,
-        description: 'Include HNW compliance checks'
+        description: 'Include HNW compliance checks',
       },
       priorityBy: {
         type: 'string',
         enum: ['impact', 'effort', 'risk', 'balanced'],
         default: 'balanced',
-        description: 'Priority calculation strategy'
+        description: 'Priority calculation strategy',
       },
       maxSuggestions: {
         type: 'number',
         default: 10,
-        description: 'Maximum number of suggestions'
-      }
+        description: 'Maximum number of suggestions',
+      },
     },
-    required: ['target']
-  }
+    required: ['target'],
+  },
 };
 
 /**
  * Handle tool execution
  */
 export const handler = async (args, projectRoot, indexer, server) => {
-  let {
-    target,
+  let { target } = args;
+  const {
     complexityThreshold = 10,
     includeHNWCheck = true,
     priorityBy = 'balanced',
-    maxSuggestions = 10
+    maxSuggestions = 10,
   } = args;
 
   logger.info('suggest_refactoring called with:', {
@@ -209,7 +222,7 @@ export const handler = async (args, projectRoot, indexer, server) => {
     complexityThreshold,
     includeHNWCheck,
     priorityBy,
-    maxSuggestions
+    maxSuggestions,
   });
 
   // CRITICAL FIX: Handle case where target is a JSON string (user error or client bug)
@@ -267,7 +280,7 @@ export const handler = async (args, projectRoot, indexer, server) => {
         if (stats.size > MAX_FILE_SIZE) {
           failures.push({
             file: file.replace(projectRoot + '/', ''),
-            error: `File too large (${Math.round(stats.size / 1024 / 1024)}MB)`
+            error: `File too large (${Math.round(stats.size / 1024 / 1024)}MB)`,
           });
           logger.warn(`[suggest_refactoring] Skipping large file: ${file}`);
           continue;
@@ -278,7 +291,7 @@ export const handler = async (args, projectRoot, indexer, server) => {
       } catch (error) {
         failures.push({
           file: file.replace(projectRoot + '/', ''),
-          error: error.message
+          error: error.message,
         });
         logger.warn(`[suggest_refactoring] Failed to analyze ${file}:`, error);
       }
@@ -286,7 +299,9 @@ export const handler = async (args, projectRoot, indexer, server) => {
 
     // Report partial results if there were failures
     if (failures.length > 0) {
-      logger.warn(`[suggest_refactoring] Failed to analyze ${failures.length}/${targetFiles.length} files`);
+      logger.warn(
+        `[suggest_refactoring] Failed to analyze ${failures.length}/${targetFiles.length} files`
+      );
     }
 
     // Generate refactoring suggestions with impact awareness
@@ -296,7 +311,7 @@ export const handler = async (args, projectRoot, indexer, server) => {
       priorityBy,
       maxSuggestions,
       projectRoot,
-      indexer // Pass indexer for call frequency analysis
+      indexer, // Pass indexer for call frequency analysis
     });
 
     // Format output
@@ -306,18 +321,20 @@ export const handler = async (args, projectRoot, indexer, server) => {
     if (failures.length > 0) {
       return createPartialResponse(
         {
-          content: [{ type: 'text', text: output }]
+          content: [{ type: 'text', text: output }],
         },
         {
-          completeness: Math.round(((targetFiles.length - failures.length) / targetFiles.length) * 100),
+          completeness: Math.round(
+            ((targetFiles.length - failures.length) / targetFiles.length) * 100
+          ),
           messages: [`Failed to analyze ${failures.length}/${targetFiles.length} files`],
-          suggestions: failures.slice(0, 5).map(f => `Check ${f.file}: ${f.error}`)
+          suggestions: failures.slice(0, 5).map(f => `Check ${f.file}: ${f.error}`),
         }
       );
     }
 
     return {
-      content: [{ type: 'text', text: output }]
+      content: [{ type: 'text', text: output }],
     };
   } catch (error) {
     logger.error('Error in suggest_refactoring:', error);
@@ -331,12 +348,7 @@ export const handler = async (args, projectRoot, indexer, server) => {
  * @returns {Array<string>} Array of absolute file paths
  */
 function getFilesInDirectory(dir) {
-  const patterns = [
-    join(dir, '**/*.js'),
-    '!**/node_modules/**',
-    '!**/*.test.js',
-    '!**/*.spec.js'
-  ];
+  const patterns = [join(dir, '**/*.js'), '!**/node_modules/**', '!**/*.test.js', '!**/*.spec.js'];
   return globSync(patterns, { absolute: true });
 }
 
@@ -354,7 +366,7 @@ async function analyzeFunctions(filePath, projectRoot) {
   const ext = filePath.endsWith('.ts') || filePath.endsWith('.tsx') ? 'typescript' : null;
   const ast = parse(content, {
     sourceType: 'module',
-    plugins: [...(ext ? [ext] : []), 'jsx']
+    plugins: [...(ext ? [ext] : []), 'jsx'],
   });
   const functions = [];
 
@@ -380,7 +392,7 @@ async function analyzeFunctions(filePath, projectRoot) {
         func.name = parent.id.name;
         functions.push(func);
       }
-    }
+    },
   });
 
   return functions;
@@ -417,7 +429,7 @@ function analyzeFunction(path, filePath, projectRoot) {
     cognitive,
     maintainability: isNaN(maintainability) ? 0 : maintainability,
     isAsync: node.async || false,
-    node
+    node,
   };
 }
 
@@ -470,7 +482,7 @@ function calculateCyclomaticComplexity(functionPath) {
       if (path.node.operator === '&&' || path.node.operator === '||') {
         complexity += 1;
       }
-    }
+    },
   });
 
   return complexity;
@@ -489,85 +501,90 @@ function calculateCognitiveComplexity(functionPath) {
   const MAX_NESTING_DEPTH = 50; // Prevent infinite loops in malformed AST
 
   functionPath.traverse({
-    IfStatement(path) {
-      // Bounds checking to prevent infinite loops
-      if (nestingDepth > MAX_NESTING_DEPTH) {
-        logger.warn(`[calculateCognitiveComplexity] Exceeded max nesting depth ${MAX_NESTING_DEPTH}`);
-        path.stop(); // Stop traversing this branch
-        return;
-      }
-      complexity += 1 + nestingDepth;
-      nestingDepth += 1;
-    },
-
     IfStatement: {
+      enter(path) {
+        // Bounds checking to prevent infinite loops
+        if (nestingDepth > MAX_NESTING_DEPTH) {
+          logger.warn(
+            `[calculateCognitiveComplexity] Exceeded max nesting depth ${MAX_NESTING_DEPTH}`
+          );
+          path.stop(); // Stop traversing this branch
+          return;
+        }
+        complexity += 1 + nestingDepth;
+        nestingDepth += 1;
+      },
       exit() {
         nestingDepth -= 1;
-      }
-    },
-
-    WhileStatement(path) {
-      if (nestingDepth > MAX_NESTING_DEPTH) {
-        logger.warn(`[calculateCognitiveComplexity] Exceeded max nesting depth ${MAX_NESTING_DEPTH}`);
-        path.stop();
-        return;
-      }
-      complexity += 1 + nestingDepth;
-      nestingDepth += 1;
+      },
     },
 
     WhileStatement: {
+      enter(path) {
+        if (nestingDepth > MAX_NESTING_DEPTH) {
+          logger.warn(
+            `[calculateCognitiveComplexity] Exceeded max nesting depth ${MAX_NESTING_DEPTH}`
+          );
+          path.stop();
+          return;
+        }
+        complexity += 1 + nestingDepth;
+        nestingDepth += 1;
+      },
       exit() {
         nestingDepth -= 1;
-      }
-    },
-
-    ForStatement(path) {
-      if (nestingDepth > MAX_NESTING_DEPTH) {
-        logger.warn(`[calculateCognitiveComplexity] Exceeded max nesting depth ${MAX_NESTING_DEPTH}`);
-        path.stop();
-        return;
-      }
-      complexity += 1 + nestingDepth;
-      nestingDepth += 1;
+      },
     },
 
     ForStatement: {
+      enter(path) {
+        if (nestingDepth > MAX_NESTING_DEPTH) {
+          logger.warn(
+            `[calculateCognitiveComplexity] Exceeded max nesting depth ${MAX_NESTING_DEPTH}`
+          );
+          path.stop();
+          return;
+        }
+        complexity += 1 + nestingDepth;
+        nestingDepth += 1;
+      },
       exit() {
         nestingDepth -= 1;
-      }
-    },
-
-    ForInStatement(path) {
-      if (nestingDepth > MAX_NESTING_DEPTH) {
-        logger.warn(`[calculateCognitiveComplexity] Exceeded max nesting depth ${MAX_NESTING_DEPTH}`);
-        path.stop();
-        return;
-      }
-      complexity += 1 + nestingDepth;
-      nestingDepth += 1;
+      },
     },
 
     ForInStatement: {
+      enter(path) {
+        if (nestingDepth > MAX_NESTING_DEPTH) {
+          logger.warn(
+            `[calculateCognitiveComplexity] Exceeded max nesting depth ${MAX_NESTING_DEPTH}`
+          );
+          path.stop();
+          return;
+        }
+        complexity += 1 + nestingDepth;
+        nestingDepth += 1;
+      },
       exit() {
         nestingDepth -= 1;
-      }
-    },
-
-    ForOfStatement(path) {
-      if (nestingDepth > MAX_NESTING_DEPTH) {
-        logger.warn(`[calculateCognitiveComplexity] Exceeded max nesting depth ${MAX_NESTING_DEPTH}`);
-        path.stop();
-        return;
-      }
-      complexity += 1 + nestingDepth;
-      nestingDepth += 1;
+      },
     },
 
     ForOfStatement: {
+      enter(path) {
+        if (nestingDepth > MAX_NESTING_DEPTH) {
+          logger.warn(
+            `[calculateCognitiveComplexity] Exceeded max nesting depth ${MAX_NESTING_DEPTH}`
+          );
+          path.stop();
+          return;
+        }
+        complexity += 1 + nestingDepth;
+        nestingDepth += 1;
+      },
       exit() {
         nestingDepth -= 1;
-      }
+      },
     },
 
     ConditionalExpression(path) {
@@ -580,7 +597,7 @@ function calculateCognitiveComplexity(functionPath) {
 
     ContinueStatement() {
       complexity += 1;
-    }
+    },
   });
 
   return complexity;
@@ -599,21 +616,14 @@ function calculateCognitiveComplexity(functionPath) {
  * @returns {Promise<Array<Object>>} Sorted array of refactoring suggestions
  */
 async function generateRefactoringSuggestions(functions, options) {
-  const {
-    complexityThreshold,
-    includeHNWCheck,
-    priorityBy,
-    maxSuggestions,
-    projectRoot,
-    indexer
-  } = options;
+  const { complexityThreshold, includeHNWCheck, priorityBy, maxSuggestions, projectRoot, indexer } =
+    options;
 
   const suggestions = [];
 
   // Find complex functions
-  const complexFunctions = functions.filter(f =>
-    f.cyclomatic >= complexityThreshold ||
-    f.cognitive >= complexityThreshold * 1.2
+  const complexFunctions = functions.filter(
+    f => f.cyclomatic >= complexityThreshold || f.cognitive >= complexityThreshold * 1.2
   );
 
   // Pre-compute call frequencies from dependency graph (if available)
@@ -626,7 +636,7 @@ async function generateRefactoringSuggestions(functions, options) {
     const impactData = await calculateImpactAware(func, refactoringType, {
       callFrequency: callFrequencies.get(func.name) || 0,
       indexer,
-      projectRoot
+      projectRoot,
     });
 
     const effort = calculateEffort(func, refactoringType);
@@ -634,7 +644,7 @@ async function generateRefactoringSuggestions(functions, options) {
     // ENHANCED: Risk tier classification (not just 1-10 score)
     const riskTier = calculateRiskTier(func, refactoringType, {
       hasTests: await hasTestCoverage(func.filePath, projectRoot),
-      callFrequency: callFrequencies.get(func.name) || 0
+      callFrequency: callFrequencies.get(func.name) || 0,
     });
 
     const suggestion = {
@@ -642,29 +652,29 @@ async function generateRefactoringSuggestions(functions, options) {
         name: func.name,
         file: func.filePath,
         line: func.line,
-        linesOfCode: func.linesOfCode
+        linesOfCode: func.linesOfCode,
       },
       refactoringType,
       priority: calculatePriority(impactData, effort, riskTier, priorityBy),
       impact: impactData.score,
-      impactDetails: impactData,  // Include breakdown
+      impactDetails: impactData, // Include breakdown
       effort,
       risk: riskTier.score,
-      riskTier: riskTier.tier,  // NEW: Risk tier classification
-      riskDetails: riskTier.details,  // NEW: Risk tier breakdown
+      riskTier: riskTier.tier, // NEW: Risk tier classification
+      riskDetails: riskTier.details, // NEW: Risk tier breakdown
       currentMetrics: {
         cyclomatic: func.cyclomatic,
         cognitive: func.cognitive,
-        maintainability: func.maintainability.toFixed(1)
+        maintainability: func.maintainability.toFixed(1),
       },
       projectedMetrics: estimateNewMetrics(func, refactoringType),
-      hnwImpact: includeHNWCheck ?
-        checkHNWComplianceImpact(func, refactoringType, projectRoot) :
-        null,
+      hnwImpact: includeHNWCheck
+        ? checkHNWComplianceImpact(func, refactoringType, projectRoot)
+        : null,
       examples: generateBeforeAfterExamples(func, refactoringType),
       // NEW: Call frequency and test coverage info
       callFrequency: callFrequencies.get(func.name) || 0,
-      hasTestCoverage: await hasTestCoverage(func.filePath, projectRoot)
+      hasTestCoverage: await hasTestCoverage(func.filePath, projectRoot),
     };
 
     suggestions.push(suggestion);
@@ -673,14 +683,22 @@ async function generateRefactoringSuggestions(functions, options) {
   // NEW: Add semantic pattern-based consolidation suggestions
   if (indexer && indexer.vectorStore) {
     try {
-      const consolidationSuggestions = await findConsolidationOpportunities(functions, indexer, projectRoot, complexityThreshold);
+      const consolidationSuggestions = await findConsolidationOpportunities(
+        functions,
+        indexer,
+        projectRoot,
+        complexityThreshold
+      );
       if (consolidationSuggestions.length > 0) {
         // Add consolidation suggestions, up to 1/3 of maxSuggestions
         const slotsAvailable = Math.max(1, Math.floor(maxSuggestions / 3));
         suggestions.push(...consolidationSuggestions.slice(0, slotsAvailable));
       }
     } catch (error) {
-      logger.warn('[generateRefactoringSuggestions] Failed to find consolidation opportunities:', error);
+      logger.warn(
+        '[generateRefactoringSuggestions] Failed to find consolidation opportunities:',
+        error
+      );
     }
   }
 
@@ -747,7 +765,7 @@ async function getCallFrequencies(functions, indexer) {
 async function calculateImpactAware(func, refactoringType, context) {
   const { callFrequency, indexer, projectRoot } = context;
 
-  let baseImpact = 5;  // Base impact from complexity
+  const baseImpact = 5; // Base impact from complexity
 
   // Factor 1: Cyclomatic complexity (0-30% weight)
   const complexityImpact = Math.min(30, func.cyclomatic * 2);
@@ -771,11 +789,11 @@ async function calculateImpactAware(func, refactoringType, context) {
       callFrequency: {
         count: callFrequency,
         impact: callFrequencyWeight,
-        label: callFrequency > 5 ? 'High' : callFrequency > 1 ? 'Medium' : 'Low'
+        label: callFrequency > 5 ? 'High' : callFrequency > 1 ? 'Medium' : 'Low',
       },
       linesOfCode: locImpact,
-      layerImportance: layerImpact
-    }
+      layerImportance: layerImpact,
+    },
   };
 }
 
@@ -786,12 +804,12 @@ async function calculateImpactAware(func, refactoringType, context) {
 async function getLayerImportance(filePath, indexer) {
   const layer = getFileLayer(filePath);
   const importanceMap = {
-    'services': 10,
-    'controllers': 8,
-    'providers': 6,
-    'storage': 4,
-    'utils': 2,
-    'other': 1
+    services: 10,
+    controllers: 8,
+    providers: 6,
+    storage: 4,
+    utils: 2,
+    other: 1,
   };
   return importanceMap[layer] || 1;
 }
@@ -851,11 +869,11 @@ function calculateRiskTier(func, refactoringType, context) {
 
   // Factor 6: Refactoring type risk
   const typeRiskMap = {
-    'extract_class': 3,
-    'extract_async_logic': 2,
-    'extract_function': 1,
-    'simplify_conditionals': 0,
-    'extract_constants': 0
+    extract_class: 3,
+    extract_async_logic: 2,
+    extract_function: 1,
+    simplify_conditionals: 0,
+    extract_constants: 0,
   };
   riskScore += typeRiskMap[refactoringType] || 0;
 
@@ -869,7 +887,7 @@ function calculateRiskTier(func, refactoringType, context) {
   return {
     score: Math.min(10, riskScore),
     tier,
-    details
+    details,
   };
 }
 
@@ -923,8 +941,10 @@ function determineRefactoringType(func) {
   if (func.cyclomatic >= COMPLEXITY_THRESHOLDS.EXTRACT_CLASS_CYCLOMATIC) {
     return 'extract_class';
   }
-  if (func.cyclomatic >= COMPLEXITY_THRESHOLDS.EXTRACT_FUNCTION_CYCLOMATIC ||
-      func.cognitive >= COMPLEXITY_THRESHOLDS.EXTRACT_FUNCTION_COGNITIVE) {
+  if (
+    func.cyclomatic >= COMPLEXITY_THRESHOLDS.EXTRACT_FUNCTION_CYCLOMATIC ||
+    func.cognitive >= COMPLEXITY_THRESHOLDS.EXTRACT_FUNCTION_COGNITIVE
+  ) {
     return 'extract_function';
   }
   if (func.isAsync && func.cyclomatic >= COMPLEXITY_THRESHOLDS.EXTRACT_ASYNC_CYCLOMATIC) {
@@ -1048,7 +1068,7 @@ function calculatePriority(impactData, effort, riskTier, strategy) {
       break;
     case 'balanced':
     default:
-      score = (impactScore * 10) - ((effort + riskScore) / 2);
+      score = impactScore * 10 - (effort + riskScore) / 2;
       break;
   }
 
@@ -1097,7 +1117,7 @@ function estimateNewMetrics(func, refactoringType) {
   return {
     cyclomatic: Math.round(func.cyclomatic - cyclomaticReduction),
     cognitive: Math.round(func.cognitive - cognitiveReduction),
-    improvement: 'Estimated'
+    improvement: 'Estimated',
   };
 }
 
@@ -1160,7 +1180,7 @@ function checkHNWComplianceImpact(func, refactoringType, projectRoot) {
   return {
     impact,
     explanation,
-    layer
+    layer,
   };
 }
 
@@ -1174,7 +1194,7 @@ function generateBeforeAfterExamples(func, refactoringType) {
   const examples = {
     before: '',
     after: '',
-    description: ''
+    description: '',
   };
 
   switch (refactoringType) {
@@ -1233,7 +1253,9 @@ function formatRefactoringSuggestions(suggestions, totalFunctionsAnalyzed) {
   const lowPriority = suggestions.filter(s => s.priority === 'LOW');
 
   if (highPriority.length > 0) {
-    lines.push(`## ${EMOJIS.HIGH_PRIORITY} ${OUTPUT_MESSAGES.HIGH_PRIORITY} (${highPriority.length})`);
+    lines.push(
+      `## ${EMOJIS.HIGH_PRIORITY} ${OUTPUT_MESSAGES.HIGH_PRIORITY} (${highPriority.length})`
+    );
     lines.push('');
     for (const suggestion of highPriority) {
       formatSuggestion(lines, suggestion);
@@ -1241,7 +1263,9 @@ function formatRefactoringSuggestions(suggestions, totalFunctionsAnalyzed) {
   }
 
   if (mediumPriority.length > 0) {
-    lines.push(`## ${EMOJIS.MEDIUM_PRIORITY} ${OUTPUT_MESSAGES.MEDIUM_PRIORITY} (${mediumPriority.length})`);
+    lines.push(
+      `## ${EMOJIS.MEDIUM_PRIORITY} ${OUTPUT_MESSAGES.MEDIUM_PRIORITY} (${mediumPriority.length})`
+    );
     lines.push('');
     for (const suggestion of mediumPriority) {
       formatSuggestion(lines, suggestion);
@@ -1267,30 +1291,59 @@ function formatRefactoringSuggestions(suggestions, totalFunctionsAnalyzed) {
 function formatSuggestion(lines, suggestion) {
   lines.push(`### ${suggestion.function.name}`);
   lines.push('');
-  lines.push(`**${OUTPUT_MESSAGES.FILE}**: ${suggestion.function.file}:${suggestion.function.line}`);
-  lines.push(`**${OUTPUT_MESSAGES.TYPE}**: ${suggestion.refactoringType.replace(/_/g, ' ').toUpperCase()}`);
+  lines.push(
+    `**${OUTPUT_MESSAGES.FILE}**: ${suggestion.function.file}:${suggestion.function.line}`
+  );
+  lines.push(
+    `**${OUTPUT_MESSAGES.TYPE}**: ${suggestion.refactoringType.replace(/_/g, ' ').toUpperCase()}`
+  );
   lines.push(`**${OUTPUT_MESSAGES.PRIORITY}**: ${suggestion.priority}`);
   lines.push('');
 
   lines.push(`**${OUTPUT_MESSAGES.CURRENT_METRICS}**:`);
-  lines.push(`- ${OUTPUT_MESSAGES.CYCLOMATIC}: ${suggestion.currentMetrics.cyclomatic} (decision points)`);
-  lines.push(`- ${OUTPUT_MESSAGES.COGNITIVE}: ${suggestion.currentMetrics.cognitive} (nesting complexity)`);
-  lines.push(`- ${OUTPUT_MESSAGES.MAINTAINABILITY}: ${suggestion.currentMetrics.maintainability}/171 (higher = better)`);
+  lines.push(
+    `- ${OUTPUT_MESSAGES.CYCLOMATIC}: ${suggestion.currentMetrics.cyclomatic} (decision points)`
+  );
+  lines.push(
+    `- ${OUTPUT_MESSAGES.COGNITIVE}: ${suggestion.currentMetrics.cognitive} (nesting complexity)`
+  );
+  lines.push(
+    `- ${OUTPUT_MESSAGES.MAINTAINABILITY}: ${suggestion.currentMetrics.maintainability}/171 (higher = better)`
+  );
   lines.push('');
 
   // Calculate improvement percentages
-  const cyclomaticImprovement = ((suggestion.currentMetrics.cyclomatic - suggestion.projectedMetrics.cyclomatic) / suggestion.currentMetrics.cyclomatic * 100).toFixed(0);
-  const cognitiveImprovement = ((suggestion.currentMetrics.cognitive - suggestion.projectedMetrics.cognitive) / suggestion.currentMetrics.cognitive * 100).toFixed(0);
+  const cyclomaticImprovement = (
+    ((suggestion.currentMetrics.cyclomatic - suggestion.projectedMetrics.cyclomatic) /
+      suggestion.currentMetrics.cyclomatic) *
+    100
+  ).toFixed(0);
+  const cognitiveImprovement = (
+    ((suggestion.currentMetrics.cognitive - suggestion.projectedMetrics.cognitive) /
+      suggestion.currentMetrics.cognitive) *
+    100
+  ).toFixed(0);
 
   lines.push(`**${OUTPUT_MESSAGES.PROJECTED_METRICS}**:`);
-  lines.push(`- ${OUTPUT_MESSAGES.CYCLOMATIC}: ${suggestion.projectedMetrics.cyclomatic} (${cyclomaticImprovement}% reduction)`);
-  lines.push(`- ${OUTPUT_MESSAGES.COGNITIVE}: ${suggestion.projectedMetrics.cognitive} (${cognitiveImprovement}% reduction)`);
+  lines.push(
+    `- ${OUTPUT_MESSAGES.CYCLOMATIC}: ${suggestion.projectedMetrics.cyclomatic} (${cyclomaticImprovement}% reduction)`
+  );
+  lines.push(
+    `- ${OUTPUT_MESSAGES.COGNITIVE}: ${suggestion.projectedMetrics.cognitive} (${cognitiveImprovement}% reduction)`
+  );
 
   // Calculate projected maintainability
   const loc = Math.max(1, suggestion.function.linesOfCode || 50);
-  const projectedMaintainability = Math.min(171, 171 - 0.23 * suggestion.projectedMetrics.cyclomatic - 16.2 * Math.log(loc)).toFixed(1);
-  const maintainabilityImprovement = (projectedMaintainability - parseFloat(suggestion.currentMetrics.maintainability)).toFixed(1);
-  lines.push(`- ${OUTPUT_MESSAGES.MAINTAINABILITY}: ${projectedMaintainability}/171 (+${maintainabilityImprovement})`);
+  const projectedMaintainability = Math.min(
+    171,
+    171 - 0.23 * suggestion.projectedMetrics.cyclomatic - 16.2 * Math.log(loc)
+  ).toFixed(1);
+  const maintainabilityImprovement = (
+    projectedMaintainability - parseFloat(suggestion.currentMetrics.maintainability)
+  ).toFixed(1);
+  lines.push(
+    `- ${OUTPUT_MESSAGES.MAINTAINABILITY}: ${projectedMaintainability}/171 (+${maintainabilityImprovement})`
+  );
   lines.push('');
 
   // ENHANCED: Impact-aware analysis with breakdown
@@ -1300,7 +1353,7 @@ function formatSuggestion(lines, suggestion) {
   // Show impact breakdown if available
   if (suggestion.impactDetails && suggestion.impactDetails.breakdown) {
     const breakdown = suggestion.impactDetails.breakdown;
-    lines.push(`- **Impact Breakdown:**`);
+    lines.push('- **Impact Breakdown:**');
     lines.push(`  - Complexity: ${breakdown.complexity.toFixed(0)}/30`);
 
     if (breakdown.callFrequency) {
@@ -1317,13 +1370,13 @@ function formatSuggestion(lines, suggestion) {
 
   // ENHANCED: Risk tier with details
   if (suggestion.riskTier) {
-    const tierEmoji = suggestion.riskTier === 'HIGH' ? '🔴' :
-                      suggestion.riskTier === 'MEDIUM' ? '🟡' : '🟢';
+    const tierEmoji =
+      suggestion.riskTier === 'HIGH' ? '🔴' : suggestion.riskTier === 'MEDIUM' ? '🟡' : '🟢';
     lines.push(`- Risk Tier: ${tierEmoji} ${suggestion.riskTier} (${suggestion.risk}/10)`);
 
     // Show risk details if available
     if (suggestion.riskDetails && suggestion.riskDetails.length > 0) {
-      lines.push(`  **Risk Factors:**`);
+      lines.push('  **Risk Factors:**');
       for (const detail of suggestion.riskDetails.slice(0, 4)) {
         lines.push(`  - ${detail}`);
       }
@@ -1337,13 +1390,15 @@ function formatSuggestion(lines, suggestion) {
 
   // ENHANCED: Call frequency and test coverage indicators
   lines.push('');
-  lines.push(`**Additional Context:**`);
+  lines.push('**Additional Context:**');
   const callFreq = suggestion.callFrequency || 0;
   const callBadge = callFreq > 10 ? '🔥' : callFreq > 3 ? '📞' : '📵';
   lines.push(`- ${callBadge} Called ${callFreq} time${callFreq !== 1 ? 's' : ''} in the codebase`);
 
   const testBadge = suggestion.hasTestCoverage ? '✅' : '❌';
-  lines.push(`- ${testBadge} Test coverage: ${suggestion.hasTestCoverage ? 'Found' : 'Not found nearby'}`);
+  lines.push(
+    `- ${testBadge} Test coverage: ${suggestion.hasTestCoverage ? 'Found' : 'Not found nearby'}`
+  );
   lines.push('');
 
   if (suggestion.hnwImpact) {
@@ -1379,7 +1434,12 @@ function formatSuggestion(lines, suggestion) {
  * @param {number} complexityThreshold - Minimum complexity threshold
  * @returns {Promise<Array<Object>>} Array of consolidation suggestions
  */
-async function findConsolidationOpportunities(functions, indexer, projectRoot, complexityThreshold) {
+async function findConsolidationOpportunities(
+  functions,
+  indexer,
+  projectRoot,
+  complexityThreshold
+) {
   const suggestions = [];
 
   if (!indexer || !indexer.vectorStore) {
@@ -1396,8 +1456,10 @@ async function findConsolidationOpportunities(functions, indexer, projectRoot, c
   // For each high-complexity function, search for semantically similar code
   const processedPairs = new Set();
 
-  for (const func of highComplexityFunctions.slice(0, 10)) { // Limit to 10 functions for performance
-    const query = func.name + ' function complexity ' + func.cyclomatic + ' ' + (func.cognitive || '');
+  for (const func of highComplexityFunctions.slice(0, 10)) {
+    // Limit to 10 functions for performance
+    const query =
+      func.name + ' function complexity ' + func.cyclomatic + ' ' + (func.cognitive || '');
 
     try {
       const semanticMatches = await indexer.vectorStore.search(query, 10, 0.65);
@@ -1439,7 +1501,7 @@ async function findConsolidationOpportunities(functions, indexer, projectRoot, c
               name: func.name,
               file: func.filePath,
               line: func.line,
-              linesOfCode: func.linesOfCode
+              linesOfCode: func.linesOfCode,
             },
             refactoringType: 'consolidate_similar',
             priority: 'MEDIUM',
@@ -1449,7 +1511,7 @@ async function findConsolidationOpportunities(functions, indexer, projectRoot, c
             currentMetrics: {
               cyclomatic: func.cyclomatic,
               cognitive: func.cognitive,
-              maintainability: func.maintainability?.toFixed(1) || 'N/A'
+              maintainability: func.maintainability?.toFixed(1) || 'N/A',
             },
             consolidation: {
               similarFile: filePath,
@@ -1460,16 +1522,32 @@ async function findConsolidationOpportunities(functions, indexer, projectRoot, c
                 'Reduce code duplication',
                 'Single source of truth for changes',
                 'Improved maintainability',
-                'Consistent behavior'
-              ]
+                'Consistent behavior',
+              ],
             },
             examples: {
               description: 'Extract shared ' + func.name + ' functionality into a common module',
-              before: '// Similar code exists in:\n- ' + func.filePath + '\n- ' + filePath + '\n\nBoth implement ' + func.name + ' with similar complexity.',
-              after: '// Create shared module: utils/' + sharedModuleName.replace('.js', '') + '\n\nexport function ' + func.name + '(...) {\n  // Shared implementation\n}\n\n// Both files now import from shared module:\nimport { ' + func.name + ' } from \'./utils/' + sharedModuleName.replace('.js', '') + '\';'
+              before:
+                '// Similar code exists in:\n- ' +
+                func.filePath +
+                '\n- ' +
+                filePath +
+                '\n\nBoth implement ' +
+                func.name +
+                ' with similar complexity.',
+              after:
+                '// Create shared module: utils/' +
+                sharedModuleName.replace('.js', '') +
+                '\n\nexport function ' +
+                func.name +
+                '(...) {\n  // Shared implementation\n}\n\n// Both files now import from shared module:\nimport { ' +
+                func.name +
+                " } from './utils/" +
+                sharedModuleName.replace('.js', '') +
+                "';",
             },
             callFrequency: 0,
-            hasTestCoverage: false
+            hasTestCoverage: false,
           });
         }
 
@@ -1490,4 +1568,3 @@ async function findConsolidationOpportunities(functions, indexer, projectRoot, c
 
   return suggestions;
 }
-

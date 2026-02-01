@@ -21,7 +21,7 @@ export class ASTParser {
       updateAgeOnHas: true,
       // Calculate size approximation for memory tracking
       maxSize: options.maxSize || 50 * 1024 * 1024, // 50MB default
-      sizeCalculation: (value) => {
+      sizeCalculation: value => {
         // Rough approximation: AST nodes * 100 bytes
         return (value.program?.body?.length || 0) * 100;
       },
@@ -87,7 +87,7 @@ export class ASTParser {
         imports.push({
           source: statement.source.value,
           type: 'static',
-          specifiers: statement.specifiers.map((spec) => ({
+          specifiers: statement.specifiers.map(spec => ({
             type: spec.type,
             imported: spec.imported?.name,
             local: spec.local?.name,
@@ -161,8 +161,10 @@ export class ASTParser {
         const callee = node.callee;
 
         // Check if it's import() - Babel uses 'Import' type node
-        if (callee.type === 'Import' ||
-           (callee.type === 'Identifier' && callee.name === 'import')) {
+        if (
+          callee.type === 'Import' ||
+          (callee.type === 'Identifier' && callee.name === 'import')
+        ) {
           let source = null;
 
           if (node.arguments.length > 0) {

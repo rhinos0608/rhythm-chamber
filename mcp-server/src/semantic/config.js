@@ -46,7 +46,9 @@ export const PROVIDER_PRIORITY = (() => {
 export const OPENROUTER_CONFIG = {
   // API key - set this to enable OpenRouter embeddings
   // Get your key at: https://openrouter.ai/keys
-  apiKey: process.env.OPENROUTER_API_KEY || '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',
+  apiKey:
+    process.env.OPENROUTER_API_KEY ||
+    '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',
 
   // Base URL for OpenRouter API
   baseUrl: 'https://openrouter.ai/api/v1',
@@ -64,7 +66,7 @@ export const OPENROUTER_CONFIG = {
   maxBatchSize: 100,
 
   // Enable/disable this provider
-  enabled: true
+  enabled: true,
 };
 
 // =============================================================================
@@ -81,7 +83,7 @@ export const TRANSFORMERS_CONFIG = {
   enabled: true,
 
   // Force transformers-only mode (skip other providers)
-  forceOnly: process.env.RC_FORCE_TRANSFORMERS === 'true'
+  forceOnly: process.env.RC_FORCE_TRANSFORMERS === 'true',
 };
 
 // =============================================================================
@@ -92,14 +94,19 @@ export const LMSTUDIO_CONFIG = {
   endpoint: process.env.RC_LMSTUDIO_ENDPOINT || 'http://localhost:1234/v1',
 
   // Model name - must output EMBEDDING_DIMENSION (768)
-  // nomic-embed-text-v1.5 is the only 768-dim model available
-  model: process.env.RC_EMBEDDING_MODEL || 'text-embedding-nomic-embed-text-v1.5',
+  // text-embedding-nomic-embed-code@q8_0 is a quantized code embedding model (768 dim)
+  // Alternative: nomic-embed-text-v1.5 (also 768 dim)
+  model: process.env.RC_EMBEDDING_MODEL || 'text-embedding-nomic-embed-code@q8_0',
 
   // Timeout for API requests (ms)
   timeout: 30000,
 
   // Enable/disable this provider
-  enabled: true
+  enabled: true,
+
+  // Truncate embeddings to EMBEDDING_DIMENSION if model outputs more
+  // This ensures compatibility across different models
+  truncateToDimension: true,
 };
 
 // =============================================================================
@@ -110,33 +117,42 @@ export const EMBEDDING_CACHE_CONFIG = {
   ttl: parseInt(process.env.RC_EMBEDDING_TTL || '600') * 1000,
 
   // Enable in-memory cache
-  enabled: true
+  enabled: true,
 };
 
 // =============================================================================
 // MODEL DIMENSIONS REGISTRY
 // =============================================================================
 // Maps model names to their output dimensions for validation
+// Models with dimensions > 768 will be truncated to EMBEDDING_DIMENSION
 export const MODEL_DIMENSIONS = {
   // Transformers.js models (768 dim - compatible)
   'jinaai/jina-embeddings-v2-base-code': EMBEDDING_DIMENSION,
   'Xenova/gte-base': EMBEDDING_DIMENSION,
 
   // LM Studio models (768 dim - compatible)
+  'text-embedding-nomic-embed-code@q8_0': EMBEDDING_DIMENSION,
+  'text-embedding-nomic-embed-code@q4_k_s': EMBEDDING_DIMENSION,
   'text-embedding-nomic-embed-text-v1.5': EMBEDDING_DIMENSION,
+  'nomic-embed-text-v1.5': EMBEDDING_DIMENSION,
   'text-embedding-qwen3-embedding-0.6b': EMBEDDING_DIMENSION,
-  'nomic-ai/nomic-embed-text-v1.5': EMBEDDING_DIMENSION,
+  'text-embedding-embeddinggemma-300m': EMBEDDING_DIMENSION,
+  'embeddinggemma-300m': EMBEDDING_DIMENSION,
+
+  // Models that output larger dimensions (will be truncated to 768)
+  'nomic-ai/nomic-embed-text-v1.5': 768, // Actually 768
+  'nomic-ai/nomic-embed-code-v1.5': 768, // Actually 768
 
   // OpenRouter models (768 dim - compatible)
   'qwen/qwen3-embedding-8b': EMBEDDING_DIMENSION,
   'qwen/qwen3-embedding-4b': EMBEDDING_DIMENSION,
   'qwen/qwen3-embedding-0.6b': EMBEDDING_DIMENSION,
-  'openai/text-embedding-3-small': EMBEDDING_DIMENSION,  // Configurable dimensions
-  'openai/text-embedding-3-large': EMBEDDING_DIMENSION,  // Configurable dimensions
+  'openai/text-embedding-3-small': EMBEDDING_DIMENSION, // Configurable dimensions
+  'openai/text-embedding-3-large': EMBEDDING_DIMENSION, // Configurable dimensions
 
   // Incompatible models (different dimensions - would require index rebuild)
   'Xenova/all-MiniLM-L6-v2': 384,
-  'jinaai/jina-code-1b': 1024
+  'jinaai/jina-code-1b': 1024,
 };
 
 /**
@@ -151,6 +167,39 @@ export function isModelCompatible(modelName) {
  */
 export function getModelDimension(modelName) {
   return MODEL_DIMENSIONS[modelName] || EMBEDDING_DIMENSION;
+}
+
+/**
+ * Truncate or pad embedding to match EMBEDDING_DIMENSION
+ * This ensures compatibility across different embedding models
+ *
+ * @param {Float32Array|Array} embedding - The embedding vector
+ * @param {number} targetDimension - Target dimension (default: EMBEDDING_DIMENSION)
+ * @returns {Float32Array} - Embedding truncated/padded to target dimension
+ */
+export function normalizeEmbeddingDimension(embedding, targetDimension = EMBEDDING_DIMENSION) {
+  const arr = embedding instanceof Float32Array ? embedding : new Float32Array(embedding);
+
+  // If already correct size, return as-is
+  if (arr.length === targetDimension) {
+    return arr;
+  }
+
+  // If larger, truncate to first N dimensions
+  if (arr.length > targetDimension) {
+    console.warn(
+      `[Embeddings] Truncating embedding from ${arr.length} to ${targetDimension} dimensions`
+    );
+    return arr.slice(0, targetDimension);
+  }
+
+  // If smaller, pad with zeros (rare case)
+  console.warn(
+    `[Embeddings] Padding embedding from ${arr.length} to ${targetDimension} dimensions`
+  );
+  const result = new Float32Array(targetDimension);
+  result.set(arr);
+  return result;
 }
 
 /**
@@ -175,7 +224,7 @@ export const RRF_CONFIG = {
    * Default: 6000 (0.0164 * 6000 = 98.4, safely within 0-100)
    * Calculation: 1/(60+1) ≈ 0.0164, use 6000 to avoid exceeding 100
    */
-  SCALING: 6000
+  SCALING: 6000,
 };
 
 /**
@@ -183,15 +232,23 @@ export const RRF_CONFIG = {
  * Used for reranking search results by chunk type
  */
 export const TYPE_PRIORITY = {
-  'function': 100,      // Functions are most relevant
-  'method': 95,        // Methods slightly less (often contextual)
-  'class': 90,         // Class definitions
+  function: 100, // Functions are most relevant
+  method: 95, // Methods slightly less (often contextual)
+  class: 90, // Class definitions
   'class-declaration': 85,
-  'variable': 60,      // Variables less semantically dense
-  'export': 50,
-  'imports': 40,
-  'code': 10,
-  'fallback': 5
+  variable: 60, // Variables less semantically dense
+  export: 50,
+  imports: 40,
+  code: 10,
+  fallback: 5,
+  // Markdown chunk types (Phase 3.2)
+  'md-section': 75,
+  'md-code-block': 70,
+  'md-list': 60,
+  'md-blockquote': 55,
+  'md-paragraph': 50,
+  'md-table': 65,
+  'md-document': 40,
 };
 
 /**
@@ -199,15 +256,23 @@ export const TYPE_PRIORITY = {
  * Different chunk types have different optimal similarity thresholds
  */
 export const TYPE_THRESHOLDS = {
-  'function': 0.25,      // Functions have dense semantics
-  'method': 0.25,        // Methods similar to functions
-  'class': 0.30,         // Class definitions more specific
-  'class-declaration': 0.30,
-  'variable': 0.35,      // Variables less semantically dense
-  'export': 0.40,        // Export statements need higher similarity
-  'imports': 0.40,       // Import statements very specific
-  'code': 0.20,          // Generic code chunks, more permissive
-  'fallback': 0.15       // Fallback chunks, most permissive
+  function: 0.25, // Functions have dense semantics
+  method: 0.25, // Methods similar to functions
+  class: 0.3, // Class definitions more specific
+  'class-declaration': 0.3,
+  variable: 0.35, // Variables less semantically dense
+  export: 0.4, // Export statements need higher similarity
+  imports: 0.4, // Import statements very specific
+  code: 0.2, // Generic code chunks, more permissive
+  fallback: 0.15, // Fallback chunks, most permissive
+  // Markdown chunk types (Phase 3.3)
+  'md-section': 0.28,
+  'md-code-block': 0.3,
+  'md-list': 0.3,
+  'md-blockquote': 0.3,
+  'md-paragraph': 0.35,
+  'md-table': 0.32,
+  'md-document': 0.2,
 };
 
 /**
@@ -228,7 +293,7 @@ export const ADAPTIVE_THRESHOLD = {
    *
    * Default: 0.1
    */
-  MIN_THRESHOLD: 0.1
+  MIN_THRESHOLD: 0.1,
 };
 
 /**
@@ -250,7 +315,7 @@ export const SYMBOL_BOOST = {
   EXACT_MATCH_SCORE: 1.0,
   PREFIX_MATCH_SCORE: 0.8,
   CAMEL_WORD_SCORE: 0.7,
-  CONTAINS_MATCH_SCORE: 0.5
+  CONTAINS_MATCH_SCORE: 0.5,
 };
 
 /**
@@ -270,7 +335,7 @@ export const CALL_FREQUENCY = {
    * Formula: min(MAX_BONUS, floor(sqrt(count / 10)))
    * This gives: 1-9 calls=0, 10-99 calls=1-3, 100-999 calls=3-9, 1000+=10-20 (capped)
    */
-  USE_SQRT_SCALING: true
+  USE_SQRT_SCALING: true,
 };
 
 /**
@@ -292,7 +357,7 @@ export const QUERY_EXPANSION = {
    * Default: 3 (original + 2 expanded queries for better recall)
    * Range: 1-5
    */
-  RETRY_QUERY_COUNT: 3
+  RETRY_QUERY_COUNT: 3,
 };
 
 /**
@@ -327,7 +392,7 @@ export const CHUNKING = {
    *
    * Default: 4000
    */
-  MAX_CHUNK_SIZE: 4000
+  MAX_CHUNK_SIZE: 4000,
 };
 
 /**
@@ -350,7 +415,7 @@ export const BM25_CONFIG = {
    * Default: 0.75
    * Range: 0.0-1.0
    */
-  b: 0.75
+  b: 0.75,
 };
 
 /**
@@ -368,6 +433,7 @@ export default {
   MODEL_DIMENSIONS,
   isModelCompatible,
   getModelDimension,
+  normalizeEmbeddingDimension,
 
   // Search configuration (existing)
   RRF_CONFIG,
@@ -378,5 +444,5 @@ export default {
   CALL_FREQUENCY,
   QUERY_EXPANSION,
   CHUNKING,
-  BM25_CONFIG
+  BM25_CONFIG,
 };

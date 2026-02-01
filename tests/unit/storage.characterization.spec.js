@@ -152,9 +152,7 @@ describe('Storage Facade - Characterization Tests', () => {
   describe('Streams Operations', () => {
     describe('saveStreams()', () => {
       it('should save streams to IndexedDB', async () => {
-        const streams = [
-          { id: '1', ts: '2024-01-01', artist: 'Artist' }
-        ];
+        const streams = [{ id: '1', ts: '2024-01-01', artist: 'Artist' }];
 
         await Storage.saveStreams(streams);
 
@@ -163,7 +161,7 @@ describe('Storage Facade - Characterization Tests', () => {
           expect.objectContaining({
             id: 'all',
             data: streams,
-            savedAt: expect.any(String)
+            savedAt: expect.any(String),
           })
         );
       });
@@ -174,7 +172,7 @@ describe('Storage Facade - Characterization Tests', () => {
         expect(EventBus.emit).toHaveBeenCalledWith(
           'storage:updated',
           expect.objectContaining({
-            store: 'streams'
+            store: 'streams',
           })
         );
       });
@@ -197,10 +195,12 @@ describe('Storage Facade - Characterization Tests', () => {
     describe('getStreams()', () => {
       it('should retrieve streams from IndexedDB', async () => {
         const mockStreams = [{ id: '1', ts: '2024-01-01' }];
-        IndexedDBCore.get = vi.fn(() => Promise.resolve({
-          id: 'all',
-          data: mockStreams
-        }));
+        IndexedDBCore.get = vi.fn(() =>
+          Promise.resolve({
+            id: 'all',
+            data: mockStreams,
+          })
+        );
 
         const result = await Storage.getStreams();
 
@@ -261,17 +261,19 @@ describe('Storage Facade - Characterization Tests', () => {
       });
 
       it('should emit storage:updated event after append', async () => {
-        IndexedDBCore.atomicUpdate = vi.fn(() => Promise.resolve({
-          id: 'all',
-          data: [{ id: '1' }, { id: '2' }]
-        }));
+        IndexedDBCore.atomicUpdate = vi.fn(() =>
+          Promise.resolve({
+            id: 'all',
+            data: [{ id: '1' }, { id: '2' }],
+          })
+        );
 
         await Storage.appendStreams([{ id: '2' }]);
 
         expect(EventBus.emit).toHaveBeenCalledWith(
           'storage:updated',
           expect.objectContaining({
-            store: 'streams'
+            store: 'streams',
           })
         );
       });
@@ -298,7 +300,7 @@ describe('Storage Facade - Characterization Tests', () => {
           'storage:updated',
           expect.objectContaining({
             store: 'streams',
-            count: 0
+            count: 0,
           })
         );
       });
@@ -321,7 +323,7 @@ describe('Storage Facade - Characterization Tests', () => {
       it('should save chunks using transaction', async () => {
         const chunks = [
           { id: 'chunk1', content: 'content1' },
-          { id: 'chunk2', content: 'content2' }
+          { id: 'chunk2', content: 'content2' },
         ];
 
         await Storage.saveChunks(chunks);
@@ -342,9 +344,7 @@ describe('Storage Facade - Characterization Tests', () => {
 
     describe('getChunks()', () => {
       it('should retrieve all chunks', async () => {
-        const mockChunks = [
-          { id: 'chunk1', content: 'content1' }
-        ];
+        const mockChunks = [{ id: 'chunk1', content: 'content1' }];
         IndexedDBCore.getAll = vi.fn(() => Promise.resolve(mockChunks));
 
         const result = await Storage.getChunks();
@@ -380,7 +380,7 @@ describe('Storage Facade - Characterization Tests', () => {
             id: 'result',
             traits: ['openness'],
             scores: [0.8],
-            savedAt: expect.any(String)
+            savedAt: expect.any(String),
           })
         );
       });
@@ -422,19 +422,21 @@ describe('Storage Facade - Characterization Tests', () => {
       it('should save a single setting', async () => {
         await Storage.saveSetting('theme', 'dark');
 
-        expect(IndexedDBCore.put).toHaveBeenCalledWith(
-          STORES.SETTINGS,
-          { key: 'theme', value: 'dark' }
-        );
+        expect(IndexedDBCore.put).toHaveBeenCalledWith(STORES.SETTINGS, {
+          key: 'theme',
+          value: 'dark',
+        });
       });
     });
 
     describe('getSetting()', () => {
       it('should retrieve a single setting', async () => {
-        IndexedDBCore.get = vi.fn(() => Promise.resolve({
-          key: 'theme',
-          value: 'dark'
-        }));
+        IndexedDBCore.get = vi.fn(() =>
+          Promise.resolve({
+            key: 'theme',
+            value: 'dark',
+          })
+        );
 
         const result = await Storage.getSetting('theme');
 
@@ -469,7 +471,7 @@ describe('Storage Facade - Characterization Tests', () => {
             id: 'session1',
             updatedAt: expect.any(String),
             createdAt: expect.any(String),
-            messageCount: 0
+            messageCount: 0,
           })
         );
       });
@@ -482,7 +484,7 @@ describe('Storage Facade - Characterization Tests', () => {
         const session = {
           id: 'session1',
           createdAt: '2024-01-01T00:00:00Z',
-          messages: ['msg1']
+          messages: ['msg1'],
         };
 
         await Storage.saveSession(session);
@@ -491,7 +493,7 @@ describe('Storage Facade - Characterization Tests', () => {
           STORES.CHAT_SESSIONS,
           expect.objectContaining({
             createdAt: '2024-01-01T00:00:00Z',
-            messageCount: 1
+            messageCount: 1,
           })
         );
       });
@@ -502,7 +504,7 @@ describe('Storage Facade - Characterization Tests', () => {
         expect(EventBus.emit).toHaveBeenCalledWith(
           'storage:updated',
           expect.objectContaining({
-            store: 'session'
+            store: 'session',
           })
         );
       });
@@ -524,7 +526,7 @@ describe('Storage Facade - Characterization Tests', () => {
       it('should retrieve all sessions ordered by updatedAt', async () => {
         const mockSessions = [
           { id: 'session1', updatedAt: '2024-01-02' },
-          { id: 'session2', updatedAt: '2024-01-01' }
+          { id: 'session2', updatedAt: '2024-01-01' },
         ];
         IndexedDBCore.getAllByIndex = vi.fn(() => Promise.resolve(mockSessions));
 
@@ -552,7 +554,7 @@ describe('Storage Facade - Characterization Tests', () => {
         expect(EventBus.emit).toHaveBeenCalledWith(
           'storage:updated',
           expect.objectContaining({
-            store: 'session'
+            store: 'session',
           })
         );
       });
@@ -583,7 +585,7 @@ describe('Storage Facade - Characterization Tests', () => {
           'storage:updated',
           expect.objectContaining({
             store: 'session',
-            count: 0
+            count: 0,
           })
         );
       });
@@ -593,17 +595,14 @@ describe('Storage Facade - Characterization Tests', () => {
       it('should clear sessions older than maxAgeMs', async () => {
         const oldSession = {
           id: 'old1',
-          updatedAt: '2024-01-01T00:00:00Z'
+          updatedAt: '2024-01-01T00:00:00Z',
         };
         const newSession = {
           id: 'new1',
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
         };
 
-        IndexedDBCore.getAllByIndex = vi.fn(() => Promise.resolve([
-          oldSession,
-          newSession
-        ]));
+        IndexedDBCore.getAllByIndex = vi.fn(() => Promise.resolve([oldSession, newSession]));
 
         const result = await Storage.clearExpiredSessions(30 * 24 * 60 * 60 * 1000);
 
@@ -662,10 +661,12 @@ describe('Storage Facade - Characterization Tests', () => {
 
     describe('hasData()', () => {
       it('should return true when streams exist', async () => {
-        IndexedDBCore.get = vi.fn(() => Promise.resolve({
-          id: 'all',
-          data: [{ id: '1' }]
-        }));
+        IndexedDBCore.get = vi.fn(() =>
+          Promise.resolve({
+            id: 'all',
+            data: [{ id: '1' }],
+          })
+        );
 
         const result = await Storage.hasData();
 
@@ -681,10 +682,12 @@ describe('Storage Facade - Characterization Tests', () => {
       });
 
       it('should return false when streams array is empty', async () => {
-        IndexedDBCore.get = vi.fn(() => Promise.resolve({
-          id: 'all',
-          data: []
-        }));
+        IndexedDBCore.get = vi.fn(() =>
+          Promise.resolve({
+            id: 'all',
+            data: [],
+          })
+        );
 
         const result = await Storage.hasData();
 
@@ -694,14 +697,13 @@ describe('Storage Facade - Characterization Tests', () => {
 
     describe('getDataHash()', () => {
       it('should return hash with count and timestamps', async () => {
-        const streams = [
-          { ts: '2024-01-01T10:00:00Z' },
-          { ts: '2024-01-10T20:00:00Z' }
-        ];
-        IndexedDBCore.get = vi.fn(() => Promise.resolve({
-          id: 'all',
-          data: streams
-        }));
+        const streams = [{ ts: '2024-01-01T10:00:00Z' }, { ts: '2024-01-10T20:00:00Z' }];
+        IndexedDBCore.get = vi.fn(() =>
+          Promise.resolve({
+            id: 'all',
+            data: streams,
+          })
+        );
 
         const result = await Storage.getDataHash();
 
@@ -717,10 +719,12 @@ describe('Storage Facade - Characterization Tests', () => {
       });
 
       it('should return null when streams array is empty', async () => {
-        IndexedDBCore.get = vi.fn(() => Promise.resolve({
-          id: 'all',
-          data: []
-        }));
+        IndexedDBCore.get = vi.fn(() =>
+          Promise.resolve({
+            id: 'all',
+            data: [],
+          })
+        );
 
         const result = await Storage.getDataHash();
 
@@ -807,7 +811,7 @@ describe('Storage Facade - Characterization Tests', () => {
         expect(EventBus.emit).toHaveBeenCalledWith(
           'storage:updated',
           expect.objectContaining({
-            store: 'sensitiveDataCleared'
+            store: 'sensitiveDataCleared',
           })
         );
       });
@@ -824,7 +828,7 @@ describe('Storage Facade - Characterization Tests', () => {
 
     describe('getDataSummary()', () => {
       it('should return summary of all data', async () => {
-        IndexedDBCore.get = vi.fn((store) => {
+        IndexedDBCore.get = vi.fn(store => {
           if (store === STORES.STREAMS) {
             return Promise.resolve({ id: 'all', data: [{ id: '1' }] });
           }
@@ -843,16 +847,18 @@ describe('Storage Facade - Characterization Tests', () => {
           streamCount: 1,
           chunkCount: 1,
           hasPersonality: true,
-          chatSessionCount: 3
+          chatSessionCount: 3,
         });
       });
 
       it('should include estimated size in MB', async () => {
         const largeStreams = Array(1000).fill({ id: '1', data: 'x'.repeat(1000) });
-        IndexedDBCore.get = vi.fn(() => Promise.resolve({
-          id: 'all',
-          data: largeStreams
-        }));
+        IndexedDBCore.get = vi.fn(() =>
+          Promise.resolve({
+            id: 'all',
+            data: largeStreams,
+          })
+        );
         IndexedDBCore.getAll = vi.fn(() => Promise.resolve([]));
         IndexedDBCore.count = vi.fn(() => Promise.resolve(0));
 
@@ -874,7 +880,7 @@ describe('Storage Facade - Characterization Tests', () => {
       expect(EventBus.emit).toHaveBeenCalledWith(
         'storage:updated',
         expect.objectContaining({
-          store: 'streams'
+          store: 'streams',
         })
       );
     });
@@ -885,7 +891,7 @@ describe('Storage Facade - Characterization Tests', () => {
       expect(EventBus.emit).toHaveBeenCalledWith(
         'storage:updated',
         expect.objectContaining({
-          store: 'session'
+          store: 'session',
         })
       );
     });
@@ -1009,7 +1015,7 @@ describe('Storage Facade - Characterization Tests', () => {
   describe('Consistency Validation', () => {
     describe('validateConsistency()', () => {
       it('should return valid when data is consistent', async () => {
-        IndexedDBCore.get = vi.fn((store) => {
+        IndexedDBCore.get = vi.fn(store => {
           if (store === STORES.STREAMS) {
             return Promise.resolve({ id: 'all', data: [{ id: '1' }] });
           }
@@ -1024,7 +1030,7 @@ describe('Storage Facade - Characterization Tests', () => {
       });
 
       it('should warn when personality exists without streams', async () => {
-        IndexedDBCore.get = vi.fn((store) => {
+        IndexedDBCore.get = vi.fn(store => {
           if (store === STORES.PERSONALITY) {
             return Promise.resolve({ id: 'result', traits: [] });
           }
@@ -1042,7 +1048,7 @@ describe('Storage Facade - Characterization Tests', () => {
       });
 
       it('should warn when chunks exist without streams', async () => {
-        IndexedDBCore.get = vi.fn((store) => {
+        IndexedDBCore.get = vi.fn(store => {
           if (store === STORES.STREAMS) {
             return Promise.resolve(null);
           }
@@ -1113,7 +1119,7 @@ describe('Storage Facade - Characterization Tests', () => {
     it('getSyncStatus should return sync status', async () => {
       const SyncManager = require('../../js/storage/sync-strategy');
       SyncManager.getStrategy = vi.fn(() => ({
-        getStatus: vi.fn(() => Promise.resolve({ mode: 'local' }))
+        getStatus: vi.fn(() => Promise.resolve({ mode: 'local' })),
       }));
 
       const result = await Storage.getSyncStatus();
@@ -1215,7 +1221,7 @@ describe('Storage Facade - Characterization Tests', () => {
 
   describe('getHealthReport()', () => {
     it('should return comprehensive health report', async () => {
-      IndexedDBCore.get = vi.fn((store) => {
+      IndexedDBCore.get = vi.fn(store => {
         if (store === STORES.STREAMS) {
           return Promise.resolve({ id: 'all', data: [{ id: '1' }] });
         }
@@ -1230,12 +1236,12 @@ describe('Storage Facade - Characterization Tests', () => {
         issues: expect.any(Array),
         autoRepair: expect.objectContaining({
           enabled: expect.any(Boolean),
-          recentRepairs: expect.any(Array)
+          recentRepairs: expect.any(Array),
         }),
         storage: expect.objectContaining({
           hasData: expect.any(Boolean),
-          hasPersonality: expect.any(Boolean)
-        })
+          hasPersonality: expect.any(Boolean),
+        }),
       });
     });
 

@@ -10,27 +10,30 @@
 
 ### Model Upgrade
 
-| Metric | Before (MiniLM) | After (gte-base) | Improvement |
-|--------|-----------------|-----------------|-------------|
-| **Dimensions** | 384 | 768 | **2x capacity** |
-| **Quality** | 56% Top-5 | ~75% Top-5 | **+34% accuracy** |
-| **Speed** | 14.7ms/1K | ~30ms/1K | 2x slower |
-| **RAM Usage** | ~300MB | ~600MB | 2x more |
-| **Index Time** | ~3 min | ~4 min | +1 minute |
+| Metric         | Before (MiniLM) | After (gte-base) | Improvement       |
+| -------------- | --------------- | ---------------- | ----------------- |
+| **Dimensions** | 384             | 768              | **2x capacity**   |
+| **Quality**    | 56% Top-5       | ~75% Top-5       | **+34% accuracy** |
+| **Speed**      | 14.7ms/1K       | ~30ms/1K         | 2x slower         |
+| **RAM Usage**  | ~300MB          | ~600MB           | 2x more           |
+| **Index Time** | ~3 min          | ~4 min           | +1 minute         |
 
 ### Key Benefits
 
 ✅ **True Hybrid Fallback**
+
 - LM Studio Nomic: 768-dim (GPU)
 - Transformers.js gte-base: 768-dim (CPU)
 - Same dimensions = seamless switching
 
 ✅ **Better Semantic Understanding**
+
 - Captures more nuanced code relationships
 - Improved similarity scores expected
 - 2x dimensional space for embeddings
 
 ✅ **Production Ready**
+
 - 100% reliable (Transformers.js)
 - No dimension mismatch errors
 - Cache valid across restarts
@@ -40,6 +43,7 @@
 ## 📊 Performance Validation
 
 ### Test Query 1: Session Management
+
 ```
 Query: "session creation management lifecycle"
 Top Match: 78% similarity ✅
@@ -48,12 +52,14 @@ Quality: Excellent
 ```
 
 ### Test Query 2: Spotify Authentication
+
 ```
 Query: "spotify oauth authentication token refresh"
 Results: Pending (testing)
 ```
 
 ### Test Query 3: Error Handling
+
 ```
 Query: "error handling retry circuit breaker"
 Results: Pending (testing)
@@ -112,11 +118,13 @@ node server.js
 ### Better Code Understanding
 
 **Before (384-dim MiniLM):**
+
 - Good at finding exact matches
 - Moderate semantic understanding
 - Sometimes misses nuanced relationships
 
 **After (768-dim gte-base):**
+
 - Better at semantic similarity
 - Captures code relationships better
 - Improved context understanding
@@ -125,16 +133,19 @@ node server.js
 ### Real-World Impact
 
 **Session Management Queries:**
+
 - Better understanding of lifecycle methods
 - Improved detection of related functions
 - More accurate dependency tracing
 
 **Authentication Flow:**
+
 - Better matches token handling code
 - Improved OAuth flow detection
 - More precise security-related results
 
 **Error Handling:**
+
 - Better understanding of retry logic
 - Improved pattern matching
 - More accurate fallback detection
@@ -146,10 +157,12 @@ node server.js
 ### What You're Trading
 
 **Speed:**
+
 - Indexing: ~3 min → ~4 min (+33%)
 - Query: Slightly slower (30ms vs 15ms per 1K tokens)
 
 **Resources:**
+
 - RAM: 300MB → 600MB (+300MB)
 - Model: 22M params → 109M params (5x larger)
 
@@ -201,6 +214,7 @@ node server.js
 ### Why gte-base?
 
 From research benchmarks:
+
 - "Better quality than MiniLM"
 - "Good balance of speed and accuracy"
 - "768 dimensions - standard for high-quality embeddings"
@@ -208,6 +222,7 @@ From research benchmarks:
 ### Why Not LM Studio?
 
 Despite testing LM Studio 0.4.0:
+
 - Batch embedding API still unstable
 - Falls back to Transformers.js anyway
 - gte-base provides same quality without complexity
@@ -216,11 +231,13 @@ Despite testing LM Studio 0.4.0:
 ### Future Considerations
 
 **When to use LM Studio:**
+
 - If batch API is fixed in future versions
 - If you need GPU acceleration
 - For very large codebases (1000+ files)
 
 **When to use gte-base:**
+
 - Current setup (recommended)
 - Need reliability and consistency
 - Want better quality without GPU dependency
@@ -236,6 +253,7 @@ Despite testing LM Studio 0.4.0:
 ### Issue: "Server crashes after indexing"
 
 **Fix:** Server auto-exits after indexing is normal behavior. Restart to serve requests:
+
 ```bash
 ./restart-semantic-search.sh
 ```
@@ -243,6 +261,7 @@ Despite testing LM Studio 0.4.0:
 ### Issue: Poor search results
 
 **Check:**
+
 1. Is indexing complete? (wait for "Indexing complete" in logs)
 2. Are dimensions matching? (should be 768)
 3. Try rephrasing query (use more specific terms)
@@ -259,6 +278,7 @@ The system detects dimension mismatch and rebuilds index automatically.
 ### Performance Tips
 
 **For development:** Consider temporarily using MiniLM for faster iteration
+
 ```bash
 # Faster but lower quality
 FALLBACK_MODEL='Xenova/all-MiniLM-L6-v2'
@@ -266,6 +286,7 @@ DEFAULT_DIM=384
 ```
 
 **For production:** Use gte-base (current setup)
+
 ```bash
 # Better quality, slightly slower
 FALLBACK_MODEL='Xenova/gte-base'
@@ -275,6 +296,7 @@ DEFAULT_DIM=768
 ### Migration Path
 
 If you want to revert to MiniLM:
+
 1. Edit `src/semantic/embeddings.js`
 2. Change `FALLBACK_MODEL` to `'Xenova/all-MiniLM-L6-v2'`
 3. Change `DEFAULT_DIM` to `384`

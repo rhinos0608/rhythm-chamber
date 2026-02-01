@@ -15,8 +15,8 @@ export function createResponse(success, data, metadata = {}) {
       confidence: metadata.confidence || 'HIGH',
       completeness: metadata.completeness || 100,
       warnings: metadata.warnings || [],
-      ...metadata
-    }
+      ...metadata,
+    },
   };
 }
 
@@ -29,8 +29,8 @@ export function createPartialResponse(data, warnings = {}) {
     completeness: warnings.completeness || 60,
     warnings: [
       ...(warnings.messages || []),
-      ...(warnings.suggestions ? warnings.suggestions.map(s => `💡 ${s}`) : [])
-    ]
+      ...(warnings.suggestions ? warnings.suggestions.map(s => `💡 ${s}`) : []),
+    ],
   });
 }
 
@@ -39,17 +39,19 @@ export function createPartialResponse(data, warnings = {}) {
  */
 export function createErrorResponse(error, partialData = null) {
   const response = {
-    content: [{
-      type: 'text',
-      text: partialData ? partialData.text : `Error: ${error.message}`
-    }],
+    content: [
+      {
+        type: 'text',
+        text: partialData ? partialData.text : `Error: ${error.message}`,
+      },
+    ],
     isError: true,
     metadata: {
       timestamp: new Date().toISOString(),
       confidence: partialData ? 'MEDIUM' : 'LOW',
       completeness: partialData ? 50 : 0,
-      warnings: partialData ? partialData.warnings || [] : []
-    }
+      warnings: partialData ? partialData.warnings || [] : [],
+    },
   };
 
   // If we have partial data, mark it as partial success

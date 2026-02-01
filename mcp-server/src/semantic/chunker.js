@@ -70,7 +70,7 @@ export class CodeChunker {
         locations: true,
         allowHashBang: true,
         allowReserved: true,
-        allowReturnOutsideFunction: true
+        allowReturnOutsideFunction: true,
       });
 
       // Split source into lines for context extraction
@@ -109,7 +109,6 @@ export class CodeChunker {
       if (leftovers.length > 0) {
         chunks.push(...leftovers);
       }
-
     } catch (error) {
       console.error(`[Chunker] Failed to parse ${filePath}:`, error.message);
 
@@ -132,7 +131,7 @@ export class CodeChunker {
       text: sourceCode.substring(0, this.maxChunkSize),
       context: {
         before: '',
-        after: sourceCode.length > this.maxChunkSize ? '... (truncated)' : ''
+        after: sourceCode.length > this.maxChunkSize ? '... (truncated)' : '',
       },
       metadata: {
         file: filePath,
@@ -140,8 +139,8 @@ export class CodeChunker {
         endLine: lines.length,
         exported: false,
         parseError: error.message,
-        truncated: sourceCode.length > this.maxChunkSize
-      }
+        truncated: sourceCode.length > this.maxChunkSize,
+      },
     };
   }
 
@@ -155,7 +154,7 @@ export class CodeChunker {
     walk(ast, {
       ImportDeclaration(node) {
         importNodes.push(node);
-      }
+      },
     });
 
     if (importNodes.length === 0) return chunks;
@@ -175,12 +174,14 @@ export class CodeChunker {
         lastLine = node.loc.end.line;
       } else {
         // Create chunk for previous group
-        chunks.push(this._createImportChunk(
-          sourceCode.substring(currentStart, currentEnd),
-          lines,
-          importNodes.find(n => n.start === currentStart).loc.start.line,
-          importNodes.find(n => n.end === currentEnd).loc.end.line
-        ));
+        chunks.push(
+          this._createImportChunk(
+            sourceCode.substring(currentStart, currentEnd),
+            lines,
+            importNodes.find(n => n.start === currentStart).loc.start.line,
+            importNodes.find(n => n.end === currentEnd).loc.end.line
+          )
+        );
 
         // Start new group
         currentStart = node.start;
@@ -190,12 +191,14 @@ export class CodeChunker {
     }
 
     // Create final chunk
-    chunks.push(this._createImportChunk(
-      sourceCode.substring(currentStart, currentEnd),
-      lines,
-      importNodes.find(n => n.start === currentStart).loc.start.line,
-      importNodes.find(n => n.end === currentEnd).loc.end.line
-    ));
+    chunks.push(
+      this._createImportChunk(
+        sourceCode.substring(currentStart, currentEnd),
+        lines,
+        importNodes.find(n => n.start === currentStart).loc.start.line,
+        importNodes.find(n => n.end === currentEnd).loc.end.line
+      )
+    );
 
     return chunks;
   }
@@ -216,8 +219,8 @@ export class CodeChunker {
         file: '',
         startLine,
         endLine,
-        exported: false
-      }
+        exported: false,
+      },
     };
   }
 
@@ -237,12 +240,14 @@ export class CodeChunker {
       },
       ExportDefaultDeclaration(node) {
         // Skip if it's just exporting a declaration
-        if (node.declaration.type !== 'Identifier' &&
-            node.declaration.type !== 'FunctionDeclaration' &&
-            node.declaration.type !== 'ClassDeclaration') {
+        if (
+          node.declaration.type !== 'Identifier' &&
+          node.declaration.type !== 'FunctionDeclaration' &&
+          node.declaration.type !== 'ClassDeclaration'
+        ) {
           exportNodes.push({ type: 'default', node });
         }
-      }
+      },
     });
 
     for (const { type, node } of exportNodes) {
@@ -261,8 +266,8 @@ export class CodeChunker {
           startLine,
           endLine,
           exported: true,
-          exportType: type
-        }
+          exportType: type,
+        },
       });
     }
 
@@ -283,7 +288,7 @@ export class CodeChunker {
             name: node.id.name,
             node,
             async: node.async,
-            generator: node.generator
+            generator: node.generator,
           });
         }
       },
@@ -296,7 +301,7 @@ export class CodeChunker {
             node,
             isMethod: true,
             async: node.async,
-            generator: node.generator
+            generator: node.generator,
           });
         }
       },
@@ -308,9 +313,9 @@ export class CodeChunker {
           node,
           isArrow: true,
           async: node.async,
-          generator: false
+          generator: false,
         });
-      }
+      },
     });
 
     // Also capture variables that contain functions (const foo = () => {})
@@ -347,32 +352,30 @@ export class CodeChunker {
               const varName = declarator.id.name;
 
               // Check if this is an arrow function
-              if (declarator.init &&
-                  declarator.init.type === 'ArrowFunctionExpression') {
+              if (declarator.init && declarator.init.type === 'ArrowFunctionExpression') {
                 functions.push({
                   name: varName,
                   node: declarator.init,
                   isArrow: true,
                   isVariable: true,
                   async: declarator.init.async,
-                  generator: false
+                  generator: false,
                 });
               }
               // Check if this is a function expression
-              else if (declarator.init &&
-                       declarator.init.type === 'FunctionExpression') {
+              else if (declarator.init && declarator.init.type === 'FunctionExpression') {
                 functions.push({
                   name: varName,
                   node: declarator.init,
                   isVariable: true,
                   async: declarator.init.async,
-                  generator: declarator.init.generator
+                  generator: declarator.init.generator,
                 });
               }
             }
           }
         }
-      }
+      },
     });
 
     return functions;
@@ -430,7 +433,7 @@ export class CodeChunker {
       throws,
       hasJSDoc: !!jsDoc,
       hasOverlap: overlapLines > 0,
-      overlapLines
+      overlapLines,
     };
 
     // For small functions, return single chunk as before
@@ -440,14 +443,16 @@ export class CodeChunker {
       const contextBeforeText = context.before ? `// Context before:\n${context.before}\n` : '';
       const contextAfterText = context.after ? `\n// Context after:\n${context.after}` : '';
 
-      return [{
-        id: this._generateChunkId('function', node.id?.name || 'anonymous', startLine),
-        type: 'function',
-        name: node.id?.name || 'anonymous',
-        text: contextBeforeText + (jsDoc ? jsDoc + '\n' : '') + funcText + contextAfterText,
-        context,
-        metadata: baseMetadata
-      }];
+      return [
+        {
+          id: this._generateChunkId('function', node.id?.name || 'anonymous', startLine),
+          type: 'function',
+          name: node.id?.name || 'anonymous',
+          text: contextBeforeText + (jsDoc ? jsDoc + '\n' : '') + funcText + contextAfterText,
+          context,
+          metadata: baseMetadata,
+        },
+      ];
     }
 
     // Large function: Create parent-child structure
@@ -456,22 +461,27 @@ export class CodeChunker {
     // CRITICAL FIX: Include overlap context in the text for embeddings
     const contextBeforeText = context.before ? `// Context before:\n${context.before}\n` : '';
     const contextAfterText = context.after ? `\n// Context after:\n${context.after}` : '';
-    const fullTextWithContext = contextBeforeText + (jsDoc ? jsDoc + '\n' : '') + funcText + contextAfterText;
+    const fullTextWithContext =
+      contextBeforeText + (jsDoc ? jsDoc + '\n' : '') + funcText + contextAfterText;
 
     // 1. Create parent chunk with full function context
-    const parentChunkId = this._generateChunkId('function', `${node.id?.name || 'anonymous'}_parent`, startLine);
+    const parentChunkId = this._generateChunkId(
+      'function',
+      `${node.id?.name || 'anonymous'}_parent`,
+      startLine
+    );
     chunks.push({
       id: parentChunkId,
       type: 'parent',
       name: node.id?.name || 'anonymous',
-      text: fullTextWithContext,  // Include overlap context in embeddings
+      text: fullTextWithContext, // Include overlap context in embeddings
       context,
       metadata: {
         ...baseMetadata,
         parentChunkId: null, // Parent chunks have no parent
         childCount: 0, // Will be updated when children are created
-        isLargeFunction: true
-      }
+        isLargeFunction: true,
+      },
     });
 
     // 2. Create child chunks for different sections of the function
@@ -488,27 +498,40 @@ export class CodeChunker {
 
       // Calculate context for child chunk (smaller overlap for children)
       const childOverlap = Math.max(1, Math.ceil((childEndLine - childStartLine + 1) * 0.1));
-      const childContext = this._extractContextWithOverlap(lines, childStartLine, childEndLine, childOverlap);
+      const childContext = this._extractContextWithOverlap(
+        lines,
+        childStartLine,
+        childEndLine,
+        childOverlap
+      );
 
       // CRITICAL FIX: Include child context in the text for embeddings
       // Use smaller context for children to avoid excessive duplication
-      const childContextBeforeText = childContext.before ? `// Context before:\n${childContext.before}\n` : '';
-      const childContextAfterText = childContext.after ? `\n// Context after:\n${childContext.after}` : '';
+      const childContextBeforeText = childContext.before
+        ? `// Context before:\n${childContext.before}\n`
+        : '';
+      const childContextAfterText = childContext.after
+        ? `\n// Context after:\n${childContext.after}`
+        : '';
       const childTextWithContext = childContextBeforeText + childText + childContextAfterText;
 
       chunks.push({
-        id: this._generateChunkId('function', `${node.id?.name || 'anonymous'}_child${Math.floor(childStart / childSize)}`, childStartLine),
+        id: this._generateChunkId(
+          'function',
+          `${node.id?.name || 'anonymous'}_child${Math.floor(childStart / childSize)}`,
+          childStartLine
+        ),
         type: 'child',
         name: `${node.id?.name || 'anonymous'} [${childStart + 1}-${childEnd}]`,
-        text: childTextWithContext,  // Include overlap context in embeddings
+        text: childTextWithContext, // Include overlap context in embeddings
         context: childContext,
         metadata: {
           ...baseMetadata,
           startLine: childStartLine,
           endLine: childEndLine,
           parentChunkId,
-          isChildChunk: true
-        }
+          isChildChunk: true,
+        },
       });
 
       childStart = childEnd;
@@ -532,16 +555,11 @@ export class CodeChunker {
         if (node.id) {
           classes.push({ name: node.id.name, node });
         }
-      }
+      },
     });
 
     for (const cls of classes) {
-      chunks.push(...this._createClassChunks(
-        cls.node,
-        sourceCode,
-        lines,
-        filePath
-      ));
+      chunks.push(...this._createClassChunks(cls.node, sourceCode, lines, filePath));
     }
 
     return chunks;
@@ -563,9 +581,10 @@ export class CodeChunker {
       ObjectExpression(node) {
         // Check if this object has method definitions
         const methodProperties = node.properties.filter(
-          prop => prop.type === 'Property' &&
-                  prop.kind === 'init' &&
-                  prop.value.type === 'FunctionExpression'
+          prop =>
+            prop.type === 'Property' &&
+            prop.kind === 'init' &&
+            prop.value.type === 'FunctionExpression'
         );
 
         if (methodProperties.length > 0) {
@@ -574,9 +593,8 @@ export class CodeChunker {
 
           for (const prop of methodProperties) {
             if (prop.key && (prop.key.type === 'Identifier' || prop.key.type === 'Literal')) {
-              const methodName = prop.key.type === 'Identifier'
-                ? prop.key.name
-                : String(prop.key.value);
+              const methodName =
+                prop.key.type === 'Identifier' ? prop.key.name : String(prop.key.value);
 
               methods.push({
                 name: objName ? `${objName}.${methodName}` : methodName,
@@ -585,12 +603,12 @@ export class CodeChunker {
                 objectName: objName,
                 propertyName: methodName,
                 async: prop.value.async,
-                generator: prop.value.generator
+                generator: prop.value.generator,
               });
             }
           }
         }
-      }
+      },
     });
 
     for (const method of methods) {
@@ -665,8 +683,8 @@ export class CodeChunker {
           exported: this._isExported(node, sourceCode),
           methods,
           superClass: node.superClass?.name || null,
-          exports
-        }
+          exports,
+        },
       });
 
       return chunks;
@@ -689,8 +707,8 @@ export class CodeChunker {
         endLine: node.loc.start.line + 1,
         exported: this._isExported(node, sourceCode),
         superClass: node.superClass?.name || null,
-        isLargeClass: true
-      }
+        isLargeClass: true,
+      },
     });
 
     // Create chunks for each method
@@ -714,7 +732,11 @@ export class CodeChunker {
       const calls = this._extractCalls(method.value, node.id.name);
 
       chunks.push({
-        id: this._generateChunkId('method', `${node.id.name}.${method.key?.name || 'anonymous'}`, methodStart),
+        id: this._generateChunkId(
+          'method',
+          `${node.id.name}.${method.key?.name || 'anonymous'}`,
+          methodStart
+        ),
         type: 'method',
         name: `${node.id.name}.${method.key?.name || 'anonymous'}`,
         className: node.id.name,
@@ -731,8 +753,8 @@ export class CodeChunker {
           params: this._extractParams(method.value),
           calls,
           hasOverlap: overlapLines > 0,
-          overlapLines
-        }
+          overlapLines,
+        },
       });
     }
 
@@ -777,7 +799,8 @@ export class CodeChunker {
         if (currentStart !== null) {
           // Create chunk for uncovered range
           const text = lines.slice(currentStart - 1, i - 1).join('\n');
-          if (text.trim().length > 10) { // Minimum meaningful content
+          if (text.trim().length > 10) {
+            // Minimum meaningful content
             chunks.push({
               id: this._generateChunkId('code', 'other', currentStart),
               type: 'code',
@@ -788,8 +811,8 @@ export class CodeChunker {
                 file: filePath,
                 startLine: currentStart,
                 endLine: i - 1,
-                exported: false
-              }
+                exported: false,
+              },
             });
           }
           currentStart = null;
@@ -812,7 +835,7 @@ export class CodeChunker {
 
     return {
       before: beforeLines.join('\n').trim(),
-      after: afterLines.join('\n').trim()
+      after: afterLines.join('\n').trim(),
     };
   }
 
@@ -840,7 +863,7 @@ export class CodeChunker {
 
     return {
       before: beforeLines.join('\n').trim(),
-      after: afterLines.join('\n').trim()
+      after: afterLines.join('\n').trim(),
     };
   }
 
@@ -900,18 +923,15 @@ export class CodeChunker {
             if (object.type === 'Identifier') {
               // obj.method() -> try to qualify as obj.method
               qualifiedName = `${object.name}.${methodName}`;
-            } else if (object.type === 'MemberExpression' && object.property.type === 'Identifier') {
+            } else if (
+              object.type === 'MemberExpression' &&
+              object.property.type === 'Identifier'
+            ) {
               // obj.foo.method() -> try to qualify as obj.foo.method
               qualifiedName = `${object.property.name}.${methodName}`;
             } else if (object.type === 'ThisExpression' && enclosingClassName) {
               // this.method() inside a class -> qualify as ClassName.method
               qualifiedName = `${enclosingClassName}.${methodName}`;
-            } else if (object.type === 'MemberExpression' &&
-                       object.object.type === 'ThisExpression' &&
-                       object.property.type === 'Identifier' &&
-                       enclosingClassName) {
-              // this.prop.method() -> ClassName.prop.method
-              qualifiedName = `${enclosingClassName}.${object.property.name}.${methodName}`;
             }
 
             // Add both qualified and short name for maximum recall
@@ -921,7 +941,7 @@ export class CodeChunker {
             calls.add(methodName);
           }
         }
-      }
+      },
     });
 
     return Array.from(calls).slice(0, 15); // Increased limit for qualified names
@@ -943,7 +963,7 @@ export class CodeChunker {
             throws.push(self._getNodeName(throwNode.argument.callee));
           }
         }
-      }
+      },
     });
 
     return throws;
@@ -961,7 +981,7 @@ export class CodeChunker {
         name: m.key?.name || 'anonymous',
         kind: m.kind,
         static: m.static || false,
-        async: m.value?.async || false
+        async: m.value?.async || false,
       }));
   }
 
@@ -1015,7 +1035,8 @@ export class CodeChunker {
       const lastJsDoc = jsDocMatch[jsDocMatch.length - 1];
       // Find where this JSDoc ends in the search window
       const lastJsDocEndIndex = searchWindow.lastIndexOf(lastJsDoc);
-      const jsDocEndPosition = node.start - searchWindow.length + lastJsDocEndIndex + lastJsDoc.length;
+      const jsDocEndPosition =
+        node.start - searchWindow.length + lastJsDocEndIndex + lastJsDoc.length;
 
       // Only accept if JSDoc ends within 100 characters of the node start
       // This prevents picking up comments from far away
@@ -1056,8 +1077,8 @@ export class CodeChunker {
    */
   _sanitizeFilePath(filePath) {
     return filePath
-      .replace(/[^a-zA-Z0-9_/-]/g, '_')  // Replace problematic chars except / and -
-      .replace(/\//g, '_');                // Normalize path separators
+      .replace(/[^a-zA-Z0-9_/-]/g, '_') // Replace problematic chars except / and -
+      .replace(/\//g, '_'); // Normalize path separators
   }
 
   /**
@@ -1074,8 +1095,8 @@ export class CodeChunker {
 
     // Update file path in metadata
     for (const chunk of chunks) {
-      chunk.metadata.file = relativePath;  // Keep original path for metadata
-      chunk.id = `${sanitizedPath}_${chunk.id}`;  // Use sanitized path for ID
+      chunk.metadata.file = relativePath; // Keep original path for metadata
+      chunk.id = `${sanitizedPath}_${chunk.id}`; // Use sanitized path for ID
     }
 
     return chunks;

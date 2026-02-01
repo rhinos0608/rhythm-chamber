@@ -21,7 +21,7 @@ vi.mock('../../js/storage/indexeddb.js', () => ({
     transaction: vi.fn(() => Promise.resolve()),
     atomicUpdate: vi.fn(() => Promise.resolve({ id: 'all', data: [] })),
     closeDatabase: vi.fn(),
-    isUsingFallback: vi.fn(() => false)
+    isUsingFallback: vi.fn(() => false),
   },
   STORES: {
     STREAMS: 'streams',
@@ -34,29 +34,29 @@ vi.mock('../../js/storage/indexeddb.js', () => ({
     TOKENS: 'tokens',
     MIGRATION: 'migration',
     TRANSACTION_JOURNAL: 'TRANSACTION_JOURNAL',
-    TRANSACTION_COMPENSATION: 'TRANSACTION_COMPENSATION'
-  }
+    TRANSACTION_COMPENSATION: 'TRANSACTION_COMPENSATION',
+  },
 }));
 
 vi.mock('../../js/storage/transaction/index.js', () => ({
   StorageTransaction: {
-    transaction: vi.fn()
-  }
+    transaction: vi.fn(),
+  },
 }));
 
 vi.mock('../../js/storage/migration.js', () => ({
   StorageMigration: {
     migrateFromLocalStorage: vi.fn(() => Promise.resolve()),
     rollbackMigration: vi.fn(() => Promise.resolve()),
-    getMigrationState: vi.fn(() => ({}))
-  }
+    getMigrationState: vi.fn(() => ({})),
+  },
 }));
 
 vi.mock('../../js/storage/write-ahead-log/index.js', () => ({
   WriteAheadLog: {
-    init: vi.fn(() => Promise.resolve())
+    init: vi.fn(() => Promise.resolve()),
   },
-  WalPriority: {}
+  WalPriority: {},
 }));
 
 vi.mock('../../js/storage/archive-service.js', () => ({
@@ -64,15 +64,15 @@ vi.mock('../../js/storage/archive-service.js', () => ({
     archiveOldStreams: vi.fn(() => Promise.resolve({ archived: 0, kept: 0, savedBytes: 0 })),
     restoreFromArchive: vi.fn(() => Promise.resolve({ restored: 0, remaining: 0 })),
     getArchiveStats: vi.fn(() => Promise.resolve({ totalArchived: 0 })),
-    clearArchive: vi.fn(() => Promise.resolve({ deleted: 0 }))
-  }
+    clearArchive: vi.fn(() => Promise.resolve({ deleted: 0 })),
+  },
 }));
 
 vi.mock('../../js/storage/quota-manager.js', () => ({
   QuotaManager: {
     init: vi.fn(() => Promise.resolve()),
-    on: vi.fn()
-  }
+    on: vi.fn(),
+  },
 }));
 
 vi.mock('../../js/storage/profiles.js', () => ({
@@ -85,8 +85,8 @@ vi.mock('../../js/storage/profiles.js', () => ({
     getActiveProfileId: vi.fn(() => Promise.resolve(null)),
     setActiveProfile: vi.fn(() => Promise.resolve()),
     getProfileCount: vi.fn(() => Promise.resolve(0)),
-    clearAllProfiles: vi.fn(() => Promise.resolve())
-  }
+    clearAllProfiles: vi.fn(() => Promise.resolve()),
+  },
 }));
 
 vi.mock('../../js/storage/config-api.js', () => ({
@@ -96,14 +96,14 @@ vi.mock('../../js/storage/config-api.js', () => ({
     removeConfig: vi.fn(),
     getToken: vi.fn(() => 'token'),
     setToken: vi.fn(),
-    removeToken: vi.fn()
-  }
+    removeToken: vi.fn(),
+  },
 }));
 
 vi.mock('../../js/storage/sync-strategy.js', () => ({
   SyncManager: {
-    getStrategy: vi.fn(() => null)
-  }
+    getStrategy: vi.fn(() => null),
+  },
 }));
 
 vi.mock('../../js/storage/auto-repair.js', () => ({
@@ -115,26 +115,26 @@ vi.mock('../../js/storage/auto-repair.js', () => ({
       this.clearRepairLog = vi.fn();
       this._logRepair = vi.fn();
     }
-  }
+  },
 }));
 
 vi.mock('../../js/security/crypto.js', () => ({
   Crypto: {
-    isSecureContext: vi.fn(() => true)
-  }
+    isSecureContext: vi.fn(() => true),
+  },
 }));
 
 vi.mock('../../js/services/event-bus.js', () => ({
   EventBus: {
     emit: vi.fn(() => Promise.resolve()),
-    registerSchemas: vi.fn(() => Promise.resolve())
-  }
+    registerSchemas: vi.fn(() => Promise.resolve()),
+  },
 }));
 
 vi.mock('../../js/module-registry.js', () => ({
   ModuleRegistry: {
-    getModule: vi.fn(() => Promise.resolve(null))
-  }
+    getModule: vi.fn(() => Promise.resolve(null)),
+  },
 }));
 
 // Now import Storage after all mocks are set up
@@ -252,7 +252,7 @@ describe('Storage Facade - Simple Characterization Tests', () => {
     it('should get streams', async () => {
       IndexedDBCore.get.mockResolvedValueOnce({
         id: 'all',
-        data: [{ id: '1' }]
+        data: [{ id: '1' }],
       });
 
       const result = await Storage.getStreams();
@@ -274,7 +274,7 @@ describe('Storage Facade - Simple Characterization Tests', () => {
         'streams',
         expect.objectContaining({
           id: 'all',
-          data: streams
+          data: streams,
         })
       );
     });

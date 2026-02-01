@@ -15,24 +15,88 @@ import { readFileSync } from 'fs';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Import tools
-import { schema as get_module_info_schema, handler as get_module_info_handler } from './src/tools/module-info.js';
-import { schema as find_dependencies_schema, handler as find_dependencies_handler } from './src/tools/dependencies.js';
-import { schema as search_architecture_schema, handler as search_architecture_handler } from './src/tools/architecture.js';
-import { schema as validate_hnw_compliance_schema, handler as validate_hnw_compliance_handler } from './src/tools/validation.js';
-import { schema as find_all_usages_schema, handler as find_all_usages_handler } from './src/tools/find-usages.js';
-import { schema as get_compilation_errors_schema, handler as get_compilation_errors_handler } from './src/tools/compilation-errors.js';
-import { schema as get_symbol_graph_schema, handler as get_symbol_graph_handler } from './src/tools/symbol-graph.js';
-import { schema as analyze_architecture_schema, handler as analyze_architecture_handler } from './src/tools/architecture-analysis.js';
-import { schema as trace_execution_flow_schema, handler as trace_execution_flow_handler } from './src/tools/execution-flow.js';
-import { schema as suggest_refactoring_schema, handler as suggest_refactoring_handler } from './src/tools/refactoring-suggestions.js';
+import {
+  schema as get_module_info_schema,
+  handler as get_module_info_handler,
+} from './src/tools/module-info.js';
+import {
+  schema as find_dependencies_schema,
+  handler as find_dependencies_handler,
+} from './src/tools/dependencies.js';
+import {
+  schema as search_architecture_schema,
+  handler as search_architecture_handler,
+} from './src/tools/architecture.js';
+import {
+  schema as validate_hnw_compliance_schema,
+  handler as validate_hnw_compliance_handler,
+} from './src/tools/validation.js';
+import {
+  schema as find_all_usages_schema,
+  handler as find_all_usages_handler,
+} from './src/tools/find-usages.js';
+import {
+  schema as get_compilation_errors_schema,
+  handler as get_compilation_errors_handler,
+} from './src/tools/compilation-errors.js';
+import {
+  schema as get_symbol_graph_schema,
+  handler as get_symbol_graph_handler,
+} from './src/tools/symbol-graph.js';
+import {
+  schema as analyze_architecture_schema,
+  handler as analyze_architecture_handler,
+} from './src/tools/architecture-analysis.js';
+import {
+  schema as trace_execution_flow_schema,
+  handler as trace_execution_flow_handler,
+} from './src/tools/execution-flow.js';
+import {
+  schema as suggest_refactoring_schema,
+  handler as suggest_refactoring_handler,
+} from './src/tools/refactoring-suggestions.js';
 
 // Semantic search tools
-import { schema as semantic_search_schema, handler as semantic_search_handler } from './src/tools/semantic-search.js';
-import { schema as deep_code_search_schema, handler as deep_code_search_handler } from './src/tools/deep-code-search.js';
-import { schema as get_chunk_details_schema, handler as get_chunk_details_handler } from './src/tools/get-chunk-details.js';
-import { schema as list_indexed_files_schema, handler as list_indexed_files_handler } from './src/tools/list-indexed-files.js';
-import { schema as watcher_control_schema, handler as watcher_control_handler } from './src/tools/watcher-control.js';
-import { schema as indexing_control_schema, handler as indexing_control_handler } from './src/tools/indexing-control.js';
+import {
+  schema as semantic_search_schema,
+  handler as semantic_search_handler,
+} from './src/tools/semantic-search.js';
+import {
+  schema as deep_code_search_schema,
+  handler as deep_code_search_handler,
+} from './src/tools/deep-code-search.js';
+import {
+  schema as get_chunk_details_schema,
+  handler as get_chunk_details_handler,
+} from './src/tools/get-chunk-details.js';
+import {
+  schema as list_indexed_files_schema,
+  handler as list_indexed_files_handler,
+} from './src/tools/list-indexed-files.js';
+import {
+  schema as watcher_control_schema,
+  handler as watcher_control_handler,
+} from './src/tools/watcher-control.js';
+import {
+  schema as indexing_control_schema,
+  handler as indexing_control_handler,
+} from './src/tools/indexing-control.js';
+
+// Multi-model comparison tools
+import {
+  schema as run_multi_models_schema,
+  handler as run_multi_models_handler,
+} from './src/tools/run-models.js';
+import {
+  schema as multi_model_compare_schema,
+  handler as multi_model_compare_handler,
+} from './src/tools/multi-model-compare.js';
+
+// Model configuration tool
+import {
+  schema as model_config_schema,
+  handler as model_config_handler,
+} from './src/tools/model-config.js';
 
 // Semantic indexer
 import { CodeIndexer } from './src/semantic/indexer.js';
@@ -56,15 +120,17 @@ class RhythmChamberMCPServer {
 
     this.projectRoot = process.env.RC_PROJECT_ROOT || join(__dirname, '..');
     this.cacheDir = process.env.RC_MCP_CACHE_DIR || join(this.projectRoot, '.mcp-cache');
-    this.enableSemantic = process.env.RC_SEMANTIC_SEARCH !== 'false';  // Enabled by default
-    this._indexingInProgress = false;  // Track indexing state
-    this._indexingError = null;  // Track any indexing errors
-    this._indexingPromise = null;  // Track current indexing operation for graceful shutdown
+    this.enableSemantic = process.env.RC_SEMANTIC_SEARCH !== 'false'; // Enabled by default
+    this._indexingInProgress = false; // Track indexing state
+    this._indexingError = null; // Track any indexing errors
+    this._indexingPromise = null; // Track current indexing operation for graceful shutdown
 
-    console.error(`[Rhythm Chamber MCP] Initializing...`);
+    console.error('[Rhythm Chamber MCP] Initializing...');
     console.error(`[Rhythm Chamber MCP] Project root: ${this.projectRoot}`);
     console.error(`[Rhythm Chamber MCP] Cache dir: ${this.cacheDir}`);
-    console.error(`[Rhythm Chamber MCP] Semantic search: ${this.enableSemantic ? 'enabled' : 'disabled'}`);
+    console.error(
+      `[Rhythm Chamber MCP] Semantic search: ${this.enableSemantic ? 'enabled' : 'disabled'}`
+    );
   }
 
   /**
@@ -93,18 +159,21 @@ class RhythmChamberMCPServer {
           get_chunk_details_schema,
           list_indexed_files_schema,
           watcher_control_schema,
-          indexing_control_schema
+          indexing_control_schema,
+          model_config_schema,
+          run_multi_models_schema,
+          multi_model_compare_schema
         );
       }
 
       return { tools };
     });
 
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    this.server.setRequestHandler(CallToolRequestSchema, async request => {
       const { name, arguments: args } = request.params;
 
       console.error(`[Rhythm Chamber MCP] Tool called: ${name}`);
-      console.error(`[Rhythm Chamber MCP] Arguments:`, JSON.stringify(args, null, 2));
+      console.error('[Rhythm Chamber MCP] Arguments:', JSON.stringify(args, null, 2));
 
       try {
         switch (name) {
@@ -140,22 +209,61 @@ class RhythmChamberMCPServer {
 
           // Semantic search tools
           case 'semantic_search':
-            return await semantic_search_handler(args, this.projectRoot, this.semanticIndexer, this);
+            return await semantic_search_handler(
+              args,
+              this.projectRoot,
+              this.semanticIndexer,
+              this
+            );
 
           case 'deep_code_search':
-            return await deep_code_search_handler(args, this.projectRoot, this.semanticIndexer, this);
+            return await deep_code_search_handler(
+              args,
+              this.projectRoot,
+              this.semanticIndexer,
+              this
+            );
 
           case 'get_chunk_details':
-            return await get_chunk_details_handler(args, this.projectRoot, this.semanticIndexer, this);
+            return await get_chunk_details_handler(
+              args,
+              this.projectRoot,
+              this.semanticIndexer,
+              this
+            );
 
           case 'list_indexed_files':
-            return await list_indexed_files_handler(args, this.projectRoot, this.semanticIndexer, this);
+            return await list_indexed_files_handler(
+              args,
+              this.projectRoot,
+              this.semanticIndexer,
+              this
+            );
 
           case 'watcher_control':
-            return await watcher_control_handler(args, this.projectRoot, this.semanticIndexer, this);
+            return await watcher_control_handler(
+              args,
+              this.projectRoot,
+              this.semanticIndexer,
+              this
+            );
 
           case 'indexing_control':
-            return await indexing_control_handler(args, this.projectRoot, this.semanticIndexer, this);
+            return await indexing_control_handler(
+              args,
+              this.projectRoot,
+              this.semanticIndexer,
+              this
+            );
+
+          case 'model_config':
+            return await model_config_handler(args, this.projectRoot);
+
+          case 'run_multi_models':
+            return await run_multi_models_handler(args, this.projectRoot);
+
+          case 'multi_model_compare':
+            return await multi_model_compare_handler(args, this.projectRoot);
 
           default:
             throw new Error(`Unknown tool: ${name}`);
@@ -187,21 +295,21 @@ class RhythmChamberMCPServer {
    * Start the server
    */
   async start() {
-    console.error(`[Rhythm Chamber MCP] Initializing semantic indexer...`);
+    console.error('[Rhythm Chamber MCP] Initializing semantic indexer...');
 
     // Initialize semantic indexer FIRST if enabled (before setting up tool handlers)
     if (this.enableSemantic) {
       await this.initializeSemanticIndexer();
     }
 
-    console.error(`[Rhythm Chamber MCP] Setting up tool handlers...`);
+    console.error('[Rhythm Chamber MCP] Setting up tool handlers...');
     this.setupToolHandlers();
 
     const transport = new StdioServerTransport();
-    console.error(`[Rhythm Chamber MCP] Connecting to transport...`);
+    console.error('[Rhythm Chamber MCP] Connecting to transport...');
 
     await this.server.connect(transport);
-    console.error(`[Rhythm Chamber MCP] Server running and listening for requests`);
+    console.error('[Rhythm Chamber MCP] Server running and listening for requests');
 
     // Auto-start file watcher if enabled via environment variable
     if (process.env.RC_ENABLE_WATCHER === 'true' && this.semanticIndexer) {
@@ -209,13 +317,13 @@ class RhythmChamberMCPServer {
         const watcherConfig = {
           debounceDelay: parseInt(process.env.RC_WATCHER_DEBOUNCE || '300', 10),
           coalesceWindow: parseInt(process.env.RC_WATCHER_COALESCE || '1000', 10),
-          maxQueueSize: parseInt(process.env.RC_WATCHER_MAX_QUEUE || '1000', 10)
+          maxQueueSize: parseInt(process.env.RC_WATCHER_MAX_QUEUE || '1000', 10),
         };
 
         await this.semanticIndexer.startWatcher(watcherConfig);
-        console.error(`[MCP] File watcher initialized`);
+        console.error('[MCP] File watcher initialized');
       } catch (error) {
-        console.error(`[MCP] Failed to initialize watcher:`, error.message);
+        console.error('[MCP] Failed to initialize watcher:', error.message);
       }
     }
   }
@@ -224,16 +332,12 @@ class RhythmChamberMCPServer {
    * Initialize semantic search indexer
    */
   async initializeSemanticIndexer() {
-    console.error(`[Rhythm Chamber MCP] Initializing semantic search indexer...`);
+    console.error('[Rhythm Chamber MCP] Initializing semantic search indexer...');
 
     try {
       this.semanticIndexer = new CodeIndexer(this.projectRoot, {
         cacheDir: this.cacheDir,
-        patterns: [
-          'js/**/*.js',
-          'mcp-server/src/**/*.js',
-          'tests/**/*.js'
-        ],
+        patterns: ['js/**/*.js', 'mcp-server/src/**/*.js', 'tests/**/*.js', 'docs/**/*.md', '*.md'],
         ignore: [
           '**/node_modules/**',
           '**/dist/**',
@@ -241,8 +345,8 @@ class RhythmChamberMCPServer {
           '**/.mcp-cache/**',
           '**/*.test.js',
           '**/*.spec.js',
-          '**/coverage/**'
-        ]
+          '**/coverage/**',
+        ],
       });
 
       await this.semanticIndexer.initialize();
@@ -252,13 +356,12 @@ class RhythmChamberMCPServer {
 
       // Perform incremental indexing in background (doesn't block server start)
       this.runIndexing().catch(error => {
-        console.error(`[Rhythm Chamber MCP] Indexing error:`, error);
+        console.error('[Rhythm Chamber MCP] Indexing error:', error);
       });
 
-      console.error(`[Rhythm Chamber MCP] Semantic indexer initialized`);
-
+      console.error('[Rhythm Chamber MCP] Semantic indexer initialized');
     } catch (error) {
-      console.error(`[Rhythm Chamber MCP] Failed to initialize semantic indexer:`, error.message);
+      console.error('[Rhythm Chamber MCP] Failed to initialize semantic indexer:', error.message);
       this.semanticIndexer = null;
       this.enableSemantic = false;
     }
@@ -274,21 +377,21 @@ class RhythmChamberMCPServer {
     this._indexingInProgress = true;
     this._indexingError = null;
 
-    console.error(`[Rhythm Chamber MCP] Starting background indexing...`);
+    console.error('[Rhythm Chamber MCP] Starting background indexing...');
 
     // Store promise so shutdown can wait for it
     this._indexingPromise = (async () => {
       try {
         const stats = await this.semanticIndexer.indexAll({ force: false });
 
-        console.error(`[Rhythm Chamber MCP] Indexing complete:`, {
+        console.error('[Rhythm Chamber MCP] Indexing complete:', {
           files: stats.filesIndexed,
           chunks: stats.chunksIndexed,
           time: `${(stats.indexTime / 1000).toFixed(2)}s`,
-          source: stats.embeddingSource
+          source: stats.embeddingSource,
         });
       } catch (error) {
-        console.error(`[Rhythm Chamber MCP] Indexing error:`, error);
+        console.error('[Rhythm Chamber MCP] Indexing error:', error);
         this._indexingError = error.message || String(error);
         this.semanticIndexer._indexingError = error;
       } finally {
@@ -312,10 +415,15 @@ class RhythmChamberMCPServer {
       return { status: 'disabled' };
     }
 
+    const isIndexing = Boolean(
+      this._indexingInProgress || this.semanticIndexer._indexingInProgress
+    );
+    const error = this._indexingError || this.semanticIndexer._indexingError;
+
     return {
-      status: this._indexingInProgress ? 'indexing' : 'ready',
-      error: this._indexingError,
-      stats: this.semanticIndexer.getStats()
+      status: isIndexing ? 'indexing' : 'ready',
+      error,
+      stats: this.semanticIndexer.getStats(),
     };
   }
 }
@@ -343,14 +451,17 @@ async function main() {
  * Set up signal handlers for graceful shutdown
  */
 function setupShutdownHandlers(mcpServer) {
-  const shutdown = async (signal) => {
+  const shutdown = async signal => {
     console.error(`[Rhythm Chamber MCP] Received ${signal}, shutting down gracefully...`);
 
     // CRITICAL: Wait for any in-progress indexing to complete before saving cache
     // But add a timeout to avoid waiting forever for large codebases
     if (mcpServer._indexingPromise) {
       console.error('[Rhythm Chamber MCP] Waiting for indexing to complete (max 10s)...');
-      console.error('[Rhythm Chamber MCP] DEBUG: _indexingPromise exists:', !!mcpServer._indexingPromise);
+      console.error(
+        '[Rhythm Chamber MCP] DEBUG: _indexingPromise exists:',
+        !!mcpServer._indexingPromise
+      );
       try {
         // Wait with timeout - if indexing takes too long, save what we have
         const result = await Promise.race([
@@ -360,7 +471,7 @@ function setupShutdownHandlers(mcpServer) {
               console.error('[Rhythm Chamber MCP] DEBUG: Timeout callback triggered');
               reject(new Error('Indexing timeout'));
             }, 10000)
-          )
+          ),
         ]);
         console.error('[Rhythm Chamber MCP] Indexing complete');
       } catch (error) {
@@ -411,7 +522,7 @@ function setupShutdownHandlers(mcpServer) {
 // Handle errors - try to save cache before exiting
 let mcpServerInstance = null;
 
-process.on('uncaughtException', async (error) => {
+process.on('uncaughtException', async error => {
   console.error('[Rhythm Chamber MCP] Uncaught exception:', error);
 
   // Wait for indexing to complete
@@ -466,7 +577,7 @@ process.on('unhandledRejection', async (reason, promise) => {
 });
 
 // Start server
-main().catch(async (error) => {
+main().catch(async error => {
   console.error('[Rhythm Chamber MCP] Fatal error:', error);
 
   // Wait for indexing to complete

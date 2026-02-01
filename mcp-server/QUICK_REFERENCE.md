@@ -22,16 +22,16 @@ cd /Users/rhinesharar/rhythm-chamber/mcp-server
 ## 🧪 Test Queries
 
 1. "session creation management" → 78% similarity
-2. "spotify oauth authentication" → 76% similarity  
+2. "spotify oauth authentication" → 76% similarity
 3. "error handling retry" → 70-78% similarity range
 4. "vector database cosine similarity" → 75-78% similarity range
 
 ## 🛠️ Configuration
 
 ```javascript
-DEFAULT_MODEL = 'text-embedding-nomic-embed-text-v1.5'  // LM Studio
-FALLBACK_MODEL = 'Xenova/gte-base'                       // Transformers.js
-DEFAULT_DIM = 768                                        // ⭐ Key: Both use 768-dim!
+DEFAULT_MODEL = 'text-embedding-nomic-embed-text-v1.5'; // LM Studio
+FALLBACK_MODEL = 'Xenova/gte-base'; // Transformers.js
+DEFAULT_DIM = 768; // ⭐ Key: Both use 768-dim!
 ```
 
 ## 🔧 Common Commands
@@ -63,16 +63,19 @@ rm -rf .mcp-cache/semantic-embeddings.json
 ## 🎯 When to Use What
 
 **Development (fast iteration):**
+
 - Use: Xenova/all-MiniLM-L6-v2 (384-dim)
 - Why: 3x faster indexing
 - Trade-off: Lower quality
 
 **Production (current setup):**
+
 - Use: Xenova/gte-base (768-dim)
 - Why: Best quality + reliability
 - Status: ✅ ACTIVE
 
 **GPU Accelerated (future):**
+
 - Use: LM Studio + Nomic-embed (768-dim)
 - When: LM Studio batch API stabilizes (v0.5.0+)
 

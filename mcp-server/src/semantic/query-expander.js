@@ -14,11 +14,53 @@
  * Common stop words to filter out
  */
 const STOP_WORDS = new Set([
-  'the', 'a', 'an', 'and', 'or', 'but', 'for', 'nor', 'so', 'yet',
-  'at', 'by', 'from', 'in', 'into', 'of', 'on', 'to', 'with',
-  'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
-  'do', 'does', 'did', 'will', 'would', 'should', 'could', 'may', 'might',
-  'can', 'shall', 'must', 'this', 'that', 'these', 'those', 'it', 'its'
+  'the',
+  'a',
+  'an',
+  'and',
+  'or',
+  'but',
+  'for',
+  'nor',
+  'so',
+  'yet',
+  'at',
+  'by',
+  'from',
+  'in',
+  'into',
+  'of',
+  'on',
+  'to',
+  'with',
+  'is',
+  'are',
+  'was',
+  'were',
+  'be',
+  'been',
+  'being',
+  'have',
+  'has',
+  'had',
+  'do',
+  'does',
+  'did',
+  'will',
+  'would',
+  'should',
+  'could',
+  'may',
+  'might',
+  'can',
+  'shall',
+  'must',
+  'this',
+  'that',
+  'these',
+  'those',
+  'it',
+  'its',
 ]);
 
 /**
@@ -43,65 +85,64 @@ export class QueryExpander {
 
     // Domain-specific synonym mappings for code search
     this.synonyms = {
-      'auth': ['authentication', 'authenticate', 'authorize', 'authorization'],
-      'session': ['sessions', 'sessionstate'],
-      'message': ['messages', 'msg', 'chatmessage'],
-      'user': ['users', 'userdata', 'userinfo', 'account'],
-      'config': ['configuration', 'settings', 'options', 'cfg'],
-      'token': ['tokens', 'jwt', 'accesstoken'],
-      'error': ['errors', 'exception', 'err'],
-      'data': ['datum', 'info'],
-      'create': ['make', 'build', 'construct', 'new'],
-      'get': ['fetch', 'retrieve', 'load', 'read'],
-      'set': ['update', 'change', 'modify', 'store'],
-      'delete': ['remove', 'destroy', 'clear'],
+      auth: ['authentication', 'authenticate', 'authorize', 'authorization'],
+      session: ['sessions', 'sessionstate'],
+      message: ['messages', 'msg', 'chatmessage'],
+      user: ['users', 'userdata', 'userinfo', 'account'],
+      config: ['configuration', 'settings', 'options', 'cfg'],
+      token: ['tokens', 'jwt', 'accesstoken'],
+      error: ['errors', 'exception', 'err'],
+      data: ['datum', 'info'],
+      create: ['make', 'build', 'construct', 'new'],
+      get: ['fetch', 'retrieve', 'load', 'read'],
+      delete: ['remove', 'destroy', 'clear'],
       // Additional domain-specific terms
-      'stream': ['streams', 'streaming'],
-      'chunk': ['chunks', 'segment'],
-      'vector': ['vectors', 'embedding'],
-      'embed': ['embeddings', 'embedded', 'embedding'],
-      'search': ['find', 'query', 'lookup'],
-      'index': ['indexes', 'indices', 'indexed'],
-      'storage': ['store', 'database', 'db'],
-      'cache': ['caching', 'cached'],
-      'provider': ['providers', 'service'],
-      'controller': ['controllers', 'handler'],
-      'service': ['services', 'business'],
-      'utility': ['utilities', 'utils', 'helper'],
-      'function': ['functions', 'func', 'fn', 'method'],
-      'class': ['classes', 'type'],
-      'variable': ['variables', 'var', 'let', 'const'],
-      'module': ['modules', 'file'],
-      'import': ['imports', 'require', 'include'],
-      'export': ['exports', 'expose'],
-      'async': ['promise', 'await', 'future'],
-      'event': ['events', 'emitter', 'listener', 'handler'],
-      'listener': ['listeners', 'handler', 'callback'],
-      'callback': ['callbacks', 'handler', 'cb'],
-      'request': ['requests', 'req', 'query'],
-      'response': ['responses', 'res', 'result'],
-      'client': ['clients', 'customer', 'frontend'],
-      'server': ['backend', 'api', 'endpoint'],
-      'api': ['interface', 'endpoint', 'rest'],
-      'http': ['request', 'response', 'fetch'],
-      'file': ['files', 'document', 'path'],
-      'path': ['paths', 'route', 'url'],
-      'route': ['routes', 'router', 'routing'],
-      'url': ['urls', 'uri', 'link', 'href'],
-      'json': ['data', 'object', 'parse'],
-      'string': ['strings', 'text', 'str'],
-      'number': ['numbers', 'int', 'float', 'numeric'],
-      'boolean': ['bool', 'true', 'false'],
-      'array': ['arrays', 'list', 'collection'],
-      'object': ['objects', 'dict', 'hash', 'map'],
-      'map': ['maps', 'dictionary', 'hash'],
-      'set': ['sets', 'collection'],
-      'list': ['lists', 'array', 'collection'],
-      'queue': ['queues', 'fifo'],
-      'stack': ['stacks', 'lifo'],
-      'tree': ['trees', 'hierarchy', 'node'],
-      'graph': ['graphs', 'network', 'node', 'edge'],
-      'node': ['nodes', 'vertex', 'element'],
+      stream: ['streams', 'streaming'],
+      chunk: ['chunks', 'segment'],
+      vector: ['vectors', 'embedding'],
+      embed: ['embeddings', 'embedded', 'embedding'],
+      search: ['find', 'query', 'lookup'],
+      index: ['indexes', 'indices', 'indexed'],
+      storage: ['store', 'database', 'db'],
+      cache: ['caching', 'cached'],
+      provider: ['providers', 'service'],
+      controller: ['controllers', 'handler'],
+      service: ['services', 'business'],
+      utility: ['utilities', 'utils', 'helper'],
+      function: ['functions', 'func', 'fn', 'method'],
+      class: ['classes', 'type'],
+      variable: ['variables', 'var', 'let', 'const'],
+      module: ['modules', 'file'],
+      import: ['imports', 'require', 'include'],
+      export: ['exports', 'expose'],
+      async: ['promise', 'await', 'future'],
+      event: ['events', 'emitter', 'listener', 'handler'],
+      listener: ['listeners', 'handler', 'callback'],
+      callback: ['callbacks', 'handler', 'cb'],
+      request: ['requests', 'req', 'query'],
+      response: ['responses', 'res', 'result'],
+      client: ['clients', 'customer', 'frontend'],
+      server: ['backend', 'api', 'endpoint'],
+      api: ['interface', 'endpoint', 'rest'],
+      http: ['request', 'response', 'fetch'],
+      file: ['files', 'document', 'path'],
+      path: ['paths', 'route', 'url'],
+      route: ['routes', 'router', 'routing'],
+      url: ['urls', 'uri', 'link', 'href'],
+      json: ['data', 'object', 'parse'],
+      string: ['strings', 'text', 'str'],
+      number: ['numbers', 'int', 'float', 'numeric'],
+      boolean: ['bool', 'true', 'false'],
+      array: ['arrays', 'list', 'collection'],
+      object: ['objects', 'dict', 'hash', 'map'],
+      map: ['maps', 'dictionary', 'hash'],
+      set: ['sets', 'collection'],
+      list: ['lists', 'array', 'collection'],
+      queue: ['queues', 'fifo'],
+      stack: ['stacks', 'lifo'],
+      tree: ['trees', 'hierarchy', 'node'],
+      graph: ['graphs', 'network', 'node', 'edge'],
+      node: ['nodes', 'vertex', 'element'],
     };
   }
 
@@ -141,7 +182,8 @@ export class QueryExpander {
     // Strategy 2: Add related symbols from dependency graph
     if (this.dependencyGraph) {
       const relatedSymbols = this._findRelatedSymbols(terms);
-      for (const symbol of relatedSymbols.slice(0, 5)) { // Limit to top 5
+      for (const symbol of relatedSymbols.slice(0, 5)) {
+        // Limit to top 5
         expansions.add(`${query} ${symbol}`);
       }
     }
@@ -199,12 +241,12 @@ export class QueryExpander {
       // Handles edge cases like: OAuth2Token, XML2JSON, Base64Encoder
       const words = id
         // Insert space before capital letters (including consecutive caps)
-        .replace(/([a-z])([A-Z])/g, '$1 $2')  // camelCase: camelCase -> camel Case
-        .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')  // PascalCase: HTTPRequest -> HTTP Request
+        .replace(/([a-z])([A-Z])/g, '$1 $2') // camelCase: camelCase -> camel Case
+        .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2') // PascalCase: HTTPRequest -> HTTP Request
         // Insert space between letters and numbers
-        .replace(/([a-zA-Z])(\d)/g, '$1 $2')  // get2 -> get 2
-        .replace(/(\d)([a-zA-Z])/g, '$1 $2')  // 2get -> 2 get
-        .replace(/[_-]+/g, ' ')  // snake_case or kebab-case
+        .replace(/([a-zA-Z])(\d)/g, '$1 $2') // get2 -> get 2
+        .replace(/(\d)([a-zA-Z])/g, '$1 $2') // 2get -> 2 get
+        .replace(/[_-]+/g, ' ') // snake_case or kebab-case
         .toLowerCase()
         .split(/\s+/);
 
@@ -307,9 +349,9 @@ export class QueryExpander {
 
     const related = new Set();
     // Performance limits to prevent O(n³) traversal
-    const MAX_SYMBOLS_TO_SCAN = 500;  // Limit symbols scanned per term
-    const MAX_USAGES_PER_SYMBOL = 10;   // Limit usage lookups
-    const MAX_RELATED_RESULTS = 50;     // Limit total results
+    const MAX_SYMBOLS_TO_SCAN = 500; // Limit symbols scanned per term
+    const MAX_USAGES_PER_SYMBOL = 10; // Limit usage lookups
+    const MAX_RELATED_RESULTS = 50; // Limit total results
 
     for (const term of terms) {
       let symbolsScanned = 0;

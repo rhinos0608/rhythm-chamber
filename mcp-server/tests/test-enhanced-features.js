@@ -193,7 +193,7 @@ async function runTests() {
       const tsImports = parser.extractImports(tsAST);
       const tsExports = parser.extractExports(tsAST);
 
-      console.log(`   Parsed TypeScript file successfully`);
+      console.log('   Parsed TypeScript file successfully');
       console.log(`   Imports: ${tsImports.length}`);
       console.log(`   Named exports: ${tsExports.named.length}`);
 
@@ -222,7 +222,7 @@ async function runTests() {
       const tsxImports = parser.extractImports(tsxAST);
       const tsxExports = parser.extractExports(tsxAST);
 
-      console.log(`   Parsed TSX file successfully`);
+      console.log('   Parsed TSX file successfully');
       console.log(`   Imports: ${tsxImports.length}`);
       console.log(`   Named exports: ${tsxExports.named.length}`);
 
@@ -285,7 +285,6 @@ async function runTests() {
       console.log('  ✅ FileScanner TypeScript detection\n');
       process.exit(0);
     }
-
   } catch (error) {
     console.error('\n❌ Test suite error:', error.message);
     console.error(error.stack);

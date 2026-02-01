@@ -41,4 +41,3 @@ The file watcher in `mcp-server/src/semantic/file-watcher.js` already has excell
 - Automatic maintenance after code changes
 - Corruption detection and auto-recovery
 - Still efficient (no full reindex on every change)
-

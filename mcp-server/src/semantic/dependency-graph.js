@@ -15,7 +15,7 @@ const SYMBOL_TYPES = {
   VARIABLE: 'variable',
   PARAMETER: 'parameter',
   IMPORT: 'import',
-  EXPORT: 'export'
+  EXPORT: 'export',
 };
 
 /**
@@ -55,7 +55,7 @@ export class DependencyGraph {
     // Initialize chunk symbols
     this.chunkSymbols.set(id, {
       defines: new Set(),
-      uses: new Set()
+      uses: new Set(),
     });
 
     // Add to file chunks
@@ -84,7 +84,7 @@ export class DependencyGraph {
         this._addImports(chunk);
         break;
       case 'export':
-        this._addExport(chunk);
+        this._addExportChunk(chunk);
         break;
       default:
         this._addGenericChunk(chunk);
@@ -115,7 +115,7 @@ export class DependencyGraph {
     this._addDefinition(name, id, {
       type: SYMBOL_TYPES.FUNCTION,
       file: metadata.file,
-      exported: metadata.exported
+      exported: metadata.exported,
     });
 
     // Track as export if exported
@@ -131,7 +131,7 @@ export class DependencyGraph {
           this._addDefinition(paramName, id, {
             type: SYMBOL_TYPES.PARAMETER,
             file: metadata.file,
-            parentId: name
+            parentId: name,
           });
         }
       }
@@ -147,7 +147,7 @@ export class DependencyGraph {
     this._addDefinition(name, id, {
       type: SYMBOL_TYPES.CLASS,
       file: metadata.file,
-      exported: metadata.exported
+      exported: metadata.exported,
     });
 
     if (metadata.exported) {
@@ -162,7 +162,7 @@ export class DependencyGraph {
           type: SYMBOL_TYPES.METHOD,
           file: metadata.file,
           className: name,
-          kind: method.kind
+          kind: method.kind,
         });
       }
     }
@@ -178,7 +178,7 @@ export class DependencyGraph {
       type: SYMBOL_TYPES.METHOD,
       file: metadata.file,
       className,
-      kind: metadata.kind
+      kind: metadata.kind,
     });
   }
 
@@ -195,7 +195,7 @@ export class DependencyGraph {
       this._addDefinition(varName, id, {
         type: SYMBOL_TYPES.VARIABLE,
         file: metadata.file,
-        kind: metadata.kind
+        kind: metadata.kind,
       });
     }
   }
@@ -217,7 +217,9 @@ export class DependencyGraph {
     while ((match = importRegex.exec(text)) !== null) {
       iterations++;
       if (iterations > maxIterations) {
-        console.warn(`[DependencyGraph] Too many import matches (${iterations}), stopping to prevent ReDoS`);
+        console.warn(
+          `[DependencyGraph] Too many import matches (${iterations}), stopping to prevent ReDoS`
+        );
         break;
       }
 
@@ -231,12 +233,15 @@ export class DependencyGraph {
       this.imports.get(metadata.file).push({
         source,
         imports,
-        chunkId: id
+        chunkId: id,
       });
 
       // Track named imports as usages
       if (imports && imports.startsWith('{')) {
-        const names = imports.slice(1, -1).split(',').map(s => s.trim().split(' ')[0]);
+        const names = imports
+          .slice(1, -1)
+          .split(',')
+          .map(s => s.trim().split(' ')[0]);
         for (const name of names) {
           this._addImport(metadata.file, name, source, id);
         }
@@ -249,7 +254,7 @@ export class DependencyGraph {
   /**
    * Add an export to the graph
    */
-  _addExport(chunk) {
+  _addExportChunk(chunk) {
     const { name, metadata, type } = chunk;
 
     if (type === 'export') {
@@ -284,7 +289,9 @@ export class DependencyGraph {
     while ((match = callRegex.exec(text)) !== null) {
       iterations++;
       if (iterations > maxIterations) {
-        console.warn(`[DependencyGraph] Too many call matches (${iterations}), stopping to prevent ReDoS`);
+        console.warn(
+          `[DependencyGraph] Too many call matches (${iterations}), stopping to prevent ReDoS`
+        );
         break;
       }
 
@@ -312,7 +319,7 @@ export class DependencyGraph {
 
     defs.push({
       chunkId,
-      ...info
+      ...info,
     });
 
     // Track in chunk symbols
@@ -342,7 +349,7 @@ export class DependencyGraph {
     if (!existing.some(u => u.chunkId === chunkId)) {
       existing.push({
         chunkId,
-        usageType
+        usageType,
       });
     }
 
@@ -366,7 +373,7 @@ export class DependencyGraph {
     if (!existing.some(e => e.symbol === symbol)) {
       existing.push({
         symbol,
-        chunkId
+        chunkId,
       });
     }
   }
@@ -385,7 +392,7 @@ export class DependencyGraph {
       existing.push({
         symbol,
         source,
-        chunkId
+        chunkId,
       });
     }
   }
@@ -452,7 +459,7 @@ export class DependencyGraph {
           callers.push({
             chunkId: usage.chunkId,
             symbol,
-            usageType: usage.usageType
+            usageType: usage.usageType,
           });
         }
       }
@@ -466,7 +473,7 @@ export class DependencyGraph {
           callees.push({
             chunkId: definition.chunkId,
             symbol,
-            type: definition.type
+            type: definition.type,
           });
         }
       }
@@ -497,7 +504,7 @@ export class DependencyGraph {
       files: this.fileChunks.size,
       chunks: this.chunkSymbols.size,
       exports: this.exports.size,
-      imports: this.imports.size
+      imports: this.imports.size,
     };
   }
 
@@ -513,9 +520,9 @@ export class DependencyGraph {
       imports: Array.from(this.imports.entries()),
       chunkSymbols: Array.from(this.chunkSymbols.entries()).map(([id, syms]) => [
         id,
-        { defines: Array.from(syms.defines), uses: Array.from(syms.uses) }
+        { defines: Array.from(syms.defines), uses: Array.from(syms.uses) },
       ]),
-      fileChunks: Array.from(this.fileChunks.entries())
+      fileChunks: Array.from(this.fileChunks.entries()),
     };
   }
 
@@ -531,13 +538,17 @@ export class DependencyGraph {
     this.usages = new Map(data.usages);
     this.exports = new Map(data.exports);
     this.imports = new Map(data.imports);
-    this.chunkSymbols = new Map(data.chunkSymbols.map(([id, syms]) => [
-      id,
-      { defines: new Set(syms.defines), uses: new Set(syms.uses) }
-    ]));
+    this.chunkSymbols = new Map(
+      data.chunkSymbols.map(([id, syms]) => [
+        id,
+        { defines: new Set(syms.defines), uses: new Set(syms.uses) },
+      ])
+    );
     this.fileChunks = new Map(data.fileChunks);
 
-    console.error(`[DependencyGraph] Imported ${this.chunkSymbols.size} chunks with ${this.definitions.size} symbols`);
+    console.error(
+      `[DependencyGraph] Imported ${this.chunkSymbols.size} chunks with ${this.definitions.size} symbols`
+    );
   }
 
   /**
@@ -545,13 +556,51 @@ export class DependencyGraph {
    */
   _isKeyword(word) {
     const keywords = new Set([
-      'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger',
-      'default', 'delete', 'do', 'else', 'enum', 'export', 'extends',
-      'false', 'finally', 'for', 'function', 'if', 'implements', 'import',
-      'in', 'instanceof', 'interface', 'let', 'new', 'null', 'package',
-      'private', 'protected', 'public', 'return', 'static', 'super',
-      'switch', 'this', 'throw', 'true', 'try', 'typeof', 'var',
-      'void', 'while', 'with', 'yield'
+      'break',
+      'case',
+      'catch',
+      'class',
+      'const',
+      'continue',
+      'debugger',
+      'default',
+      'delete',
+      'do',
+      'else',
+      'enum',
+      'export',
+      'extends',
+      'false',
+      'finally',
+      'for',
+      'function',
+      'if',
+      'implements',
+      'import',
+      'in',
+      'instanceof',
+      'interface',
+      'let',
+      'new',
+      'null',
+      'package',
+      'private',
+      'protected',
+      'public',
+      'return',
+      'static',
+      'super',
+      'switch',
+      'this',
+      'throw',
+      'true',
+      'try',
+      'typeof',
+      'var',
+      'void',
+      'while',
+      'with',
+      'yield',
     ]);
 
     return keywords.has(word);

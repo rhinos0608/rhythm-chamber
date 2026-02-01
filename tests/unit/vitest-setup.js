@@ -55,16 +55,16 @@ console.log('[Vitest Setup] IndexedDB mock initialized');
 
 // Mock navigator.storage for storage quota tests
 if (!globalThis.navigator) {
-    globalThis.navigator = {};
+  globalThis.navigator = {};
 }
 if (!global.navigator) {
-    global.navigator = globalThis.navigator;
+  global.navigator = globalThis.navigator;
 }
 
 if (!globalThis.navigator.storage) {
-    globalThis.navigator.storage = {
-        estimate: async () => ({ usage: 0, quota: 100 * 1024 * 1024 })
-    };
+  globalThis.navigator.storage = {
+    estimate: async () => ({ usage: 0, quota: 100 * 1024 * 1024 }),
+  };
 }
 global.navigator.storage = globalThis.navigator.storage;
 

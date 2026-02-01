@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { TransactionStateManager, NestedTransactionGuard } from '../../../../js/storage/transaction/transaction-state.js';
+import {
+  TransactionStateManager,
+  NestedTransactionGuard,
+} from '../../../../js/storage/transaction/transaction-state.js';
 
 // Mock EventBus to avoid import chain issues
 vi.mock('../../../../js/services/event-bus.js', () => ({
   EventBus: {
-    emit: vi.fn()
-  }
+    emit: vi.fn(),
+  },
 }));
 
 describe('TransactionStateManager', () => {

@@ -39,7 +39,7 @@ async function testTool(toolName, handler, args, testDescription) {
       console.log(preview.substring(0, 1000)); // Show more
 
       if (result.isError) {
-        console.log(`\n❌ Tool returned error`);
+        console.log('\n❌ Tool returned error');
         failed++;
       } else {
         console.log(`\n✅ ${toolName} executed successfully`);
@@ -126,7 +126,7 @@ async function runTests() {
   }
 }
 
-runTests().catch((error) => {
+runTests().catch(error => {
   console.error('\n❌ Test suite error:', error);
   process.exit(1);
 });

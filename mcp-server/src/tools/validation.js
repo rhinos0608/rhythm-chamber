@@ -21,7 +21,8 @@ export const schema = {
     properties: {
       filePath: {
         type: 'string',
-        description: 'Specific file to validate (optional - validates entire codebase if not provided)',
+        description:
+          'Specific file to validate (optional - validates entire codebase if not provided)',
       },
       checkViolations: {
         type: 'boolean',
@@ -99,7 +100,13 @@ export const handler = async (args, projectRoot) => {
 /**
  * Validate HNW compliance across codebase or specific file
  */
-async function validateHNWCompliance(projectRoot, filePath, checkViolations, generateReport, layer) {
+async function validateHNWCompliance(
+  projectRoot,
+  filePath,
+  checkViolations,
+  generateReport,
+  layer
+) {
   const results = {
     summary: {
       totalFiles: 0,
@@ -199,7 +206,6 @@ async function validateHNWCompliance(projectRoot, filePath, checkViolations, gen
 
       results.summary.validatedFiles++;
       totalScore += analysis.compliance.score;
-
     } catch (error) {
       logger.warn(`Failed to validate ${relativePath}:`, error.message);
     }
@@ -292,8 +298,7 @@ function generateRecommendations(results) {
     recommendations.push({
       priority: 'MEDIUM',
       title: `Increase EventBus Usage (${violationPatterns.missingEventBus} opportunities)`,
-      description:
-        'Some modules could benefit from using EventBus instead of direct dependencies.',
+      description: 'Some modules could benefit from using EventBus instead of direct dependencies.',
       actions: [
         'Identify tight coupling between modules',
         'Refactor to use EventBus for cross-module communication',
@@ -377,7 +382,9 @@ function formatComplianceReport(results) {
   if (results.criticalIssues.length > 0) {
     lines.push('## 🚨 Critical Issues');
     lines.push('');
-    lines.push(`Found ${results.criticalIssues.length} critical architecture violations requiring immediate attention:`);
+    lines.push(
+      `Found ${results.criticalIssues.length} critical architecture violations requiring immediate attention:`
+    );
     lines.push('');
 
     for (const issue of results.criticalIssues.slice(0, 20)) {
@@ -412,7 +419,7 @@ function formatComplianceReport(results) {
       lines.push(`- **Violations**: ${analysis.violations.length}`);
 
       if (analysis.violations.length > 0 && analysis.violations.length <= 5) {
-        lines.push(`- **Top Issues**:`);
+        lines.push('- **Top Issues**:');
         for (const violation of analysis.violations.slice(0, 5)) {
           const icon = violation.severity === 'error' ? '❌' : '⚠️';
           lines.push(`  - ${icon} \`${violation.file}\`: ${violation.rule}`);
@@ -466,7 +473,8 @@ function formatComplianceReport(results) {
     results.recommendations.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
 
     for (const rec of results.recommendations) {
-      const priorityIcon = rec.priority === 'CRITICAL' ? '🔴' : rec.priority === 'HIGH' ? '🟠' : '🟡';
+      const priorityIcon =
+        rec.priority === 'CRITICAL' ? '🔴' : rec.priority === 'HIGH' ? '🟠' : '🟡';
       lines.push(`### ${priorityIcon} ${rec.title}`);
       lines.push('');
       lines.push(rec.description);
