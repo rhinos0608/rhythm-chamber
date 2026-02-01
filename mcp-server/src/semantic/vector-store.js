@@ -10,6 +10,7 @@
 
 import { HybridEmbeddings, cosineSimilarity } from './embeddings.js';
 import { passesFilters as sharedPassesFilters } from './filters.js';
+import { SqliteVectorAdapter } from './sqlite-adapter.js';
 
 /**
  * Auto-upgrade threshold
@@ -39,12 +40,26 @@ export class VectorStore {
     this.useSqlite = false;
     this.dbPath = options.dbPath;
     this._upgradeWarned = false; // Track if we've warned about sqlite upgrade
+    this.adapter = null; // SqliteVectorAdapter instance (when useSqlite = true)
+    this._migrationInProgress = false; // Track if migration is in progress
   }
 
   /**
    * Add or update a vector
+   * Routes to Map or SQLite backend based on useSqlite flag
    */
   upsert(chunkId, embedding, metadata = {}) {
+    if (this.useSqlite) {
+      return this._sqliteUpsert(chunkId, embedding, metadata);
+    }
+    return this._mapUpsert(chunkId, embedding, metadata);
+  }
+
+  /**
+   * Add or update a vector (Map backend)
+   * @private
+   */
+  _mapUpsert(chunkId, embedding, metadata = {}) {
     // Validate and convert embedding to Float32Array
     if (!(embedding instanceof Float32Array)) {
       if (Array.isArray(embedding)) {
@@ -90,6 +105,48 @@ export class VectorStore {
   }
 
   /**
+   * Add or update a vector (SQLite backend)
+   * @private
+   */
+  _sqliteUpsert(chunkId, embedding, metadata = {}) {
+    if (!this.adapter) {
+      throw new Error('SQLite adapter not initialized');
+    }
+
+    // Validate and convert embedding to Float32Array
+    if (!(embedding instanceof Float32Array)) {
+      if (Array.isArray(embedding)) {
+        embedding = new Float32Array(embedding);
+      } else if (typeof embedding === 'object' && embedding !== null) {
+        throw new Error(
+          `Invalid embedding type for ${chunkId}: expected Float32Array or Array, got object with numeric keys.`
+        );
+      } else {
+        throw new Error(
+          `Invalid embedding type for ${chunkId}: expected Float32Array or Array, got ${typeof embedding}`
+        );
+      }
+    }
+
+    // Validate embedding dimension
+    if (embedding.length !== this.dimension) {
+      throw new Error(
+        `Embedding dimension mismatch for ${chunkId}: ` +
+          `expected ${this.dimension} dimensions, got ${embedding.length}. ` +
+          'This may indicate a model change or cache corruption.'
+      );
+    }
+
+    this.adapter.upsert(chunkId, embedding, {
+      ...metadata,
+      chunkId,
+      updatedAt: Date.now(),
+    });
+
+    this.chunkCount++; // Note: This is approximate; use getStats() for accurate count
+  }
+
+  /**
    * Batch upsert multiple vectors
    */
   upsertBatch(items) {
@@ -100,8 +157,20 @@ export class VectorStore {
 
   /**
    * Get a vector by ID
+   * Routes to Map or SQLite backend based on useSqlite flag
    */
   get(chunkId) {
+    if (this.useSqlite) {
+      return this._sqliteGet(chunkId);
+    }
+    return this._mapGet(chunkId);
+  }
+
+  /**
+   * Get a vector by ID (Map backend)
+   * @private
+   */
+  _mapGet(chunkId) {
     const vector = this.vectors.get(chunkId);
     const metadata = this.metadata.get(chunkId);
 
@@ -111,16 +180,46 @@ export class VectorStore {
   }
 
   /**
+   * Get a vector by ID (SQLite backend)
+   * @private
+   */
+  _sqliteGet(chunkId) {
+    if (!this.adapter) {
+      throw new Error('SQLite adapter not initialized');
+    }
+    return this.adapter.get(chunkId);
+  }
+
+  /**
    * Check if a chunk exists
    */
   has(chunkId) {
+    if (this.useSqlite) {
+      if (!this.adapter) {
+        return false;
+      }
+      const result = this.adapter.get(chunkId);
+      return result !== null;
+    }
     return this.vectors.has(chunkId);
   }
 
   /**
    * Delete a chunk
+   * Routes to Map or SQLite backend based on useSqlite flag
    */
   delete(chunkId) {
+    if (this.useSqlite) {
+      return this._sqliteDelete(chunkId);
+    }
+    return this._mapDelete(chunkId);
+  }
+
+  /**
+   * Delete a chunk (Map backend)
+   * @private
+   */
+  _mapDelete(chunkId) {
     const deleted = this.vectors.delete(chunkId);
     this.metadata.delete(chunkId);
     const oldCount = this.chunkCount;
@@ -135,6 +234,21 @@ export class VectorStore {
       this._upgradeWarned = false;
     }
 
+    return deleted;
+  }
+
+  /**
+   * Delete a chunk (SQLite backend)
+   * @private
+   */
+  _sqliteDelete(chunkId) {
+    if (!this.adapter) {
+      throw new Error('SQLite adapter not initialized');
+    }
+    const deleted = this.adapter.delete(chunkId);
+    if (deleted) {
+      this.chunkCount = Math.max(0, this.chunkCount - 1);
+    }
     return deleted;
   }
 
@@ -175,8 +289,20 @@ export class VectorStore {
 
   /**
    * Search for similar vectors
+   * Routes to Map or SQLite backend based on useSqlite flag
    */
   search(queryEmbedding, options = {}) {
+    if (this.useSqlite) {
+      return this._sqliteSearch(queryEmbedding, options);
+    }
+    return this._mapSearch(queryEmbedding, options);
+  }
+
+  /**
+   * Search for similar vectors (Map backend)
+   * @private
+   */
+  _mapSearch(queryEmbedding, options = {}) {
     const { limit = 10, threshold = DEFAULT_THRESHOLD, filters = {} } = options;
 
     if (!(queryEmbedding instanceof Float32Array)) {
@@ -219,6 +345,32 @@ export class VectorStore {
 
     // Return top results
     return results.slice(0, limit);
+  }
+
+  /**
+   * Search for similar vectors (SQLite backend)
+   * @private
+   */
+  _sqliteSearch(queryEmbedding, options = {}) {
+    if (!this.adapter) {
+      throw new Error('SQLite adapter not initialized');
+    }
+
+    if (!(queryEmbedding instanceof Float32Array)) {
+      queryEmbedding = new Float32Array(queryEmbedding);
+    }
+
+    // CRITICAL FIX: Validate dimension matches before search
+    if (queryEmbedding.length !== this.dimension) {
+      throw new Error(
+        `Query embedding dimension (${queryEmbedding.length}) does not match ` +
+          `vector store dimension (${this.dimension}). Model may have switched. ` +
+          'Clear cache and reindex if needed.'
+      );
+    }
+
+    // Delegate to adapter's search method
+    return this.adapter.search(queryEmbedding, options);
   }
 
   /**
@@ -371,12 +523,31 @@ export class VectorStore {
    * Get statistics
    */
   getStats() {
-    return {
+    const baseStats = {
       chunkCount: this.chunkCount,
       dimension: this.dimension,
       useSqlite: this.useSqlite,
       memoryBytes: this._estimateMemoryUsage(),
       upgradeThreshold: this.upgradeThreshold,
+    };
+
+    // Add SQLite-specific stats if using sqlite-vec
+    if (this.useSqlite && this.adapter) {
+      const adapterStats = this.adapter.getStats();
+
+      return {
+        ...baseStats,
+        storageType: 'sqlite-vec',
+        dbPath: this.dbPath,
+        dbSizeBytes: adapterStats.dbSizeBytes,
+        adapterReady: this.adapter.isInitialized,
+      };
+    }
+
+    // Map storage stats
+    return {
+      ...baseStats,
+      storageType: 'Map (in-memory)',
     };
   }
 
