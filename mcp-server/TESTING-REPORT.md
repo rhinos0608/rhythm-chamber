@@ -15,6 +15,7 @@ The Rhythm Chamber MCP server has been **successfully tested on the production c
 ## Test Results on Production Codebase
 
 ### Test Environment
+
 - **Project**: Rhythm Chamber
 - **Files**: 406 JavaScript/TypeScript files
 - **Test Date**: 2025-01-30
@@ -23,9 +24,11 @@ The Rhythm Chamber MCP server has been **successfully tested on the production c
 ### Tool-by-Tool Results
 
 #### ✅ Tool 1: get_module_info
+
 **Test**: Analyzed `js/controllers/chat-ui-controller.js`
 
 **Results**:
+
 - ✅ Layer detection: "controllers"
 - ✅ HNW Compliance Score: 90/100
 - ✅ Imports detected: 5 imports
@@ -33,6 +36,7 @@ The Rhythm Chamber MCP server has been **successfully tested on the production c
 - ✅ Compliance issues flagged: EventBus recommendation
 
 **Output Sample**:
+
 ```
 **Layer**: controllers
 **HNW Compliance Score**: 90/100
@@ -51,15 +55,18 @@ The Rhythm Chamber MCP server has been **successfully tested on the production c
 ---
 
 #### ✅ Tool 2: find_dependencies
+
 **Test**: Traced dependencies from `js/main.js` (depth 2)
 
 **Results**:
+
 - ✅ No circular dependencies detected
 - ✅ Modules analyzed: 1 (depth-limited scan)
 - ✅ Dependency tree generated correctly
 - ✅ Layer distribution calculated
 
 **Output Sample**:
+
 ```
 ## ✅ No Circular Dependencies
 
@@ -75,15 +82,18 @@ js/main.js (other)
 ---
 
 #### ✅ Tool 3: search_architecture
+
 **Test**: Searched for "EventBus usage" pattern
 
 **Results**:
+
 - ✅ Files scanned: 406
 - ✅ Matches found: 20 files
 - ✅ Pattern matching working correctly
 - ✅ Layer distribution calculated
 
 **Output Sample**:
+
 ```
 **Search Pattern**: EventBus usage
 **Files Scanned**: 406
@@ -105,15 +115,18 @@ js/main.js (other)
 ---
 
 #### ✅ Tool 4: validate_hnw_compliance
+
 **Test**: Validated `js/controllers` layer
 
 **Results**:
+
 - ✅ Validation executed successfully
 - ✅ Compliance report generated
 - ✅ Architecture violations detected
 - ✅ Recommendations provided
 
 **Output Sample**:
+
 ```
 ## Executive Summary
 **Overall Compliance Score**: [calculated per file]
@@ -131,11 +144,13 @@ Found [count] critical violations...
 ## Bug Fixes Applied During Testing
 
 ### Issue #1: Parse Failures on Production Code
+
 **Problem**: "Cannot read properties of undefined (reading 'toLowerCase')"
 
 **Root Cause**: The `checkPatternMatch()` function in `search_architecture.js` was calling `.toLowerCase()` and `.includes()` on import values without checking if they were strings first.
 
 **Fix Applied**: Added defensive null/undefined checks:
+
 ```javascript
 // Before
 for (const imp of analysis.imports) {
@@ -150,6 +165,7 @@ for (const imp of analysis.imports) {
 ```
 
 **Files Modified**:
+
 - `mcp-server/src/tools/architecture.js` (lines 207-323)
 - `mcp-server/src/analyzers/hnw-analyzer.js` (lines 143-146)
 
@@ -160,19 +176,22 @@ for (const imp of analysis.imports) {
 ## Performance Metrics
 
 ### Server Startup
+
 - **Time**: <500ms
 - **Memory**: ~50MB baseline
 - **Status**: ✅ Ready
 
 ### Tool Execution Time
-| Tool | Files Analyzed | Time | Status |
-|------|---------------|------|--------|
-| get_module_info | 1 file | <50ms | ✅ Fast |
-| find_dependencies | 1 file (depth 2) | <100ms | ✅ Fast |
-| search_architecture | 406 files | <2s | ✅ Acceptable |
-| validate_hnw_compliance | Layer validation | <1s | ✅ Fast |
+
+| Tool                    | Files Analyzed   | Time   | Status        |
+| ----------------------- | ---------------- | ------ | ------------- |
+| get_module_info         | 1 file           | <50ms  | ✅ Fast       |
+| find_dependencies       | 1 file (depth 2) | <100ms | ✅ Fast       |
+| search_architecture     | 406 files        | <2s    | ✅ Acceptable |
+| validate_hnw_compliance | Layer validation | <1s    | ✅ Fast       |
 
 ### Caching Performance
+
 - **Cache Hit Rate**: >80% on repeated operations
 - **Speedup**: 100% (2ms → 0ms) on cached scans
 - **Memory Usage**: <50MB with LRU cache limits
@@ -182,21 +201,26 @@ for (const imp of analysis.imports) {
 ## Security Validation
 
 ### ✅ Path Traversal Protection
+
 **Test Attempted**: Resolving imports with `../../../etc/passwd`
 
 **Result**: ✅ Blocked
+
 ```
 [Rhythm Chamber MCP] WARN: Path traversal attempt blocked: ../../../etc/passwd
 ```
 
 ### ✅ No Code Execution
+
 The MCP server only:
+
 - Reads source code files
 - Parses AST (abstract syntax tree)
 - Analyzes imports/exports
 - Validates architecture rules
 
 **Does NOT**:
+
 - Execute any code
 - Modify any files
 - Make network calls
@@ -207,6 +231,7 @@ The MCP server only:
 ## Code Coverage
 
 ### Files Successfully Analyzed
+
 - **Total Files**: 406
 - **Controllers**: 21 files
 - **Services**: 39 files
@@ -217,6 +242,7 @@ The MCP server only:
 - **Artifacts**: 4 files
 
 ### Languages Supported
+
 - ✅ JavaScript (.js)
 - ✅ JSX (.jsx)
 - ✅ TypeScript (.ts)
@@ -238,9 +264,7 @@ The MCP server uses **Claude Code configuration** (not Claude Desktop).
   "mcpServers": {
     "rhythm-chamber": {
       "command": "node",
-      "args": [
-        "${PROJECT_ROOT}/mcp-server/server.js"
-      ],
+      "args": ["${PROJECT_ROOT}/mcp-server/server.js"],
       "env": {
         "RC_PROJECT_ROOT": "${PROJECT_ROOT}",
         "RC_MCP_CACHE_DIR": "${PROJECT_ROOT}/.mcp-cache",
@@ -252,6 +276,7 @@ The MCP server uses **Claude Code configuration** (not Claude Desktop).
 ```
 
 **Configuration scopes:**
+
 - **Project**: `.mcp.json` (recommended, checked into version control)
 - **User**: `~/.claude.json` (available across all projects)
 - **Local**: `~/.claude.json` (project-specific, private)
@@ -279,6 +304,7 @@ claude mcp list
 ### Test the MCP Server
 
 Once configured, test with questions like:
+
 - "Analyze the chat-ui-controller.js module"
 - "Find all dependencies from main.js"
 - "Search for EventBus usage patterns"
@@ -289,9 +315,11 @@ Once configured, test with questions like:
 ## Example Usage in Claude Code
 
 ### Question 1: Module Analysis
+
 **User**: "Analyze the chat-ui-controller.js for HNW compliance"
 
 **MCP Server Response**:
+
 ```
 # Module Information: js/controllers/chat-ui-controller.js
 
@@ -308,9 +336,11 @@ Once configured, test with questions like:
 ```
 
 ### Question 2: Dependency Discovery
+
 **User**: "What does main.js depend on?"
 
 **MCP Server Response**:
+
 ```
 # Dependency Analysis
 
@@ -328,9 +358,11 @@ js/main.js (other)
 ```
 
 ### Question 3: Architecture Search
+
 **User**: "Find all files using EventBus"
 
 **MCP Server Response**:
+
 ```
 # Architecture Pattern Search
 
@@ -345,9 +377,11 @@ Matches Found: 20 files
 ```
 
 ### Question 4: HNW Validation
-**User": "Check if controllers follow HNW architecture"
+
+\*\*User": "Check if controllers follow HNW architecture"
 
 **MCP Server Response**:
+
 ```
 # HNW Architecture Compliance Report
 
@@ -392,6 +426,7 @@ Matches Found: 20 files
 ## Appendix: Test Output
 
 ### Full Test Run
+
 ```bash
 $ node mcp-server/tests/test-on-real-codebase.js
 

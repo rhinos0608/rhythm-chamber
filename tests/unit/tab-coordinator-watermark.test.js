@@ -9,279 +9,277 @@ import { TabCoordinator } from '../../js/services/tab-coordination/index.js';
 
 // Mock BroadcastChannel for testing
 global.BroadcastChannel = class MockBroadcastChannel {
-    constructor(name) {
-        this.name = name;
-        this.listeners = [];
-    }
+  constructor(name) {
+    this.name = name;
+    this.listeners = [];
+  }
 
-    postMessage(message) {
-        // Simulate immediate delivery to all listeners except sender
-        this.listeners.forEach(listener => {
-            if (listener !== this.currentMessageListener) {
-                try {
-                    listener({ data: message });
-                } catch (error) {
-                    console.error('MockBroadcastChannel error:', error);
-                }
-            }
-        });
-    }
-
-    addEventListener(listener) {
-        this.listeners.push(listener);
-        this.currentMessageListener = listener;
-    }
-
-    removeEventListener(listener) {
-        const index = this.listeners.indexOf(listener);
-        if (index > -1) {
-            this.listeners.splice(index, 1);
+  postMessage(message) {
+    // Simulate immediate delivery to all listeners except sender
+    this.listeners.forEach(listener => {
+      if (listener !== this.currentMessageListener) {
+        try {
+          listener({ data: message });
+        } catch (error) {
+          console.error('MockBroadcastChannel error:', error);
         }
-        if (this.currentMessageListener === listener) {
-            this.currentMessageListener = null;
-        }
-    }
+      }
+    });
+  }
 
-    close() {
-        this.listeners = [];
-        this.currentMessageListener = null;
+  addEventListener(listener) {
+    this.listeners.push(listener);
+    this.currentMessageListener = listener;
+  }
+
+  removeEventListener(listener) {
+    const index = this.listeners.indexOf(listener);
+    if (index > -1) {
+      this.listeners.splice(index, 1);
     }
+    if (this.currentMessageListener === listener) {
+      this.currentMessageListener = null;
+    }
+  }
+
+  close() {
+    this.listeners = [];
+    this.currentMessageListener = null;
+  }
 };
 
 describe('TabCoordinator Watermark Tracking', () => {
-    beforeEach(() => {
-        // Reset state before each test
-        vi.clearAllMocks();
+  beforeEach(() => {
+    // Reset state before each test
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    // Clean up
+    if (TabCoordinator.cleanup) {
+      TabCoordinator.cleanup();
+    }
+  });
+
+  describe('Watermark Tracking', () => {
+    it('should initialize with negative watermark', () => {
+      const watermark = TabCoordinator.getEventWatermark();
+      expect(watermark).toBe(-1);
     });
 
-    afterEach(() => {
-        // Clean up
-        if (TabCoordinator.cleanup) {
-            TabCoordinator.cleanup();
-        }
+    it('should update event watermark', () => {
+      TabCoordinator.updateEventWatermark(10);
+
+      const watermark = TabCoordinator.getEventWatermark();
+      expect(watermark).toBe(10);
     });
 
-    describe('Watermark Tracking', () => {
-        it('should initialize with negative watermark', () => {
-            const watermark = TabCoordinator.getEventWatermark();
-            expect(watermark).toBe(-1);
-        });
+    it('should track multiple watermark updates', () => {
+      TabCoordinator.updateEventWatermark(5);
+      expect(TabCoordinator.getEventWatermark()).toBe(5);
 
-        it('should update event watermark', () => {
-            TabCoordinator.updateEventWatermark(10);
+      TabCoordinator.updateEventWatermark(15);
+      expect(TabCoordinator.getEventWatermark()).toBe(15);
 
-            const watermark = TabCoordinator.getEventWatermark();
-            expect(watermark).toBe(10);
-        });
-
-        it('should track multiple watermark updates', () => {
-            TabCoordinator.updateEventWatermark(5);
-            expect(TabCoordinator.getEventWatermark()).toBe(5);
-
-            TabCoordinator.updateEventWatermark(15);
-            expect(TabCoordinator.getEventWatermark()).toBe(15);
-
-            TabCoordinator.updateEventWatermark(100);
-            expect(TabCoordinator.getEventWatermark()).toBe(100);
-        });
-
-        it('should get known watermarks from other tabs', () => {
-            const watermarks = TabCoordinator.getKnownWatermarks();
-
-            expect(watermarks).toBeInstanceOf(Map);
-        });
+      TabCoordinator.updateEventWatermark(100);
+      expect(TabCoordinator.getEventWatermark()).toBe(100);
     });
 
-    describe('Replay Detection', () => {
-        it('should detect when replay is needed', () => {
-            // Setup: We're secondary and behind
-            const isPrimary = TabCoordinator.isPrimary();
-            if (!isPrimary) {
-                TabCoordinator.updateEventWatermark(5);
+    it('should get known watermarks from other tabs', () => {
+      const watermarks = TabCoordinator.getKnownWatermarks();
 
-                // Simulate receiving watermark from another tab
-                // In real implementation, this would come via BroadcastChannel
+      expect(watermarks).toBeInstanceOf(Map);
+    });
+  });
 
-                const needsReplay = TabCoordinator.needsReplay();
-                expect(typeof needsReplay).toBe('boolean');
-            }
-        });
+  describe('Replay Detection', () => {
+    it('should detect when replay is needed', () => {
+      // Setup: We're secondary and behind
+      const isPrimary = TabCoordinator.isPrimary();
+      if (!isPrimary) {
+        TabCoordinator.updateEventWatermark(5);
 
-        it('should not need replay when up to date', () => {
-            const isPrimary = TabCoordinator.isPrimary();
-            if (!isPrimary) {
-                TabCoordinator.updateEventWatermark(10);
+        // Simulate receiving watermark from another tab
+        // In real implementation, this would come via BroadcastChannel
 
-                const needsReplay = TabCoordinator.needsReplay();
-                expect(needsReplay).toBe(false);
-            }
-        });
+        const needsReplay = TabCoordinator.needsReplay();
+        expect(typeof needsReplay).toBe('boolean');
+      }
     });
 
-    describe('Replay Requests', () => {
-        it('should request event replay', async () => {
-            const isPrimary = TabCoordinator.isPrimary();
-            if (!isPrimary) {
-                await expect(
-                    TabCoordinator.requestEventReplay(5)
-                ).resolves.toBeUndefined();
-            }
-        });
+    it('should not need replay when up to date', () => {
+      const isPrimary = TabCoordinator.isPrimary();
+      if (!isPrimary) {
+        TabCoordinator.updateEventWatermark(10);
 
-        it('should warn primary tab from requesting replay', async () => {
-            const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const needsReplay = TabCoordinator.needsReplay();
+        expect(needsReplay).toBe(false);
+      }
+    });
+  });
 
-            const isPrimary = TabCoordinator.isPrimary();
-            if (isPrimary) {
-                await TabCoordinator.requestEventReplay(5);
-
-                expect(consoleSpy).toHaveBeenCalledWith(
-                    expect.stringContaining('Primary tab should not request replay')
-                );
-            }
-
-            consoleSpy.mockRestore();
-        });
+  describe('Replay Requests', () => {
+    it('should request event replay', async () => {
+      const isPrimary = TabCoordinator.isPrimary();
+      if (!isPrimary) {
+        await expect(TabCoordinator.requestEventReplay(5)).resolves.toBeUndefined();
+      }
     });
 
-    describe('Auto-Replay', () => {
-        it('should auto-replay when needed', async () => {
-            const isPrimary = TabCoordinator.isPrimary();
-            if (!isPrimary) {
-                TabCoordinator.updateEventWatermark(0);
+    it('should warn primary tab from requesting replay', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-                const result = await TabCoordinator.autoReplayIfNeeded();
+      const isPrimary = TabCoordinator.isPrimary();
+      if (isPrimary) {
+        await TabCoordinator.requestEventReplay(5);
 
-                expect(typeof result).toBe('boolean');
-            }
-        });
+        expect(consoleSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Primary tab should not request replay')
+        );
+      }
 
-        it('should not auto-replay when not needed', async () => {
-            const isPrimary = TabCoordinator.isPrimary();
-            if (!isPrimary) {
-                TabCoordinator.updateEventWatermark(100);
+      consoleSpy.mockRestore();
+    });
+  });
 
-                const result = await TabCoordinator.autoReplayIfNeeded();
+  describe('Auto-Replay', () => {
+    it('should auto-replay when needed', async () => {
+      const isPrimary = TabCoordinator.isPrimary();
+      if (!isPrimary) {
+        TabCoordinator.updateEventWatermark(0);
 
-                expect(result).toBe(false);
-            }
-        });
+        const result = await TabCoordinator.autoReplayIfNeeded();
+
+        expect(typeof result).toBe('boolean');
+      }
     });
 
-    describe('Integration with TabCoordination', () => {
-        it('should start watermark broadcast when becoming primary', async () => {
-            const isPrimary = await TabCoordinator.init();
+    it('should not auto-replay when not needed', async () => {
+      const isPrimary = TabCoordinator.isPrimary();
+      if (!isPrimary) {
+        TabCoordinator.updateEventWatermark(100);
 
-            if (isPrimary) {
-                // Watermark broadcast should be started
-                // In real implementation, we'd verify the interval is set
-                expect(TabCoordinator.getEventWatermark()).toBeDefined();
-            }
-        });
+        const result = await TabCoordinator.autoReplayIfNeeded();
 
-        it('should stop watermark broadcast when becoming secondary', async () => {
-            await TabCoordinator.init();
+        expect(result).toBe(false);
+      }
+    });
+  });
 
-            const isPrimary = TabCoordinator.isPrimary();
-            if (isPrimary) {
-                // In real implementation, another tab claiming primary
-                // would trigger transition to secondary
-                expect(TabCoordinator.getEventWatermark()).toBeDefined();
-            }
-        });
+  describe('Integration with TabCoordination', () => {
+    it('should start watermark broadcast when becoming primary', async () => {
+      const isPrimary = await TabCoordinator.init();
+
+      if (isPrimary) {
+        // Watermark broadcast should be started
+        // In real implementation, we'd verify the interval is set
+        expect(TabCoordinator.getEventWatermark()).toBeDefined();
+      }
     });
 
-    describe('Edge Cases', () => {
-        it('should handle watermark updates with same value', () => {
-            TabCoordinator.updateEventWatermark(10);
-            TabCoordinator.updateEventWatermark(10);
-            TabCoordinator.updateEventWatermark(10);
+    it('should stop watermark broadcast when becoming secondary', async () => {
+      await TabCoordinator.init();
 
-            expect(TabCoordinator.getEventWatermark()).toBe(10);
-        });
+      const isPrimary = TabCoordinator.isPrimary();
+      if (isPrimary) {
+        // In real implementation, another tab claiming primary
+        // would trigger transition to secondary
+        expect(TabCoordinator.getEventWatermark()).toBeDefined();
+      }
+    });
+  });
 
-        it('should handle watermark decrements (should not happen in practice)', () => {
-            TabCoordinator.updateEventWatermark(20);
-            TabCoordinator.updateEventWatermark(15);
-            TabCoordinator.updateEventWatermark(10);
+  describe('Edge Cases', () => {
+    it('should handle watermark updates with same value', () => {
+      TabCoordinator.updateEventWatermark(10);
+      TabCoordinator.updateEventWatermark(10);
+      TabCoordinator.updateEventWatermark(10);
 
-            expect(TabCoordinator.getEventWatermark()).toBe(10);
-        });
-
-        it('should handle large watermark values', () => {
-            const largeValue = Number.MAX_SAFE_INTEGER;
-            TabCoordinator.updateEventWatermark(largeValue);
-
-            expect(TabCoordinator.getEventWatermark()).toBe(largeValue);
-        });
-
-        it('should handle zero watermark', () => {
-            TabCoordinator.updateEventWatermark(0);
-
-            expect(TabCoordinator.getEventWatermark()).toBe(0);
-        });
-
-        it('should handle negative watermark values', () => {
-            TabCoordinator.updateEventWatermark(-1);
-            TabCoordinator.updateEventWatermark(-100);
-
-            expect(TabCoordinator.getEventWatermark()).toBe(-100);
-        });
+      expect(TabCoordinator.getEventWatermark()).toBe(10);
     });
 
-    describe('BroadcastChannel Integration', () => {
-        it('should handle EVENT_WATERMARK messages', async () => {
-            const isPrimary = await TabCoordinator.init();
+    it('should handle watermark decrements (should not happen in practice)', () => {
+      TabCoordinator.updateEventWatermark(20);
+      TabCoordinator.updateEventWatermark(15);
+      TabCoordinator.updateEventWatermark(10);
 
-            if (isPrimary) {
-                // Primary broadcasts watermark
-                TabCoordinator.updateEventWatermark(42);
-
-                // Verify watermark was updated
-                expect(TabCoordinator.getEventWatermark()).toBe(42);
-            }
-        });
-
-        it('should handle REPLAY_REQUEST messages', async () => {
-            const isPrimary = await TabCoordinator.init();
-
-            if (isPrimary) {
-                // Primary can receive replay requests via internal BroadcastChannel
-                // Verify that the public API for watermark tracking exists
-                expect(TabCoordinator.updateEventWatermark).toBeDefined();
-                expect(TabCoordinator.getEventWatermark).toBeDefined();
-            }
-        });
-
-        it('should handle REPLAY_RESPONSE messages', async () => {
-            const isPrimary = await TabCoordinator.init();
-
-            if (!isPrimary) {
-                // Secondary can receive replay responses via internal BroadcastChannel
-                // Verify that replay detection API exists
-                expect(TabCoordinator.needsReplay).toBeDefined();
-                expect(TabCoordinator.requestEventReplay).toBeDefined();
-            }
-        });
+      expect(TabCoordinator.getEventWatermark()).toBe(10);
     });
 
-    describe('API Availability', () => {
-        it('should export watermark tracking functions', () => {
-            expect(TabCoordinator.updateEventWatermark).toBeDefined();
-            expect(TabCoordinator.getEventWatermark).toBeDefined();
-            expect(TabCoordinator.getKnownWatermarks).toBeDefined();
-            expect(TabCoordinator.requestEventReplay).toBeDefined();
-            expect(TabCoordinator.needsReplay).toBeDefined();
-            expect(TabCoordinator.autoReplayIfNeeded).toBeDefined();
-        });
+    it('should handle large watermark values', () => {
+      const largeValue = Number.MAX_SAFE_INTEGER;
+      TabCoordinator.updateEventWatermark(largeValue);
 
-        it('should have functions as callable', () => {
-            expect(typeof TabCoordinator.updateEventWatermark).toBe('function');
-            expect(typeof TabCoordinator.getEventWatermark).toBe('function');
-            expect(typeof TabCoordinator.getKnownWatermarks).toBe('function');
-            expect(typeof TabCoordinator.requestEventReplay).toBe('function');
-            expect(typeof TabCoordinator.needsReplay).toBe('function');
-            expect(typeof TabCoordinator.autoReplayIfNeeded).toBe('function');
-        });
+      expect(TabCoordinator.getEventWatermark()).toBe(largeValue);
     });
+
+    it('should handle zero watermark', () => {
+      TabCoordinator.updateEventWatermark(0);
+
+      expect(TabCoordinator.getEventWatermark()).toBe(0);
+    });
+
+    it('should handle negative watermark values', () => {
+      TabCoordinator.updateEventWatermark(-1);
+      TabCoordinator.updateEventWatermark(-100);
+
+      expect(TabCoordinator.getEventWatermark()).toBe(-100);
+    });
+  });
+
+  describe('BroadcastChannel Integration', () => {
+    it('should handle EVENT_WATERMARK messages', async () => {
+      const isPrimary = await TabCoordinator.init();
+
+      if (isPrimary) {
+        // Primary broadcasts watermark
+        TabCoordinator.updateEventWatermark(42);
+
+        // Verify watermark was updated
+        expect(TabCoordinator.getEventWatermark()).toBe(42);
+      }
+    });
+
+    it('should handle REPLAY_REQUEST messages', async () => {
+      const isPrimary = await TabCoordinator.init();
+
+      if (isPrimary) {
+        // Primary can receive replay requests via internal BroadcastChannel
+        // Verify that the public API for watermark tracking exists
+        expect(TabCoordinator.updateEventWatermark).toBeDefined();
+        expect(TabCoordinator.getEventWatermark).toBeDefined();
+      }
+    });
+
+    it('should handle REPLAY_RESPONSE messages', async () => {
+      const isPrimary = await TabCoordinator.init();
+
+      if (!isPrimary) {
+        // Secondary can receive replay responses via internal BroadcastChannel
+        // Verify that replay detection API exists
+        expect(TabCoordinator.needsReplay).toBeDefined();
+        expect(TabCoordinator.requestEventReplay).toBeDefined();
+      }
+    });
+  });
+
+  describe('API Availability', () => {
+    it('should export watermark tracking functions', () => {
+      expect(TabCoordinator.updateEventWatermark).toBeDefined();
+      expect(TabCoordinator.getEventWatermark).toBeDefined();
+      expect(TabCoordinator.getKnownWatermarks).toBeDefined();
+      expect(TabCoordinator.requestEventReplay).toBeDefined();
+      expect(TabCoordinator.needsReplay).toBeDefined();
+      expect(TabCoordinator.autoReplayIfNeeded).toBeDefined();
+    });
+
+    it('should have functions as callable', () => {
+      expect(typeof TabCoordinator.updateEventWatermark).toBe('function');
+      expect(typeof TabCoordinator.getEventWatermark).toBe('function');
+      expect(typeof TabCoordinator.getKnownWatermarks).toBe('function');
+      expect(typeof TabCoordinator.requestEventReplay).toBe('function');
+      expect(typeof TabCoordinator.needsReplay).toBe('function');
+      expect(typeof TabCoordinator.autoReplayIfNeeded).toBe('function');
+    });
+  });
 });

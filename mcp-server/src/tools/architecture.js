@@ -18,19 +18,19 @@ function validateChunkFilePath(filePath, projectRoot) {
   // CRITICAL FIX #1: Prevent path traversal attacks
   // Reject paths with directory traversal sequences
   if (filePath.includes('..') || filePath.includes('\\..') || filePath.includes('./..')) {
-    logger.warn(`[validateChunkFilePath] Rejected path traversal attempt`);
+    logger.warn('[validateChunkFilePath] Rejected path traversal attempt');
     return null;
   }
 
   // Reject absolute paths (should be relative to project root)
   if (filePath.startsWith('/')) {
-    logger.warn(`[validateChunkFilePath] Rejected absolute path`);
+    logger.warn('[validateChunkFilePath] Rejected absolute path');
     return null;
   }
 
   // Reject null bytes (potential security issue)
   if (filePath.includes('\0')) {
-    logger.warn(`[validateChunkFilePath] Rejected path with null byte`);
+    logger.warn('[validateChunkFilePath] Rejected path with null byte');
     return null;
   }
 
@@ -40,7 +40,7 @@ function validateChunkFilePath(filePath, projectRoot) {
 
   // Check if the resolved path escaped the project root
   if (resolvedPath.startsWith('..')) {
-    logger.warn(`[validateChunkFilePath] Rejected path escaping project root`);
+    logger.warn('[validateChunkFilePath] Rejected path escaping project root');
     return null;
   }
 
@@ -52,7 +52,8 @@ let analyzerCache = null;
 
 export const schema = {
   name: 'search_architecture',
-  description: 'Search the codebase based on HNW architecture patterns and constraints. Enhanced with semantic search for conceptual pattern matching.',
+  description:
+    'Search the codebase based on HNW architecture patterns and constraints. Enhanced with semantic search for conceptual pattern matching.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -80,7 +81,8 @@ export const schema = {
       useSemanticSearch: {
         type: 'boolean',
         default: true,
-        description: 'Use semantic search to find conceptual pattern matches (requires semantic indexer)',
+        description:
+          'Use semantic search to find conceptual pattern matches (requires semantic indexer)',
       },
       semanticThreshold: {
         type: 'number',
@@ -99,7 +101,7 @@ export const handler = async (args, projectRoot, indexer, server) => {
     complianceCheck = false,
     maxResults = 50,
     useSemanticSearch = true,
-    semanticThreshold = 0.4
+    semanticThreshold = 0.4,
   } = args;
 
   // Initialize file scanner and analyzer
@@ -138,7 +140,9 @@ export const handler = async (args, projectRoot, indexer, server) => {
 
     // Use semantic search if available and enabled
     if (useSemanticSearch && indexer) {
-      const indexingStatus = server?.getIndexingStatus ? server.getIndexingStatus() : { status: 'unknown' };
+      const indexingStatus = server?.getIndexingStatus
+        ? server.getIndexingStatus()
+        : { status: 'unknown' };
 
       if (indexingStatus.status === 'ready' && indexingStatus.stats?.vectorStore?.chunkCount > 0) {
         logger.info('Using semantic search for pattern matching');
@@ -154,7 +158,14 @@ export const handler = async (args, projectRoot, indexer, server) => {
         );
 
         // Convert semantic results to architecture results
-        semanticResults = processSemanticResults(semanticMatches, layer, complianceCheck, analyzerCache, fileScanner, projectRoot);
+        semanticResults = processSemanticResults(
+          semanticMatches,
+          layer,
+          complianceCheck,
+          analyzerCache,
+          fileScanner,
+          projectRoot
+        );
         logger.info(`Semantic search found ${semanticResults.matches.length} matches`);
       } else {
         logger.info('Semantic search not ready, falling back to pattern matching');
@@ -162,13 +173,7 @@ export const handler = async (args, projectRoot, indexer, server) => {
     }
 
     // Perform traditional pattern-based search
-    results = await searchArchitecture(
-      projectRoot,
-      pattern,
-      layer,
-      complianceCheck,
-      maxResults
-    );
+    results = await searchArchitecture(projectRoot, pattern, layer, complianceCheck, maxResults);
 
     // Merge semantic results if available
     if (semanticResults && semanticResults.matches.length > 0) {
@@ -462,7 +467,7 @@ function formatSearchResults(results, pattern, layer, complianceCheck) {
       lines.push(`- **Match Type**: ${match.pattern.type}`);
 
       if (match.pattern.details.length > 0) {
-        lines.push(`- **Details**:`);
+        lines.push('- **Details**:');
         for (const detail of match.pattern.details) {
           lines.push(`  - ${detail}`);
         }
@@ -489,7 +494,7 @@ function formatSearchResults(results, pattern, layer, complianceCheck) {
   lines.push('## Recommendations');
   lines.push('');
 
-  const criticalViolations = results.matches.filter((m) => m.compliance.score < 50);
+  const criticalViolations = results.matches.filter(m => m.compliance.score < 50);
   if (criticalViolations.length > 0) {
     lines.push(`### Critical Issues Found (${criticalViolations.length} files)`);
     lines.push('');
@@ -556,19 +561,19 @@ function formatSearchResults(results, pattern, layer, complianceCheck) {
  */
 function buildSemanticQuery(pattern, layer) {
   const queries = {
-    'eventbus': 'EventBus cross-module communication event-driven loose coupling',
+    eventbus: 'EventBus cross-module communication event-driven loose coupling',
     'event bus': 'EventBus cross-module communication event-driven loose coupling',
-    'hnw': 'HNW architecture hierarchy network wave compliance violation',
-    'violation': 'architecture violation layer bypass dependency rule',
-    'compliance': 'HNW architecture compliance score validation check',
-    'service': 'service layer dependency injection business logic',
-    'provider': 'provider abstraction data source external api',
-    'dependency': 'import dependency module coupling circular',
-    'circular': 'circular dependency cycle import mutual reference',
-    'controller': 'controller layer UI interaction event handling',
-    'hierarchy': 'hierarchical layer architecture controller service provider',
-    'network': 'network event bus communication loose coupling',
-    'wave': 'wave tab coordination cross-tab primary authority',
+    hnw: 'HNW architecture hierarchy network wave compliance violation',
+    violation: 'architecture violation layer bypass dependency rule',
+    compliance: 'HNW architecture compliance score validation check',
+    service: 'service layer dependency injection business logic',
+    provider: 'provider abstraction data source external api',
+    dependency: 'import dependency module coupling circular',
+    circular: 'circular dependency cycle import mutual reference',
+    controller: 'controller layer UI interaction event handling',
+    hierarchy: 'hierarchical layer architecture controller service provider',
+    network: 'network event bus communication loose coupling',
+    wave: 'wave tab coordination cross-tab primary authority',
   };
 
   // Find matching key or construct query from pattern
@@ -591,7 +596,14 @@ function buildSemanticQuery(pattern, layer) {
 /**
  * Process semantic search results into architecture results format
  */
-function processSemanticResults(semanticMatches, layer, complianceCheck, analyzerCache, fileScanner, projectRoot) {
+function processSemanticResults(
+  semanticMatches,
+  layer,
+  complianceCheck,
+  analyzerCache,
+  fileScanner,
+  projectRoot
+) {
   const results = {
     pattern: 'semantic',
     matches: [],

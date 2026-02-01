@@ -131,7 +131,7 @@ async function runTests() {
     const controllerPath = resolve(testDir, 'controllers/test-controller.js');
     const controllerAnalysis = analyzer.analyzeFile(controllerPath);
 
-    console.log(`   Controller imports:`, controllerAnalysis.imports);
+    console.log('   Controller imports:', controllerAnalysis.imports);
     console.log(`   Controller compliance score: ${controllerAnalysis.compliance.score}/100`);
 
     if (controllerAnalysis.compliance.score >= 80) {
@@ -158,7 +158,7 @@ async function runTests() {
 
     console.log(`   First scan: ${time1}ms (${files1.length} files)`);
     console.log(`   Second scan: ${time2}ms (${files2.length} files)`);
-    console.log(`   Speedup: ${time1 > 0 ? ((time1 - time2) / time1 * 100).toFixed(1) : 0}%`);
+    console.log(`   Speedup: ${time1 > 0 ? (((time1 - time2) / time1) * 100).toFixed(1) : 0}%`);
 
     if (time2 <= time1 && files1.length === files2.length) {
       console.log('✅ Caching working correctly');
@@ -179,7 +179,7 @@ async function runTests() {
     if (existsSync(workersPath)) {
       const workersLayer = mainProjectScanner.getFileLayer(workersPath);
       if (workersLayer === 'workers') {
-        console.log(`✅ Workers layer detected correctly`);
+        console.log('✅ Workers layer detected correctly');
         passed++;
       } else {
         console.log(`❌ Workers layer: got '${workersLayer}', expected 'workers'`);
@@ -211,11 +211,15 @@ async function runTests() {
         console.log('✅ Path traversal attempts blocked');
         passed++;
       } else {
-        console.log('⚠️  No traversal blocking detected (may be OK if paths resolve to project files)');
+        console.log(
+          '⚠️  No traversal blocking detected (may be OK if paths resolve to project files)'
+        );
         passed++; // Don't fail - traversal may be harmless in test context
       }
     } catch (error) {
-      console.log(`ℹ️  Parse error expected for invalid imports: ${error.message.substring(0, 50)}...`);
+      console.log(
+        `ℹ️  Parse error expected for invalid imports: ${error.message.substring(0, 50)}...`
+      );
       passed++;
     }
 
@@ -237,7 +241,6 @@ async function runTests() {
       console.log('  ✅ Path traversal protection active\n');
       process.exit(0);
     }
-
   } catch (error) {
     console.error('\n❌ Test suite error:', error.message);
     console.error(error.stack);

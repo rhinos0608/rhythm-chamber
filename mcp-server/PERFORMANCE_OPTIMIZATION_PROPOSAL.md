@@ -1,6 +1,7 @@
 # MCP Server Performance Optimization Proposal
 
 ## Overview
+
 This document proposes 5 performance optimizations for the Rhythm Chamber MCP server to address critical inefficiencies identified during code review.
 
 ## Proposed Changes
@@ -11,6 +12,7 @@ This document proposes 5 performance optimizations for the Rhythm Chamber MCP se
 **Lines:** 60-62
 
 **Current Code:**
+
 ```javascript
 upsert(chunkId, embedding, metadata = {}) {
   // ... setup code ...
@@ -23,6 +25,7 @@ upsert(chunkId, embedding, metadata = {}) {
 ```
 
 **Proposed Fix:**
+
 ```javascript
 constructor(options = {}) {
   this.vectors = new Map();
@@ -47,6 +50,7 @@ upsert(chunkId, embedding, metadata = {}) {
 ```
 
 **Expected Impact:**
+
 - Eliminates 9,071+ log warnings per startup
 - Reduces log file size
 - Improves startup performance (less I/O)
@@ -59,6 +63,7 @@ upsert(chunkId, embedding, metadata = {}) {
 **Lines:** 24-28 (top-level imports)
 
 **Current Code:**
+
 ```javascript
 import { env, pipeline } from '@xenova/transformers';
 
@@ -68,6 +73,7 @@ env.allowRemoteModels = true;
 ```
 
 **Proposed Fix:**
+
 ```javascript
 // Remove top-level import and configuration
 // Import will happen dynamically when first needed
@@ -127,6 +133,7 @@ async _initTransformers() {
 ```
 
 **Expected Impact:**
+
 - Reduces initial memory footprint by 50-100MB
 - Faster startup for non-semantic tools
 - Transformers.js only loads if semantic search is actually used
@@ -139,6 +146,7 @@ async _initTransformers() {
 **Lines:** 223-224
 
 **Current Code:**
+
 ```javascript
 async initializeSemanticIndexer() {
   // ... initialization code ...
@@ -156,6 +164,7 @@ async initializeSemanticIndexer() {
 ```
 
 **Proposed Fix:**
+
 ```javascript
 async initializeSemanticIndexer() {
   // ... initialization code ...
@@ -178,7 +187,9 @@ async initializeSemanticIndexer() {
 ```
 
 **Safety Consideration:**
+
 - Add ready check in semantic search handlers:
+
 ```javascript
 case 'semantic_search':
   if (this._indexingInProgress || !this.semanticIndexer?.indexed) {
@@ -195,6 +206,7 @@ case 'semantic_search':
 ```
 
 **Expected Impact:**
+
 - Server becomes ready in <1 second instead of 30-60 seconds
 - Non-semantic tools work immediately
 - Better user experience
@@ -210,6 +222,7 @@ Currently two `node server.js` processes are running, consuming ~440MB total. Th
 
 **Proposed Fix:**
 Add process tracking and cleanup:
+
 ```javascript
 // In server.js, add to start() method:
 async start() {
@@ -238,6 +251,7 @@ async start() {
 ```
 
 **Expected Impact:**
+
 - Prevents accidental duplicate instances
 - Saves ~220MB memory
 - Clearer error messaging
@@ -250,6 +264,7 @@ async start() {
 **Lines:** 33-34, 45-63, 77-84
 
 **Current Code:**
+
 ```javascript
 constructor(options = {}) {
   this.vectors = new Map();      // chunkId -> Float32Array
@@ -278,6 +293,7 @@ get(chunkId) {
 ```
 
 **Proposed Fix:**
+
 ```javascript
 constructor(options = {}) {
   this.store = new Map();  // chunkId -> { vector, metadata, updatedAt }
@@ -309,6 +325,7 @@ get(chunkId) {
 ```
 
 **Expected Impact:**
+
 - Single Map lookup vs. two lookups
 - Better memory locality
 - Simpler code
@@ -319,14 +336,17 @@ get(chunkId) {
 ## Risk Assessment
 
 ### Low Risk Changes
+
 1. **Log spam fix** - One-line addition, purely additive
 2. **Multiple instance fix** - New safety check, doesn't affect core logic
 
 ### Medium Risk Changes
+
 3. **Asynchronous cache loading** - Changes startup sequence, requires readiness checks
 4. **Consolidate Maps** - Changes internal data structure, affects all vector operations
 
 ### High Risk Changes
+
 5. **Lazy-load Transformers.js** - Changes import strategy, affects embedding generation path
 
 ---

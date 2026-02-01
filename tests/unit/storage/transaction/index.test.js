@@ -15,8 +15,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // Mock EventBus to avoid import chain issues
 vi.mock('../../../../js/services/event-bus.js', () => ({
   EventBus: {
-    emit: vi.fn()
-  }
+    emit: vi.fn(),
+  },
 }));
 
 import {
@@ -25,7 +25,7 @@ import {
   NestedTransactionGuard,
   CompensationLogger,
   getCompensationLogs,
-  clearFatalState
+  clearFatalState,
 } from '../../../../js/storage/transaction/index.js';
 
 describe('Transaction Composition Root', () => {
@@ -109,8 +109,8 @@ describe('Transaction Composition Root', () => {
           prepare: vi.fn().mockResolvedValue(undefined),
           commit: vi.fn().mockResolvedValue(undefined),
           rollback: vi.fn().mockResolvedValue(undefined),
-          recover: vi.fn().mockResolvedValue(undefined)
-        }
+          recover: vi.fn().mockResolvedValue(undefined),
+        },
       ];
     });
 
@@ -127,7 +127,7 @@ describe('Transaction Composition Root', () => {
     it('should pass TransactionContext to callback', async () => {
       let capturedContext = null;
 
-      const callback = vi.fn().mockImplementation((ctx) => {
+      const callback = vi.fn().mockImplementation(ctx => {
         capturedContext = ctx;
         return Promise.resolve();
       });
@@ -141,7 +141,7 @@ describe('Transaction Composition Root', () => {
     });
 
     it('should call prepare on all resources', async () => {
-      const callback = vi.fn().mockImplementation((ctx) => {
+      const callback = vi.fn().mockImplementation(ctx => {
         ctx.put('test-store', 'key1', 'value1');
         return Promise.resolve();
       });
@@ -152,7 +152,7 @@ describe('Transaction Composition Root', () => {
     });
 
     it('should call commit on all resources when successful', async () => {
-      const callback = vi.fn().mockImplementation((ctx) => {
+      const callback = vi.fn().mockImplementation(ctx => {
         ctx.put('test-store', 'key1', 'value1');
         return Promise.resolve();
       });
@@ -163,7 +163,7 @@ describe('Transaction Composition Root', () => {
     });
 
     it('should call rollback on all resources when callback fails', async () => {
-      const callback = vi.fn().mockImplementation(async (ctx) => {
+      const callback = vi.fn().mockImplementation(async ctx => {
         // Add some operations before failing
         ctx.put('test-store', 'key1', 'value1');
         ctx.put('test-store', 'key2', 'value2');
@@ -176,7 +176,7 @@ describe('Transaction Composition Root', () => {
     });
 
     it('should not call commit when callback fails', async () => {
-      const callback = vi.fn().mockImplementation(async (ctx) => {
+      const callback = vi.fn().mockImplementation(async ctx => {
         // Add operations before failing
         ctx.put('test-store', 'key1', 'value1');
         throw new Error('Test error');
@@ -208,7 +208,7 @@ describe('Transaction Composition Root', () => {
     });
 
     it('should reject nested transactions', async () => {
-      const callback1 = vi.fn().mockImplementation(async (ctx) => {
+      const callback1 = vi.fn().mockImplementation(async ctx => {
         // Try to start nested transaction
         const callback2 = vi.fn().mockResolvedValue(undefined);
         await storageTx.run(callback2, mockResources);
@@ -219,7 +219,8 @@ describe('Transaction Composition Root', () => {
 
     it('should block transactions when in fatal state', async () => {
       // Manually enter fatal state
-      const { TransactionStateManager } = await import('../../../../js/storage/transaction/transaction-state.js');
+      const { TransactionStateManager } =
+        await import('../../../../js/storage/transaction/transaction-state.js');
       TransactionStateManager.enterFatalState('Test fatal state', 'test-tx-id');
 
       const callback = vi.fn().mockResolvedValue(undefined);
@@ -240,8 +241,8 @@ describe('Transaction Composition Root', () => {
           prepare: vi.fn().mockResolvedValue(undefined),
           commit: vi.fn().mockResolvedValue(undefined),
           rollback: vi.fn().mockResolvedValue(undefined),
-          recover: vi.fn().mockResolvedValue(undefined)
-        }
+          recover: vi.fn().mockResolvedValue(undefined),
+        },
       ];
 
       // Reset transaction state before each test
@@ -306,12 +307,14 @@ describe('Transaction Composition Root', () => {
     });
 
     it('should queue put operations', async () => {
-      const mockResources = [{
-        prepare: vi.fn().mockResolvedValue(undefined),
-        commit: vi.fn().mockResolvedValue(undefined),
-        rollback: vi.fn().mockResolvedValue(undefined),
-        recover: vi.fn().mockResolvedValue(undefined)
-      }];
+      const mockResources = [
+        {
+          prepare: vi.fn().mockResolvedValue(undefined),
+          commit: vi.fn().mockResolvedValue(undefined),
+          rollback: vi.fn().mockResolvedValue(undefined),
+          recover: vi.fn().mockResolvedValue(undefined),
+        },
+      ];
 
       const context = await storageTx.begin(mockResources);
 
@@ -327,12 +330,14 @@ describe('Transaction Composition Root', () => {
     });
 
     it('should queue delete operations', async () => {
-      const mockResources = [{
-        prepare: vi.fn().mockResolvedValue(undefined),
-        commit: vi.fn().mockResolvedValue(undefined),
-        rollback: vi.fn().mockResolvedValue(undefined),
-        recover: vi.fn().mockResolvedValue(undefined)
-      }];
+      const mockResources = [
+        {
+          prepare: vi.fn().mockResolvedValue(undefined),
+          commit: vi.fn().mockResolvedValue(undefined),
+          rollback: vi.fn().mockResolvedValue(undefined),
+          recover: vi.fn().mockResolvedValue(undefined),
+        },
+      ];
 
       const context = await storageTx.begin(mockResources);
 
@@ -346,12 +351,14 @@ describe('Transaction Composition Root', () => {
     });
 
     it('should support backend parameter in operations', async () => {
-      const mockResources = [{
-        prepare: vi.fn().mockResolvedValue(undefined),
-        commit: vi.fn().mockResolvedValue(undefined),
-        rollback: vi.fn().mockResolvedValue(undefined),
-        recover: vi.fn().mockResolvedValue(undefined)
-      }];
+      const mockResources = [
+        {
+          prepare: vi.fn().mockResolvedValue(undefined),
+          commit: vi.fn().mockResolvedValue(undefined),
+          rollback: vi.fn().mockResolvedValue(undefined),
+          recover: vi.fn().mockResolvedValue(undefined),
+        },
+      ];
 
       const context = await storageTx.begin(mockResources);
 
@@ -364,12 +371,14 @@ describe('Transaction Composition Root', () => {
     });
 
     it('should throw error when exceeding max operations', async () => {
-      const mockResources = [{
-        prepare: vi.fn().mockResolvedValue(undefined),
-        commit: vi.fn().mockResolvedValue(undefined),
-        rollback: vi.fn().mockResolvedValue(undefined),
-        recover: vi.fn().mockResolvedValue(undefined)
-      }];
+      const mockResources = [
+        {
+          prepare: vi.fn().mockResolvedValue(undefined),
+          commit: vi.fn().mockResolvedValue(undefined),
+          rollback: vi.fn().mockResolvedValue(undefined),
+          recover: vi.fn().mockResolvedValue(undefined),
+        },
+      ];
 
       const context = await storageTx.begin(mockResources);
 
@@ -404,13 +413,15 @@ describe('Transaction Composition Root', () => {
     });
 
     it('should integrate with TransactionStateManager', async () => {
-      const { TransactionStateManager } = await import('../../../../js/storage/transaction/transaction-state.js');
+      const { TransactionStateManager } =
+        await import('../../../../js/storage/transaction/transaction-state.js');
 
       expect(TransactionStateManager.isFatalState()).toBe(false);
     });
 
     it('should integrate with NestedTransactionGuard', async () => {
-      const { NestedTransactionGuard } = await import('../../../../js/storage/transaction/transaction-state.js');
+      const { NestedTransactionGuard } =
+        await import('../../../../js/storage/transaction/transaction-state.js');
 
       expect(NestedTransactionGuard.isInTransaction()).toBe(false);
       expect(NestedTransactionGuard.getTransactionDepth()).toBe(0);

@@ -25,25 +25,25 @@ Actions:
       action: {
         type: 'string',
         enum: ['start', 'force_start', 'stop', 'status', 'clear_cache'],
-        description: 'Action to perform'
+        description: 'Action to perform',
       },
       patterns: {
         type: 'array',
         description: 'Glob patterns for files to index (for start/force_start)',
         items: {
-          type: 'string'
-        }
+          type: 'string',
+        },
       },
       ignore: {
         type: 'array',
         description: 'Additional ignore patterns (for start/force_start)',
         items: {
-          type: 'string'
-        }
-      }
+          type: 'string',
+        },
+      },
     },
-    required: ['action']
-  }
+    required: ['action'],
+  },
 };
 
 /**
@@ -58,10 +58,10 @@ export async function handler(args, projectRoot, semanticIndexer, mcpServer) {
       content: [
         {
           type: 'text',
-          text: 'Error: Semantic search is not enabled. Cannot control indexing.'
-        }
+          text: 'Error: Semantic search is not enabled. Cannot control indexing.',
+        },
       ],
-      isError: true
+      isError: true,
     };
   }
 
@@ -87,10 +87,10 @@ export async function handler(args, projectRoot, semanticIndexer, mcpServer) {
           content: [
             {
               type: 'text',
-              text: `Error: Unknown action '${action}'. Valid actions: start, force_start, stop, status, clear_cache`
-            }
+              text: `Error: Unknown action '${action}'. Valid actions: start, force_start, stop, status, clear_cache`,
+            },
           ],
-          isError: true
+          isError: true,
         };
     }
   } catch (error) {
@@ -99,10 +99,10 @@ export async function handler(args, projectRoot, semanticIndexer, mcpServer) {
       content: [
         {
           type: 'text',
-          text: `Error: ${error.message}`
-        }
+          text: `Error: ${error.message}`,
+        },
       ],
-      isError: true
+      isError: true,
     };
   }
 }
@@ -118,11 +118,12 @@ async function handleStart(indexer, mcpServer, patterns, ignore, force) {
       content: [
         {
           type: 'text',
-          text: 'Indexing is already in progress.\n\n' +
-                'Use the "status" action to check progress or "stop" to cancel the current operation.'
-        }
+          text:
+            'Indexing is already in progress.\n\n' +
+            'Use the "status" action to check progress or "stop" to cancel the current operation.',
+        },
       ],
-      isError: true
+      isError: true,
     };
   }
 
@@ -150,11 +151,11 @@ async function handleStart(indexer, mcpServer, patterns, ignore, force) {
 
   // Don't await - let it run in background
   indexPromise
-    .then((stats) => {
+    .then(stats => {
       console.error('[Indexing Control] Indexing completed:', stats);
       // indexAll() already manages its own state, no need to modify flags here
     })
-    .catch((error) => {
+    .catch(error => {
       console.error('[Indexing Control] Indexing failed:', error);
       // indexAll() already manages its own state and error tracking
     });
@@ -163,16 +164,17 @@ async function handleStart(indexer, mcpServer, patterns, ignore, force) {
     content: [
       {
         type: 'text',
-        text: `# Indexing Started\n\n` +
-              `${force ? '**Force mode enabled** - bypassing all cache\n\n' : ''}` +
-              `Indexing is running in the background.\n\n` +
-              `**Patterns:**\n` +
-              (indexer.patterns || []).map(p => `- ${p}`).join('\n') +
-              `\n\n**Ignore Patterns:**\n` +
-              (indexer.ignore || []).map(p => `- ${p}`).join('\n') +
-              `\n\nUse the "status" action to check progress.`
-      }
-    ]
+        text:
+          '# Indexing Started\n\n' +
+          `${force ? '**Force mode enabled** - bypassing all cache\n\n' : ''}` +
+          'Indexing is running in the background.\n\n' +
+          '**Patterns:**\n' +
+          (indexer.patterns || []).map(p => `- ${p}`).join('\n') +
+          '\n\n**Ignore Patterns:**\n' +
+          (indexer.ignore || []).map(p => `- ${p}`).join('\n') +
+          '\n\nUse the "status" action to check progress.',
+      },
+    ],
   };
 }
 
@@ -187,9 +189,9 @@ async function handleStop(indexer, mcpServer) {
       content: [
         {
           type: 'text',
-          text: 'No indexing operation is currently in progress.'
-        }
-      ]
+          text: 'No indexing operation is currently in progress.',
+        },
+      ],
     };
   }
 
@@ -204,11 +206,12 @@ async function handleStop(indexer, mcpServer) {
     content: [
       {
         type: 'text',
-        text: 'Stop signal sent.\n\n' +
-              'The current indexing operation will complete processing of the current file ' +
-              'and then stop. Use "status" to check the final state.'
-      }
-    ]
+        text:
+          'Stop signal sent.\n\n' +
+          'The current indexing operation will complete processing of the current file ' +
+          'and then stop. Use "status" to check the final state.',
+      },
+    ],
   };
 }
 
@@ -220,10 +223,7 @@ async function handleStatus(indexer, mcpServer) {
   const stats = indexer.stats || {};
   const hasError = indexer._indexingError;
 
-  const lines = [
-    '# Indexing Status',
-    ''
-  ];
+  const lines = ['# Indexing Status', ''];
 
   // State
   lines.push('## State');
@@ -275,19 +275,22 @@ async function handleStatus(indexer, mcpServer) {
       }
     }
     if (stats.cacheFailures > 0) {
-      const failureRate = stats.filesIndexed > 0
-        ? ((stats.cacheFailures / stats.filesIndexed) * 100).toFixed(1)
-        : '0.0';
+      const failureRate =
+        stats.filesIndexed > 0
+          ? ((stats.cacheFailures / stats.filesIndexed) * 100).toFixed(1)
+          : '0.0';
 
       // Only show warning if failures are recent (< 1 hour ago)
       const lastFailureTime = stats.lastCacheFailureTime || 0;
       const failureAge = Date.now() - lastFailureTime;
       const isRecent = failureAge < 3600000; // 1 hour in milliseconds
 
-      lines.push(`- **Cache Failures**: ${stats.cacheFailures}/${stats.filesIndexed} (${failureRate}%)${isRecent ? ' ⚠️' : ''}`);
+      lines.push(
+        `- **Cache Failures**: ${stats.cacheFailures}/${stats.filesIndexed} (${failureRate}%)${isRecent ? ' ⚠️' : ''}`
+      );
 
       if (isRecent) {
-        lines.push(`- **Status**: Cache degradation detected - re-embedding required on restart`);
+        lines.push('- **Status**: Cache degradation detected - re-embedding required on restart');
       } else {
         const minutesAgo = Math.floor(failureAge / 60000);
         lines.push(`- **Last Failure**: ${minutesAgo} minutes ago (resolved)`);
@@ -317,9 +320,13 @@ async function handleStatus(indexer, mcpServer) {
     const mismatch = vectorCount !== expectedCount;
 
     lines.push('## Vector Store');
-    lines.push(`- **Vectors**: ${vectorCount}${expectedCount > 0 ? ` (expected: ${expectedCount})` : ''}${mismatch ? ' ⚠️' : ''}`);
+    lines.push(
+      `- **Vectors**: ${vectorCount}${expectedCount > 0 ? ` (expected: ${expectedCount})` : ''}${mismatch ? ' ⚠️' : ''}`
+    );
     if (mismatch && expectedCount > 0) {
-      lines.push(`- **Status**: MISMATCH - ${expectedCount - vectorCount > 0 ? 'Some embeddings not stored' : 'More vectors than chunks indexed'}`);
+      lines.push(
+        `- **Status**: MISMATCH - ${expectedCount - vectorCount > 0 ? 'Some embeddings not stored' : 'More vectors than chunks indexed'}`
+      );
     }
     lines.push('');
   }
@@ -334,7 +341,9 @@ async function handleStatus(indexer, mcpServer) {
     const symbolCount = definitionCount + usageCount + exportCount + importCount;
 
     lines.push('## Dependency Graph');
-    lines.push(`- **Symbols**: ${symbolCount} (definitions: ${definitionCount}, usages: ${usageCount}, exports: ${exportCount}, imports: ${importCount})`);
+    lines.push(
+      `- **Symbols**: ${symbolCount} (definitions: ${definitionCount}, usages: ${usageCount}, exports: ${exportCount}, imports: ${importCount})`
+    );
     lines.push('');
   }
 
@@ -342,9 +351,9 @@ async function handleStatus(indexer, mcpServer) {
     content: [
       {
         type: 'text',
-        text: lines.join('\n')
-      }
-    ]
+        text: lines.join('\n'),
+      },
+    ],
   };
 }
 
@@ -359,11 +368,12 @@ async function handleClearCache(indexer, mcpServer) {
       content: [
         {
           type: 'text',
-          text: 'Cannot clear cache while indexing is in progress.\n\n' +
-                'Use "stop" first to stop the current indexing operation.'
-        }
+          text:
+            'Cannot clear cache while indexing is in progress.\n\n' +
+            'Use "stop" first to stop the current indexing operation.',
+        },
       ],
-      isError: true
+      isError: true,
     };
   }
 
@@ -399,7 +409,7 @@ async function handleClearCache(indexer, mcpServer) {
     chunksIndexed: 0,
     embeddingSource: 'unknown',
     indexTime: 0,
-    lastIndexed: null
+    lastIndexed: null,
   };
 
   // Clear vector store and dependency graph
@@ -416,14 +426,15 @@ async function handleClearCache(indexer, mcpServer) {
     content: [
       {
         type: 'text',
-        text: '# Cache Cleared\n\n' +
-              'The index cache has been completely cleared.\n\n' +
-              '**Next Steps:**\n' +
-              '- Use "start" to reindex with cache (will rebuild from scratch)\n' +
-              '- Use "force_start" to force a complete fresh index\n\n' +
-              '**Note:** All semantic search features will be unavailable until you reindex.'
-      }
-    ]
+        text:
+          '# Cache Cleared\n\n' +
+          'The index cache has been completely cleared.\n\n' +
+          '**Next Steps:**\n' +
+          '- Use "start" to reindex with cache (will rebuild from scratch)\n' +
+          '- Use "force_start" to force a complete fresh index\n\n' +
+          '**Note:** All semantic search features will be unavailable until you reindex.',
+      },
+    ],
   };
 }
 

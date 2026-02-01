@@ -17,6 +17,7 @@ import { join, relative } from 'path';
 import { existsSync } from 'fs';
 
 import { CodeChunker } from './chunker.js';
+import { MarkdownChunker } from './markdown-chunker.js';
 import { HybridEmbeddings } from './embeddings.js';
 import { VectorStore } from './vector-store.js';
 import { DependencyGraph } from './dependency-graph.js';
@@ -31,7 +32,7 @@ import {
   ADAPTIVE_THRESHOLD,
   CALL_FREQUENCY,
   QUERY_EXPANSION,
-  RRF_CONFIG
+  RRF_CONFIG,
 } from './config.js';
 
 /**
@@ -40,7 +41,14 @@ import {
 const DEFAULT_PATTERNS = [
   'js/**/*.js',
   'mcp-server/**/*.js',
-  'tests/**/*.js'
+  'tests/**/*.js',
+  'workers/**/*.js',
+  'workers/**/*.mjs',
+  'scripts/**/*.js',
+  'scripts/**/*.mjs',
+  'docs/**/*.md',
+  'coverage/**/*.js',
+  'coverage/**/*.html',
 ];
 
 /**
@@ -53,10 +61,9 @@ const DEFAULT_IGNORE = [
   '**/.mcp-cache/**',
   '**/*.test.js',
   '**/*.spec.js',
-  '**/coverage/**',
   '**/vendor/**',
-  '**/vendor/**/*.js',  // Skip large minified vendor files that cause chunker to hang
-  'js/vendor/**'  // More specific pattern for js/vendor directory
+  '**/vendor/**/*.js', // Skip large minified vendor files that cause chunker to hang
+  'js/vendor/**', // More specific pattern for js/vendor directory
 ];
 
 /**
@@ -68,12 +75,13 @@ export class CodeIndexer {
     this.cacheDir = options.cacheDir || join(projectRoot, '.mcp-cache');
 
     // Components
-    this.chunker = new CodeChunker(options.chunker);
+    this.codeChunker = new CodeChunker(options.chunker);
+    this.markdownChunker = new MarkdownChunker(options.markdownChunker);
     this.embeddings = new HybridEmbeddings(options.embeddings);
     // Pass embedding dimension to vector store
     this.vectorStore = new VectorStore({
       ...options.vectorStore,
-      dimension: this.embeddings.getDimension()
+      dimension: this.embeddings.getDimension(),
     });
     this.dependencyGraph = new DependencyGraph();
     this.cache = new EmbeddingCache(this.cacheDir, { enabled: options.cache !== false });
@@ -88,22 +96,22 @@ export class CodeIndexer {
 
     // State
     this.indexed = false;
-    this.watcher = null;  // File watcher instance
-    this._reindexLock = null;  // Concurrency control for reindexFiles()
-    this._indexingInProgress = false;  // Track if indexing is currently running
-    this._indexingError = null;  // Track any indexing errors
-    this._indexingPromise = null;  // Track current indexing operation
+    this.watcher = null; // File watcher instance
+    this._reindexLock = null; // Concurrency control for reindexFiles()
+    this._indexingInProgress = false; // Track if indexing is currently running
+    this._indexingError = null; // Track any indexing errors
+    this._indexingPromise = null; // Track current indexing operation
     this.stats = {
       filesDiscovered: 0,
       filesIndexed: 0,
       filesSkipped: 0,
       filesFromCache: 0,
       chunksIndexed: 0,
-      cacheFailures: 0,  // Track cache storage failures
-      lastCacheFailureTime: null,  // Track when last cache failure occurred
+      cacheFailures: 0, // Track cache storage failures
+      lastCacheFailureTime: null, // Track when last cache failure occurred
       embeddingSource: 'unknown',
       indexTime: 0,
-      lastIndexed: null
+      lastIndexed: null,
     };
   }
 
@@ -121,7 +129,9 @@ export class CodeIndexer {
     // Load cached data if available
     const stats = this.cache.getStats();
     if (stats.fileCount > 0) {
-      console.error(`[Indexer] Found cached data for ${stats.fileCount} files (model: ${stats.modelVersion || 'unknown'})`);
+      console.error(
+        `[Indexer] Found cached data for ${stats.fileCount} files (model: ${stats.modelVersion || 'unknown'})`
+      );
     }
 
     // Check embedding source and detect actual dimension
@@ -183,7 +193,7 @@ export class CodeIndexer {
         cwd: this.projectRoot,
         ignore: this.ignore,
         absolute: true,
-        nodir: true
+        nodir: true,
       });
 
       for (const file of files) {
@@ -240,7 +250,7 @@ export class CodeIndexer {
       lastCacheFailureTime: null,
       embeddingSource: this.embeddings.getModelInfo().source || 'unknown',
       indexTime: 0,
-      lastIndexed: null
+      lastIndexed: null,
     };
 
     // FIX: When force=true, clear vector store and dependency graph to prevent mismatch
@@ -262,9 +272,9 @@ export class CodeIndexer {
         this.stats.filesDiscovered = files.length;
 
         // Check cache validity
-        const validFiles = force ? new Map() : await this.cache.checkFilesValid(
-          files.map(f => relative(this.projectRoot, f))
-        );
+        const validFiles = force
+          ? new Map()
+          : await this.cache.checkFilesValid(files.map(f => relative(this.projectRoot, f)));
 
         // Separate files to index vs cached
         const toIndex = [];
@@ -309,9 +319,14 @@ export class CodeIndexer {
 
             // THEN report progress
             indexedCount++;
-            if (indexedCount - lastProgressLog >= progressInterval || indexedCount === totalToIndex) {
+            if (
+              indexedCount - lastProgressLog >= progressInterval ||
+              indexedCount === totalToIndex
+            ) {
               const progress = ((indexedCount / totalToIndex) * 100).toFixed(1);
-              console.error(`[Indexer] Progress: ${indexedCount}/${totalToIndex} files (${progress}%)`);
+              console.error(
+                `[Indexer] Progress: ${indexedCount}/${totalToIndex} files (${progress}%)`
+              );
               lastProgressLog = indexedCount;
 
               // FIX: Periodic cache save every 10 files to prevent data loss on interruption
@@ -320,7 +335,7 @@ export class CodeIndexer {
                   await this._saveCache();
                   console.error(`[Indexer] Checkpoint: Saved cache at ${indexedCount} files`);
                 } catch (cacheError) {
-                  console.error(`[Indexer] Checkpoint save failed:`, cacheError.message);
+                  console.error('[Indexer] Checkpoint save failed:', cacheError.message);
                   // Non-critical - continue indexing
                 }
               }
@@ -382,8 +397,11 @@ export class CodeIndexer {
       // Read source
       const source = await readFile(filePath, 'utf-8');
 
-      // Chunk the source
-      const chunks = this.chunker.chunkSourceFile(source, relPath);
+      // Route to appropriate chunker based on file extension
+      const isMarkdown = this.markdownChunker.isSupported(relPath);
+      const chunks = isMarkdown
+        ? this.markdownChunker.chunkSourceFile(source, relPath)
+        : this.codeChunker.chunkSourceFile(source, relPath);
 
       if (chunks.length === 0) {
         console.error(`[Indexer] No chunks generated for ${relPath}`);
@@ -393,7 +411,9 @@ export class CodeIndexer {
       // CRITICAL: Add file path prefix to chunk IDs to ensure uniqueness across files
       // Without this, chunks with the same local ID (e.g., function_init_L232) from
       // different files would collide and overwrite each other in the vector store.
-      const sanitizedPath = this.chunker._sanitizeFilePath(relPath);
+      const sanitizedPath = isMarkdown
+        ? this.markdownChunker._sanitizeFilePath(relPath)
+        : this.codeChunker._sanitizeFilePath(relPath);
       for (const chunk of chunks) {
         const localId = chunk.id;
         chunk.id = `${sanitizedPath}_${localId}`;
@@ -411,8 +431,12 @@ export class CodeIndexer {
       }
 
       if (embeddings.length !== chunks.length) {
-        console.error(`[Indexer] Embedding count mismatch for ${relPath}: expected ${chunks.length}, got ${embeddings.length}`);
-        throw new Error(`Embedding array length (${embeddings.length}) does not match chunks array length (${chunks.length})`);
+        console.error(
+          `[Indexer] Embedding count mismatch for ${relPath}: expected ${chunks.length}, got ${embeddings.length}`
+        );
+        throw new Error(
+          `Embedding array length (${embeddings.length}) does not match chunks array length (${chunks.length})`
+        );
       }
 
       // Expected embedding dimension
@@ -478,15 +502,21 @@ export class CodeIndexer {
       const invalidCount = invalidReasons.length;
 
       if (invalidCount > 0) {
-        console.error(`[Indexer] Filtered ${invalidCount} invalid embeddings for ${relPath}: ${invalidReasons.slice(0, 5).join(', ')}${invalidReasons.length > 5 ? '...' : ''}`);
+        console.error(
+          `[Indexer] Filtered ${invalidCount} invalid embeddings for ${relPath}: ${invalidReasons.slice(0, 5).join(', ')}${invalidReasons.length > 5 ? '...' : ''}`
+        );
       }
 
       // If ALL embeddings are invalid, then fail
       if (validCount === 0) {
-        throw new Error(`All ${chunks.length} embeddings for ${relPath} are invalid. Reasons: ${invalidReasons.slice(0, 3).join(', ')}`);
+        throw new Error(
+          `All ${chunks.length} embeddings for ${relPath} are invalid. Reasons: ${invalidReasons.slice(0, 3).join(', ')}`
+        );
       }
 
-      console.error(`[Indexer] Generated ${validCount}/${chunks.length} valid embeddings for ${relPath}${invalidCount > 0 ? ` (${invalidCount} filtered)` : ''}`);
+      console.error(
+        `[Indexer] Generated ${validCount}/${chunks.length} valid embeddings for ${relPath}${invalidCount > 0 ? ` (${invalidCount} filtered)` : ''}`
+      );
 
       // Store in vector store and dependency graph
       let vectorsStored = 0;
@@ -519,14 +549,18 @@ export class CodeIndexer {
           // Add to dependency graph
           this.dependencyGraph.addChunk(chunk);
           symbolsAdded++;
-
         } catch (storeError) {
-          console.error(`[Indexer] Failed to store chunk ${chunk.id} from ${relPath}:`, storeError.message);
+          console.error(
+            `[Indexer] Failed to store chunk ${chunk.id} from ${relPath}:`,
+            storeError.message
+          );
           // Continue with next chunk instead of failing entire file
         }
       }
 
-      console.error(`[Indexer] Stored ${vectorsStored} vectors and ${symbolsAdded} symbols for ${relPath}`);
+      console.error(
+        `[Indexer] Stored ${vectorsStored} vectors and ${symbolsAdded} symbols for ${relPath}`
+      );
 
       // Index chunks in lexical index (index only valid chunks that passed embedding validation)
       try {
@@ -544,7 +578,9 @@ export class CodeIndexer {
       } catch (cacheError) {
         cacheSuccess = false;
         console.error(`[Indexer] Cache storage FAILED for ${relPath}:`, cacheError.message);
-        console.error(`[Indexer] ⚠️  Cache degradation detected - re-embedding will be required on restart`);
+        console.error(
+          '[Indexer] ⚠️  Cache degradation detected - re-embedding will be required on restart'
+        );
         // Track cache failures with timestamp
         this.stats.cacheFailures = (this.stats.cacheFailures || 0) + 1;
         this.stats.lastCacheFailureTime = Date.now();
@@ -559,8 +595,9 @@ export class CodeIndexer {
       // This counter was previously only updated at the end of indexAll()
       this.stats.filesIndexed++;
 
-      console.error(`[Indexer] Indexed ${relPath} (${validCount} valid chunks, ${vectorsStored} vectors, ${symbolsAdded} symbols${!cacheSuccess ? ', CACHE FAILED' : ''})`);
-
+      console.error(
+        `[Indexer] Indexed ${relPath} (${validCount} valid chunks, ${vectorsStored} vectors, ${symbolsAdded} symbols${!cacheSuccess ? ', CACHE FAILED' : ''})`
+      );
     } catch (error) {
       if (error.code === 'ENOENT') {
         // File disappeared during indexing
@@ -579,7 +616,7 @@ export class CodeIndexer {
       } else if (error.code === 'EISDIR') {
         console.error(`[Indexer] BUG: Tried to index directory ${relPath} - file discovery bug`);
       } else if (error.code === 'EMFILE') {
-        console.error(`[Indexer] Too many open files - system limit reached, consider throttling`);
+        console.error('[Indexer] Too many open files - system limit reached, consider throttling');
       } else {
         console.error(`[Indexer] Failed to index ${relPath}:`, error.message);
       }
@@ -620,7 +657,9 @@ export class CodeIndexer {
 
             // Fallback: regenerate if embedding not in cache
             if (!embedding) {
-              console.error(`[Indexer] Warning: Missing cached embedding for ${chunkId}, regenerating`);
+              console.error(
+                `[Indexer] Warning: Missing cached embedding for ${chunkId}, regenerating`
+              );
               embedding = await this.embeddings.getEmbedding(chunkData.text);
             }
 
@@ -630,7 +669,7 @@ export class CodeIndexer {
               ...chunkData.metadata,
               text: chunkData.text,
               name: chunkData.name,
-              type: chunkData.type
+              type: chunkData.type,
             };
 
             // FIX: Wrap upsert in try/catch to handle storage failures gracefully
@@ -638,7 +677,10 @@ export class CodeIndexer {
               // Store in vector store
               this.vectorStore.upsert(chunkId, embedding, metadataWithText);
             } catch (upsertError) {
-              console.error(`[Indexer] Failed to store chunk ${chunkId} in vector store:`, upsertError.message);
+              console.error(
+                `[Indexer] Failed to store chunk ${chunkId} in vector store:`,
+                upsertError.message
+              );
               // Skip this chunk - don't add to dependency graph or lexical index
               continue;
             }
@@ -646,14 +688,14 @@ export class CodeIndexer {
             // Add to dependency graph
             this.dependencyGraph.addChunk({
               id: chunkId,
-              ...chunkData
+              ...chunkData,
             });
 
             // Collect chunk for lexical indexing
             chunksToIndexLexically.push({
               id: chunkId,
               text: chunkData.text,
-              metadata: metadataWithText
+              metadata: metadataWithText,
             });
 
             this.stats.chunksIndexed++;
@@ -704,7 +746,7 @@ export class CodeIndexer {
         savesSucceeded: stats.savesSucceeded || 0,
         savesFailed: stats.savesFailed || 0,
         lastSaveError: stats.lastSaveError,
-        lastSaveTime: stats.lastSaveTime
+        lastSaveTime: stats.lastSaveTime,
       });
 
       // Log the error but don't crash the indexer
@@ -755,7 +797,7 @@ export class CodeIndexer {
     // Convert to array and sort by RRF score
     const combined = Array.from(scores.entries(), ([chunkId, rrfScore]) => ({
       chunkId,
-      rrfScore
+      rrfScore,
     })).sort((a, b) => b.rrfScore - a.rrfScore);
 
     return combined;
@@ -798,7 +840,7 @@ export class CodeIndexer {
       filters = {},
       queryText = null,
       useHybrid = true,
-      useQueryExpansion = true
+      useQueryExpansion = true,
     } = options;
 
     // Performance monitoring: track timing for each phase
@@ -808,18 +850,21 @@ export class CodeIndexer {
       vectorSearchTime: 0,
       lexicalSearchTime: 0,
       rankingTime: 0,
-      totalTime: 0
+      totalTime: 0,
     };
 
     const searchStart = Date.now();
 
     // Determine type-specific threshold if chunkType filter is set
-    const effectiveThreshold = filters.chunkType && TYPE_THRESHOLDS[filters.chunkType]
-      ? Math.max(threshold, TYPE_THRESHOLDS[filters.chunkType])
-      : threshold;
+    const effectiveThreshold =
+      filters.chunkType && TYPE_THRESHOLDS[filters.chunkType]
+        ? Math.max(threshold, TYPE_THRESHOLDS[filters.chunkType])
+        : threshold;
 
     if (filters.chunkType && TYPE_THRESHOLDS[filters.chunkType]) {
-      console.error(`[Indexer] Using type-specific threshold for ${filters.chunkType}: ${effectiveThreshold.toFixed(3)}`);
+      console.error(
+        `[Indexer] Using type-specific threshold for ${filters.chunkType}: ${effectiveThreshold.toFixed(3)}`
+      );
     }
 
     // FIX #13: Use centralized configuration
@@ -835,11 +880,15 @@ export class CodeIndexer {
       : [queryText || query];
     perf.queryExpansionTime = Date.now() - expansionStart;
 
+    // Keep query-cache model tracking up-to-date so switching embedding models
+    // doesn't cross-pollute cached embeddings.
+    this.queryCache.setCurrentModel(this.embeddings.getModelInfo().name);
+
     console.error(`[Indexer] Query expansion: ${queriesToSearch.length} queries to search`);
 
     // Perform vector search with expanded queries
     const vectorSearchStart = Date.now();
-    let vectorResults = [];
+    const vectorResults = [];
     const seenChunkIds = new Set();
     const bestSimilarities = new Map(); // Track highest similarity per chunk
 
@@ -852,7 +901,9 @@ export class CodeIndexer {
         // Compute function: generate embedding if not cached
         async () => await this.embeddings.getEmbedding(expandedQuery),
         // Optional: existing embedding for semantic similarity check
-        queryEmbeddings.size > 0 ? Array.from(queryEmbeddings.values())[0] : null
+        queryEmbeddings.size > 0 ? Array.from(queryEmbeddings.values())[0] : null,
+        // Model-aware caching: prevent cross-model reuse
+        this.embeddings.getModelInfo().name
       );
       queryEmbeddings.set(expandedQuery, embedding);
     }
@@ -864,7 +915,7 @@ export class CodeIndexer {
         threshold: effectiveThreshold,
         filters,
         queryText: expandedQuery,
-        queryEmbedding  // Pass cached embedding
+        queryEmbedding, // Pass cached embedding
       });
 
       // Merge results, keeping HIGHEST similarity per chunkId (FIX #4)
@@ -893,25 +944,35 @@ export class CodeIndexer {
 
     // Adaptive threshold: If too few results, retry with lower threshold and expanded queries
     if (vectorResults.length < limit && effectiveThreshold > MIN_THRESHOLD) {
-      const adjustedThreshold = Math.max(MIN_THRESHOLD, effectiveThreshold * ADAPTIVE_THRESHOLD.REDUCTION_MULTIPLIER);
-      console.error(`[Indexer] Too few results (${vectorResults.length} < ${limit}), retrying with threshold ${adjustedThreshold.toFixed(3)}`);
+      const adjustedThreshold = Math.max(
+        MIN_THRESHOLD,
+        effectiveThreshold * ADAPTIVE_THRESHOLD.REDUCTION_MULTIPLIER
+      );
+      console.error(
+        `[Indexer] Too few results (${vectorResults.length} < ${limit}), retrying with threshold ${adjustedThreshold.toFixed(3)}`
+      );
 
       // FIX: Use expanded queries for retry (original + RETRY_QUERY_COUNT-1 expanded)
       // This improves recall by trying alternative query formulations
-      const retryQueries = useQueryExpansion && queriesToSearch.length > 1
-        ? queriesToSearch.slice(0, QUERY_EXPANSION.RETRY_QUERY_COUNT + 1)
-        : [queryText || query];
+      const retryQueries =
+        useQueryExpansion && queriesToSearch.length > 1
+          ? queriesToSearch.slice(0, QUERY_EXPANSION.RETRY_QUERY_COUNT + 1)
+          : [queryText || query];
 
-      console.error(`[Indexer] Retrying with ${retryQueries.length} expanded queries: ${retryQueries.map(q => `"${q}"`).join(', ')}`);
+      console.error(
+        `[Indexer] Retrying with ${retryQueries.length} expanded queries: ${retryQueries.map(q => `"${q}"`).join(', ')}`
+      );
 
       for (const retryQuery of retryQueries) {
         // Use cached embedding if available, otherwise compute new one
         const retryEmbedding = queryEmbeddings.has(retryQuery)
           ? queryEmbeddings.get(retryQuery)
           : await this.queryCache.get(
-              retryQuery,
-              async () => await this.embeddings.getEmbedding(retryQuery)
-            );
+            retryQuery,
+            async () => await this.embeddings.getEmbedding(retryQuery),
+            null,
+            this.embeddings.getModelInfo().name
+          );
 
         // Store in map for potential reuse
         if (!queryEmbeddings.has(retryQuery)) {
@@ -923,7 +984,7 @@ export class CodeIndexer {
           threshold: adjustedThreshold,
           filters,
           queryText: retryQuery,
-          queryEmbedding: retryEmbedding  // Use cached embedding
+          queryEmbedding: retryEmbedding, // Use cached embedding
         });
 
         // Merge results, keeping HIGHEST similarity per chunkId
@@ -945,7 +1006,9 @@ export class CodeIndexer {
 
         // Early termination if we have enough results
         if (vectorResults.length >= limit) {
-          console.error(`[Indexer] Retry found sufficient results (${vectorResults.length}), stopping early`);
+          console.error(
+            `[Indexer] Retry found sufficient results (${vectorResults.length}), stopping early`
+          );
           break;
         }
       }
@@ -980,7 +1043,7 @@ export class CodeIndexer {
         // Convert Map to array format
         const lexicalResults = Array.from(lexicalResultsMap.entries()).map(([chunkId, score]) => ({
           chunkId,
-          score
+          score,
         }));
 
         perf.lexicalSearchTime = Date.now() - lexicalStart;
@@ -989,28 +1052,33 @@ export class CodeIndexer {
         const combined = this.reciprocalRankFusion(vectorResults, lexicalResults);
 
         // Build full result objects with metadata from vector store
-        finalResults = combined.map(item => {
-          const vectorResult = vectorResults.find(r => r.chunkId === item.chunkId);
-          if (vectorResult) {
-            return {
-              ...vectorResult,
-              rrfScore: item.rrfScore
-            };
-          }
-          // Lexical-only result: fetch from vector store
-          const fromStore = this.vectorStore.get(item.chunkId);
-          if (fromStore) {
-            return {
-              chunkId: item.chunkId,
-              similarity: 0, // No vector similarity for lexical-only results
-              rrfScore: item.rrfScore,
-              metadata: fromStore.metadata
-            };
-          }
-          return null;
-        }).filter(r => r !== null);
+        finalResults = combined
+          .map(item => {
+            const vectorResult = vectorResults.find(r => r.chunkId === item.chunkId);
+            if (vectorResult) {
+              return {
+                ...vectorResult,
+                rrfScore: item.rrfScore,
+              };
+            }
+            // Lexical-only result: fetch from vector store
+            const fromStore = this.vectorStore.get(item.chunkId);
+            if (fromStore) {
+              return {
+                chunkId: item.chunkId,
+                similarity: 0, // No vector similarity for lexical-only results
+                rrfScore: item.rrfScore,
+                metadata: fromStore.metadata,
+              };
+            }
+            return null;
+          })
+          .filter(r => r !== null);
       } catch (error) {
-        console.error('[Indexer] Lexical search failed, falling back to vector-only:', error.message);
+        console.error(
+          '[Indexer] Lexical search failed, falling back to vector-only:',
+          error.message
+        );
         finalResults = vectorResults;
       }
     } else {
@@ -1023,63 +1091,69 @@ export class CodeIndexer {
     const queryLower = (queryText || query).toLowerCase();
 
     const rankingStart = Date.now();
-    const ranked = finalResults.map(r => {
-      // FIX #1: Use consistent scaling for RRF and similarity
-      // RRF scores range ~0-0.02, similarity ranges 0-1
-      // Scale both to similar range (0-100) for fair comparison
-      const baseScore = r.rrfScore !== undefined
-        ? r.rrfScore * RRF_CONFIG.SCALING  // RRF: max ~0.02 * 5000 = 100
-        : r.similarity * 100;  // Similarity: max 1.0 * 100 = 100
+    const ranked = finalResults
+      .map(r => {
+        // FIX #1: Use consistent scaling for RRF and similarity
+        // RRF scores range ~0-0.02, similarity ranges 0-1
+        // Scale both to similar range (0-100) for fair comparison
+        const baseScore =
+          r.rrfScore !== undefined
+            ? r.rrfScore * RRF_CONFIG.SCALING // RRF: max ~0.02 * 5000 = 100
+            : r.similarity * 100; // Similarity: max 1.0 * 100 = 100
 
-      let rankScore = baseScore + (typePriority[r.metadata?.type] || 0);
+        let rankScore = baseScore + (typePriority[r.metadata?.type] || 0);
 
-      // Exact symbol name match bonus: +50
-      if (r.metadata?.name && queryLower === r.metadata.name.toLowerCase()) {
-        rankScore += 50;
-      }
+        // Exact symbol name match bonus: +50
+        if (r.metadata?.name && queryLower === r.metadata.name.toLowerCase()) {
+          rankScore += 50;
+        }
 
-      // Exported status bonus: +20
-      if (r.metadata?.exported) {
-        rankScore += 20;
-      }
+        // Exported status bonus: +20
+        if (r.metadata?.exported) {
+          rankScore += 20;
+        }
 
-      // FIX #11: Call frequency bonus using sqrt scaling to prevent domination
-      // Old: Math.floor(usages/10) could give +100, overwhelming semantic relevance
-      // New: Sqrt scaling provides meaningful bonus progression: 1-9 calls=0, 10-99 calls=1-3, 100-999 calls=3-9, 1000+=10-20 (capped)
-      if (r.metadata?.name) {
-        let symbolName = r.metadata.name;
-        let usages = [];
+        // FIX #11: Call frequency bonus using sqrt scaling to prevent domination
+        // Old: Math.floor(usages/10) could give +100, overwhelming semantic relevance
+        // New: Sqrt scaling provides meaningful bonus progression: 1-9 calls=0, 10-99 calls=1-3, 100-999 calls=3-9, 1000+=10-20 (capped)
+        if (r.metadata?.name) {
+          const symbolName = r.metadata.name;
+          let usages = [];
 
-        // FIX: Try fully-qualified name first for overloaded method disambiguation
-        // For methods like "UserService.getUser", try the full name first
-        if (r.metadata?.type === 'method' && symbolName.includes('.')) {
-          // Try qualified name first (e.g., "UserService.getUser")
-          usages = this.dependencyGraph.findUsages(symbolName);
+          // FIX: Try fully-qualified name first for overloaded method disambiguation
+          // For methods like "UserService.getUser", try the full name first
+          if (r.metadata?.type === 'method' && symbolName.includes('.')) {
+            // Try qualified name first (e.g., "UserService.getUser")
+            usages = this.dependencyGraph.findUsages(symbolName);
 
-          // If no results with qualified name, try short name (e.g., "getUser")
-          if (usages.length === 0) {
-            const shortName = symbolName.split('.').pop();
-            usages = this.dependencyGraph.findUsages(shortName);
+            // If no results with qualified name, try short name (e.g., "getUser")
+            if (usages.length === 0) {
+              const shortName = symbolName.split('.').pop();
+              usages = this.dependencyGraph.findUsages(shortName);
+            }
+          } else {
+            // For non-methods, use the symbol name directly
+            usages = this.dependencyGraph.findUsages(symbolName);
           }
-        } else {
-          // For non-methods, use the symbol name directly
-          usages = this.dependencyGraph.findUsages(symbolName);
+
+          if (usages.length > 0) {
+            // FIX #13: Use centralized call frequency config
+            const callBonus = CALL_FREQUENCY.USE_SQRT_SCALING
+              ? Math.min(
+                CALL_FREQUENCY.MAX_BONUS,
+                Math.floor(Math.sqrt(Math.max(0, usages.length / 10)))
+              )
+              : Math.floor(usages.length / 10);
+            rankScore += callBonus;
+          }
         }
 
-        if (usages.length > 0) {
-          // FIX #13: Use centralized call frequency config
-          const callBonus = CALL_FREQUENCY.USE_SQRT_SCALING
-            ? Math.min(CALL_FREQUENCY.MAX_BONUS, Math.floor(Math.sqrt(Math.max(0, usages.length / 10))))
-            : Math.floor(usages.length / 10);
-          rankScore += callBonus;
-        }
-      }
-
-      return {
-        ...r,
-        rankScore
-      };
-    }).sort((a, b) => b.rankScore - a.rankScore);
+        return {
+          ...r,
+          rankScore,
+        };
+      })
+      .sort((a, b) => b.rankScore - a.rankScore);
     perf.rankingTime = Date.now() - rankingStart;
 
     // FIX #14: Parent-child deduplication - filter out children when parent also in results
@@ -1096,7 +1170,7 @@ export class CodeIndexer {
         if (r.metadata?.childCount && r.metadata.childCount > 0) {
           seenParentIds.add(r.chunkId);
         }
-        return true;  // Always keep non-child chunks
+        return true; // Always keep non-child chunks
       }
       // This is a child chunk - only keep if parent is NOT also in results
       // If parent chunk exists in results, prefer it (has more context)
@@ -1114,7 +1188,7 @@ export class CodeIndexer {
       queryText: queryText || query,
       expandedQueries: queriesToSearch.length,
       effectiveThreshold,
-      typeSpecificThreshold: filters.chunkType ? TYPE_THRESHOLDS[filters.chunkType] : null
+      typeSpecificThreshold: filters.chunkType ? TYPE_THRESHOLDS[filters.chunkType] : null,
     };
 
     return results;
@@ -1137,7 +1211,9 @@ export class CodeIndexer {
     // Fallback: If not found and ID looks like a local ID (no file prefix), try localId lookup
     // Local IDs start with type prefixes like function_, method_, class_, variable_, etc.
     if (!result) {
-      const isLocalId = /^(function|method|class|variable|code|imports|export|fallback)_/.test(chunkId);
+      const isLocalId = /^(function|method|class|variable|code|imports|export|fallback)_/.test(
+        chunkId
+      );
       if (isLocalId) {
         // Search by localId in metadata
         for (const [id, metadata] of this.vectorStore.metadata.entries()) {
@@ -1163,7 +1239,7 @@ export class CodeIndexer {
       chunkId: actualChunkId,
       originalQuery: chunkId !== actualChunkId ? chunkId : undefined,
       metadata,
-      related
+      related,
     };
   }
 
@@ -1184,8 +1260,8 @@ export class CodeIndexer {
         chunks: chunks.map(c => ({
           id: c.chunkId,
           type: c.metadata.type,
-          name: c.metadata.name
-        }))
+          name: c.metadata.name,
+        })),
       };
     });
   }
@@ -1200,7 +1276,7 @@ export class CodeIndexer {
       dependencyGraph: this.dependencyGraph.getStats(),
       cache: this.cache.getStats(),
       embeddings: this.embeddings.getCacheStats(),
-      lexicalIndex: this.lexicalIndex.getStats()
+      lexicalIndex: this.lexicalIndex.getStats(),
     };
   }
 
@@ -1213,7 +1289,7 @@ export class CodeIndexer {
       timestamp: Date.now(),
       stats: this.stats,
       vectorStore: this.vectorStore.export(),
-      dependencyGraph: this.dependencyGraph.export()
+      dependencyGraph: this.dependencyGraph.export(),
     };
   }
 
@@ -1226,7 +1302,7 @@ export class CodeIndexer {
       `Files: ${stats.filesIndexed} indexed, ${stats.filesFromCache} from cache, ${stats.filesSkipped} skipped`,
       `Chunks: ${stats.chunksIndexed}`,
       `Source: ${stats.embeddingSource}`,
-      `Time: ${(stats.indexTime / 1000).toFixed(2)}s`
+      `Time: ${(stats.indexTime / 1000).toFixed(2)}s`,
     ].join(', ');
   }
 
@@ -1234,37 +1310,43 @@ export class CodeIndexer {
    * Reindex specific files
    */
   async reindexFiles(filePaths) {
-    // CRITICAL FIX: Use proper mutex flag instead of promise-based locking
-    // Prevents race condition where multiple concurrent calls all pass the check
-    while (this._reindexInProgress) {
+    // Serialize reindex operations to avoid concurrent writes to cache/vector store.
+    // Important: avoid busy-waiting; waiting callers should await the active promise.
+    if (this._reindexPromise) {
       await this._reindexPromise;
     }
 
-    this._reindexInProgress = true;
+    const runPromise = (async () => {
+      this._reindexInProgress = true;
 
-    try {
-      console.error(`[Indexer] Reindexing ${filePaths.length} files...`);
+      try {
+        console.error(`[Indexer] Reindexing ${filePaths.length} files...`);
 
-      for (const filePath of filePaths) {
-        const absPath = filePath.startsWith('/') ? filePath : join(this.projectRoot, filePath);
+        for (const filePath of filePaths) {
+          const absPath = filePath.startsWith('/') ? filePath : join(this.projectRoot, filePath);
 
-        if (existsSync(absPath)) {
-          await this._indexFile(absPath);
-        } else {
-          console.error(`[Indexer] File not found: ${filePath}`);
+          if (existsSync(absPath)) {
+            await this._indexFile(absPath);
+          } else {
+            console.error(`[Indexer] File not found: ${filePath}`);
+          }
+        }
+
+        await this._saveCache();
+
+        return {
+          reindexed: filePaths.length,
+        };
+      } finally {
+        this._reindexInProgress = false;
+        if (this._reindexPromise === runPromise) {
+          this._reindexPromise = null;
         }
       }
+    })();
 
-      await this._saveCache();
-
-      return {
-        reindexed: filePaths.length
-      };
-    } finally {
-      // CRITICAL: Clear flag BEFORE clearing promise to prevent race condition
-      this._reindexInProgress = false;
-      this._reindexPromise = null;
-    }
+    this._reindexPromise = runPromise;
+    return await runPromise;
   }
 
   /**
@@ -1285,11 +1367,11 @@ export class CodeIndexer {
       filesSkipped: 0,
       filesFromCache: 0,
       chunksIndexed: 0,
-      cacheFailures: 0,  // Track cache storage failures
-      lastCacheFailureTime: null,  // Track when last cache failure occurred
+      cacheFailures: 0, // Track cache storage failures
+      lastCacheFailureTime: null, // Track when last cache failure occurred
       embeddingSource: 'unknown',
       indexTime: 0,
-      lastIndexed: null
+      lastIndexed: null,
     };
 
     await this.cache.save();
@@ -1360,7 +1442,7 @@ export class CodeIndexer {
     if (!this.watcher) {
       return {
         running: false,
-        message: 'Watcher not initialized'
+        message: 'Watcher not initialized',
       };
     }
 

@@ -45,12 +45,7 @@ export const schema = {
 };
 
 export const handler = async (args, projectRoot) => {
-  const {
-    startModule,
-    dependencyType = 'all',
-    maxDepth = 3,
-    filterByLayer = 'all',
-  } = args;
+  const { startModule, dependencyType = 'all', maxDepth = 3, filterByLayer = 'all' } = args;
 
   // Initialize file scanner for this project
   if (!fileScanner || fileScanner.projectRoot !== projectRoot) {
@@ -178,7 +173,7 @@ async function buildDependencyGraph(
       const failure = {
         file: relativePath,
         error: error.message,
-        type: 'parse_error'
+        type: 'parse_error',
       };
       parseFailures.push(failure);
       logger.warn(`Failed to analyze ${relativePath}:`, error.message);
@@ -389,7 +384,9 @@ function formatDependencyResults(
       lines.push(`- **${failure.file}**: ${failure.error}`);
     }
     lines.push('');
-    lines.push('**Note**: These files were excluded from analysis due to syntax errors or parsing issues.');
+    lines.push(
+      '**Note**: These files were excluded from analysis due to syntax errors or parsing issues.'
+    );
     lines.push('');
   }
 
@@ -456,7 +453,9 @@ function formatDependencyResults(
   if (circularDeps.length > 0) {
     lines.push('### Critical: Resolve Circular Dependencies');
     lines.push('');
-    lines.push('Circular dependencies prevent proper module initialization and can cause runtime errors. Consider:');
+    lines.push(
+      'Circular dependencies prevent proper module initialization and can cause runtime errors. Consider:'
+    );
     lines.push('- Extracting shared functionality into a separate module');
     lines.push('- Using dependency injection to break cycles');
     lines.push('- Reorganizing module structure to follow HNW hierarchy');
@@ -518,11 +517,11 @@ function printDependencyTree(lines, graph, nodePath, prefix, depth, maxDepth) {
   }
 
   const isLast = depth === maxDepth || node.imports.length === 0;
-  const connector = depth === 0 ? '' : (isLast ? '└── ' : '├── ');
+  const connector = depth === 0 ? '' : isLast ? '└── ' : '├── ';
 
   lines.push(`${prefix}${connector}${nodePath} (${node.layer})`);
 
-  const childPrefix = prefix + (depth === 0 ? '' : (isLast ? '    ' : '│   '));
+  const childPrefix = prefix + (depth === 0 ? '' : isLast ? '    ' : '│   ');
 
   for (let i = 0; i < node.imports.length; i++) {
     const imp = node.imports[i];

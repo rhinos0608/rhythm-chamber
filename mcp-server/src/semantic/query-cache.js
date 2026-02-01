@@ -27,6 +27,14 @@ const DEFAULT_CONFIG = {
   SIMILARITY_THRESHOLD: 0.92,
 
   /**
+   * Minimum interval between full expired-entry sweeps.
+   *
+   * The cache must enforce TTL, but sweeping the entire cache on every query
+   * creates an O(n) hot path. This interval bounds sweep frequency.
+   */
+  CLEANUP_INTERVAL_MS: 60 * 1000,
+
+  /**
    * Maximum number of cached queries
    *
    * Default: 1000 (balances memory usage vs cache hit rate)
@@ -52,7 +60,7 @@ const DEFAULT_CONFIG = {
    *
    * Default: 0.9 (evict to 90% capacity to avoid immediate re-eviction)
    */
-  LRU_TARGET_SIZE_RATIO: 0.9
+  LRU_TARGET_SIZE_RATIO: 0.9,
 };
 
 /**
@@ -62,29 +70,35 @@ export class SemanticQueryCache {
   constructor(config = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
 
-    // Cache storage: query -> { embedding, timestamp, accessCount, modelName }
+    // Cache storage: cacheKey -> { embedding, timestamp, accessCount, modelName, query }
+    // cacheKey is model-scoped to prevent cross-model reuse.
     this.cache = new Map();
 
-    // For similarity-based lookup: normalized query -> embedding
-    // Stores lowercase, trimmed versions for quick exact match check
+    // For exact lookup: model::normalizedQuery -> cacheKey
     this.normalizedCache = new Map();
 
-    // FIX: Deduplicate concurrent requests for same query
-    // Stores in-flight compute promises to prevent redundant API calls
+    // Reverse index: cacheKey -> Set(model::normalizedQuery)
+    // Used so evictions remove all alias normalized keys, not just canonical.
+    this.normalizedRefs = new Map();
+
+    // Deduplicate concurrent requests for same (model, normalizedQuery)
     this.pendingComputes = new Map();
 
-    // Track current model for cache validation
+    // Track current model for convenience defaults in has()/getCached()
     this.currentModel = null;
+
+    // Periodic cleanup tracking
+    this._lastExpiredSweep = 0;
 
     // Statistics
     this.stats = {
       hits: 0,
       misses: 0,
-      semanticHits: 0,  // Hits via similarity (not exact match)
+      semanticHits: 0, // Hits via similarity (not exact match)
       evictions: 0,
       totalQueries: 0,
-      deduplicatedHits: 0,  // Hits from pending computes
-      modelMismatches: 0  // Count of cross-model cache misses
+      deduplicatedHits: 0, // Hits from pending computes
+      modelMismatches: 0, // Retained for backward compatibility in stats
     };
   }
 
@@ -95,6 +109,59 @@ export class SemanticQueryCache {
    */
   _normalizeQuery(query) {
     return query.toLowerCase().trim().replace(/\s+/g, ' ');
+  }
+
+  _getModelKey(modelName) {
+    return modelName || this.currentModel || 'unknown';
+  }
+
+  _makeCacheKey(modelKey, query) {
+    return `${modelKey}::${query}`;
+  }
+
+  _makeNormalizedKey(modelKey, normalizedQuery) {
+    return `${modelKey}::${normalizedQuery}`;
+  }
+
+  _addNormalizedRef(cacheKey, normalizedKey) {
+    this.normalizedCache.set(normalizedKey, cacheKey);
+
+    let refs = this.normalizedRefs.get(cacheKey);
+    if (!refs) {
+      refs = new Set();
+      this.normalizedRefs.set(cacheKey, refs);
+    }
+    refs.add(normalizedKey);
+  }
+
+  _removeNormalizedKey(normalizedKey) {
+    const cacheKey = this.normalizedCache.get(normalizedKey);
+    if (!cacheKey) {
+      this.normalizedCache.delete(normalizedKey);
+      return;
+    }
+
+    this.normalizedCache.delete(normalizedKey);
+
+    const refs = this.normalizedRefs.get(cacheKey);
+    if (refs) {
+      refs.delete(normalizedKey);
+      if (refs.size === 0) {
+        this.normalizedRefs.delete(cacheKey);
+      }
+    }
+  }
+
+  _removeCacheKey(cacheKey) {
+    this.cache.delete(cacheKey);
+
+    const refs = this.normalizedRefs.get(cacheKey);
+    if (refs) {
+      for (const normalizedKey of refs) {
+        this.normalizedCache.delete(normalizedKey);
+      }
+      this.normalizedRefs.delete(cacheKey);
+    }
   }
 
   /**
@@ -136,10 +203,9 @@ export class SemanticQueryCache {
    */
   _evictExpired() {
     const now = Date.now();
-    for (const [query, entry] of this.cache.entries()) {
+    for (const [cacheKey, entry] of Array.from(this.cache.entries())) {
       if (now - entry.timestamp > this.config.CACHE_TTL) {
-        this.cache.delete(query);
-        this.normalizedCache.delete(this._normalizeQuery(query));
+        this._removeCacheKey(cacheKey);
         this.stats.evictions++;
       }
     }
@@ -147,22 +213,18 @@ export class SemanticQueryCache {
 
   /**
    * Enforce cache size limit (LRU eviction)
-   * FIX: Evict to target size (90% of max) instead of just below threshold
-   * This prevents cache from repeatedly hitting the limit
    */
   _evictLRU() {
     const targetSize = Math.floor(this.config.MAX_CACHE_SIZE * this.config.LRU_TARGET_SIZE_RATIO);
     if (this.cache.size <= targetSize) return;
 
-    // Sort entries by access time (oldest first)
-    const entries = Array.from(this.cache.entries())
-      .sort((a, b) => a[1].lastAccess - b[1].lastAccess);
+    const entries = Array.from(this.cache.entries()).sort(
+      (a, b) => a[1].lastAccess - b[1].lastAccess
+    );
 
-    // Evict oldest entries to reach target size
     const toEvict = entries.slice(0, this.cache.size - targetSize);
-    for (const [query, _] of toEvict) {
-      this.cache.delete(query);
-      this.normalizedCache.delete(this._normalizeQuery(query));
+    for (const [cacheKey] of toEvict) {
+      this._removeCacheKey(cacheKey);
       this.stats.evictions++;
     }
   }
@@ -179,43 +241,44 @@ export class SemanticQueryCache {
   async get(query, computeFn, existingEmbedding = null, modelName = null) {
     this.stats.totalQueries++;
 
-    // Evict expired entries opportunistically so TTL actually bounds memory.
-    // This is intentionally lightweight (linear in cache size) and keeps
-    // semantics simple/correct.
-    this._evictExpired();
-
-    const normalized = this._normalizeQuery(query);
-
-    // CRITICAL FIX: Deduplicate concurrent requests using normalized key
-    // so case/whitespace variants don't trigger redundant embedding work.
-    if (this.pendingComputes.has(normalized)) {
-      this.stats.deduplicatedHits++;
-      console.error(`[QueryCache] Deduplicated concurrent request for: "${query}"`);
-      return await this.pendingComputes.get(normalized);
+    // If callers supply a model, treat it as the default for subsequent
+    // has()/getCached() calls (which may omit modelName).
+    if (modelName) {
+      this.currentModel = modelName;
     }
 
-    // Check exact match first (fastest path)
-    if (this.normalizedCache.has(normalized)) {
-      const cacheKey = this.normalizedCache.get(normalized);
+    // Periodically sweep expired entries (avoid O(n) on every get).
+    if (
+      !this._lastExpiredSweep ||
+      Date.now() - this._lastExpiredSweep > this.config.CLEANUP_INTERVAL_MS
+    ) {
+      this._evictExpired();
+      this._lastExpiredSweep = Date.now();
+    }
+
+    const normalized = this._normalizeQuery(query);
+    const modelKey = this._getModelKey(modelName);
+
+    const normalizedKey = this._makeNormalizedKey(modelKey, normalized);
+    const pendingKey = normalizedKey;
+
+    if (this.pendingComputes.has(pendingKey)) {
+      this.stats.deduplicatedHits++;
+      console.error(`[QueryCache] Deduplicated concurrent request for: "${query}"`);
+      return await this.pendingComputes.get(pendingKey);
+    }
+
+    // Exact match (fast path)
+    if (this.normalizedCache.has(normalizedKey)) {
+      const cacheKey = this.normalizedCache.get(normalizedKey);
       const entry = this.cache.get(cacheKey);
 
-      // Entry may have been evicted by _evictExpired() or otherwise removed.
       if (!entry) {
-        this.normalizedCache.delete(normalized);
+        this._removeNormalizedKey(normalizedKey);
       } else if (this._isExpired(entry)) {
-        // TTL enforcement: never return expired entries.
-        this.cache.delete(cacheKey);
-        this.normalizedCache.delete(normalized);
+        this._removeCacheKey(cacheKey);
         this.stats.evictions++;
-      } else if (modelName && entry.modelName && entry.modelName !== modelName) {
-        // Model changed - treat as cache miss
-        console.error(`[QueryCache] Model mismatch for cached query "${query}": cached=${entry.modelName}, current=${modelName}`);
-        this.stats.modelMismatches++;
-        // Remove stale entry
-        this.cache.delete(cacheKey);
-        this.normalizedCache.delete(normalized);
       } else {
-        // Valid cache hit
         this.stats.hits++;
         entry.lastAccess = Date.now();
         entry.accessCount++;
@@ -223,16 +286,11 @@ export class SemanticQueryCache {
       }
     }
 
-    // Check semantic similarity if we have an embedding to compare against
-    // IMPORTANT: Only compare embeddings from the same model
+    // Semantic similarity check (same model only)
     if (existingEmbedding) {
-      for (const [cachedQuery, entry] of this.cache.entries()) {
+      for (const [cacheKey, entry] of this.cache.entries()) {
+        if (entry.modelName !== modelKey) continue;
         if (this._isExpired(entry)) continue;
-
-        // Skip if models don't match (cross-model similarity is meaningless)
-        if (modelName && entry.modelName && entry.modelName !== modelName) {
-          continue;
-        }
 
         const similarity = this._cosineSimilarity(existingEmbedding, entry.embedding);
         if (similarity >= this.config.SIMILARITY_THRESHOLD) {
@@ -240,88 +298,105 @@ export class SemanticQueryCache {
           entry.lastAccess = Date.now();
           entry.accessCount++;
 
-          // Also store this query as an alias for the cached embedding.
-          // Use the cached entry's canonical key to avoid duplicate Map entries
-          // pointing at the same object.
-          this.normalizedCache.set(normalized, cachedQuery);
+          // Alias this normalized query to the same cache entry.
+          this._addNormalizedRef(cacheKey, normalizedKey);
 
-          console.error(`[QueryCache] Semantic hit: "${query}" ~ "${cachedQuery}" (similarity: ${similarity.toFixed(3)}, model: ${entry.modelName || 'unknown'})`);
+          console.error(
+            `[QueryCache] Semantic hit: "${query}" ~ "${entry.query}" (similarity: ${similarity.toFixed(3)}, model: ${entry.modelName || 'unknown'})`
+          );
           return entry.embedding;
         }
       }
     }
 
-    // Cache miss - compute new embedding
+    // Cache miss
     this.stats.misses++;
 
-    // CRITICAL FIX: Create and store promise atomically before async work
-    // This prevents race condition where multiple concurrent requests
-    // could all pass the has() check before set() completes
+    const cacheKey = this._makeCacheKey(modelKey, query);
+
     const computePromise = (async () => {
       try {
-        // Periodic cleanup before computing
         if (this.cache.size > this.config.MAX_CACHE_SIZE * this.config.CLEANUP_TRIGGER_MULTIPLIER) {
           this._evictExpired();
           this._evictLRU();
         }
 
-        // Compute embedding
         const embedding = await computeFn();
 
-        // Store in cache with model tracking
         const entry = {
           embedding,
           timestamp: Date.now(),
           lastAccess: Date.now(),
           accessCount: 1,
-          modelName: modelName || this.currentModel  // Track which model generated this
+          modelName: modelKey,
+          query,
         };
 
-        this.cache.set(query, entry);
-        this.normalizedCache.set(normalized, query);
-
-        // Update current model tracker
-        if (modelName) {
-          this.currentModel = modelName;
-        }
+        this.cache.set(cacheKey, entry);
+        this._addNormalizedRef(cacheKey, normalizedKey);
 
         return embedding;
       } finally {
-        // Always remove from pending computes, even if computation fails
-        this.pendingComputes.delete(normalized);
+        this.pendingComputes.delete(pendingKey);
       }
     })();
 
-    // Store promise BEFORE awaiting (atomic deduplication)
-    this.pendingComputes.set(normalized, computePromise);
-
+    this.pendingComputes.set(pendingKey, computePromise);
     return await computePromise;
   }
 
   /**
    * Check if a query is cached (without computing)
    * @param {string} query - Query text
+   * @param {string} modelName - Optional model name to scope the cache lookup
    * @returns {boolean} True if cached
    */
-  has(query) {
+  has(query, modelName = null) {
     const normalized = this._normalizeQuery(query);
-    return this.normalizedCache.has(normalized);
+    const modelKey = this._getModelKey(modelName);
+    const normalizedKey = this._makeNormalizedKey(modelKey, normalized);
+
+    if (!this.normalizedCache.has(normalizedKey)) {
+      return false;
+    }
+
+    const cacheKey = this.normalizedCache.get(normalizedKey);
+    const entry = this.cache.get(cacheKey);
+
+    if (!entry || this._isExpired(entry)) {
+      this._removeCacheKey(cacheKey);
+      return false;
+    }
+
+    return true;
   }
 
   /**
    * Get cached entry without computing
    * @param {string} query - Query text
+   * @param {string} modelName - Optional model name to scope the cache lookup
    * @returns {number[]|null} Cached embedding or null
    */
-  getCached(query) {
+  getCached(query, modelName = null) {
     const normalized = this._normalizeQuery(query);
-    if (this.normalizedCache.has(normalized)) {
-      const entry = this.cache.get(this.normalizedCache.get(normalized));
-      entry.lastAccess = Date.now();
-      entry.accessCount++;
-      return entry.embedding;
+    const modelKey = this._getModelKey(modelName);
+    const normalizedKey = this._makeNormalizedKey(modelKey, normalized);
+
+    if (!this.normalizedCache.has(normalizedKey)) {
+      return null;
     }
-    return null;
+
+    const cacheKey = this.normalizedCache.get(normalizedKey);
+    const entry = this.cache.get(cacheKey);
+
+    if (!entry || this._isExpired(entry)) {
+      this._removeCacheKey(cacheKey);
+      return null;
+    }
+
+    entry.lastAccess = Date.now();
+    entry.accessCount++;
+    return entry.embedding;
   }
 
   /**
@@ -330,7 +405,8 @@ export class SemanticQueryCache {
   clear() {
     this.cache.clear();
     this.normalizedCache.clear();
-    this.currentModel = null;
+    this.normalizedRefs.clear();
+    this.pendingComputes.clear();
     this.stats = {
       hits: 0,
       misses: 0,
@@ -338,7 +414,7 @@ export class SemanticQueryCache {
       evictions: 0,
       totalQueries: 0,
       deduplicatedHits: 0,
-      modelMismatches: 0
+      modelMismatches: 0,
     };
   }
 
@@ -347,20 +423,22 @@ export class SemanticQueryCache {
    * @returns {Object} Statistics object
    */
   getStats() {
-    const hitRate = this.stats.totalQueries > 0
-      ? (this.stats.hits / this.stats.totalQueries * 100).toFixed(1)
-      : 0;
+    const hitRate =
+      this.stats.totalQueries > 0
+        ? ((this.stats.hits / this.stats.totalQueries) * 100).toFixed(1)
+        : 0;
 
-    const semanticHitRate = this.stats.totalQueries > 0
-      ? (this.stats.semanticHits / this.stats.totalQueries * 100).toFixed(1)
-      : 0;
+    const semanticHitRate =
+      this.stats.totalQueries > 0
+        ? ((this.stats.semanticHits / this.stats.totalQueries) * 100).toFixed(1)
+        : 0;
 
     return {
       ...this.stats,
       cacheSize: this.cache.size,
       hitRate: `${hitRate}%`,
       semanticHitRate: `${semanticHitRate}%`,
-      currentModel: this.currentModel
+      currentModel: this.currentModel,
     };
   }
 
@@ -371,32 +449,32 @@ export class SemanticQueryCache {
   preWarm(entries) {
     for (const { query, embedding, modelName } of entries) {
       const normalized = this._normalizeQuery(query);
+      const modelKey = this._getModelKey(modelName);
+      const normalizedKey = this._makeNormalizedKey(modelKey, normalized);
+      const cacheKey = this._makeCacheKey(modelKey, query);
 
       const entry = {
         embedding,
         timestamp: Date.now(),
         lastAccess: Date.now(),
         accessCount: 0,
-        modelName: modelName || this.currentModel
+        modelName: modelKey,
+        query,
       };
 
-      this.cache.set(query, entry);
-      this.normalizedCache.set(normalized, query);
+      this.cache.set(cacheKey, entry);
+      this._addNormalizedRef(cacheKey, normalizedKey);
     }
 
     this._evictLRU();
   }
 
   /**
-   * Set the current model (for cache tracking)
+   * Set the current model (used only as a default for has()/getCached())
    * @param {string} modelName - Name of the current embedding model
    */
   setCurrentModel(modelName) {
-    if (this.currentModel !== modelName) {
-      console.error(`[QueryCache] Current model changed from "${this.currentModel}" to "${modelName}", clearing cache`);
-      this.currentModel = modelName;
-      this.clear();  // Clear cache to prevent cross-model pollution
-    }
+    this.currentModel = modelName;
   }
 
   /**

@@ -13,27 +13,28 @@
  */
 export const schema = {
   name: 'get_chunk_details',
-  description: 'Get detailed information about a specific code chunk including full source code, metadata, and related chunks (callers/callees).',
+  description:
+    'Get detailed information about a specific code chunk including full source code, metadata, and related chunks (callers/callees).',
   inputSchema: {
     type: 'object',
     properties: {
       chunkId: {
         type: 'string',
-        description: 'Unique chunk identifier (e.g., js_chat_session-manager_L123)'
+        description: 'Unique chunk identifier (e.g., js_chat_session-manager_L123)',
       },
       includeRelated: {
         type: 'boolean',
         description: 'Include related chunks (callers/callees)',
-        default: true
+        default: true,
       },
       includeSource: {
         type: 'boolean',
         description: 'Include full source code',
-        default: true
-      }
+        default: true,
+      },
     },
-    required: ['chunkId']
-  }
+    required: ['chunkId'],
+  },
 };
 
 /**
@@ -45,9 +46,10 @@ export const handler = async (args, projectRoot, indexer, server) => {
   // Check if indexer is available
   if (!indexer) {
     return {
-      content: [{
-        type: 'text',
-        text: `# Chunk Details Not Available
+      content: [
+        {
+          type: 'text',
+          text: `# Chunk Details Not Available
 
 The semantic search indexer has not been initialized. Cannot retrieve chunk details.
 
@@ -56,9 +58,10 @@ The semantic search indexer has not been initialized. Cannot retrieve chunk deta
 **To fix:**
 1. Ensure the MCP server was started with semantic search enabled
 2. Check that indexing completed successfully
-`
-      }],
-      isError: true
+`,
+        },
+      ],
+      isError: true,
     };
   }
 
@@ -68,38 +71,43 @@ The semantic search indexer has not been initialized. Cannot retrieve chunk deta
 
     if (!details) {
       return {
-        content: [{
-          type: 'text',
-          text: formatNotFound(chunkId)
-        }]
+        content: [
+          {
+            type: 'text',
+            text: formatNotFound(chunkId),
+          },
+        ],
       };
     }
 
     const { chunkId: id, metadata, related } = details;
 
     return {
-      content: [{
-        type: 'text',
-        text: formatChunkDetails(id, metadata, related, includeSource, includeRelated, indexer)
-      }]
+      content: [
+        {
+          type: 'text',
+          text: formatChunkDetails(id, metadata, related, includeSource, includeRelated, indexer),
+        },
+      ],
     };
-
   } catch (error) {
     console.error('[get_chunk_details] Error:', error);
 
     return {
-      content: [{
-        type: 'text',
-        text: `# Error Retrieving Chunk Details
+      content: [
+        {
+          type: 'text',
+          text: `# Error Retrieving Chunk Details
 
 **Chunk ID:** ${chunkId}
 
 **Error:** ${error.message}
 
 **Suggestion:** Verify the chunk ID is correct and that indexing completed successfully.
-`
-      }],
-      isError: true
+`,
+        },
+      ],
+      isError: true,
     };
   }
 };
@@ -114,10 +122,10 @@ function formatChunkDetails(chunkId, metadata, related, includeSource, includeRe
   lines.push('');
 
   // Basic info
-  lines.push(`## Basic Information`);
+  lines.push('## Basic Information');
   lines.push('');
-  lines.push(`| Property | Value |`);
-  lines.push(`|----------|-------|`);
+  lines.push('| Property | Value |');
+  lines.push('|----------|-------|');
   lines.push(`| **Chunk ID** | \`${chunkId}\` |`);
   lines.push(`| **Name** | ${metadata.name || 'N/A'} |`);
   lines.push(`| **Type** | ${metadata.type || 'unknown'} |`);
@@ -135,12 +143,12 @@ function formatChunkDetails(chunkId, metadata, related, includeSource, includeRe
 
   // Type-specific metadata
   if (metadata.type === 'function' || metadata.type === 'method') {
-    lines.push(`## Function Details`);
+    lines.push('## Function Details');
     lines.push('');
 
-    if (metadata.async) lines.push(`- **Async**: Yes`);
-    if (metadata.generator) lines.push(`- **Generator**: Yes`);
-    if (metadata.static) lines.push(`- **Static**: Yes`);
+    if (metadata.async) lines.push('- **Async**: Yes');
+    if (metadata.generator) lines.push('- **Generator**: Yes');
+    if (metadata.static) lines.push('- **Static**: Yes');
     if (metadata.className) lines.push(`- **Class**: ${metadata.className}`);
     if (metadata.kind) lines.push(`- **Kind**: ${metadata.kind}`);
 
@@ -152,11 +160,11 @@ function formatChunkDetails(chunkId, metadata, related, includeSource, includeRe
   }
 
   if (metadata.type === 'class') {
-    lines.push(`## Class Details`);
+    lines.push('## Class Details');
     lines.push('');
 
     if (metadata.superClass) lines.push(`- **Extends**: ${metadata.superClass}`);
-    if (metadata.isLargeClass) lines.push(`- **Large Class**: Yes (split into method chunks)`);
+    if (metadata.isLargeClass) lines.push('- **Large Class**: Yes (split into method chunks)');
 
     if (metadata.methods && metadata.methods.length > 0) {
       lines.push(`- **Methods**: ${metadata.methods.map(m => m.name).join(', ')}`);
@@ -167,14 +175,14 @@ function formatChunkDetails(chunkId, metadata, related, includeSource, includeRe
 
   // Symbol relationships
   if (includeRelated && related) {
-    lines.push(`## Symbol Relationships`);
+    lines.push('## Symbol Relationships');
     lines.push('');
 
     // Callers (chunks that use symbols defined here)
     if (related.callers && related.callers.length > 0) {
-      lines.push(`### Callers`);
+      lines.push('### Callers');
       lines.push('');
-      lines.push(`Chunks that use symbols defined in this chunk:`);
+      lines.push('Chunks that use symbols defined in this chunk:');
       lines.push('');
 
       for (const caller of related.callers.slice(0, 10)) {
@@ -182,7 +190,9 @@ function formatChunkDetails(chunkId, metadata, related, includeSource, includeRe
         lines.push(`- \`${caller.chunkId}\``);
         lines.push(`  - Uses: **${caller.symbol}** (${caller.usageType})`);
         if (callerMeta) {
-          lines.push(`  - Location: ${callerMeta.file || 'unknown'} (L${callerMeta.startLine || '?'})`);
+          lines.push(
+            `  - Location: ${callerMeta.file || 'unknown'} (L${callerMeta.startLine || '?'})`
+          );
         }
       }
 
@@ -192,17 +202,17 @@ function formatChunkDetails(chunkId, metadata, related, includeSource, includeRe
 
       lines.push('');
     } else {
-      lines.push(`### Callers`);
+      lines.push('### Callers');
       lines.push('');
-      lines.push(`No known callers for this chunk.`);
+      lines.push('No known callers for this chunk.');
       lines.push('');
     }
 
     // Callees (symbols used by this chunk)
     if (related.callees && related.callees.length > 0) {
-      lines.push(`### Callees`);
+      lines.push('### Callees');
       lines.push('');
-      lines.push(`Symbols used by this chunk (defined elsewhere):`);
+      lines.push('Symbols used by this chunk (defined elsewhere):');
       lines.push('');
 
       for (const callee of related.callees.slice(0, 10)) {
@@ -210,7 +220,9 @@ function formatChunkDetails(chunkId, metadata, related, includeSource, includeRe
         lines.push(`- **${callee.symbol}** (${callee.type})`);
         lines.push(`  - Defined in: \`${callee.chunkId}\``);
         if (calleeMeta) {
-          lines.push(`  - Location: ${calleeMeta.file || 'unknown'} (L${calleeMeta.startLine || '?'})`);
+          lines.push(
+            `  - Location: ${calleeMeta.file || 'unknown'} (L${calleeMeta.startLine || '?'})`
+          );
         }
       }
 
@@ -220,16 +232,16 @@ function formatChunkDetails(chunkId, metadata, related, includeSource, includeRe
 
       lines.push('');
     } else {
-      lines.push(`### Callees`);
+      lines.push('### Callees');
       lines.push('');
-      lines.push(`No external symbol calls detected.`);
+      lines.push('No external symbol calls detected.');
       lines.push('');
     }
   }
 
   // Source code
   if (includeSource) {
-    lines.push(`## Source Code`);
+    lines.push('## Source Code');
     lines.push('');
     lines.push('```javascript');
 
@@ -241,12 +253,12 @@ function formatChunkDetails(chunkId, metadata, related, includeSource, includeRe
   }
 
   // Navigation hint
-  lines.push(`---`);
+  lines.push('---');
   lines.push('');
-  lines.push(`**Related Tools:`);
-  lines.push(`- \`semantic_search\` - Find similar code`);
-  lines.push(`- \`find_dependencies\` - Trace dependencies`);
-  lines.push(`- \`get_module_info\` - Full file information`);
+  lines.push('**Related Tools:');
+  lines.push('- `semantic_search` - Find similar code');
+  lines.push('- `find_dependencies` - Trace dependencies');
+  lines.push('- `get_module_info` - Full file information');
 
   return lines.join('\n');
 }

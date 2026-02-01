@@ -13,12 +13,12 @@ import { EventBus } from '../../js/services/event-bus.js';
 // ==========================================
 
 beforeEach(() => {
-    EventBus.clearAll();
+  EventBus.clearAll();
 });
 
 afterEach(() => {
-    EventBus.clearAll();
-    PatternStream.abort();
+  EventBus.clearAll();
+  PatternStream.abort();
 });
 
 // ==========================================
@@ -26,77 +26,79 @@ afterEach(() => {
 // ==========================================
 
 describe('PatternStream startStream', () => {
-    // Helper to create valid mock stream data
-    const createMockStreams = (count = 10) => {
-        const artists = ['Artist A', 'Artist B', 'Artist C', 'Artist D', 'Artist E'];
-        return Array.from({ length: count }, (_, i) => ({
-            artistName: artists[i % artists.length],
-            playedAt: new Date(Date.now() - (count - i) * 86400000).toISOString(),
-            msPlayed: 180000,
-            hourUTC: 12,
-            dayOfWeek: i % 7
-        }));
-    };
+  // Helper to create valid mock stream data
+  const createMockStreams = (count = 10) => {
+    const artists = ['Artist A', 'Artist B', 'Artist C', 'Artist D', 'Artist E'];
+    return Array.from({ length: count }, (_, i) => ({
+      artistName: artists[i % artists.length],
+      playedAt: new Date(Date.now() - (count - i) * 86400000).toISOString(),
+      msPlayed: 180000,
+      hourUTC: 12,
+      dayOfWeek: i % 7,
+    }));
+  };
 
-    it('should detect patterns and return all results', async () => {
-        const mockStreams = createMockStreams(10);
+  it('should detect patterns and return all results', async () => {
+    const mockStreams = createMockStreams(10);
 
-        const result = await PatternStream.startStream(mockStreams, { delay: 0 });
+    const result = await PatternStream.startStream(mockStreams, { delay: 0 });
 
-        expect(result).toHaveProperty('comfortDiscovery');
-        expect(result.comfortDiscovery).toHaveProperty('ratio');
-    });
+    expect(result).toHaveProperty('comfortDiscovery');
+    expect(result.comfortDiscovery).toHaveProperty('ratio');
+  });
 
-    it('should emit pattern:detected events for each pattern', async () => {
-        const mockStreams = createMockStreams(10);
-        const patternHandler = vi.fn();
+  it('should emit pattern:detected events for each pattern', async () => {
+    const mockStreams = createMockStreams(10);
+    const patternHandler = vi.fn();
 
-        EventBus.on('pattern:detected', patternHandler);
+    EventBus.on('pattern:detected', patternHandler);
 
-        await PatternStream.startStream(mockStreams, { delay: 0 });
+    await PatternStream.startStream(mockStreams, { delay: 0 });
 
-        expect(patternHandler).toHaveBeenCalled();
-        expect(patternHandler.mock.calls[0][0]).toHaveProperty('patternName');
-        expect(patternHandler.mock.calls[0][0]).toHaveProperty('result');
-    });
+    expect(patternHandler).toHaveBeenCalled();
+    expect(patternHandler.mock.calls[0][0]).toHaveProperty('patternName');
+    expect(patternHandler.mock.calls[0][0]).toHaveProperty('result');
+  });
 
-    it('should emit pattern:all_complete when done', async () => {
-        const mockStreams = createMockStreams(10);
-        const completeHandler = vi.fn();
+  it('should emit pattern:all_complete when done', async () => {
+    const mockStreams = createMockStreams(10);
+    const completeHandler = vi.fn();
 
-        EventBus.on('pattern:all_complete', completeHandler);
+    EventBus.on('pattern:all_complete', completeHandler);
 
-        await PatternStream.startStream(mockStreams, { delay: 0 });
+    await PatternStream.startStream(mockStreams, { delay: 0 });
 
-        expect(completeHandler).toHaveBeenCalledWith(
-            expect.objectContaining({
-                patterns: expect.any(Object),
-                duration: expect.any(Number)
-            }),
-            expect.any(Object)
-        );
-    });
+    expect(completeHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        patterns: expect.any(Object),
+        duration: expect.any(Number),
+      }),
+      expect.any(Object)
+    );
+  });
 
-    it('should call onPattern callback for each pattern', async () => {
-        const mockStreams = createMockStreams(10);
-        const onPattern = vi.fn();
+  it('should call onPattern callback for each pattern', async () => {
+    const mockStreams = createMockStreams(10);
+    const onPattern = vi.fn();
 
-        await PatternStream.startStream(mockStreams, { delay: 0, onPattern });
+    await PatternStream.startStream(mockStreams, { delay: 0, onPattern });
 
-        expect(onPattern).toHaveBeenCalled();
-        expect(onPattern.mock.calls[0][0]).toBe('comfortDiscovery');
-    });
+    expect(onPattern).toHaveBeenCalled();
+    expect(onPattern.mock.calls[0][0]).toBe('comfortDiscovery');
+  });
 
-    it('should call onComplete callback when finished', async () => {
-        const mockStreams = createMockStreams(10);
-        const onComplete = vi.fn();
+  it('should call onComplete callback when finished', async () => {
+    const mockStreams = createMockStreams(10);
+    const onComplete = vi.fn();
 
-        await PatternStream.startStream(mockStreams, { delay: 0, onComplete });
+    await PatternStream.startStream(mockStreams, { delay: 0, onComplete });
 
-        expect(onComplete).toHaveBeenCalledWith(expect.objectContaining({
-            comfortDiscovery: expect.any(Object)
-        }));
-    });
+    expect(onComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        comfortDiscovery: expect.any(Object),
+      })
+    );
+  });
 });
 
 // ==========================================
@@ -104,52 +106,52 @@ describe('PatternStream startStream', () => {
 // ==========================================
 
 describe('PatternStream State', () => {
-    // Helper to create valid mock stream data
-    const createMockStreams = (count = 10) => {
-        const artists = ['Artist A', 'Artist B', 'Artist C', 'Artist D', 'Artist E'];
-        return Array.from({ length: count }, (_, i) => ({
-            artistName: artists[i % artists.length],
-            playedAt: new Date(Date.now() - (count - i) * 86400000).toISOString(),
-            msPlayed: 180000,
-            hourUTC: 12,
-            dayOfWeek: i % 7
-        }));
-    };
+  // Helper to create valid mock stream data
+  const createMockStreams = (count = 10) => {
+    const artists = ['Artist A', 'Artist B', 'Artist C', 'Artist D', 'Artist E'];
+    return Array.from({ length: count }, (_, i) => ({
+      artistName: artists[i % artists.length],
+      playedAt: new Date(Date.now() - (count - i) * 86400000).toISOString(),
+      msPlayed: 180000,
+      hourUTC: 12,
+      dayOfWeek: i % 7,
+    }));
+  };
 
-    it('should track progress during streaming', async () => {
-        const mockStreams = createMockStreams(10);
+  it('should track progress during streaming', async () => {
+    const mockStreams = createMockStreams(10);
 
-        // Start streaming (no await)
-        const promise = PatternStream.startStream(mockStreams, { delay: 10 });
+    // Start streaming (no await)
+    const promise = PatternStream.startStream(mockStreams, { delay: 10 });
 
-        // Check initial state
-        expect(PatternStream.isActive()).toBe(true);
+    // Check initial state
+    expect(PatternStream.isActive()).toBe(true);
 
-        // Wait for completion
-        await promise;
+    // Wait for completion
+    await promise;
 
-        expect(PatternStream.isActive()).toBe(false);
-    });
+    expect(PatternStream.isActive()).toBe(false);
+  });
 
-    it('should return detected patterns', async () => {
-        const mockStreams = createMockStreams(10);
+  it('should return detected patterns', async () => {
+    const mockStreams = createMockStreams(10);
 
-        await PatternStream.startStream(mockStreams, { delay: 0 });
+    await PatternStream.startStream(mockStreams, { delay: 0 });
 
-        const detected = PatternStream.getDetected();
-        expect(detected).toHaveProperty('comfortDiscovery');
-    });
+    const detected = PatternStream.getDetected();
+    expect(detected).toHaveProperty('comfortDiscovery');
+  });
 
-    it('should report progress', async () => {
-        const mockStreams = createMockStreams(10);
+  it('should report progress', async () => {
+    const mockStreams = createMockStreams(10);
 
-        await PatternStream.startStream(mockStreams, { delay: 0 });
+    await PatternStream.startStream(mockStreams, { delay: 0 });
 
-        const progress = PatternStream.getProgress();
-        expect(progress.detected).toBeGreaterThan(0);
-        expect(progress.total).toBe(PatternStream.PATTERN_ORDER.length);
-        expect(progress.percentage).toBeGreaterThan(0);
-    });
+    const progress = PatternStream.getProgress();
+    expect(progress.detected).toBeGreaterThan(0);
+    expect(progress.total).toBe(PatternStream.PATTERN_ORDER.length);
+    expect(progress.percentage).toBeGreaterThan(0);
+  });
 });
 
 // ==========================================
@@ -157,37 +159,37 @@ describe('PatternStream State', () => {
 // ==========================================
 
 describe('PatternStream Abort', () => {
-    // Helper to create valid mock stream data
-    const createMockStreams = (count = 10) => {
-        const artists = ['Artist A', 'Artist B', 'Artist C', 'Artist D', 'Artist E'];
-        return Array.from({ length: count }, (_, i) => ({
-            artistName: artists[i % artists.length],
-            playedAt: new Date(Date.now() - (count - i) * 86400000).toISOString(),
-            msPlayed: 180000,
-            hourUTC: 12,
-            dayOfWeek: i % 7
-        }));
-    };
+  // Helper to create valid mock stream data
+  const createMockStreams = (count = 10) => {
+    const artists = ['Artist A', 'Artist B', 'Artist C', 'Artist D', 'Artist E'];
+    return Array.from({ length: count }, (_, i) => ({
+      artistName: artists[i % artists.length],
+      playedAt: new Date(Date.now() - (count - i) * 86400000).toISOString(),
+      msPlayed: 180000,
+      hourUTC: 12,
+      dayOfWeek: i % 7,
+    }));
+  };
 
-    it('should abort streaming when abort() is called', async () => {
-        const mockStreams = createMockStreams(10);
+  it('should abort streaming when abort() is called', async () => {
+    const mockStreams = createMockStreams(10);
 
-        // Start streaming with long delay
-        const promise = PatternStream.startStream(mockStreams, { delay: 100 });
+    // Start streaming with long delay
+    const promise = PatternStream.startStream(mockStreams, { delay: 100 });
 
-        // Small delay to let first pattern start
-        await new Promise(resolve => setTimeout(resolve, 50));
+    // Small delay to let first pattern start
+    await new Promise(resolve => setTimeout(resolve, 50));
 
-        // Abort
-        PatternStream.abort();
+    // Abort
+    PatternStream.abort();
 
-        // Should resolve quickly after abort
-        const result = await promise;
+    // Should resolve quickly after abort
+    const result = await promise;
 
-        // Should have fewer patterns than full run
-        const patternCount = Object.keys(result).length;
-        expect(patternCount).toBeLessThan(PatternStream.PATTERN_ORDER.length);
-    });
+    // Should have fewer patterns than full run
+    const patternCount = Object.keys(result).length;
+    expect(patternCount).toBeLessThan(PatternStream.PATTERN_ORDER.length);
+  });
 });
 
 // ==========================================
@@ -195,9 +197,9 @@ describe('PatternStream Abort', () => {
 // ==========================================
 
 describe('PatternStream Constants', () => {
-    it('should expose pattern order', () => {
-        expect(PatternStream.PATTERN_ORDER).toBeInstanceOf(Array);
-        expect(PatternStream.PATTERN_ORDER.length).toBeGreaterThan(0);
-        expect(PatternStream.PATTERN_ORDER).toContain('comfortDiscovery');
-    });
+  it('should expose pattern order', () => {
+    expect(PatternStream.PATTERN_ORDER).toBeInstanceOf(Array);
+    expect(PatternStream.PATTERN_ORDER.length).toBeGreaterThan(0);
+    expect(PatternStream.PATTERN_ORDER).toContain('comfortDiscovery');
+  });
 });

@@ -20,7 +20,8 @@ const cache = new CacheManager();
  */
 export const schema = {
   name: 'find_all_usages',
-  description: 'Find all usages of a function, class, or variable with precise file:line:column locations. Supports direct calls and detects dynamic calls with lower certainty.',
+  description:
+    'Find all usages of a function, class, or variable with precise file:line:column locations. Supports direct calls and detects dynamic calls with lower certainty.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -62,9 +63,7 @@ export const handler = async (args, projectRoot) => {
     }
 
     // Build file list to search
-    const filesToSearch = filePath
-      ? [resolve(projectRoot, filePath)]
-      : getSourceFiles(projectRoot);
+    const filesToSearch = filePath ? [resolve(projectRoot, filePath)] : getSourceFiles(projectRoot);
 
     if (filesToSearch.length === 0) {
       throw new Error('No files found to search');
@@ -84,7 +83,7 @@ export const handler = async (args, projectRoot) => {
       }
 
       try {
-        const fileUsages = findUsagesInFile(file, symbolName, symbolType, includeDynamic);
+        const fileUsages = findUsagesInFile(file, symbolName, symbolType, includeDynamic, projectRoot);
         usages.push(...fileUsages);
         processedFiles++;
       } catch (error) {
@@ -101,7 +100,7 @@ export const handler = async (args, projectRoot) => {
       symbol: {
         name: symbolName,
         type: symbolType,
-        file: filePath || 'entire project'
+        file: filePath || 'entire project',
       },
       usages: usages.map(u => ({
         file: u.file,
@@ -109,42 +108,46 @@ export const handler = async (args, projectRoot) => {
         column: u.column,
         context: u.context,
         callType: u.callType,
-        certainty: u.certainty
+        certainty: u.certainty,
       })),
       summary: {
         total_usages: usages.length,
         unique_files: new Set(usages.map(u => u.file)).size,
         direct_calls: usages.filter(u => u.callType === 'direct').length,
-        dynamic_calls: usages.filter(u => u.callType === 'dynamic').length
+        dynamic_calls: usages.filter(u => u.callType === 'dynamic').length,
       },
-      risky_usages: riskyUsages
+      risky_usages: riskyUsages,
     };
 
     // Format output
     const output = formatUsages(result);
 
     // Check completeness
-    const completeness = processedFiles === filesToSearch.length ? 100 :
-                        Math.round((processedFiles / filesToSearch.length) * 100);
+    const completeness =
+      processedFiles === filesToSearch.length
+        ? 100
+        : Math.round((processedFiles / filesToSearch.length) * 100);
 
     if (completeness < 100) {
       // Partial result - some files failed
-      return createPartialResponse({
-        content: [{ type: 'text', text: output }]
-      }, {
-        completeness,
-        messages: warnings,
-        suggestions: [
-          `Found ${usages.length} usages across ${processedFiles}/${filesToSearch.length} files`,
-          warnings.length > 0 ? 'Some files could not be analyzed' : null
-        ].filter(Boolean)
-      });
+      return createPartialResponse(
+        {
+          content: [{ type: 'text', text: output }],
+        },
+        {
+          completeness,
+          messages: warnings,
+          suggestions: [
+            `Found ${usages.length} usages across ${processedFiles}/${filesToSearch.length} files`,
+            warnings.length > 0 ? 'Some files could not be analyzed' : null,
+          ].filter(Boolean),
+        }
+      );
     }
 
     return {
-      content: [{ type: 'text', text: output }]
+      content: [{ type: 'text', text: output }],
     };
-
   } catch (error) {
     logger.error('Error in find_all_usages:', error);
     return createErrorResponse(error);
@@ -163,7 +166,7 @@ function getSourceFiles(projectRoot) {
     'src/**/*.js',
     '!**/node_modules/**',
     '!**/*.test.js',
-    '!**/*.spec.js'
+    '!**/*.spec.js',
   ];
 
   const files = globSync(patterns, { cwd: projectRoot, absolute: true });
@@ -173,7 +176,7 @@ function getSourceFiles(projectRoot) {
 /**
  * Find usages in a single file
  */
-function findUsagesInFile(filePath, symbolName, symbolType, includeDynamic) {
+function findUsagesInFile(filePath, symbolName, symbolType, includeDynamic, projectRoot) {
   const content = readFileSync(filePath, 'utf-8');
   const lines = content.split('\n');
   const usages = [];
@@ -183,7 +186,7 @@ function findUsagesInFile(filePath, symbolName, symbolType, includeDynamic) {
     // Use parser and traverse imported at top of file
     const ast = parser.parse(content, {
       sourceType: 'module',
-      plugins: ['jsx']
+      plugins: ['jsx'],
     });
 
     // Find symbol declarations to get scope
@@ -219,13 +222,12 @@ function findUsagesInFile(filePath, symbolName, symbolType, includeDynamic) {
               column: loc.start.column + 1, // 0-indexed to 1-indexed
               context: extractContext(lines, loc.start.line, loc.start.column),
               callType: determineCallType(path),
-              certainty: 1.0
+              certainty: 1.0,
             });
           }
         }
-      }
+      },
     });
-
   } catch (error) {
     // AST parsing failed, fall back to regex
     logger.warn(`AST parsing failed for ${filePath}, using regex fallback:`, error.message);
@@ -301,7 +303,7 @@ function findUsagesWithRegex(content, lines, filePath, symbolName, symbolType) {
         column: match.index + 1,
         context: extractContext(lines, lineNumber, match.index),
         callType: 'unknown',
-        certainty: 0.7  // Lower certainty for regex
+        certainty: 0.7, // Lower certainty for regex
       });
     }
   }
@@ -323,7 +325,7 @@ function findDynamicUsages(content, lines, filePath, symbolName) {
     // eval with template literals or string concatenation
     new RegExp(`eval\\s*\\([^)]*['"\`].*${symbolName}`, 'g'),
     // Bracket notation
-    new RegExp(`\\[\\s*['"\`]${symbolName}['"\`]\\s*\\]`, 'g')
+    new RegExp(`\\[\\s*['"\`]${symbolName}['"\`]\\s*\\]`, 'g'),
   ];
 
   let lineNumber = 0;
@@ -342,7 +344,7 @@ function findDynamicUsages(content, lines, filePath, symbolName) {
           column: match.index + 1,
           context: extractContext(lines, lineNumber, match.index),
           callType: 'dynamic',
-          certainty: 0.5  // Lower certainty for dynamic calls
+          certainty: 0.5, // Lower certainty for dynamic calls
         });
       }
     }
@@ -379,7 +381,7 @@ function identifyRiskyUsages(usages, symbolType) {
       risky.push({
         location: `${usage.file}:${usage.line}:${usage.column}`,
         issues: issues,
-        suggestion: 'Add error handling or verify the call is safe'
+        suggestion: 'Add error handling or verify the call is safe',
       });
     }
   }
@@ -426,11 +428,12 @@ function formatUsages(result) {
       lines.push('');
 
       for (const usage of fileUsages) {
-        const certainty = usage.certainty === 1.0 ? '✓' : `? (${Math.round(usage.certainty * 100)}%)`;
+        const certainty =
+          usage.certainty === 1.0 ? '✓' : `? (${Math.round(usage.certainty * 100)}%)`;
         lines.push(`- **Line ${usage.line}:${usage.column}** (${usage.callType}, ${certainty})`);
-        lines.push(`  \`\`\``);
+        lines.push('  ```');
         lines.push(`  ${usage.context.split('\n').find(l => l.trim().length > 0)}`);
-        lines.push(`  \`\`\``);
+        lines.push('  ```');
         lines.push('');
       }
     }

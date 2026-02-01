@@ -10,9 +10,9 @@
  * that could cause catastrophic backtracking
  */
 const REDOS_PATTERNS = [
-  /\([^)]*[\*+][^)]*[\*+]\)/,  // Nested quantifiers: (a+)+, (a*)*
-  /\([^)]*\|[^)]*\)[\*+]/,      // Overlapping alternations: (a|a)+
-  /\(.[\*+].*\)[\*+]/,          // Nested with wildcard: (.+)+
+  /\([^)]*[*+][^)]*[*+]\)/, // Nested quantifiers: (a+)+, (a*)*
+  /\([^)]*\|[^)]*\)[*+]/, // Overlapping alternations: (a|a)+
+  /\(.[*+].*\)[*+]/, // Nested with wildcard: (.+)+
 ];
 
 /**
@@ -154,5 +154,5 @@ export default {
   extractLayer,
   validateFilePattern,
   passesFilters,
-  REDOS_PATTERNS
+  REDOS_PATTERNS,
 };

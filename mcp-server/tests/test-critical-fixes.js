@@ -47,24 +47,21 @@ async function runTests() {
   const graph1 = new Map([
     ['a.js', { imports: [{ resolved: 'b.js' }] }],
     ['b.js', { imports: [{ resolved: 'c.js' }] }],
-    ['c.js', { imports: [{ resolved: 'a.js' }] }] // Cycle: a -> b -> c -> a
+    ['c.js', { imports: [{ resolved: 'a.js' }] }], // Cycle: a -> b -> c -> a
   ]);
 
   const cycles1 = dependenciesModule.detectCircularDependencies
     ? await dependenciesModule.detectCircularDependencies(graph1)
     : [];
 
-  assert(
-    cycles1.length > 0,
-    `Detects simple cycle (found ${cycles1.length} cycle(s))`
-  );
+  assert(cycles1.length > 0, `Detects simple cycle (found ${cycles1.length} cycle(s))`);
 
   // Test disconnected components
   const graph2 = new Map([
     ['component1/a.js', { imports: [{ resolved: 'component1/b.js' }] }],
     ['component1/b.js', { imports: [{ resolved: 'component1/a.js' }] }], // Cycle 1
     ['component2/x.js', { imports: [{ resolved: 'component2/y.js' }] }],
-    ['component2/y.js', { imports: [{ resolved: 'component2/x.js' }] }] // Cycle 2
+    ['component2/y.js', { imports: [{ resolved: 'component2/x.js' }] }], // Cycle 2
   ]);
 
   const cycles2 = dependenciesModule.detectCircularDependencies
@@ -98,11 +95,12 @@ async function runTests() {
     const traversalAttempt = '../../../etc/passwd';
 
     if (dependenciesModule.resolveImportPath) {
-      const resolved = dependenciesModule.resolveImportPath(traversalAttempt, currentFile, projectRoot);
-      assert(
-        resolved === null,
-        'Blocks path traversal in resolveImportPath()'
+      const resolved = dependenciesModule.resolveImportPath(
+        traversalAttempt,
+        currentFile,
+        projectRoot
       );
+      assert(resolved === null, 'Blocks path traversal in resolveImportPath()');
     }
   } else {
     console.log('⚠️  isPathWithinProject not exported (skipping some tests)');
@@ -129,10 +127,7 @@ async function runTests() {
     `Cache returns same number of files (${files1.length} files)`
   );
 
-  assert(
-    time2 < time1,
-    `Cached call is faster (${time1}ms vs ${time2}ms)`
-  );
+  assert(time2 < time1, `Cached call is faster (${time1}ms vs ${time2}ms)`);
 
   // Test cache invalidation
   scanner.clearCache();
@@ -140,10 +135,7 @@ async function runTests() {
   await scanner.findJsFiles({ includeTests: false });
   const time3 = Date.now() - start3;
 
-  assert(
-    time3 >= time2,
-    'After clearCache(), scan takes longer (cache was cleared)'
-  );
+  assert(time3 >= time2, 'After clearCache(), scan takes longer (cache was cleared)');
 
   // Test 4: HNW Layer Detection
   console.log('\n🏗️  Test 4: HNW Layer Detection');
@@ -161,10 +153,7 @@ async function runTests() {
     const fullPath = resolve(projectRoot, path);
     if (existsSync(fullPath)) {
       const layer = scanner.getFileLayer(fullPath);
-      assert(
-        layer === expected,
-        `Detects ${path} as '${expected}' (got '${layer}')`
-      );
+      assert(layer === expected, `Detects ${path} as '${expected}' (got '${layer}')`);
     }
   }
 
@@ -184,10 +173,7 @@ async function runTests() {
         'all'
       );
 
-      assert(
-        Array.isArray(graph.parseFailures),
-        'Graph includes parseFailures array'
-      );
+      assert(Array.isArray(graph.parseFailures), 'Graph includes parseFailures array');
 
       console.log(`   ℹ️  Parse failures tracked: ${graph.parseFailures.length}`);
     } catch (error) {
@@ -209,7 +195,7 @@ async function runTests() {
   }
 }
 
-runTests().catch((error) => {
+runTests().catch(error => {
   console.error('Test suite error:', error);
   process.exit(1);
 });

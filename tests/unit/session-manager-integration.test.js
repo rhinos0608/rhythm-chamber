@@ -25,12 +25,12 @@ const mockConfigs = new Map();
 
 vi.mock('../../js/storage.js', () => ({
   Storage: {
-    getSession: vi.fn((id) => Promise.resolve(mockSessions.get(id) || null)),
-    saveSession: vi.fn((session) => {
+    getSession: vi.fn(id => Promise.resolve(mockSessions.get(id) || null)),
+    saveSession: vi.fn(session => {
       mockSessions.set(session.id, { ...session });
       return Promise.resolve();
     }),
-    deleteSession: vi.fn((id) => {
+    deleteSession: vi.fn(id => {
       mockSessions.delete(id);
       return Promise.resolve();
     }),
@@ -39,8 +39,8 @@ vi.mock('../../js/storage.js', () => ({
       mockConfigs.set(key, value);
       return Promise.resolve();
     }),
-    getConfig: vi.fn((key) => Promise.resolve(mockConfigs.get(key) || null))
-  }
+    getConfig: vi.fn(key => Promise.resolve(mockConfigs.get(key) || null)),
+  },
 }));
 
 // Mock AppState
@@ -48,26 +48,26 @@ vi.mock('../../js/state/app-state.js', () => ({
   AppState: {
     get: vi.fn(),
     set: vi.fn(),
-    update: vi.fn()
-  }
+    update: vi.fn(),
+  },
 }));
 
 // Mock SessionLockManager
 vi.mock('../../js/services/session-lock-manager.js', () => ({
   default: {
-    acquireProcessingLock: vi.fn(() => Promise.resolve({ locked: true, currentSessionId: null }))
-  }
+    acquireProcessingLock: vi.fn(() => Promise.resolve({ locked: true, currentSessionId: null })),
+  },
 }));
 
 // Mock DataVersion
 vi.mock('../../js/services/data-version.js', () => ({
   DataVersion: {
-    tagMessage: vi.fn((msg) => {
+    tagMessage: vi.fn(msg => {
       if (msg && typeof msg === 'object') {
         msg.dataVersion = '1.0.0';
       }
-    })
-  }
+    }),
+  },
 }));
 
 // Mock Mutex - must be a class factory
@@ -76,7 +76,7 @@ vi.mock('../../js/utils/concurrency/mutex.js', () => ({
     runExclusive(fn) {
       return fn();
     }
-  }
+  },
 }));
 
 // ==========================================
@@ -102,8 +102,8 @@ beforeEach(async () => {
     window._userContext = {
       personality: {
         name: 'default',
-        emoji: '🎵'
-      }
+        emoji: '🎵',
+      },
     };
   }
 
@@ -221,7 +221,7 @@ describe('SessionManager Integration - Full Flow', () => {
       { role: 'user', content: 'Message 1' },
       { role: 'assistant', content: 'Response 1' },
       { role: 'user', content: 'Message 2' },
-      { role: 'assistant', content: 'Response 2' }
+      { role: 'assistant', content: 'Response 2' },
     ];
 
     await SessionManager.addMessagesToHistory(messages);
@@ -242,11 +242,11 @@ describe('SessionManager Integration - Event Emission', () => {
     const events = [];
 
     // Subscribe to session events
-    EventBus.on('session:created', (data) => events.push({ type: 'created', data }));
-    EventBus.on('session:loaded', (data) => events.push({ type: 'loaded', data }));
-    EventBus.on('session:switched', (data) => events.push({ type: 'switched', data }));
-    EventBus.on('session:updated', (data) => events.push({ type: 'updated', data }));
-    EventBus.on('session:deleted', (data) => events.push({ type: 'deleted', data }));
+    EventBus.on('session:created', data => events.push({ type: 'created', data }));
+    EventBus.on('session:loaded', data => events.push({ type: 'loaded', data }));
+    EventBus.on('session:switched', data => events.push({ type: 'switched', data }));
+    EventBus.on('session:updated', data => events.push({ type: 'updated', data }));
+    EventBus.on('session:deleted', data => events.push({ type: 'deleted', data }));
 
     // Create session
     const session = await SessionManager.createSession('Event Test');
@@ -263,7 +263,7 @@ describe('SessionManager Integration - Event Emission', () => {
   it('should include correct payload in session:created event', async () => {
     let capturedEvent = null;
 
-    EventBus.on('session:created', (data) => {
+    EventBus.on('session:created', data => {
       capturedEvent = data;
     });
 
@@ -308,26 +308,32 @@ describe('SessionManager Integration - Event Emission', () => {
 describe('SessionManager Integration - Emergency Backup', () => {
   it('should create emergency backup on pagehide signal', () => {
     // Setup session with messages
-    SessionManager.createSession('Backup Test').then(() => {
-      return SessionManager.addMessageToHistory({ role: 'user', content: 'Important message' });
-    }).then(() => {
-      return SessionManager.addMessageToHistory({ role: 'assistant', content: 'Important response' });
-    }).then(() => {
-      // Trigger emergency backup
-      SessionManager.emergencyBackupSync();
+    SessionManager.createSession('Backup Test')
+      .then(() => {
+        return SessionManager.addMessageToHistory({ role: 'user', content: 'Important message' });
+      })
+      .then(() => {
+        return SessionManager.addMessageToHistory({
+          role: 'assistant',
+          content: 'Important response',
+        });
+      })
+      .then(() => {
+        // Trigger emergency backup
+        SessionManager.emergencyBackupSync();
 
-      // Verify backup in localStorage
-      const backupStr = localStorage.getItem('rc_session_emergency_backup');
-      expect(backupStr).toBeDefined();
+        // Verify backup in localStorage
+        const backupStr = localStorage.getItem('rc_session_emergency_backup');
+        expect(backupStr).toBeDefined();
 
-      const backup = JSON.parse(backupStr);
-      expect(backup).toMatchObject({
-        sessionId: expect.any(String),
-        messages: expect.any(Array),
-        timestamp: expect.any(Number)
+        const backup = JSON.parse(backupStr);
+        expect(backup).toMatchObject({
+          sessionId: expect.any(String),
+          messages: expect.any(Array),
+          timestamp: expect.any(Number),
+        });
+        expect(backup.messages).toHaveLength(2);
       });
-      expect(backup.messages).toHaveLength(2);
-    });
   });
 
   it('should recover from emergency backup on initialization', async () => {
@@ -338,9 +344,9 @@ describe('SessionManager Integration - Emergency Backup', () => {
       createdAt: new Date().toISOString(),
       messages: [
         { role: 'user', content: 'Recovered message 1' },
-        { role: 'assistant', content: 'Recovered response 1' }
+        { role: 'assistant', content: 'Recovered response 1' },
       ],
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
 
     localStorage.setItem('rc_session_emergency_backup', JSON.stringify(backupData));
@@ -357,12 +363,12 @@ describe('SessionManager Integration - Emergency Backup', () => {
 
   it('should not recover stale emergency backup', async () => {
     // Create an old backup (more than 1 hour)
-    const oldTimestamp = Date.now() - (61 * 60 * 1000); // 61 minutes ago
+    const oldTimestamp = Date.now() - 61 * 60 * 1000; // 61 minutes ago
     const backupData = {
       sessionId: 'old-session-id',
       createdAt: new Date(oldTimestamp).toISOString(),
       messages: [{ role: 'user', content: 'Old message' }],
-      timestamp: oldTimestamp
+      timestamp: oldTimestamp,
     };
 
     localStorage.setItem('rc_session_emergency_backup', JSON.stringify(backupData));
@@ -385,7 +391,7 @@ describe('SessionManager Integration - Emergency Backup', () => {
       sessionId: testSessionId,
       createdAt: new Date().toISOString(),
       messages: [{ role: 'user', content: 'Test' }],
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
 
     localStorage.setItem('rc_session_emergency_backup', JSON.stringify(backupData));
@@ -396,7 +402,7 @@ describe('SessionManager Integration - Emergency Backup', () => {
       id: testSessionId,
       title: 'Test Session',
       createdAt: backupData.createdAt,
-      messages: [] // Empty, so backup should restore
+      messages: [], // Empty, so backup should restore
     });
 
     // Recover
@@ -420,7 +426,8 @@ describe('SessionManager Integration - Debounced Save', () => {
     await SessionManager.addMessageToHistory({ role: 'user', content: 'Hello' });
 
     // Import to spy on saveCurrentSession
-    const { SessionPersistence } = await import('../../js/services/session-manager/session-persistence.js');
+    const { SessionPersistence } =
+      await import('../../js/services/session-manager/session-persistence.js');
 
     // Call saveConversation multiple times rapidly
     SessionManager.saveConversation(2000);
@@ -548,7 +555,7 @@ describe('SessionManager Integration - Session Switching', () => {
       { role: 'user', content: 'Question 2' },
       { role: 'assistant', content: 'Answer 2' },
       { role: 'user', content: 'Question 3' },
-      { role: 'assistant', content: 'Answer 3' }
+      { role: 'assistant', content: 'Answer 3' },
     ];
 
     await SessionManager.createSession('Persistence Test');
@@ -600,7 +607,7 @@ describe('SessionManager Integration - Message Truncation', () => {
     await SessionManager.addMessagesToHistory([
       { role: 'user', content: 'Keep 1' },
       { role: 'assistant', content: 'Remove this' },
-      { role: 'user', content: 'Keep 2' }
+      { role: 'user', content: 'Keep 2' },
     ]);
 
     expect(SessionManager.getHistory()).toHaveLength(3);

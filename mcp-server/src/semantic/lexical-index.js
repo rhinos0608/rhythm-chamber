@@ -31,10 +31,43 @@ const DEFAULT_B = 0.75;
  * Stopwords to filter out (common English words that add little meaning)
  */
 const STOPWORDS = new Set([
-  'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from',
-  'has', 'he', 'in', 'is', 'it', 'its', 'of', 'on', 'that', 'the',
-  'to', 'was', 'will', 'with', 'the', 'this', 'but', 'they', 'have',
-  'had', 'what', 'when', 'where', 'who', 'which', 'why', 'how'
+  'a',
+  'an',
+  'and',
+  'are',
+  'as',
+  'at',
+  'be',
+  'by',
+  'for',
+  'from',
+  'has',
+  'he',
+  'in',
+  'is',
+  'it',
+  'its',
+  'of',
+  'on',
+  'that',
+  'the',
+  'to',
+  'was',
+  'will',
+  'with',
+  'the',
+  'this',
+  'but',
+  'they',
+  'have',
+  'had',
+  'what',
+  'when',
+  'where',
+  'who',
+  'which',
+  'why',
+  'how',
 ]);
 
 /**
@@ -47,10 +80,10 @@ export class LexicalIndex {
     this.b = options.b ?? DEFAULT_B;
 
     // Index storage
-    this.documents = new Map();           // chunkId -> { text, metadata, terms }
-    this.termFreqs = new Map();            // chunkId -> Map(term -> frequency)
-    this.docFreqs = new Map();             // term -> number of documents containing term
-    this.docLengths = new Map();           // chunkId -> document length (term count)
+    this.documents = new Map(); // chunkId -> { text, metadata, terms }
+    this.termFreqs = new Map(); // chunkId -> Map(term -> frequency)
+    this.docFreqs = new Map(); // term -> number of documents containing term
+    this.docLengths = new Map(); // chunkId -> document length (term count)
 
     // Statistics
     this.totalDocs = 0;
@@ -98,7 +131,7 @@ export class LexicalIndex {
     this.documents.set(id, {
       text,
       metadata: { ...metadata, chunkId: id },
-      terms
+      terms,
     });
 
     // Store term frequencies
@@ -151,9 +184,7 @@ export class LexicalIndex {
     terms.push(...textTerms);
 
     // Filter stopwords and normalize
-    return terms.filter(term =>
-      term.length > 1 && !STOPWORDS.has(term.toLowerCase())
-    );
+    return terms.filter(term => term.length > 1 && !STOPWORDS.has(term.toLowerCase()));
   }
 
   /**
@@ -232,10 +263,32 @@ export class LexicalIndex {
    */
   _isCommonKeyword(token) {
     const keywords = new Set([
-      'const', 'let', 'var', 'function', 'return', 'if', 'else',
-      'for', 'while', 'class', 'extends', 'import', 'export',
-      'from', 'default', 'async', 'await', 'try', 'catch',
-      'throw', 'new', 'this', 'super', 'static', 'get', 'set'
+      'const',
+      'let',
+      'var',
+      'function',
+      'return',
+      'if',
+      'else',
+      'for',
+      'while',
+      'class',
+      'extends',
+      'import',
+      'export',
+      'from',
+      'default',
+      'async',
+      'await',
+      'try',
+      'catch',
+      'throw',
+      'new',
+      'this',
+      'super',
+      'static',
+      'get',
+      'set',
     ]);
 
     return keywords.has(token);
@@ -307,8 +360,8 @@ export class LexicalIndex {
 
       // BM25 formula
       const numerator = tf * (this.k1 + 1);
-      const denominator = tf + this.k1 * (1 - this.b + this.b * docLen / this.avgDocLen);
-      const bm25 = idf * numerator / denominator;
+      const denominator = tf + this.k1 * (1 - this.b + (this.b * docLen) / this.avgDocLen);
+      const bm25 = (idf * numerator) / denominator;
 
       score += bm25;
     }
@@ -349,7 +402,7 @@ export class LexicalIndex {
         results.push({
           chunkId,
           score,
-          metadata: doc.metadata
+          metadata: doc.metadata,
         });
       }
     }
@@ -391,9 +444,7 @@ export class LexicalIndex {
     }
 
     // Filter stopwords and short terms
-    return terms.filter(term =>
-      term.length > 1 && !STOPWORDS.has(term)
-    );
+    return terms.filter(term => term.length > 1 && !STOPWORDS.has(term));
   }
 
   /**
@@ -482,7 +533,7 @@ export class LexicalIndex {
       avgDocLen: this.avgDocLen,
       uniqueTerms: this.docFreqs.size,
       k1: this.k1,
-      b: this.b
+      b: this.b,
     };
   }
 
@@ -502,7 +553,7 @@ export class LexicalIndex {
       documents: {},
       termFreqs: {},
       docFreqs: Array.from(this.docFreqs.entries()),
-      docLengths: Array.from(this.docLengths.entries())
+      docLengths: Array.from(this.docLengths.entries()),
     };
 
     for (const [chunkId, doc] of this.documents.entries()) {

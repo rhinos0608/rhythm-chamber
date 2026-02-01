@@ -6,12 +6,16 @@
 import { resolve, join } from 'path';
 import { existsSync, readFileSync } from 'fs';
 import { logger } from '../utils/logger.js';
-import { createPartialResponse, createErrorResponse, calculateConfidence } from '../errors/partial.js';
+import {
+  createPartialResponse,
+  createErrorResponse,
+  calculateConfidence,
+} from '../errors/partial.js';
 import {
   validateTarget,
   validateSeverity,
   getFilesInDirectory,
-  ValidationError
+  ValidationError,
 } from '../utils/validation.js';
 // FIX: Replace CommonJS require() with ES module imports
 import * as parser from '@babel/parser';
@@ -22,37 +26,50 @@ import { ESLint } from 'eslint';
  */
 export const schema = {
   name: 'get_compilation_errors',
-  description: 'Get compilation errors, syntax errors, and lint errors with precise locations, suggested fixes, and priority ranking. Combines Babel parsing for syntax errors and ESLint for code quality issues.',
+  description:
+    'Get compilation errors, syntax errors, and lint errors with precise locations, suggested fixes, and priority ranking. Combines Babel parsing for syntax errors and ESLint for code quality issues.',
   inputSchema: {
     type: 'object',
     properties: {
       target: {
-        description: 'File or directory to analyze. Paths are relative to project root. Examples: "js/storage/indexed-db.js" or { "filePath": "js/storage/indexed-db.js" } or { "directory": "js/storage" }',
+        description:
+          'File or directory to analyze. Paths are relative to project root. Examples: "js/storage/indexed-db.js" or { "filePath": "js/storage/indexed-db.js" } or { "directory": "js/storage" }',
         oneOf: [
-          { type: 'string', description: 'File path as string (e.g., "js/controllers/chat-ui-controller.js")' },
+          {
+            type: 'string',
+            description: 'File path as string (e.g., "js/controllers/chat-ui-controller.js")',
+          },
           {
             type: 'object',
-            description: 'Object with filePath or directory property for explicit type specification',
+            description:
+              'Object with filePath or directory property for explicit type specification',
             properties: {
-              filePath: { type: 'string', description: 'File path (e.g., "js/controllers/chat-ui-controller.js")' },
-              directory: { type: 'string', description: 'Directory path to analyze all JS files within (e.g., "js/controllers")' }
+              filePath: {
+                type: 'string',
+                description: 'File path (e.g., "js/controllers/chat-ui-controller.js")',
+              },
+              directory: {
+                type: 'string',
+                description:
+                  'Directory path to analyze all JS files within (e.g., "js/controllers")',
+              },
             },
-            additionalProperties: false
-          }
-        ]
+            additionalProperties: false,
+          },
+        ],
       },
       severity: {
         type: 'string',
         enum: ['all', 'error', 'warning'],
         default: 'all',
-        description: 'Filter by severity level'
+        description: 'Filter by severity level',
       },
       includeContext: {
         type: 'boolean',
         default: true,
-        description: 'Include code context around errors'
-      }
-    }
+        description: 'Include code context around errors',
+      },
+    },
   },
   required: ['target'],
 };
@@ -61,7 +78,8 @@ export const schema = {
  * Handle tool execution
  */
 export const handler = async (args, projectRoot) => {
-  let { target, severity = 'all', includeContext = true } = args;
+  let { target } = args;
+  const { severity = 'all', includeContext = true } = args;
 
   logger.info('get_compilation_errors called with:', { target, severity, includeContext });
 
@@ -78,7 +96,7 @@ export const handler = async (args, projectRoot) => {
         'Invalid target format. If trying to use object format, ensure valid JSON. For file paths, use plain string without braces.',
         {
           received: target.substring(0, 100),
-          hint: 'Use either "path/to/file.js" or {"directory": "path/to/dir"}'
+          hint: 'Use either "path/to/file.js" or {"directory": "path/to/dir"}',
         }
       );
     }
@@ -105,7 +123,7 @@ export const handler = async (args, projectRoot) => {
     if (targetFiles.length === 0) {
       return createErrorResponse('No files to analyze', {
         target: validatedTarget.relative,
-        isDirectory
+        isDirectory,
       });
     }
 
@@ -133,7 +151,6 @@ export const handler = async (args, projectRoot) => {
         allErrors.push(...lintErrors);
 
         processedFiles++;
-
       } catch (error) {
         failedFiles++;
         warnings.push(`Failed to analyze ${file}: ${error.message}`);
@@ -142,9 +159,12 @@ export const handler = async (args, projectRoot) => {
     }
 
     // Filter by severity
-    const filteredErrors = validatedSeverity === 'all' ? allErrors :
-                          validatedSeverity === 'error' ? allErrors.filter(e => e.severity === 'error') :
-                          allErrors.filter(e => e.severity === 'warning');
+    const filteredErrors =
+      validatedSeverity === 'all'
+        ? allErrors
+        : validatedSeverity === 'error'
+          ? allErrors.filter(e => e.severity === 'error')
+          : allErrors.filter(e => e.severity === 'warning');
 
     // Group errors by code for summary
     const errorsByCode = {};
@@ -176,7 +196,7 @@ export const handler = async (args, projectRoot) => {
         total_errors_unfiltered: totalErrors,
         total_warnings_unfiltered: totalWarnings,
         by_code: errorsByCode,
-        fix_priority: fixPriority
+        fix_priority: fixPriority,
       },
       errors: filteredErrors.map(error => ({
         file: error.file,
@@ -187,33 +207,37 @@ export const handler = async (args, projectRoot) => {
         message: error.message,
         context: includeContext ? error.context : undefined,
         suggested_fix: error.suggested_fix,
-        related_symbols: error.related_symbols || []
-      }))
+        related_symbols: error.related_symbols || [],
+      })),
     };
 
     // Format output
     const output = formatErrors(result);
 
     // Check completeness
-    const completeness = processedFiles === targetFiles.length ? 100 :
-                        Math.round((processedFiles / targetFiles.length) * 100);
+    const completeness =
+      processedFiles === targetFiles.length
+        ? 100
+        : Math.round((processedFiles / targetFiles.length) * 100);
     const confidence = calculateConfidence(completeness, failedFiles);
 
     if (completeness < 100 || confidence === 'LOW') {
       // Partial result
-      return createPartialResponse({
-        content: [{ type: 'text', text: output }]
-      }, {
-        completeness,
-        messages: warnings,
-        suggestions: fixPriority.slice(0, 3)
-      });
+      return createPartialResponse(
+        {
+          content: [{ type: 'text', text: output }],
+        },
+        {
+          completeness,
+          messages: warnings,
+          suggestions: fixPriority.slice(0, 3),
+        }
+      );
     }
 
     return {
-      content: [{ type: 'text', text: output }]
+      content: [{ type: 'text', text: output }],
     };
-
   } catch (error) {
     logger.error('Error in get_compilation_errors:', error);
 
@@ -222,7 +246,7 @@ export const handler = async (args, projectRoot) => {
       const details = error.details || {};
       const lines = [];
 
-      lines.push(`# Validation Error`);
+      lines.push('# Validation Error');
       lines.push('');
       lines.push(`**Error:** ${error.message}`);
       lines.push('');
@@ -241,7 +265,7 @@ export const handler = async (args, projectRoot) => {
       }
 
       lines.push('');
-      lines.push(`**Expected format:**`);
+      lines.push('**Expected format:**');
       lines.push('```json');
       lines.push('{');
       lines.push('  "target": "path/to/file.js"');
@@ -252,7 +276,7 @@ export const handler = async (args, projectRoot) => {
 
       return {
         content: [{ type: 'text', text: lines.join('\n') }],
-        isError: true
+        isError: true,
       };
     }
 
@@ -271,9 +295,8 @@ function getSyntaxErrors(filePath, projectRoot) {
     // FIX: Use imported parser instead of require()
     parser.parse(content, {
       sourceType: 'module',
-      plugins: ['jsx']
+      plugins: ['jsx'],
     });
-
   } catch (error) {
     if (error.loc) {
       const lines = readFileSync(filePath, 'utf-8').split('\n');
@@ -287,7 +310,7 @@ function getSyntaxErrors(filePath, projectRoot) {
         code: 'SYNTAX_ERROR',
         message: error.message,
         context: extractErrorContext(lines, errorLine),
-        suggested_fix: suggestSyntaxFix(error, lines[errorLine])
+        suggested_fix: suggestSyntaxFix(error, lines[errorLine]),
       });
     } else {
       errors.push({
@@ -296,7 +319,7 @@ function getSyntaxErrors(filePath, projectRoot) {
         column: 0,
         severity: 'error',
         code: 'PARSE_ERROR',
-        message: error.message
+        message: error.message,
       });
     }
   }
@@ -322,9 +345,9 @@ async function getLintErrors(filePath, projectRoot, severity) {
         rules: {
           'no-undef': 'error',
           'no-unused-vars': 'warn',
-          'no-console': 'off'
-        }
-      }
+          'no-console': 'off',
+        },
+      },
     });
 
     const results = await eslint.lintText(content, { filePath });
@@ -345,11 +368,10 @@ async function getLintErrors(filePath, projectRoot, severity) {
           code: message.ruleId,
           message: message.message,
           context: extractErrorContext(lines, errorLine),
-          suggested_fix: suggestLintFix(message, lines[errorLine])
+          suggested_fix: suggestLintFix(message, lines[errorLine]),
         });
       }
     }
-
   } catch (error) {
     // ESLint not available or failed, skip lint errors
     logger.warn(`ESLint failed for ${filePath}:`, error.message);
@@ -462,9 +484,9 @@ function formatErrors(result) {
         lines.push(`   ${error.message}`);
 
         if (error.context) {
-          lines.push(`   \`\`\``);
+          lines.push('   ```');
           lines.push(`   ${error.context.split('\n').join('\n   ')}`);
-          lines.push(`   \`\`\``);
+          lines.push('   ```');
         }
 
         if (error.suggested_fix) {
@@ -482,9 +504,13 @@ function formatErrors(result) {
     if (hasWarnings && !hasErrors) {
       lines.push('## ✅ No Errors Found (Warnings Present)');
       lines.push('');
-      lines.push(`No syntax or lint errors were found. However, ${result.summary.total_warnings_unfiltered} warning(s) were detected.`);
+      lines.push(
+        `No syntax or lint errors were found. However, ${result.summary.total_warnings_unfiltered} warning(s) were detected.`
+      );
       lines.push('');
-      lines.push('**Note:** Warnings were not included in this report. To see warnings, run again with `severity: "all"` or `severity: "warning"`.');
+      lines.push(
+        '**Note:** Warnings were not included in this report. To see warnings, run again with `severity: "all"` or `severity: "warning"`.'
+      );
       lines.push('');
     } else if (!hasErrors && !hasWarnings) {
       lines.push('## ✅ No Errors or Warnings Found');
@@ -497,10 +523,14 @@ function formatErrors(result) {
       lines.push('## ✅ No Results Matching Filter');
       lines.push('');
       if (hasErrors) {
-        lines.push(`- ${result.summary.total_errors_unfiltered} error(s) exist but may be filtered by your settings.`);
+        lines.push(
+          `- ${result.summary.total_errors_unfiltered} error(s) exist but may be filtered by your settings.`
+        );
       }
       if (hasWarnings) {
-        lines.push(`- ${result.summary.total_warnings_unfiltered} warning(s) exist but may be filtered by your settings.`);
+        lines.push(
+          `- ${result.summary.total_warnings_unfiltered} warning(s) exist but may be filtered by your settings.`
+        );
       }
       lines.push('');
       lines.push('**Note:** Try running again with `severity: "all"` to see all issues.');

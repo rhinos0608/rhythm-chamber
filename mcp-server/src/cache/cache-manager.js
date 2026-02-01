@@ -66,7 +66,7 @@ export class CacheManager {
   generateKey(filePath, options = {}) {
     const optionsStr = Object.keys(options)
       .sort()
-      .map((k) => `${k}:${options[k]}`)
+      .map(k => `${k}:${options[k]}`)
       .join('|');
 
     return `${filePath}:${optionsStr}`;

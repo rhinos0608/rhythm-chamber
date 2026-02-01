@@ -31,8 +31,10 @@ import {
   TRANSFORMERS_CONFIG,
   LMSTUDIO_CONFIG,
   EMBEDDING_CACHE_CONFIG,
-  MODEL_DIMENSIONS
+  MODEL_DIMENSIONS,
+  normalizeEmbeddingDimension,
 } from './config.js';
+import { getModelConfig } from './model-config.js';
 
 // Configure Transformers.js for browser-less environment
 env.allowLocalModels = true;
@@ -64,9 +66,17 @@ export class HybridEmbeddings {
     this.mode = options.mode || EMBEDDING_MODE;
     this.providerPriority = options.providerPriority || PROVIDER_PRIORITY;
 
-    // LM Studio config
+    // LM Studio config - use ModelConfigManager for model selection
     this.endpoint = options.endpoint || LMSTUDIO_CONFIG.endpoint;
-    this.modelName = options.model || LMSTUDIO_CONFIG.model;
+
+    // CRITICAL FIX: Read from ModelConfigManager to bridge the two config systems
+    // If options.model is provided, use it; otherwise check ModelConfigManager;
+    // finally fall back to LMSTUDIO_CONFIG.model or environment variable
+    const modelConfig = getModelConfig();
+    const configModel = modelConfig.getActiveModel();
+
+    // Map model names to LM Studio compatible format if needed
+    this.modelName = options.model || this._mapToLMStudioModel(configModel) || LMSTUDIO_CONFIG.model;
 
     // OpenRouter config
     this.openRouterApiKey = options.openRouterApiKey || OPENROUTER_CONFIG.apiKey;
@@ -79,8 +89,8 @@ export class HybridEmbeddings {
     this.forceTransformers = options.forceTransformers || TRANSFORMERS_CONFIG.forceOnly;
 
     this.transformersPipeline = null;
-    this.transformersModel = FALLBACK_MODEL;  // Track which model is loaded
-    this.initPromises = new Map();  // Per-model loading promises (fixes race condition)
+    this.transformersModel = FALLBACK_MODEL; // Track which model is loaded
+    this.initPromises = new Map(); // Per-model loading promises (fixes race condition)
     this.transformersLoading = false;
     this.lmStudioAvailable = null;
     this.openRouterAvailable = null;
@@ -90,7 +100,53 @@ export class HybridEmbeddings {
     this.cache = new Map();
     this.cacheStats = { hits: 0, misses: 0 };
 
-    console.error(`[Embeddings] Mode: ${this.mode}, Providers: ${this.providerPriority.join(' → ')}, Dimension: ${this.dimension}`);
+    // Track which provider was last used for embeddings
+    this.lastUsedProvider = null;
+    this.lastUsedModel = null;
+
+    // Store reference to model config for dynamic updates
+    this.modelConfig = modelConfig;
+
+    console.error(
+      `[Embeddings] Mode: ${this.mode}, Providers: ${this.providerPriority.join(' → ')}, Dimension: ${this.dimension}`
+    );
+    console.error(
+      `[Embeddings] Config model: ${configModel}, LM Studio model: ${this.modelName || 'fallback to Transformers.js'}`
+    );
+  }
+
+  /**
+   * Map model name from ModelConfigManager to LM Studio compatible format
+   * @private
+   */
+  _mapToLMStudioModel(modelName) {
+    // If model name starts with 'text-embedding-', it's already an LM Studio model
+    if (modelName?.startsWith('text-embedding-')) {
+      return modelName;
+    }
+
+    // Map known transformers models to LM Studio equivalents if available
+    const lmStudioMappings = {
+      'Xenova/gte-base': 'text-embedding-embeddinggemma-300m', // Use embeddinggemma as alternative
+      'jinaai/jina-embeddings-v2-base-code': 'text-embedding-nomic-embed-code@q8_0',
+      // Add more mappings as needed
+    };
+
+    const mapped = lmStudioMappings[modelName];
+    if (mapped) {
+      console.error(`[Embeddings] Mapped ${modelName} → ${mapped} for LM Studio`);
+      return mapped;
+    }
+
+    // If it's an LM Studio model name (starts with text-embedding-), use as-is
+    if (modelName?.includes('embedding') || modelName?.includes('nomic')) {
+      return modelName;
+    }
+
+    // For Transformers.js models without LM Studio equivalents, return null
+    // to fall back to Transformers.js provider
+    console.error(`[Embeddings] Model ${modelName} is not an LM Studio model, will use Transformers.js`);
+    return null;
   }
 
   /**
@@ -119,7 +175,7 @@ export class HybridEmbeddings {
     // Cache result with model-aware key
     this.cache.set(cacheKey, {
       embedding,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     return embedding;
@@ -132,14 +188,18 @@ export class HybridEmbeddings {
   async getBatchEmbeddings(texts) {
     const errors = [];
 
-    console.error(`[Embeddings] getBatchEmbeddings called with ${texts.length} texts, mode: ${this.mode}, providers: ${this.providerPriority.join(', ')}`);
+    console.error(
+      `[Embeddings] getBatchEmbeddings called with ${texts.length} texts, mode: ${this.mode}, providers: ${this.providerPriority.join(', ')}`
+    );
 
     // Try each provider in priority order (respects EMBEDDING_MODE)
     for (const provider of this.providerPriority) {
       try {
         switch (provider) {
           case 'openrouter':
-            console.error(`[Embeddings] Checking OpenRouter: enabled=${OPENROUTER_CONFIG.enabled}, hasKey=${!!this.openRouterApiKey}`);
+            console.error(
+              `[Embeddings] Checking OpenRouter: enabled=${OPENROUTER_CONFIG.enabled}, hasKey=${!!this.openRouterApiKey}`
+            );
             if (OPENROUTER_CONFIG.enabled && this.openRouterApiKey) {
               console.error(`[Embeddings] Using OpenRouter for batch of ${texts.length} texts`);
               return await this._fetchBatchEmbeddingsOpenRouter(texts);
@@ -147,7 +207,7 @@ export class HybridEmbeddings {
             break;
 
           case 'lmstudio':
-            if (LMSTUDIO_CONFIG.enabled && await this.isLMStudioAvailable()) {
+            if (LMSTUDIO_CONFIG.enabled && (await this.isLMStudioAvailable())) {
               console.error(`[Embeddings] Using LM Studio for batch of ${texts.length} texts`);
               return await this._fetchBatchEmbeddingsLMStudio(texts);
             }
@@ -155,7 +215,9 @@ export class HybridEmbeddings {
 
           case 'transformers':
             if (TRANSFORMERS_CONFIG.enabled) {
-              console.error(`[Embeddings] Using Transformers.js for batch of ${texts.length} texts`);
+              console.error(
+                `[Embeddings] Using Transformers.js for batch of ${texts.length} texts`
+              );
               return await this._fetchBatchWithTransformers(texts);
             }
             break;
@@ -169,7 +231,9 @@ export class HybridEmbeddings {
     // All configured providers failed - try transformers as last resort fallback
     if (!this.providerPriority.includes('transformers') && TRANSFORMERS_CONFIG.enabled) {
       try {
-        console.error(`[Embeddings] All configured providers failed, falling back to Transformers.js`);
+        console.error(
+          '[Embeddings] All configured providers failed, falling back to Transformers.js'
+        );
         return await this._fetchBatchWithTransformers(texts);
       } catch (fallbackError) {
         errors.push({ provider: 'transformers-fallback', error: fallbackError.message });
@@ -186,6 +250,9 @@ export class HybridEmbeddings {
    * Groups queries by type (code vs general) to use optimal models
    */
   async _fetchBatchWithTransformers(texts) {
+    // Track that we're using transformers
+    this.lastUsedProvider = 'transformers';
+
     // Classify each query by its optimal model
     const codeQueries = [];
     const generalQueries = [];
@@ -206,7 +273,7 @@ export class HybridEmbeddings {
         codeQueries.map(q => q.text),
         JINA_CODE_MODEL
       );
-      codeQueries.forEach((q, i) => results[q.index] = codeEmbeddings[i]);
+      codeQueries.forEach((q, i) => (results[q.index] = codeEmbeddings[i]));
     }
 
     // Process general queries with fallback model
@@ -215,7 +282,7 @@ export class HybridEmbeddings {
         generalQueries.map(q => q.text),
         FALLBACK_MODEL
       );
-      generalQueries.forEach((q, i) => results[q.index] = generalEmbeddings[i]);
+      generalQueries.forEach((q, i) => (results[q.index] = generalEmbeddings[i]));
     }
 
     return results;
@@ -244,7 +311,7 @@ export class HybridEmbeddings {
     for (const text of texts) {
       const output = await this.transformersPipeline(text, {
         pooling: 'mean',
-        normalize: true
+        normalize: true,
       });
 
       const tensorData = await output.tolist();
@@ -257,7 +324,8 @@ export class HybridEmbeddings {
         throw new Error(`Unexpected tensor structure: ${JSON.stringify(tensorData).slice(0, 100)}`);
       }
 
-      results.push(new Float32Array(embeddingArray));
+      // Normalize dimension to EMBEDDING_DIMENSION (truncate if needed)
+      results.push(normalizeEmbeddingDimension(embeddingArray, EMBEDDING_DIMENSION));
     }
 
     return results;
@@ -280,14 +348,14 @@ export class HybridEmbeddings {
       const { signal, clearTimeout: clearFetchTimeout } = createTimeoutSignal(5000);
       const response = await fetch(`${this.endpoint}/models`, {
         method: 'GET',
-        signal
+        signal,
       });
       clearFetchTimeout();
 
       if (response.ok) {
         const data = await response.json();
-        const hasEmbeddingModel = data.data?.some(m =>
-          m.id.includes(this.modelName) || m.id.includes('embedding')
+        const hasEmbeddingModel = data.data?.some(
+          m => m.id.includes(this.modelName) || m.id.includes('embedding')
         );
 
         this.lmStudioAvailable = hasEmbeddingModel;
@@ -312,16 +380,41 @@ export class HybridEmbeddings {
 
   /**
    * Get current embedding source
-   * Returns the actual source being used (Transformers.js is now primary)
+   * Returns the actual source being used (dynamically detected)
    */
   getCurrentSource() {
-    // Transformers.js is always available (it's the primary source)
-    // The model used depends on query type (selected dynamically)
+    // If we've used a provider, report it; otherwise default to 'unknown'
+    const source = this.lastUsedProvider || 'unknown';
+
+    // Determine the model name based on which provider was used
+    let model;
+    switch (source) {
+      case 'lmstudio':
+        model = this.modelName;
+        break;
+      case 'openrouter':
+        model = this.openRouterModel;
+        break;
+      case 'transformers':
+        model = this.transformersModel || FALLBACK_MODEL;
+        break;
+      default:
+        model = FALLBACK_MODEL;
+    }
+
+    // Map source to display-friendly name
+    const sourceNames = {
+      lmstudio: 'lmstudio',
+      openrouter: 'openrouter',
+      transformers: 'transformers',
+      unknown: 'unknown',
+    };
+
     return {
-      source: 'transformers',
-      model: this.transformersModel || FALLBACK_MODEL,
+      source: sourceNames[source] || 'unknown',
+      model,
       fallbackAvailable: this.lmStudioAvailable,
-      isCodeSpecialized: this.isCodeSpecific()
+      isCodeSpecialized: this.isCodeSpecific(),
     };
   }
 
@@ -332,7 +425,7 @@ export class HybridEmbeddings {
     return {
       ...this.cacheStats,
       size: this.cache.size,
-      hitRate: this.cacheStats.hits / (this.cacheStats.hits + this.cacheStats.misses) || 0
+      hitRate: this.cacheStats.hits / (this.cacheStats.hits + this.cacheStats.misses) || 0,
     };
   }
 
@@ -354,7 +447,7 @@ export class HybridEmbeddings {
     const str = text.trim().substring(0, 200); // Limit key size
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash; // Convert to 32bit integer
     }
 
@@ -379,10 +472,12 @@ export class HybridEmbeddings {
     if (!query || typeof query !== 'string') return false;
 
     // First, exclude common natural language phrases that contain code words
-    const naturalLanguagePhrases = /\b(the function of|class action|class income|middle class|world class|first class|business class|working class|return on|return ticket|for sale|for free|for ever|while ago|if you|if we|if the|else can|else will)\b/i;
+    const naturalLanguagePhrases =
+      /\b(the function of|class action|class income|middle class|world class|first class|business class|working class|return on|return ticket|for sale|for free|for ever|while ago|if you|if we|if the|else can|else will)\b/i;
     if (naturalLanguagePhrases.test(query)) {
       // Check for additional strong code indicators before ruling out
-      const overridePatterns = /\b(function|class|const|let|var|import|export|def)\s*\(|\b(function|class|const|let|var|import|export|def)\s+[a-z_][a-zA-Z0-9_]*\s*\(/;
+      const overridePatterns =
+        /\b(function|class|const|let|var|import|export|def)\s*\(|\b(function|class|const|let|var|import|export|def)\s+[a-z_][a-zA-Z0-9_]*\s*\(/;
       if (!overridePatterns.test(query)) {
         // Only check syntax patterns for potential override
         const syntaxPatterns = /\w+\s*\(\s*\)|\+\+|--|=>|::|&&|\|\||\{[\s\S]*\}/;
@@ -395,7 +490,8 @@ export class HybridEmbeddings {
 
     // Strong code-specific indicators (keyword followed by identifier or bracket)
     // Matches: "function foo", "const x", "import {", "class Foo", etc.
-    const strongCodePatterns = /\b(function|class|const|let|var|import|export|def|async|await|interface|type|enum|struct|impl|fn|pub|mut)\s+[a-zA-Z_<{\[]/;
+    const strongCodePatterns =
+      /\b(function|class|const|let|var|import|export|def|async|await|interface|type|enum|struct|impl|fn|pub|mut)\s+[a-zA-Z_<{[]/;
 
     // Syntax patterns that are very rare in natural language
     // Matches: "foo()", "x++", "=>", "::", etc.
@@ -403,13 +499,15 @@ export class HybridEmbeddings {
 
     // Programming keywords that need context (followed by bracket or operator)
     // Matches: "if(", "for {", "return x", etc.
-    const contextualKeywords = /\b(return|static|try|catch|throw|break|continue|switch|case)\b.*[({\w]|\b(if|else|for|while)\s*\(/;
+    const contextualKeywords =
+      /\b(return|static|try|catch|throw|break|continue|switch|case)\b.*[({\w]|\b(if|else|for|while)\s*\(/;
 
     // Check for standalone function/class keyword (at end or followed by paren)
     const standaloneKeywords = /\b(function|class)\s*\(/;
 
     // Check for keyword at end of query
-    const keywordAtEnd = /\b(function|class|const|def|import|export|async|await|return|static|try|catch|throw|break|continue|switch|case|interface|type|enum|struct|impl|fn|pub|mut)$\b/;
+    const keywordAtEnd =
+      /\b(function|class|const|def|import|export|async|await|return|static|try|catch|throw|break|continue|switch|case|interface|type|enum|struct|impl|fn|pub|mut)$\b/;
 
     // Count number of code indicators
     let codeIndicatorCount = 0;
@@ -417,7 +515,7 @@ export class HybridEmbeddings {
     if (syntaxPatterns.test(query)) codeIndicatorCount += 2;
     if (contextualKeywords.test(query)) codeIndicatorCount += 1;
     if (standaloneKeywords.test(query)) codeIndicatorCount += 2;
-    if (keywordAtEnd.test(query)) codeIndicatorCount += 2;  // Increased from 1 to 2
+    if (keywordAtEnd.test(query)) codeIndicatorCount += 2; // Increased from 1 to 2
 
     // Require at least 2 indicators for code classification (reduces false positives)
     return codeIndicatorCount >= 2;
@@ -452,7 +550,7 @@ export class HybridEmbeddings {
             break;
 
           case 'lmstudio':
-            if (LMSTUDIO_CONFIG.enabled && await this.isLMStudioAvailable()) {
+            if (LMSTUDIO_CONFIG.enabled && (await this.isLMStudioAvailable())) {
               return await this._fetchEmbeddingLMStudio(text);
             }
             break;
@@ -478,21 +576,23 @@ export class HybridEmbeddings {
    * Fetch embedding from OpenRouter API
    */
   async _fetchEmbeddingOpenRouter(text) {
-    const { signal, clearTimeout: clearFetchTimeout } = createTimeoutSignal(OPENROUTER_CONFIG.timeout);
+    const { signal, clearTimeout: clearFetchTimeout } = createTimeoutSignal(
+      OPENROUTER_CONFIG.timeout
+    );
 
     try {
       const response = await fetch(`${this.openRouterBaseUrl}/embeddings`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.openRouterApiKey}`,
-          'Content-Type': 'application/json'
+          Authorization: `Bearer ${this.openRouterApiKey}`,
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           model: this.openRouterModel,
           input: text,
-          dimensions: EMBEDDING_DIMENSION  // Request specific dimension
+          dimensions: EMBEDDING_DIMENSION, // Request specific dimension
         }),
-        signal
+        signal,
       });
 
       if (!response.ok) {
@@ -507,12 +607,8 @@ export class HybridEmbeddings {
         throw new Error('Invalid embedding response from OpenRouter');
       }
 
-      // Validate dimension
-      if (embedding.length !== EMBEDDING_DIMENSION) {
-        throw new Error(`OpenRouter returned ${embedding.length} dimensions, expected ${EMBEDDING_DIMENSION}`);
-      }
-
-      return new Float32Array(embedding);
+      // Normalize dimension to EMBEDDING_DIMENSION (truncate if API doesn't support dimensions parameter)
+      return normalizeEmbeddingDimension(embedding, EMBEDDING_DIMENSION);
     } finally {
       clearFetchTimeout();
     }
@@ -522,21 +618,25 @@ export class HybridEmbeddings {
    * Fetch batch embeddings from OpenRouter API
    */
   async _fetchBatchEmbeddingsOpenRouter(texts) {
+    // Track that we're using OpenRouter
+    this.lastUsedProvider = 'openrouter';
+    this.lastUsedModel = this.openRouterModel;
+
     const { signal, clearTimeout: clearFetchTimeout } = createTimeoutSignal(60000);
 
     try {
       const response = await fetch(`${this.openRouterBaseUrl}/embeddings`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.openRouterApiKey}`,
-          'Content-Type': 'application/json'
+          Authorization: `Bearer ${this.openRouterApiKey}`,
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           model: this.openRouterModel,
           input: texts,
-          dimensions: EMBEDDING_DIMENSION
+          dimensions: EMBEDDING_DIMENSION,
         }),
-        signal
+        signal,
       });
 
       if (!response.ok) {
@@ -551,10 +651,10 @@ export class HybridEmbeddings {
         throw new Error('Invalid batch embedding response from OpenRouter');
       }
 
-      // Sort by index and extract embeddings
+      // Sort by index and extract embeddings, then normalize dimensions
       return embeddings
         .sort((a, b) => a.index - b.index)
-        .map(item => new Float32Array(item.embedding));
+        .map(item => normalizeEmbeddingDimension(item.embedding, EMBEDDING_DIMENSION));
     } finally {
       clearFetchTimeout();
     }
@@ -567,14 +667,21 @@ export class HybridEmbeddings {
     const { signal, clearTimeout: clearFetchTimeout } = createTimeoutSignal(30000);
 
     try {
+      const requestBody = {
+        model: this.modelName,
+        input: text,
+      };
+
+      // Request specific dimensions if LM Studio supports it (OpenAI-compatible API)
+      if (LMSTUDIO_CONFIG.truncateToDimension) {
+        requestBody.dimensions = EMBEDDING_DIMENSION;
+      }
+
       const response = await fetch(`${this.endpoint}/embeddings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: this.modelName,
-          input: text
-        }),
-        signal
+        body: JSON.stringify(requestBody),
+        signal,
       });
 
       if (!response.ok) {
@@ -591,7 +698,8 @@ export class HybridEmbeddings {
         throw new Error('Invalid embedding response from LM Studio');
       }
 
-      return new Float32Array(embedding);
+      // Normalize dimension to EMBEDDING_DIMENSION (truncate if API doesn't support dimensions parameter)
+      return normalizeEmbeddingDimension(embedding, EMBEDDING_DIMENSION);
     } finally {
       // CRITICAL FIX: Always clear timeout, even if fetch throws
       clearFetchTimeout();
@@ -602,17 +710,28 @@ export class HybridEmbeddings {
    * Fetch batch embeddings from LM Studio
    */
   async _fetchBatchEmbeddingsLMStudio(texts) {
+    // Track that we're using LM Studio
+    this.lastUsedProvider = 'lmstudio';
+    this.lastUsedModel = this.modelName;
+
     const { signal, clearTimeout: clearFetchTimeout } = createTimeoutSignal(60000);
 
     try {
+      const requestBody = {
+        model: this.modelName,
+        input: texts,
+      };
+
+      // Request specific dimensions if LM Studio supports it (OpenAI-compatible API)
+      if (LMSTUDIO_CONFIG.truncateToDimension) {
+        requestBody.dimensions = EMBEDDING_DIMENSION;
+      }
+
       const response = await fetch(`${this.endpoint}/embeddings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: this.modelName,
-          input: texts
-        }),
-        signal
+        body: JSON.stringify(requestBody),
+        signal,
       });
 
       if (!response.ok) {
@@ -630,7 +749,7 @@ export class HybridEmbeddings {
       }
 
       return embeddings.map(item =>
-        new Float32Array(item.embedding || item)
+        normalizeEmbeddingDimension(item.embedding || item, EMBEDDING_DIMENSION)
       );
     } finally {
       // CRITICAL FIX: Always clear timeout, even if fetch throws
@@ -663,7 +782,7 @@ export class HybridEmbeddings {
     // Generate embedding
     const output = await this.transformersPipeline(text, {
       pooling: 'mean',
-      normalize: true
+      normalize: true,
     });
 
     // Convert to Float32Array
@@ -684,7 +803,8 @@ export class HybridEmbeddings {
       throw new Error(`Unexpected tensor structure: ${JSON.stringify(tensorData).slice(0, 100)}`);
     }
 
-    return new Float32Array(embeddingArray);
+    // Normalize dimension to EMBEDDING_DIMENSION (truncate if needed)
+    return normalizeEmbeddingDimension(embeddingArray, EMBEDDING_DIMENSION);
   }
 
   /**
@@ -692,11 +812,17 @@ export class HybridEmbeddings {
    * @param {string} modelName - The model to load (defaults to FALLBACK_MODEL)
    */
   async _initializePipeline(modelName = FALLBACK_MODEL) {
-    console.error(`[Embeddings] Loading Transformers.js model: ${modelName}${modelName === JINA_CODE_MODEL ? ' (code-specialized)' : ''}...`);
+    console.error(
+      `[Embeddings] Loading Transformers.js model: ${modelName}${modelName === JINA_CODE_MODEL ? ' (code-specialized)' : ''}...`
+    );
 
     try {
       // Dispose old pipeline if switching models to prevent memory leak
-      if (this.transformersPipeline && this.transformersModel && this.transformersModel !== modelName) {
+      if (
+        this.transformersPipeline &&
+        this.transformersModel &&
+        this.transformersModel !== modelName
+      ) {
         try {
           if (typeof this.transformersPipeline.dispose === 'function') {
             await this.transformersPipeline.dispose();
@@ -709,23 +835,29 @@ export class HybridEmbeddings {
       }
 
       this.transformersPipeline = await pipeline('feature-extraction', modelName, {
-        progress_callback: (progress) => {
+        progress_callback: progress => {
           if (progress.status === 'progress') {
-            const percent = progress.progress ? Math.round(progress.progress * 100) : progress.progress;
+            const percent = progress.progress
+              ? Math.round(progress.progress * 100)
+              : progress.progress;
             console.error(`[Embeddings] Loading model: ${percent}%`);
           } else if (progress.status === 'done') {
             console.error(`[Embeddings] Model loaded successfully: ${modelName}`);
           }
-        }
+        },
       });
 
       // Track which model is loaded
       this.transformersModel = modelName;
 
+      // FIX #5: Clear the init promise for this model after successful loading
+      // This prevents memory leak when same model is loaded multiple times
+      this.initPromises.delete(modelName);
+
       // Detect actual dimension from first embedding
       const testOutput = await this.transformersPipeline('test', {
         pooling: 'mean',
-        normalize: true
+        normalize: true,
       });
       const testTensor = await testOutput.tolist();
 
@@ -749,7 +881,9 @@ export class HybridEmbeddings {
       }
 
       if (actualDim !== this.dimension) {
-        console.warn(`[Embeddings] Dimension mismatch: expected ${this.dimension}, but ${modelName} produces ${actualDim}. Using actual dimension.`);
+        console.warn(
+          `[Embeddings] Dimension mismatch: expected ${this.dimension}, but ${modelName} produces ${actualDim}. Using actual dimension.`
+        );
         this.dimension = actualDim;
       }
     } catch (error) {
@@ -816,7 +950,7 @@ export class HybridEmbeddings {
       dimension: this.getDimension(),
       type: source.isCodeSpecialized ? 'code-specialized' : 'general-purpose',
       fallbackAvailable: source.fallbackAvailable,
-      hasDynamicSelection: true  // Indicates support for per-query model selection
+      hasDynamicSelection: true, // Indicates support for per-query model selection
     };
   }
 

@@ -7,6 +7,7 @@
 
 import { resolve, join } from 'path';
 import { existsSync, statSync } from 'fs';
+import { globSync } from 'glob';
 
 /**
  * Validation error class
@@ -49,13 +50,10 @@ export function getPathType(path) {
 export function validateTarget(target, projectRoot) {
   // 1. Check for null/undefined
   if (target === null || target === undefined) {
-    throw new ValidationError(
-      'Missing required parameter: target',
-      {
-        hint: 'Provide either a file path (string) or object with filePath/directory property',
-        received: target
-      }
-    );
+    throw new ValidationError('Missing required parameter: target', {
+      hint: 'Provide either a file path (string) or object with filePath/directory property',
+      received: target,
+    });
   }
 
   // 2. Handle string form
@@ -63,13 +61,10 @@ export function validateTarget(target, projectRoot) {
     const targetPath = resolve(projectRoot, target);
 
     if (!existsSync(targetPath)) {
-      throw new ValidationError(
-        `Target not found: ${target}`,
-        {
-          path: target,
-          resolved: targetPath
-        }
-      );
+      throw new ValidationError(`Target not found: ${target}`, {
+        path: target,
+        resolved: targetPath,
+      });
     }
 
     // Determine if it's a file or directory
@@ -79,7 +74,7 @@ export function validateTarget(target, projectRoot) {
         type: 'directory',
         path: targetPath,
         relative: target,
-        original: target
+        original: target,
       };
     }
 
@@ -87,7 +82,7 @@ export function validateTarget(target, projectRoot) {
       type: 'file',
       path: targetPath,
       relative: target,
-      original: target
+      original: target,
     };
   }
 
@@ -98,96 +93,80 @@ export function validateTarget(target, projectRoot) {
     // Check for filePath property
     if ('filePath' in target) {
       if (typeof target.filePath !== 'string') {
-        throw new ValidationError(
-          'Invalid filePath property: must be a string',
-          { received: typeof target.filePath }
-        );
+        throw new ValidationError('Invalid filePath property: must be a string', {
+          received: typeof target.filePath,
+        });
       }
 
       // Check for empty string
       if (target.filePath === '') {
-        throw new ValidationError(
-          'Invalid filePath property: cannot be empty string',
-          { hint: 'Provide a valid file path relative to project root' }
-        );
+        throw new ValidationError('Invalid filePath property: cannot be empty string', {
+          hint: 'Provide a valid file path relative to project root',
+        });
       }
 
       const targetPath = resolve(projectRoot, target.filePath);
 
       if (!existsSync(targetPath)) {
-        throw new ValidationError(
-          `File not found: ${target.filePath}`,
-          {
-            path: target.filePath,
-            resolved: targetPath
-          }
-        );
+        throw new ValidationError(`File not found: ${target.filePath}`, {
+          path: target.filePath,
+          resolved: targetPath,
+        });
       }
 
       return {
         type: 'file',
         path: targetPath,
         relative: target.filePath,
-        original: target
+        original: target,
       };
     }
 
     // Check for directory property
     if ('directory' in target) {
       if (typeof target.directory !== 'string') {
-        throw new ValidationError(
-          'Invalid directory property: must be a string',
-          { received: typeof target.directory }
-        );
+        throw new ValidationError('Invalid directory property: must be a string', {
+          received: typeof target.directory,
+        });
       }
 
       // Check for empty string
       if (target.directory === '') {
-        throw new ValidationError(
-          'Invalid directory property: cannot be empty string',
-          { hint: 'Provide a valid directory path relative to project root' }
-        );
+        throw new ValidationError('Invalid directory property: cannot be empty string', {
+          hint: 'Provide a valid directory path relative to project root',
+        });
       }
 
       const targetPath = resolve(projectRoot, target.directory);
 
       if (!existsSync(targetPath)) {
-        throw new ValidationError(
-          `Directory not found: ${target.directory}`,
-          {
-            path: target.directory,
-            resolved: targetPath
-          }
-        );
+        throw new ValidationError(`Directory not found: ${target.directory}`, {
+          path: target.directory,
+          resolved: targetPath,
+        });
       }
 
       return {
         type: 'directory',
         path: targetPath,
         relative: target.directory,
-        original: target
+        original: target,
       };
     }
 
     // Object has neither property
-    throw new ValidationError(
-      'Invalid target object: must have filePath or directory property',
-      {
-        received: keys,
-        hint: 'Use { filePath: "path/to/file" } or { directory: "path/to/dir" }'
-      }
-    );
+    throw new ValidationError('Invalid target object: must have filePath or directory property', {
+      received: keys,
+      hint: 'Use { filePath: "path/to/file" } or { directory: "path/to/dir" }',
+    });
   }
 
   // 4. Handle arrays (not valid)
   if (Array.isArray(target)) {
-    throw new ValidationError(
-      'Invalid target type: array not supported',
-      {
-        hint: 'Provide a single file path or object, not an array',
-        received: `array[${target.length}]`
-      }
-    );
+    throw new ValidationError('Invalid target type: array not supported', {
+      hint: 'Provide a single file path or object, not an array',
+      received: `array[${target.length}]`,
+    });
   }
 
   // 5. Unknown type
@@ -203,14 +182,11 @@ export function validateTarget(target, projectRoot) {
 export function validateSeverity(severity) {
   const valid = ['all', 'error', 'warning'];
   if (severity && !valid.includes(severity)) {
-    throw new ValidationError(
-      `Invalid severity: ${severity}`,
-      {
-        valid,
-        received: severity,
-        hint: 'Use "all", "error", or "warning"'
-      }
-    );
+    throw new ValidationError(`Invalid severity: ${severity}`, {
+      valid,
+      received: severity,
+      hint: 'Use "all", "error", or "warning"',
+    });
   }
   return severity || 'all';
 }
@@ -219,13 +195,7 @@ export function validateSeverity(severity) {
  * Get files in directory recursively
  */
 export function getFilesInDirectory(dir, projectRoot) {
-  const { globSync } = require('glob');
-  const patterns = [
-    join(dir, '**/*.js'),
-    '!**/node_modules/**',
-    '!**/*.test.js',
-    '!**/*.spec.js'
-  ];
+  const patterns = [join(dir, '**/*.js'), '!**/node_modules/**', '!**/*.test.js', '!**/*.spec.js'];
 
   return globSync(patterns, { absolute: true });
 }
@@ -235,10 +205,9 @@ export function getFilesInDirectory(dir, projectRoot) {
  */
 export function resolvePath(filePath, projectRoot) {
   if (!filePath || typeof filePath !== 'string') {
-    throw new ValidationError(
-      'Invalid file path: must be a non-empty string',
-      { received: filePath }
-    );
+    throw new ValidationError('Invalid file path: must be a non-empty string', {
+      received: filePath,
+    });
   }
 
   const resolved = resolve(projectRoot, filePath);

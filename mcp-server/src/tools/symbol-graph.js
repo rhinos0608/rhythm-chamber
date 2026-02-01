@@ -22,19 +22,22 @@ const cache = new CacheManager();
  */
 export const schema = {
   name: 'get_symbol_graph',
-  description: 'Generate symbol relationship graphs with multiple visualization formats (Mermaid, DOT, JSON). Shows call graphs, inheritance hierarchies, and dependency networks.',
+  description:
+    'Generate symbol relationship graphs with multiple visualization formats (Mermaid, DOT, JSON). Shows call graphs, inheritance hierarchies, and dependency networks.',
   inputSchema: {
     type: 'object',
     properties: {
       filePath: {
         type: 'string',
-        description: 'Relative path to the module file (e.g., "js/controllers/chat-ui-controller.js")',
+        description:
+          'Relative path to the module file (e.g., "js/controllers/chat-ui-controller.js")',
       },
       graphType: {
         type: 'string',
         enum: ['call', 'inheritance', 'dependency'],
         default: 'call',
-        description: 'Type of graph: call (function calls), inheritance (class extends), dependency (imports/exports)',
+        description:
+          'Type of graph: call (function calls), inheritance (class extends), dependency (imports/exports)',
       },
       maxDepth: {
         type: 'number',
@@ -75,7 +78,7 @@ export const handler = async (args, projectRoot) => {
 
 ## Suggestions
 
-${similarFiles.length > 0 ? similarFiles.map((f) => `- Did you mean \`${f}\`?`).join('\n') : 'No similar files found.'}
+${similarFiles.length > 0 ? similarFiles.map(f => `- Did you mean \`${f}\`?`).join('\n') : 'No similar files found.'}
 
 ## Check
 - Verify the file path is correct
@@ -87,9 +90,10 @@ ${similarFiles.length > 0 ? similarFiles.map((f) => `- Did you mean \`${f}\`?`).
       {
         completeness: 0,
         messages: [`File not found: ${filePath}`],
-        suggestions: similarFiles.length > 0
-          ? [`Try one of these similar files:`, ...similarFiles.slice(0, 3)]
-          : ['Verify the file path'],
+        suggestions:
+          similarFiles.length > 0
+            ? ['Try one of these similar files:', ...similarFiles.slice(0, 3)]
+            : ['Verify the file path'],
       }
     );
   }
@@ -209,7 +213,7 @@ function buildCallGraph(ast, graph, filePath, projectRoot, maxDepth, currentDept
       }
 
       // Collect methods
-      path.get('body.body').forEach((classMethod) => {
+      path.get('body.body').forEach(classMethod => {
         if (classMethod.isClassMethod({ computed: false })) {
           const methodName = `${path.node.id.name}.${classMethod.node.key.name}`;
           functions.set(methodName, {
@@ -224,7 +228,7 @@ function buildCallGraph(ast, graph, filePath, projectRoot, maxDepth, currentDept
   });
 
   // Add nodes
-  functions.forEach((func) => {
+  functions.forEach(func => {
     graph.nodes.push(func);
   });
 
@@ -253,7 +257,7 @@ function buildCallGraph(ast, graph, filePath, projectRoot, maxDepth, currentDept
     ClassDeclaration(path) {
       if (!path.node.id) return;
 
-      path.get('body.body').forEach((classMethod) => {
+      path.get('body.body').forEach(classMethod => {
         if (!classMethod.isClassMethod({ computed: false })) return;
 
         const methodName = `${path.node.id.name}.${classMethod.node.key.name}`;
@@ -278,7 +282,7 @@ function buildCallGraph(ast, graph, filePath, projectRoot, maxDepth, currentDept
 
   // Add edges
   calls.forEach((calledSet, caller) => {
-    calledSet.forEach((called) => {
+    calledSet.forEach(called => {
       if (functions.has(called)) {
         graph.edges.push({
           from: caller,
@@ -311,7 +315,11 @@ function buildInheritanceGraph(ast, graph, filePath, projectRoot, maxDepth, curr
         type: 'class',
         file: filePath.replace(projectRoot + '/', ''),
         line: path.node.loc.start.line,
-        extends: superClass ? (superClass.type === 'Identifier' ? superClass.name : 'Expression') : null,
+        extends: superClass
+          ? superClass.type === 'Identifier'
+            ? superClass.name
+            : 'Expression'
+          : null,
       });
 
       // Add node
@@ -346,7 +354,7 @@ function buildDependencyGraph(ast, graph, filePath, projectRoot, maxDepth, curre
   traverse.default(ast, {
     ImportDeclaration(path) {
       const source = path.node.source.value;
-      const specifiers = path.node.specifiers.map((s) => s.local.name);
+      const specifiers = path.node.specifiers.map(s => s.local.name);
 
       dependencies.set(source, {
         type: 'import',
@@ -354,7 +362,7 @@ function buildDependencyGraph(ast, graph, filePath, projectRoot, maxDepth, curre
       });
 
       // Add node for dependency
-      if (!graph.nodes.find((n) => n.name === source)) {
+      if (!graph.nodes.find(n => n.name === source)) {
         graph.nodes.push({
           name: source,
           type: 'module',
@@ -376,7 +384,7 @@ function buildDependencyGraph(ast, graph, filePath, projectRoot, maxDepth, curre
         const source = path.node.source.value;
 
         // Add node for re-export
-        if (!graph.nodes.find((n) => n.name === source)) {
+        if (!graph.nodes.find(n => n.name === source)) {
           graph.nodes.push({
             name: source,
             type: 'module',
@@ -453,18 +461,24 @@ function formatMermaid(graph, graphType) {
 
   if (graphType === 'call') {
     lines.push('graph TD');
-    graph.edges.forEach((edge) => {
-      lines.push(`  ${edge.from.replace(/\./g, '_')}[${edge.from}] --> ${edge.to.replace(/\./g, '_')}[${edge.to}]`);
+    graph.edges.forEach(edge => {
+      lines.push(
+        `  ${edge.from.replace(/\./g, '_')}[${edge.from}] --> ${edge.to.replace(/\./g, '_')}[${edge.to}]`
+      );
     });
   } else if (graphType === 'inheritance') {
     lines.push('graph TD');
-    graph.edges.forEach((edge) => {
-      lines.push(`  ${edge.from.replace(/\./g, '_')}[${edge.from}] --|> ${edge.to.replace(/\./g, '_')}[${edge.to}]`);
+    graph.edges.forEach(edge => {
+      lines.push(
+        `  ${edge.from.replace(/\./g, '_')}[${edge.from}] --|> ${edge.to.replace(/\./g, '_')}[${edge.to}]`
+      );
     });
   } else if (graphType === 'dependency') {
     lines.push('graph LR');
-    graph.edges.forEach((edge) => {
-      lines.push(`  ${edge.from.replace(/\./g, '_')}[${edge.from}] --> ${edge.to.replace(/\./g, '_')}[${edge.to}]`);
+    graph.edges.forEach(edge => {
+      lines.push(
+        `  ${edge.from.replace(/\./g, '_')}[${edge.from}] --> ${edge.to.replace(/\./g, '_')}[${edge.to}]`
+      );
     });
   }
 
@@ -478,12 +492,12 @@ function formatDOT(graph, graphType) {
   const lines = [];
 
   const direction = graphType === 'dependency' ? 'LR' : 'TD';
-  lines.push(`digraph G {`);
+  lines.push('digraph G {');
   lines.push(`  rankdir=${direction};`);
-  lines.push(`  node [shape=box];`);
+  lines.push('  node [shape=box];');
   lines.push('');
 
-  graph.edges.forEach((edge) => {
+  graph.edges.forEach(edge => {
     const style = edge.type === 'extends' ? ' [arrowhead=empty]' : '';
     lines.push(`  "${edge.from}" -> "${edge.to}"${style};`);
   });
@@ -508,7 +522,9 @@ function findSimilarFiles(filePath, projectRoot) {
   const files = readdirSync(absoluteDir);
 
   // Find files with similar names (contains the basename)
-  const similar = files.filter((f) => f.endsWith('.js') && f.includes(basename.replace('.js', ''))).slice(0, 5);
+  const similar = files
+    .filter(f => f.endsWith('.js') && f.includes(basename.replace('.js', '')))
+    .slice(0, 5);
 
-  return similar.map((f) => path.join(dirname, f));
+  return similar.map(f => path.join(dirname, f));
 }

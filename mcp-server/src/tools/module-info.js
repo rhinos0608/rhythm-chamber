@@ -9,6 +9,7 @@ import { HNWAnalyzer } from '../analyzers/hnw-analyzer.js';
 import { CacheManager } from '../cache/cache-manager.js';
 import { logger } from '../utils/logger.js';
 import { createPartialResponse, createErrorResponse } from '../errors/partial.js';
+import { FileScanner } from '../utils/file-scanner.js';
 import path from 'path';
 
 // Static imports for parsers (ES6 modules)
@@ -72,7 +73,7 @@ export const handler = async (args, projectRoot, indexer, server) => {
     includeExports = true,
     includeSymbols = false,
     includeSimilarModules = true,
-    similarityLimit = 5
+    similarityLimit = 5,
   } = args;
 
   logger.info('get_module_info called with:', {
@@ -81,7 +82,7 @@ export const handler = async (args, projectRoot, indexer, server) => {
     includeExports,
     includeSymbols,
     includeSimilarModules,
-    similarityLimit
+    similarityLimit,
   });
 
   // Resolve file path
@@ -91,10 +92,12 @@ export const handler = async (args, projectRoot, indexer, server) => {
   if (!existsSync(absolutePath)) {
     // Return partial result with suggestions
     const similarFiles = findSimilarFiles(filePath, projectRoot);
-    return createPartialResponse({
-      content: [{
-        type: 'text',
-        text: `# File Not Found: ${filePath}
+    return createPartialResponse(
+      {
+        content: [
+          {
+            type: 'text',
+            text: `# File Not Found: ${filePath}
 
 ## Suggestions
 
@@ -103,19 +106,27 @@ ${similarFiles.length > 0 ? similarFiles.map(f => `- Did you mean \`${f}\`?`).jo
 ## Check
 - Verify the file path is correct
 - The file should be relative to the project root
-`
-      }]
-    }, {
-      completeness: 0,
-      messages: [`File not found: ${filePath}`],
-      suggestions: similarFiles.length > 0 ?
-        [`Try one of these similar files:`, ...similarFiles.slice(0, 3)] :
-        ['Verify the file path']
-    });
+`,
+          },
+        ],
+      },
+      {
+        completeness: 0,
+        messages: [`File not found: ${filePath}`],
+        suggestions:
+          similarFiles.length > 0
+            ? ['Try one of these similar files:', ...similarFiles.slice(0, 3)]
+            : ['Verify the file path'],
+      }
+    );
   }
 
   // Check cache
-  const cacheKey = cache.generateKey(absolutePath, { includeDependencies, includeExports, includeSymbols });
+  const cacheKey = cache.generateKey(absolutePath, {
+    includeDependencies,
+    includeExports,
+    includeSymbols,
+  });
   const cached = cache.get(cacheKey);
   if (cached) {
     logger.info('Returning cached result for:', filePath);
@@ -133,16 +144,26 @@ ${similarFiles.length > 0 ? similarFiles.map(f => `- Did you mean \`${f}\`?`).jo
     logger.warn(`Analysis failed for ${filePath}, attempting partial analysis:`, error);
     const partialAnalysis = getPartialAnalysis(absolutePath, projectRoot, error);
 
-    const result = createPartialResponse({
-      content: [{
-        type: 'text',
-        text: formatModuleInfo(partialAnalysis, includeDependencies, includeExports, includeSymbols)
-      }]
-    }, {
+    const result = createPartialResponse(
+      {
+        content: [
+          {
+            type: 'text',
+            text: formatModuleInfo(
+              partialAnalysis,
+              includeDependencies,
+              includeExports,
+              includeSymbols
+            ),
+          },
+        ],
+      },
+      {
         completeness: 60,
         messages: [`Analysis partially failed: ${error.message}`],
-        suggestions: ['Showing available information from regex fallback']
-    });
+        suggestions: ['Showing available information from regex fallback'],
+      }
+    );
 
     return result;
   }
@@ -162,7 +183,9 @@ ${similarFiles.length > 0 ? similarFiles.map(f => `- Did you mean \`${f}\`?`).jo
   let similarModules = null;
   if (includeSimilarModules && indexer) {
     try {
-      const indexingStatus = server?.getIndexingStatus ? server.getIndexingStatus() : { status: 'unknown' };
+      const indexingStatus = server?.getIndexingStatus
+        ? server.getIndexingStatus()
+        : { status: 'unknown' };
 
       if (indexingStatus.status === 'ready' && indexingStatus.stats?.vectorStore?.chunkCount > 0) {
         // Build semantic query from file name and layer
@@ -174,7 +197,12 @@ ${similarFiles.length > 0 ? similarFiles.map(f => `- Did you mean \`${f}\`?`).jo
         const semanticMatches = await indexer.vectorStore.search(query, similarityLimit * 3, 0.5);
 
         // Process matches to extract unique files
-        similarModules = processSimilarModules(semanticMatches, filePath, similarityLimit, projectRoot);
+        similarModules = processSimilarModules(
+          semanticMatches,
+          filePath,
+          similarityLimit,
+          projectRoot
+        );
         logger.info(`Found ${similarModules.length} similar modules for ${filePath}`);
       }
     } catch (error) {
@@ -188,7 +216,14 @@ ${similarFiles.length > 0 ? similarFiles.map(f => `- Did you mean \`${f}\`?`).jo
     content: [
       {
         type: 'text',
-        text: formatModuleInfo(analysis, includeDependencies, includeExports, includeSymbols, symbols, similarModules),
+        text: formatModuleInfo(
+          analysis,
+          includeDependencies,
+          includeExports,
+          includeSymbols,
+          symbols,
+          similarModules
+        ),
       },
     ],
   };
@@ -202,7 +237,14 @@ ${similarFiles.length > 0 ? similarFiles.map(f => `- Did you mean \`${f}\`?`).jo
 /**
  * Format module information for display
  */
-function formatModuleInfo(analysis, includeDependencies, includeExports, includeSymbols = false, symbols = null, similarModules = null) {
+function formatModuleInfo(
+  analysis,
+  includeDependencies,
+  includeExports,
+  includeSymbols = false,
+  symbols = null,
+  similarModules = null
+) {
   const lines = [];
 
   lines.push(`# Module Information: ${analysis.filePath}`);
@@ -256,9 +298,11 @@ function formatModuleInfo(analysis, includeDependencies, includeExports, include
       lines.push('### Functions');
       for (const func of symbols.functions) {
         lines.push(`- \`${func.name}\` - Line ${func.line}`);
-        if (func.exported) lines.push(`  - Exported`);
+        if (func.exported) lines.push('  - Exported');
         if (func.calls.length > 0) {
-          lines.push(`  - Calls: ${func.calls.slice(0, 3).join(', ')}${func.calls.length > 3 ? '...' : ''}`);
+          lines.push(
+            `  - Calls: ${func.calls.slice(0, 3).join(', ')}${func.calls.length > 3 ? '...' : ''}`
+          );
         }
       }
       lines.push('');
@@ -277,7 +321,8 @@ function formatModuleInfo(analysis, includeDependencies, includeExports, include
 
     if (symbols.variables.length > 0) {
       lines.push('### Variables (declared in scope)');
-      for (const v of symbols.variables.slice(0, 10)) { // Limit to 10
+      for (const v of symbols.variables.slice(0, 10)) {
+        // Limit to 10
         lines.push(`- \`${v.name}\` (${v.kind}) - Line ${v.line}`);
       }
       if (symbols.variables.length > 10) {
@@ -370,11 +415,17 @@ function getPartialAnalysis(filePath, projectRoot, error) {
   // Use regex to extract basic information
   const imports = extractImportsRegex(content);
   const exports = extractExportsRegex(content);
-  const layer = relativePath.includes('/controllers/') ? 'controllers' :
-                relativePath.includes('/services/') ? 'services' :
-                relativePath.includes('/utils/') ? 'utils' :
-                relativePath.includes('/storage/') ? 'storage' :
-                relativePath.includes('/providers/') ? 'providers' : 'unknown';
+  const layer = relativePath.includes('/controllers/')
+    ? 'controllers'
+    : relativePath.includes('/services/')
+      ? 'services'
+      : relativePath.includes('/utils/')
+        ? 'utils'
+        : relativePath.includes('/storage/')
+          ? 'storage'
+          : relativePath.includes('/providers/')
+            ? 'providers'
+            : 'unknown';
 
   return {
     filePath: relativePath,
@@ -382,17 +433,17 @@ function getPartialAnalysis(filePath, projectRoot, error) {
     compliance: {
       score: 0,
       compliant: false,
-      violations: []
+      violations: [],
     },
     imports: imports,
     exports: {
       named: exports.named.length,
       default: exports.default ? 1 : 0,
-      details: exports
+      details: exports,
     },
     recommendations: [],
     partial: true,
-    error: error.message
+    error: error.message,
   };
 }
 
@@ -429,7 +480,10 @@ function extractExportsRegex(content) {
   while ((match = exportPattern.exec(content)) !== null) {
     const name = match[1] || match[2];
     if (name) {
-      const type = match[0].includes('const') || match[0].includes('let') || match[0].includes('var') ? 'variable' : 'function';
+      const type =
+        match[0].includes('const') || match[0].includes('let') || match[0].includes('var')
+          ? 'variable'
+          : 'function';
       named.push({ name, type });
       exported.add(name);
     }
@@ -442,7 +496,7 @@ function extractExportsRegex(content) {
   return {
     named,
     default: hasDefault ? { name: 'default', type: 'unknown' } : null,
-    exported: Array.from(exported)
+    exported: Array.from(exported),
   };
 }
 
@@ -454,14 +508,14 @@ function extractSymbols(filePath, projectRoot) {
 
   const ast = parser.parse(content, {
     sourceType: 'module',
-    plugins: ['jsx']
+    plugins: ['jsx'],
   });
 
   const symbols = {
     functions: [],
     classes: [],
     variables: [],
-    exported: new Set()
+    exported: new Set(),
   };
 
   const exportedNames = new Set();
@@ -477,7 +531,7 @@ function extractSymbols(filePath, projectRoot) {
       if (path.node.declaration.id) {
         exportedNames.add(path.node.declaration.id.name);
       }
-    }
+    },
   });
 
   // Second pass: extract symbols
@@ -488,7 +542,7 @@ function extractSymbols(filePath, projectRoot) {
           name: path.node.id.name,
           line: path.node.loc.start.line,
           exported: exportedNames.has(path.node.id.name),
-          calls: extractCalledFunctions(path)
+          calls: extractCalledFunctions(path),
         });
       }
     },
@@ -505,7 +559,7 @@ function extractSymbols(filePath, projectRoot) {
           name: path.node.id.name,
           line: path.node.loc.start.line,
           exported: exportedNames.has(path.node.id.name),
-          methods: methods
+          methods: methods,
         });
       }
     },
@@ -516,11 +570,11 @@ function extractSymbols(filePath, projectRoot) {
             name: declaration.id.name,
             kind: path.node.kind, // 'const', 'let', or 'var'
             line: declaration.loc ? declaration.loc.start.line : 0,
-            exported: exportedNames.has(declaration.id.name)
+            exported: exportedNames.has(declaration.id.name),
           });
         }
       });
-    }
+    },
   });
 
   return symbols;
@@ -541,7 +595,7 @@ function extractCalledFunctions(path) {
           calls.push(callPath.node.callee.property.name);
         }
       }
-    }
+    },
   });
 
   return [...new Set(calls)].slice(0, 10); // Deduplicate and limit
@@ -589,7 +643,7 @@ function validateChunkFilePath(filePath, projectRoot) {
 
   // Reject null bytes (potential security issue)
   if (filePath.includes('\0')) {
-    logger.warn(`[validateChunkFilePath] Rejected path with null byte`);
+    logger.warn('[validateChunkFilePath] Rejected path with null byte');
     return null;
   }
 

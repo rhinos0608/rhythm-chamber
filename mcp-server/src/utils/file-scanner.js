@@ -18,11 +18,7 @@ export class FileScanner {
    * Results are cached based on options to prevent repeated scans
    */
   async findJsFiles(options = {}) {
-    const {
-      includeTests = false,
-      includeNodeModules = false,
-      includeDist = false,
-    } = options;
+    const { includeTests = false, includeNodeModules = false, includeDist = false } = options;
 
     // Generate cache key from options
     const cacheKey = JSON.stringify(options);

@@ -61,22 +61,19 @@ describe('EmbeddingCache - Embedding Storage', () => {
         text: 'function hello() { return "world"; }',
         type: 'function',
         name: 'hello',
-        metadata: { file: 'test.js', startLine: 1, endLine: 3 }
+        metadata: { file: 'test.js', startLine: 1, endLine: 3 },
       },
       {
         id: 'test_chunk_2',
         text: 'const x = 42;',
         type: 'variable',
         name: 'x',
-        metadata: { file: 'test.js', startLine: 5, endLine: 5 }
-      }
+        metadata: { file: 'test.js', startLine: 5, endLine: 5 },
+      },
     ];
 
     // Create embeddings (768 dimensions for all-MiniLM-L6-v2)
-    const embeddings = [
-      new Float32Array(768).fill(0.1),
-      new Float32Array(768).fill(0.2)
-    ];
+    const embeddings = [new Float32Array(768).fill(0.1), new Float32Array(768).fill(0.2)];
 
     // Store chunks WITH embeddings
     await cache.storeFileChunks('test.js', chunks, Date.now(), embeddings);
@@ -86,12 +83,18 @@ describe('EmbeddingCache - Embedding Storage', () => {
     assert.ok(chunk1, 'Chunk 1 should be retrieved');
     assert.ok(chunk1.embedding, 'Chunk 1 should have embedding');
     assert.strictEqual(chunk1.embedding.length, 768, 'Embedding should have 768 dimensions');
-    assert.ok(Math.abs(chunk1.embedding[0] - 0.1) < 0.0001, 'First value should match (within float precision)');
+    assert.ok(
+      Math.abs(chunk1.embedding[0] - 0.1) < 0.0001,
+      'First value should match (within float precision)'
+    );
 
     const chunk2 = cache.getChunk('test_chunk_2');
     assert.ok(chunk2, 'Chunk 2 should be retrieved');
     assert.ok(chunk2.embedding, 'Chunk 2 should have embedding');
-    assert.ok(Math.abs(chunk2.embedding[0] - 0.2) < 0.0001, 'First value should match (within float precision)');
+    assert.ok(
+      Math.abs(chunk2.embedding[0] - 0.2) < 0.0001,
+      'First value should match (within float precision)'
+    );
 
     console.error('✓ Embeddings stored correctly in cache');
   });
@@ -107,13 +110,11 @@ describe('EmbeddingCache - Embedding Storage', () => {
         text: 'function persisted() { return true; }',
         type: 'function',
         name: 'persisted',
-        metadata: { file: 'persist.js', startLine: 1, endLine: 3 }
-      }
+        metadata: { file: 'persist.js', startLine: 1, endLine: 3 },
+      },
     ];
 
-    const embeddings = [
-      new Float32Array(768).fill(0.5)
-    ];
+    const embeddings = [new Float32Array(768).fill(0.5)];
 
     await cache1.storeFileChunks('persist.js', chunks, Date.now(), embeddings);
     await cache1.save();
@@ -143,8 +144,8 @@ describe('EmbeddingCache - Embedding Storage', () => {
         text: 'function cached() { return "loaded"; }',
         type: 'function',
         name: 'cached',
-        metadata: { file: 'cached.js', startLine: 1, endLine: 3 }
-      }
+        metadata: { file: 'cached.js', startLine: 1, endLine: 3 },
+      },
     ];
 
     const originalEmbedding = new Float32Array(768).fill(0.7);
@@ -170,13 +171,10 @@ describe('EmbeddingCache - Embedding Storage', () => {
 
     const chunks = [
       { id: 'stats_1', text: 'const a = 1;', type: 'variable', name: 'a', metadata: {} },
-      { id: 'stats_2', text: 'const b = 2;', type: 'variable', name: 'b', metadata: {} }
+      { id: 'stats_2', text: 'const b = 2;', type: 'variable', name: 'b', metadata: {} },
     ];
 
-    const embeddings = [
-      new Float32Array(768).fill(0.1),
-      new Float32Array(768).fill(0.2)
-    ];
+    const embeddings = [new Float32Array(768).fill(0.1), new Float32Array(768).fill(0.2)];
 
     await cache.storeFileChunks('stats.js', chunks, Date.now(), embeddings);
     await cache.save();

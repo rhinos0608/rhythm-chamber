@@ -30,7 +30,7 @@ const LAYERS = {
   artifacts: { level: 4, canImport: ['services', 'utils'] },
   embeddings: { level: 4, canImport: ['services', 'utils', 'vector-store'] },
   'vector-store': { level: 4, canImport: ['services', 'utils'] },
-  workers: { level: 3, canImport: ['services', 'utils', 'storage', 'providers'] }
+  workers: { level: 3, canImport: ['services', 'utils', 'storage', 'providers'] },
 };
 
 /**
@@ -108,7 +108,7 @@ describe('HNW Hierarchy', () => {
           if (resolved.includes('/controllers/')) {
             violations.push({
               file: relative(JS_DIR, file),
-              imports: relative(JS_DIR, resolved)
+              imports: relative(JS_DIR, resolved),
             });
           }
         } catch (e) {
@@ -150,7 +150,7 @@ describe('HNW Hierarchy', () => {
               file: relative(JS_DIR, file),
               fromLayer,
               toLayer,
-              imports: relative(JS_DIR, resolved)
+              imports: relative(JS_DIR, resolved),
             });
           }
         } catch (e) {
@@ -223,7 +223,7 @@ describe('No Circular Dependencies', () => {
     try {
       const output = execSync('node scripts/analyze-deps-simple.js', {
         cwd: ROOT_DIR,
-        encoding: 'utf-8'
+        encoding: 'utf-8',
       });
 
       // Check if output contains circular dependencies
@@ -254,7 +254,7 @@ describe('File Size Limits', () => {
       if (lines > 400) {
         violations.push({
           file: relative(JS_DIR, file),
-          lines
+          lines,
         });
       }
     }
@@ -278,7 +278,7 @@ describe('File Size Limits', () => {
       if (lines > 500) {
         violations.push({
           file: relative(JS_DIR, file),
-          lines
+          lines,
         });
       }
     }

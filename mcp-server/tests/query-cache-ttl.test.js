@@ -37,7 +37,7 @@ describe('SemanticQueryCache - TTL', () => {
   });
 
   it('evicts expired entries so has() reflects expiry', async () => {
-    const cache = new SemanticQueryCache({ CACHE_TTL: 10 });
+    const cache = new SemanticQueryCache({ CACHE_TTL: 10, CLEANUP_INTERVAL_MS: 0 });
 
     await cache.get('foo', async () => [1], null, 'model-a');
     assert.equal(cache.has('foo'), true);

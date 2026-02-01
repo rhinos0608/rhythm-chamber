@@ -5,6 +5,7 @@ Model Context Protocol (MCP) server for codebase analysis, semantic search, and 
 ## Purpose
 
 Enables AI agents (like Claude Code) to:
+
 - **Search code by meaning** - Semantic search using vector embeddings
 - **Orchestrate deep analysis** - Combine semantic + structural + architectural search
 - **Inspect code chunks** - Get detailed information about indexed code
@@ -63,6 +64,7 @@ Add to your Claude Code configuration (usually `~/.config/claude-code/config.jso
 Search the codebase by semantic meaning using vector embeddings. Finds code related to natural language queries.
 
 **Parameters:**
+
 - `query` (string, required): Natural language query (e.g., "how are sessions created?")
 - `limit` (number, optional): Maximum results (default: 10, range: 1-50)
 - `threshold` (number, optional): Minimum similarity score (default: 0.3, range: 0-1)
@@ -71,12 +73,14 @@ Search the codebase by semantic meaning using vector embeddings. Finds code rela
 - `layer` (enum, optional): Filter by HNW layer ("controllers", "services", "utils", etc.)
 
 **Returns:**
+
 - Matching chunks ranked by semantic similarity
 - File location, line numbers, and type
 - Exported status and metadata
 - Similarity scores (0-1)
 
 **Example:**
+
 ```json
 {
   "query": "authentication flow",
@@ -91,17 +95,20 @@ Search the codebase by semantic meaning using vector embeddings. Finds code rela
 Orchestrates comprehensive code search combining semantic search with dependency graph analysis.
 
 **Parameters:**
+
 - `query` (string, required): Natural language query or code symbol
 - `depth` (enum, optional): Analysis depth ("quick", "standard", "thorough")
 - `limit` (number, optional): Maximum results (default: 10, range: 1-50)
 
 **Returns:**
+
 - Semantic matches clustered by file
 - Related chunks with caller/callee relationships
 - Symbol dependency analysis
 - Summary with actionable insights
 
 **Example:**
+
 ```json
 {
   "query": "session persistence",
@@ -115,17 +122,20 @@ Orchestrates comprehensive code search combining semantic search with dependency
 Get detailed information about a specific code chunk including source code and relationships.
 
 **Parameters:**
+
 - `chunkId` (string, required): Unique chunk identifier (e.g., "js_auth.js_function_authenticate_L123")
 - `includeRelated` (boolean, optional): Include related chunks (default: true)
 - `includeSource` (boolean, optional): Include full source code (default: true)
 
 **Returns:**
+
 - Full source code with JSDoc comments
 - Complete metadata (file, lines, type, exported status)
 - Related chunks (callers, callees)
 - Symbol relationships
 
 **Example:**
+
 ```json
 {
   "chunkId": "js_services_session-manager.js_function_createSession_L42",
@@ -141,17 +151,20 @@ Get detailed information about a specific code chunk including source code and r
 List all files that have been indexed for semantic search.
 
 **Parameters:**
+
 - `filter` (enum, optional): Filter by HNW layer ("all", "controllers", "services", etc.)
 - `includeChunks` (boolean, optional): Include individual chunk details
 - `format` (enum, optional): Output format ("summary", "detailed", "json")
 
 **Returns:**
+
 - All indexed files with chunk counts
 - Last modified timestamps
 - Chunk type distribution
 - Index statistics
 
 **Example:**
+
 ```json
 {
   "filter": "services",
@@ -165,12 +178,14 @@ List all files that have been indexed for semantic search.
 Control the file watcher daemon for automatic reindexing when files change.
 
 **Actions:**
+
 - `start`: Initialize and start the file watcher
 - `stop`: Gracefully stop the watcher
 - `status`: Return comprehensive watcher status
 - `restart`: Stop and restart with optional new config
 
 **Parameters:**
+
 - `action` (enum, required): Action to perform ("start", "stop", "status", "restart")
 - `config` (object, optional): Configuration options (for start/restart)
   - `debounceDelay` (number): Milliseconds to wait after last change (default: 300, range: 100-5000)
@@ -178,6 +193,7 @@ Control the file watcher daemon for automatic reindexing when files change.
   - `ignore` (array): Additional ignore patterns
 
 **Returns:**
+
 - Running state and uptime
 - Configuration (patterns, delays)
 - Statistics (files changed, batches, errors)
@@ -187,6 +203,7 @@ Control the file watcher daemon for automatic reindexing when files change.
 **Examples:**
 
 Start watcher with default settings:
+
 ```json
 {
   "action": "start"
@@ -194,6 +211,7 @@ Start watcher with default settings:
 ```
 
 Start watcher with custom debounce:
+
 ```json
 {
   "action": "start",
@@ -205,6 +223,7 @@ Start watcher with custom debounce:
 ```
 
 Get watcher status:
+
 ```json
 {
   "action": "status"
@@ -212,6 +231,7 @@ Get watcher status:
 ```
 
 Stop watcher:
+
 ```json
 {
   "action": "stop"
@@ -219,6 +239,7 @@ Stop watcher:
 ```
 
 Restart with new config:
+
 ```json
 {
   "action": "restart",
@@ -236,11 +257,13 @@ Restart with new config:
 Get comprehensive metadata about a module including exports, imports, dependencies, and HNW architecture compliance.
 
 **Parameters:**
+
 - `filePath` (string, required): Relative path to module file (e.g., "js/controllers/chat-ui-controller.js")
 - `includeDependencies` (boolean, optional, default: true): Include detailed dependency information
 - `includeExports` (boolean, optional, default: true): Include all exported members and their types
 
 **Returns:**
+
 - Module layer (controllers/services/utils/storage/providers)
 - HNW compliance score (0-100)
 - Import statements
@@ -250,6 +273,7 @@ Get comprehensive metadata about a module including exports, imports, dependenci
 - HNW pattern reference
 
 **Example:**
+
 ```json
 {
   "filePath": "js/controllers/chat-ui-controller.js",
@@ -263,12 +287,14 @@ Get comprehensive metadata about a module including exports, imports, dependenci
 Analyze dependency relationships between modules.
 
 **Parameters:**
+
 - `startModule` (string, required): Starting module path
 - `dependencyType` (enum, optional): Type of dependencies ("imports", "exports", "all")
 - `maxDepth` (number, optional): Maximum traversal depth (default: 3, range: 1-10)
 - `filterByLayer` (enum, optional): Filter by architectural layer
 
 **Returns:**
+
 - Dependency graph with tree visualization
 - Circular dependency detection
 - HNW compliance scores for all modules
@@ -276,6 +302,7 @@ Analyze dependency relationships between modules.
 - Architectural recommendations
 
 **Example:**
+
 ```json
 {
   "startModule": "js/controllers/chat-ui-controller.js",
@@ -289,12 +316,14 @@ Analyze dependency relationships between modules.
 Search the codebase based on HNW architecture patterns and constraints.
 
 **Parameters:**
+
 - `pattern` (string, required): Architecture pattern to search for
 - `layer` (enum, optional): Specific layer to search
 - `complianceCheck` (boolean, optional): Filter results by compliance (score ≥ 50)
 - `maxResults` (number, optional): Maximum results to return (default: 50, range: 1-200)
 
 **Returns:**
+
 - Matching files with pattern details
 - HNW compliance scores
 - Layer distribution
@@ -302,6 +331,7 @@ Search the codebase based on HNW architecture patterns and constraints.
 - Top violations
 
 **Example:**
+
 ```json
 {
   "pattern": "EventBus usage",
@@ -319,12 +349,14 @@ Validate codebase adherence to HNW architecture principles.
 Find all usages of a function, class, or variable with precise file:line:column locations.
 
 **Parameters:**
+
 - `symbolName` (string, required): Name of the symbol to find (e.g., "handleMessage", "TabCoordinator")
 - `symbolType` (enum, required): Type of symbol ("function", "class", "variable")
 - `filePath` (string, optional): Search within specific file only
 - `includeDynamic` (boolean, optional, default: true): Include dynamic calls (call(), apply(), eval())
 
 **Returns:**
+
 - All usages with precise locations (file:line:column)
 - Call type classification (direct, dynamic, reference)
 - Certainty scores for each match
@@ -332,6 +364,7 @@ Find all usages of a function, class, or variable with precise file:line:column 
 - Context code snippets around each usage
 
 **Example:**
+
 ```json
 {
   "symbolName": "EventBus",
@@ -346,11 +379,13 @@ Find all usages of a function, class, or variable with precise file:line:column 
 Get compilation errors, syntax errors, and lint errors with precise locations and suggested fixes.
 
 **Parameters:**
+
 - `target` (string/object, required): File or directory to analyze (supports string path or {filePath} or {directory} format)
 - `severity` (enum, optional): Filter by severity ("all", "error", "warning", default: "all")
 - `includeContext` (boolean, optional, default: true): Include code context around errors
 
 **Returns:**
+
 - Syntax errors from Babel parser with line/column
 - Lint errors from ESLint with rule IDs
 - Suggested fixes for each error
@@ -358,6 +393,7 @@ Get compilation errors, syntax errors, and lint errors with precise locations an
 - Fix priority ranking (most frequent issues first)
 
 **Example:**
+
 ```json
 {
   "target": "js/controllers/chat-ui-controller.js",
@@ -371,18 +407,21 @@ Get compilation errors, syntax errors, and lint errors with precise locations an
 Generate symbol relationship graphs with multiple visualization formats (Mermaid, DOT, JSON).
 
 **Parameters:**
+
 - `filePath` (string, required): Relative path to module file
 - `graphType` (enum, optional): Type of graph ("call", "inheritance", "dependency", default: "call")
 - `maxDepth` (number, optional): Maximum traversal depth (1-5, default: 2)
 - `format` (enum, optional): Output format ("mermaid", "dot", "json", default: "mermaid")
 
 **Returns:**
+
 - Function call graphs
 - Class inheritance hierarchies
 - Import/export dependency networks
 - Visualizable output (Mermaid for Markdown, DOT for Graphviz, JSON for processing)
 
 **Example:**
+
 ```json
 {
   "filePath": "js/controllers/chat-ui-controller.js",
@@ -397,12 +436,14 @@ Generate symbol relationship graphs with multiple visualization formats (Mermaid
 Enhanced HNW architecture validation with layer violation detection, circular dependency analysis, and refactoring suggestions.
 
 **Parameters:**
+
 - `target` (string/object, required): File or directory to analyze (supports string path or {filePath} or {directory} format)
 - `analysisType` (enum, optional): Type of analysis ("comprehensive", "layer-violations", "circular-dependencies", "compliance-score", default: "comprehensive")
 - `includeSuggestions` (boolean, optional, default: true): Include actionable refactoring suggestions
 - `severity` (enum, optional): Filter by severity ("all", "error", "warning", default: "all")
 
 **Returns:**
+
 - HNW compliance score (0-100)
 - Layer violation detection
 - Circular dependency detection
@@ -410,6 +451,7 @@ Enhanced HNW architecture validation with layer violation detection, circular de
 - Prioritized refactoring suggestions
 
 **Example:**
+
 ```json
 {
   "target": { "directory": "js/services" },
@@ -423,6 +465,7 @@ Enhanced HNW architecture validation with layer violation detection, circular de
 Trace execution flow from a function with async pattern support and circular dependency detection.
 
 **Parameters:**
+
 - `startFunction` (string, required): Function name to start tracing
 - `filePath` (string, required): File containing the function
 - `maxDepth` (number, optional): Maximum traversal depth (1-10, default: 5)
@@ -432,6 +475,7 @@ Trace execution flow from a function with async pattern support and circular dep
 - `format` (enum, optional): Output format ("text", "mermaid", "json", default: "text")
 
 **Returns:**
+
 - Execution call tree with depth tracking
 - Async pattern detection (await, Promise.then, callbacks)
 - Circular flow detection
@@ -439,6 +483,7 @@ Trace execution flow from a function with async pattern support and circular dep
 - Visualization in multiple formats
 
 **Example:**
+
 ```json
 {
   "startFunction": "sendMessage",
@@ -453,6 +498,7 @@ Trace execution flow from a function with async pattern support and circular dep
 Generate complexity-based refactoring suggestions with HNW compliance checks and before/after examples.
 
 **Parameters:**
+
 - `target` (string/object, required): File or directory to analyze (supports string path or {filePath} or {directory} format)
 - `complexityThreshold` (number, optional, default: 10): Cyclomatic complexity threshold
 - `includeHNWCheck` (boolean, optional, default: true): Include HNW compliance checks
@@ -460,6 +506,7 @@ Generate complexity-based refactoring suggestions with HNW compliance checks and
 - `maxSuggestions` (number, optional, default: 10): Maximum suggestions to return
 
 **Returns:**
+
 - Functions exceeding complexity threshold
 - Refactoring type recommendations (extract_function, extract_class, etc.)
 - Impact/Effort/Risk scoring
@@ -470,6 +517,7 @@ Generate complexity-based refactoring suggestions with HNW compliance checks and
 - Call frequency weighting
 
 **Example:**
+
 ```json
 {
   "target": { "directory": "js/controllers" },
@@ -483,6 +531,7 @@ Generate complexity-based refactoring suggestions with HNW compliance checks and
 All tools that accept file/directory paths support **two formats**:
 
 ### Format 1: String Path (Simple)
+
 ```json
 {
   "target": "js/storage/indexed-db.js"
@@ -492,6 +541,7 @@ All tools that accept file/directory paths support **two formats**:
 ### Format 2: Object Path (Explicit)
 
 For a **single file**:
+
 ```json
 {
   "target": {
@@ -501,6 +551,7 @@ For a **single file**:
 ```
 
 For a **directory** (analyzes all `.js` files within):
+
 ```json
 {
   "target": {
@@ -518,25 +569,25 @@ For a **directory** (analyzes all `.js` files within):
 
 ### Common Issues
 
-| Symptom | Cause | Solution |
-|---------|-------|----------|
-| "Target not found" | Path relative to wrong directory | Use path relative to project root, not MCP server directory |
-| "Path traversal detected" | Using `../` to escape project | Don't use `../` - reference files within project root |
-| "No files to analyze" | Directory has no `.js` files | Check the directory contains JavaScript files |
+| Symptom                   | Cause                            | Solution                                                    |
+| ------------------------- | -------------------------------- | ----------------------------------------------------------- |
+| "Target not found"        | Path relative to wrong directory | Use path relative to project root, not MCP server directory |
+| "Path traversal detected" | Using `../` to escape project    | Don't use `../` - reference files within project root       |
+| "No files to analyze"     | Directory has no `.js` files     | Check the directory contains JavaScript files               |
 
 ### Which Tools Support Which Format?
 
-| Tool | String | `{filePath}` | `{directory}` |
-|------|--------|--------------|---------------|
-| `get_compilation_errors` | ✅ | ✅ | ✅ |
-| `suggest_refactoring` | ✅ | ✅ | ✅ |
-| `analyze_architecture` | ✅ | ✅ | ✅ |
-| `get_module_info` | — | ✅ (as `filePath`) | — |
-| `find_dependencies` | — | ✅ (as `startModule`) | — |
-| `semantic_search` | — | ✅ (in `filters`) | — |
-| `find_all_usages` | — | ✅ (as `filePath`) | — |
-| `get_symbol_graph` | — | ✅ (as `filePath`) | — |
-| `trace_execution_flow` | — | ✅ (as `filePath`) | — |
+| Tool                     | String | `{filePath}`          | `{directory}` |
+| ------------------------ | ------ | --------------------- | ------------- |
+| `get_compilation_errors` | ✅     | ✅                    | ✅            |
+| `suggest_refactoring`    | ✅     | ✅                    | ✅            |
+| `analyze_architecture`   | ✅     | ✅                    | ✅            |
+| `get_module_info`        | —      | ✅ (as `filePath`)    | —             |
+| `find_dependencies`      | —      | ✅ (as `startModule`) | —             |
+| `semantic_search`        | —      | ✅ (in `filters`)     | —             |
+| `find_all_usages`        | —      | ✅ (as `filePath`)    | —             |
+| `get_symbol_graph`       | —      | ✅ (as `filePath`)    | —             |
+| `trace_execution_flow`   | —      | ✅ (as `filePath`)    | —             |
 
 ## Architecture
 
@@ -625,16 +676,19 @@ The semantic search uses Transformers.js for 100% local, privacy-preserving embe
 The server validates against **Hierarchical Network Wave (HNW)** patterns:
 
 ### Hierarchy: Controllers → Services → Providers
+
 - ✅ Controllers call Services, not Providers directly
 - ✅ Services use Provider abstraction layer
 - ✅ No circular dependencies
 
 ### Network: EventBus for Cross-Module Communication
+
 - ✅ Event-driven, loosely coupled design
 - ✅ Domain filtering for event handlers
 - ✅ No tight coupling between modules
 
 ### Wave: TabCoordinator for Cross-Tab Coordination
+
 - ✅ Check primary tab status before writes
 - ✅ Use write-ahead log for crash recovery
 - ✅ Single writer pattern for data integrity
@@ -714,6 +768,7 @@ npm test
 ## Performance
 
 ### Architecture Analysis
+
 - **LRU Cache**: Caches module analysis results (500 entries, 5-minute TTL)
 - **AST Caching**: Reuses parsed ASTs to avoid re-parsing
 - **Incremental Updates**: Only re-scans changed files
@@ -723,10 +778,14 @@ npm test
 - **Memory Usage**: ~50MB baseline + ~1MB per 100 cached analyses
 
 ### Semantic Search
+
 - **First Index**: ~30-60 seconds for 400 files (LM Studio) or ~2-3 minutes (Transformers.js)
-- **Cached Index**: <5 seconds startup with warm cache
+- **Cached Index**: <5 seconds startup with warm cache (loaded from disk)
 - **Search Latency**: <100ms for 1000 chunks (in-memory)
-- **Embedding Cache**: Persistent cache with mtime-based invalidation
+- **Embedding Cache**: Persistent disk cache with mtime-based invalidation
+  - Survives server restarts and device reboots
+  - Stored in `.mcp-cache/` directory
+  - Auto-invalidates for changed files
 - **Memory Usage**: ~200MB for 5000 chunks (768-dim embeddings)
 - **Auto-Upgrade**: Prompts for sqlite-vec at 5000+ chunks
 
@@ -737,6 +796,7 @@ npm test
 **Issue:** Using plain strings instead of Zod schemas in `setRequestHandler`.
 
 **Solution:**
+
 ```javascript
 // ❌ WRONG
 this.server.setRequestHandler('tools/list', async () => { ... });
@@ -762,18 +822,65 @@ this.server.setRequestHandler(CallToolRequestSchema, async (request) => { ... })
 
 ### Cache issues
 
-- Clear cache: `rm -rf .mcp-cache`
-- Restart server
-- Check file permissions
+**Clear cache:**
+
+```bash
+rm -rf .mcp-cache
+```
+
+**Restart server:**
+
+```bash
+# Stop and restart the MCP server
+npm start
+```
+
+**Check file permissions:**
+
+- Ensure write access to `.mcp-cache/` directory
+- Cache directory is created automatically on first run
+
+### Cache Persistence ✅
+
+The embedding cache is **persistent and survives restarts**:
+
+- **Location**: `.mcp-cache/` (configurable via `RC_MCP_CACHE_DIR`)
+- **What's cached**: Embeddings vectors, indexed chunks, dependency graph
+- **When it updates**: Automatically saves after indexing completes or on dirty state
+- **Survives**: Server restarts, system reboots, closing/opening device
+
+**Example workflow:**
+
+```bash
+# Day 1: Start indexing 412 files
+npm start
+# Indexing completes... cache saved to disk
+
+# Day 2: Restart server
+npm start
+# Cache loaded in <5 seconds — no reindexing needed!
+
+# After code changes: Automatic invalidation
+# Only modified files are re-indexed
+```
+
+**Benefits:**
+
+- ✅ Fast restarts (<5 seconds with warm cache)
+- ✅ No need to reindex after closing device
+- ✅ Automatic mtime-based invalidation for changed files
+- ✅ Persistent across work sessions
 
 ## Environment Variables
 
 ### Core Configuration
+
 - `RC_PROJECT_ROOT` (required): Absolute path to Rhythm Chamber project root
 - `RC_MCP_CACHE_DIR` (optional): Directory for cache storage (default: `{RC_PROJECT_ROOT}/.mcp-cache`)
 - `NODE_ENV` (optional): Set to 'development' for verbose logging
 
 ### Semantic Search Configuration
+
 - `RC_ENABLE_SEMANTIC` (optional): Enable semantic search (default: `true`)
 - `RC_EMBEDDING_DIM` (optional): Embedding dimension (default: `768`)
 - `RC_EMBEDDING_TTL` (optional): Cache TTL in seconds (default: `600`)
@@ -781,17 +888,20 @@ this.server.setRequestHandler(CallToolRequestSchema, async (request) => { ... })
 - `RC_FORCE_TRANSFORMERS` (optional): Force Transformers.js usage (default: `true`, LM Studio deprecated)
 
 ### File Watcher Configuration
+
 - `RC_ENABLE_WATCHER` (optional): Enable file watcher on startup (default: `false`)
 - `RC_WATCHER_DEBOUNCE` (optional): Debounce delay in milliseconds (default: `300`)
 - `RC_WATCHER_COALESCE` (optional): Coalescing window in milliseconds (default: `1000`)
 - `RC_WATCHER_MAX_QUEUE` (optional): Maximum queue size (default: `1000`)
 
 **Example: Enable watcher on startup**
+
 ```bash
 RC_ENABLE_WATCHER=true npm start
 ```
 
 **Example: Custom debounce settings**
+
 ```bash
 RC_ENABLE_WATCHER=true RC_WATCHER_DEBOUNCE=500 RC_WATCHER_COALESCE=2000 npm start
 ```
@@ -819,6 +929,7 @@ The `HNWAnalyzer` class performs static analysis:
 ### AST Parsing
 
 Uses `@babel/parser` for JavaScript/TypeScript parsing:
+
 - ES6+ module syntax
 - JSX support
 - Type annotations
@@ -843,60 +954,4 @@ MIT
 - [Rhythm Chamber AGENT_CONTEXT.md](../AGENT_CONTEXT.md) - Complete architecture documentation
 - [AI_TOOLING_ROADMAP.md](../AI_TOOLING_ROADMAP.md) - Implementation roadmap
 
-## Status
-
-✅ **Phase 1 Complete**: Core MCP server infrastructure
-✅ **Phase 2 Complete**: All 4 architecture analysis tools fully implemented and functional
-- get_module_info ✅
-- find_dependencies ✅
-- search_architecture ✅
-- validate_hnw_compliance ✅
-
-✅ **Phase 3 Complete**: Critical security and algorithm fixes applied
-- Fixed circular dependency detection (3-state tracking)
-- Closed path traversal security vulnerability
-- Enhanced HNW validation with resolved imports
-- Added FileScanner caching (100% performance improvement)
-- Implemented parse failure tracking
-- Production-ready status achieved
-
-✅ **Phase 4 Complete**: Enhanced features and language support
-- LRU cache with memory limits (prevents memory leaks)
-- Dynamic import detection (code splitting patterns)
-- TypeScript file support (.ts, .tsx files)
-- TSX (React + TypeScript) support
-- Comprehensive test suite (11/11 passing)
-
-✅ **Phase 5 Complete**: Semantic search implementation
-- Hybrid embeddings (LM Studio + Transformers.js fallback)
-- AST-aware code chunking (Acorn parser)
-- Tiered vector store (in-memory → sqlite-vec upgrade path)
-- Dependency graph for symbol tracking
-- Persistent embedding cache with mtime invalidation
-- 5 new semantic search tools:
-  - semantic_search ✅
-  - deep_code_search ✅
-  - get_chunk_details ✅
-  - list_indexed_files ✅
-  - watcher_control ✅ (NEW: Automatic file watching and reindexing)
-
-✅ **Phase 6 Complete**: Additional architecture and code quality tools
-- find_all_usages ✅ (Symbol usage tracking with risk detection)
-- get_compilation_errors ✅ (Babel + ESLint error detection)
-- get_symbol_graph ✅ (Call graphs, inheritance, dependencies)
-- analyze_architecture ✅ (HNW validation with refactoring suggestions)
-- trace_execution_flow ✅ (Cross-file execution flow tracing)
-- suggest_refactoring ✅ (Complexity-based refactoring with impact analysis)
-
-✅ **Phase 7 Complete**: Tooling improvements and documentation
-- Path format consistency across all tools (clear oneOf schemas)
-- Enhanced schema descriptions with examples
-- Path format guide added to README
-- All 14 tools now documented in README
-- Debug logging added for directory scanning troubleshooting
-
-📋 **Optional Future Enhancements**: Package.json export resolution, Vue SFC support, sqlite-vec integration
-
-**Last Updated**: 2026-01-30
-
-**Production Ready**: ✅ Yes (15 tools tested and verified)
+#

@@ -9,9 +9,9 @@ global.console = console;
 
 // Mock Settings module for Node.js testing
 global.window.Settings = {
-    getContextWindow: function () {
-        return 4096; // Default context window for testing
-    }
+  getContextWindow: function () {
+    return 4096; // Default context window for testing
+  },
 };
 
 // Load the token counter module
@@ -19,10 +19,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Read and evaluate the token counter module
-const tokenCounterCode = fs.readFileSync(
-    path.join(__dirname, '../js/token-counter.js'),
-    'utf8'
-);
+const tokenCounterCode = fs.readFileSync(path.join(__dirname, '../js/token-counter.js'), 'utf8');
 
 // Evaluate the module in the current context
 eval(tokenCounterCode.replace('window.', 'global.window.'));
@@ -37,15 +34,19 @@ console.log('Test 1: Basic Token Counting');
 console.log('-----------------------------');
 
 const testMessages = [
-    { role: 'user', content: 'What was my music like in 2023?' },
-    { role: 'assistant', content: 'Based on your listening data from 2023, you showed a strong preference for indie rock and electronic music.' },
-    { role: 'user', content: 'Which artists did I listen to the most?' }
+  { role: 'user', content: 'What was my music like in 2023?' },
+  {
+    role: 'assistant',
+    content:
+      'Based on your listening data from 2023, you showed a strong preference for indie rock and electronic music.',
+  },
+  { role: 'user', content: 'Which artists did I listen to the most?' },
 ];
 
 const result1 = TokenCounter.calculateRequestTokens({
-    systemPrompt: 'You are a helpful assistant analyzing music listening patterns.',
-    messages: testMessages,
-    model: 'openai/gpt-4'
+  systemPrompt: 'You are a helpful assistant analyzing music listening patterns.',
+  messages: testMessages,
+  model: 'openai/gpt-4',
 });
 
 console.log('✓ System prompt tokens:', result1.systemPromptTokens);
@@ -66,10 +67,10 @@ const ragContext = `RELEVANT DATA:
 - Genre shift: From rock to electronic`;
 
 const result2 = TokenCounter.calculateRequestTokens({
-    systemPrompt: 'You are a helpful assistant analyzing music listening patterns.',
-    messages: testMessages,
-    ragContext: ragContext,
-    model: 'openai/gpt-4'
+  systemPrompt: 'You are a helpful assistant analyzing music listening patterns.',
+  messages: testMessages,
+  ragContext: ragContext,
+  model: 'openai/gpt-4',
 });
 
 console.log('✓ RAG context tokens:', result2.ragContextTokens);
@@ -82,26 +83,26 @@ console.log('Test 3: Tool Calling');
 console.log('--------------------');
 
 const tools = [
-    {
-        type: 'function',
-        function: {
-            name: 'getArtistStats',
-            description: 'Get statistics for a specific artist',
-            parameters: {
-                type: 'object',
-                properties: {
-                    artistName: { type: 'string' }
-                }
-            }
-        }
-    }
+  {
+    type: 'function',
+    function: {
+      name: 'getArtistStats',
+      description: 'Get statistics for a specific artist',
+      parameters: {
+        type: 'object',
+        properties: {
+          artistName: { type: 'string' },
+        },
+      },
+    },
+  },
 ];
 
 const result3 = TokenCounter.calculateRequestTokens({
-    systemPrompt: 'You are a helpful assistant analyzing music listening patterns.',
-    messages: testMessages,
-    tools: tools,
-    model: 'openai/gpt-4'
+  systemPrompt: 'You are a helpful assistant analyzing music listening patterns.',
+  messages: testMessages,
+  tools: tools,
+  model: 'openai/gpt-4',
 });
 
 console.log('✓ Tool tokens:', result3.toolTokens);
@@ -116,29 +117,29 @@ console.log('----------------------');
 // Create a large conversation that should trigger warnings
 const largeConversation = [];
 for (let i = 0; i < 50; i++) {
-    largeConversation.push({
-        role: i % 2 === 0 ? 'user' : 'assistant',
-        content: `This is message ${i + 1} in a long conversation about music listening patterns and preferences.`
-    });
+  largeConversation.push({
+    role: i % 2 === 0 ? 'user' : 'assistant',
+    content: `This is message ${i + 1} in a long conversation about music listening patterns and preferences.`,
+  });
 }
 
 const result4 = TokenCounter.calculateRequestTokens({
-    systemPrompt: 'You are a helpful assistant analyzing music listening patterns.',
-    messages: largeConversation,
-    model: 'openai/gpt-4'
+  systemPrompt: 'You are a helpful assistant analyzing music listening patterns.',
+  messages: largeConversation,
+  model: 'openai/gpt-4',
 });
 
 console.log('✓ Large conversation tokens:', result4.total);
 console.log('✓ Usage percent:', result4.usagePercent.toFixed(1) + '%');
 console.log('✓ Warnings:', result4.warnings.length);
 result4.warnings.forEach((warning, i) => {
-    console.log(`  ${i + 1}. [${warning.level}] ${warning.message}`);
+  console.log(`  ${i + 1}. [${warning.level}] ${warning.message}`);
 });
 
 const recommended = TokenCounter.getRecommendedAction(result4);
 console.log('✓ Recommended action:', recommended.action);
 if (recommended.message) {
-    console.log('✓ Action message:', recommended.message);
+  console.log('✓ Action message:', recommended.message);
 }
 console.log('');
 
@@ -147,20 +148,26 @@ console.log('Test 5: Truncation Strategy');
 console.log('---------------------------');
 
 const targetTokens = Math.floor(result4.contextWindow * 0.8); // Target 80%
-const truncated = TokenCounter.truncateToTarget({
+const truncated = TokenCounter.truncateToTarget(
+  {
     systemPrompt: 'You are a helpful assistant analyzing music listening patterns.',
     messages: largeConversation,
-    model: 'openai/gpt-4'
-}, targetTokens);
+    model: 'openai/gpt-4',
+  },
+  targetTokens
+);
 
 console.log('✓ Target tokens:', targetTokens);
 console.log('✓ Original messages:', largeConversation.length);
 console.log('✓ Truncated messages:', truncated.messages.length);
-console.log('✓ Truncated total:', TokenCounter.calculateRequestTokens({
+console.log(
+  '✓ Truncated total:',
+  TokenCounter.calculateRequestTokens({
     systemPrompt: truncated.systemPrompt,
     messages: truncated.messages,
-    model: 'openai/gpt-4'
-}).total);
+    model: 'openai/gpt-4',
+  }).total
+);
 console.log('');
 
 // Test 6: Configurable Context Window
@@ -177,20 +184,20 @@ console.log('✓ No more model-specific context window management');
 console.log('');
 
 contextWindows.forEach(window => {
-    // Mock different context windows
-    const originalGetContextWindow = TokenCounter.getContextWindow;
-    TokenCounter.getContextWindow = () => window;
+  // Mock different context windows
+  const originalGetContextWindow = TokenCounter.getContextWindow;
+  TokenCounter.getContextWindow = () => window;
 
-    const result = TokenCounter.calculateRequestTokens({
-        systemPrompt: 'You are a helpful assistant.',
-        messages: testMessages,
-        model: 'any-model'
-    });
+  const result = TokenCounter.calculateRequestTokens({
+    systemPrompt: 'You are a helpful assistant.',
+    messages: testMessages,
+    model: 'any-model',
+  });
 
-    console.log(`✓ Configured ${window} window: ${result.usagePercent.toFixed(1)}% usage`);
+  console.log(`✓ Configured ${window} window: ${result.usagePercent.toFixed(1)}% usage`);
 
-    // Restore original
-    TokenCounter.getContextWindow = originalGetContextWindow;
+  // Restore original
+  TokenCounter.getContextWindow = originalGetContextWindow;
 });
 
 console.log('\n✅ All tests completed successfully!');

@@ -10,30 +10,31 @@
  */
 export const schema = {
   name: 'deep_code_search',
-  description: 'Orchestrates comprehensive code search using semantic search with dependency graph analysis. Returns clustered, ranked results with full context.',
+  description:
+    'Orchestrates comprehensive code search using semantic search with dependency graph analysis. Returns clustered, ranked results with full context.',
   inputSchema: {
     type: 'object',
     properties: {
       query: {
         type: 'string',
-        description: 'Natural language query or code symbol to search for'
+        description: 'Natural language query or code symbol to search for',
       },
       depth: {
         type: 'string',
         enum: ['quick', 'standard', 'thorough'],
         description: 'Analysis depth - affects search threshold and related chunk analysis',
-        default: 'standard'
+        default: 'standard',
       },
       limit: {
         type: 'number',
         description: 'Maximum results to return',
         default: 10,
         minimum: 1,
-        maximum: 50
-      }
+        maximum: 50,
+      },
     },
-    required: ['query']
-  }
+    required: ['query'],
+  },
 };
 
 /**
@@ -61,16 +62,18 @@ export const handler = async (args, projectRoot, indexer, server) => {
   const summary = formatResults(phases, query, depth, elapsed);
 
   return {
-    content: [{
-      type: 'text',
-      text: summary
-    }],
+    content: [
+      {
+        type: 'text',
+        text: summary,
+      },
+    ],
     metadata: {
       query,
       depth,
       phasesCompleted: phases.length,
-      elapsedMs: elapsed
-    }
+      elapsedMs: elapsed,
+    },
   };
 };
 
@@ -86,7 +89,7 @@ async function phase1SemanticSearch(query, limit, indexer, depth) {
       status: 'skipped',
       reason: 'Indexer not available',
       results: [],
-      elapsed: Date.now() - startTime
+      elapsed: Date.now() - startTime,
     };
   }
 
@@ -104,9 +107,9 @@ async function phase1SemanticSearch(query, limit, indexer, depth) {
         type: r.metadata?.type,
         name: r.metadata?.name,
         lines: `${r.metadata?.startLine}-${r.metadata?.endLine}`,
-        exported: r.metadata?.exported
+        exported: r.metadata?.exported,
       })),
-      elapsed: Date.now() - startTime
+      elapsed: Date.now() - startTime,
     };
   } catch (error) {
     return {
@@ -114,7 +117,7 @@ async function phase1SemanticSearch(query, limit, indexer, depth) {
       status: 'error',
       error: error.message,
       results: [],
-      elapsed: Date.now() - startTime
+      elapsed: Date.now() - startTime,
     };
   }
 }
@@ -143,18 +146,21 @@ async function phase2RelatedChunks(semanticResults, indexer) {
           callees: details.related.callees?.length || 0,
           relatedCallers: (details.related.callers || []).slice(0, 3).map(c => ({
             chunkId: c.chunkId,
-            symbol: c.symbol
+            symbol: c.symbol,
           })),
           relatedCallees: (details.related.callees || []).slice(0, 3).map(c => ({
             chunkId: c.chunkId,
-            symbol: c.symbol
-          }))
+            symbol: c.symbol,
+          })),
         });
 
         processedChunks.add(result.chunkId);
       }
     } catch (error) {
-      console.error(`[deep_code_search] Related analysis failed for ${result.chunkId}:`, error.message);
+      console.error(
+        `[deep_code_search] Related analysis failed for ${result.chunkId}:`,
+        error.message
+      );
     }
   }
 
@@ -162,7 +168,7 @@ async function phase2RelatedChunks(semanticResults, indexer) {
     phase: 'related',
     status: 'complete',
     results,
-    elapsed: Date.now() - startTime
+    elapsed: Date.now() - startTime,
   };
 }
 
@@ -175,14 +181,16 @@ function formatResults(phases, query, depth, elapsed) {
   lines.push(`# Deep Code Search: "${query}"`);
   lines.push('');
   lines.push(`**Analysis Depth:** ${depth}`);
-  lines.push(`**Phases Completed:** ${phases.filter(p => p.status === 'complete').length}/${phases.length}`);
+  lines.push(
+    `**Phases Completed:** ${phases.filter(p => p.status === 'complete').length}/${phases.length}`
+  );
   lines.push(`**Total Time:** ${(elapsed / 1000).toFixed(2)}s`);
   lines.push('');
 
   // Phase 1: Semantic Results
   const semantic = phases.find(p => p.phase === 'semantic');
   if (semantic && semantic.results.length > 0) {
-    lines.push(`## 🎯 Semantic Matches`);
+    lines.push('## 🎯 Semantic Matches');
     lines.push('');
 
     // Cluster by file
@@ -198,14 +206,14 @@ function formatResults(phases, query, depth, elapsed) {
         lines.push(`- ${badge} **${match.name}** (L${match.lines}) - ${score}% similar`);
 
         if (match.exported) {
-          lines.push(`  - Exported ✓`);
+          lines.push('  - Exported ✓');
         }
       }
 
       lines.push('');
     }
   } else if (semantic?.status === 'skipped') {
-    lines.push(`## ⚠️ Semantic Search Unavailable`);
+    lines.push('## ⚠️ Semantic Search Unavailable');
     lines.push('');
     lines.push(semantic.reason || 'The semantic search indexer is not available.');
     lines.push('');
@@ -216,12 +224,19 @@ function formatResults(phases, query, depth, elapsed) {
   // Phase 2: Related Chunks
   const related = phases.find(p => p.phase === 'related');
   if (related && related.results.length > 0) {
-    lines.push(`## 🔗 Related Code`);
+    lines.push('## 🔗 Related Code');
     lines.push('');
-    lines.push(`Symbol relationships for top results:`);
+    lines.push('Symbol relationships for top results:');
     lines.push('');
 
-    for (const { chunkId, name, callers, callees, relatedCallers, relatedCallees } of related.results) {
+    for (const {
+      chunkId,
+      name,
+      callers,
+      callees,
+      relatedCallers,
+      relatedCallees,
+    } of related.results) {
       lines.push(`### **${name}** (\`${chunkId}\`)`);
       lines.push('');
 
@@ -233,7 +248,7 @@ function formatResults(phases, query, depth, elapsed) {
           }
         }
       } else {
-        lines.push(`**Called by:** None detected`);
+        lines.push('**Called by:** None detected');
       }
 
       lines.push('');
@@ -246,7 +261,7 @@ function formatResults(phases, query, depth, elapsed) {
           }
         }
       } else {
-        lines.push(`**Calls:** No external calls detected`);
+        lines.push('**Calls:** No external calls detected');
       }
 
       lines.push('');
@@ -254,22 +269,24 @@ function formatResults(phases, query, depth, elapsed) {
   }
 
   // Summary
-  lines.push(`## 📊 Summary`);
+  lines.push('## 📊 Summary');
   lines.push('');
 
   const totalResults = phases.reduce((sum, p) => sum + (p.results?.length || 0), 0);
   lines.push(`- **Semantic Matches:** ${semantic?.results?.length || 0}`);
   lines.push(`- **Related Chunks Analyzed:** ${related?.results?.length || 0}`);
-  lines.push(`- **Files in Results:** ${new Set(phases.flatMap(p => p.results?.map(r => r.file) || [])).size}`);
+  lines.push(
+    `- **Files in Results:** ${new Set(phases.flatMap(p => p.results?.map(r => r.file) || [])).size}`
+  );
 
   lines.push('');
-  lines.push(`---`);
+  lines.push('---');
   lines.push('');
-  lines.push(`💡 **Follow-up Tools:`);
-  lines.push(`- \`get_chunk_details\` - Get full source and metadata for a chunk`);
-  lines.push(`- \`list_indexed_files\` - Browse all indexed files`);
-  lines.push(`- \`find_dependencies\` - Trace dependency relationships`);
-  lines.push(`- \`validate_hnw_compliance\` - Check HNW architecture compliance`);
+  lines.push('💡 **Follow-up Tools:');
+  lines.push('- `get_chunk_details` - Get full source and metadata for a chunk');
+  lines.push('- `list_indexed_files` - Browse all indexed files');
+  lines.push('- `find_dependencies` - Trace dependency relationships');
+  lines.push('- `validate_hnw_compliance` - Check HNW architecture compliance');
 
   return lines.join('\n');
 }

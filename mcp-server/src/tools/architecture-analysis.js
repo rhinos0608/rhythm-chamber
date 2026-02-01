@@ -24,24 +24,37 @@ const IMPORT_REGEX = /import\s+(?:(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+)?['"
  */
 export const schema = {
   name: 'analyze_architecture',
-  description: 'Enhanced HNW architecture validation with layer violation detection, circular dependency analysis, and actionable refactoring suggestions.',
+  description:
+    'Enhanced HNW architecture validation with layer violation detection, circular dependency analysis, and actionable refactoring suggestions.',
   inputSchema: {
     type: 'object',
     properties: {
       target: {
-        description: 'File or directory to analyze. Paths are relative to project root. Examples: "js/services/event-bus.js" or { "filePath": "js/services/event-bus.js" } or { "directory": "js/services" }',
+        description:
+          'File or directory to analyze. Paths are relative to project root. Examples: "js/services/event-bus.js" or { "filePath": "js/services/event-bus.js" } or { "directory": "js/services" }',
         oneOf: [
-          { type: 'string', description: 'File path as string (e.g., "js/controllers/chat-ui-controller.js")' },
+          {
+            type: 'string',
+            description: 'File path as string (e.g., "js/controllers/chat-ui-controller.js")',
+          },
           {
             type: 'object',
-            description: 'Object with filePath or directory property for explicit type specification',
+            description:
+              'Object with filePath or directory property for explicit type specification',
             properties: {
-              filePath: { type: 'string', description: 'File path (e.g., "js/controllers/chat-ui-controller.js")' },
-              directory: { type: 'string', description: 'Directory path to analyze all JS files within (e.g., "js/controllers")' }
+              filePath: {
+                type: 'string',
+                description: 'File path (e.g., "js/controllers/chat-ui-controller.js")',
+              },
+              directory: {
+                type: 'string',
+                description:
+                  'Directory path to analyze all JS files within (e.g., "js/controllers")',
+              },
             },
-            additionalProperties: false
-          }
-        ]
+            additionalProperties: false,
+          },
+        ],
       },
       analysisType: {
         type: 'string',
@@ -69,9 +82,19 @@ export const schema = {
  * Handle tool execution
  */
 export const handler = async (args, projectRoot) => {
-  let { target, analysisType = 'comprehensive', includeSuggestions = true, severity = 'all' } = args;
+  let { target } = args;
+  const {
+    analysisType = 'comprehensive',
+    includeSuggestions = true,
+    severity = 'all',
+  } = args;
 
-  logger.info('analyze_architecture called with:', { target, analysisType, includeSuggestions, severity });
+  logger.info('analyze_architecture called with:', {
+    target,
+    analysisType,
+    includeSuggestions,
+    severity,
+  });
 
   // CRITICAL FIX: Handle case where target is a JSON string (user error or client bug)
   // Some clients may pass object parameters as JSON strings
@@ -118,7 +141,7 @@ export const handler = async (args, projectRoot) => {
     logger.info(`Found ${targetFiles.length} files to analyze:`, {
       target,
       targetPath,
-      sampleFiles: targetFiles.slice(0, 5).map(f => f.replace(projectRoot + '/', ''))
+      sampleFiles: targetFiles.slice(0, 5).map(f => f.replace(projectRoot + '/', '')),
     });
 
     logger.info(`Analyzing ${targetFiles.length} files for architecture issues`);
@@ -227,13 +250,19 @@ function performComprehensiveAnalysis(files, projectRoot) {
   analysis.circularDependencies = detectCircularDependencies(importGraph, projectRoot);
 
   // Calculate metrics
-  analysis.metrics.hierarchy_compliance = calculateHierarchyCompliance(analysis.layerViolations, files.length);
+  analysis.metrics.hierarchy_compliance = calculateHierarchyCompliance(
+    analysis.layerViolations,
+    files.length
+  );
   analysis.metrics.network_compliance = calculateNetworkCompliance(analysis.violations);
   analysis.metrics.wave_compliance = calculateWaveCompliance(analysis.violations);
 
   // Calculate overall compliance score
   analysis.summary.compliance_score =
-    (analysis.metrics.hierarchy_compliance + analysis.metrics.network_compliance + analysis.metrics.wave_compliance) / 3;
+    (analysis.metrics.hierarchy_compliance +
+      analysis.metrics.network_compliance +
+      analysis.metrics.wave_compliance) /
+    3;
 
   return analysis;
 }
@@ -352,8 +381,12 @@ function buildImportGraph(files, projectRoot) {
         iterations++;
         const importPath = match[1];
         // Only skip node_modules, not path aliases
-        if (!importPath.startsWith('.') && !importPath.startsWith('/') &&
-            !importPath.startsWith('@') && !importPath.startsWith('#')) {
+        if (
+          !importPath.startsWith('.') &&
+          !importPath.startsWith('/') &&
+          !importPath.startsWith('@') &&
+          !importPath.startsWith('#')
+        ) {
           continue; // Skip node_modules (but not @/ or #/ aliases)
         }
 
@@ -486,7 +519,7 @@ function calculateHierarchyCompliance(violations, totalFiles) {
  * Calculate network compliance score
  */
 function calculateNetworkCompliance(violations) {
-  const networkViolations = violations.filter((v) => v.category === 'network');
+  const networkViolations = violations.filter(v => v.category === 'network');
   return Math.max(0, 100 - networkViolations.length * 15);
 }
 
@@ -494,7 +527,7 @@ function calculateNetworkCompliance(violations) {
  * Calculate wave compliance score
  */
 function calculateWaveCompliance(violations) {
-  const waveViolations = violations.filter((v) => v.category === 'wave');
+  const waveViolations = violations.filter(v => v.category === 'wave');
   return Math.max(0, 100 - waveViolations.length * 20);
 }
 
@@ -510,7 +543,7 @@ function generateRefactoringSuggestions(analysis) {
       priority: 'HIGH',
       category: 'Hierarchy',
       message: `Fix ${analysis.layerViolations.length} layer violation(s)`,
-      actions: analysis.layerViolations.slice(0, 3).map((v) => v.recommendation),
+      actions: analysis.layerViolations.slice(0, 3).map(v => v.recommendation),
     });
   }
 
@@ -520,9 +553,7 @@ function generateRefactoringSuggestions(analysis) {
       priority: 'HIGH',
       category: 'Circular Dependencies',
       message: `Break ${analysis.circularDependencies.length} circular dependency cycle(s)`,
-      actions: analysis.circularDependencies.map((c) =>
-        `Review cycle: ${c.files.join(' → ')}`
-      ),
+      actions: analysis.circularDependencies.map(c => `Review cycle: ${c.files.join(' → ')}`),
     });
   }
 
@@ -593,9 +624,15 @@ function formatArchitectureAnalysis(analysis, analysisType) {
   if (analysis.scores) {
     lines.push('## Compliance Scores');
     lines.push('');
-    lines.push(`**Hierarchy**: ${analysis.scores.hierarchy.score.toFixed(0)}/100 (${analysis.scores.hierarchy.issues} issues)`);
-    lines.push(`**Network**: ${analysis.scores.network.score.toFixed(0)}/100 (${analysis.scores.network.issues} issues)`);
-    lines.push(`**Wave**: ${analysis.scores.wave.score.toFixed(0)}/100 (${analysis.scores.wave.issues} issues)`);
+    lines.push(
+      `**Hierarchy**: ${analysis.scores.hierarchy.score.toFixed(0)}/100 (${analysis.scores.hierarchy.issues} issues)`
+    );
+    lines.push(
+      `**Network**: ${analysis.scores.network.score.toFixed(0)}/100 (${analysis.scores.network.issues} issues)`
+    );
+    lines.push(
+      `**Wave**: ${analysis.scores.wave.score.toFixed(0)}/100 (${analysis.scores.wave.issues} issues)`
+    );
     lines.push('');
   }
 
@@ -658,18 +695,31 @@ function formatArchitectureAnalysis(analysis, analysisType) {
       }
 
       // Show impact and confidence
-      const impactBadge = firstViolation.impact === 'CRITICAL' ? '🔴' :
-                          firstViolation.impact === 'HIGH' ? '🟠' :
-                          firstViolation.impact === 'MEDIUM' ? '🟡' : '🟢';
-      const confBadge = firstViolation.confidence === 'HIGH' ? '💪' :
-                        firstViolation.confidence === 'MEDIUM' ? '👍' : '❓';
-      lines.push(`**Impact:** ${impactBadge} ${firstViolation.impact || 'N/A'} | **Confidence:** ${confBadge} ${firstViolation.confidence || 'N/A'}`);
+      const impactBadge =
+        firstViolation.impact === 'CRITICAL'
+          ? '🔴'
+          : firstViolation.impact === 'HIGH'
+            ? '🟠'
+            : firstViolation.impact === 'MEDIUM'
+              ? '🟡'
+              : '🟢';
+      const confBadge =
+        firstViolation.confidence === 'HIGH'
+          ? '💪'
+          : firstViolation.confidence === 'MEDIUM'
+            ? '👍'
+            : '❓';
+      lines.push(
+        `**Impact:** ${impactBadge} ${firstViolation.impact || 'N/A'} | **Confidence:** ${confBadge} ${firstViolation.confidence || 'N/A'}`
+      );
       lines.push('');
 
       // Show violations for this rule
       for (const violation of violations.slice(0, 10)) {
         const icon = violation.severity === 'error' ? '❌' : '⚠️';
-        lines.push(`${icon} **${violation.file}${violation.evidence?.line ? ':' + violation.evidence.line : ''}**`);
+        lines.push(
+          `${icon} **${violation.file}${violation.evidence?.line ? ':' + violation.evidence.line : ''}**`
+        );
 
         if (violation.message) {
           lines.push(`   ${violation.message}`);
@@ -681,7 +731,7 @@ function formatArchitectureAnalysis(analysis, analysisType) {
 
         // Show evidence snippet
         if (violation.evidence?.snippet) {
-          lines.push(`   **Evidence:**`);
+          lines.push('   **Evidence:**');
           lines.push('   ```javascript');
           for (const evidenceLine of violation.evidence.snippet.split('\n').slice(0, 5)) {
             lines.push(`   ${evidenceLine}`);

@@ -12,27 +12,30 @@ import { getEmbeddingsInstance } from '../semantic/embeddings.js';
  */
 export const schema = {
   name: 'semantic_search',
-  description: 'Search codebase by semantic meaning using vector embeddings. Finds code that is conceptually similar to the query, not just keyword matches.',
+  description:
+    'Search codebase by semantic meaning using vector embeddings. Finds code that is conceptually similar to the query, not just keyword matches.',
   inputSchema: {
     type: 'object',
     properties: {
       query: {
         type: 'string',
-        description: 'Natural language query describing what you are looking for (e.g., "how are sessions created?", "authentication flow", "error handling for API calls")'
+        description:
+          'Natural language query describing what you are looking for (e.g., "how are sessions created?", "authentication flow", "error handling for API calls")',
       },
       limit: {
         type: 'number',
         description: 'Maximum number of results to return',
         default: 10,
         minimum: 1,
-        maximum: 50
+        maximum: 50,
       },
       threshold: {
         type: 'number',
-        description: 'Minimum similarity threshold (0-1). Lower values return more results but may be less relevant.',
+        description:
+          'Minimum similarity threshold (0-1). Lower values return more results but may be less relevant.',
         default: 0.3,
         minimum: 0,
-        maximum: 1
+        maximum: 1,
       },
       filters: {
         type: 'object',
@@ -41,31 +44,31 @@ export const schema = {
           chunkType: {
             type: 'string',
             enum: ['function', 'class', 'method', 'variable', 'imports', 'export', 'code'],
-            description: 'Filter by chunk type'
+            description: 'Filter by chunk type',
           },
           exportedOnly: {
             type: 'boolean',
             description: 'Only return exported symbols',
-            default: false
+            default: false,
           },
           filePath: {
             type: 'string',
-            description: 'Only search in specific file'
+            description: 'Only search in specific file',
           },
           layer: {
             type: 'string',
             enum: ['controllers', 'services', 'utils', 'storage', 'providers'],
-            description: 'Filter by HNW architecture layer'
+            description: 'Filter by HNW architecture layer',
           },
           filePattern: {
             type: 'string',
-            description: 'Regex pattern to match file paths'
-          }
-        }
-      }
+            description: 'Regex pattern to match file paths',
+          },
+        },
+      },
     },
-    required: ['query']
-  }
+    required: ['query'],
+  },
 };
 
 /**
@@ -77,9 +80,10 @@ export const handler = async (args, projectRoot, indexer, server) => {
   // Check if indexer is available
   if (!indexer) {
     return {
-      content: [{
-        type: 'text',
-        text: `# Semantic Search Not Available
+      content: [
+        {
+          type: 'text',
+          text: `# Semantic Search Not Available
 
 The semantic search indexer has not been initialized. Please ensure the MCP server
 was started with semantic search enabled.
@@ -92,9 +96,10 @@ was started with semantic search enabled.
 3. Verify the cache directory is accessible
 
 **Fallback:** Use the \`search_architecture\` tool for pattern-based searching.
-`
-      }],
-      isError: false
+`,
+        },
+      ],
+      isError: false,
     };
   }
 
@@ -102,9 +107,10 @@ was started with semantic search enabled.
   const status = server?.getIndexingStatus ? server.getIndexingStatus() : { status: 'unknown' };
   if (status.status === 'indexing') {
     return {
-      content: [{
-        type: 'text',
-        text: `# Indexing in Progress
+      content: [
+        {
+          type: 'text',
+          text: `# Indexing in Progress
 
 Semantic search is currently building the index. This may take a minute for the first run.
 
@@ -118,18 +124,20 @@ Semantic search is currently building the index. This may take a minute for the 
 - Embedding source: ${status.stats?.embeddingSource || 'unknown'}
 
 **Tip:** The server remains ready for other tools during indexing.
-`
-      }],
-      isError: false
+`,
+        },
+      ],
+      isError: false,
     };
   }
 
   // Check for indexing errors
   if (status.error) {
     return {
-      content: [{
-        type: 'text',
-        text: `# Indexing Error
+      content: [
+        {
+          type: 'text',
+          text: `# Indexing Error
 
 Semantic search encountered an error during indexing:
 
@@ -139,9 +147,10 @@ Semantic search encountered an error during indexing:
 1. Check the server logs for details
 2. Try reindexing with \`rm -rf .mcp-cache\` and restart
 3. Verify the project contains JavaScript files
-`
-      }],
-      isError: true
+`,
+        },
+      ],
+      isError: true,
     };
   }
 
@@ -149,9 +158,10 @@ Semantic search encountered an error during indexing:
   const stats = indexer.getStats();
   if (stats.vectorStore?.chunkCount === 0) {
     return {
-      content: [{
-        type: 'text',
-        text: `# No Indexed Code Found
+      content: [
+        {
+          type: 'text',
+          text: `# No Indexed Code Found
 
 The semantic search index is empty. This could mean:
 1. Indexing has not been performed yet
@@ -167,9 +177,10 @@ The semantic search index is empty. This could mean:
 1. Ensure the project contains JavaScript files in the expected locations
 2. Check the ignore patterns in the indexer configuration
 3. Try running the indexer manually to see detailed logs
-`
-      }],
-      isError: false
+`,
+        },
+      ],
+      isError: false,
     };
   }
 
@@ -179,32 +190,36 @@ The semantic search index is empty. This could mean:
 
     if (results.length === 0) {
       return {
-        content: [{
-          type: 'text',
-          text: formatNoResults(query, threshold, filters)
-        }]
+        content: [
+          {
+            type: 'text',
+            text: formatNoResults(query, threshold, filters),
+          },
+        ],
       };
     }
 
     return {
-      content: [{
-        type: 'text',
-        text: formatResults(query, results, stats)
-      }],
+      content: [
+        {
+          type: 'text',
+          text: formatResults(query, results, stats),
+        },
+      ],
       metadata: {
         query,
         resultCount: results.length,
-        avgSimilarity: results.reduce((a, b) => a + b.similarity, 0) / results.length
-      }
+        avgSimilarity: results.reduce((a, b) => a + b.similarity, 0) / results.length,
+      },
     };
-
   } catch (error) {
     console.error('[semantic_search] Error:', error);
 
     return {
-      content: [{
-        type: 'text',
-        text: `# Search Error
+      content: [
+        {
+          type: 'text',
+          text: `# Search Error
 
 An error occurred while performing semantic search:
 
@@ -213,9 +228,10 @@ An error occurred while performing semantic search:
 **Query:** ${query}
 
 **Suggestion:** Try rephrasing your query or use the \`search_architecture\` tool as an alternative.
-`
-      }],
-      isError: true
+`,
+        },
+      ],
+      isError: true,
     };
   }
 };
@@ -226,7 +242,7 @@ An error occurred while performing semantic search:
 function formatResults(query, results, stats) {
   const lines = [];
 
-  lines.push(`# Semantic Search Results`);
+  lines.push('# Semantic Search Results');
   lines.push('');
   lines.push(`**Query:** ${query}`);
   lines.push(`**Results:** ${results.length} matches`);
@@ -264,7 +280,7 @@ function formatResults(query, results, stats) {
       }
 
       if (metadata.exported) {
-        lines.push(`**Exported:** Yes`);
+        lines.push('**Exported:** Yes');
       }
 
       lines.push('');
@@ -358,28 +374,28 @@ function formatSimilarity(similarity) {
 function formatNoResults(query, threshold, filters) {
   const lines = [];
 
-  lines.push(`# No Results Found`);
+  lines.push('# No Results Found');
   lines.push('');
-  lines.push(`No code chunks matched your query with the current threshold.`);
+  lines.push('No code chunks matched your query with the current threshold.');
   lines.push('');
   lines.push(`**Query:** ${query}`);
   lines.push(`**Threshold:** ${threshold}`);
   lines.push('');
 
   if (filters && Object.keys(filters).length > 0) {
-    lines.push(`**Active filters:**`);
+    lines.push('**Active filters:**');
     for (const [key, value] of Object.entries(filters)) {
       lines.push(`- ${key}: ${value}`);
     }
     lines.push('');
   }
 
-  lines.push(`**Suggestions:`);
-  lines.push(`- Try a more general query`);
+  lines.push('**Suggestions:');
+  lines.push('- Try a more general query');
   lines.push(`- Lower the threshold (current: ${threshold})`);
-  lines.push(`- Remove some filters`);
-  lines.push(`- Try rephrasing your query`);
-  lines.push(`- Use \`search_architecture\` for pattern-based search`);
+  lines.push('- Remove some filters');
+  lines.push('- Try rephrasing your query');
+  lines.push('- Use `search_architecture` for pattern-based search');
 
   return lines.join('\n');
 }
