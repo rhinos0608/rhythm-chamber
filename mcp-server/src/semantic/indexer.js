@@ -78,13 +78,18 @@ export class CodeIndexer {
     this.codeChunker = new CodeChunker(options.chunker);
     this.markdownChunker = new MarkdownChunker(options.markdownChunker);
     this.embeddings = new HybridEmbeddings(options.embeddings);
-    // Pass embedding dimension to vector store
+    // Pass embedding dimension and dbPath to vector store
     this.vectorStore = new VectorStore({
       ...options.vectorStore,
       dimension: this.embeddings.getDimension(),
+      dbPath: join(this.cacheDir, 'vectors.db'),
     });
     this.dependencyGraph = new DependencyGraph();
-    this.cache = new EmbeddingCache(this.cacheDir, { enabled: options.cache !== false });
+    // Pass modelVersion to cache for proper invalidation when model changes
+    this.cache = new EmbeddingCache(this.cacheDir, {
+      enabled: options.cache !== false,
+      modelVersion: this.embeddings.getModelVersion()
+    });
     this.lexicalIndex = new LexicalIndex(options.lexical);
     this.queryExpander = new QueryExpander(this.dependencyGraph);
     // FIX: Query cache to reduce redundant embedding API calls
@@ -240,18 +245,32 @@ export class CodeIndexer {
 
     // FIX: Reset stats at start of indexAll to prevent accumulation across runs
     // This ensures stats accurately reflect THIS indexing run, not cumulative totals
+    // CRITICAL: Preserve filesFromCache and chunksIndexed from initial loadCachedChunks()
+    // If loadCachedChunks() was called before indexAll(), we need to keep those counts
+    const initialFilesFromCache = this.stats.filesFromCache || 0;
+    const initialChunksIndexed = this.stats.chunksIndexed || 0;
+
     this.stats = {
       filesDiscovered: 0,
       filesIndexed: 0,
       filesSkipped: 0,
-      filesFromCache: 0,
-      chunksIndexed: 0,
+      filesFromCache: 0, // Will be incremented in _loadCachedChunks()
+      chunksIndexed: 0, // Will be incremented in _loadCachedChunks() and _indexFile()
       cacheFailures: 0,
       lastCacheFailureTime: null,
       embeddingSource: this.embeddings.getModelInfo().source || 'unknown',
       indexTime: 0,
       lastIndexed: null,
     };
+
+    // FIX: Restore initial counts if loadCachedChunks() was called before indexAll()
+    // This prevents losing the initial cache load statistics
+    // CRITICAL: Only restore if NOT force=true (force means clear and reload)
+    if (!force && (initialFilesFromCache > 0 || initialChunksIndexed > 0)) {
+      console.error(`[Indexer] Preserving initial cache load stats: ${initialFilesFromCache} files, ${initialChunksIndexed} chunks`);
+      this.stats.filesFromCache = initialFilesFromCache;
+      this.stats.chunksIndexed = initialChunksIndexed;
+    }
 
     // FIX: When force=true, clear vector store and dependency graph to prevent mismatch
     // Without this, old vectors remain while stats reset, causing count discrepancies
@@ -328,17 +347,56 @@ export class CodeIndexer {
                 `[Indexer] Progress: ${indexedCount}/${totalToIndex} files (${progress}%)`
               );
               lastProgressLog = indexedCount;
+            }
 
-              // FIX: Periodic cache save every 10 files to prevent data loss on interruption
-              if (indexedCount % 10 === 0) {
-                try {
-                  await this._saveCache();
-                  console.error(`[Indexer] Checkpoint: Saved cache at ${indexedCount} files`);
-                } catch (cacheError) {
-                  console.error('[Indexer] Checkpoint save failed:', cacheError.message);
-                  // Non-critical - continue indexing
-                }
+            // FIX: Periodic cache save every 10 files to prevent data loss on interruption
+            // Moved OUTSIDE progress logging condition to ensure it fires consistently
+            if (indexedCount % 10 === 0) {
+              try {
+                await this._saveCache();
+                console.error(`[Indexer] Checkpoint: Saved cache at ${indexedCount} files`);
+                // FIX: Track successful checkpoints
+                this.stats.checkpointSuccesses = (this.stats.checkpointSuccesses || 0) + 1;
+                this.stats.lastCheckpointTime = Date.now();
+              } catch (cacheError) {
+                console.error('[Indexer] Checkpoint save failed:', cacheError.message);
+                // FIX: Track checkpoint failures in stats for monitoring
+                this.stats.checkpointFailures = (this.stats.checkpointFailures || 0) + 1;
+                this.stats.lastCheckpointFailureTime = Date.now();
+                this.stats.lastCheckpointFailure = {
+                  message: cacheError.message,
+                  indexedCount: indexedCount,
+                  time: new Date().toISOString(),
+                };
               }
+            }
+
+            // CRITICAL FIX: Clear in-memory cache every 100 files to prevent OOM
+            // The cache persists to disk, and we only need it for temporary buffering
+            // VectorStore, DependencyGraph, and LexicalIndex are kept in memory
+            // because they're needed for search after indexing completes
+            if (indexedCount % 100 === 0) {
+              const cacheSizeBefore = this.cache.embeddings.size;
+              const vectorStoreStats = this.vectorStore.getStats();
+              const depGraphStats = this.dependencyGraph.getStats();
+              const lexicalDocsSize = this.lexicalIndex.documents.size;
+
+              // Log memory breakdown before clearing
+              const estimatedVectorStoreMB = (vectorStoreStats.memoryBytes / 1024 / 1024).toFixed(2);
+              console.error(
+                `[Indexer] Memory breakdown at ${indexedCount} files:` +
+                `\n  - Cache: ${cacheSizeBefore} chunks` +
+                `\n  - VectorStore: ${vectorStoreStats.chunkCount} chunks (${estimatedVectorStoreMB}MB)` +
+                `\n  - DependencyGraph: ${depGraphStats.symbols} symbols, ${depGraphStats.definitions} definitions, ${depGraphStats.usages} usages` +
+                `\n  - LexicalIndex: ${lexicalDocsSize} documents`
+              );
+
+              this.cache.clear();
+              // Force garbage collection to free memory immediately
+              if (global.gc) {
+                global.gc();
+              }
+              console.error(`[Indexer] Memory: Cleared ${cacheSizeBefore} cache embeddings at ${indexedCount} files`);
             }
           }
         }
@@ -514,6 +572,17 @@ export class CodeIndexer {
         );
       }
 
+      // FIX: Skip caching if ANY embeddings are invalid
+      // This prevents caching partial/Incomplete files that cause inconsistency
+      // Without this fix, a file with 10 chunks where 2 are invalid would cache only 8 chunks
+      // On restart, the cache would have 8 chunks but the file has 10, causing mismatch
+      const hasInvalidChunks = invalidCount > 0;
+      if (hasInvalidChunks) {
+        console.warn(
+          `[Indexer] ⚠️  Skipping cache for ${relPath}: ${invalidCount} invalid chunks detected (file will be re-indexed on restart)`
+        );
+      }
+
       console.error(
         `[Indexer] Generated ${validCount}/${chunks.length} valid embeddings for ${relPath}${invalidCount > 0 ? ` (${invalidCount} filtered)` : ''}`
       );
@@ -572,19 +641,42 @@ export class CodeIndexer {
 
       // Store in cache WITH embeddings (reuse fileStat from earlier)
       // CRITICAL: Store only valid chunks/embeddings to prevent cache corruption
+      // FIX: Skip caching if any chunks were invalid to prevent partial cache inconsistency
       let cacheSuccess = true;
-      try {
-        await this.cache.storeFileChunks(relPath, validChunks, fileStat.mtimeMs, validEmbeddings);
-      } catch (cacheError) {
+
+      if (!hasInvalidChunks) {
+        // FIX: Add retry logic with exponential backoff for cache save failures
+        const maxRetries = 3;
+        let retryCount = 0;
+        while (retryCount < maxRetries) {
+          try {
+            await this.cache.storeFileChunks(relPath, validChunks, fileStat.mtimeMs, validEmbeddings);
+            break; // Success - exit retry loop
+          } catch (cacheError) {
+            retryCount++;
+            if (retryCount >= maxRetries) {
+              // Final attempt failed - give up
+              cacheSuccess = false;
+              console.error(`[Indexer] Cache storage FAILED after ${maxRetries} retries for ${relPath}:`, cacheError.message);
+              console.error(
+                '[Indexer] ⚠️  Cache degradation detected - re-embedding will be required on restart'
+              );
+              // Track cache failures with timestamp
+              this.stats.cacheFailures = (this.stats.cacheFailures || 0) + 1;
+              this.stats.lastCacheFailureTime = Date.now();
+              break;
+            }
+            // Retry with exponential backoff
+            const delay = 1000 * retryCount; // 1s, 2s, 3s delays
+            console.warn(
+              `[Indexer] Cache save attempt ${retryCount}/${maxRetries} failed for ${relPath}, retrying in ${delay}ms...`
+            );
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
+      } else {
+        // Mark as intentionally skipped (not a failure)
         cacheSuccess = false;
-        console.error(`[Indexer] Cache storage FAILED for ${relPath}:`, cacheError.message);
-        console.error(
-          '[Indexer] ⚠️  Cache degradation detected - re-embedding will be required on restart'
-        );
-        // Track cache failures with timestamp
-        this.stats.cacheFailures = (this.stats.cacheFailures || 0) + 1;
-        this.stats.lastCacheFailureTime = Date.now();
-        // Non-critical for indexing, but expensive on restart
       }
 
       // FIX: Track successfully stored vectors, not just valid chunks
