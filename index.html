@@ -1,13 +1,14 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Rhythm Chamber — Chat With Your Spotify Data</title>
-  <meta name="description"
-    content="Understand why your music matters. Chat with your complete Spotify history. Runs privately in your browser. BYOI for power users.">
-  <!--
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+        <title>Rhythm Chamber — Chat With Your Spotify Data</title>
+        <meta
+            name="description"
+            content="Understand why your music matters. Chat with your complete Spotify history. Runs privately in your browser. BYOI for power users."
+        />
+        <!--
     Content Security Policy (CSP)
 
     Strict CSP configuration to prevent XSS attacks:
@@ -22,328 +23,441 @@
     - worker-src 'self' blob:: Required for Web Workers and Transformers.js
     - style-src 'self' 'unsafe-inline': Allow inline styles for dynamic UI elements
     - font-src 'self' https://fonts.gstatic.com: Google Fonts
-    - connect-src 'self' https://*.lemonsqueezy.com: API connections
+    - connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co https://*.lemonsqueezy.com: API connections
+      * CDN for Transformers.js library (fallback only, should be vendored)
+      * HuggingFace for model downloads (required for local embeddings)
+      * Lemon Squeezy payment processor
     - img-src 'self' data:: Image sources (data URIs for inline images)
     - object-src 'none': Block plugins (Flash, Java, etc.)
     - base-uri 'self': Restrict <base> tag to same origin
     - form-action 'self': Restrict form submissions to same origin
     - frame-src 'self' https://*.lemonsqueezy.com: Allow payment processor iframes
   -->
-  <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' 'unsafe-eval'; script-src-elem 'self' https://assets.lemonsqueezy.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.lemonsqueezy.com; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'self' https://*.lemonsqueezy.com;">
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'self'; script-src 'self' 'unsafe-eval'; script-src-elem 'self' https://cdn.jsdelivr.net https://assets.lemonsqueezy.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co https://*.lemonsqueezy.com; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'self' https://*.lemonsqueezy.com;"
+        />
 
-  <!-- Open Graph -->
-  <meta property="og:title" content="Rhythm Chamber — Chat With Your Spotify Data">
-  <meta property="og:description"
-    content="Understand why your music matters. Chat with your complete Spotify history. Runs privately in your browser. BYOI for power users.">
-  <meta property="og:type" content="website">
+        <!-- Open Graph -->
+        <meta property="og:title" content="Rhythm Chamber — Chat With Your Spotify Data" />
+        <meta
+            property="og:description"
+            content="Understand why your music matters. Chat with your complete Spotify history. Runs privately in your browser. BYOI for power users."
+        />
+        <meta property="og:type" content="website" />
 
-  <!-- Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap"
-    rel="stylesheet">
+        <!-- Fonts -->
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap"
+            rel="stylesheet"
+        />
 
-  <link rel="stylesheet" href="css/styles.css">
-</head>
+        <link rel="stylesheet" href="css/styles.css" />
+    </head>
 
-<body>
-  <!-- Premium Upgrade CTA -->
-  <button id="premium-cta" class="premium-cta" data-user-state="unknown" aria-label="Upgrade to Premium">
-    <span class="premium-icon">👑</span>
-    <span class="premium-text">Premium</span>
-  </button>
+    <body>
+        <!-- Premium Upgrade CTA -->
+        <button
+            id="premium-cta"
+            class="premium-cta"
+            data-user-state="unknown"
+            aria-label="Upgrade to Premium"
+        >
+            <span class="premium-icon">👑</span>
+            <span class="premium-text">Premium</span>
+        </button>
 
-  <!-- Premium Preview Modal -->
-  <div id="premium-modal" class="modal-overlay premium-preview-modal" hidden>
-    <div class="modal-content premium-modal-content">
-      <button class="modal-close" data-action="close-modal" aria-label="Close modal">×</button>
-      <h2 class="gradient-text">✨ Unlock Rhythm Chamber Premium</h2>
-      <div class="premium-features">
-        <div class="feature-item">🎵 Unlimited playlist generation</div>
-        <div class="feature-item">📊 Advanced analytics & insights</div>
-        <div class="feature-item">🔍 Semantic search with AI</div>
-        <div class="feature-item">⚡ Priority processing</div>
-      </div>
-      <div class="premium-pricing">
-        <span class="price-monthly">$4.99/mo</span>
-        <span class="price-divider">or</span>
-        <span class="price-yearly">$39/yr <small>(Save 35%)</small></span>
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" data-action="close-modal">Maybe Later</button>
-        <a href="upgrade.html" class="btn btn-primary">Upgrade Now</a>
-      </div>
-    </div>
-  </div>
-
-  <div class="landing">
-    <!-- Hero Section -->
-    <section class="hero">
-      <div class="hero-icon">🎵</div>
-      <h1>Understand why your music matters</h1>
-      <p class="hero-subtitle">Chat with your complete Spotify history. Runs privately in your browser. Bring your own
-        AI for power users.</p>
-
-      <div class="cta-group">
-        <a href="app.html" class="btn btn-primary">
-          <span>📁</span> Upload Your Data
-        </a>
-        <a href="app.html?mode=spotify" class="btn btn-spotify" id="lite-btn">
-          <span>⚡</span> Quick Snapshot
-        </a>
-        <a href="app.html?mode=demo" class="btn btn-secondary" id="demo-btn">
-          <span>🎭</span> Try Demo Mode
-        </a>
-        <a href="#" class="btn btn-accent" id="custom-profile-btn" data-action="show-custom-profile-modal">
-          <span>✨</span> Create a Custom Profile
-        </a>
-      </div>
-
-      <div class="usp-grid">
-        <div class="usp-card">
-          <div class="emoji">💬</div>
-          <h3>Chat With Your History</h3>
-          <p>Ask natural questions about your complete listening patterns</p>
-        </div>
-        <div class="usp-card">
-          <div class="emoji">🔒</div>
-          <h3>Runs Privately</h3>
-          <p>Everything stays in your browser. Zero data transmission</p>
-        </div>
-        <div class="usp-card">
-          <div class="emoji">🧠</div>
-          <h3>Bring Your Own AI</h3>
-          <p>Ollama, LM Studio, or OpenRouter — you control the intelligence</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- Local AI Providers -->
-    <section class="container" style="padding: var(--space-3xl) var(--space-lg); background: var(--bg-secondary);">
-      <h2 style="text-align: center; margin-bottom: var(--space-2xl);">Bring <span class="gradient-text">Your Own
-          AI</span></h2>
-
-      <div class="types-grid" style="max-width: 1000px; margin: 0 auto;">
-        <div class="card" style="text-align: center;">
-          <div style="font-size: 2.5rem; margin-bottom: var(--space-md);">🦙</div>
-          <h3>Ollama (Local)</h3>
-          <p style="margin-bottom: var(--space-md);">Run models like Llama 3.2, Mistral, or Gemma on your own hardware.
-            Zero cloud dependency.</p>
-          <code
-            style="display: block; background: var(--bg-tertiary); padding: var(--space-sm); border-radius: 4px; font-size: 0.9em;">ollama serve</code>
-          <code
-            style="display: block; background: var(--bg-tertiary); padding: var(--space-sm); border-radius: 4px; font-size: 0.9em; margin-top: 4px;">ollama pull llama3.2</code>
+        <!-- Premium Preview Modal -->
+        <div id="premium-modal" class="modal-overlay premium-preview-modal" hidden>
+            <div class="modal-content premium-modal-content">
+                <button class="modal-close" data-action="close-modal" aria-label="Close modal">
+                    ×
+                </button>
+                <h2 class="gradient-text">✨ Unlock Rhythm Chamber Premium</h2>
+                <div class="premium-features">
+                    <div class="feature-item">🎵 Unlimited playlist generation</div>
+                    <div class="feature-item">📊 Advanced analytics & insights</div>
+                    <div class="feature-item">🔍 Semantic search with AI</div>
+                    <div class="feature-item">⚡ Priority processing</div>
+                </div>
+                <div class="premium-pricing">
+                    <span class="price-monthly">$4.99/mo</span>
+                    <span class="price-divider">or</span>
+                    <span class="price-yearly">$39/yr <small>(Save 35%)</small></span>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" data-action="close-modal">Maybe Later</button>
+                    <a href="upgrade.html" class="btn btn-primary">Upgrade Now</a>
+                </div>
+            </div>
         </div>
 
-        <div class="card" style="text-align: center;">
-          <div style="font-size: 2.5rem; margin-bottom: var(--space-md);">🖥️</div>
-          <h3>LM Studio (Local)</h3>
-          <p style="margin-bottom: var(--space-md);">User-friendly GUI for local AI. OpenAI-compatible API at
-            localhost:1234.</p>
-          <code
-            style="display: block; background: var(--bg-tertiary); padding: var(--space-sm); border-radius: 4px; font-size: 0.9em;">http://localhost:1234/v1</code>
+        <div class="landing">
+            <!-- Hero Section -->
+            <section class="hero">
+                <div class="hero-icon">🎵</div>
+                <h1>Understand why your music matters</h1>
+                <p class="hero-subtitle">
+                    Chat with your complete Spotify history. Runs privately in your browser. Bring
+                    your own AI for power users.
+                </p>
+
+                <div class="cta-group">
+                    <a href="app.html" class="btn btn-primary">
+                        <span>📁</span> Upload Your Data
+                    </a>
+                    <a href="app.html?mode=spotify" class="btn btn-spotify" id="lite-btn">
+                        <span>⚡</span> Quick Snapshot
+                    </a>
+                    <a href="app.html?mode=demo" class="btn btn-secondary" id="demo-btn">
+                        <span>🎭</span> Try Demo Mode
+                    </a>
+                    <a
+                        href="#"
+                        class="btn btn-accent"
+                        id="custom-profile-btn"
+                        data-action="show-custom-profile-modal"
+                    >
+                        <span>✨</span> Create a Custom Profile
+                    </a>
+                </div>
+
+                <div class="usp-grid">
+                    <div class="usp-card">
+                        <div class="emoji">💬</div>
+                        <h3>Chat With Your History</h3>
+                        <p>Ask natural questions about your complete listening patterns</p>
+                    </div>
+                    <div class="usp-card">
+                        <div class="emoji">🔒</div>
+                        <h3>Runs Privately</h3>
+                        <p>Everything stays in your browser. Zero data transmission</p>
+                    </div>
+                    <div class="usp-card">
+                        <div class="emoji">🧠</div>
+                        <h3>Bring Your Own AI</h3>
+                        <p>Ollama, LM Studio, or OpenRouter — you control the intelligence</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Local AI Providers -->
+            <section
+                class="container"
+                style="padding: var(--space-3xl) var(--space-lg); background: var(--bg-secondary)"
+            >
+                <h2 style="text-align: center; margin-bottom: var(--space-2xl)">
+                    Bring <span class="gradient-text">Your Own AI</span>
+                </h2>
+
+                <div class="types-grid" style="max-width: 1000px; margin: 0 auto">
+                    <div class="card" style="text-align: center">
+                        <div style="font-size: 2.5rem; margin-bottom: var(--space-md)">🦙</div>
+                        <h3>Ollama (Local)</h3>
+                        <p style="margin-bottom: var(--space-md)">
+                            Run models like Llama 3.2, Mistral, or Gemma on your own hardware. Zero
+                            cloud dependency.
+                        </p>
+                        <code
+                            style="
+                                display: block;
+                                background: var(--bg-tertiary);
+                                padding: var(--space-sm);
+                                border-radius: 4px;
+                                font-size: 0.9em;
+                            "
+                            >ollama serve</code
+                        >
+                        <code
+                            style="
+                                display: block;
+                                background: var(--bg-tertiary);
+                                padding: var(--space-sm);
+                                border-radius: 4px;
+                                font-size: 0.9em;
+                                margin-top: 4px;
+                            "
+                            >ollama pull llama3.2</code
+                        >
+                    </div>
+
+                    <div class="card" style="text-align: center">
+                        <div style="font-size: 2.5rem; margin-bottom: var(--space-md)">🖥️</div>
+                        <h3>LM Studio (Local)</h3>
+                        <p style="margin-bottom: var(--space-md)">
+                            User-friendly GUI for local AI. OpenAI-compatible API at localhost:1234.
+                        </p>
+                        <code
+                            style="
+                                display: block;
+                                background: var(--bg-tertiary);
+                                padding: var(--space-sm);
+                                border-radius: 4px;
+                                font-size: 0.9em;
+                            "
+                            >http://localhost:1234/v1</code
+                        >
+                    </div>
+
+                    <div class="card" style="text-align: center">
+                        <div style="font-size: 2.5rem; margin-bottom: var(--space-md)">☁️</div>
+                        <h3>OpenRouter (Cloud)</h3>
+                        <p style="margin-bottom: var(--space-md)">
+                            Optional cloud provider for premium models. BYOI: run local or bring
+                            your own key.
+                        </p>
+                        <code
+                            style="
+                                display: block;
+                                background: var(--bg-tertiary);
+                                padding: var(--space-sm);
+                                border-radius: 4px;
+                                font-size: 0.9em;
+                            "
+                            >sk-or-v1-...</code
+                        >
+                    </div>
+                </div>
+            </section>
+
+            <!-- Personality Types Preview -->
+            <section class="types-section">
+                <div class="container">
+                    <h2 style="text-align: center">
+                        Get Your <span class="gradient-text">Listener Personality</span>
+                    </h2>
+                    <p
+                        style="
+                            text-align: center;
+                            max-width: 600px;
+                            margin: 0 auto var(--space-2xl);
+                        "
+                    >
+                        Not Myers-Briggs. These compete with stats.fm's generic charts by telling
+                        you <strong>who you are</strong>
+                        through your music.
+                    </p>
+
+                    <div class="types-grid">
+                        <div class="card type-card">
+                            <div class="emoji">🏛️</div>
+                            <h3>Emotional Archaeologist</h3>
+                            <p>You mark time through sound. Your library is a scrapbook.</p>
+                        </div>
+
+                        <div class="card type-card">
+                            <div class="emoji">🎛️</div>
+                            <h3>Mood Engineer</h3>
+                            <p>You strategically use music to change your emotional state.</p>
+                        </div>
+
+                        <div class="card type-card">
+                            <div class="emoji">🔍</div>
+                            <h3>Discovery Junkie</h3>
+                            <p>Always hunting for the next sound. Your playlists never settle.</p>
+                        </div>
+
+                        <div class="card type-card">
+                            <div class="emoji">🛋️</div>
+                            <h3>Comfort Curator</h3>
+                            <p>Same 200 songs for years. You know what you love.</p>
+                        </div>
+
+                        <div class="card type-card">
+                            <div class="emoji">🎭</div>
+                            <h3>Social Chameleon</h3>
+                            <p>Your music shifts by context. Weekdays ≠ weekends.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Competitive Position -->
+            <section
+                class="container"
+                style="padding: var(--space-3xl) var(--space-lg); background: var(--bg-secondary)"
+            >
+                <h2 style="text-align: center; margin-bottom: var(--space-2xl)">
+                    Stats.fm Shows <span class="gradient-text">WHAT</span>. We Show
+                    <span class="gradient-text">WHY & WHO</span>.
+                </h2>
+
+                <div class="comparison-grid">
+                    <div class="card">
+                        <h3>📊 Stats.fm</h3>
+                        <ul style="text-align: left; padding-left: var(--space-lg)">
+                            <li>"You listened to 12,847 hours"</li>
+                            <li>Charts and graphs</li>
+                            <li>Click to explore</li>
+                            <li>Full history + real-time</li>
+                            <li>Low technical barrier</li>
+                            <li style="color: var(--danger)">❌ Cloud dependency</li>
+                            <li style="color: var(--danger)">❌ No local AI</li>
+                        </ul>
+                    </div>
+
+                    <div class="card" style="border: 2px solid var(--accent)">
+                        <h3>🎵 Rhythm Chamber</h3>
+                        <ul style="text-align: left; padding-left: var(--space-lg)">
+                            <li>"You're a Mood Engineer because..."</li>
+                            <li>Identity and meaning</li>
+                            <li>Ask questions naturally</li>
+                            <li>Full history only (depth over speed)</li>
+                            <li><strong>Bring Your Own AI</strong></li>
+                            <li style="color: var(--success)">✅ Local AI (Ollama/LM Studio)</li>
+                            <li style="color: var(--success)">✅ Zero data transmission</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- How It Works -->
+            <section class="container" style="padding: var(--space-3xl) var(--space-lg)">
+                <h2 style="text-align: center; margin-bottom: var(--space-2xl)">How It Works</h2>
+
+                <div class="types-grid" style="max-width: 900px; margin: 0 auto">
+                    <div class="card" style="text-align: center">
+                        <div style="font-size: 2rem; margin-bottom: var(--space-md)">1️⃣</div>
+                        <h3>Request Your Data</h3>
+                        <p>Ask Spotify for your extended streaming history (takes 5-30 days)</p>
+                    </div>
+
+                    <div class="card" style="text-align: center">
+                        <div style="font-size: 2rem; margin-bottom: var(--space-md)">2️⃣</div>
+                        <h3>Upload the .zip</h3>
+                        <p>Drop your file here — everything stays on your device</p>
+                    </div>
+
+                    <div class="card" style="text-align: center">
+                        <div style="font-size: 2rem; margin-bottom: var(--space-md)">3️⃣</div>
+                        <h3>Choose Your AI</h3>
+                        <p>Start Ollama/LM Studio locally, or configure OpenRouter in settings</p>
+                    </div>
+
+                    <div class="card" style="text-align: center">
+                        <div style="font-size: 2rem; margin-bottom: var(--space-md)">4️⃣</div>
+                        <h3>Chat & Discover</h3>
+                        <p>
+                            Ask questions like "What was I like in 2019?" and get semantic answers
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- The BYOI Advantage -->
+            <section
+                class="container"
+                style="padding: var(--space-3xl) var(--space-lg); background: var(--bg-secondary)"
+            >
+                <h2 style="text-align: center; margin-bottom: var(--space-2xl)">
+                    The <span class="gradient-text">BYOI Advantage</span>
+                </h2>
+
+                <div class="card" style="max-width: 800px; margin: 0 auto; text-align: center">
+                    <p style="font-size: 1.1em; line-height: 1.6">
+                        <strong>Bring Your Own Intelligence.</strong> We respect your privacy and
+                        sovereignty by letting you control the models (local or cloud) and vector
+                        stores you use.
+                    </p>
+                    <ul
+                        style="
+                            text-align: left;
+                            margin-top: var(--space-lg);
+                            padding-left: var(--space-xl);
+                        "
+                    >
+                        <li>
+                            <strong>Privacy-conscious:</strong> Local AI means zero data
+                            transmission or keys
+                        </li>
+                        <li>
+                            <strong>Technical:</strong> Run models on your own hardware or your
+                            chosen cloud
+                        </li>
+                        <li><strong>Sovereignty:</strong> No vendor lock-in, full control</li>
+                        <li>
+                            <strong>Cost-effective:</strong> No API costs for local AI; choose when
+                            to pay for cloud
+                        </li>
+                        <li><strong>Transparent:</strong> Open-source, inspect the code</li>
+                    </ul>
+                    <p style="margin-top: var(--space-lg); font-style: italic">
+                        "Your data never leaves your device. Your intelligence runs where you want.
+                        You control everything."
+                    </p>
+                </div>
+            </section>
+
+            <!-- Footer -->
+            <footer class="footer">
+                <p>
+                    <strong>Zero-backend architecture.</strong> No servers. No data collection. Free
+                    forever.
+                </p>
+                <p>Local AI = maximum privacy. Cloud AI = optional convenience.</p>
+                <button
+                    class="settings-btn"
+                    id="landing-settings-btn"
+                    data-action="show-settings-modal"
+                    title="Settings"
+                    style="margin-top: var(--space-md)"
+                >
+                    ⚙️ Settings
+                </button>
+            </footer>
         </div>
 
-        <div class="card" style="text-align: center;">
-          <div style="font-size: 2.5rem; margin-bottom: var(--space-md);">☁️</div>
-          <h3>OpenRouter (Cloud)</h3>
-          <p style="margin-bottom: var(--space-md);">Optional cloud provider for premium models. BYOI: run local or
-            bring your own key.
-          </p>
-          <code
-            style="display: block; background: var(--bg-tertiary); padding: var(--space-sm); border-radius: 4px; font-size: 0.9em;">sk-or-v1-...</code>
-        </div>
-      </div>
-    </section>
+        <!-- Browser Compatibility Check -->
+        <script src="js/compatibility.js?v=1"></script>
 
-    <!-- Personality Types Preview -->
-    <section class="types-section">
-      <div class="container">
-        <h2 style="text-align: center;">Get Your <span class="gradient-text">Listener Personality</span></h2>
-        <p style="text-align: center; max-width: 600px; margin: 0 auto var(--space-2xl);">
-          Not Myers-Briggs. These compete with stats.fm's generic charts by telling you <strong>who you are</strong>
-          through your music.
-        </p>
+        <!-- Landing page interactions (Premium CTA) -->
+        <script src="js/landing.js?v=1"></script>
 
-        <div class="types-grid">
-          <div class="card type-card">
-            <div class="emoji">🏛️</div>
-            <h3>Emotional Archaeologist</h3>
-            <p>You mark time through sound. Your library is a scrapbook.</p>
-          </div>
+        <!-- Scripts -->
+        <!-- Settings module for landing page (ES module) - Config loaded dynamically -->
+        <script type="module">
+            import { Settings } from './js/settings.js';
+            import { ConfigLoader } from './js/services/config-loader.js';
 
-          <div class="card type-card">
-            <div class="emoji">🎛️</div>
-            <h3>Mood Engineer</h3>
-            <p>You strategically use music to change your emotional state.</p>
-          </div>
-
-          <div class="card type-card">
-            <div class="emoji">🔍</div>
-            <h3>Discovery Junkie</h3>
-            <p>Always hunting for the next sound. Your playlists never settle.</p>
-          </div>
-
-          <div class="card type-card">
-            <div class="emoji">🛋️</div>
-            <h3>Comfort Curator</h3>
-            <p>Same 200 songs for years. You know what you love.</p>
-          </div>
-
-          <div class="card type-card">
-            <div class="emoji">🎭</div>
-            <h3>Social Chameleon</h3>
-            <p>Your music shifts by context. Weekdays ≠ weekends.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Competitive Position -->
-    <section class="container" style="padding: var(--space-3xl) var(--space-lg); background: var(--bg-secondary);">
-      <h2 style="text-align: center; margin-bottom: var(--space-2xl);">Stats.fm Shows <span
-          class="gradient-text">WHAT</span>. We Show <span class="gradient-text">WHY & WHO</span>.</h2>
-
-      <div class="comparison-grid">
-        <div class="card">
-          <h3>📊 Stats.fm</h3>
-          <ul style="text-align: left; padding-left: var(--space-lg);">
-            <li>"You listened to 12,847 hours"</li>
-            <li>Charts and graphs</li>
-            <li>Click to explore</li>
-            <li>Full history + real-time</li>
-            <li>Low technical barrier</li>
-            <li style="color: var(--danger);">❌ Cloud dependency</li>
-            <li style="color: var(--danger);">❌ No local AI</li>
-          </ul>
-        </div>
-
-        <div class="card" style="border: 2px solid var(--accent);">
-          <h3>🎵 Rhythm Chamber</h3>
-          <ul style="text-align: left; padding-left: var(--space-lg);">
-            <li>"You're a Mood Engineer because..."</li>
-            <li>Identity and meaning</li>
-            <li>Ask questions naturally</li>
-            <li>Full history only (depth over speed)</li>
-            <li><strong>Bring Your Own AI</strong></li>
-            <li style="color: var(--success);">✅ Local AI (Ollama/LM Studio)</li>
-            <li style="color: var(--success);">✅ Zero data transmission</li>
-          </ul>
-        </div>
-      </div>
-    </section>
-
-    <!-- How It Works -->
-    <section class="container" style="padding: var(--space-3xl) var(--space-lg);">
-      <h2 style="text-align: center; margin-bottom: var(--space-2xl);">How It Works</h2>
-
-      <div class="types-grid" style="max-width: 900px; margin: 0 auto;">
-        <div class="card" style="text-align: center;">
-          <div style="font-size: 2rem; margin-bottom: var(--space-md);">1️⃣</div>
-          <h3>Request Your Data</h3>
-          <p>Ask Spotify for your extended streaming history (takes 5-30 days)</p>
-        </div>
-
-        <div class="card" style="text-align: center;">
-          <div style="font-size: 2rem; margin-bottom: var(--space-md);">2️⃣</div>
-          <h3>Upload the .zip</h3>
-          <p>Drop your file here — everything stays on your device</p>
-        </div>
-
-        <div class="card" style="text-align: center;">
-          <div style="font-size: 2rem; margin-bottom: var(--space-md);">3️⃣</div>
-          <h3>Choose Your AI</h3>
-          <p>Start Ollama/LM Studio locally, or configure OpenRouter in settings</p>
-        </div>
-
-        <div class="card" style="text-align: center;">
-          <div style="font-size: 2rem; margin-bottom: var(--space-md);">4️⃣</div>
-          <h3>Chat & Discover</h3>
-          <p>Ask questions like "What was I like in 2019?" and get semantic answers</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- The BYOI Advantage -->
-    <section class="container" style="padding: var(--space-3xl) var(--space-lg); background: var(--bg-secondary);">
-      <h2 style="text-align: center; margin-bottom: var(--space-2xl);">The <span class="gradient-text">BYOI
-          Advantage</span></h2>
-
-      <div class="card" style="max-width: 800px; margin: 0 auto; text-align: center;">
-        <p style="font-size: 1.1em; line-height: 1.6;">
-          <strong>Bring Your Own Intelligence.</strong> We respect your privacy and sovereignty by letting you control
-          the models (local or cloud) and vector stores you use.
-        </p>
-        <ul style="text-align: left; margin-top: var(--space-lg); padding-left: var(--space-xl);">
-          <li><strong>Privacy-conscious:</strong> Local AI means zero data transmission or keys</li>
-          <li><strong>Technical:</strong> Run models on your own hardware or your chosen cloud</li>
-          <li><strong>Sovereignty:</strong> No vendor lock-in, full control</li>
-          <li><strong>Cost-effective:</strong> No API costs for local AI; choose when to pay for cloud</li>
-          <li><strong>Transparent:</strong> Open-source, inspect the code</li>
-        </ul>
-        <p style="margin-top: var(--space-lg); font-style: italic;">
-          "Your data never leaves your device. Your intelligence runs where you want. You control everything."
-        </p>
-      </div>
-    </section>
-
-    <!-- Footer -->
-    <footer class="footer">
-      <p><strong>Zero-backend architecture.</strong> No servers. No data collection. Free forever.</p>
-      <p>Local AI = maximum privacy. Cloud AI = optional convenience.</p>
-      <button class="settings-btn" id="landing-settings-btn" data-action="show-settings-modal" title="Settings"
-        style="margin-top: var(--space-md);">⚙️ Settings</button>
-    </footer>
-  </div>
-
-  <!-- Browser Compatibility Check -->
-  <script src="js/compatibility.js?v=1"></script>
-
-  <!-- Landing page interactions (Premium CTA) -->
-  <script src="js/landing.js?v=1"></script>
-
-  <!-- Scripts -->
-  <!-- Settings module for landing page (ES module) - Config loaded dynamically -->
-  <script type="module">
-    import { Settings } from './js/settings.js';
-    import { ConfigLoader } from './js/services/config-loader.js';
-
-    // Load config, then setup event delegation for complex actions
-    try {
-      await ConfigLoader.load();
-    } catch (error) {
-      console.error('ConfigLoader.load failed:', error);
-    } finally {
-      ConfigLoader.installWindowProxy();
-
-      // Setup event delegation for actions that require module imports
-      document.addEventListener('click', async (e) => {
-        const button = e.target.closest('[data-action]');
-        if (button) {
-          const action = button.dataset.action;
-
-          // Show settings modal (requires Settings import)
-          if (action === 'show-settings-modal') {
-            e.preventDefault();
-            Settings.showSettingsModal();
-          }
-
-          // Custom profile modal handler
-          if (action === 'show-custom-profile-modal') {
-            e.preventDefault();
+            // Load config, then setup event delegation for complex actions
             try {
-              const { CustomProfileController } = await import('./js/controllers/custom-profile-controller.js');
-              CustomProfileController.showModal();
-            } catch (err) {
-              console.error('[Landing] Failed to load custom profile controller:', err);
-            }
-          }
-        }
-      });
-    }
-  </script>
-</body>
+                await ConfigLoader.load();
+            } catch (error) {
+                console.error('ConfigLoader.load failed:', error);
+            } finally {
+                ConfigLoader.installWindowProxy();
 
+                // Setup event delegation for actions that require module imports
+                document.addEventListener('click', async e => {
+                    const button = e.target.closest('[data-action]');
+                    if (button) {
+                        const action = button.dataset.action;
+
+                        // Show settings modal (requires Settings import)
+                        if (action === 'show-settings-modal') {
+                            e.preventDefault();
+                            Settings.showSettingsModal();
+                        }
+
+                        // Custom profile modal handler
+                        if (action === 'show-custom-profile-modal') {
+                            e.preventDefault();
+                            try {
+                                const { CustomProfileController } =
+                                    await import('./js/controllers/custom-profile-controller.js');
+                                CustomProfileController.showModal();
+                            } catch (err) {
+                                console.error(
+                                    '[Landing] Failed to load custom profile controller:',
+                                    err
+                                );
+                            }
+                        }
+                    }
+                });
+            }
+        </script>
+    </body>
 </html>
