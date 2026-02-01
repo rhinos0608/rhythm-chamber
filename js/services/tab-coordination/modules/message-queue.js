@@ -21,6 +21,17 @@ const messageQueue = [];
 let isProcessingQueue = false;
 
 // ==========================================
+// Recursion Protection
+// ==========================================
+
+/**
+ * Track recursion depth to prevent stack overflow
+ * CRITICAL FIX #1: Prevent unbounded recursion
+ */
+let recursionDepth = 0;
+const MAX_RECURSION_DEPTH = 100;
+
+// ==========================================
 // Queue Operations
 // ==========================================
 
@@ -79,19 +90,73 @@ export function getQueueInfo(isReady) {
  * messages added during processing are handled. Without this, if messages
  * are queued while processing, they won't be processed until another
  * message triggers processMessageQueue(), causing potential delays.
+ *
+ * CRITICAL FIX #1: Added recursion depth tracking to prevent stack overflow
+ * CRITICAL FIX #3: Added error handling and tracking for failed messages
  */
 export async function processMessageQueue() {
     if (isProcessingQueue || messageQueue.length === 0) {
         return;
     }
 
+    // CRITICAL FIX #1: Check recursion depth to prevent stack overflow
+    if (recursionDepth >= MAX_RECURSION_DEPTH) {
+        console.error('[MessageQueue] Max recursion depth reached, deferring processing');
+        // Defer to next event loop to allow stack to clear
+        setTimeout(() => processMessageQueue().catch(e => console.error('[MessageQueue] Deferred processing failed:', e)), 100);
+        return;
+    }
+
     isProcessingQueue = true;
+    recursionDepth++;
+
+    // CRITICAL FIX #3: Track processing results and failed messages
+    let processedCount = 0;
+    let failedMessages = [];
+
     try {
         while (messageQueue.length > 0) {
             const queued = messageQueue.shift();
-            await sendMessage(queued.msg, true);
+            try {
+                await sendMessage(queued.msg, true);
+                processedCount++;
+            } catch (sendError) {
+                // CRITICAL FIX #3: Don't lose messages - track failures
+                console.error('[MessageQueue] Failed to send message:', sendError);
+                failedMessages.push({
+                    msg: queued.msg,
+                    error: sendError,
+                    timestamp: Date.now()
+                });
+            }
+        }
+
+        // CRITICAL FIX #3: Report processing results
+        if (processedCount > 0) {
+            console.log(`[MessageQueue] Processed ${processedCount} messages`);
+        }
+
+        if (failedMessages.length > 0) {
+            console.error(`[MessageQueue] ${failedMessages.length} messages failed to send`);
+            // Emit event for monitoring
+            try {
+                // Dynamic import to avoid circular dependency
+                import('../../../services/event-bus/index.js')
+                    .then(({ EventBus }) => {
+                        EventBus.emit('messagequeue:send_failed', {
+                            failedCount: failedMessages.length,
+                            messages: failedMessages
+                        });
+                    })
+                    .catch(emitError => {
+                        console.error('[MessageQueue] Failed to emit failure event:', emitError);
+                    });
+            } catch (emitError) {
+                console.error('[MessageQueue] Failed to import EventBus:', emitError);
+            }
         }
     } finally {
+        recursionDepth--;
         isProcessingQueue = false;
         // RACE CONDITION FIX: Continue processing if messages were added during processing
         // This ensures the queue is drained completely before returning
