@@ -448,15 +448,46 @@ export class EmbeddingCache {
         data.files[file] = info;
       }
 
-      for (const [chunkId, embData] of embeddingsSnapshot.entries()) {
-        // FIX: Convert Float32Array to Array for JSON serialization
-        // Float32Array serializes as {"0": val, "1": val, ...} instead of [val, val, ...]
-        // This caused progressive cache corruption after load() -> save() cycles
-        const serializable = { ...embData };
-        if (serializable.embedding instanceof Float32Array) {
-          serializable.embedding = Array.from(serializable.embedding);
+      // FIX: Batched embedding serialization with event loop yielding
+      // Prevents 267ms blocking on large datasets (5000+ chunks)
+      // Processes 100 chunks at a time, then yields to event loop
+      const BATCH_SIZE = 100;
+      const embeddingEntries = Array.from(embeddingsSnapshot.entries());
+
+      // Validate array length
+      if (!Number.isFinite(embeddingEntries.length) || embeddingEntries.length < 0) {
+        throw new Error(`Invalid embedding entries length: ${embeddingEntries.length}`);
+      }
+
+      // Safety check for unreasonably large caches
+      const MAX_EMBEDDINGS = 1000000; // 1 million chunks
+      if (embeddingEntries.length > MAX_EMBEDDINGS) {
+        throw new Error(`Cache too large to save: ${embeddingEntries.length} chunks exceeds limit of ${MAX_EMBEDDINGS}`);
+      }
+
+      let processed = 0;
+
+      while (processed < embeddingEntries.length) {
+        // Process one batch
+        const batch = embeddingEntries.slice(processed, processed + BATCH_SIZE);
+        for (const [chunkId, embData] of batch) {
+          // FIX: Convert Float32Array to Array for JSON serialization
+          // Float32Array serializes as {"0": val, "1": val, ...} instead of [val, val, ...]
+          // This caused progressive cache corruption after load() -> save() cycles
+          const serializable = { ...embData };
+          if (serializable.embedding instanceof Float32Array) {
+            serializable.embedding = Array.from(serializable.embedding);
+          }
+          data.embeddings[chunkId] = serializable;
         }
-        data.embeddings[chunkId] = serializable;
+
+        processed += batch.length;
+
+        // Yield to event loop between batches (except for last batch)
+        // Use setTimeout instead of setImmediate for actual event loop yielding
+        if (processed < embeddingEntries.length) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
       }
 
       // FIX #2: Retry logic with exponential backoff
@@ -504,8 +535,16 @@ export class EmbeddingCache {
           // Skip retries for errors that won't resolve with retrying
           // ENOSPC: Disk full - retrying won't help
           // EACCES/EPERM: Permission denied - retrying won't help
-          if (error.code === 'ENOSPC' || error.code === 'EACCES' || error.code === 'EPERM') {
-            console.error(`[Cache] Fatal error (${error.code}), skipping retries:`, error.message);
+          // RangeError with "Invalid string length" or "string length exceeded": data too large - retrying won't help
+          const isStringLengthError =
+            error.name === 'RangeError' &&
+            (error.message?.includes('Invalid string length') ||
+             error.message?.includes('string length exceeded') ||
+             error.message?.includes('String length exceeded'));
+
+          if (error.code === 'ENOSPC' || error.code === 'EACCES' || error.code === 'EPERM' ||
+              isStringLengthError) {
+            console.error(`[Cache] Fatal error (${error.code || error.name}), skipping retries:`, error.message);
             break;
           }
 
