@@ -42,6 +42,17 @@ let currentTurn = null;
 const listeners = [];
 
 // ==========================================
+// Recursion Protection
+// ==========================================
+
+/**
+ * Track recursion depth to prevent stack overflow
+ * CRITICAL FIX #1: Prevent unbounded recursion
+ */
+let recursionDepth = 0;
+const MAX_RECURSION_DEPTH = 100;
+
+// ==========================================
 // Metrics State
 // ==========================================
 
@@ -113,8 +124,17 @@ async function processNext() {
     // Check queue after acquiring the "lock"
     if (queue.length === 0) return;
 
+    // CRITICAL FIX #1: Check recursion depth to prevent stack overflow
+    if (recursionDepth >= MAX_RECURSION_DEPTH) {
+        console.error('[TurnQueue] Max recursion depth reached, deferring processing');
+        // Defer to next event loop to allow stack to clear
+        setTimeout(() => processNext().catch(e => console.error('[TurnQueue] Deferred processing failed:', e)), 100);
+        return;
+    }
+
     // Set processing flag BEFORE any async operations
     isProcessing = true;
+    recursionDepth++;
 
     // RACE CONDITION FIX: Wrap entire processing in outer error boundary
     // This ensures that any unexpected errors (including those that might occur
@@ -173,12 +193,34 @@ async function processNext() {
             currentTurn.reject(error);
         }
     } catch (unexpectedError) {
-        // Outer error boundary: Catch any unexpected errors that might bypass
-        // the inner try-catch. This prevents queue stall from unexpected throws.
+        // CRITICAL FIX #2: Don't silently swallow errors - emit to EventBus for observability
         console.error('[TurnQueue] Unexpected error in processNext():', unexpectedError);
+        console.error('[TurnQueue] Current turn:', currentTurn?.id);
+        console.error('[TurnQueue] Stack trace:', unexpectedError.stack);
+
+        // Emit to EventBus for monitoring
+        if (currentTurn) {
+            try {
+                // Dynamic import to avoid circular dependency
+                import('./event-bus/index.js')
+                    .then(({ EventBus }) => {
+                        EventBus.emit('turn:unexpected_error', {
+                            turnId: currentTurn.id,
+                            error: unexpectedError.message,
+                            stack: unexpectedError.stack,
+                        });
+                    })
+                    .catch(emitError => {
+                        console.error('[TurnQueue] Failed to emit error event:', emitError);
+                    });
+            } catch (emitError) {
+                console.error('[TurnQueue] Failed to import EventBus:', emitError);
+            }
+        }
     } finally {
         // Always reset processing flag, even if an error occurred
         // This ensures the queue doesn't get stuck in a processing state
+        recursionDepth--;
         currentTurn = null;
         isProcessing = false;
 
