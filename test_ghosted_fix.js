@@ -3,6 +3,8 @@
  * Tests the edge case where artists at the end of dataset should not be flagged as ghosted
  */
 
+/* global require, console */
+
 // Import the Patterns module using CommonJS
 const { Patterns } = require('./js/patterns.js');
 

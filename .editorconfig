@@ -1,0 +1,40 @@
+# EditorConfig - https://editorconfig.org/
+# Helps maintain consistent coding styles across editors and IDEs
+
+root = true
+
+# Default for all files
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# JavaScript - Browser code (js/) uses 4 spaces
+[js/**/*.js]
+indent_style = space
+indent_size = 4
+
+# JavaScript - Node.js code uses 2 spaces
+[{mcp-server,scripts,tests,workers}/**/*.{js,mjs}]
+indent_style = space
+indent_size = 2
+
+# JSON, YAML, Markdown - 2 spaces
+[*.{json,yml,yaml,md}]
+indent_style = space
+indent_size = 2
+
+# Package files
+[package.json]
+indent_style = space
+indent_size = 2
+
+# HTML, CSS
+[*.{html,css}]
+indent_style = space
+indent_size = 2
+
+# Makefiles require tabs
+[Makefile]
+indent_style = tab

@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+mcp-server/node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Test outputs
+playwright-report/
+test-results/
+blob-report/
+
+# Cache and state
+.state/
+.memdb/
+.mcp-cache/
+.mcp-config/
+.eslintcache
+
+# Generated files
+API.md
+ARCHITECTURE.md
+
+# Vendor/legacy
+js/vendor/
+js/window-globals-debug.js
+
+# Lock files
+package-lock.json
+
+# Test fixtures
+.test-fixtures/
+
+# Hidden directories
+.claude/
+.planning/
+
+# JSONC files (not standard JSON)
+*.jsonc

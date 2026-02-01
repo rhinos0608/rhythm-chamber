@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/prettierrc",
+  "semi": true,
+  "singleQuote": true,
+  "tabWidth": 4,
+  "useTabs": false,
+  "trailingComma": "es5",
+  "arrowParens": "avoid",
+  "printWidth": 100,
+  "bracketSpacing": true,
+  "endOfLine": "lf",
+  "overrides": [
+    {
+      "files": ["*.json", "*.md", "*.yml", "*.yaml"],
+      "options": {
+        "tabWidth": 2
+      }
+    },
+    {
+      "files": ["mcp-server/**/*.js", "scripts/**/*.js", "scripts/**/*.mjs", "tests/**/*.js"],
+      "options": {
+        "tabWidth": 2
+      }
+    }
+  ]
+}

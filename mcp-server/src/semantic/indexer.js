@@ -625,10 +625,25 @@ export class CodeIndexer {
   }
 
   /**
-   * Load cached chunks
+   * Yield to event loop to allow processing of pending events
+   * Critical for MCP servers to remain responsive during long operations
+   */
+  async _yield() {
+    return new Promise(resolve => setImmediate(resolve));
+  }
+
+  /**
+   * Load cached chunks with periodic yielding to maintain responsiveness
+   * This prevents the MCP server from appearing "frozen" during cache loading
    */
   async _loadCachedChunks(filePaths) {
     const chunksToIndexLexically = [];
+    const totalFiles = filePaths.length;
+    const progressInterval = Math.max(1, Math.floor(totalFiles / 10)); // Log ~10 progress updates
+    let processedFiles = 0;
+    let lastProgressLog = 0;
+
+    console.error(`[Indexer] Loading ${totalFiles} cached files with progressive yielding...`);
 
     for (const relPath of filePaths) {
       try {
@@ -640,6 +655,7 @@ export class CodeIndexer {
         const alreadyLoaded = chunkIds.every(id => this.vectorStore.has(id));
         if (alreadyLoaded && chunkIds.length > 0) {
           console.error(`[Indexer] Skipping already loaded file: ${relPath}`);
+          processedFiles++;
           continue;
         }
 
@@ -706,6 +722,22 @@ export class CodeIndexer {
         const wasAlreadyLoaded = this.vectorStore.getByFile(relPath).length > 0;
         if (!wasAlreadyLoaded || chunkIds.some(id => !this.vectorStore.has(id))) {
           this.stats.filesFromCache++;
+        }
+
+        processedFiles++;
+
+        // CRITICAL FIX: Yield after every file to keep MCP server responsive
+        // This allows the server to respond to Claude's protocol messages during cache loading
+        // Without this, Claude kills the "unresponsive" server after ~2 seconds
+        await this._yield();
+
+        // Log progress periodically
+        if (processedFiles - lastProgressLog >= progressInterval || processedFiles === totalFiles) {
+          const progress = ((processedFiles / totalFiles) * 100).toFixed(1);
+          console.error(
+            `[Indexer] Cache loading progress: ${processedFiles}/${totalFiles} files (${progress}%), ${this.stats.chunksIndexed} chunks`
+          );
+          lastProgressLog = processedFiles;
         }
       } catch (error) {
         console.error(`[Indexer] Failed to load cache for ${relPath}:`, error.message);
