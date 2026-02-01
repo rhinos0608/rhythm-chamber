@@ -67,13 +67,18 @@ export function getQueueInfo(isReady) {
         size: messageQueue.length,
         isProcessing: isProcessingQueue,
         isWatching: false,
-        isReady: isReady
+        isReady: isReady,
     };
 }
 
 /**
  * Process all queued messages
  * Sends each message in order
+ *
+ * RACE CONDITION FIX: Added recursive call in finally block to ensure
+ * messages added during processing are handled. Without this, if messages
+ * are queued while processing, they won't be processed until another
+ * message triggers processMessageQueue(), causing potential delays.
  */
 export async function processMessageQueue() {
     if (isProcessingQueue || messageQueue.length === 0) {
@@ -88,6 +93,9 @@ export async function processMessageQueue() {
         }
     } finally {
         isProcessingQueue = false;
+        // RACE CONDITION FIX: Continue processing if messages were added during processing
+        // This ensures the queue is drained completely before returning
+        processMessageQueue().catch(e => console.error('[MessageQueue] Next batch failed:', e));
     }
 }
 

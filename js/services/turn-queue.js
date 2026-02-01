@@ -49,8 +49,8 @@ const listeners = [];
  * Configuration for metrics and observability
  */
 const METRICS_CONFIG = {
-    historySize: CACHE_SIZES.METRICS_HISTORY_SIZE,     // Keep last N completed turns for analysis
-    warningThresholdMs: DELAYS.TOAST_SHORT_MS          // Emit warning if avgWaitTime exceeds this
+    historySize: CACHE_SIZES.METRICS_HISTORY_SIZE, // Keep last N completed turns for analysis
+    warningThresholdMs: DELAYS.TOAST_SHORT_MS, // Emit warning if avgWaitTime exceeds this
 };
 
 /**
@@ -79,7 +79,7 @@ let warningEmitted = false;
 
 /**
  * Push a message to the turn queue
- * 
+ *
  * @param {string} message - User message
  * @param {Object} [options] - Message options (API key, etc.)
  * @returns {Promise<*>} Resolves with the chat response
@@ -116,54 +116,66 @@ async function processNext() {
     // Set processing flag BEFORE any async operations
     isProcessing = true;
 
+    // RACE CONDITION FIX: Wrap entire processing in outer error boundary
+    // This ensures that any unexpected errors (including those that might occur
+    // between setting isProcessing and the try block) don't stall the queue.
+    // The outer try-catch ensures we always reach the finally block to continue
+    // queue processing, even if unexpected throws occur.
     try {
-        currentTurn = queue.shift();
-        currentTurn.status = 'processing';
-        currentTurn.startedAt = Date.now();
+        try {
+            currentTurn = queue.shift();
+            currentTurn.status = 'processing';
+            currentTurn.startedAt = Date.now();
 
-        // Record queue depth sample
-        recordDepthSample();
+            // Record queue depth sample
+            recordDepthSample();
 
-        console.log(`[TurnQueue] Processing turn ${currentTurn.id}`);
-        notifyListeners('processing', currentTurn);
+            console.log(`[TurnQueue] Processing turn ${currentTurn.id}`);
+            notifyListeners('processing', currentTurn);
 
-        // Get Chat module
-        const Chat = getChatModule();
+            // Get Chat module
+            const Chat = getChatModule();
 
-        if (!Chat || typeof Chat.sendMessage !== 'function') {
-            throw new Error('Chat module not available');
+            if (!Chat || typeof Chat.sendMessage !== 'function') {
+                throw new Error('Chat module not available');
+            }
+
+            // Process the message - bypass queue to avoid infinite recursion
+            // TurnQueue already serializes turns, so we call sendMessage with bypassQueue: true
+            const options = currentTurn.options || {};
+            const result = await Chat.sendMessage(currentTurn.message, options, {
+                bypassQueue: true,
+                allowBypass: true,
+            });
+
+            currentTurn.status = 'completed';
+            currentTurn.completedAt = Date.now();
+
+            // Record metrics
+            recordTurnMetrics(currentTurn, true);
+
+            console.log(
+                `[TurnQueue] Completed turn ${currentTurn.id} in ${currentTurn.completedAt - currentTurn.startedAt}ms`
+            );
+            notifyListeners('completed', currentTurn);
+
+            currentTurn.resolve(result);
+        } catch (error) {
+            currentTurn.status = 'failed';
+            currentTurn.completedAt = Date.now();
+
+            // Record metrics for failed turn
+            recordTurnMetrics(currentTurn, false);
+
+            console.error(`[TurnQueue] Failed turn ${currentTurn.id}:`, error);
+            notifyListeners('failed', currentTurn, error);
+
+            currentTurn.reject(error);
         }
-
-        // Process the message - bypass queue to avoid infinite recursion
-        // TurnQueue already serializes turns, so we call sendMessage with bypassQueue: true
-        const options = currentTurn.options || {};
-        const result = await Chat.sendMessage(
-            currentTurn.message,
-            options,
-            { bypassQueue: true, allowBypass: true }
-        );
-
-        currentTurn.status = 'completed';
-        currentTurn.completedAt = Date.now();
-
-        // Record metrics
-        recordTurnMetrics(currentTurn, true);
-
-        console.log(`[TurnQueue] Completed turn ${currentTurn.id} in ${currentTurn.completedAt - currentTurn.startedAt}ms`);
-        notifyListeners('completed', currentTurn);
-
-        currentTurn.resolve(result);
-    } catch (error) {
-        currentTurn.status = 'failed';
-        currentTurn.completedAt = Date.now();
-
-        // Record metrics for failed turn
-        recordTurnMetrics(currentTurn, false);
-
-        console.error(`[TurnQueue] Failed turn ${currentTurn.id}:`, error);
-        notifyListeners('failed', currentTurn, error);
-
-        currentTurn.reject(error);
+    } catch (unexpectedError) {
+        // Outer error boundary: Catch any unexpected errors that might bypass
+        // the inner try-catch. This prevents queue stall from unexpected throws.
+        console.error('[TurnQueue] Unexpected error in processNext():', unexpectedError);
     } finally {
         // Always reset processing flag, even if an error occurred
         // This ensures the queue doesn't get stuck in a processing state
@@ -189,7 +201,7 @@ function getChatModule() {
 
 /**
  * Get count of pending (queued) turns
- * 
+ *
  * @returns {number}
  */
 function getPendingCount() {
@@ -198,7 +210,7 @@ function getPendingCount() {
 
 /**
  * Check if currently processing a turn
- * 
+ *
  * @returns {boolean}
  */
 function isActive() {
@@ -207,7 +219,7 @@ function isActive() {
 
 /**
  * Get the current turn being processed
- * 
+ *
  * @returns {QueuedTurn|null}
  */
 function getCurrentTurn() {
@@ -216,7 +228,7 @@ function getCurrentTurn() {
 
 /**
  * Get queue status summary
- * 
+ *
  * @returns {{
  *   pending: number,
  *   isProcessing: boolean,
@@ -229,14 +241,14 @@ function getStatus() {
         pending: queue.length,
         isProcessing,
         currentTurnId: currentTurn?.id || null,
-        queuedTurnIds: queue.map(t => t.id)
+        queuedTurnIds: queue.map(t => t.id),
     };
 }
 
 /**
  * Clear all pending turns (not the current one)
  * Rejected with AbortError
- * 
+ *
  * @returns {number} Number of cleared turns
  */
 function clearPending() {
@@ -253,7 +265,7 @@ function clearPending() {
 
 /**
  * Subscribe to queue events
- * 
+ *
  * @param {function(string, QueuedTurn, Error?): void} callback - Event callback
  * @returns {function(): void} Unsubscribe function
  */
@@ -270,7 +282,7 @@ function subscribe(callback) {
 
 /**
  * Notify all listeners of an event
- * 
+ *
  * @param {string} event - Event type
  * @param {QueuedTurn} turn - The turn
  * @param {Error} [error] - Error if any
@@ -288,7 +300,7 @@ function notifyListeners(event, turn, error = null) {
 /**
  * Get wait time estimate for a new turn
  * Based on average processing time of recent turns
- * 
+ *
  * @returns {number} Estimated wait time in ms
  */
 function getEstimatedWaitTime() {
@@ -299,7 +311,7 @@ function getEstimatedWaitTime() {
 
 /**
  * Get user-friendly status message for UI
- * 
+ *
  * @returns {string|null} Status message or null if queue is empty
  */
 function getStatusMessage() {
@@ -349,7 +361,7 @@ function recordTurnMetrics(turn, success) {
         waitTimeMs,
         processingTimeMs,
         completedAt: turn.completedAt,
-        success
+        success,
     });
 
     // Trim old history
@@ -361,21 +373,25 @@ function recordTurnMetrics(turn, success) {
     const metrics = calculateMetrics();
     if (metrics.avgWaitTimeMs > METRICS_CONFIG.warningThresholdMs && !warningEmitted) {
         warningEmitted = true;
-        console.warn(`[TurnQueue] Average wait time (${metrics.avgWaitTimeMs.toFixed(0)}ms) exceeds threshold (${METRICS_CONFIG.warningThresholdMs}ms)`);
+        console.warn(
+            `[TurnQueue] Average wait time (${metrics.avgWaitTimeMs.toFixed(0)}ms) exceeds threshold (${METRICS_CONFIG.warningThresholdMs}ms)`
+        );
 
         // Emit event if EventBus is available
         try {
             // Dynamic import to avoid circular dependency
-            import('./event-bus.js').then(({ EventBus }) => {
-                EventBus.emit('turnqueue:performance_warning', {
-                    avgWaitTimeMs: metrics.avgWaitTimeMs,
-                    maxWaitTimeMs: metrics.maxWaitTimeMs,
-                    queueDepth: queue.length,
-                    threshold: METRICS_CONFIG.warningThresholdMs
+            import('./event-bus.js')
+                .then(({ EventBus }) => {
+                    EventBus.emit('turnqueue:performance_warning', {
+                        avgWaitTimeMs: metrics.avgWaitTimeMs,
+                        maxWaitTimeMs: metrics.maxWaitTimeMs,
+                        queueDepth: queue.length,
+                        threshold: METRICS_CONFIG.warningThresholdMs,
+                    });
+                })
+                .catch(err => {
+                    console.warn('[TurnQueue] Failed to emit performance warning event:', err);
                 });
-            }).catch((err) => {
-                console.warn('[TurnQueue] Failed to emit performance warning event:', err);
-            });
         } catch (e) {
             // Ignore
         }
@@ -388,7 +404,7 @@ function recordTurnMetrics(turn, success) {
 function recordDepthSample() {
     depthSamples.push({
         timestamp: Date.now(),
-        depth: queue.length + 1 // +1 for current processing turn
+        depth: queue.length + 1, // +1 for current processing turn
     });
 
     // Trim old samples
@@ -409,7 +425,7 @@ function calculateMetrics() {
             maxWaitTimeMs: 0,
             totalProcessed: totalTurnsProcessed,
             totalFailed: totalTurnsFailed,
-            successRate: 1
+            successRate: 1,
         };
     }
 
@@ -423,7 +439,7 @@ function calculateMetrics() {
         maxWaitTimeMs,
         totalProcessed: totalTurnsProcessed,
         totalFailed: totalTurnsFailed,
-        successRate: successCount / turnHistory.length
+        successRate: successCount / turnHistory.length,
     };
 }
 
@@ -435,12 +451,11 @@ function getMetrics() {
     const metrics = calculateMetrics();
 
     // Calculate queue depth stats
-    const avgDepth = depthSamples.length > 0
-        ? depthSamples.reduce((sum, s) => sum + s.depth, 0) / depthSamples.length
-        : 0;
-    const maxDepth = depthSamples.length > 0
-        ? Math.max(...depthSamples.map(s => s.depth))
-        : 0;
+    const avgDepth =
+        depthSamples.length > 0
+            ? depthSamples.reduce((sum, s) => sum + s.depth, 0) / depthSamples.length
+            : 0;
+    const maxDepth = depthSamples.length > 0 ? Math.max(...depthSamples.map(s => s.depth)) : 0;
 
     return {
         // Wait times
@@ -465,7 +480,7 @@ function getMetrics() {
 
         // Warning state
         warningThresholdMs: METRICS_CONFIG.warningThresholdMs,
-        isAboveThreshold: metrics.avgWaitTimeMs > METRICS_CONFIG.warningThresholdMs
+        isAboveThreshold: metrics.avgWaitTimeMs > METRICS_CONFIG.warningThresholdMs,
     };
 }
 
@@ -510,7 +525,7 @@ const TurnQueue = {
     // For testing
     _queue: queue,
     _QueuedTurn: QueuedTurn,
-    _turnHistory: turnHistory
+    _turnHistory: turnHistory,
 };
 
 // ES Module export
