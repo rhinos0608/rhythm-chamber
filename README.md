@@ -28,17 +28,19 @@ Plus: Your AI notices your patterns and writes personalized narratives about you
 ## The Three-Layer Value Stack
 
 ### Layer 1: Emotional Value
+
 **Your AI notices your patterns. Writes personalized narratives. Witnesses your evolution. Creates meaning from data.**
 
-| Stats.fm | Rhythm Chamber |
-|----------|----------------|
-| "You listened to 12,847 hours" | "You're a Mood Engineer because..." |
-| Charts and graphs | Identity and meaning |
-| Click to explore | Ask questions naturally |
-| Full history + real-time | Full history only (depth over speed) |
-| Low technical barrier | BYOI model (power users bring their own intelligence) |
+| Stats.fm                       | Rhythm Chamber                                        |
+| ------------------------------ | ----------------------------------------------------- |
+| "You listened to 12,847 hours" | "You're a Mood Engineer because..."                   |
+| Charts and graphs              | Identity and meaning                                  |
+| Click to explore               | Ask questions naturally                               |
+| Full history + real-time       | Full history only (depth over speed)                  |
+| Low technical barrier          | BYOI model (power users bring their own intelligence) |
 
 ### Layer 2: Privacy Value
+
 **Data never leaves your device. Your AI, not a company's AI. Structurally private by design. Verifiable through open source.**
 
 **Stats.fm needs servers** → They must monetize → They control your data → You depend on them
@@ -48,6 +50,7 @@ Plus: Your AI notices your patterns and writes personalized narratives about you
 **This isn't "too cheap to host AI" — it's "respecting power users' desire for control."**
 
 ### Layer 3: Control Value
+
 **Choose your AI provider. Own your data completely. No vendor lock-in. Full transparency.**
 
 - **Pick the compute**: Local models (Ollama/LM Studio) for zero cloud calls, or cloud via OpenRouter when convenient
@@ -59,31 +62,31 @@ Plus: Your AI notices your patterns and writes personalized narratives about you
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [Product Vision](docs/01-product-vision.md) | Emotional witness positioning, competitive moat |
-| [User Experience](docs/02-user-experience.md) | Natural language queries, semantic search |
-| [Technical Architecture](docs/03-technical-architecture.md) | Zero-backend, BYOI architecture |
-| [Intelligence Engine](docs/04-intelligence-engine.md) | Personality types, data depth |
-| [Roadmap & Risks](docs/05-roadmap-and-risks.md) | 6-week timeline, competitive positioning |
-| [Advanced Features](docs/06-advanced-features.md) | Local models, transparency |
-| [API Setup](docs/API_SETUP.md) | Power user configuration |
-| [GSD System](docs/gsd-system.md) | Development methodology and workflows |
-| [Security Milestone v0.9](docs/security-milestone-v0.9.md) | Security hardening completion report |
-| [Deployment Guide](docs/DEPLOYMENT.md) | Deployment instructions for Vercel, Netlify, etc. |
+| Document                                                    | Description                                       |
+| ----------------------------------------------------------- | ------------------------------------------------- |
+| [Product Vision](docs/01-product-vision.md)                 | Emotional witness positioning, competitive moat   |
+| [User Experience](docs/02-user-experience.md)               | Natural language queries, semantic search         |
+| [Technical Architecture](docs/03-technical-architecture.md) | Zero-backend, BYOI architecture                   |
+| [Intelligence Engine](docs/04-intelligence-engine.md)       | Personality types, data depth                     |
+| [Roadmap & Risks](docs/05-roadmap-and-risks.md)             | 6-week timeline, competitive positioning          |
+| [Advanced Features](docs/06-advanced-features.md)           | Local models, transparency                        |
+| [API Setup](docs/API_SETUP.md)                              | Power user configuration                          |
+| [GSD System](docs/gsd-system.md)                            | Development methodology and workflows             |
+| [Security Milestone v0.9](docs/security-milestone-v0.9.md)  | Security hardening completion report              |
+| [Deployment Guide](docs/DEPLOYMENT.md)                      | Deployment instructions for Vercel, Netlify, etc. |
 
 ### Developer Documentation
 
-| Document | Description |
-|----------|-------------|
-| [Contributing](CONTRIBUTING.md) | Contribution guidelines and development workflow |
-| [Testing Guide](TESTING.md) | Running and writing tests |
-| [Security Model](SECURITY.md) | Comprehensive security model and threat analysis |
-| [Agent Reference](AGENT_CONTEXT.md) | Technical documentation for AI agents |
-| [API Reference](API_REFERENCE.md) | Core module API documentation |
-| [Troubleshooting](TROUBLESHOOTING.md) | Common issues and solutions |
-| [Changelog](CHANGELOG.md) | Version history and changes |
-| [Code of Conduct](CODE_OF_CONDUCT.md) | Community guidelines |
+| Document                                       | Description                                       |
+| ---------------------------------------------- | ------------------------------------------------- |
+| [Contributing](CONTRIBUTING.md)                | Contribution guidelines and development workflow  |
+| [Testing Guide](TESTING.md)                    | Running and writing tests                         |
+| [Security Model](SECURITY.md)                  | Comprehensive security model and threat analysis  |
+| [Agent Reference](AGENT_CONTEXT.md)            | Technical documentation for AI agents             |
+| [API Reference](API_REFERENCE.md)              | Core module API documentation                     |
+| [Troubleshooting](TROUBLESHOOTING.md)          | Common issues and solutions                       |
+| [Changelog](CHANGELOG.md)                      | Version history and changes                       |
+| [Code of Conduct](CODE_OF_CONDUCT.md)          | Community guidelines                              |
 | [Technical Debt](docs/plans/TECHNICAL_DEBT.md) | ✅ All 20 items resolved - see remediation report |
 
 ### Development Tools
@@ -104,6 +107,7 @@ npm run docs:validate
 ```
 
 **Features:**
+
 - Automatic metric extraction (file counts, line counts, module counts)
 - Dependency graph generation with circular dependency detection
 - Git history tracking (timestamps, versions)
@@ -126,6 +130,7 @@ node examples/test-server.js
 **File Watcher Commands:**
 
 Via npm scripts (recommended):
+
 ```bash
 npm run watcher:start      # Start the file watcher
 npm run watcher:status     # Check watcher status
@@ -134,6 +139,7 @@ npm run watcher:restart    # Restart the watcher
 ```
 
 Or direct script access:
+
 ```bash
 node mcp-server/scripts/watcher-control.js start
 node mcp-server/scripts/watcher-control.js status
@@ -142,6 +148,7 @@ node mcp-server/scripts/watcher-control.js restart --debounce 500
 ```
 
 **Features:**
+
 - **get_module_info**: Analyze module exports, imports, dependencies, and HNW compliance ✅
 - **find_dependencies**: Trace dependency graphs with circular dependency detection ✅
 - **search_architecture**: Search for HNW patterns and anti-patterns ✅
@@ -194,21 +201,25 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 ## Getting Started
 
 ### 0. Demo Mode (Instant sample)
+
 - Load the built-in "Emo Teen" persona
 - Chat with pre-seeded insights without uploading anything
 - Exit demo to keep sample data isolated from your real analysis
 
 ### 1. Quick Snapshot (Instant)
+
 - Connect Spotify OAuth (Chamber tier)
 - Get current vibe analysis
 - Limited to recent data
 
 ### 2. Full Analysis (Patient)
+
 - Request Spotify data export (5-30 days)
 - Upload .zip file
 - Complete personality reveal + semantic search
 
 ### 3. Power User Setup
+
 - Add OpenRouter API key (or use local models for BYOI)
 - Use local models for ultimate privacy
 
@@ -218,49 +229,51 @@ Upload .zip → Personality Reveal → Chat with Semantic Search → Share Card
 
 ### Core Documentation
 
-| Document | Description |
-|----------|-------------|
+| Document                        | Description                                                  |
+| ------------------------------- | ------------------------------------------------------------ |
 | [Architecture](ARCHITECTURE.md) | System design, modules, data flow, zero-backend architecture |
-| [API Reference](API.md) | Complete API documentation for all modules |
-| [Testing Guide](TESTING.md) | Running and writing tests, test methodologies |
-| [Security Model](SECURITY.md) | Comprehensive security model, threat analysis, audit results |
+| [API Reference](API.md)         | Complete API documentation for all modules                   |
+| [Testing Guide](TESTING.md)     | Running and writing tests, test methodologies                |
+| [Security Model](SECURITY.md)   | Comprehensive security model, threat analysis, audit results |
 
 ### Development Guides
 
-| Document | Description |
-|----------|-------------|
-| [Contributing](CONTRIBUTING.md) | Development setup, patterns, guidelines |
-| [Deployment](DEPLOYMENT.md) | Build process, deployment to Vercel/Netlify, COOP/COEP headers |
-| [Refactoring](REFACTORING.md) | Refactoring history, patterns, characterization testing methodology |
-| [Troubleshooting](TROUBLESHOOTING.md) | Common issues and solutions |
-| [Changelog](CHANGELOG.md) | Version history and breaking changes |
+| Document                              | Description                                                         |
+| ------------------------------------- | ------------------------------------------------------------------- |
+| [Contributing](CONTRIBUTING.md)       | Development setup, patterns, guidelines                             |
+| [Deployment](DEPLOYMENT.md)           | Build process, deployment to Vercel/Netlify, COOP/COEP headers      |
+| [Refactoring](REFACTORING.md)         | Refactoring history, patterns, characterization testing methodology |
+| [Troubleshooting](TROUBLESHOOTING.md) | Common issues and solutions                                         |
+| [Changelog](CHANGELOG.md)             | Version history and breaking changes                                |
 
 ### Decision Records
 
-| Document | Description |
-|----------|-------------|
-| [ADR Index](docs/ADR/README.md) | Architecture Decision Records index |
-| [Testing Methodology](docs/ADR/001-testing-methodology.md) | Characterization testing and worker mock architecture |
+| Document                                                         | Description                                              |
+| ---------------------------------------------------------------- | -------------------------------------------------------- |
+| [ADR Index](docs/ADR/README.md)                                  | Architecture Decision Records index                      |
+| [Testing Methodology](docs/ADR/001-testing-methodology.md)       | Characterization testing and worker mock architecture    |
 | [Architecture Decisions](docs/ADR/002-architecture-decisions.md) | IndexedDB structure, facade pattern, sub-agent execution |
 
 ### Additional Resources
 
-| Document | Description |
-|----------|-------------|
-| [Agent Reference](AGENT_CONTEXT.md) | Technical documentation for AI agents |
-| [Code of Conduct](CODE_OF_CONDUCT.md) | Community guidelines |
+| Document                              | Description                           |
+| ------------------------------------- | ------------------------------------- |
+| [Agent Reference](AGENT_CONTEXT.md)   | Technical documentation for AI agents |
+| [Code of Conduct](CODE_OF_CONDUCT.md) | Community guidelines                  |
 
 ---
 
 ## Development
 
 ### Setup
+
 ```bash
 npm install
 npm run dev     # Start local server on port 8080
 ```
 
 ### Testing
+
 ```bash
 npm test           # E2E tests (Playwright)
 npm run test:unit  # Unit tests (Vitest) - schemas & patterns
@@ -268,6 +281,7 @@ npm run test:unit:watch  # Watch mode for TDD
 ```
 
 ### Project Structure
+
 - `js/` - Application source code
 - `tests/unit/` - Unit tests (Vitest)
 - `tests/rhythm-chamber.spec.ts` - E2E tests (Playwright)
@@ -281,14 +295,14 @@ Rhythm Chamber is built for **modern browsers** and uses contemporary web platfo
 
 ### Supported Browsers
 
-| Browser | Minimum Version | Status |
-|---------|----------------|--------|
-| Chrome | 90+ | Fully Supported |
-| Edge | 90+ | Fully Supported |
-| Firefox | 90+ | Fully Supported |
-| Safari | 14.5+ | Fully Supported |
-| iOS Safari | 14.5+ | Fully Supported |
-| Android Chrome | 90+ | Fully Supported |
+| Browser        | Minimum Version | Status          |
+| -------------- | --------------- | --------------- |
+| Chrome         | 90+             | Fully Supported |
+| Edge           | 90+             | Fully Supported |
+| Firefox        | 90+             | Fully Supported |
+| Safari         | 14.5+           | Fully Supported |
+| iOS Safari     | 14.5+           | Fully Supported |
+| Android Chrome | 90+             | Fully Supported |
 
 ### Required Features
 
@@ -323,12 +337,13 @@ A friendly upgrade message will be displayed if your browser doesn't support req
 
 Rhythm Chamber offers a simple two-tier pricing model:
 
-| Tier | Price | Features |
-|------|-------|----------|
-| **Sovereign** | Free | Local AI only, manual data import, basic chat, manual profile creation |
-| **Chamber** | $4.99/month | Cloud AI access, Spotify integration, AI-generated profiles, premium features |
+| Tier          | Price       | Features                                                                      |
+| ------------- | ----------- | ----------------------------------------------------------------------------- |
+| **Sovereign** | Free        | Local AI only, manual data import, basic chat, manual profile creation        |
+| **Chamber**   | $4.99/month | Cloud AI access, Spotify integration, AI-generated profiles, premium features |
 
 ### Premium Features (Chamber Tier)
+
 - Spotify OAuth integration (automatic data import)
 - OpenRouter cloud AI access
 - AI-generated profile narratives
@@ -337,6 +352,7 @@ Rhythm Chamber offers a simple two-tier pricing model:
 - Advanced analytics features
 
 ### License Verification
+
 - Licenses managed through Lemon Squeezy
 - Local validation with encrypted storage
 - Graceful fallback to Sovereign tier

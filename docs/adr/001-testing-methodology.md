@@ -29,6 +29,7 @@ We will use **characterization testing** before any refactoring work, combined w
 ### Characterization Testing
 
 **Characterization testing** means:
+
 - Write tests that **document and lock in current behavior**
 - Tests capture what the system **currently does**, not what it **should do**
 - Use these tests as a safety net during refactoring
@@ -39,6 +40,7 @@ We will use **characterization testing** before any refactoring work, combined w
 Given the heavy use of Web Workers in Rhythm Chamber (pattern detection, embeddings, vector search), we need a sophisticated mocking strategy:
 
 **Mock Strategy:**
+
 - **Create synchronous mock workers** that return pre-defined responses
 - **Support async worker communication patterns** for realistic testing
 - **Inject mock workers** via dependency injection for testability
@@ -121,7 +123,7 @@ describe('Pattern Detection', () => {
     // Set up mock responses
     workerMock.setMockResponse('DETECT_ERAS', {
       type: 'ERAS_DETECTED',
-      eras: [{ name: 'Emo Teen', start: '2020-01-01', end: '2020-12-31' }]
+      eras: [{ name: 'Emo Teen', start: '2020-01-01', end: '2020-12-31' }],
     });
   });
 

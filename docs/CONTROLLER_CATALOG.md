@@ -376,4 +376,3 @@ Controllers manage UI components and user interactions. Each controller is respo
 - `js/controllers/sidebar-controller.js`
 
 ---
-

@@ -49,6 +49,7 @@ js/storage/indexeddb/
 ### Consequences
 
 **Positive:**
+
 - Each module has a single, clear responsibility
 - Smaller modules are easier to test in isolation
 - Modules can be reused independently
@@ -56,6 +57,7 @@ js/storage/indexeddb/
 - New developers can understand individual modules quickly
 
 **Negative:**
+
 - Increased file count (1 → 11 files)
 - More complex import structure
 - Facade adds a thin layer of indirection
@@ -80,6 +82,7 @@ Use the **facade pattern** to maintain backward compatibility while splitting in
 #### Pattern Structure
 
 **Before (God Object):**
+
 ```
 ┌─────────────────────────────────────┐
 │     SessionManager (826 lines)      │
@@ -90,6 +93,7 @@ Use the **facade pattern** to maintain backward compatibility while splitting in
 ```
 
 **After (Facade + Modules):**
+
 ```
 ┌─────────────────────────────────────┐
 │   index.js (Facade) - Public API    │
@@ -160,6 +164,7 @@ const data = await IndexedDB.get('streams', 1);
 ### Consequences
 
 **Positive:**
+
 - Zero breaking changes to existing code
 - Can update consumers gradually
 - Clean modular structure behind the facade
@@ -167,6 +172,7 @@ const data = await IndexedDB.get('streams', 1);
 - Enables incremental migration
 
 **Negative:**
+
 - Facade adds a thin layer of indirection
 - Slight performance overhead from delegation
 - Must maintain facade API longer-term
@@ -186,6 +192,7 @@ Phase 2-3 required refactoring 40+ god objects across the codebase. Given the sc
 - **Multiple developers/sub-agents** working in parallel
 
 We needed a systematic approach to:
+
 1. Execute work efficiently with parallel execution
 2. Avoid merge conflicts between concurrent work
 3. Maintain code stability throughout refactoring
@@ -198,24 +205,29 @@ Use **sub-agents with maximum 2-3 parallel workers** to balance speed and safety
 #### Parallel Execution Strategy
 
 **Week 1: Test Infrastructure (Sequential)**
+
 - Sub-Agent 1: Test Framework Setup (must complete first)
 - Sub-Agent 2: Characterization Tests (depends on test framework)
 
 **Week 2: Low-Risk Refactoring (2-3 Parallel)**
+
 - Sub-Agent 1: Documentation (ADR creation, README updates)
 - Sub-Agent 2: Simple Refactoring (utils, helpers, validators)
 - Sub-Agent 3: Characterization Tests (for medium-risk modules)
 
 **Week 3: Medium-Risk Refactoring (Sequential or Limited Parallel)**
+
 - Sub-Agent 1: Metrics Exporter Refactoring
 - Sub-Agent 2: Session Manager Refactoring (starts after Metrics completes)
 
 **Week 4: High-Risk Refactoring (Sequential)**
+
 - Sub-Agent 1: IndexedDB Refactoring (only one high-risk task at a time)
 
 #### Risk Assessment Criteria
 
 **Low Risk (can parallelize):**
+
 - Doesn't touch core business logic
 - No database schema changes
 - No API contract changes
@@ -223,12 +235,14 @@ Use **sub-agents with maximum 2-3 parallel workers** to balance speed and safety
 - Documentation and tests
 
 **Medium Risk (limited parallelization):**
+
 - Touches multiple modules
 - Some dependencies on other modules
 - Moderate complexity
 - Some consumers to update
 
 **High Risk (must be sequential):**
+
 - Core storage layers
 - Data migration logic
 - Performance-critical code
@@ -238,12 +252,14 @@ Use **sub-agents with maximum 2-3 parallel workers** to balance speed and safety
 ### Consequences
 
 **Positive:**
+
 - Reduced overall timeline (4 weeks vs 8+ weeks)
 - Parallel work on independent modules
 - Systematic risk assessment
 - Clear coordination protocol
 
 **Negative:**
+
 - Increased coordination overhead
 - Need for careful branch management
 - Potential for merge conflicts
@@ -298,6 +314,7 @@ User's Browser
 ### Consequences
 
 **Positive:**
+
 - Zero server infrastructure costs
 - Privacy-first (data never leaves device)
 - User controls their data completely
@@ -305,6 +322,7 @@ User's Browser
 - Open source verifiable security
 
 **Negative:**
+
 - No centralized data collection
 - No real-time sync across devices (without E2EE infrastructure)
 - Must process everything on user's device
@@ -329,17 +347,18 @@ Implement **BYOI (Bring Your Own Intelligence)** architecture allowing users to 
 
 #### Supported Providers
 
-| Provider | Type | Cost | Setup |
-|----------|------|------|-------|
-| **Ollama** | Local | Free | Install Ollama, run model |
-| **LM Studio** | Local | Free | Install LM Studio, enable API |
-| **OpenRouter** | Cloud | Pay-per-use | Add API key in settings |
+| Provider              | Type           | Cost                | Setup                                 |
+| --------------------- | -------------- | ------------------- | ------------------------------------- |
+| **Ollama**            | Local          | Free                | Install Ollama, run model             |
+| **LM Studio**         | Local          | Free                | Install LM Studio, enable API         |
+| **OpenRouter**        | Cloud          | Pay-per-use         | Add API key in settings               |
 | **OpenAI-Compatible** | Cloud or Local | Depends on provider | Configure custom base URL and API key |
-| **Gemini** | Cloud | Pay-per-use | Add API key in settings |
+| **Gemini**            | Cloud          | Pay-per-use         | Add API key in settings               |
 
 ### Consequences
 
 **Positive:**
+
 - Users control their AI experience
 - Can optimize for cost (local) or quality (cloud)
 - No vendor lock-in
@@ -347,6 +366,7 @@ Implement **BYOI (Bring Your Own Intelligence)** architecture allowing users to 
 - Power users can fine-tune their setup
 
 **Negative:**
+
 - More complex configuration for users
 - Support burden for multiple providers
 - Inconsistent experiences across providers

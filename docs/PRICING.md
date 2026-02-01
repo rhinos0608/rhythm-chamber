@@ -7,11 +7,13 @@ Rhythm Chamber uses a two-tier premium model that separates **Privacy & Growth**
 ## The Two Tiers
 
 ### Tier 1: The Sovereign (Free)
+
 **Focus:** Privacy & Viral Growth
 
 **Cost:** $0
 
 **Features:**
+
 - 100% Local analysis (BYOI chat with Ollama/Gemini keys)
 - Basic personality cards
 - Full data parsing and pattern detection
@@ -22,12 +24,14 @@ Rhythm Chamber uses a two-tier premium model that separates **Privacy & Growth**
 **Infrastructure:** Client-side only (zero backend)
 
 **Purpose:**
+
 - Loss leader to build community
 - Validate product-market fit
 - Zero server costs
 - Viral growth through shareable cards
 
 **Why it works:**
+
 - Zero risk entry
 - Builds trust through transparency
 - Generates organic marketing via shared cards
@@ -36,11 +40,13 @@ Rhythm Chamber uses a two-tier premium model that separates **Privacy & Growth**
 ---
 
 ### Tier 2: The Chamber ($4.99/mo or $39/yr)
+
 **Focus:** Advanced Analytics & Convenience
 
 **Cost:** $4.99/month OR $39/year (≈35% discount)
 
 **Features:**
+
 - **Unlimited Playlists:** AI-curate mood, era, and time machine playlists
 - **Metadata Enrichment:** Fetch BPM, Key, Danceability, Energy from Spotify API
 - **Semantic Search:** Vibe-based queries using local embeddings
@@ -99,6 +105,7 @@ Beautiful, interactive data visualizations:
 ### License Verification
 
 The app verifies licenses via:
+
 1. Lemon Squeezy API validation
 2. Local encrypted storage
 3. Periodic re-validation (every 30 days)
@@ -109,12 +116,14 @@ The app verifies licenses via:
 ### Implementation Notes
 
 **Architecture Decisions:**
+
 - Client-side validation only (no backend dependency)
 - Encrypted local storage for license keys
 - Offline-friendly with 30-day grace period
 - Automatic fallback to free tier if license expires
 
 **Technical Details:**
+
 - License validation happens at app initialization
 - Premium features check license status before activation
 - Graceful degradation if license becomes invalid

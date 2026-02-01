@@ -13,6 +13,7 @@
 ## Overview
 
 This plan refactors three God objects in parallel work streams:
+
 - **Stream A**: Transaction.js → 4-module decomposition (most complex)
 - **Stream B**: Validation.js → Extract crypto hashing (simplest)
 - **Stream C**: Storage.js → Extract auto-repair service (medium)
@@ -26,6 +27,7 @@ Each stream can execute independently after the sequential foundation tasks.
 ### Task 1: Create Feature Flag Infrastructure
 
 **Files:**
+
 - Create: `js/config/refactoring-flags.js`
 
 **Context:**
@@ -55,7 +57,7 @@ export const REFACTORING_FLAGS = {
   USE_NEW_CRYPTO_HASHING: true,
 
   /** Use new auto-repair.js service vs legacy inline implementation in storage.js */
-  USE_NEW_AUTO_REPAIR: true
+  USE_NEW_AUTO_REPAIR: true,
 };
 ```
 
@@ -71,6 +73,7 @@ git commit -m "feat(refactoring): add feature flag infrastructure"
 ### Task 2: Create Transaction Module Directory
 
 **Files:**
+
 - Create: `js/storage/transaction/` (directory)
 
 **Context:**
@@ -97,6 +100,7 @@ git commit -m "feat(refactoring): create transaction module directory"
 ### Task A1: Create Transactional Resource Interface
 
 **Files:**
+
 - Create: `js/storage/transaction/transactional-resource.js`
 
 **Context:**
@@ -180,6 +184,7 @@ git commit -m "feat(transaction): add TransactionalResource interface"
 ### Task A2: Create Transaction State Manager
 
 **Files:**
+
 - Create: `js/storage/transaction/transaction-state.js`
 - Reference: `js/storage/transaction.js:39-114` (extract fatal state logic)
 - Reference: `js/storage/transaction.js:59-68` (extract nested transaction logic)
@@ -217,7 +222,7 @@ let FATAL_STATE = {
   reason: null,
   timestamp: null,
   transactionId: null,
-  compensationLogCount: 0
+  compensationLogCount: 0,
 };
 
 // ==========================================
@@ -264,7 +269,7 @@ export class TransactionStateManager {
       reason,
       timestamp: Date.now(),
       transactionId,
-      compensationLogCount
+      compensationLogCount,
     };
 
     EventBus.emit('transaction:fatal_state', { ...FATAL_STATE });
@@ -282,7 +287,7 @@ export class TransactionStateManager {
         reason: null,
         timestamp: null,
         transactionId: null,
-        compensationLogCount: 0
+        compensationLogCount: 0,
       };
       EventBus.emit('transaction:fatal_cleared', { reason, timestamp: Date.now() });
     }
@@ -318,9 +323,9 @@ export class NestedTransactionGuard {
     if (transactionDepth > 0) {
       const error = new Error(
         `[TransactionState] Nested transaction detected. ` +
-        `Current: ${NESTED_TRANSACTION_STACK[transactionDepth - 1]}, ` +
-        `Attempted: ${transactionId}. ` +
-        `Nested transactions can cause deadlocks and undefined behavior.`
+          `Current: ${NESTED_TRANSACTION_STACK[transactionDepth - 1]}, ` +
+          `Attempted: ${transactionId}. ` +
+          `Nested transactions can cause deadlocks and undefined behavior.`
       );
       console.error(error.message);
       throw error;
@@ -341,7 +346,7 @@ export class NestedTransactionGuard {
     if (topId !== transactionId) {
       console.error(
         `[TransactionState] Transaction depth mismatch. ` +
-        `Expected: ${topId}, Got: ${transactionId}`
+          `Expected: ${topId}, Got: ${transactionId}`
       );
     }
 
@@ -359,7 +364,10 @@ mkdir -p tests/unit/storage/transaction
 ```javascript
 // tests/unit/storage/transaction/transaction-state.test.js
 import { describe, it, expect, beforeEach } from 'vitest';
-import { TransactionStateManager, NestedTransactionGuard } from '../../../../js/storage/transaction/transaction-state.js';
+import {
+  TransactionStateManager,
+  NestedTransactionGuard,
+} from '../../../../js/storage/transaction/transaction-state.js';
 
 describe('TransactionStateManager', () => {
   beforeEach(() => {
@@ -439,6 +447,7 @@ git commit -m "feat(transaction): extract state management module"
 ### Task A3: Create Compensation Logger
 
 **Files:**
+
 - Create: `js/storage/transaction/compensation-logger.js`
 - Reference: `js/storage/transaction.js:135-187` (in-memory compensation log)
 - Reference: `js/storage/transaction.js:COMPENSATION_LOG_STORE` constant
@@ -485,7 +494,7 @@ export class CompensationLogger {
       id: transactionId,
       entries,
       timestamp: Date.now(),
-      resolved: false
+      resolved: false,
     };
 
     // Try IndexedDB first
@@ -683,7 +692,7 @@ export class CompensationLogger {
 
     this.memoryLogs.set(transactionId, {
       ...logEntry,
-      storage: 'memory'
+      storage: 'memory',
     });
   }
 }
@@ -701,6 +710,7 @@ git commit -m "feat(transaction): extract compensation logger module"
 ### Task A4: Create Two-Phase Commit Coordinator
 
 **Files:**
+
 - Create: `js/storage/transaction/two-phase-commit.js`
 - Reference: `js/storage/transaction.js:260-294` (TransactionOperation class)
 - Reference: `js/storage/transaction.js:196-255` (retry logic, timeouts)
@@ -731,12 +741,12 @@ const OPERATION_TIMEOUT_MS = 5000;
  */
 export class TransactionOperation {
   constructor(backend, type, store, key, value, previousValue = null) {
-    this.backend = backend;       // 'indexeddb' | 'localstorage'
-    this.type = type;             // 'put' | 'delete'
-    this.store = store;           // Store name
-    this.key = key;               // Key identifier
-    this.value = value;           // Value to store
-    this.previousValue = previousValue;  // For rollback
+    this.backend = backend; // 'indexeddb' | 'localstorage'
+    this.type = type; // 'put' | 'delete'
+    this.store = store; // Store name
+    this.key = key; // Key identifier
+    this.value = value; // Value to store
+    this.previousValue = previousValue; // For rollback
     this.committed = false;
     this.rolledBack = false;
     this.timestamp = Date.now();
@@ -761,12 +771,12 @@ export class TransactionContext {
    */
   put(store, key, value, backend = 'indexeddb') {
     if (this.operations.length >= MAX_OPERATIONS_PER_TRANSACTION) {
-      throw new Error(`Transaction ${this.id}: Maximum operations (${MAX_OPERATIONS_PER_TRANSACTION}) exceeded`);
+      throw new Error(
+        `Transaction ${this.id}: Maximum operations (${MAX_OPERATIONS_PER_TRANSACTION}) exceeded`
+      );
     }
 
-    this.operations.push(
-      new TransactionOperation(backend, 'put', store, key, value)
-    );
+    this.operations.push(new TransactionOperation(backend, 'put', store, key, value));
   }
 
   /**
@@ -774,12 +784,12 @@ export class TransactionContext {
    */
   delete(store, key, backend = 'indexeddb') {
     if (this.operations.length >= MAX_OPERATIONS_PER_TRANSACTION) {
-      throw new Error(`Transaction ${this.id}: Maximum operations (${MAX_OPERATIONS_PER_TRANSACTION}) exceeded`);
+      throw new Error(
+        `Transaction ${this.id}: Maximum operations (${MAX_OPERATIONS_PER_TRANSACTION}) exceeded`
+      );
     }
 
-    this.operations.push(
-      new TransactionOperation(backend, 'delete', store, key, null)
-    );
+    this.operations.push(new TransactionOperation(backend, 'delete', store, key, null));
   }
 
   getOperations() {
@@ -808,8 +818,8 @@ export class TwoPhaseCommitCoordinator {
       const fatalState = TransactionStateManager.getFatalState();
       throw new Error(
         `Cannot execute transaction: system in fatal state. ` +
-        `Reason: ${fatalState.reason}. ` +
-        `Transaction ${context.id} blocked.`
+          `Reason: ${fatalState.reason}. ` +
+          `Transaction ${context.id} blocked.`
       );
     }
 
@@ -912,8 +922,8 @@ export class TwoPhaseCommitCoordinator {
 
       throw new Error(
         `Transaction ${context.id} rollback failed. ` +
-        `Compensation logged. Manual recovery required. ` +
-        `Original error: ${originalError.message}`
+          `Compensation logged. Manual recovery required. ` +
+          `Original error: ${originalError.message}`
       );
     }
   }
@@ -932,6 +942,7 @@ git commit -m "feat(transaction): extract two-phase commit coordinator"
 ### Task A5: Create Transaction Index (Composition Root)
 
 **Files:**
+
 - Create: `js/storage/transaction/index.js`
 
 **Context:**
@@ -971,7 +982,14 @@ const compensationLogger = new CompensationLogger();
 
 if (REFACTORING_FLAGS.USE_NEW_TRANSACTION) {
   // New implementation: Export classes for composition
-  export { TwoPhaseCommitCoordinator, TransactionContext, CompensationLogger, TransactionStateManager, NestedTransactionGuard, TransactionalResource };
+  export {
+    TwoPhaseCommitCoordinator,
+    TransactionContext,
+    CompensationLogger,
+    TransactionStateManager,
+    NestedTransactionGuard,
+    TransactionalResource,
+  };
 
   // TODO: Create StorageTransaction facade that uses coordinator
   export const StorageTransaction = null; // Will be implemented
@@ -995,6 +1013,7 @@ git commit -m "feat(transaction): add composition root with feature flag"
 ### Task B1: Create Crypto Hashing Module
 
 **Files:**
+
 - Create: `js/utils/crypto-hashing.js`
 - Reference: `js/utils/validation.js:36-86` (hash and LRU cache logic)
 
@@ -1053,7 +1072,7 @@ class MessageHashCache {
 
     this.cache.set(content, {
       hash,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
   }
 
@@ -1156,7 +1175,12 @@ export { MessageHashCache };
 ```javascript
 // tests/unit/utils/crypto-hashing.test.js
 import { describe, it, expect } from 'vitest';
-import { hashMessageContent, clearHashCache, getHashCacheSize, MessageHashCache } from '../../../../js/utils/crypto-hashing.js';
+import {
+  hashMessageContent,
+  clearHashCache,
+  getHashCacheSize,
+  MessageHashCache,
+} from '../../../../js/utils/crypto-hashing.js';
 
 describe('Crypto Hashing', () => {
   beforeEach(() => {
@@ -1233,6 +1257,7 @@ git commit -m "feat(utils): extract crypto hashing module"
 ### Task B2: Update Validation.js to Use New Module
 
 **Files:**
+
 - Modify: `js/utils/validation.js:36-86`
 
 **Context:**
@@ -1241,6 +1266,7 @@ Remove inline hashing logic and import from new module.
 **Step 1: Remove hashing code and add import**
 
 At top of validation.js, add import:
+
 ```javascript
 import { hashMessageContent } from './crypto-hashing.js';
 ```
@@ -1273,6 +1299,7 @@ git commit -m "refactor(validation): use crypto-hashing module"
 ### Task C1: Create Auto-Repair Service
 
 **Files:**
+
 - Create: `js/storage/auto-repair.js`
 - Reference: `js/storage.js:54-100` (auto-repair config)
 
@@ -1303,7 +1330,7 @@ const DEFAULT_CONFIG = {
   rebuildIndexes: true,
   recalcMetadata: true,
   attemptRecovery: true,
-  backupBeforeRepair: true
+  backupBeforeRepair: true,
 };
 
 /**
@@ -1331,7 +1358,7 @@ export class AutoRepairService {
     Object.assign(this.config, updates);
 
     this.eventBus.emit('storage:autorepair_config_changed', {
-      config: this.getAutoRepairConfig()
+      config: this.getAutoRepairConfig(),
     });
 
     console.log('[AutoRepair] Config updated:', this.config);
@@ -1376,9 +1403,8 @@ export class AutoRepairService {
 
       this.eventBus.emit('storage:autorepair_complete', {
         repairCount: repairs.length,
-        duration
+        duration,
       });
-
     } catch (error) {
       console.error('[AutoRepair] Failed:', error);
       this.eventBus.emit('storage:autorepair_failed', { error: error.message });
@@ -1448,7 +1474,7 @@ export class AutoRepairService {
     const entry = {
       timestamp: Date.now(),
       action,
-      details
+      details,
     };
 
     this.repairLog.push(entry);
@@ -1470,6 +1496,7 @@ git commit -m "feat(storage): extract auto-repair service"
 ### Task C2: Update Storage.js to Use Auto-Repair Service
 
 **Files:**
+
 - Modify: `js/storage.js:54-100`
 
 **Context:**
@@ -1524,11 +1551,12 @@ git commit -m "refactor(storage): use auto-repair service"
 **Step 1: Toggle each flag independently**
 
 Edit `js/config/refactoring-flags.js`:
+
 ```javascript
 export const REFACTORING_FLAGS = {
-  USE_NEW_TRANSACTION: false,  // Test legacy
+  USE_NEW_TRANSACTION: false, // Test legacy
   USE_NEW_CRYPTO_HASHING: false,
-  USE_NEW_AUTO_REPAIR: false
+  USE_NEW_AUTO_REPAIR: false,
 };
 ```
 
@@ -1546,7 +1574,7 @@ Expected: All tests PASS
 export const REFACTORING_FLAGS = {
   USE_NEW_TRANSACTION: true,
   USE_NEW_CRYPTO_HASHING: true,
-  USE_NEW_AUTO_REPAIR: true
+  USE_NEW_AUTO_REPAIR: true,
 };
 ```
 

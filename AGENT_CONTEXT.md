@@ -1,31 +1,36 @@
 # AI Agent Reference — Rhythm Chamber
 
 > **Status:** v0.9.0 Enhanced Architecture Complete — 366 Source Files
+>
 > - **21 Controllers**: Modular UI components for focused functionality
 > - **94 Services**: Comprehensive business logic with enhanced error handling
 > - **37 Utilities**: Enhanced reliability and performance utilities
 > - **Advanced Error Handling**: Intelligent classification and recovery systems
 > - **Enhanced Streaming**: Real-time message processing with proper buffering
 > - **Security v2.0**: Enhanced validation, adaptive rate limiting, and protection
->npm run dev:coop-coep       # With COOP/COEP for SharedArrayBuffer
+>   npm run dev:coop-coep # With COOP/COEP for SharedArrayBuffer
 
 # Testing
-npm run test:unit            # Run all unit tests
-npm run test:unit -- --run   # Run once (no watch mode)
-npm run test:unit:watch      # Watch mode for TDD
-npm test                     # Run E2E tests
-npm run test:ui              # E2E with UI for debugging
+
+npm run test:unit # Run all unit tests
+npm run test:unit -- --run # Run once (no watch mode)
+npm run test:unit:watch # Watch mode for TDD
+npm test # Run E2E tests
+npm run test:ui # E2E with UI for debugging
 
 # Code Quality
-npm run lint:globals         # Check for accidental globals
-npm run docs:sync            # Update documentation
-npm run docs:validate        # Validate docs are in sync
+
+npm run lint:globals # Check for accidental globals
+npm run docs:sync # Update documentation
+npm run docs:validate # Validate docs are in sync
 
 # Specific Test Patterns
-npm run test:unit -- --testNamePattern="ChatUIController"  # Single test
-npm run test:unit -- --reporter=verbose                    # Verbose output
-npm test --headed                                                   # E2E with browser
-```
+
+npm run test:unit -- --testNamePattern="ChatUIController" # Single test
+npm run test:unit -- --reporter=verbose # Verbose output
+npm test --headed # E2E with browser
+
+````
 
 ### MCP Server (AI Agent Tooling)
 
@@ -42,23 +47,26 @@ node server.js
 
 # Or test standalone
 node examples/test-server.js
-```
+````
 
 **What it does:**
 
-*Semantic Search (NEW):*
+_Semantic Search (NEW):_
+
 - **semantic_search**: Search code by meaning using vector embeddings ✅
 - **deep_code_search**: Orchestrated semantic + structural + architectural analysis ✅
 - **get_chunk_details**: Inspect specific chunks with relationships ✅
 - **list_indexed_files**: Browse all indexed files ✅
 
-*Architecture Analysis:*
+_Architecture Analysis:_
+
 - **get_module_info**: Analyze any module's exports, imports, dependencies, and HNW compliance score ✅
 - **find_dependencies**: Trace dependency graphs, detect circular dependencies ✅
 - **search_architecture**: Search for HNW patterns and anti-patterns ✅
 - **validate_hnw_compliance**: Comprehensive architecture validation ✅
 
 **Semantic Search Example:**
+
 ```json
 {
   "tool": "semantic_search",
@@ -71,6 +79,7 @@ node examples/test-server.js
 ```
 
 **Deep Code Search Example:**
+
 ```json
 {
   "tool": "deep_code_search",
@@ -82,6 +91,7 @@ node examples/test-server.js
 ```
 
 **Returns:**
+
 - Matching chunks ranked by semantic similarity
 - File location, line numbers, and type
 - Related chunks (callers/callees)
@@ -89,6 +99,7 @@ node examples/test-server.js
 
 **Integration with Claude Code:**
 Add to `~/.config/claude-code/config.json`:
+
 ```json
 {
   "mcpServers": {
@@ -108,6 +119,7 @@ See [mcp-server/README.md](mcp-server/README.md) for complete documentation.
 ### HNW Architecture Patterns (Critical)
 
 **Hierarchy:** Controllers → Services → Providers (never bypass layers)
+
 - ✅ DO: Controllers call Services, Services call Providers
 - ✅ DO: Use EventBus for cross-module communication
 - ✅ DO: Let TabCoordinator handle cross-tab conflicts
@@ -115,19 +127,28 @@ See [mcp-server/README.md](mcp-server/README.md) for complete documentation.
 - ❌ DON'T: Bypass abstraction layers (Controllers shouldn't call Providers directly)
 
 **Network:** EventBus for modular communication
+
 ```javascript
 import { EventBus } from './services/event-bus.js';
 
 // Subscribe with domain filtering
-EventBus.on('chat:message:sent', async (data) => {
-  // Handle message sent
-}, { domain: 'chat' });
+EventBus.on(
+  'chat:message:sent',
+  async data => {
+    // Handle message sent
+  },
+  { domain: 'chat' }
+);
 
 // Emit with priority
-await EventBus.emit('chat:message:sent', {
-  sessionId: '...',
-  content: '...'
-}, { priority: 'HIGH' });
+await EventBus.emit(
+  'chat:message:sent',
+  {
+    sessionId: '...',
+    content: '...',
+  },
+  { priority: 'HIGH' }
+);
 ```
 
 **EventBus Limitations:**
@@ -139,18 +160,25 @@ The EventBus supports catch-all subscriptions but **does NOT** support pattern-b
 EventBus.on('session:*', handler);
 
 // ✅ CORRECT - Subscribe to each specific event
-const sessionEvents = ['session:created', 'session:loaded', 'session:switched', 'session:deleted', 'session:updated'];
+const sessionEvents = [
+  'session:created',
+  'session:loaded',
+  'session:switched',
+  'session:deleted',
+  'session:updated',
+];
 sessionEvents.forEach(eventType => {
-    EventBus.on(eventType, handler);
+  EventBus.on(eventType, handler);
 });
 
 // ✅ ALSO SUPPORTED - Catch-all events
 EventBus.on('*', (data, meta) => {
-    console.log('All events:', meta.eventType, data);
+  console.log('All events:', meta.eventType, data);
 });
 ```
 
 **Wave:** TabCoordinator for cross-tab coordination
+
 - ✅ Check primary tab status before writing to IndexedDB
 - ✅ Use write-ahead log for crash recovery
 - ✅ Test with multiple tabs open
@@ -159,32 +187,39 @@ EventBus.on('*', (data, meta) => {
 ### Common Gotchas (Mistake Patterns)
 
 **Cross-Tab Data Corruption**
+
 - ❌ Symptom: Data disappears or gets corrupted with multiple tabs
 - ✅ Solution: Always use TabCoordinator, never write directly from non-primary tabs
 
 **Data Loss on Page Refresh**
+
 - ❌ Symptom: Changes lost after refresh
 - ✅ Solution: Use write-ahead log, transactions, proper error handling
 
 **"CORS error" or "null origin"**
+
 - ❌ Symptom: API calls fail with CORS errors
 - ✅ Solution: Must run on HTTPS or localhost (secure context requirement)
 
 **IndexedDB Tests Failing**
+
 - ❌ Symptom: Tests fail with IDB errors
 - ✅ Solution: Use `fake-indexeddb` from test utilities
 
 **Event Handlers Firing Multiple Times**
+
 - ❌ Symptom: Events trigger repeatedly
 - ✅ Solution: Check EventBus circuit breaker, use domain filtering
 
 **Import Path Errors**
+
 - ❌ Symptom: "Cannot find module" errors
 - ✅ Solution: Always use `./` prefix for relative imports (ES6 modules)
 
 ### Testing Patterns for AI Workflows
 
 **When Adding New Features:**
+
 1. Write unit tests for new services in `tests/unit/services/`
 2. Add E2E tests for user flows in `tests/rhythm-chamber.spec.ts`
 3. Test cross-tab coordination by opening multiple browser tabs
@@ -198,6 +233,7 @@ EventBus.on('*', (data, meta) => {
 ### ES6 Module Best Practices
 
 **Import/Export Patterns:**
+
 ```javascript
 // ✅ GOOD - Named exports for services
 import { Storage, EventBus } from './services/index.js';
@@ -215,11 +251,12 @@ window.ChatController = {};
 ```
 
 **Dependency Injection:**
+
 ```javascript
 // ✅ GOOD - Use parameterized dependencies
 const controller = new ChatUIController({
   chat: container.resolve('Chat'),
-  artifacts: container.resolve('Artifacts')
+  artifacts: container.resolve('Artifacts'),
 });
 
 // ❌ BAD - Hard-coded dependencies
@@ -227,6 +264,7 @@ const controller = new ChatUIController(new Chat());
 ```
 
 **Error Handling:**
+
 ```javascript
 // ✅ GOOD - Use OperationLock for critical operations
 const lock = OperationLock.acquire('processing-streams');
@@ -244,11 +282,13 @@ await this.processMoreStreams(streams); // Race condition!
 ### Project-Specific Patterns
 
 **AI Provider Integration:**
+
 - Always use `llm-api-orchestrator.js` (never call providers directly)
 - Test with both local (Ollama) and cloud (OpenRouter) providers
 - Handle rate limiting and fallbacks automatically
 
 **Data Processing Flow:**
+
 ```
 Upload → Validate → Encrypt → Store → Process → Generate → Display
     ↓         ↓        ↓       ↓        ↓        ↓       ↓
@@ -256,6 +296,7 @@ Upload → Validate → Encrypt → Store → Process → Generate → Display
 ```
 
 **Streaming Architecture:**
+
 - Use `StreamingMessageHandler` for real-time updates
 - Implement proper buffering and backpressure
 - Handle connection drops gracefully
@@ -263,6 +304,7 @@ Upload → Validate → Encrypt → Store → Process → Generate → Display
 ### Security Requirements (CRITICAL)
 
 **Before committing changes:**
+
 - [ ] No sensitive data in logs or error messages
 - [ ] API keys encrypted with `Security.storeEncryptedCredentials()`
 - [ ] User input validated
@@ -271,6 +313,7 @@ Upload → Validate → Encrypt → Store → Process → Generate → Display
 - [ ] Security review if modifying `js/security/`
 
 **Critical Files:**
+
 - `js/security/` - Any changes require security review
 - `js/storage/` - Encrypted storage operations
 - `js/providers/` - AI provider credentials
@@ -278,6 +321,7 @@ Upload → Validate → Encrypt → Store → Process → Generate → Display
 ### File Locations Quick Reference
 
 **Entry Points:**
+
 - `js/main.js` - Application bootstrap, security checks
 - `js/app.js` - Main orchestrator, controller initialization
 
@@ -294,6 +338,7 @@ Upload → Validate → Encrypt → Store → Process → Generate → Display
 ### Debug Patterns
 
 **Enable Debug Mode:**
+
 ```javascript
 // In browser console
 localStorage.setItem('rhythm-chamber-debug', 'true');
@@ -301,12 +346,14 @@ localStorage.setItem('rhythm-chamber-debug', 'true');
 ```
 
 **Test Cross-Tab Coordination:**
+
 1. Open app in multiple browser tabs
 2. Watch leader election in console
 3. Verify only primary tab writes to IndexedDB
 4. Test message passing between tabs
 
 **Test Storage Operations:**
+
 ```javascript
 // Check IndexedDB contents
 await Storage.streams.getAll();
@@ -324,16 +371,17 @@ await Security.decrypt(encryptedData);
 
 ### Two-Tier Premium Model
 
-| Tier | Price | Features | Purpose |
-|------|------|----------|---------|
-| **Sovereign (Free)** | **$0** | Local AI only, manual data import, basic chat, manual profile creation | Build community, validate product |
-| **Chamber** | **$4.99/mo** | Spotify OAuth integration, cloud AI access, AI-generated profiles, artifact visualizations, advanced analytics, enhanced streaming, real-time analytics | Recurring revenue, sustainable operations |
+| Tier                 | Price        | Features                                                                                                                                                | Purpose                                   |
+| -------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| **Sovereign (Free)** | **$0**       | Local AI only, manual data import, basic chat, manual profile creation                                                                                  | Build community, validate product         |
+| **Chamber**          | **$4.99/mo** | Spotify OAuth integration, cloud AI access, AI-generated profiles, artifact visualizations, advanced analytics, enhanced streaming, real-time analytics | Recurring revenue, sustainable operations |
 
 ### License Verification System
 
 **Implementation:** Lemon Squeezy + Cloudflare Worker + Client-side validation
 
 **Architecture:**
+
 ```
 Client App → License Verifier → Cloudflare Worker → Lemon Squeezy API
      ↓                ↓                    ↓
@@ -341,6 +389,7 @@ Client App → License Verifier → Cloudflare Worker → Lemon Squeezy API
 ```
 
 **Flow:**
+
 1. Client validates license key format
 2. Cloudflare Worker verifies with Lemon Squeezy API
 3. License bound to device fingerprint (SHA-256)
@@ -352,12 +401,14 @@ Client App → License Verifier → Cloudflare Worker → Lemon Squeezy API
 ### Payment Integration: Lemon Squeezy
 
 **Why Lemon Squeezy?**
+
 - **Overlay checkout** - Stays IN your app (no page redirects)
 - **Built-in license keys** - Automatic generation and validation API
 - **No backend required** - Can validate client-side with crypto fallback
 - **Merchant of Record** - Handles global tax/VAT automatically
 
 **Implementation:**
+
 - **Lemon.js Script:** `https://app.lemonsqueezy.com/js/lemon.js`
 - **Service:** `js/services/lemon-squeezy-service.js`
 - **Worker:** `workers/license-validator/index.js` (Cloudflare Worker for secure validation)
@@ -489,6 +540,7 @@ Client App → License Verifier → Cloudflare Worker → Lemon Squeezy API
 **Pattern:** ES6 modular architecture following **Hierarchical Network Wave (HNW)** with Controller-Service-Model organization and event-driven communication.
 
 #### Initialization Flow (`js/main.js`)
+
 1. Security validation (secure context check first)
 2. AppState initialization
 3. Dependency checking (early-fail pattern)
@@ -511,18 +563,21 @@ container.register('Chat', () => new Chat());
 // Controller Initialization with Auto-wiring
 const chatController = new ChatUIController({
   chat: container.resolve('Chat'),
-  artifacts: container.resolve('Artifacts')
+  artifacts: container.resolve('Artifacts'),
 });
 ```
 
 **Benefits:**
+
 - Centralized dependency management
 - Easier testing with mock injection
 - Clear dependency graph
 - Singleton service lifecycle
 
 #### Enhanced Controllers (`js/controllers/` - 15 Controllers)
+
 **Core Controllers (7):**
+
 - `ChatUIController` - Message rendering, streaming, markdown, artifacts
 - `SidebarController` - Session management, navigation, search
 - `ViewController` - View transitions, navigation history
@@ -532,6 +587,7 @@ const chatController = new ChatUIController({
 - `ResetController` - Data reset, confirmation, cleanup
 
 **Advanced Controllers (8):**
+
 - `MessageRenderer` - Advanced rendering, animations, performance optimization
 - `StreamingMessageHandler` - Real-time streaming, buffering, error recovery
 - `ChatInputManager` - Input validation, auto-suggestions, history
@@ -542,6 +598,7 @@ const chatController = new ChatUIController({
 - `AnalyticsController` - Event tracking, behavior analysis, insights
 
 #### Enhanced Event System (`js/services/event-bus.js`)
+
 - **Typed events**: Schema validation for type safety
 - **Priority dispatch**: CRITICAL, HIGH, NORMAL, LOW with circuit breaker
 - **Enhanced circuit breaker**: Storm detection, adaptive thresholds, overflow handling
@@ -551,19 +608,20 @@ const chatController = new ChatUIController({
 - **Enhanced debugging**: Event tracing, performance monitoring
 
 #### Enhanced State Management (`js/state/app-state.js`)
+
 ```javascript
 const INITIAL_STATE = {
-    view: { current, previous },      // Current screen
-    data: { streams, chunks, patterns, personality },
-    lite: { isLiteMode },
-    ui: { sidebarCollapsed },
-    operations: { isProcessing },
-    demo: { isDemoMode },
-    // Enhanced v2.0 state
-    streaming: { isStreaming, buffers, speed },
-    errors: { errorStack, recoveryHistory },
-    providers: { health, current, fallbacks },
-    validation: { rules, results, suggestions }
+  view: { current, previous }, // Current screen
+  data: { streams, chunks, patterns, personality },
+  lite: { isLiteMode },
+  ui: { sidebarCollapsed },
+  operations: { isProcessing },
+  demo: { isDemoMode },
+  // Enhanced v2.0 state
+  streaming: { isStreaming, buffers, speed },
+  errors: { errorStack, recoveryHistory },
+  providers: { health, current, fallbacks },
+  validation: { rules, results, suggestions },
 };
 ```
 
@@ -575,20 +633,21 @@ const INITIAL_STATE = {
 
 #### Security Modules (`js/security/`)
 
-| Module | Purpose |
-|--------|---------|
-| `index.js` | Enhanced facade and unified API |
-| `security-coordinator.js` | Single authority for initialization |
-| `message-security.js` | HMAC-SHA256 signing and verification |
-| `encryption.js` | AES-GCM, PBKDF2 key derivation |
-| `token-binding.js` | XSS token protection, device fingerprinting |
-| `key-manager.js` | Non-extractable key management |
-| `storage-encryption.js` | Storage-specific encryption |
-| `security-service.js` | Enhanced threat detection and monitoring (v2.0) |
+| Module                    | Purpose                                         |
+| ------------------------- | ----------------------------------------------- |
+| `index.js`                | Enhanced facade and unified API                 |
+| `security-coordinator.js` | Single authority for initialization             |
+| `message-security.js`     | HMAC-SHA256 signing and verification            |
+| `encryption.js`           | AES-GCM, PBKDF2 key derivation                  |
+| `token-binding.js`        | XSS token protection, device fingerprinting     |
+| `key-manager.js`          | Non-extractable key management                  |
+| `storage-encryption.js`   | Storage-specific encryption                     |
+| `security-service.js`     | Enhanced threat detection and monitoring (v2.0) |
 
 #### Enhanced Threat Model
 
 **Addressed Threats:**
+
 - Cross-tab data corruption (leader election + write authority)
 - XSS attacks (secure context + token binding)
 - Message tampering (HMAC-SHA256 + timestamp validation)
@@ -601,11 +660,13 @@ const INITIAL_STATE = {
 #### Message Security (`js/security/message-security.js`)
 
 **HMAC-SHA256 Signing:**
+
 - Non-extractable `CryptoKey` from KeyManager
 - Message canonicalization for deterministic signatures
 - `crypto.subtle.sign()` for authentication
 
 **Replay Prevention:**
+
 - `usedNonces` Set with 1000-entry FIFO cache
 - Nonce format: `${senderId}_${seq}_${timestamp}`
 - 5-second max age for timestamps
@@ -613,6 +674,7 @@ const INITIAL_STATE = {
 #### Cross-Tab Security (`js/services/tab-coordination.js`)
 
 **Message Verification Pipeline:**
+
 1. Origin validation against `window.location.origin`
 2. Timestamp freshness (5 seconds max)
 3. Nonce replay check
@@ -626,32 +688,35 @@ const INITIAL_STATE = {
 
 #### IndexedDB Stores
 
-| Store | Purpose | Indexes |
-|-------|---------|---------|
-| `STREAMS` | Raw streaming data | - |
-| `CHUNKS` | Aggregated data | type, startDate |
-| `EMBEDDINGS` | Vector embeddings | - |
-| `PERSONALITY` | Personality results | - |
-| `CHAT_SESSIONS` | Chat history | updatedAt |
-| `CONFIG` | Configuration | - |
-| `TOKENS` | Encrypted credentials | - |
-| `EVENT_LOG` | Event replay | - |
-| `EVENT_CHECKPOINT` | Checkpoints | - |
+| Store              | Purpose               | Indexes         |
+| ------------------ | --------------------- | --------------- |
+| `STREAMS`          | Raw streaming data    | -               |
+| `CHUNKS`           | Aggregated data       | type, startDate |
+| `EMBEDDINGS`       | Vector embeddings     | -               |
+| `PERSONALITY`      | Personality results   | -               |
+| `CHAT_SESSIONS`    | Chat history          | updatedAt       |
+| `CONFIG`           | Configuration         | -               |
+| `TOKENS`           | Encrypted credentials | -               |
+| `EVENT_LOG`        | Event replay          | -               |
+| `EVENT_CHECKPOINT` | Checkpoints           | -               |
 
 #### Advanced Features
 
 **Write Authority Enforcement:**
+
 - TabCoordinator ensures only primary tab writes
 - VectorClock conflict resolution
 - Write epoch stamping: `_writeEpoch`, `_writerId`
 
 **Write-Ahead Log (`js/storage/write-ahead-log.js`):**
+
 - Priority queue: CRITICAL, HIGH, NORMAL, LOW
 - Crash recovery with replay on encryption restoration
 - Cross-tab coordination (primary only processes)
 - Entry lifecycle: PENDING → PROCESSING → COMMITTED/FAILED
 
 **Transaction System (`js/storage/transaction.js`):**
+
 - Two-Phase Commit: Prepare → Journal → Commit → Cleanup
 - Multi-backend: IndexedDB + localStorage + SecureTokenStore
 - Compensation Log for rollback failures
@@ -659,12 +724,12 @@ const INITIAL_STATE = {
 
 **Storage Degradation (`js/services/storage-degradation-manager.js`):**
 
-| Tier | Threshold | Behavior |
-|------|-----------|----------|
-| `NORMAL` | <80% | Full operations |
-| `WARNING` | 80-94% | Warnings, aggressive LRU |
-| `CRITICAL` | 95-99% | Read-only mode |
-| `EXCEEDED` | 100% | Emergency cleanup |
+| Tier       | Threshold | Behavior                 |
+| ---------- | --------- | ------------------------ |
+| `NORMAL`   | <80%      | Full operations          |
+| `WARNING`  | 80-94%    | Warnings, aggressive LRU |
+| `CRITICAL` | 95-99%    | Read-only mode           |
+| `EXCEEDED` | 100%      | Emergency cleanup        |
 
 ---
 
@@ -673,18 +738,21 @@ const INITIAL_STATE = {
 #### Enhanced Provider Architecture
 
 **LLMApiOrchestrator (`js/services/llm-api-orchestrator.js`):**
+
 - Advanced request routing with load balancing
 - Health monitoring with 2-second update intervals
 - Performance optimization with request prioritization
 - Automatic fallback on provider failure
 
 **ProviderHealthMonitor (`js/services/provider-health-monitor.js`):**
+
 - Real-time health tracking with 2-second update intervals
 - Success/failure tracking with configurable history
 - Performance metrics monitoring
 - Provider recommendations based on health trends
 
 **ProviderNotificationService (`js/services/provider-notification-service.js`):**
+
 - User-friendly notifications with actionable guidance
 - Error guidance and recovery suggestions
 - User action tracking and UI updates
@@ -692,12 +760,14 @@ const INITIAL_STATE = {
 #### Enhanced Circuit Breaker System
 
 **AdaptiveCircuitBreaker (`js/services/adaptive-circuit-breaker.js`):**
+
 - Circuit state management with adaptive thresholds
 - Success/failure tracking with configurable policies
 - Automatic recovery with smart backoff
 - Performance monitoring and optimization
 
 **RetryManager (`js/services/retry-manager.js`):**
+
 - Sophisticated retry with exponential backoff and jitter
 - Circuit breaker integration for resilience
 - Retry condition filtering and statistics tracking
@@ -706,6 +776,7 @@ const INITIAL_STATE = {
 #### Enhanced Cross-Tab Coordination (`js/services/tab-coordination.js`)
 
 **TabCoordinator Features:**
+
 - Deterministic leader election (lowest ID wins)
 - Dual transport: BroadcastChannel → SharedWorker fallback
 - VectorClock integration for conflict detection
@@ -716,6 +787,7 @@ const INITIAL_STATE = {
 #### Enhanced Session Management (`js/services/session-manager.js`)
 
 **Persistence Strategy:**
+
 1. Primary: IndexedDB via unified Storage API
 2. Fallback: localStorage for configuration
 3. Emergency: Sync localStorage backup on beforeunload
@@ -724,6 +796,7 @@ const INITIAL_STATE = {
 #### Enhanced Error Handling (`js/services/message-error-handler.js`)
 
 **Intelligent Error Classification:**
+
 - Automatic error categorization (network, API, validation, user input)
 - Recovery strategy selection with smart fallbacks
 - User-friendly error messages with actionable suggestions
@@ -732,6 +805,7 @@ const INITIAL_STATE = {
 #### Enhanced Streaming (`js/services/stream-processor.js`)
 
 **Real-time Stream Processing:**
+
 - Stream parsing and processing with buffering
 - Real-time data handling with error recovery
 - Stream optimization with adaptive strategies
@@ -740,6 +814,7 @@ const INITIAL_STATE = {
 #### Enhanced Validation (`js/services/message-validator.js`)
 
 **Advanced Message Validation:**
+
 - Content sanitization and security scanning
 - Spam detection and compliance checking
 - Custom validation rules and schema validation
@@ -748,12 +823,14 @@ const INITIAL_STATE = {
 #### Enhanced Worker System
 
 **PatternWorkerPool (`js/workers/pattern-worker-pool.js`):**
+
 - Parallel processing with dynamic worker scaling
 - Memory limits and backpressure management
 - SharedArrayBuffer mode with COOP/COEP headers
 - Heartbeat monitoring and recovery mechanisms
 
 **SharedWorkerCoordinator (`js/workers/shared-worker-coordinator.js`):**
+
 - Enhanced cross-tab coordination via SharedWorker
 - State synchronization with conflict resolution
 - Performance optimization and error handling
@@ -763,12 +840,14 @@ const INITIAL_STATE = {
 ## Key Features Overview
 
 ### Two-Path Onboarding
-| Path | Data Source | Analysis Depth |
-|------|-------------|----------------|
-| **Full** | .zip/.json upload | Complete eras, ghosted artists, all patterns |
-| **Lite** | Spotify OAuth | Last 50 tracks, top artists/tracks, limited patterns |
+
+| Path     | Data Source       | Analysis Depth                                       |
+| -------- | ----------------- | ---------------------------------------------------- |
+| **Full** | .zip/.json upload | Complete eras, ghosted artists, all patterns         |
+| **Lite** | Spotify OAuth     | Last 50 tracks, top artists/tracks, limited patterns |
 
 ### Enhanced AI Function Calling (30+ Functions)
+
 **Core Data Queries:** `get_top_artists`, `get_top_tracks`, `get_artist_history`, `get_listening_stats`, `compare_periods`, `search_tracks`
 
 **Advanced Analytics:** `get_bottom_tracks`, `get_listening_clock`, `get_listening_streaks`, `get_discovery_stats`, `get_skip_patterns`, `get_completion_rate`, `temporal_analysis`
@@ -783,13 +862,13 @@ const INITIAL_STATE = {
 
 **Claude-style inline visualizations** that the AI can generate via function calls:
 
-| Type | Use Case |
-|------|---------|
+| Type       | Use Case                                        |
+| ---------- | ----------------------------------------------- |
 | Line Chart | Trends over time (plays, hours, unique artists) |
-| Bar Chart | Top artists/tracks, period comparisons |
-| Timeline | Artist discovery, milestones |
-| Heatmap | Calendar view of listening activity |
-| Table | Detailed data with columns |
+| Bar Chart  | Top artists/tracks, period comparisons          |
+| Timeline   | Artist discovery, milestones                    |
+| Heatmap    | Calendar view of listening activity             |
+| Table      | Detailed data with columns                      |
 
 #### Artifact Module Structure (`js/artifacts/`)
 
@@ -804,6 +883,7 @@ js/artifacts/
 #### Artifact Function Schemas
 
 **`visualize_trend(title, data, options)`** — Line chart for temporal trends
+
 ```javascript
 {
   title: string,           // Chart title
@@ -826,6 +906,7 @@ js/artifacts/
 ```
 
 **`visualize_comparison(title, data, options)`** — Bar chart for categorical comparison
+
 ```javascript
 {
   title: string,
@@ -844,6 +925,7 @@ js/artifacts/
 ```
 
 **`show_data_table(title, data, columns)`** — Table for detailed data
+
 ```javascript
 {
   title: string,
@@ -859,6 +941,7 @@ js/artifacts/
 ```
 
 **`show_listening_timeline(title, events, options)`** — Timeline of events
+
 ```javascript
 {
   title: string,
@@ -875,6 +958,7 @@ js/artifacts/
 ```
 
 **`show_listening_heatmap(title, data, options)`** — Calendar heatmap
+
 ```javascript
 {
   title: string,
@@ -892,12 +976,12 @@ js/artifacts/
 
 #### Security & Performance
 
-| Threat | Mitigation |
-|--------|------------|
+| Threat        | Mitigation                                 |
+| ------------- | ------------------------------------------ |
 | Malicious SVG | Allowlist rendering, no arbitrary elements |
-| XSS injection | Text content only, no `innerHTML` |
-| DoS via data | `MAX_DATA_ROWS = 1000` limit |
-| Reuse attacks | Unique `artifactId` per instance |
+| XSS injection | Text content only, no `innerHTML`          |
+| DoS via data  | `MAX_DATA_ROWS = 1000` limit               |
+| Reuse attacks | Unique `artifactId` per instance           |
 
 #### Renderer Capabilities
 
@@ -912,11 +996,13 @@ See [docs/artifact-visualization-guide.md](docs/artifact-visualization-guide.md)
 ### Enhanced Semantic Search (100% Client-Side WASM)
 
 **Architecture:**
+
 ```
 User Query → WASM Embedding Generator → Local Vector Store → Cosine Similarity → Ranked Results → Enhanced Caching
 ```
 
 **Enhanced Implementation:**
+
 - WASM-only via `@xenova/transformers` (no external API calls)
 - Model: `Xenova/all-MiniLM-L6-v2` (INT8 quantization, ~6MB)
 - Enhanced Performance: ~300ms first query (optimized loading), ~30ms subsequent
@@ -926,6 +1012,7 @@ User Query → WASM Embedding Generator → Local Vector Store → Cosine Simila
 - Enhanced Workers: Parallel processing with dynamic scaling
 
 **Enhanced Privacy:**
+
 - No API calls to external services
 - Queries processed locally
 - No data transmitted
@@ -935,16 +1022,17 @@ User Query → WASM Embedding Generator → Local Vector Store → Cosine Simila
 
 Users can choose their AI provider:
 
-| Provider | Type | Cost | Setup |
-|----------|------|------|-------|
-| Ollama | Local | Free | Install Ollama, run model |
-| LM Studio | Local | Free | Install LM Studio, enable API |
-| OpenRouter | Cloud | Pay-per-use | Add API key in settings |
+| Provider          | Type           | Cost                       | Setup                                             |
+| ----------------- | -------------- | -------------------------- | ------------------------------------------------- |
+| Ollama            | Local          | Free                       | Install Ollama, run model                         |
+| LM Studio         | Local          | Free                       | Install LM Studio, enable API                     |
+| OpenRouter        | Cloud          | Pay-per-use                | Add API key in settings                           |
 | OpenAI-Compatible | Cloud or Local | Depends on chosen provider | Configure custom base URL and API key in settings |
 
 The OpenAI-Compatible provider supports any OpenAI-compatible API, including self-hosted servers, cloud providers like Together AI/Anyscale/DeepInfra, or the official OpenAI API.
 
 **Enhanced Provider Health Monitoring:**
+
 - Circuit breaker pattern with adaptive thresholds (Closed, Open, Half-Open states)
 - Automatic fallback on provider failure with 2-second health checks
 - Enhanced health tracking: Healthy, Degraded, Unhealthy, Blacklisted
@@ -953,6 +1041,7 @@ The OpenAI-Compatible provider supports any OpenAI-compatible API, including sel
 - See [docs/provider-health-monitoring.md](docs/provider-health-monitoring.md)
 
 ### Enhanced Chat Session Storage
+
 - Persistent chat conversations via IndexedDB with encryption
 - Enhanced session management with auto-save (1s debounce) and recovery
 - Enhanced emergency recovery via localStorage backup with integrity checks
@@ -965,38 +1054,41 @@ The OpenAI-Compatible provider supports any OpenAI-compatible API, including sel
 
 ### Full Personality Types
 
-| Type | Description |
-|------|-------------|
+| Type                    | Description                    |
+| ----------------------- | ------------------------------ |
 | Emotional Archaeologist | Uses music to process feelings |
-| Mood Engineer | Strategically deploys music |
-| Discovery Junkie | Always seeking new artists |
-| Comfort Curator | Sticks to beloved favorites |
-| Social Chameleon | Music adapts to context |
+| Mood Engineer           | Strategically deploys music    |
+| Discovery Junkie        | Always seeking new artists     |
+| Comfort Curator         | Sticks to beloved favorites    |
+| Social Chameleon        | Music adapts to context        |
 
 ### Lite Personality Types
 
-| Type | Description |
-|------|-------------|
-| The Current Obsessor | Deep in one sound right now |
-| The Sound Explorer | Always seeking new territory |
-| The Taste Keeper | Knows exactly what they love |
-| The Taste Shifter | Musical journey in motion |
+| Type                 | Description                  |
+| -------------------- | ---------------------------- |
+| The Current Obsessor | Deep in one sound right now  |
+| The Sound Explorer   | Always seeking new territory |
+| The Taste Keeper     | Knows exactly what they love |
+| The Taste Shifter    | Musical journey in motion    |
 
 ---
 
 ## HNW Patterns Addressed
 
 ### Hierarchy
+
 - Clear chain of command: App → Controller → Service → Provider
 - Dependency injection: All modules receive dependencies explicitly
 - Single responsibility: Each module has one clear purpose
 
 ### Network
+
 - Modular communication: Reduced "God Object" interconnectivity
 - Facade pattern: Unified interfaces hide complexity
 - Event-driven: Services communicate through events, not direct coupling
 
 ### Wave
+
 - Deterministic leader election: 300ms window, lowest ID wins
 - Async/sync separation: visibilitychange (async) vs beforeunload (sync)
 - Migration isolation: Runs atomically before app initialization
@@ -1007,16 +1099,17 @@ The OpenAI-Compatible provider supports any OpenAI-compatible API, including sel
 
 ### Implemented Security Features
 
-| Feature | Implementation | Purpose |
-|---------|----------------|---------|
-| AES-GCM Encryption | `security.js`, `js/security/encryption.js` | RAG credentials, API keys |
-| XSS Token Binding | `security.js`, `token-binding.js` | Spotify tokens |
-| Secure Context | `security.js` | HTTPS/localhost enforcement |
-| Session Versioning | `security.js` | Key invalidation on failures |
-| Prototype Prevention | `security/index.js` | Object.freeze on prototypes |
-| v0.9 Hardening | `js/security/` | Complete security module suite |
+| Feature              | Implementation                             | Purpose                        |
+| -------------------- | ------------------------------------------ | ------------------------------ |
+| AES-GCM Encryption   | `security.js`, `js/security/encryption.js` | RAG credentials, API keys      |
+| XSS Token Binding    | `security.js`, `token-binding.js`          | Spotify tokens                 |
+| Secure Context       | `security.js`                              | HTTPS/localhost enforcement    |
+| Session Versioning   | `security.js`                              | Key invalidation on failures   |
+| Prototype Prevention | `security/index.js`                        | Object.freeze on prototypes    |
+| v0.9 Hardening       | `js/security/`                             | Complete security module suite |
 
 **v0.9 Security Milestone (Complete):**
+
 - ✅ All API keys encrypted at rest (AES-GCM-256)
 - ✅ Chat history encrypted with unique IV per operation
 - ✅ Cross-tab messages authenticated with HMAC-SHA256
@@ -1026,6 +1119,7 @@ The OpenAI-Compatible provider supports any OpenAI-compatible API, including sel
 - ✅ Secure context validation (HTTPS/localhost only)
 
 **Recent Security Fixes (v0.9):**
+
 - **TOCTOU Prevention**: Reservation mechanism in QuotaManager prevents race conditions
 - **Token Binding**: SHA-256 hashed device fingerprints for all API access
 - **Session Versioning**: Automatic credential invalidation on auth events
@@ -1036,6 +1130,7 @@ The OpenAI-Compatible provider supports any OpenAI-compatible API, including sel
 ## Deployment
 
 ### Static Site Deployment (Vercel/Netlify)
+
 1. Clone repository
 2. Copy `js/config.example.js` to `js/config.js`
 3. Add Spotify Client ID from Developer Dashboard
@@ -1043,6 +1138,7 @@ The OpenAI-Compatible provider supports any OpenAI-compatible API, including sel
 5. Deploy static files
 
 ### Local Development
+
 ```bash
 python -m http.server 8080
 # or
@@ -1081,6 +1177,7 @@ Services use a three-layer facade pattern for modular, testable, and backward-co
 ### Completed Facade Refactorings
 
 #### SessionManager (100% complete, 247 tests)
+
 - **Facade**: `js/services/session-manager.js` (365 lines)
   - Public API: `initialize()`, `createSession()`, `deleteSession()`, `clearAllSessions()`, `getAllSessions()`
   - Backward compatibility: `init()` alias, `setUserContext()` deprecated
@@ -1095,6 +1192,7 @@ Services use a three-layer facade pattern for modular, testable, and backward-co
   - `session-persistence.js` (266 lines) - Auto-save, emergency backup, debounced writes
 
 #### StorageDegradationManager (facade complete)
+
 - **Facade**: `js/services/storage-degradation-manager.js`
   - Public API: `checkQuotaNow()`, `getCurrentTier()`, `triggerCleanup()`
 - **Internal Modules**:
@@ -1103,6 +1201,7 @@ Services use a three-layer facade pattern for modular, testable, and backward-co
   - `tier-handlers.js` - Tier-specific behavior
 
 #### ErrorRecoveryCoordinator (facade complete)
+
 - **Facade**: `js/services/error-recovery-coordinator.js`
   - Public API: `coordinateRecovery()`, `getTelemetry()`, `cleanup()`
 - **Internal Modules**:
@@ -1111,6 +1210,7 @@ Services use a three-layer facade pattern for modular, testable, and backward-co
   - `recovery-lock-manager.js` - Cross-tab coordination
 
 #### PatternWorkerPool (facade complete)
+
 - **Facade**: `js/workers/pattern-worker-pool.js`
   - Public API: `init()`, `detectAllPatterns()`, `terminate()`, `getStatus()`
 - **Internal Modules**:
@@ -1151,6 +1251,7 @@ static async initialize() {
 ```
 
 **Benefits:**
+
 - Type-safe event handling
 - Self-documenting events
 - Schema validation available
@@ -1165,7 +1266,7 @@ EventBus.on('session:*', handler);
 
 // ✅ CORRECT - Individual subscriptions
 ['session:created', 'session:loaded', 'session:updated'].forEach(event => {
-    EventBus.on(event, handler);
+  EventBus.on(event, handler);
 });
 ```
 
@@ -1199,6 +1300,7 @@ static registerEventListeners() {
 ```
 
 **Pattern:**
+
 - `visibilitychange` → async flush (non-blocking)
 - `beforeunload`/`pagehide` → sync emergency backup (best-effort)
 
@@ -1217,6 +1319,7 @@ static registerEventListeners() {
 **Run**: `npm run test:api`
 
 **Coverage**:
+
 - ErrorRecoveryCoordinator: 10 tests
 - StorageDegradationManager: 12 tests
 - SessionManager: 18 tests
@@ -1224,6 +1327,7 @@ static registerEventListeners() {
 - PatternWorkerPool: 14 tests
 
 **What it checks**:
+
 1. Expected methods exist on facades
 2. Methods can be called without throwing
 3. Return types match expectations
@@ -1287,31 +1391,31 @@ static registerEventListeners() {
 
 All 20 technical debt items have been resolved:
 
-| ID | Issue | Status | Resolution |
-|----|-------|--------|------------|
-| **Critical (11)** | | **ALL RESOLVED** | |
-| TD-1 | SessionManager race condition | ✅ | Version tracking |
-| TD-2 | EventBus emitParallel | ✅ | try-catch wrapper |
-| TD-3 | SessionManager God Object | ✅ | 3-module facade |
-| TD-4 | Global state pollution | ✅ | ES imports |
-| TD-5 | TurnQueue race condition | ✅ | Atomic check-and-set |
-| TD-6 | StreamingMessageHandler memory leak | ✅ | cleanupStreamingHandler |
-| TD-7 | Array bounds checking | ✅ | Number.isInteger() |
-| TD-8 | getAllSessions null check | ✅ | Storage type check |
-| TD-9 | SidebarController God Object | ✅ | 5 focused controllers |
-| TD-10 | EventBus over-engineered | ✅ | Simplified |
-| TD-11 | Error boundaries | ✅ | 53 tests |
-| TD-12 | DI Container | ✅ | Explicit deps |
-| **High (7)** | | **ALL RESOLVED** | |
-| TD-13 | ProviderHealthMonitor errors | ✅ | Error handling |
-| TD-14 | localStorage quota | ✅ | QuotaManager |
-| TD-15 | Timeout messages | ✅ | TimeoutError class |
-| TD-16 | Magic numbers | ✅ | 6 constant files |
-| TD-17 | Abstraction levels | ✅ | 3-layer architecture |
-| TD-18 | SidebarController memory leaks | ✅ | Cleanup implemented |
-| TD-19 | Message array growth | ✅ | LRU implemented |
-| **Medium (2)** | | **ALL RESOLVED** | |
-| TD-20 | Error handling patterns | ✅ | Result utility |
+| ID                | Issue                               | Status           | Resolution              |
+| ----------------- | ----------------------------------- | ---------------- | ----------------------- |
+| **Critical (11)** |                                     | **ALL RESOLVED** |                         |
+| TD-1              | SessionManager race condition       | ✅               | Version tracking        |
+| TD-2              | EventBus emitParallel               | ✅               | try-catch wrapper       |
+| TD-3              | SessionManager God Object           | ✅               | 3-module facade         |
+| TD-4              | Global state pollution              | ✅               | ES imports              |
+| TD-5              | TurnQueue race condition            | ✅               | Atomic check-and-set    |
+| TD-6              | StreamingMessageHandler memory leak | ✅               | cleanupStreamingHandler |
+| TD-7              | Array bounds checking               | ✅               | Number.isInteger()      |
+| TD-8              | getAllSessions null check           | ✅               | Storage type check      |
+| TD-9              | SidebarController God Object        | ✅               | 5 focused controllers   |
+| TD-10             | EventBus over-engineered            | ✅               | Simplified              |
+| TD-11             | Error boundaries                    | ✅               | 53 tests                |
+| TD-12             | DI Container                        | ✅               | Explicit deps           |
+| **High (7)**      |                                     | **ALL RESOLVED** |                         |
+| TD-13             | ProviderHealthMonitor errors        | ✅               | Error handling          |
+| TD-14             | localStorage quota                  | ✅               | QuotaManager            |
+| TD-15             | Timeout messages                    | ✅               | TimeoutError class      |
+| TD-16             | Magic numbers                       | ✅               | 6 constant files        |
+| TD-17             | Abstraction levels                  | ✅               | 3-layer architecture    |
+| TD-18             | SidebarController memory leaks      | ✅               | Cleanup implemented     |
+| TD-19             | Message array growth                | ✅               | LRU implemented         |
+| **Medium (2)**    |                                     | **ALL RESOLVED** |                         |
+| TD-20             | Error handling patterns             | ✅               | Result utility          |
 
 ### Adversarial Review Findings - ALL RESOLVED
 
@@ -1320,20 +1424,20 @@ All 20 technical debt items have been resolved:
 
 All 14 findings from adversarial review have been addressed:
 
-| ID | Issue | Severity | Fix |
-|----|-------|----------|-----|
-| C1 | Device fingerprint truncated | Critical | Full 256-bit hash |
-| H1 | TransactionMutex not atomic | High | Promise chaining |
-| H2 | EventBus swallows errors | High | Promise.allSettled |
-| H3 | License offline bypass | High | Network-only fallback |
-| M1 | Deep clone is shallow | Medium | structuredClone() |
-| M2 | No key rotation | Medium | PUBLIC_KEYS object |
-| M3 | setTimeout not guaranteed | Medium | Direct call |
-| M4 | Mutex mock serialization | Medium | Fixed mock |
-| M5 | Circular dep detection incomplete | Medium | Enhanced detection |
-| M6 | Session ID validation | Medium | Length check |
-| L1 | innerHTML loses handlers | Low | DOM cloning |
-| L2 | Constants duplicated | Low | Consolidated |
+| ID  | Issue                             | Severity | Fix                   |
+| --- | --------------------------------- | -------- | --------------------- |
+| C1  | Device fingerprint truncated      | Critical | Full 256-bit hash     |
+| H1  | TransactionMutex not atomic       | High     | Promise chaining      |
+| H2  | EventBus swallows errors          | High     | Promise.allSettled    |
+| H3  | License offline bypass            | High     | Network-only fallback |
+| M1  | Deep clone is shallow             | Medium   | structuredClone()     |
+| M2  | No key rotation                   | Medium   | PUBLIC_KEYS object    |
+| M3  | setTimeout not guaranteed         | Medium   | Direct call           |
+| M4  | Mutex mock serialization          | Medium   | Fixed mock            |
+| M5  | Circular dep detection incomplete | Medium   | Enhanced detection    |
+| M6  | Session ID validation             | Medium   | Length check          |
+| L1  | innerHTML loses handlers          | Low      | DOM cloning           |
+| L2  | Constants duplicated              | Low      | Consolidated          |
 
 ### Final Adversarial Review (Phase Completion)
 
@@ -1341,17 +1445,20 @@ All 14 findings from adversarial review have been addressed:
 **Review Scope:** All refactoring phases
 
 **SessionManager Refactoring:**
+
 - ✅ Fixed circular dependency (removed direct session-state import)
 - ✅ Fixed duplicate saveCurrentSession() functionality
 - ✅ Fixed memory leak in notifySessionUpdate()
 - ✅ Added cleanupSessionResources() method
 
 **SidebarController Refactoring:**
+
 - ✅ Fixed rename memory leak (try-finally cleanup)
 - ✅ Removed dynamic imports from event handlers
 - ✅ Extracted mobile responsiveness to separate module
 
 **Architecture & Constants:**
+
 - ✅ Removed dead code (js/architecture/ - 1,927 lines)
 - ✅ Fixed constant duplication (MAX_SAVED_MESSAGES)
 - ✅ Consolidated to shared constants
@@ -1359,6 +1466,7 @@ All 14 findings from adversarial review have been addressed:
 ### Current Architecture State
 
 **Facade Pattern Services:**
+
 - `SessionManager` - 3 modules (state, lifecycle, persistence)
 - `SidebarController` - 5 controllers (coordinator, state, list, actions, mobile)
 - `StorageDegradationManager` - 3 internal modules
@@ -1366,6 +1474,7 @@ All 14 findings from adversarial review have been addressed:
 - `PatternWorkerPool` - 3 internal modules
 
 **Constants Consolidation:**
+
 - `js/constants/limits.js` - MAX_SAVED_MESSAGES, MAX_WAVES, etc.
 - `js/constants/delays.js` - Timeout values
 - `js/constants/priorities.js` - PRIORITY levels
@@ -1374,12 +1483,14 @@ All 14 findings from adversarial review have been addressed:
 - `js/constants/session.js` - Session-specific (imports from limits)
 
 **Error Handling:**
+
 - `js/utils/result.js` - Ok/Err pattern
 - `js/services/timeout-error.js` - TimeoutError class
 
 ### Development Guidelines Update
 
 **When modifying code:**
+
 1. Use facade pattern for new services
 2. Import from shared constants (js/constants/)
 3. Use Result pattern for error handling
@@ -1397,23 +1508,25 @@ All 14 findings from adversarial review have been addressed:
 ### Features
 
 **1. AST-Based Metric Extraction**
+
 - Parses all `js/**/*.js` files using @babel/parser
 - Extracts: line counts, module counts, exports, imports, classes, functions
 - Builds dependency graph and detects circular dependencies
 - Caching enables 80%+ performance improvement on subsequent runs
 
 **2. Git History Analysis**
+
 - Tracks "last modified" timestamps per file
 - Extracts contributor statistics
 - Determines version from git tags, CHANGELOG.md, or package.json
 
 **3. Multi-Mode Execution**
 
-| Mode | Command | Purpose |
-|------|---------|---------|
-| **Manual** | `npm run docs:sync` | On-demand documentation update |
-| **Watch Daemon** | `npm run docs:watch` | Continuous monitoring with auto-sync |
-| **Git Hook** | Automatic (pre-commit) | Validates docs before allowing commits |
+| Mode             | Command                | Purpose                                |
+| ---------------- | ---------------------- | -------------------------------------- |
+| **Manual**       | `npm run docs:sync`    | On-demand documentation update         |
+| **Watch Daemon** | `npm run docs:watch`   | Continuous monitoring with auto-sync   |
+| **Git Hook**     | Automatic (pre-commit) | Validates docs before allowing commits |
 
 **4. Auto-Updated Documentation**
 
@@ -1424,6 +1537,7 @@ All 14 findings from adversarial review have been addressed:
 - **docs/DEPENDENCY_GRAPH.md** - Auto-generated dependency tree with circular dependency warnings
 
 **5. Cross-Reference Validation**
+
 - Validates internal markdown links
 - Checks version consistency across documents
 - Reports broken links and inconsistencies
@@ -1431,12 +1545,14 @@ All 14 findings from adversarial review have been addressed:
 ### Usage for AI Agents
 
 **When modifying code:**
+
 1. Make your code changes
 2. Run `npm run docs:sync` to update documentation
 3. Review the generated changes
 4. Commit with updated docs
 
 **If pre-commit hook fails:**
+
 ```
 ✗ Documentation is outdated
 ℹ  Run: npm run docs:sync
@@ -1444,9 +1560,11 @@ All 14 findings from adversarial review have been addressed:
 ```
 
 **Watch mode for active development:**
+
 ```bash
 npm run docs:watch -- --verbose
 ```
+
 Monitors files and auto-updates docs within 500ms of changes.
 
 ### Architecture
@@ -1472,24 +1590,28 @@ scripts/docs-sync/
 ### Key Behaviors
 
 **Circular Dependency Detection:**
+
 - Builds adjacency list from imports
 - Uses depth-first search to detect cycles
 - Reports warnings in console and DEPENDENCY_GRAPH.md
 - Example cycle: `A → B → C → A`
 
 **Caching Strategy:**
+
 - First run: Parses all files (~2-3 seconds for 365 files)
 - Subsequent runs: Only parses changed files (~0.5 seconds)
 - Cache invalidated on file modification
 - Enables real-time watch mode performance
 
 **Git Hook Integration:**
+
 - Checks if documentation metrics match current codebase
 - Fails commit if docs are outdated
 - Provides clear instructions to fix
 - Respects `--no-verify` flag for emergency bypasses
 
 **Error Handling:**
+
 - Continues processing if individual files fail to parse
 - Logs parse errors without blocking sync
 - Reports summary of failures at end
@@ -1498,6 +1620,7 @@ scripts/docs-sync/
 ### Configuration
 
 Edit `scripts/docs-sync/config.json` to customize:
+
 - Target documentation files
 - Watch paths (default: `js/**/*.js`)
 - Exclude patterns (e.g., large worker files)
@@ -1510,6 +1633,7 @@ Edit `scripts/docs-sync/config.json` to customize:
 To enable auto-generated API documentation:
 
 1. Add JSDoc comments to exported functions:
+
 ```javascript
 /**
  * Processes streaming messages from AI provider
@@ -1524,6 +1648,7 @@ export async function processStreamingMessages(sessionId, messageStream) {
 ```
 
 2. Add markers to `API.md`:
+
 ```markdown
 <!-- AUTO-GENERATED:START -->
 <!-- API documentation will be auto-generated here -->
@@ -1535,6 +1660,7 @@ export async function processStreamingMessages(sessionId, messageStream) {
 ### Performance Metrics
 
 **Current Codebase (2026-01-30):**
+
 - Total files: 365 JavaScript files
 - Total lines: 108,478 lines of code
 - Controllers: 21
@@ -1546,23 +1672,27 @@ export async function processStreamingMessages(sessionId, messageStream) {
 ### Troubleshooting
 
 **"Documentation is outdated" error:**
+
 - Run `npm run docs:sync`
 - Git history shows docs haven't been updated after code changes
 - Sync will update metrics and regenerate dependency graph
 
 **Parse errors in specific files:**
+
 - Check for unsupported syntax features
 - Verify file encoding is UTF-8
 - Errors are non-blocking and logged to console
 - Tool continues processing other files
 
 **Watch mode not updating:**
+
 - Check file is in `js/` directory (watch path)
 - Verify file isn't in exclude list
 - Increase verbosity with `--verbose` flag
 - Check debounce delay (may need longer for large changes)
 
 **Git hook bypass needed:**
+
 - Use `git commit --no-verify -m "message"`
 - Only for emergency commits or WIP work
 - Remember to sync docs before final commits
@@ -1570,6 +1700,7 @@ export async function processStreamingMessages(sessionId, messageStream) {
 ### Future Enhancements
 
 Planned improvements to docs-sync tooling:
+
 - TypeScript file support (`.ts`)
 - Visual dependency graphs (SVG/DOT output)
 - Diff highlighting in watch mode

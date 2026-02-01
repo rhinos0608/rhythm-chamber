@@ -23,12 +23,12 @@ This guide covers running and writing tests for Rhythm Chamber, including lesson
 
 Rhythm Chamber uses a multi-tier testing strategy:
 
-| Test Type | Framework | Location | Purpose |
-|-----------|-----------|----------|---------|
-| **Unit Tests** | Vitest | `tests/unit/` | Test individual modules, schemas, utilities |
-| **Characterization Tests** | Vitest | `tests/unit/*characterization*.test.js` | Capture existing behavior before refactoring |
-| **Integration Tests** | Vitest | `tests/integration/` | Test cross-module functionality |
-| **E2E Tests** | Playwright | `tests/e2e/` | Test complete user flows |
+| Test Type                  | Framework  | Location                                | Purpose                                      |
+| -------------------------- | ---------- | --------------------------------------- | -------------------------------------------- |
+| **Unit Tests**             | Vitest     | `tests/unit/`                           | Test individual modules, schemas, utilities  |
+| **Characterization Tests** | Vitest     | `tests/unit/*characterization*.test.js` | Capture existing behavior before refactoring |
+| **Integration Tests**      | Vitest     | `tests/integration/`                    | Test cross-module functionality              |
+| **E2E Tests**              | Playwright | `tests/e2e/`                            | Test complete user flows                     |
 
 ### Current Test Status
 
@@ -78,21 +78,22 @@ Used for new features and bug fixes:
 ```javascript
 // RED: Write failing test first
 describe('new feature', () => {
-    it('should do something', () => {
-        const result = newFunction();
-        expect(result).toBe('expected');
-    });
+  it('should do something', () => {
+    const result = newFunction();
+    expect(result).toBe('expected');
+  });
 });
 
 // GREEN: Implement minimal code to pass
 function newFunction() {
-    return 'expected';
+  return 'expected';
 }
 
 // REFACTOR: Clean up while tests stay green
 ```
 
 **TDD Workflow:**
+
 1. Write test describing expected behavior
 2. Run test - MUST fail (RED)
 3. Write minimal implementation
@@ -107,11 +108,13 @@ function newFunction() {
 Used before refactoring to capture current behavior:
 
 **Purpose:**
+
 - Safety net for refactoring
 - Documents existing behavior
 - Enables confident code changes
 
 **Workflow (from Phase 2):**
+
 1. Write comprehensive tests for existing code
 2. Establish baseline - all tests must pass
 3. Refactor code
@@ -119,12 +122,14 @@ Used before refactoring to capture current behavior:
 5. Add unit tests for new modules
 
 **Example - Provider Fallback Chain (Phase 2.2):**
+
 - Created 38 characterization tests
 - Baseline: 38/38 passing
 - Refactored 872-line file into 6 modules
 - Result: 38/38 still passing + 42 new unit tests
 
 **Example - Provider Interface (Phase 2.3):**
+
 - Created 36 characterization tests
 - Baseline: 36/36 passing
 - Refactored 1,102-line file into 8 modules
@@ -137,21 +142,22 @@ When refactoring with facade pattern for backward compatibility:
 ```javascript
 // Test facade maintains original API
 describe('Backward Compatibility', () => {
-    it('should support original class signature', () => {
-        const instance = new OriginalClass();
-        expect(instance.originalMethod()).toBeDefined();
-    });
+  it('should support original class signature', () => {
+    const instance = new OriginalClass();
+    expect(instance.originalMethod()).toBeDefined();
+  });
 
-    it('should delegate to new modules', () => {
-        const spy = vi.spyOn(newModule, 'method');
-        const instance = new OriginalClass();
-        instance.originalMethod();
-        expect(spy).toHaveBeenCalled();
-    });
+  it('should delegate to new modules', () => {
+    const spy = vi.spyOn(newModule, 'method');
+    const instance = new OriginalClass();
+    instance.originalMethod();
+    expect(spy).toHaveBeenCalled();
+  });
 });
 ```
 
 **See:**
+
 - `tests/unit/provider-fallback-chain.characterization.test.js`
 - `tests/unit/provider-interface.characterization.test.js`
 
@@ -189,38 +195,40 @@ import { Storage } from '../../js/storage.js';
 
 // Mock dependencies
 vi.mock('../../js/services/event-bus.js', () => ({
-    EventBus: {
-        emit: vi.fn(),
-        on: vi.fn()
-    }
+  EventBus: {
+    emit: vi.fn(),
+    on: vi.fn(),
+  },
 }));
 
 describe('Storage', () => {
-    beforeEach(() => {
-        // Reset state before each test
-        vi.clearAllMocks();
-    });
+  beforeEach(() => {
+    // Reset state before each test
+    vi.clearAllMocks();
+  });
 
-    afterEach(() => {
-        // Clean up after each test
-        vi.restoreAllMocks();
-    });
+  afterEach(() => {
+    // Clean up after each test
+    vi.restoreAllMocks();
+  });
 
-    it('should store data correctly', async () => {
-        const result = await Storage.save('test-key', { data: 'value' });
-        expect(result).toBe(true);
-    });
+  it('should store data correctly', async () => {
+    const result = await Storage.save('test-key', { data: 'value' });
+    expect(result).toBe(true);
+  });
 });
 ```
 
 ### Test Organization
 
 **File naming:**
+
 - Unit tests: `[module].test.js`
 - Characterization tests: `[module].characterization.test.js`
 - Critical fixes: `critical-[issue].test.js`
 
 **Directory structure mirrors source:**
+
 ```
 tests/unit/services/session-manager/
 ├── session-lifecycle.test.js
@@ -236,20 +244,20 @@ Use Vitest's `vi` module to mock browser APIs:
 import { vi } from 'vitest';
 
 describe('IndexedDB operations', () => {
-    it('should handle storage errors', async () => {
-        // Mock IndexedDB
-        const mockDB = {
-            transaction: vi.fn(() => ({
-                objectStore: vi.fn(() => ({
-                    put: vi.fn(),
-                    get: vi.fn()
-                }))
-            }))
-        };
+  it('should handle storage errors', async () => {
+    // Mock IndexedDB
+    const mockDB = {
+      transaction: vi.fn(() => ({
+        objectStore: vi.fn(() => ({
+          put: vi.fn(),
+          get: vi.fn(),
+        })),
+      })),
+    };
 
-        // Use mock in test
-        // ...
-    });
+    // Use mock in test
+    // ...
+  });
 });
 ```
 
@@ -264,36 +272,38 @@ All browser APIs are mocked globally in `tests/setup.js`. However, some mocks re
 ```javascript
 // ✅ CORRECT - headers.get() returns value
 global.fetch = vi.fn(() =>
-    Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        headers: {
-            get: vi.fn((header) => {
-                if (header === 'content-type') return 'application/json';
-                if (header === 'retry-after') return '60';
-                return null;
-            })
-        },
-        json: async () => ({ success: true })
-    })
+  Promise.resolve({
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    headers: {
+      get: vi.fn(header => {
+        if (header === 'content-type') return 'application/json';
+        if (header === 'retry-after') return '60';
+        return null;
+      }),
+    },
+    json: async () => ({ success: true }),
+  })
 );
 
 // ❌ WRONG - Missing headers.get() causes errors
 global.fetch = vi.fn(() =>
-    Promise.resolve({
-        ok: true,
-        status: 200,
-        headers: {},  // Missing get() method
-        json: async () => ({ success: true })
-    })
+  Promise.resolve({
+    ok: true,
+    status: 200,
+    headers: {}, // Missing get() method
+    json: async () => ({ success: true }),
+  })
 );
 ```
 
 **Common Error:**
+
 ```
 Cannot read properties of undefined (reading 'get')
 ```
+
 **Fix:** Add `headers.get()` mock to fetch response
 
 ### Worker Mock
@@ -303,31 +313,33 @@ Cannot read properties of undefined (reading 'get')
 ```javascript
 // ✅ CORRECT - Returns actual message
 global.Worker = class Worker {
-    postMessage(message) {
-        setTimeout(() => {
-            if (this.onmessage) {
-                this.onmessage({ data: message });  // Returns message
-            }
-        }, 0);
-    }
+  postMessage(message) {
+    setTimeout(() => {
+      if (this.onmessage) {
+        this.onmessage({ data: message }); // Returns message
+      }
+    }, 0);
+  }
 };
 
 // ❌ WRONG - Returns null
 global.Worker = class Worker {
-    postMessage(message) {
-        setTimeout(() => {
-            if (this.onmessage) {
-                this.onmessage({ data: null });  // Wrong!
-            }
-        }, 0);
-    }
+  postMessage(message) {
+    setTimeout(() => {
+      if (this.onmessage) {
+        this.onmessage({ data: null }); // Wrong!
+      }
+    }, 0);
+  }
 };
 ```
 
 **Common Error:**
+
 ```
 Error: Worker mock returned data: null instead of message
 ```
+
 **Fix:** Ensure Worker.onmessage receives `{ data: message }`
 
 ### BroadcastChannel Mock
@@ -338,36 +350,36 @@ Error: Worker mock returned data: null instead of message
 const broadcastChannelInstances = new Map();
 
 global.BroadcastChannel = class BroadcastChannel {
-    constructor(name) {
-        this.name = name;
-        this.listeners = [];
-        this.messageHistory = [];  // Track messages for verification
+  constructor(name) {
+    this.name = name;
+    this.listeners = [];
+    this.messageHistory = []; // Track messages for verification
 
-        if (!broadcastChannelInstances.has(name)) {
-            broadcastChannelInstances.set(name, []);
-        }
-        broadcastChannelInstances.get(name).push(this);
+    if (!broadcastChannelInstances.has(name)) {
+      broadcastChannelInstances.set(name, []);
     }
+    broadcastChannelInstances.get(name).push(this);
+  }
 
-    postMessage(message) {
-        this.messageHistory.push({ message, timestamp: Date.now() });
+  postMessage(message) {
+    this.messageHistory.push({ message, timestamp: Date.now() });
 
-        setTimeout(() => {
-            this.listeners.forEach(listener => {
-                listener({ data: message, type: 'message' });
-            });
-        }, 0);
+    setTimeout(() => {
+      this.listeners.forEach(listener => {
+        listener({ data: message, type: 'message' });
+      });
+    }, 0);
+  }
+
+  addEventListener(type, listener) {
+    if (type === 'message') {
+      this.listeners.push(listener);
     }
+  }
 
-    addEventListener(type, listener) {
-        if (type === 'message') {
-            this.listeners.push(listener);
-        }
-    }
-
-    getMessageHistory() {
-        return this.messageHistory;  // For test verification
-    }
+  getMessageHistory() {
+    return this.messageHistory; // For test verification
+  }
 };
 ```
 
@@ -377,27 +389,27 @@ global.BroadcastChannel = class BroadcastChannel {
 
 ```javascript
 vi.mock('../../js/services/event-bus.js', () => {
-    const handlers = new Map();
+  const handlers = new Map();
 
-    const mockEventBus = {
-        on: vi.fn((event, handler) => {
-            if (!handlers.has(event)) {
-                handlers.set(event, []);
-            }
-            handlers.get(event).push(handler);
-            return vi.fn();  // Return unsubscribe function
-        }),
-        emit: vi.fn((event, data) => {
-            const eventHandlers = handlers.get(event) || [];
-            eventHandlers.forEach(handler => handler(event, data));
-        }),
-        once: vi.fn(() => vi.fn()),
-        off: vi.fn(),
-        _getHandlers: (event) => handlers.get(event) || [],
-        _clearHandlers: () => handlers.clear()
-    };
+  const mockEventBus = {
+    on: vi.fn((event, handler) => {
+      if (!handlers.has(event)) {
+        handlers.set(event, []);
+      }
+      handlers.get(event).push(handler);
+      return vi.fn(); // Return unsubscribe function
+    }),
+    emit: vi.fn((event, data) => {
+      const eventHandlers = handlers.get(event) || [];
+      eventHandlers.forEach(handler => handler(event, data));
+    }),
+    once: vi.fn(() => vi.fn()),
+    off: vi.fn(),
+    _getHandlers: event => handlers.get(event) || [],
+    _clearHandlers: () => handlers.clear(),
+  };
 
-    return { EventBus: mockEventBus };
+  return { EventBus: mockEventBus };
 });
 ```
 
@@ -407,11 +419,11 @@ vi.mock('../../js/services/event-bus.js', () => {
 import { EventBus } from '../../js/services/event-bus.js';
 
 it('should emit event', () => {
-    performAction();
-    expect(EventBus.emit).toHaveBeenCalledWith(
-        'event:name',
-        expect.objectContaining({ key: 'value' })
-    );
+  performAction();
+  expect(EventBus.emit).toHaveBeenCalledWith(
+    'event:name',
+    expect.objectContaining({ key: 'value' })
+  );
 });
 ```
 
@@ -419,19 +431,19 @@ it('should emit event', () => {
 
 ```javascript
 const localStorageMock = (() => {
-    let store = {};
-    return {
-        getItem: vi.fn((key) => store[key] || null),
-        setItem: vi.fn((key, value) => {
-            store[key] = value.toString();
-        }),
-        removeItem: vi.fn((key) => {
-            delete store[key];
-        }),
-        clear: vi.fn(() => {
-            store = {};
-        })
-    };
+  let store = {};
+  return {
+    getItem: vi.fn(key => store[key] || null),
+    setItem: vi.fn((key, value) => {
+      store[key] = value.toString();
+    }),
+    removeItem: vi.fn(key => {
+      delete store[key];
+    }),
+    clear: vi.fn(() => {
+      store = {};
+    }),
+  };
 })();
 
 global.localStorage = localStorageMock;
@@ -443,8 +455,8 @@ global.localStorage = localStorageMock;
 
 ```javascript
 it('should handle async operations', async () => {
-    const result = await asyncOperation();
-    expect(result).toBeDefined();
+  const result = await asyncOperation();
+  expect(result).toBeDefined();
 });
 ```
 
@@ -457,29 +469,29 @@ it('should handle async operations', async () => {
 ```javascript
 // ✅ CORRECT - Use try-catch with fake timers
 it('should timeout if operation takes too long', async () => {
-    vi.useFakeTimers();
+  vi.useFakeTimers();
 
-    try {
-        const promise = slowOperation();
-        vi.advanceTimersByTime(10000);
-        await promise;
-        expect.fail('Should have timed out');
-    } catch (error) {
-        expect(error.message).toContain('timeout');
-    } finally {
-        vi.useRealTimers();
-    }
+  try {
+    const promise = slowOperation();
+    vi.advanceTimersByTime(10000);
+    await promise;
+    expect.fail('Should have timed out');
+  } catch (error) {
+    expect(error.message).toContain('timeout');
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 // ❌ WRONG - Causes unhandled rejection warnings with fake timers
 it('should timeout if operation takes too long', async () => {
-    vi.useFakeTimers();
+  vi.useFakeTimers();
 
-    const promise = slowOperation();
-    vi.advanceTimersByTime(10000);
+  const promise = slowOperation();
+  vi.advanceTimersByTime(10000);
 
-    await expect(promise).rejects.toThrow();  // Unhandled rejection!
-    vi.useRealTimers();
+  await expect(promise).rejects.toThrow(); // Unhandled rejection!
+  vi.useRealTimers();
 });
 ```
 
@@ -489,11 +501,11 @@ it('should timeout if operation takes too long', async () => {
 
 ```javascript
 it('should handle sequential calls', async () => {
-    const result1 = await operation1();
-    const result2 = await operation2();
+  const result1 = await operation1();
+  const result2 = await operation2();
 
-    expect(result1).toBeDefined();
-    expect(result2).toBeDefined();
+  expect(result1).toBeDefined();
+  expect(result2).toBeDefined();
 });
 ```
 
@@ -501,14 +513,10 @@ it('should handle sequential calls', async () => {
 
 ```javascript
 it('should handle parallel operations', async () => {
-    const results = await Promise.allSettled([
-        operation1(),
-        operation2(),
-        operation3()
-    ]);
+  const results = await Promise.allSettled([operation1(), operation2(), operation3()]);
 
-    expect(results[0].status).toBe('fulfilled');
-    expect(results[1].status).toBe('fulfilled');
+  expect(results[0].status).toBe('fulfilled');
+  expect(results[1].status).toBe('fulfilled');
 });
 ```
 
@@ -516,17 +524,15 @@ it('should handle parallel operations', async () => {
 
 ```javascript
 it('should emit event on completion', () => {
-    const handler = vi.fn();
+  const handler = vi.fn();
 
-    // Subscribe to event
-    EventBus.on('operation:complete', handler);
+  // Subscribe to event
+  EventBus.on('operation:complete', handler);
 
-    // Trigger operation
-    completeOperation();
+  // Trigger operation
+  completeOperation();
 
-    expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ status: 'success' })
-    );
+  expect(handler).toHaveBeenCalledWith(expect.objectContaining({ status: 'success' }));
 });
 ```
 
@@ -573,7 +579,7 @@ describe('TOCTOU Race Conditions', () => {
     // Parallel writes should respect reservation
     const results = await Promise.allSettled([
       quotaManager.write('key1', new Uint8Array(500)),
-      quotaManager.write('key2', new Uint8Array(500))
+      quotaManager.write('key2', new Uint8Array(500)),
     ]);
 
     expect(results[1].status).toBe('rejected');
@@ -603,15 +609,15 @@ describe('License Verification', () => {
 import { test, expect } from '@playwright/test';
 
 test('user can upload data file', async ({ page }) => {
-    // Navigate to app
-    await page.goto('http://localhost:8080');
+  // Navigate to app
+  await page.goto('http://localhost:8080');
 
-    // Upload file
-    const fileInput = page.locator('#file-input');
-    await fileInput.setInputFiles('tests/fixtures/sample-data.json');
+  // Upload file
+  const fileInput = page.locator('#file-input');
+  await fileInput.setInputFiles('tests/fixtures/sample-data.json');
 
-    // Verify result
-    await expect(page.locator('.reveal-section')).toBeVisible();
+  // Verify result
+  await expect(page.locator('.reveal-section')).toBeVisible();
 });
 ```
 
@@ -619,12 +625,12 @@ test('user can upload data file', async ({ page }) => {
 
 ```typescript
 test('Spotify OAuth flow', async ({ page, context }) => {
-    // Mock Spotify OAuth callback
-    await page.goto('http://localhost:8080?code=test-auth-code');
+  // Mock Spotify OAuth callback
+  await page.goto('http://localhost:8080?code=test-auth-code');
 
-    // Verify redirect handled correctly
-    await expect(page).toHaveURL(/http:\/\/localhost:8080\/?$/);
-    await expect(page.locator('.spotify-connected')).toBeVisible();
+  // Verify redirect handled correctly
+  await expect(page).toHaveURL(/http:\/\/localhost:8080\/?$/);
+  await expect(page.locator('.spotify-connected')).toBeVisible();
 });
 ```
 
@@ -632,14 +638,14 @@ test('Spotify OAuth flow', async ({ page, context }) => {
 
 ```typescript
 test('chat responds to user messages', async ({ page }) => {
-    await page.goto('http://localhost:8080?mode=demo');
+  await page.goto('http://localhost:8080?mode=demo');
 
-    // Send message
-    await page.fill('#chat-input', 'What was I listening to in March?');
-    await page.click('#chat-send');
+  // Send message
+  await page.fill('#chat-input', 'What was I listening to in March?');
+  await page.click('#chat-send');
 
-    // Wait for response
-    await expect(page.locator('.chat-message.assistant')).toBeVisible();
+  // Wait for response
+  await expect(page.locator('.chat-message.assistant')).toBeVisible();
 });
 ```
 
@@ -647,11 +653,11 @@ test('chat responds to user messages', async ({ page }) => {
 
 ```typescript
 test('blocks insecure context', async ({ page }) => {
-    // Use http instead of https
-    await page.goto('http://insecure-example.com');
+  // Use http instead of https
+  await page.goto('http://insecure-example.com');
 
-    // Should show security error
-    await expect(page.locator('.security-error')).toBeVisible();
+  // Should show security error
+  await expect(page.locator('.security-error')).toBeVisible();
 });
 ```
 
@@ -665,8 +671,8 @@ Use `sample_data.json` for consistent test data:
 import sampleData from '../sample_data.json';
 
 it('processes sample data correctly', () => {
-    const result = processData(sampleData);
-    expect(result).toBeDefined();
+  const result = processData(sampleData);
+  expect(result).toBeDefined();
 });
 ```
 
@@ -678,8 +684,8 @@ Use demo personas for predictable test scenarios:
 import { DemoData } from '../../js/demo-data.js';
 
 it('loads demo persona', () => {
-    const emoTeen = DemoData.personas.emoTeen;
-    expect(emoTeen.personality.type).toBe('Emotional Archaeologist');
+  const emoTeen = DemoData.personas.emoTeen;
+  expect(emoTeen.personality.type).toBe('Emotional Archaeologist');
 });
 ```
 
@@ -702,13 +708,13 @@ tests/fixtures/
 import { OperationLock, LockAcquisitionError } from '../../js/operation-lock.js';
 
 it('prevents concurrent operations', async () => {
-    const lock1 = OperationLock.acquire('test-op');
-    const lock2 = OperationLock.acquire('test-op');
+  const lock1 = OperationLock.acquire('test-op');
+  const lock2 = OperationLock.acquire('test-op');
 
-    await expect(lock2.acquire()).rejects.toThrow(LockAcquisitionError);
+  await expect(lock2.acquire()).rejects.toThrow(LockAcquisitionError);
 
-    lock1.release();
-    await expect(lock2.acquire()).resolves.toBe(true);
+  lock1.release();
+  await expect(lock2.acquire()).resolves.toBe(true);
 });
 ```
 
@@ -718,12 +724,12 @@ it('prevents concurrent operations', async () => {
 import { Security } from '../../js/security/index.js';
 
 it('encrypts sensitive data', async () => {
-    const plaintext = 'sensitive-api-key';
-    const encrypted = await Security.encryptData(plaintext);
+  const plaintext = 'sensitive-api-key';
+  const encrypted = await Security.encryptData(plaintext);
 
-    expect(encrypted).not.toContain(plaintext);
-    expect(encrypted).toHaveProperty('cipher');
-    expect(encrypted).toHaveProperty('iv');
+  expect(encrypted).not.toContain(plaintext);
+  expect(encrypted).toHaveProperty('cipher');
+  expect(encrypted).toHaveProperty('iv');
 });
 ```
 
@@ -731,12 +737,12 @@ it('encrypts sensitive data', async () => {
 
 ```javascript
 it('falls back to secondary provider', async () => {
-    // Mock primary provider failure
-    vi.mocked(primaryProvider.call).mockRejectedValueOnce(new Error('API error'));
+  // Mock primary provider failure
+  vi.mocked(primaryProvider.call).mockRejectedValueOnce(new Error('API error'));
 
-    const response = await callProviderWithFallback();
+  const response = await callProviderWithFallback();
 
-    expect(response.provider).toBe('fallback');
+  expect(response.provider).toBe('fallback');
 });
 ```
 
@@ -749,20 +755,21 @@ it('falls back to secondary provider', async () => {
 **Cause:** Fetch response missing `headers.get()` mock
 
 **Solution:**
+
 ```javascript
 // Add headers.get() to fetch mock
 global.fetch = vi.fn(() =>
-    Promise.resolve({
-        ok: true,
-        status: 200,
-        headers: {
-            get: vi.fn((header) => {
-                if (header === 'content-type') return 'application/json';
-                return null;
-            })
-        },
-        json: async () => ({ success: true })
-    })
+  Promise.resolve({
+    ok: true,
+    status: 200,
+    headers: {
+      get: vi.fn(header => {
+        if (header === 'content-type') return 'application/json';
+        return null;
+      }),
+    },
+    json: async () => ({ success: true }),
+  })
 );
 ```
 
@@ -773,12 +780,13 @@ global.fetch = vi.fn(() =>
 **Cause:** Using Jest syntax in Vitest
 
 **Solution:** Use `vi.fn()` instead of `jest.fn()`
+
 ```javascript
 // ❌ WRONG
-jest.fn()
+jest.fn();
 
 // ✅ CORRECT
-vi.fn()
+vi.fn();
 ```
 
 #### 3. Unhandled Promise Rejections
@@ -788,6 +796,7 @@ vi.fn()
 **Solution:** Use try-catch blocks (see [Testing Async Operations](#testing-async-operations))
 
 **Locations where this was fixed (Phase 1.2):**
+
 - `retry-manager-critical-fixes.test.js` - timeout tests
 - `export-strategies.test.js` - retry tests
 - `error-handling-tests.test.js` - transaction state tests
@@ -800,16 +809,17 @@ vi.fn()
 **Cause:** Worker mock not returning message data
 
 **Solution:**
+
 ```javascript
 // Ensure Worker returns actual message
 global.Worker = class Worker {
-    postMessage(message) {
-        setTimeout(() => {
-            if (this.onmessage) {
-                this.onmessage({ data: message });  // Not null!
-            }
-        }, 0);
-    }
+  postMessage(message) {
+    setTimeout(() => {
+      if (this.onmessage) {
+        this.onmessage({ data: message }); // Not null!
+      }
+    }, 0);
+  }
 };
 ```
 
@@ -818,13 +828,14 @@ global.Worker = class Worker {
 **Cause:** Undefined variable in race condition tests
 
 **Solution:** Define variable before use
+
 ```javascript
 describe('race conditions', () => {
-    let requestIdCounter;  // Declare variable
+  let requestIdCounter; // Declare variable
 
-    beforeEach(() => {
-        requestIdCounter = 0;  // Initialize
-    });
+  beforeEach(() => {
+    requestIdCounter = 0; // Initialize
+  });
 });
 ```
 
@@ -833,14 +844,20 @@ describe('race conditions', () => {
 #### 6. Timeout Issues
 
 **Default timeouts:**
+
 - Test timeout: 10,000ms (configured in `vitest.config.js`)
 - Hook timeout: 30,000ms (configured in `vitest.config.js`)
 
 **Increase timeout for slow tests:**
+
 ```javascript
-test('slow operation', async () => {
+test(
+  'slow operation',
+  async () => {
     // ...
-}, { timeout: 30000 }); // 30 seconds
+  },
+  { timeout: 30000 }
+); // 30 seconds
 ```
 
 #### 7. Mock Accuracy Problems
@@ -848,17 +865,19 @@ test('slow operation', async () => {
 **Issue:** Tests passing but mocks don't match real behavior
 
 **Solution:**
+
 - Review mock implementation vs real API
 - Add tests for error conditions
 - Verify mock returns correct data types
 - Test edge cases in mock behavior
 
 **Example:**
+
 ```javascript
 // Test that mock matches real behavior
 it('mock should match real API behavior', () => {
-    const mock = createMock();
-    expect(mock.method()).toEqual(realAPI.method());
+  const mock = createMock();
+  expect(mock.method()).toEqual(realAPI.method());
 });
 ```
 
@@ -867,19 +886,17 @@ it('mock should match real API behavior', () => {
 **Challenge:** Testing timing-dependent code
 
 **Solutions:**
+
 ```javascript
 // Use Promise.allSettled for parallel operations
-const results = await Promise.allSettled([
-    operation1(),
-    operation2()
-]);
+const results = await Promise.allSettled([operation1(), operation2()]);
 
 // Use locks to prevent concurrent access
 const lock = await acquireLock('resource');
 try {
-    await criticalSection();
+  await criticalSection();
 } finally {
-    lock.release();
+  lock.release();
 }
 ```
 
@@ -890,10 +907,15 @@ try {
 **Issue**: Tests exceed default timeout
 
 **Solution**: Increase timeout for slow operations:
+
 ```javascript
-test('slow operation', async ({ page }) => {
+test(
+  'slow operation',
+  async ({ page }) => {
     // ...
-}, { timeout: 30000 }); // 30 seconds
+  },
+  { timeout: 30000 }
+); // 30 seconds
 ```
 
 ### IndexedDB Not Available
@@ -901,13 +923,14 @@ test('slow operation', async ({ page }) => {
 **Issue**: Tests fail with "IndexedDB not available"
 
 **Solution**: Use test environment with IndexedDB support:
+
 ```javascript
 // In vitest.config.js
 export default {
-    testEnvironment: 'jsdom',
-    testEnvironmentOptions: {
-        url: 'http://localhost:8080'
-    }
+  testEnvironment: 'jsdom',
+  testEnvironmentOptions: {
+    url: 'http://localhost:8080',
+  },
 };
 ```
 
@@ -916,6 +939,7 @@ export default {
 **Issue**: `locator.click()` fails with "Element not found"
 
 **Solution**: Wait for element to be visible:
+
 ```javascript
 await page.waitForSelector('#my-element', { state: 'visible' });
 await page.click('#my-element');
@@ -924,6 +948,7 @@ await page.click('#my-element');
 ### Tests Pass Locally but Fail in CI
 
 **Common causes**:
+
 - Timing issues (add explicit waits)
 - Browser differences (test in multiple browsers)
 - Missing test data (ensure fixtures are committed)
@@ -932,21 +957,25 @@ await page.click('#my-element');
 ### Debugging Failed Tests
 
 **Unit tests (Vitest)**:
+
 ```bash
 npm run test:unit -- --reporter=verbose
 ```
 
 **E2E tests (Playwright)**:
+
 ```bash
 npm run test:ui  # Use UI to inspect failures
 ```
 
 **Run specific test file:**
+
 ```bash
 npm run test:unit -- path/to/test.test.js
 ```
 
 **Run specific test:**
+
 ```bash
 npm run test:unit -- -t "test name"
 ```
@@ -954,11 +983,13 @@ npm run test:unit -- -t "test name"
 ## Test Coverage
 
 ### Current Metrics
+
 - **Unit test pass rate**: 96.8% (2,479/2,560 tests)
 - **Target pass rate**: >98%
 - **Test files**: 122 unit test files
 
 ### Coverage Goals
+
 - 100% coverage of security-critical code
 - 98%+ pass rate for unit tests
 - 100% pass rate for E2E tests
@@ -966,6 +997,7 @@ npm run test:unit -- -t "test name"
 - Characterization tests before refactoring (>90% coverage)
 
 Check coverage:
+
 ```bash
 npm run test:unit -- --coverage
 ```
@@ -975,12 +1007,14 @@ npm run test:unit -- --coverage
 ### 1. Test-Driven Development (TDD)
 
 **Write tests before code:**
+
 1. Write failing test (RED)
 2. Write minimal implementation (GREEN)
 3. Refactor while tests stay green
 4. Commit each phase separately
 
 **Benefits:**
+
 - Forces thinking about requirements first
 - Guarantees test coverage
 - Makes refactoring safer
@@ -989,6 +1023,7 @@ npm run test:unit -- --coverage
 ### 2. Characterization Testing Before Refactoring
 
 **Before refactoring any module:**
+
 1. Write comprehensive characterization tests
 2. Establish baseline - all tests must pass
 3. Refactor code
@@ -996,6 +1031,7 @@ npm run test:unit -- --coverage
 5. Add unit tests for new structure
 
 **Proven results (Phase 2):**
+
 - Provider Fallback Chain: 38 characterization tests → 97% code reduction
 - Provider Interface: 36 characterization tests → 8 modular files
 - Zero regressions during refactoring
@@ -1003,6 +1039,7 @@ npm run test:unit -- --coverage
 ### 3. Facade Pattern Testing
 
 **When using facade pattern for backward compatibility:**
+
 - Test original API still works
 - Test delegation to new modules
 - Test event emissions
@@ -1012,6 +1049,7 @@ npm run test:unit -- --coverage
 ### 4. Worker Integration Testing
 
 **Testing Web Worker communication:**
+
 - Mock Worker to return actual message data
 - Test message passing both ways
 - Verify Worker initialization
@@ -1021,6 +1059,7 @@ npm run test:unit -- --coverage
 ### 5. Mock Accuracy
 
 **Ensure mocks match real behavior:**
+
 - Return correct data types
 - Simulate error conditions
 - Implement all required methods
@@ -1030,6 +1069,7 @@ npm run test:unit -- --coverage
 ### 6. Async Testing Patterns
 
 **Best practices:**
+
 - Use try-catch instead of `expect().rejects` with fake timers
 - Always clean up fake timers in `finally` blocks
 - Use `Promise.allSettled` for parallel operations
@@ -1039,24 +1079,27 @@ npm run test:unit -- --coverage
 ### 7. Test Organization
 
 **Arrange-Act-Assert structure:**
+
 ```javascript
 it('should do something', () => {
-    // Arrange: Setup test data and mocks
-    const input = { value: 'test' };
+  // Arrange: Setup test data and mocks
+  const input = { value: 'test' };
 
-    // Act: Execute the code being tested
-    const result = functionUnderTest(input);
+  // Act: Execute the code being tested
+  const result = functionUnderTest(input);
 
-    // Assert: Verify expected outcome
-    expect(result).toBe('expected');
+  // Assert: Verify expected outcome
+  expect(result).toBe('expected');
 });
 ```
 
 **Descriptive test names:**
+
 - ✅ "should emit session:created event when session is created"
 - ❌ "test session creation"
 
 **Independent tests:**
+
 - No shared state between tests
 - Clean up in `afterEach` hooks
 - Use fresh mocks in each test
@@ -1065,6 +1108,7 @@ it('should do something', () => {
 ### 8. Testing Edge Cases
 
 **Always test:**
+
 - Error conditions (network failures, timeouts)
 - Boundary values (empty arrays, null, undefined)
 - Concurrent operations (race conditions)
@@ -1074,6 +1118,7 @@ it('should do something', () => {
 ### 9. Regression Testing
 
 **For every bug fix:**
+
 1. Write test that reproduces bug
 2. Verify test fails before fix
 3. Implement fix
@@ -1081,12 +1126,14 @@ it('should do something', () => {
 5. Add to critical test suite
 
 **Example files:**
+
 - `critical-*.test.js` - Critical bug fixes
 - `*-critical-fixes.test.js` - Module-specific fixes
 
 ### 10. Documentation
 
 **Document in test files:**
+
 - What is being tested and why
 - Any non-obvious behavior
 - Mock limitations
@@ -1112,6 +1159,7 @@ it('should do something', () => {
 ### Fixed Test Patterns (Phase 1.2)
 
 **Issues identified and resolved:**
+
 1. Missing `headers.get()` in fetch mocks → Added headers to all fetch responses
 2. Worker mock returning null → Fixed to return actual message data
 3. Unhandled promise rejections → Switched to try-catch pattern
@@ -1119,6 +1167,7 @@ it('should do something', () => {
 5. Missing timeout configuration → Added to `vitest.config.js`
 
 **Results:**
+
 - Reduced unhandled rejections from 13 to 8
 - Improved test pass rate by 20 tests
 - Fixed 8 test files with proper error handling
@@ -1126,11 +1175,13 @@ it('should do something', () => {
 ### Characterization Testing (Phase 2)
 
 **Successful refactoring patterns:**
+
 1. Provider Fallback Chain: 872 lines → 6 modules
 2. Provider Interface: 1,102 lines → 8 modules
 3. Session Manager: Facade pattern with 95.7% test coverage
 
 **Total test coverage added:**
+
 - 38 characterization tests (Provider Fallback)
 - 36 characterization tests (Provider Interface)
 - 84 new unit tests for refactored modules
@@ -1139,6 +1190,7 @@ it('should do something', () => {
 ### Test Infrastructure (Phase 3.3)
 
 **Documentation and standards:**
+
 - Comprehensive testing guide
 - Mock requirements documented
 - Troubleshooting patterns captured
@@ -1148,6 +1200,7 @@ it('should do something', () => {
 ---
 
 For more information, see:
+
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
 - [AGENT_CONTEXT.md](AGENT_CONTEXT.md) - Technical architecture
 - [Playwright Docs](https://playwright.dev/docs/intro)
