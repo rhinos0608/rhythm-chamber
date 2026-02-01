@@ -22,9 +22,10 @@ export default {
 
     // Determine if origin is allowed (fallback to empty for same-origin requests)
     // Handle null origin from local file:// URLs, redirects, and certain privacy modes
-    const allowedOrigin = (requestOrigin === null || !allowedOrigins.includes(requestOrigin))
-      ? (allowedOrigins[0] || '')
-      : requestOrigin;
+    const allowedOrigin =
+            requestOrigin === null || !allowedOrigins.includes(requestOrigin)
+              ? allowedOrigins[0] || ''
+              : requestOrigin;
 
     // CORS headers for all responses - use whitelisted origin only
     const corsHeaders = {
@@ -33,7 +34,7 @@ export default {
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Max-Age': '86400',
       // Vary header required for proper caching when origin is dynamic
-      'Vary': 'Origin'
+      Vary: 'Origin',
     };
 
     const url = new URL(request.url);
@@ -45,12 +46,15 @@ export default {
 
     // Health check endpoint
     if (url.pathname === '/health' && request.method === 'GET') {
-      return new Response(JSON.stringify({
-        status: 'healthy',
-        timestamp: Date.now()
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return new Response(
+        JSON.stringify({
+          status: 'healthy',
+          timestamp: Date.now(),
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
     }
 
     // License validation endpoint
@@ -69,14 +73,17 @@ export default {
     }
 
     // 404 for unknown routes
-    return new Response(JSON.stringify({
-      error: 'Not found',
-      available_routes: ['/validate', '/activate', '/webhook', '/health']
-    }), {
-      status: 404,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
-  }
+    return new Response(
+      JSON.stringify({
+        error: 'Not found',
+        available_routes: ['/validate', '/activate', '/webhook', '/health'],
+      }),
+      {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  },
 };
 
 /**
@@ -96,15 +103,19 @@ async function handleValidate(request, env, corsHeaders) {
   );
 
   if (!rateLimitCheck.allowed) {
-    return jsonResponse({
-      valid: false,
-      error: 'RATE_LIMITED',
-      message: 'Too many validation requests. Please try again later.',
-      retryAfter: rateLimitCheck.retryAfter
-    }, 429, {
-      ...corsHeaders,
-      'Retry-After': String(rateLimitCheck.retryAfter)
-    });
+    return jsonResponse(
+      {
+        valid: false,
+        error: 'RATE_LIMITED',
+        message: 'Too many validation requests. Please try again later.',
+        retryAfter: rateLimitCheck.retryAfter,
+      },
+      429,
+      {
+        ...corsHeaders,
+        'Retry-After': String(rateLimitCheck.retryAfter),
+      }
+    );
   }
 
   try {
@@ -112,11 +123,15 @@ async function handleValidate(request, env, corsHeaders) {
     const { licenseKey, instanceId, action } = body;
 
     if (!licenseKey) {
-      return jsonResponse({
-        valid: false,
-        error: 'MISSING_KEY',
-        message: 'License key is required'
-      }, 400, corsHeaders);
+      return jsonResponse(
+        {
+          valid: false,
+          error: 'MISSING_KEY',
+          message: 'License key is required',
+        },
+        400,
+        corsHeaders
+      );
     }
 
     // If instanceId is provided, validate existing instance
@@ -132,41 +147,53 @@ async function handleValidate(request, env, corsHeaders) {
     const apiResponse = await fetch(apiUrl, {
       method: 'POST',
       headers: {
-        'Accept': 'application/vnd.api+json',
+        Accept: 'application/vnd.api+json',
         'Content-Type': 'application/vnd.api+json',
-        'Authorization': `Bearer ${env.LEMONSQUEEZY_API_KEY}`
+        Authorization: `Bearer ${env.LEMONSQUEEZY_API_KEY}`,
       },
-      body: JSON.stringify(apiBody)
+      body: JSON.stringify(apiBody),
     });
 
     if (!apiResponse.ok) {
-      return jsonResponse({
-        valid: false,
-        error: 'API_ERROR',
-        message: `Lemon Squeezy API returned ${apiResponse.status}`
-      }, 502, corsHeaders);
+      return jsonResponse(
+        {
+          valid: false,
+          error: 'API_ERROR',
+          message: `Lemon Squeezy API returned ${apiResponse.status}`,
+        },
+        502,
+        corsHeaders
+      );
     }
 
     const data = await apiResponse.json();
 
     // Check for Lemon Squeezy errors
     if (data.error) {
-      return jsonResponse({
-        valid: false,
-        error: 'INVALID_KEY',
-        message: data.error
-      }, 200, corsHeaders);
+      return jsonResponse(
+        {
+          valid: false,
+          error: 'INVALID_KEY',
+          message: data.error,
+        },
+        200,
+        corsHeaders
+      );
     }
 
     const licenseKeyData = data.license_key;
 
     // Check license status
     if (licenseKeyData.status !== 'active') {
-      return jsonResponse({
-        valid: false,
-        error: 'INACTIVE',
-        message: `License status: ${licenseKeyData.status}`
-      }, 200, corsHeaders);
+      return jsonResponse(
+        {
+          valid: false,
+          error: 'INACTIVE',
+          message: `License status: ${licenseKeyData.status}`,
+        },
+        200,
+        corsHeaders
+      );
     }
 
     // Check expiration
@@ -174,32 +201,43 @@ async function handleValidate(request, env, corsHeaders) {
     if (licenseKeyData.expires_at) {
       const expiryDate = new Date(licenseKeyData.expires_at);
       if (expiryDate < new Date()) {
-        return jsonResponse({
-          valid: false,
-          error: 'EXPIRED',
-          message: 'License has expired',
-          expiredAt: licenseKeyData.expires_at
-        }, 200, corsHeaders);
+        return jsonResponse(
+          {
+            valid: false,
+            error: 'EXPIRED',
+            message: 'License has expired',
+            expiredAt: licenseKeyData.expires_at,
+          },
+          200,
+          corsHeaders
+        );
       }
       expiresAt = licenseKeyData.expires_at;
     }
 
     // Valid license - return data with 30-day cache recommendation
-    return jsonResponse({
-      valid: true,
-      tier: 'chamber',
-      instanceId: data.instance?.id || instanceId,
-      activatedAt: licenseKeyData.created_at,
-      expiresAt: expiresAt,
-      cacheFor: 30 * 24 * 60 * 60 // 30 days in seconds
-    }, 200, corsHeaders);
-
+    return jsonResponse(
+      {
+        valid: true,
+        tier: 'chamber',
+        instanceId: data.instance?.id || instanceId,
+        activatedAt: licenseKeyData.created_at,
+        expiresAt: expiresAt,
+        cacheFor: 30 * 24 * 60 * 60, // 30 days in seconds
+      },
+      200,
+      corsHeaders
+    );
   } catch (error) {
-    return jsonResponse({
-      valid: false,
-      error: 'INTERNAL_ERROR',
-      message: error.message
-    }, 500, corsHeaders);
+    return jsonResponse(
+      {
+        valid: false,
+        error: 'INTERNAL_ERROR',
+        message: error.message,
+      },
+      500,
+      corsHeaders
+    );
   }
 }
 
@@ -218,18 +256,29 @@ async function handleWebhook(request, env, corsHeaders) {
     // Verify webhook signature
     const signature = request.headers.get('X-Signature');
     if (!signature) {
-      return jsonResponse({
-        error: 'Missing signature'
-      }, 401, corsHeaders);
+      return jsonResponse(
+        {
+          error: 'Missing signature',
+        },
+        401,
+        corsHeaders
+      );
     }
 
     const rawBody = await request.text();
-    const expectedSig = await createHmac(rawBody, env.WEBHOOK_SECRET || env.LEMONSQUEEZY_API_KEY);
+    const expectedSig = await createHmac(
+      rawBody,
+      env.WEBHOOK_SECRET || env.LEMONSQUEEZY_API_KEY
+    );
 
     if (!signature || !timingSafeEqual(signature, expectedSig)) {
-      return jsonResponse({
-        error: 'Invalid signature'
-      }, 401, corsHeaders);
+      return jsonResponse(
+        {
+          error: 'Invalid signature',
+        },
+        401,
+        corsHeaders
+      );
     }
 
     const data = JSON.parse(rawBody);
@@ -259,11 +308,14 @@ async function handleWebhook(request, env, corsHeaders) {
 
     // Return 200 to acknowledge webhook
     return new Response('OK', { status: 200, headers: corsHeaders });
-
   } catch (error) {
-    return jsonResponse({
-      error: error.message
-    }, 500, corsHeaders);
+    return jsonResponse(
+      {
+        error: error.message,
+      },
+      500,
+      corsHeaders
+    );
   }
 }
 
@@ -283,11 +335,7 @@ async function createHmac(data, secret) {
     ['sign']
   );
 
-  const signature = await crypto.subtle.sign(
-    'HMAC',
-    key,
-    messageData
-  );
+  const signature = await crypto.subtle.sign('HMAC', key, messageData);
 
   return Array.from(new Uint8Array(signature))
     .map(b => b.toString(16).padStart(2, '0'))
@@ -336,7 +384,7 @@ function checkRateLimit(identifier, maxRequests = 10, windowMs = 60000) {
     // First request or window expired
     rateLimitStore.set(identifier, {
       count: 1,
-      resetAt: now + windowMs
+      resetAt: now + windowMs,
     });
     return { allowed: true };
   }
@@ -361,9 +409,9 @@ function checkRateLimit(identifier, maxRequests = 10, windowMs = 60000) {
 function getClientIdentifier(request) {
   // Check various headers for real IP (behind proxy)
   const headers = [
-    'CF-Connecting-IP',  // Cloudflare
-    'X-Forwarded-For',   // General proxy
-    'X-Real-IP',         // Nginx
+    'CF-Connecting-IP', // Cloudflare
+    'X-Forwarded-For', // General proxy
+    'X-Real-IP', // Nginx
   ];
 
   for (const header of headers) {
@@ -390,8 +438,8 @@ function jsonResponse(data, status, corsHeaders) {
     status,
     headers: {
       ...corsHeaders,
-      'Content-Type': 'application/json'
-    }
+      'Content-Type': 'application/json',
+    },
   });
 }
 
@@ -402,5 +450,5 @@ const logger = {
   info: (message, data) => {
     // In production, you might want to send this to a logging service
     // For now, silent in worker
-  }
+  },
 };

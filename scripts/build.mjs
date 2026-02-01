@@ -50,10 +50,7 @@ function getEntryPoints() {
   }
 
   // Other standalone files
-  const standaloneFiles = [
-    'embedding-worker.js',
-    'parser-worker.js'
-  ];
+  const standaloneFiles = ['embedding-worker.js', 'parser-worker.js'];
 
   for (const file of standaloneFiles) {
     const filePath = join(jsDir, file);
@@ -82,7 +79,7 @@ function copyStaticFiles() {
     'vercel.json',
     '.htaccess',
     'README.md',
-    'SECURITY.md'
+    'SECURITY.md',
   ];
 
   let copiedCount = 0;
@@ -129,9 +126,9 @@ function minifyCSS(sourcePath, destPath) {
   // Basic CSS minification
   const minified = css
     .replace(/\/\*[\s\S]*?\*\//g, '') // Remove comments
-    .replace(/\s+/g, ' ')             // Collapse whitespace
-    .replace(/\s*([\{\}\:\;\,])\s*/g, '$1') // Remove space around symbols
-    .replace(/;\}/g, '}')             // Remove last semicolon
+    .replace(/\s+/g, ' ') // Collapse whitespace
+    .replace(/\s*([{}:;,])\s*/g, '$1') // Remove space around symbols
+    .replace(/;\}/g, '}') // Remove last semicolon
     .trim();
 
   writeFileSync(destPath, minified);
@@ -139,9 +136,10 @@ function minifyCSS(sourcePath, destPath) {
   const newSize = minified.length;
   const savings = ((1 - newSize / originalSize) * 100).toFixed(1);
 
-  console.log(`   ✓ styles.css: ${Common.formatBytes(originalSize)} → ${Common.formatBytes(newSize)} (${savings}% reduction)`);
+  console.log(
+    `   ✓ styles.css: ${Common.formatBytes(originalSize)} → ${Common.formatBytes(newSize)} (${savings}% reduction)`
+  );
 }
-
 
 /**
  * Build JavaScript with esbuild
@@ -177,7 +175,9 @@ async function buildJS() {
     const minifiedSize = statSync(outPath).size;
     const savings = ((1 - minifiedSize / originalSize) * 100).toFixed(1);
 
-    console.log(`   ✓ ${relativePath}: ${Common.formatBytes(originalSize)} → ${Common.formatBytes(minifiedSize)} (${savings}% reduction)`);
+    console.log(
+      `   ✓ ${relativePath}: ${Common.formatBytes(originalSize)} → ${Common.formatBytes(minifiedSize)} (${savings}% reduction)`
+    );
   }
 }
 

@@ -33,51 +33,85 @@ export class MetricsUpdater {
       // Update modular structure section (around line 73-92)
       const structurePattern = /├── controllers\/.*?# UI LAYER \(\d+ controllers\)/;
       const structureReplacement = `├── controllers/               # UI LAYER (${metrics.summary.controllers} controllers)`;
-      if (structurePattern.test(content) && !content.match(structurePattern)[0].includes(`(${metrics.summary.controllers} controllers)`)) {
+      if (
+        structurePattern.test(content) &&
+        !content.match(structurePattern)[0].includes(`(${metrics.summary.controllers} controllers)`)
+      ) {
         hasChanges = true;
       }
       content = content.replace(structurePattern, structureReplacement);
 
       const servicesPattern = /├── services\/.*?# BUSINESS LOGIC \(\d+ services\)/;
       const servicesReplacement = `├── services/                  # BUSINESS LOGIC (${metrics.summary.services} services)`;
-      if (servicesPattern.test(content) && !content.match(servicesPattern)[0].includes(`(${metrics.summary.services} services)`)) {
+      if (
+        servicesPattern.test(content) &&
+        !content.match(servicesPattern)[0].includes(`(${metrics.summary.services} services)`)
+      ) {
         hasChanges = true;
       }
       content = content.replace(servicesPattern, servicesReplacement);
 
       const utilsPattern = /├── utils\/.*?# SHARED UTILITIES \(\d+ utilities\)/;
       const utilsReplacement = `├── utils/                     # SHARED UTILITIES (${metrics.summary.utilities} utilities)`;
-      if (utilsPattern.test(content) && !content.match(utilsPattern)[0].includes(`(${metrics.summary.utilities} utilities)`)) {
+      if (
+        utilsPattern.test(content) &&
+        !content.match(utilsPattern)[0].includes(`(${metrics.summary.utilities} utilities)`)
+      ) {
         hasChanges = true;
       }
       content = content.replace(utilsPattern, utilsReplacement);
 
       // Update Essential Documentation section (around line 113)
-      const docPattern = /- \*\*\[AGENT_CONTEXT\.md\]\(AGENT_CONTEXT\.md\)\*\* - Complete technical architecture \(\d[\d,]*\+ lines\)/;
+      const docPattern =
+        /- \*\*\[AGENT_CONTEXT\.md\]\(AGENT_CONTEXT\.md\)\*\* - Complete technical architecture \(\d[\d,]*\+ lines\)/;
       const docReplacement = `- **[AGENT_CONTEXT.md](AGENT_CONTEXT.md)** - Complete technical architecture (${metrics.summary.totalLines.toLocaleString()}+ lines)`;
-      if (docPattern.test(content) && !content.includes(`(${metrics.summary.totalLines.toLocaleString()}+ lines)`)) {
+      if (
+        docPattern.test(content) &&
+        !content.includes(`(${metrics.summary.totalLines.toLocaleString()}+ lines)`)
+      ) {
         hasChanges = true;
       }
       content = content.replace(docPattern, docReplacement);
 
       // Update Key Directories table (around line 102-110)
-      const controllersDirPattern = /\| `js\/controllers\/` \| UI components \(\d+ controllers\) \|/;
-      if (controllersDirPattern.test(content) && !content.match(controllersDirPattern)[0].includes(`(${metrics.summary.controllers} controllers)`)) {
+      const controllersDirPattern =
+        /\| `js\/controllers\/` \| UI components \(\d+ controllers\) \|/;
+      if (
+        controllersDirPattern.test(content) &&
+        !content
+          .match(controllersDirPattern)[0]
+          .includes(`(${metrics.summary.controllers} controllers)`)
+      ) {
         hasChanges = true;
       }
-      content = content.replace(controllersDirPattern, '| `js/controllers/` | UI components (' + metrics.summary.controllers + ' controllers) |');
+      content = content.replace(
+        controllersDirPattern,
+        '| `js/controllers/` | UI components (' + metrics.summary.controllers + ' controllers) |'
+      );
 
       const servicesDirPattern = /\| `js\/services\/` \| Business logic \(\d+ services\) \|/;
-      if (servicesDirPattern.test(content) && !content.match(servicesDirPattern)[0].includes(`(${metrics.summary.services} services)`)) {
+      if (
+        servicesDirPattern.test(content) &&
+        !content.match(servicesDirPattern)[0].includes(`(${metrics.summary.services} services)`)
+      ) {
         hasChanges = true;
       }
-      content = content.replace(servicesDirPattern, '| `js/services/` | Business logic (' + metrics.summary.services + ' services) |');
+      content = content.replace(
+        servicesDirPattern,
+        '| `js/services/` | Business logic (' + metrics.summary.services + ' services) |'
+      );
 
       const utilsDirPattern = /\| `js\/utils\/` \| Shared utilities \(\d+ utilities\) \|/;
-      if (utilsDirPattern.test(content) && !content.match(utilsDirPattern)[0].includes(`(${metrics.summary.utilities} utilities)`)) {
+      if (
+        utilsDirPattern.test(content) &&
+        !content.match(utilsDirPattern)[0].includes(`(${metrics.summary.utilities} utilities)`)
+      ) {
         hasChanges = true;
       }
-      content = content.replace(utilsDirPattern, '| `js/utils/` | Shared utilities (' + metrics.summary.utilities + ' utilities) |');
+      content = content.replace(
+        utilsDirPattern,
+        '| `js/utils/` | Shared utilities (' + metrics.summary.utilities + ' utilities) |'
+      );
 
       // Only update last updated timestamp if actual content changed
       if (hasChanges) {
@@ -115,7 +149,8 @@ export class MetricsUpdater {
       // Update status header (lines 3-9)
       // Match exactly the status header block: starts with "> **Status:**" and ends with "Security v2.0" line
       // This prevents accidentally capturing other lines that start with ">"
-      const headerPattern = /> \*\*Status:\*\* v[0-9.]+.*[\s\S]*?Security v[0-9.]+\*: Enhanced validation, adaptive rate limiting, and protection\n>/;
+      const headerPattern =
+        /> \*\*Status:\*\* v[0-9.]+.*[\s\S]*?Security v[0-9.]+\*: Enhanced validation, adaptive rate limiting, and protection\n>/;
 
       const newHeader = `> **Status:** ${version} Enhanced Architecture Complete — ${metrics.summary.totalFiles} Source Files
 > - **${metrics.summary.controllers} Controllers**: Modular UI components for focused functionality
@@ -135,7 +170,9 @@ export class MetricsUpdater {
         writeFileSync(filepath, content, 'utf-8');
       }
 
-      this.logger.success(hasChanges ? 'Updated AGENT_CONTEXT.md' : 'AGENT_CONTEXT.md already up to date');
+      this.logger.success(
+        hasChanges ? 'Updated AGENT_CONTEXT.md' : 'AGENT_CONTEXT.md already up to date'
+      );
       return true;
     } catch (error) {
       this.logger.error('Failed to update AGENT_CONTEXT.md', error.message);
@@ -163,10 +200,7 @@ export class MetricsUpdater {
       );
 
       // Update last modified line
-      content = content.replace(
-        /\*\*Last Updated:\*\* [0-9-]+/,
-        `**Last Updated:** ${date}`
-      );
+      content = content.replace(/\*\*Last Updated:\*\* [0-9-]+/, `**Last Updated:** ${date}`);
 
       if (!this.dryRun) {
         writeFileSync(filepath, content, 'utf-8');
@@ -195,16 +229,10 @@ export class MetricsUpdater {
 
       // Update footer metadata (usually at end of file)
       // Pattern for: **Last Updated:** YYYY-MM-DD
-      content = content.replace(
-        /\*\*Last Updated:\*\* [0-9-]+/,
-        `**Last Updated:** ${date}`
-      );
+      content = content.replace(/\*\*Last Updated:\*\* [0-9-]+/, `**Last Updated:** ${date}`);
 
       // Pattern for: **API Version:** v*
-      content = content.replace(
-        /\*\*API Version:\*\* v[0-9.]+/,
-        `**API Version:** ${version}`
-      );
+      content = content.replace(/\*\*API Version:\*\* v[0-9.]+/, `**API Version:** ${version}`);
 
       if (!this.dryRun) {
         writeFileSync(filepath, content, 'utf-8');
@@ -238,10 +266,7 @@ export class MetricsUpdater {
       );
 
       // Update last modified line
-      content = content.replace(
-        /\*\*Last Updated:\*\* [0-9-]+/,
-        `**Last Updated:** ${date}`
-      );
+      content = content.replace(/\*\*Last Updated:\*\* [0-9-]+/, `**Last Updated:** ${date}`);
 
       if (!this.dryRun) {
         writeFileSync(filepath, content, 'utf-8');

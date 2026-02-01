@@ -28,9 +28,9 @@ console.log(hasSection ? '✓ Found: Backward Compatibility section' : '❌ Miss
 // Final result
 console.log('\n' + '='.repeat(60));
 if (hasIsQueueProcessing && hasGetApiStats && hasSection) {
-    console.log('✓ ALL EXPORTS VERIFIED - Fix 2.1 is complete!');
+  console.log('✓ ALL EXPORTS VERIFIED - Fix 2.1 is complete!');
 } else {
-    console.log('❌ SOME EXPORTS MISSING - Fix incomplete!');
-    process.exit(1);
+  console.log('❌ SOME EXPORTS MISSING - Fix incomplete!');
+  process.exit(1);
 }
 console.log('='.repeat(60));

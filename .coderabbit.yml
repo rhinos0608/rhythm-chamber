@@ -1,21 +1,21 @@
 # CodeRabbit Configuration for Rhythm Chamber
 # Enforces HNW architecture patterns and code quality standards
 
-language: "en-US"
-tone: "friendly and precise"
+language: 'en-US'
+tone: 'friendly and precise'
 early_access: false
 free_tier_features: true
 
 # Review settings
 reviews:
-  profile: "chill"  # Friendly but thorough reviews
+  profile: 'chill' # Friendly but thorough reviews
   auto_approve: false
   generate_summary: true
   high_level_summary_instructions: |
     Create concise release notes as a bullet-point list of key changes.
     Focus on architectural impact, new features, and critical fixes.
     Include a Markdown table showing lines added/removed by each contributing author.
-  high_level_summary_placeholder: "@coderabbitai summary"
+  high_level_summary_placeholder: '@coderabbitai summary'
   wrap_walkthrough: true
   include_file_summary: true
   include_sequence_diagrams: true
@@ -27,21 +27,21 @@ reviews:
 
 # Path filters - exclude generated code and dependencies
 path_filters:
-  - "!**/dist/**"
-  - "!**/node_modules/**"
-  - "!**/tests/**"
-  - "!**/*.test.js"
-  - "!**/*.spec.js"
-  - "!**/*.spec.ts"
-  - "!**/coverage/**"
-  - "!**/*.min.js"
-  - "!**/package-lock.json"
-  - "!**/.state/**"
-  - "!scripts/docs-sync/**"  # Auto-generated docs
+  - '!**/dist/**'
+  - '!**/node_modules/**'
+  - '!**/tests/**'
+  - '!**/*.test.js'
+  - '!**/*.spec.js'
+  - '!**/*.spec.ts'
+  - '!**/coverage/**'
+  - '!**/*.min.js'
+  - '!**/package-lock.json'
+  - '!**/.state/**'
+  - '!scripts/docs-sync/**' # Auto-generated docs
 
 # Custom review instructions for HNW architecture
 path_instructions:
-  - path: "**/*.js"
+  - path: '**/*.js'
     instructions: |
       Review against Rhythm Chamber's HNW (Hierarchical Network Wave) architecture:
 
@@ -75,7 +75,7 @@ path_instructions:
       - Never log sensitive data (API keys, tokens)
       - Use Security facade for encrypted credentials
 
-  - path: "js/controllers/**"
+  - path: 'js/controllers/**'
     instructions: |
       Controllers should ONLY handle UI logic:
       - Call services for business logic (no direct provider/storage access)
@@ -85,7 +85,7 @@ path_instructions:
       - Implement proper cleanup (event listeners, etc.)
       - No business logic or data processing in controllers
 
-  - path: "js/services/**"
+  - path: 'js/services/**'
     instructions: |
       Services contain business logic:
       - No direct DOM manipulation
@@ -95,7 +95,7 @@ path_instructions:
       - Follow HNW patterns strictly
       - Test both happy and sad paths
 
-  - path: "js/storage/**"
+  - path: 'js/storage/**'
     instructions: |
       Storage modules handle IndexedDB operations:
       - No business logic in storage modules
@@ -105,7 +105,7 @@ path_instructions:
       - Validate all data before storage
       - Handle encryption/decryption through Security facade
 
-  - path: "js/security/**"
+  - path: 'js/security/**'
     instructions: |
       ⚠️ SECURITY MODULE - CHANGES REQUIRE REVIEW ⚠️
       - Never log sensitive data (keys, tokens, user data)
@@ -115,7 +115,7 @@ path_instructions:
       - Follow zero-trust security model
       - Changes to these files should trigger security review
 
-  - path: "js/providers/**"
+  - path: 'js/providers/**'
     instructions: |
       Provider modules implement AI integrations:
       - Always use llm-api-orchestrator.js (never call providers directly from services)
@@ -125,7 +125,7 @@ path_instructions:
       - Test with both Ollama and OpenRouter
       - Never hard-code API keys or credentials
 
-  - path: "package.json"
+  - path: 'package.json'
     instructions: |
       Review package.json changes:
       - Check for unnecessary dependencies
@@ -136,8 +136,8 @@ path_instructions:
 # Pre-merge checks
 pre_merge_checks:
   custom_checks:
-    - name: "HNW Architecture Compliance"
-      mode: "warning"
+    - name: 'HNW Architecture Compliance'
+      mode: 'warning'
       instructions: |
         Ensure changes follow HNW patterns:
         - Controllers call Services, not Providers directly
@@ -146,8 +146,8 @@ pre_merge_checks:
         - TabCoordinator handles cross-tab operations
         - Proper layer separation maintained
 
-    - name: "ES6 Module Compliance"
-      mode: "warning"
+    - name: 'ES6 Module Compliance'
+      mode: 'warning'
       instructions: |
         Verify proper ES6 module usage:
         - Use import/export statements
@@ -156,8 +156,8 @@ pre_merge_checks:
         - No accidental globals (check with npm run lint:globals)
         - No window pollution
 
-    - name: "Security Compliance"
-      mode: "error"
+    - name: 'Security Compliance'
+      mode: 'error'
       instructions: |
         Check security requirements:
         - No sensitive data in logs, comments, or console output
@@ -167,8 +167,8 @@ pre_merge_checks:
         - HTTPS/localhost enforcement
         - Changes to js/security/ require explicit approval
 
-    - name: "Testing Requirements"
-      mode: "warning"
+    - name: 'Testing Requirements'
+      mode: 'warning'
       instructions: |
         Verify test coverage:
         - Unit tests for new services in tests/unit/services/
@@ -182,9 +182,9 @@ tools:
   ast-grep:
     essential_rules: true
     rule_dirs:
-      - ".coderabbit/rules"
+      - '.coderabbit/rules'
     util_dirs:
-      - ".coderabbit/utils"
+      - '.coderabbit/utils'
 
   eslint:
     enabled: true
@@ -197,13 +197,13 @@ knowledge_base:
   code_guidelines:
     enabled: true
     file_patterns:
-      - "**/CLAUDE.md"
-      - "**/AGENT_CONTEXT.md"
-      - "**/.cursorrules"
-      - "**/.github/instructions/*.md"
+      - '**/CLAUDE.md'
+      - '**/AGENT_CONTEXT.md'
+      - '**/.cursorrules'
+      - '**/.github/instructions/*.md'
 
 # Documentation settings
 documentation:
   enabled: true
   auto_detection: true
-  summary_method: "comprehensive"
+  summary_method: 'comprehensive'

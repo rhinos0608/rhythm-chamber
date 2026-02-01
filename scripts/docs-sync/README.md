@@ -43,6 +43,7 @@ npm run docs:watch
 ```
 
 Options:
+
 - `--verbose` / `-v`: Show detailed output
 - `--commit`: Auto-commit documentation changes
 - `--debounce=<ms>`: Set debounce delay (default: 500ms)
@@ -114,6 +115,7 @@ Edit `scripts/docs-sync/config.json`:
 ### AGENT_CONTEXT.md
 
 Status header with current metrics:
+
 - Total source files
 - Controller/Service/Utility counts
 - Version number
@@ -185,6 +187,7 @@ const traverse = require('@babel/traverse').default;
 ### Failed to parse files
 
 Some files may fail to parse due to:
+
 - Syntax errors
 - Unsupported JavaScript features
 - Encoding issues
@@ -194,6 +197,7 @@ These files are skipped and logged. The tool will continue processing other file
 ### Git hook blocking commits
 
 If the hook is blocking legitimate commits:
+
 1. Run `npm run docs:sync` to update docs
 2. Or bypass with `git commit --no-verify`
 

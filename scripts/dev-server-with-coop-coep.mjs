@@ -41,7 +41,7 @@ const MIME_TYPES = {
   '.eot': 'application/vnd.ms-fontobject',
   '.mp3': 'audio/mpeg',
   '.mp4': 'video/mp4',
-  '.webm': 'video/webm'
+  '.webm': 'video/webm',
 };
 
 /**
@@ -57,10 +57,11 @@ function getMimeType(filePath) {
  */
 function getHeaders(filePath) {
   const headers = {
-    'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.openrouter.com https://api.anthropic.com;",
+    'Content-Security-Policy':
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.openrouter.com https://api.anthropic.com;",
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
-    'X-XSS-Protection': '1; mode=block'
+    'X-XSS-Protection': '1; mode=block',
   };
 
   // Add COOP/COEP headers for SharedArrayBuffer support
@@ -86,11 +87,16 @@ const server = createServer((req, res) => {
     decodedPathname = decodeURIComponent(parsedUrl.pathname);
   } catch (decodeError) {
     // Malformed percent-encoding in URL - use raw pathname as fallback
-    console.warn(`[${new Date().toISOString()}] Warning: Malformed URL encoding in ${parsedUrl.pathname}:`, decodeError.message);
+    console.warn(
+      `[${new Date().toISOString()}] Warning: Malformed URL encoding in ${parsedUrl.pathname}:`,
+      decodeError.message
+    );
     // Return 400 Bad Request for malformed URLs
     res.writeHead(400, { 'Content-Type': 'text/plain' });
     res.end('400 Bad Request - Malformed URL encoding');
-    console.error(`[${new Date().toISOString()}] ${req.method} ${req.url} -> 400 Bad Request (malformed URL encoding)`);
+    console.error(
+      `[${new Date().toISOString()}] ${req.method} ${req.url} -> 400 Bad Request (malformed URL encoding)`
+    );
     return;
   }
 
@@ -102,7 +108,9 @@ const server = createServer((req, res) => {
   if (safePath !== ROOT_DIR && !safePath.startsWith(ROOT_DIR + sep)) {
     res.writeHead(403, { 'Content-Type': 'text/plain' });
     res.end('403 Forbidden');
-    console.error(`[${new Date().toISOString()}] ${req.method} ${req.url} -> 403 Forbidden (path traversal attempt)`);
+    console.error(
+      `[${new Date().toISOString()}] ${req.method} ${req.url} -> 403 Forbidden (path traversal attempt)`
+    );
     return;
   }
 
@@ -121,7 +129,7 @@ const server = createServer((req, res) => {
 
     res.writeHead(200, {
       ...headers,
-      'Content-Type': mimeType
+      'Content-Type': mimeType,
     });
     res.end(stats);
 
@@ -136,11 +144,13 @@ const server = createServer((req, res) => {
 
         res.writeHead(200, {
           ...headers,
-          'Content-Type': 'text/html'
+          'Content-Type': 'text/html',
         });
         res.end(indexContent);
 
-        console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} -> ${indexFilePath} (SPA fallback)`);
+        console.log(
+          `[${new Date().toISOString()}] ${req.method} ${req.url} -> ${indexFilePath} (SPA fallback)`
+        );
         return;
       } catch (indexErr) {
         // index.html also not found
@@ -159,8 +169,8 @@ server.listen(PORT, () => {
   console.log('║  Rhythm Chamber Development Server (COOP/COEP Enabled) ║');
   console.log('╚════════════════════════════════════════════════════════════╝');
   console.log(`\n  🚀 Server running at: http://localhost:${PORT}/`);
-  console.log(`  🔒 COOP/COEP headers enabled for SharedArrayBuffer support`);
-  console.log(`  📝 Press Ctrl+C to stop\n`);
+  console.log('  🔒 COOP/COEP headers enabled for SharedArrayBuffer support');
+  console.log('  📝 Press Ctrl+C to stop\n');
 });
 
 process.on('SIGINT', () => {

@@ -222,7 +222,11 @@ export class XRefValidator {
     results.versionIssues = versionIssues;
 
     // Report results
-    if (results.broken.length === 0 && results.errors.length === 0 && results.versionIssues.length === 0) {
+    if (
+      results.broken.length === 0 &&
+      results.errors.length === 0 &&
+      results.versionIssues.length === 0
+    ) {
       this.logger.success('No cross-reference issues found');
     } else {
       if (results.broken.length > 0) {

@@ -54,9 +54,11 @@ export class ArchitectureCatalogGenerator {
       content += '> **Auto-generated** by docs-sync tool\n';
       content += `> **Generated:** ${generatedDate}\n`;
       content += `> **Total Controllers:** ${controllers.length}\n\n`;
-      content += 'This catalog provides detailed information about all UI controllers in the application.\n\n';
+      content +=
+        'This catalog provides detailed information about all UI controllers in the application.\n\n';
       content += '## Overview\n\n';
-      content += 'Controllers manage UI components and user interactions. Each controller is responsible for a specific aspect of the user interface.\n\n';
+      content +=
+        'Controllers manage UI components and user interactions. Each controller is responsible for a specific aspect of the user interface.\n\n';
       content += '## Controllers\n\n';
 
       if (controllers.length === 0) {
@@ -143,9 +145,11 @@ export class ArchitectureCatalogGenerator {
       content += '> **Auto-generated** by docs-sync tool\n';
       content += `> **Generated:** ${generatedDate}\n`;
       content += `> **Total Services:** ${services.length}\n\n`;
-      content += 'This catalog provides detailed information about all business logic services in the application.\n\n';
+      content +=
+        'This catalog provides detailed information about all business logic services in the application.\n\n';
       content += '## Overview\n\n';
-      content += 'Services encapsulate business logic and data processing. They follow the HNW architecture pattern and communicate via the EventBus.\n\n';
+      content +=
+        'Services encapsulate business logic and data processing. They follow the HNW architecture pattern and communicate via the EventBus.\n\n';
       content += '## Services\n\n';
 
       if (services.length === 0) {
@@ -223,7 +227,11 @@ export class ArchitectureCatalogGenerator {
 
       // Get utilities from metrics.files (object with filepath keys)
       const utilities = Object.entries(metrics.files)
-        .filter(([_, data]) => data.filepath && (data.filepath.startsWith('js/utils/') || data.filepath.startsWith('js/utilities/')))
+        .filter(
+          ([_, data]) =>
+            data.filepath &&
+            (data.filepath.startsWith('js/utils/') || data.filepath.startsWith('js/utilities/'))
+        )
         .map(([path, data]) => ({ path, ...data }))
         .sort((a, b) => a.filepath.localeCompare(b.filepath));
 
@@ -232,9 +240,11 @@ export class ArchitectureCatalogGenerator {
       content += '> **Auto-generated** by docs-sync tool\n';
       content += `> **Generated:** ${generatedDate}\n`;
       content += `> **Total Utilities:** ${utilities.length}\n\n`;
-      content += 'This reference provides detailed information about all utility modules in the application.\n\n';
+      content +=
+        'This reference provides detailed information about all utility modules in the application.\n\n';
       content += '## Overview\n\n';
-      content += 'Utilities are shared helper functions and modules used across the application.\n\n';
+      content +=
+        'Utilities are shared helper functions and modules used across the application.\n\n';
       content += '## Utilities\n\n';
 
       if (utilities.length === 0) {
