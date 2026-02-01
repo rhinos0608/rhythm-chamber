@@ -43,13 +43,14 @@ ConfigLoader.set('LEMONSQUEEZY_API_KEY', 'your-api-key');
 
 Create a product called "The Chamber" with multiple variants:
 
-| Variant | Price | Interval | Variant ID |
-|---------|-------|----------|------------|
-| Chamber Monthly | $4.99 | Month | `LEMON_VARIANT_CHAMBER_MONTHLY` |
-| Chamber Yearly | $39.00 | Year | `LEMON_VARIANT_CHAMBER_YEARLY` |
+| Variant          | Price  | Interval | Variant ID                       |
+| ---------------- | ------ | -------- | -------------------------------- |
+| Chamber Monthly  | $4.99  | Month    | `LEMON_VARIANT_CHAMBER_MONTHLY`  |
+| Chamber Yearly   | $39.00 | Year     | `LEMON_VARIANT_CHAMBER_YEARLY`   |
 | Chamber Lifetime | $99.00 | One-time | `LEMON_VARIANT_CHAMBER_LIFETIME` |
 
 **Important:** Enable **"Generate License Keys"** in variant settings:
+
 - License length: Lifetime (or set expiry)
 - Activation limit: 3 devices
 
@@ -73,6 +74,7 @@ wrangler deploy
 ```
 
 Update `LEMON_VALIDATION_ENDPOINT` to your worker URL:
+
 ```
 https://your-worker.workers.dev/validate
 ```
@@ -107,11 +109,13 @@ Total time: ~60 seconds
 ## Files Created/Modified
 
 ### Created
+
 - `js/services/lemon-squeezy-service.js` - Lemon Squeezy integration
 - `workers/license-validator/index.js` - Cloudflare Worker for secure validation
 - `workers/license-validator/wrangler.jsonc` - Worker configuration
 
 ### Modified
+
 - `upgrade.html` - Uses Lemon Squeezy overlay checkout
 - `js/payments.js` - Updated for Lemon Squeezy
 
@@ -128,11 +132,13 @@ Lemon Squeezy doesn't have a separate test mode. For testing:
 ### License Key Format
 
 Lemon Squeezy license keys are UUID format:
+
 ```
 38b1460a-5104-4067-a91d-77b872934d51
 ```
 
 For offline/crypto validation, use the JWT-like format:
+
 ```
 payload.signature
 ```
@@ -146,6 +152,7 @@ Where payload is Base64URL-encoded JSON and signature is hex HMAC-SHA256.
 Validates a license key securely.
 
 **Request:**
+
 ```json
 {
   "licenseKey": "38b1460a-5104-4067-a91d-77b872934d51",
@@ -154,6 +161,7 @@ Validates a license key securely.
 ```
 
 **Response (valid):**
+
 ```json
 {
   "valid": true,
@@ -166,6 +174,7 @@ Validates a license key securely.
 ```
 
 **Response (invalid):**
+
 ```json
 {
   "valid": false,
@@ -176,17 +185,18 @@ Validates a license key securely.
 
 ## Cost Breakdown
 
-| Service | Cost | What It Does |
-|---------|------|--------------|
-| **Lemon Squeezy** | 5% + $0.50/transaction | Payment processing, tax, licenses |
-| **Cloudflare Worker** | $0 (100k requests/day) | Secure license validation |
-| **Your revenue** | ~87% | $4.43 of $4.99 monthly |
+| Service               | Cost                   | What It Does                      |
+| --------------------- | ---------------------- | --------------------------------- |
+| **Lemon Squeezy**     | 5% + $0.50/transaction | Payment processing, tax, licenses |
+| **Cloudflare Worker** | $0 (100k requests/day) | Secure license validation         |
+| **Your revenue**      | ~87%                   | $4.43 of $4.99 monthly            |
 
 ## Security Notes
 
 ### Client-Side Validation (Crypto Fallback)
 
 When Cloudflare Worker is unavailable, the app falls back to crypto validation:
+
 - Uses HMAC-SHA256 with derived secret
 - Secret is XOR-obfuscated in source code
 - Provides "good enough" security for $20 product

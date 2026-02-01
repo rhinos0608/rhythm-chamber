@@ -11,6 +11,7 @@
 This document tracks identified technical debt from adversarial code reviews. Issues are categorized by severity and include actionable remediation plans.
 
 **Summary:**
+
 - **Critical Issues:** 5
 - **High Priority:** 7
 - **Medium Priority:** 8
@@ -29,6 +30,7 @@ This document tracks identified technical debt from adversarial code reviews. Is
 **Impact:** Data corruption, lost updates, inconsistent state
 
 **Scenario:**
+
 ```javascript
 // Two concurrent operations:
 // Op1: Read state -> Modify -> Write
@@ -37,6 +39,7 @@ This document tracks identified technical debt from adversarial code reviews. Is
 ```
 
 **Remediation:**
+
 1. Implement read-write locks with versioning
 2. Add state version tracking
 3. Reject stale updates based on version numbers
@@ -56,23 +59,27 @@ This document tracks identified technical debt from adversarial code reviews. Is
 **Impact:** Event subscribers can crash the event system, lost events
 
 **Scenario:**
+
 ```javascript
 // One faulty subscriber handler causes all parallel handlers to fail
-Promise.all(handlers) // First rejection rejects entire promise
+Promise.all(handlers); // First rejection rejects entire promise
 ```
 
 **Remediation:**
+
 ```javascript
-await Promise.all(sorted.map(async (sub) => {
+await Promise.all(
+  sorted.map(async sub => {
     try {
-        await sub.handler(payload, meta);
+      await sub.handler(payload, meta);
     } catch (e) {
-        console.error('[EventBus] Parallel handler error:', e);
-        // Continue with other handlers
+      console.error('[EventBus] Parallel handler error:', e);
+      // Continue with other handlers
     } finally {
-        if (sub.once) off(eventType === '*' ? '*' : eventType, sub.handler);
+      if (sub.once) off(eventType === '*' ? '*' : eventType, sub.handler);
     }
-}));
+  })
+);
 ```
 
 **Estimated Effort:** 2 hours
@@ -88,6 +95,7 @@ await Promise.all(sorted.map(async (sub) => {
 **Impact:** Difficult to test, tight coupling, violates SOLID principles
 
 **Remediation:**
+
 1. Implement proper interfaces for each service concern
 2. Use dependency injection to decouple components
 3. Already partially addressed by SessionManager refactoring
@@ -104,6 +112,7 @@ await Promise.all(sorted.map(async (sub) => {
 **Files:** Multiple (`js/settings/index.js:357`, `js/compatibility.js:27`, `js/observability/init-observability.js:351`)
 
 **Issue:** Excessive use of global state through window object:
+
 - `window.Settings = Settings`
 - `window.__COMPATIBILITY_PASSED__ = false`
 - `window.ObservabilityInit = { ... }`
@@ -111,6 +120,7 @@ await Promise.all(sorted.map(async (sub) => {
 **Impact:** Tight coupling, difficult testing, race conditions in multi-tab scenarios
 
 **Remediation:**
+
 1. Implement proper dependency injection container
 2. Use ES module exports exclusively
 3. Encapsulate global state in singleton pattern with controlled access
@@ -128,20 +138,21 @@ await Promise.all(sorted.map(async (sub) => {
 **Impact:** Message serialization breaks, concurrent LLM requests, data corruption
 
 **Remediation:**
+
 ```javascript
 async function processNext() {
-    if (queue.length === 0) return;
+  if (queue.length === 0) return;
 
-    // Use atomic check-and-set pattern
-    if (isProcessing) return;
-    isProcessing = true;
+  // Use atomic check-and-set pattern
+  if (isProcessing) return;
+  isProcessing = true;
 
-    try {
-        // ... existing logic
-    } finally {
-        isProcessing = false;
-        processNext();
-    }
+  try {
+    // ... existing logic
+  } finally {
+    isProcessing = false;
+    processNext();
+  }
 }
 ```
 
@@ -160,13 +171,14 @@ async function processNext() {
 **Impact:** Memory leaks, orphaned timeouts, performance degradation
 
 **Remediation:**
+
 ```javascript
 function cleanup() {
-    if (activeTimeout) {
-        clearTimeout(activeTimeout);
-        activeTimeout = null;
-    }
-    streamBuffer.reset();
+  if (activeTimeout) {
+    clearTimeout(activeTimeout);
+    activeTimeout = null;
+  }
+  streamBuffer.reset();
 }
 ```
 
@@ -186,32 +198,34 @@ function cleanup() {
 
 ```javascript
 export async function removeMessageFromHistory(index) {
-    let success = false;
-    await updateSessionData((currentData) => {
-        // TD-7: Comprehensive bounds checking
-        // 1. Check messages array exists
-        // 2. Check index is a valid number (not NaN, null, undefined)
-        // 3. Check index is within array bounds [0, length)
-        // Note: Number.isInteger() handles null, undefined, NaN, floats correctly
-        const isValidIndex = currentData.messages &&
-                             Number.isInteger(index) &&
-                             index >= 0 &&
-                             index < currentData.messages.length;
+  let success = false;
+  await updateSessionData(currentData => {
+    // TD-7: Comprehensive bounds checking
+    // 1. Check messages array exists
+    // 2. Check index is a valid number (not NaN, null, undefined)
+    // 3. Check index is within array bounds [0, length)
+    // Note: Number.isInteger() handles null, undefined, NaN, floats correctly
+    const isValidIndex =
+      currentData.messages &&
+      Number.isInteger(index) &&
+      index >= 0 &&
+      index < currentData.messages.length;
 
-        if (isValidIndex) {
-            // Create new array without the removed item
-            const newMessages = [...currentData.messages];
-            newMessages.splice(index, 1);
-            success = true;
-            return { id: currentData.id, messages: newMessages };
-        }
-        return currentData;
-    });
-    return success;
+    if (isValidIndex) {
+      // Create new array without the removed item
+      const newMessages = [...currentData.messages];
+      newMessages.splice(index, 1);
+      success = true;
+      return { id: currentData.id, messages: newMessages };
+    }
+    return currentData;
+  });
+  return success;
 }
 ```
 
 **Tests Added:**
+
 - Negative index validation
 - Null/undefined index validation
 - NaN index validation
@@ -235,13 +249,14 @@ export async function removeMessageFromHistory(index) {
 **Impact:** Runtime errors if storage module uninitialized
 
 **Remediation:**
+
 ```javascript
 export async function getAllSessions() {
-    if (!Storage || typeof Storage.getAllSessions !== 'function') {
-        console.warn('[SessionManager] Storage module not available');
-        return [];
-    }
-    // ... rest of logic
+  if (!Storage || typeof Storage.getAllSessions !== 'function') {
+    console.warn('[SessionManager] Storage module not available');
+    return [];
+  }
+  // ... rest of logic
 }
 ```
 
@@ -258,6 +273,7 @@ export async function getAllSessions() {
 **Impact:** Difficult to test, high coupling, potential memory leaks
 
 **Remediation:**
+
 1. Split into smaller, focused controllers
 2. Extract business logic into services
 3. Implement proper event cleanup
@@ -275,6 +291,7 @@ export async function getAllSessions() {
 **Impact:** Performance overhead, difficult to reason about, maintenance burden
 
 **Remediation:**
+
 1. Simplify to basic pub/sub for client-side operations
 2. Remove circuit breakers for non-network operations
 3. Keep complex features only for actual external API calls
@@ -292,6 +309,7 @@ export async function getAllSessions() {
 **Impact:** Uncaught errors in UI components can crash the application
 
 **Remediation:**
+
 1. Wrap critical UI operations with error boundaries
 2. Implement fallback UI for error states
 3. Add error reporting
@@ -309,6 +327,7 @@ export async function getAllSessions() {
 **Impact:** Difficult to mock for testing, unclear dependency graph
 
 **Remediation:**
+
 1. Use proper DI framework or simpler service locator
 2. Use constructor injection instead of property injection
 3. Implement proper interfaces for services
@@ -328,12 +347,13 @@ export async function getAllSessions() {
 **Impact:** Health checks fail silently, no monitoring
 
 **Remediation:**
+
 ```javascript
 this._updateIntervalId = setInterval(() => {
-    this._refreshHealthData().catch(err => {
-        console.error('[ProviderHealthMonitor] Failed to refresh health data:', err);
-    });
-    this._notifyUI();
+  this._refreshHealthData().catch(err => {
+    console.error('[ProviderHealthMonitor] Failed to refresh health data:', err);
+  });
+  this._notifyUI();
 }, this._updateIntervalMs);
 ```
 
@@ -350,6 +370,7 @@ this._updateIntervalId = setInterval(() => {
 **Impact:** Data loss, silent failures, poor UX
 
 **Remediation:**
+
 1. Implement quota checking before writes
 2. Add fallback strategies for quota exceeded
 3. Use compression for large data
@@ -367,6 +388,7 @@ this._updateIntervalId = setInterval(() => {
 **Impact:** Users don't know why requests are failing
 
 **Remediation:**
+
 1. Add detailed error context to timeout messages
 2. Include retry information
 3. Show user-friendly error messages
@@ -382,17 +404,19 @@ this._updateIntervalId = setInterval(() => {
 **Issue:** Unexplained numeric constants scattered throughout code.
 
 **Examples:**
+
 ```javascript
 // js/services/provider-interface.js:29-32
 const PROVIDER_TIMEOUTS = {
-    cloud: 60000,    // Why 60s?
-    local: 90000     // Why 90s?
+  cloud: 60000, // Why 60s?
+  local: 90000, // Why 90s?
 };
 ```
 
 **Impact:** Difficult to configure, brittle, unclear intent
 
 **Remediation:**
+
 1. Create centralized configuration constants file
 2. Document why each value was chosen
 3. Implement environment-specific configurations
@@ -410,6 +434,7 @@ const PROVIDER_TIMEOUTS = {
 **Impact:** Violates Information Hiding, difficult to maintain
 
 **Remediation:**
+
 1. Implement clear layered architecture
 2. Define boundaries between layers
 3. Use interfaces to define contracts
@@ -427,6 +452,7 @@ const PROVIDER_TIMEOUTS = {
 **Impact:** Memory leaks, difficult lifecycle management
 
 **Remediation:**
+
 1. Use event delegation instead of individual listeners
 2. Implement proper lifecycle methods
 3. Use WeakMap for tracking related state
@@ -444,6 +470,7 @@ const PROVIDER_TIMEOUTS = {
 **Impact:** Memory exhaustion, performance degradation
 
 **Remediation:**
+
 1. Implement hard limits on array size
 2. Add cleanup policies for old data
 3. Monitor memory usage
@@ -461,6 +488,7 @@ const PROVIDER_TIMEOUTS = {
 **Impact:** Difficult to implement proper error handling in consuming code
 
 **Remediation:**
+
 1. Implement consistent error handling strategy
 2. Use either exceptions or result objects, not both
 3. Provide clear error contracts
@@ -473,38 +501,42 @@ const PROVIDER_TIMEOUTS = {
 
 ### 21-27. Minor Issues
 
-| # | Issue | File | Impact | Effort |
-|---|-------|------|--------|--------|
-| 21 | Missing Null Checks in EventBus | `event-bus/index.js:322-358` | Edge case crashes | 1 hr |
-| 22 | Uninitialized State in AppState | `state/app-state.js:346-349` | Warning vs proper init | 1 hr |
-| 23 | Memory Leaks in Event Subscriptions | Multiple event bus users | Gradual memory growth | 2 hrs |
-| 24 | Timing-Dependent Code | `services/wave-telemetry.js:165-176` | UUID collision potential | 1 hr |
-| 25 | Over-Use of ES Module Exports | `session-manager/index.js:20-22` | Violates encapsulation | 2 hrs |
-| 26 | No CSP Headers | Deployment config | XSS vulnerability | 1 hr |
-| 27 | Missing Content-Type Validation | Multiple API callers | MIME confusion attacks | 2 hrs |
+| #   | Issue                               | File                                 | Impact                   | Effort |
+| --- | ----------------------------------- | ------------------------------------ | ------------------------ | ------ |
+| 21  | Missing Null Checks in EventBus     | `event-bus/index.js:322-358`         | Edge case crashes        | 1 hr   |
+| 22  | Uninitialized State in AppState     | `state/app-state.js:346-349`         | Warning vs proper init   | 1 hr   |
+| 23  | Memory Leaks in Event Subscriptions | Multiple event bus users             | Gradual memory growth    | 2 hrs  |
+| 24  | Timing-Dependent Code               | `services/wave-telemetry.js:165-176` | UUID collision potential | 1 hr   |
+| 25  | Over-Use of ES Module Exports       | `session-manager/index.js:20-22`     | Violates encapsulation   | 2 hrs  |
+| 26  | No CSP Headers                      | Deployment config                    | XSS vulnerability        | 1 hr   |
+| 27  | Missing Content-Type Validation     | Multiple API callers                 | MIME confusion attacks   | 2 hrs  |
 
 ---
 
 ## Remediation Priority
 
 ### Sprint 1 (Critical - Do Immediately)
+
 1. Fix SessionManager race condition (#1)
 2. Fix EventBus promise rejection (#2)
 3. Fix TurnQueue race condition (#5)
 
 ### Sprint 2 (High - Within 2 Weeks)
+
 4. Memory leak fixes (#6, #18)
 5. Array bounds checking (#7)
 6. Null reference safety (#8)
 7. Error boundaries (#11)
 
 ### Sprint 3 (Medium - Within Month)
+
 8. Refactor God objects (#3, #9)
 9. Simplify Event System (#10)
 10. DI container improvement (#12)
 11. Storage quota handling (#14)
 
 ### Sprint 4 (Low - Technical Debt Paydown)
+
 12. Magic numbers consolidation (#16)
 13. Consistent error handling (#20)
 14. Minor issues (#21-27)

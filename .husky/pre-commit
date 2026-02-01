@@ -1,5 +1,34 @@
+#!/bin/sh
+
+# Run ESLint and Prettier checks
+echo "Running linting and format checks..."
+
+# Check for ESLint issues (fast fail)
+npm run lint --silent
+if [ $? -ne 0 ]; then
+    echo "❌ ESLint found issues. Run 'npm run lint:fix' to auto-fix."
+    exit 1
+fi
+
+# Check formatting (fast fail)
+npm run format:check --silent
+if [ $? -ne 0 ]; then
+    echo "❌ Prettier found formatting issues. Run 'npm run format' to fix."
+    exit 1
+fi
+
+# Check custom window globals (existing validation)
+npm run lint:globals --silent
+if [ $? -ne 0 ]; then
+    echo "❌ Window globals check failed."
+    exit 1
+fi
+
 # Check if documentation is synchronized
 node scripts/docs-sync/orchestrator.js --mode=hook
+if [ $? -ne 0 ]; then
+    echo "❌ Documentation is out of sync. Run 'npm run docs:sync' to update."
+    exit 1
+fi
 
-# If docs are outdated, this will fail the commit
-# To bypass this check, use: git commit --no-verify -m "message"
+echo "✅ All pre-commit checks passed!"

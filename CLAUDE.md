@@ -28,6 +28,7 @@ AI-powered music analytics that tells users what their Spotify listening history
 ```
 
 **Implications**:
+
 - ✅ Controllers call Services, Services call Providers
 - ✅ Use EventBus for cross-module communication
 - ❌ No circular dependencies or bypassing layers
@@ -95,6 +96,7 @@ js/
 ---
 
 **When in doubt**:
+
 1. Check [AGENT_CONTEXT.md](AGENT_CONTEXT.md) for component details
 2. Follow existing patterns in similar code
 3. Use EventBus for communication, not direct calls

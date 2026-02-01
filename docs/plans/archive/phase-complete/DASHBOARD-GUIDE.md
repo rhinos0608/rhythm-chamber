@@ -17,16 +17,16 @@ The Refactoring Progress Dashboard provides real-time tracking of all God object
 
 The main table shows all 6 God objects at a glance:
 
-| Column | Description |
-|--------|-------------|
-| **ID** | Unique identifier for the object |
-| **Object Name** | File path and description |
-| **Status** | Current state (Not Started, Analysis Complete, In Progress, Implementation Complete, Tested) |
-| **Priority** | HIGH/MEDIUM/LOW - indicates importance |
-| **Risk** | CRITICAL/MODERATE/LOW - indicates complexity and danger |
-| **Progress** | Percentage complete (0-100%) |
-| **Agent** | Agent assigned to this task |
-| **Details** | Quick summary of current state |
+| Column          | Description                                                                                  |
+| --------------- | -------------------------------------------------------------------------------------------- |
+| **ID**          | Unique identifier for the object                                                             |
+| **Object Name** | File path and description                                                                    |
+| **Status**      | Current state (Not Started, Analysis Complete, In Progress, Implementation Complete, Tested) |
+| **Priority**    | HIGH/MEDIUM/LOW - indicates importance                                                       |
+| **Risk**        | CRITICAL/MODERATE/LOW - indicates complexity and danger                                      |
+| **Progress**    | Percentage complete (0-100%)                                                                 |
+| **Agent**       | Agent assigned to this task                                                                  |
+| **Details**     | Quick summary of current state                                                               |
 
 ### Status Values Explained
 
@@ -40,11 +40,13 @@ The main table shows all 6 God objects at a glance:
 ### Priority and Risk
 
 **Priority:**
+
 - **HIGH**: Critical functionality that impacts many parts of the codebase
 - **MEDIUM**: Important functionality with moderate impact
 - **LOW**: Lower priority items that can be deferred
 
 **Risk:**
+
 - **CRITICAL**: High risk of breaking changes, requires extensive testing
 - **MODERATE**: Medium risk with some expected breaking changes
 - **LOW**: Low risk with isolated changes or well-tested areas
@@ -77,10 +79,10 @@ When you start working on a God object or support task:
 2. **Update the JSON tracker** with your agent ID and initial status:
 
 ```bash
-jq '.god_objects[] | select(.id == "your-object-id") | 
-    .agent_id = "your-agent-id" | 
-    .agent_assigned = "your-agent-name" | 
-    .status = "in_progress" | 
+jq '.god_objects[] | select(.id == "your-object-id") |
+    .agent_id = "your-agent-id" |
+    .agent_assigned = "your-agent-name" |
+    .status = "in_progress" |
     .progress = 0' \
     /Users/rhinesharar/rhythm-chamber/.state/refactoring-tracker.json > \
     /Users/rhinesharar/rhythm-chamber/.state/refactoring-tracker.json.tmp && \
@@ -93,9 +95,9 @@ jq '.god_objects[] | select(.id == "your-object-id") |
 Update your progress every 30-60 seconds:
 
 ```bash
-jq '.god_objects[] | select(.id == "your-object-id") | 
-    .progress = 50 | 
-    .insights += ["Your latest insight"] | 
+jq '.god_objects[] | select(.id == "your-object-id") |
+    .progress = 50 |
+    .insights += ["Your latest insight"] |
     .updated_at = now' \
     /Users/rhinesharar/rhythm-chamber/.state/refactoring-tracker.json > \
     /Users/rhinesharar/rhythm-chamber/.state/refactoring-tracker.json.tmp && \
@@ -108,10 +110,10 @@ jq '.god_objects[] | select(.id == "your-object-id") |
 When your work is complete:
 
 ```bash
-jq '.god_objects[] | select(.id == "your-object-id") | 
-    .status = "implementation_complete" | 
-    .progress = 100 | 
-    .completed_at = now | 
+jq '.god_objects[] | select(.id == "your-object-id") |
+    .status = "implementation_complete" |
+    .progress = 100 |
+    .completed_at = now |
     .artifacts += ["path/to/your/artifact"]' \
     /Users/rhinesharar/rhythm-chamber/.state/refactoring-tracker.json > \
     /Users/rhinesharar/rhythm-chamber/.state/refactoring-tracker.json.tmp && \
@@ -124,8 +126,8 @@ jq '.god_objects[] | select(.id == "your-object-id") |
 If you encounter issues:
 
 ```bash
-jq '.god_objects[] | select(.id == "your-object-id") | 
-    .status = "blocked" | 
+jq '.god_objects[] | select(.id == "your-object-id") |
+    .status = "blocked" |
     .blockers += ["Description of blocker"]' \
     /Users/rhinesharar/rhythm-chamber/.state/refactoring-tracker.json > \
     /Users/rhinesharar/rhythm-chamber/.state/refactoring-tracker.json.tmp && \
@@ -140,6 +142,7 @@ jq '.god_objects[] | select(.id == "your-object-id") |
 The dashboard coordinator should:
 
 1. **Check agent state documents every 30-60 seconds**
+
    ```bash
    ls -lt /Users/rhinesharar/rhythm-chamber/.state/*.json | head -20
    ```
@@ -213,6 +216,7 @@ Overall Progress = (Sum of all task progress) / (Total number of tasks)
 ```
 
 Example:
+
 ```
 (80 + 0 + 50 + 35 + 50 + 30 + 100 + 5 + 40) / 9 = 42%
 ```
@@ -259,6 +263,7 @@ Not Started → Analysis Complete → In Progress → Implementation Complete �
 ## Support
 
 For questions or issues with the dashboard:
+
 - Consult the dashboard coordinator agent
 - Check agent state documents in `.state/`
 - Review this guide and the main dashboard documentation

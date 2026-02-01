@@ -1598,4 +1598,3 @@
 
 - `/Users/rhinesharar/rhythm-chamber/js/services/event-bus.js`
 - `/Users/rhinesharar/rhythm-chamber/js/services/tab-coordination/constants.js`
-

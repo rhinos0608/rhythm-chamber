@@ -11,6 +11,7 @@
 Review of recent technical debt remediation work (11 critical + 7 high priority issues).
 
 **Overall Assessment:** Good intent but contains several significant concerns:
+
 - **1 CRITICAL** security finding
 - **3 HIGH** severity issues
 - **6 MEDIUM** severity issues
@@ -43,6 +44,7 @@ return fingerprint.substring(0, 16);
 **File:** `js/storage/indexeddb.js:729-767, 799-907`
 
 **Problem:** The check-and-set pattern is NOT atomic in JavaScript:
+
 ```javascript
 async acquire() {
     while (this.lock) {
@@ -57,6 +59,7 @@ async acquire() {
 Between checking `while (this.lock)` and setting `this.lock`, another async function can be scheduled by the event loop.
 
 **Fix:** Use Promise chaining (not while loop):
+
 ```javascript
 async acquire() {
     const previousLock = this._lock || Promise.resolve();
@@ -87,25 +90,25 @@ async acquire() {
 
 ## MEDIUM Severity Findings
 
-| ID | Issue | File | Description |
-|----|-------|------|-------------|
-| M1 | Deep clone is shallow | session-state.js:45-56 | Function named `deepCloneMessage` only does `{ ...msg }` shallow copy |
-| M2 | No key rotation | license-verifier.js:60-63 | Hardcoded public key, no versioning mechanism |
-| M3 | setTimeout not guaranteed | turn-queue.js:165-175 | `setTimeout(fn, 0)` is not guaranteed immediate execution |
-| M4 | Versioning not tested | session-state.test.js | Mutex is mocked, so versioning behavior not actually tested |
-| M5 | Circular dep detection incomplete | di-container.js:270-288 | Only checks factories, not instances or controllers |
-| M6 | Session ID validation too permissive | session-list-controller.js:59-65 | No length limit, empty string not explicitly checked |
+| ID  | Issue                                | File                             | Description                                                           |
+| --- | ------------------------------------ | -------------------------------- | --------------------------------------------------------------------- |
+| M1  | Deep clone is shallow                | session-state.js:45-56           | Function named `deepCloneMessage` only does `{ ...msg }` shallow copy |
+| M2  | No key rotation                      | license-verifier.js:60-63        | Hardcoded public key, no versioning mechanism                         |
+| M3  | setTimeout not guaranteed            | turn-queue.js:165-175            | `setTimeout(fn, 0)` is not guaranteed immediate execution             |
+| M4  | Versioning not tested                | session-state.test.js            | Mutex is mocked, so versioning behavior not actually tested           |
+| M5  | Circular dep detection incomplete    | di-container.js:270-288          | Only checks factories, not instances or controllers                   |
+| M6  | Session ID validation too permissive | session-list-controller.js:59-65 | No length limit, empty string not explicitly checked                  |
 
 ---
 
 ## LOW Severity Findings
 
-| ID | Issue | File | Description |
-|----|-------|------|-------------|
-| L1 | innerHTML loses handlers | error-boundary.js:99-105 | Should use DOM cloning instead |
-| L2 | Constants duplicated | Multiple | `MAX_SAVED_MESSAGES` appears in multiple files |
-| L3 | Inconsistent error handling | Multiple | Some return objects, some throw |
-| L4 | Sidebar event cleanup | sidebar/index.js:260-268 | Actually correct - no issue |
+| ID  | Issue                       | File                     | Description                                    |
+| --- | --------------------------- | ------------------------ | ---------------------------------------------- |
+| L1  | innerHTML loses handlers    | error-boundary.js:99-105 | Should use DOM cloning instead                 |
+| L2  | Constants duplicated        | Multiple                 | `MAX_SAVED_MESSAGES` appears in multiple files |
+| L3  | Inconsistent error handling | Multiple                 | Some return objects, some throw                |
+| L4  | Sidebar event cleanup       | sidebar/index.js:260-268 | Actually correct - no issue                    |
 
 ---
 
@@ -120,6 +123,7 @@ The tests use a mock that doesn't simulate realistic async behavior. `processing
 ## References
 
 Best practices sources:
+
 - [Race Conditions and Unresolved Promises](https://dev.to/alex_aslam/tackling-asynchronous-bugs-in-javascript-race-conditions-and-unresolved-promises-7jo)
 - [Mutex in Node.js](https://shiftasia.com/community/mutex-in-node-js-synchronizing-asynchronous-operations)
 - [Promise Error Handling](https://www.geeksforgeeks.org/javascript/how-to-handle-errors-in-promise-all/)
@@ -132,6 +136,7 @@ Best practices sources:
 **Commit:** `4c15905`
 
 All 14 findings have been fixed:
+
 - C1: Device fingerprint now uses full 256-bit hash
 - H1-H3: All high priority issues resolved
 - M1-M6: All medium priority issues resolved

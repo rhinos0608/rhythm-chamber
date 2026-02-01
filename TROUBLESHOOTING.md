@@ -29,14 +29,14 @@ Most issues show error messages in the browser console:
 
 ```javascript
 // In browser console, run:
-Storage.getDataSummary()
+Storage.getDataSummary();
 // Returns: data status, sizes, session mode
 
-EventBus.getHealthStatus()
+EventBus.getHealthStatus();
 // Returns: event system health
 
 // Check Safe Mode status
-SafeMode.getSafeModeStatus()
+SafeMode.getSafeModeStatus();
 ```
 
 ---
@@ -46,11 +46,13 @@ SafeMode.getSafeModeStatus()
 ### Issue: "API key is required" Error
 
 **Symptoms:**
+
 - configuration model shows errors
 - Provider selection fails
 - Chat responses don't work
 
 **Causes:**
+
 - No API key configured
 - Key was cleared or revoked
 - Key format incorrect
@@ -70,6 +72,7 @@ SafeMode.getSafeModeStatus()
    - OpenAI: `sk-...` (starts with `sk-`)
 
 3. **Test key directly:**
+
    ```bash
    # Test OpenRouter key
    curl -H "Authorization: Bearer YOUR_KEY" \
@@ -86,10 +89,12 @@ SafeMode.getSafeModeStatus()
 ### Issue: "Model not compatible" Error
 
 **Symptoms:**
+
 - Error: `Model X is not compatible with YProvider`
 - Model selection dropdown is empty
 
 **Causes:**
+
 - Model name not supported by provider
 - Typo in model name
 - Using wrong provider for the model
@@ -98,14 +103,15 @@ SafeMode.getSafeModeStatus()
 
 1. **Check compatible models for each provider:**
 
-| Provider | Compatible Models |
-|----------|-------------------|
-| OpenRouter | `openai/gpt-4o`, `anthropic/claude-3.5-sonnet`, etc. |
-| Anthropic | `claude-3-5-sonnet-20241022`, `claude-3-haiku-20240307` |
-| OpenAI | `gpt-4o`, `gpt-4o-mini`, `gpt-3.5-turbo` |
-| Gemini | `gemini-2.0-flash-exp`, `gemini-1.5-pro` |
+| Provider   | Compatible Models                                       |
+| ---------- | ------------------------------------------------------- |
+| OpenRouter | `openai/gpt-4o`, `anthropic/claude-3.5-sonnet`, etc.    |
+| Anthropic  | `claude-3-5-sonnet-20241022`, `claude-3-haiku-20240307` |
+| OpenAI     | `gpt-4o`, `gpt-4o-mini`, `gpt-3.5-turbo`                |
+| Gemini     | `gemini-2.0-flash-exp`, `gemini-1.5-pro`                |
 
 2. **For OpenRouter, use full model paths:**
+
    ```
    Good: openai/gpt-4o
    Bad: gpt-4o
@@ -120,11 +126,13 @@ SafeMode.getSafeModeStatus()
 ### Issue: Custom Base URL / Proxy Not Working
 
 **Symptoms:**
+
 - Network errors when calling API
 - CORS errors in console
 - Timeouts on requests
 
 **Causes:**
+
 - Proxy server misconfigured
 - CORS not enabled on proxy
 - Wrong URL format
@@ -132,11 +140,13 @@ SafeMode.getSafeModeStatus()
 **Solutions:**
 
 1. **Verify proxy server is running:**
+
    ```bash
    curl https://your-proxy.com/status
    ```
 
 2. **Check CORS headers on proxy:**
+
    ```
    Access-Control-Allow-Origin: *
    Access-Control-Allow-Headers: Authorization, Content-Type
@@ -160,11 +170,13 @@ SafeMode.getSafeModeStatus()
 ### Issue: "Secure context required" Error
 
 **Symptoms:**
+
 - Error: `This feature requires a secure context`
 - Application doesn't load
 - Security warnings
 
 **Causes:**
+
 - Not using HTTPS
 - Using `file://` protocol
 - Using insecure HTTP (unless localhost)
@@ -189,11 +201,13 @@ SafeMode.getSafeModeStatus()
 ### Issue: Geographic Lockout / Travel Detection
 
 **Symptoms:**
+
 - Error: `Too many location changes detected`
 - Account temporarily locked
 - Reduced rate limits
 
 **Causes:**
+
 - Using VPN/proxy that changes location
 - Traveling between regions
 - Multiple browser sessions from different locations
@@ -210,8 +224,8 @@ SafeMode.getSafeModeStatus()
 3. **Clear location tracking:**
    ```javascript
    // In console (advanced)
-   localStorage.clear()
-   location.reload()
+   localStorage.clear();
+   location.reload();
    ```
 
 ---
@@ -219,11 +233,13 @@ SafeMode.getSafeModeStatus()
 ### Issue: Safe Mode Active
 
 **Symptoms:**
+
 - Orange banner at top of screen
 - Cannot save new data
 - Error: `Safe Mode active. Write blocked`
 
 **Causes:**
+
 - Security modules failed to load
 - Encryption unavailable
 - Critical security initialization failed
@@ -231,8 +247,9 @@ SafeMode.getSafeModeStatus()
 **Solutions:**
 
 1. **Check which modules failed:**
+
    ```javascript
-   SafeMode.getSafeModeStatus()
+   SafeMode.getSafeModeStatus();
    // Returns: { isSafeMode, failedModules, ... }
    ```
 
@@ -255,11 +272,13 @@ SafeMode.getSafeModeStatus()
 ### Issue: Data Not Persisting
 
 **Symptoms:**
+
 - Data disappears after refresh
 - Upload progress but no results
 - "Session only mode" warnings
 
 **Causes:**
+
 - Incognito/Private browsing mode
 - Browser storage cleared
 - Storage quota exceeded
@@ -271,9 +290,10 @@ SafeMode.getSafeModeStatus()
    - Or explicitly enable session persistence
 
 2. **Check storage quota:**
+
    ```javascript
    // Check usage
-   navigator.storage.estimate().then(console.log)
+   navigator.storage.estimate().then(console.log);
    ```
 
 3. **Clear old data to free space:**
@@ -290,10 +310,12 @@ SafeMode.getSafeModeStatus()
 ### Issue: "Database upgrade blocked by other tabs"
 
 **Symptoms:**
+
 - Error about database version
 - Multiple tabs open causing conflict
 
 **Causes:**
+
 - Multiple Rhythm Chamber tabs open
 - Background tab with old version
 
@@ -312,11 +334,13 @@ SafeMode.getSafeModeStatus()
 ### Issue: Corrupted Data / Parse Errors
 
 **Symptoms:**
+
 - `Error loading state: ...`
 - `Unexpected token in JSON`
 - App loads but data missing
 
 **Causes:**
+
 - Manual editing of localStorage
 - Incomplete write (tab closed during save)
 - Browser data corruption
@@ -324,8 +348,9 @@ SafeMode.getSafeModeStatus()
 **Solutions:**
 
 1. **Validate data consistency:**
+
    ```javascript
-   Storage.validateConsistency()
+   Storage.validateConsistency();
    ```
 
 2. **Export data before clearing:**
@@ -333,9 +358,10 @@ SafeMode.getSafeModeStatus()
    - "Export Profile" to save current data
 
 3. **Clear corrupted data:**
+
    ```javascript
    // CAUTION: This deletes all data
-   Storage.clearAllData()
+   Storage.clearAllData();
    ```
 
 4. **Re-upload from original Spotify export:**
@@ -348,11 +374,13 @@ SafeMode.getSafeModeStatus()
 ### Issue: Slow Embedding Generation
 
 **Symptoms:**
+
 - "Generating embeddings" takes long time
 - Browser becomes unresponsive
 - Progress bar moves slowly
 
 **Causes:**
+
 - Large streaming history (>100K tracks)
 - Low-end device
 - Battery saver mode active
@@ -373,7 +401,7 @@ SafeMode.getSafeModeStatus()
 4. **Check available memory:**
    ```javascript
    // Check heap size
-   console.log(performance.memory)
+   console.log(performance.memory);
    ```
 
 ---
@@ -381,10 +409,12 @@ SafeMode.getSafeModeStatus()
 ### Issue: Chat Responses Slow
 
 **Symptoms:**
+
 - Long wait for AI responses
 - Streaming stalls
 
 **Causes:**
+
 - Slow API provider
 - Network issues
 - Large context being processed
@@ -406,7 +436,9 @@ SafeMode.getSafeModeStatus()
 4. **Check network:**
    ```javascript
    // Test connectivity
-   fetch('https://openrouter.ai/api/v1/models').then(r => r.json()).then(console.log)
+   fetch('https://openrouter.ai/api/v1/models')
+     .then(r => r.json())
+     .then(console.log);
    ```
 
 ---
@@ -415,24 +447,27 @@ SafeMode.getSafeModeStatus()
 
 ### Supported Browsers
 
-| Browser | Minimum Version | Notes |
-|---------|----------------|-------|
-| Chrome/Edge | 90+ | Recommended |
-| Firefox | 88+ | Good support |
-| Safari | 14+ | Some limitations |
-| Opera | 76+ | Chromium-based |
+| Browser     | Minimum Version | Notes            |
+| ----------- | --------------- | ---------------- |
+| Chrome/Edge | 90+             | Recommended      |
+| Firefox     | 88+             | Good support     |
+| Safari      | 14+             | Some limitations |
+| Opera       | 76+             | Chromium-based   |
 
 ### Known Issues
 
 **Safari < 15:**
+
 - IndexedDB may have size limits
 - Web Crypto API slower
 
 **Firefox Private Mode:**
+
 - Storage cleared on close
 - Consider using normal mode
 
 **Mobile Browsers:**
+
 - Virtual keyboard may hide chat input
 - Use landscape mode for better experience
 
@@ -442,27 +477,27 @@ SafeMode.getSafeModeStatus()
 
 ### Security Errors
 
-| Error | Cause | Solution |
-|-------|-------|----------|
-| `Secure context required` | HTTP instead of HTTPS | Use HTTPS or localhost |
-| `Token binding verification failed` | Session changed | Reload page |
-| `Geographic lockout detected` | Location changes | Wait for cooldown |
+| Error                               | Cause                 | Solution               |
+| ----------------------------------- | --------------------- | ---------------------- |
+| `Secure context required`           | HTTP instead of HTTPS | Use HTTPS or localhost |
+| `Token binding verification failed` | Session changed       | Reload page            |
+| `Geographic lockout detected`       | Location changes      | Wait for cooldown      |
 
 ### Storage Errors
 
-| Error | Cause | Solution |
-|-------|-------|----------|
-| `IndexedDB database blocked` | Multiple tabs open | Close other tabs |
-| `Quota exceeded` | Too much data | Archive old streams |
-| `Invalid state` | Corrupted data | Clear and re-upload |
+| Error                        | Cause              | Solution            |
+| ---------------------------- | ------------------ | ------------------- |
+| `IndexedDB database blocked` | Multiple tabs open | Close other tabs    |
+| `Quota exceeded`             | Too much data      | Archive old streams |
+| `Invalid state`              | Corrupted data     | Clear and re-upload |
 
 ### Provider Errors
 
-| Error | Cause | Solution |
-|-------|-------|----------|
-| `401 Unauthorized` | Invalid API key | Check API key |
-| `Model not compatible` | Wrong model name | Use compatible model |
-| `Network error` | Connection failed | Check proxy/network |
+| Error                  | Cause             | Solution             |
+| ---------------------- | ----------------- | -------------------- |
+| `401 Unauthorized`     | Invalid API key   | Check API key        |
+| `Model not compatible` | Wrong model name  | Use compatible model |
+| `Network error`        | Connection failed | Check proxy/network  |
 
 ---
 
@@ -478,11 +513,11 @@ When reporting issues, include:
 4. Debug output:
    ```javascript
    console.log({
-       browser: navigator.userAgent,
-       storage: await Storage.getDataSummary(),
-       health: EventBus.getHealthStatus(),
-       safeMode: SafeMode.getSafeModeStatus()
-   })
+     browser: navigator.userAgent,
+     storage: await Storage.getDataSummary(),
+     health: EventBus.getHealthStatus(),
+     safeMode: SafeMode.getSafeModeStatus(),
+   });
    ```
 
 ### Support Channels
@@ -500,28 +535,28 @@ When reporting issues, include:
 ```javascript
 // Run in console to export everything
 const data = {
-    streams: await Storage.getStreams(),
-    personality: await Storage.getPersonality(),
-    chunks: await Storage.getChunks(),
-    sessions: await Storage.getAllSessions(),
-    settings: {...localStorage}
-}
+  streams: await Storage.getStreams(),
+  personality: await Storage.getPersonality(),
+  chunks: await Storage.getChunks(),
+  sessions: await Storage.getAllSessions(),
+  settings: { ...localStorage },
+};
 
 // Download as file
-const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'})
-const url = URL.createObjectURL(blob)
-const a = document.createElement('a')
-a.href = url
-a.download = `rhythm-chamber-backup-${new Date().toISOString().slice(0,10)}.json`
-a.click()
+const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+const url = URL.createObjectURL(blob);
+const a = document.createElement('a');
+a.href = url;
+a.download = `rhythm-chamber-backup-${new Date().toISOString().slice(0, 10)}.json`;
+a.click();
 ```
 
 ### Reset Everything
 
 ```javascript
 // DANGER: This deletes ALL data
-await Storage.clearAllData()
-location.reload()
+await Storage.clearAllData();
+location.reload();
 ```
 
 ---

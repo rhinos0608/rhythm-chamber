@@ -5,6 +5,7 @@
 **Goal:** Complete the SessionManager refactoring by restoring missing persistence functions, event listeners, and ensuring API compatibility with existing code.
 
 **Architecture:** The SessionManager was split into focused modules:
+
 - `session-state.js`: Session data management with mutex protection
 - `session-lifecycle.js`: Session CRUD operations and lifecycle
 - `index.js`: Internal coordinator
@@ -19,17 +20,20 @@ The refactoring is incomplete - critical persistence functions (`saveConversatio
 ## Context
 
 ### Missing Functions (Called by chat.js and message-lifecycle-coordinator.js)
+
 1. `saveConversation(delayMs)` - Debounced auto-save called after messages
 2. `flushPendingSaveAsync()` - Async save on visibilitychange
 3. `emergencyBackupSync()` - Sync backup on beforeunload/pagehide
 4. `recoverEmergencyBackup()` - Recover backup on init
 
 ### Missing Event Listeners
+
 - `visibilitychange` → `flushPendingSaveAsync()`
 - `beforeunload` → `emergencyBackupSync()`
 - `pagehide` → `emergencyBackupSync()`
 
 ### Original Implementation Location
+
 Commit `a5fddfb:js/services/session-manager.js` (lines 503-656)
 
 ---
@@ -37,6 +41,7 @@ Commit `a5fddfb:js/services/session-manager.js` (lines 503-656)
 ## Task 1: Add Persistence Module
 
 **Files:**
+
 - Create: `js/services/session-manager/session-persistence.js`
 - Test: `tests/unit/session-persistence.test.js`
 
@@ -48,39 +53,39 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as SessionPersistence from '../../js/services/session-manager/session-persistence.js';
 
 describe('SessionPersistence - saveConversation', () => {
-    beforeEach(() => {
-        vi.useFakeTimers();
-    });
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
 
-    it('should debounce save calls', () => {
-        const saveSpy = vi.spyOn(SessionPersistence, 'saveCurrentSession');
+  it('should debounce save calls', () => {
+    const saveSpy = vi.spyOn(SessionPersistence, 'saveCurrentSession');
 
-        SessionPersistence.saveConversation(2000);
-        SessionPersistence.saveConversation(1000);
-        SessionPersistence.saveConversation(500);
+    SessionPersistence.saveConversation(2000);
+    SessionPersistence.saveConversation(1000);
+    SessionPersistence.saveConversation(500);
 
-        expect(saveSpy).not.toHaveBeenCalled();
-        vi.advanceTimersByTime(500);
-        expect(saveSpy).toHaveBeenCalledOnce();
-    });
+    expect(saveSpy).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(500);
+    expect(saveSpy).toHaveBeenCalledOnce();
+  });
 });
 
 describe('SessionPersistence - emergencyBackupSync', () => {
-    it('should save backup to localStorage synchronously', () => {
-        // Mock current session state
-        SessionPersistence.setCurrentSessionId('test-id');
-        SessionPersistence.setSessionDataForTest({
-            id: 'test-id',
-            messages: [{ role: 'user', content: 'test' }]
-        });
-
-        SessionPersistence.emergencyBackupSync();
-
-        const backup = localStorage.getItem('rc_session_emergency_backup');
-        expect(backup).toBeTruthy();
-        const data = JSON.parse(backup);
-        expect(data.sessionId).toBe('test-id');
+  it('should save backup to localStorage synchronously', () => {
+    // Mock current session state
+    SessionPersistence.setCurrentSessionId('test-id');
+    SessionPersistence.setSessionDataForTest({
+      id: 'test-id',
+      messages: [{ role: 'user', content: 'test' }],
     });
+
+    SessionPersistence.emergencyBackupSync();
+
+    const backup = localStorage.getItem('rc_session_emergency_backup');
+    expect(backup).toBeTruthy();
+    const data = JSON.parse(backup);
+    expect(data.sessionId).toBe('test-id');
+  });
 });
 ```
 
@@ -124,11 +129,11 @@ let autoSaveTimeoutId = null;
  * @returns {*} Parsed object or fallback
  */
 function safeJsonParse(str, fallback) {
-    try {
-        return JSON.parse(str);
-    } catch {
-        return fallback;
-    }
+  try {
+    return JSON.parse(str);
+  } catch {
+    return fallback;
+  }
 }
 
 // ==========================================
@@ -141,13 +146,17 @@ function safeJsonParse(str, fallback) {
  * @returns {string} Generated session title
  */
 function generateSessionTitle(messages) {
-    const firstUserMsg = messages.find(m => m.role === 'user');
-    if (firstUserMsg?.content && typeof firstUserMsg.content === 'string' && firstUserMsg.content.trim().length > 0) {
-        const chars = Array.from(firstUserMsg.content.trim());
-        const title = chars.slice(0, 50).join('');
-        return chars.length > 50 ? title + '...' : title;
-    }
-    return 'New Chat';
+  const firstUserMsg = messages.find(m => m.role === 'user');
+  if (
+    firstUserMsg?.content &&
+    typeof firstUserMsg.content === 'string' &&
+    firstUserMsg.content.trim().length > 0
+  ) {
+    const chars = Array.from(firstUserMsg.content.trim());
+    const title = chars.slice(0, 50).join('');
+    return chars.length > 50 ? title + '...' : title;
+  }
+  return 'New Chat';
 }
 
 // ==========================================
@@ -159,41 +168,45 @@ function generateSessionTitle(messages) {
  * @returns {Promise<boolean>} True if save succeeded
  */
 export async function saveCurrentSession() {
-    const currentSessionId = SessionState.getCurrentSessionId();
-    if (!currentSessionId || !Storage.saveSession) {
-        return false;
-    }
+  const currentSessionId = SessionState.getCurrentSessionId();
+  if (!currentSessionId || !Storage.saveSession) {
+    return false;
+  }
 
-    const sessionData = SessionState.getSessionData();
-    const messages = sessionData.messages || [];
-    const currentSessionCreatedAt = SessionState.getCurrentSessionCreatedAt();
+  const sessionData = SessionState.getSessionData();
+  const messages = sessionData.messages || [];
+  const currentSessionCreatedAt = SessionState.getCurrentSessionCreatedAt();
 
-    try {
-        const systemMessages = messages.filter(m => m.role === 'system');
-        const nonSystemMessages = messages.filter(m => m.role !== 'system');
-        const messagesToSave = messages.length > MAX_SAVED_MESSAGES
-            ? [...systemMessages, ...nonSystemMessages.slice(-(MAX_SAVED_MESSAGES - systemMessages.length))]
-            : messages;
+  try {
+    const systemMessages = messages.filter(m => m.role === 'system');
+    const nonSystemMessages = messages.filter(m => m.role !== 'system');
+    const messagesToSave =
+      messages.length > MAX_SAVED_MESSAGES
+        ? [
+            ...systemMessages,
+            ...nonSystemMessages.slice(-(MAX_SAVED_MESSAGES - systemMessages.length)),
+          ]
+        : messages;
 
-        const session = {
-            id: currentSessionId,
-            title: generateSessionTitle(messages),
-            createdAt: currentSessionCreatedAt,
-            messages: messagesToSave,
-            metadata: {
-                personalityName: window._userContext?.personality?.name || 'Unknown',
-                personalityEmoji: window._userContext?.personality?.emoji || '🎵',
-                isLiteMode: false
-            }
-        };
+    const session = {
+      id: currentSessionId,
+      title: generateSessionTitle(messages),
+      createdAt: currentSessionCreatedAt,
+      messages: messagesToSave,
+      metadata: {
+        personalityName: window._userContext?.personality?.name || 'Unknown',
+        personalityEmoji: window._userContext?.personality?.emoji || '🎵',
+        isLiteMode: false,
+      },
+    };
 
-        await Storage.saveSession(session);
-        console.log('[SessionPersistence] Session saved:', currentSessionId);
-        return true;
-    } catch (e) {
-        console.error('[SessionPersistence] Failed to save session:', e);
-        return false;
-    }
+    await Storage.saveSession(session);
+    console.log('[SessionPersistence] Session saved:', currentSessionId);
+    return true;
+  } catch (e) {
+    console.error('[SessionPersistence] Failed to save session:', e);
+    return false;
+  }
 }
 
 /**
@@ -202,14 +215,14 @@ export async function saveCurrentSession() {
  * @param {number} delayMs - Delay in milliseconds (default: 2000)
  */
 export function saveConversation(delayMs = 2000) {
-    if (autoSaveTimeoutId) {
-        clearTimeout(autoSaveTimeoutId);
-    }
+  if (autoSaveTimeoutId) {
+    clearTimeout(autoSaveTimeoutId);
+  }
 
-    autoSaveTimeoutId = setTimeout(async () => {
-        await saveCurrentSession();
-        autoSaveTimeoutId = null;
-    }, delayMs);
+  autoSaveTimeoutId = setTimeout(async () => {
+    await saveCurrentSession();
+    autoSaveTimeoutId = null;
+  }, delayMs);
 }
 
 /**
@@ -217,29 +230,29 @@ export function saveConversation(delayMs = 2000) {
  * Called on visibilitychange when tab goes hidden
  */
 export async function flushPendingSaveAsync() {
-    if (autoSaveTimeoutId) {
-        clearTimeout(autoSaveTimeoutId);
-        autoSaveTimeoutId = null;
+  if (autoSaveTimeoutId) {
+    clearTimeout(autoSaveTimeoutId);
+    autoSaveTimeoutId = null;
+  }
+
+  const currentSessionId = SessionState.getCurrentSessionId();
+  const sessionData = SessionState.getSessionData();
+
+  if (currentSessionId && sessionData.id) {
+    try {
+      await saveCurrentSession();
+      console.log('[SessionPersistence] Session flushed on visibility change');
+
+      // Clear emergency backup after successful save
+      try {
+        localStorage.removeItem(SESSION_EMERGENCY_BACKUP_KEY);
+      } catch (e) {
+        console.warn('[SessionPersistence] Failed to clear emergency backup:', e);
+      }
+    } catch (e) {
+      console.error('[SessionPersistence] Flush save failed:', e);
     }
-
-    const currentSessionId = SessionState.getCurrentSessionId();
-    const sessionData = SessionState.getSessionData();
-
-    if (currentSessionId && sessionData.id) {
-        try {
-            await saveCurrentSession();
-            console.log('[SessionPersistence] Session flushed on visibility change');
-
-            // Clear emergency backup after successful save
-            try {
-                localStorage.removeItem(SESSION_EMERGENCY_BACKUP_KEY);
-            } catch (e) {
-                console.warn('[SessionPersistence] Failed to clear emergency backup:', e);
-            }
-        } catch (e) {
-            console.error('[SessionPersistence] Flush save failed:', e);
-        }
-    }
+  }
 }
 
 /**
@@ -247,27 +260,27 @@ export async function flushPendingSaveAsync() {
  * Called on beforeunload/pagehide when tab is closing
  */
 export function emergencyBackupSync() {
-    const currentSessionId = SessionState.getCurrentSessionId();
-    const sessionData = SessionState.getSessionData();
+  const currentSessionId = SessionState.getCurrentSessionId();
+  const sessionData = SessionState.getSessionData();
 
-    if (!currentSessionId || !sessionData.id) return;
+  if (!currentSessionId || !sessionData.id) return;
 
-    const messages = sessionData.messages || [];
-    if (messages.length === 0) return;
+  const messages = sessionData.messages || [];
+  if (messages.length === 0) return;
 
-    const backup = {
-        sessionId: currentSessionId,
-        createdAt: SessionState.getCurrentSessionCreatedAt(),
-        messages: messages.slice(-100),
-        timestamp: Date.now()
-    };
+  const backup = {
+    sessionId: currentSessionId,
+    createdAt: SessionState.getCurrentSessionCreatedAt(),
+    messages: messages.slice(-100),
+    timestamp: Date.now(),
+  };
 
-    try {
-        localStorage.setItem(SESSION_EMERGENCY_BACKUP_KEY, JSON.stringify(backup));
-        console.log('[SessionPersistence] Emergency backup saved');
-    } catch (e) {
-        console.error('[SessionPersistence] Emergency backup failed:', e);
-    }
+  try {
+    localStorage.setItem(SESSION_EMERGENCY_BACKUP_KEY, JSON.stringify(backup));
+    console.log('[SessionPersistence] Emergency backup saved');
+  } catch (e) {
+    console.error('[SessionPersistence] Emergency backup failed:', e);
+  }
 }
 
 /**
@@ -276,67 +289,67 @@ export function emergencyBackupSync() {
  * @returns {Promise<boolean>} True if backup was recovered
  */
 export async function recoverEmergencyBackup() {
-    let backupStr = null;
-    try {
-        backupStr = localStorage.getItem(SESSION_EMERGENCY_BACKUP_KEY);
-    } catch (e) {
-        console.error('[SessionPersistence] Failed to get emergency backup:', e);
-        return false;
+  let backupStr = null;
+  try {
+    backupStr = localStorage.getItem(SESSION_EMERGENCY_BACKUP_KEY);
+  } catch (e) {
+    console.error('[SessionPersistence] Failed to get emergency backup:', e);
+    return false;
+  }
+
+  if (!backupStr) return false;
+
+  const backup = safeJsonParse(backupStr, null);
+  if (!backup) {
+    console.warn('[SessionPersistence] Emergency backup is corrupted');
+    return false;
+  }
+
+  try {
+    // Only recover if backup is recent (< 1 hour)
+    if (Date.now() - backup.timestamp > SESSION_EMERGENCY_BACKUP_MAX_AGE_MS) {
+      console.log('[SessionPersistence] Emergency backup too old, discarding');
+      localStorage.removeItem(SESSION_EMERGENCY_BACKUP_KEY);
+      return false;
     }
 
-    if (!backupStr) return false;
+    let saveSuccess = false;
 
-    const backup = safeJsonParse(backupStr, null);
-    if (!backup) {
-        console.warn('[SessionPersistence] Emergency backup is corrupted');
-        return false;
+    // Check if session exists with fewer messages
+    const existing = await Storage.getSession?.(backup.sessionId);
+    if (existing) {
+      const existingCount = existing.messages?.length || 0;
+      const backupCount = backup.messages?.length || 0;
+
+      if (backupCount > existingCount) {
+        existing.messages = backup.messages;
+        existing.createdAt = backup.createdAt || existing.createdAt;
+        await Storage.saveSession(existing);
+        saveSuccess = true;
+        console.log('[SessionPersistence] Recovered', backupCount - existingCount, 'messages');
+      } else {
+        saveSuccess = true;
+      }
+    } else if (backup.messages?.length > 0) {
+      await Storage.saveSession?.({
+        id: backup.sessionId,
+        title: 'Recovered Chat',
+        createdAt: backup.createdAt,
+        messages: backup.messages,
+      });
+      saveSuccess = true;
+      console.log('[SessionPersistence] Created session from emergency backup');
     }
 
-    try {
-        // Only recover if backup is recent (< 1 hour)
-        if (Date.now() - backup.timestamp > SESSION_EMERGENCY_BACKUP_MAX_AGE_MS) {
-            console.log('[SessionPersistence] Emergency backup too old, discarding');
-            localStorage.removeItem(SESSION_EMERGENCY_BACKUP_KEY);
-            return false;
-        }
-
-        let saveSuccess = false;
-
-        // Check if session exists with fewer messages
-        const existing = await Storage.getSession?.(backup.sessionId);
-        if (existing) {
-            const existingCount = existing.messages?.length || 0;
-            const backupCount = backup.messages?.length || 0;
-
-            if (backupCount > existingCount) {
-                existing.messages = backup.messages;
-                existing.createdAt = backup.createdAt || existing.createdAt;
-                await Storage.saveSession(existing);
-                saveSuccess = true;
-                console.log('[SessionPersistence] Recovered', backupCount - existingCount, 'messages');
-            } else {
-                saveSuccess = true;
-            }
-        } else if (backup.messages?.length > 0) {
-            await Storage.saveSession?.({
-                id: backup.sessionId,
-                title: 'Recovered Chat',
-                createdAt: backup.createdAt,
-                messages: backup.messages
-            });
-            saveSuccess = true;
-            console.log('[SessionPersistence] Created session from emergency backup');
-        }
-
-        if (saveSuccess) {
-            localStorage.removeItem(SESSION_EMERGENCY_BACKUP_KEY);
-        }
-
-        return saveSuccess;
-    } catch (e) {
-        console.error('[SessionPersistence] Failed to recover emergency backup:', e);
-        return false;
+    if (saveSuccess) {
+      localStorage.removeItem(SESSION_EMERGENCY_BACKUP_KEY);
     }
+
+    return saveSuccess;
+  } catch (e) {
+    console.error('[SessionPersistence] Failed to recover emergency backup:', e);
+    return false;
+  }
 }
 
 /**
@@ -344,17 +357,17 @@ export async function recoverEmergencyBackup() {
  * @returns {number|null} Timeout ID
  */
 export function getAutoSaveTimeoutId() {
-    return autoSaveTimeoutId;
+  return autoSaveTimeoutId;
 }
 
 /**
  * Clear auto-save timeout (for testing)
  */
 export function clearAutoSaveTimeout() {
-    if (autoSaveTimeoutId) {
-        clearTimeout(autoSaveTimeoutId);
-        autoSaveTimeoutId = null;
-    }
+  if (autoSaveTimeoutId) {
+    clearTimeout(autoSaveTimeoutId);
+    autoSaveTimeoutId = null;
+  }
 }
 
 console.log('[SessionPersistence] Module loaded');
@@ -377,6 +390,7 @@ git commit -m "feat(session-manager): add persistence module for auto-save and e
 ## Task 2: Integrate Persistence Module into Internal Index
 
 **Files:**
+
 - Modify: `js/services/session-manager/index.js`
 
 **Step 1: Update internal index to import and re-export persistence**
@@ -397,34 +411,34 @@ export { SessionPersistence };
 ```javascript
 // In createManager() function, add:
 export function createManager() {
-    const instance = {
-        // ... existing properties
-        persistence: SessionPersistence,
+  const instance = {
+    // ... existing properties
+    persistence: SessionPersistence,
 
-        // Add persistence methods to instance
-        async saveCurrentSession() {
-            return await SessionPersistence.saveCurrentSession();
-        },
+    // Add persistence methods to instance
+    async saveCurrentSession() {
+      return await SessionPersistence.saveCurrentSession();
+    },
 
-        saveConversation(delayMs) {
-            SessionPersistence.saveConversation(delayMs);
-        },
+    saveConversation(delayMs) {
+      SessionPersistence.saveConversation(delayMs);
+    },
 
-        async flushPendingSaveAsync() {
-            return await SessionPersistence.flushPendingSaveAsync();
-        },
+    async flushPendingSaveAsync() {
+      return await SessionPersistence.flushPendingSaveAsync();
+    },
 
-        emergencyBackupSync() {
-            SessionPersistence.emergencyBackupSync();
-        },
+    emergencyBackupSync() {
+      SessionPersistence.emergencyBackupSync();
+    },
 
-        async recoverEmergencyBackup() {
-            return await SessionPersistence.recoverEmergencyBackup();
-        },
+    async recoverEmergencyBackup() {
+      return await SessionPersistence.recoverEmergencyBackup();
+    },
 
-        // ... existing cleanup
-    };
-    return instance;
+    // ... existing cleanup
+  };
+  return instance;
 }
 ```
 
@@ -445,6 +459,7 @@ git commit -m "feat(session-manager): integrate persistence module into internal
 ## Task 3: Add Persistence Methods to Facade
 
 **Files:**
+
 - Modify: `js/services/session-manager.js`
 
 **Step 1: Add persistence methods to SessionManager class**
@@ -516,23 +531,23 @@ Add to `tests/unit/api-compatibility.test.js` in the SessionManager section:
 
 ```javascript
 it('should have saveCurrentSession method', () => {
-    expect(typeof SessionManager.saveCurrentSession).toBe('function');
+  expect(typeof SessionManager.saveCurrentSession).toBe('function');
 });
 
 it('should have saveConversation method', () => {
-    expect(typeof SessionManager.saveConversation).toBe('function');
+  expect(typeof SessionManager.saveConversation).toBe('function');
 });
 
 it('should have flushPendingSaveAsync method', () => {
-    expect(typeof SessionManager.flushPendingSaveAsync).toBe('function');
+  expect(typeof SessionManager.flushPendingSaveAsync).toBe('function');
 });
 
 it('should have emergencyBackupSync method', () => {
-    expect(typeof SessionManager.emergencyBackupSync).toBe('function');
+  expect(typeof SessionManager.emergencyBackupSync).toBe('function');
 });
 
 it('should have recoverEmergencyBackup method', () => {
-    expect(typeof SessionManager.recoverEmergencyBackup).toBe('function');
+  expect(typeof SessionManager.recoverEmergencyBackup).toBe('function');
 });
 ```
 
@@ -553,6 +568,7 @@ git commit -m "feat(session-manager): add persistence methods to facade"
 ## Task 4: Register Event Listeners for Persistence
 
 **Files:**
+
 - Modify: `js/services/session-manager.js`
 
 **Step 1: Add event listener registration**
@@ -623,16 +639,16 @@ static async initialize() {
 // In tests/unit/api-compatibility.test.js, add to SessionManager section:
 
 it('should have registerEventListeners method', () => {
-    expect(typeof SessionManager.registerEventListeners).toBe('function');
+  expect(typeof SessionManager.registerEventListeners).toBe('function');
 });
 
 it('should register event listeners only once', () => {
-    const initialRegistered = SessionManager.eventListenersRegistered;
-    SessionManager.registerEventListeners();
-    expect(SessionManager.eventListenersRegistered).toBe(true);
-    // Should not register twice
-    SessionManager.registerEventListeners();
-    expect(SessionManager.eventListenersRegistered).toBe(true);
+  const initialRegistered = SessionManager.eventListenersRegistered;
+  SessionManager.registerEventListeners();
+  expect(SessionManager.eventListenersRegistered).toBe(true);
+  // Should not register twice
+  SessionManager.registerEventListeners();
+  expect(SessionManager.eventListenersRegistered).toBe(true);
 });
 ```
 
@@ -653,6 +669,7 @@ git commit -m "feat(session-manager): register event listeners for persistence"
 ## Task 5: Update Chat.js to Use Facade Methods
 
 **Files:**
+
 - Modify: `js/chat.js`
 
 **Step 1: Verify existing calls work**
@@ -689,6 +706,7 @@ npm run test
 ## Task 6: Update MessageLifecycleCoordinator to Use Facade
 
 **Files:**
+
 - Verify: `js/services/message-lifecycle-coordinator.js`
 
 **Step 1: Verify existing calls work**
@@ -709,6 +727,7 @@ Expected: All tests pass
 ## Task 7: Add EventBus Schema Registration
 
 **Files:**
+
 - Modify: `js/services/session-manager/session-lifecycle.js`
 
 **Step 1: Add schema exports**
@@ -723,26 +742,26 @@ The session-lifecycle module already emits events via EventBus. Add schema defin
  * Registered with EventBus during initialization for decentralized schema management
  */
 export const SESSION_EVENT_SCHEMAS = {
-    'session:created': {
-        description: 'New session created',
-        payload: { sessionId: 'string', title: 'string' }
-    },
-    'session:loaded': {
-        description: 'Session loaded from storage',
-        payload: { sessionId: 'string', messageCount: 'number' }
-    },
-    'session:switched': {
-        description: 'Switched to different session',
-        payload: { fromSessionId: 'string|null', toSessionId: 'string' }
-    },
-    'session:deleted': {
-        description: 'Session deleted',
-        payload: { sessionId: 'string' }
-    },
-    'session:updated': {
-        description: 'Session data updated',
-        payload: { sessionId: 'string', field: 'string' }
-    }
+  'session:created': {
+    description: 'New session created',
+    payload: { sessionId: 'string', title: 'string' },
+  },
+  'session:loaded': {
+    description: 'Session loaded from storage',
+    payload: { sessionId: 'string', messageCount: 'number' },
+  },
+  'session:switched': {
+    description: 'Switched to different session',
+    payload: { fromSessionId: 'string|null', toSessionId: 'string' },
+  },
+  'session:deleted': {
+    description: 'Session deleted',
+    payload: { sessionId: 'string' },
+  },
+  'session:updated': {
+    description: 'Session data updated',
+    payload: { sessionId: 'string', field: 'string' },
+  },
 };
 ```
 
@@ -799,6 +818,7 @@ git commit -m "feat(session-manager): add EventBus schema registration"
 ## Task 8: Update API Compatibility Documentation
 
 **Files:**
+
 - Modify: `tests/unit/api-compatibility.test.js`
 
 **Step 1: Update breaking changes documentation**
@@ -807,32 +827,33 @@ git commit -m "feat(session-manager): add EventBus schema registration"
 // Update the "API Breaking Changes - Documentation" section:
 
 describe('API Breaking Changes - Documentation', () => {
-    it('should document SessionManager breaking changes', () => {
-        const breakingChanges = {
-            'init()': 'initialize() - Has alias for backward compatibility',
-            'createNewSession()': 'createSession() - Use new name',
-            'deleteSessionById()': 'deleteSession() - Use new name',
-            'clearConversation()': 'clearAllSessions() - Use new name',
-            'listSessions()': 'getAllSessions() - Use new name',
-            'setUserContext()': 'Deprecated - Still exists as no-op with warning',
-            'onSessionUpdate()': 'Removed - Use individual EventBus.on() calls for each session event instead (session:created, session:loaded, session:switched, session:deleted, session:updated) - EventBus does NOT support wildcard patterns like "session:*"',
-            'switchSession()': 'Still available - Moved to internal module',
-            'loadSession()': 'Still available - Use activateSession() or loadSession()',
-            // New persistence methods added
-            'saveConversation()': 'Available - Added back in refactoring',
-            'flushPendingSaveAsync()': 'Available - Added back in refactoring',
-            'emergencyBackupSync()': 'Available - Added back in refactoring',
-            'recoverEmergencyBackup()': 'Available - Added back in refactoring'
-        };
+  it('should document SessionManager breaking changes', () => {
+    const breakingChanges = {
+      'init()': 'initialize() - Has alias for backward compatibility',
+      'createNewSession()': 'createSession() - Use new name',
+      'deleteSessionById()': 'deleteSession() - Use new name',
+      'clearConversation()': 'clearAllSessions() - Use new name',
+      'listSessions()': 'getAllSessions() - Use new name',
+      'setUserContext()': 'Deprecated - Still exists as no-op with warning',
+      'onSessionUpdate()':
+        'Removed - Use individual EventBus.on() calls for each session event instead (session:created, session:loaded, session:switched, session:deleted, session:updated) - EventBus does NOT support wildcard patterns like "session:*"',
+      'switchSession()': 'Still available - Moved to internal module',
+      'loadSession()': 'Still available - Use activateSession() or loadSession()',
+      // New persistence methods added
+      'saveConversation()': 'Available - Added back in refactoring',
+      'flushPendingSaveAsync()': 'Available - Added back in refactoring',
+      'emergencyBackupSync()': 'Available - Added back in refactoring',
+      'recoverEmergencyBackup()': 'Available - Added back in refactoring',
+    };
 
-        // Verify backward compatibility
-        expect(typeof SessionManager.init).toBe('function');
-        expect(typeof SessionManager.initialize).toBe('function');
-        expect(typeof SessionManager.saveConversation).toBe('function');
-        expect(typeof SessionManager.flushPendingSaveAsync).toBe('function');
-        expect(typeof SessionManager.emergencyBackupSync).toBe('function');
-        expect(typeof SessionManager.recoverEmergencyBackup).toBe('function');
-    });
+    // Verify backward compatibility
+    expect(typeof SessionManager.init).toBe('function');
+    expect(typeof SessionManager.initialize).toBe('function');
+    expect(typeof SessionManager.saveConversation).toBe('function');
+    expect(typeof SessionManager.flushPendingSaveAsync).toBe('function');
+    expect(typeof SessionManager.emergencyBackupSync).toBe('function');
+    expect(typeof SessionManager.recoverEmergencyBackup).toBe('function');
+  });
 });
 ```
 
@@ -853,6 +874,7 @@ git commit -m "docs(session-manager): update API compatibility documentation"
 ## Task 9: Final Integration Test
 
 **Files:**
+
 - Test: Full test suite
 
 **Step 1: Run all unit tests**
@@ -887,6 +909,7 @@ git commit -m "feat(session-manager): complete refactoring with persistence and 
 ## Summary
 
 After completing all tasks:
+
 - 4 persistence functions restored (`saveConversation`, `flushPendingSaveAsync`, `emergencyBackupSync`, `recoverEmergencyBackup`)
 - 3 event listeners registered (visibilitychange, beforeunload, pagehide)
 - EventBus schemas registered
@@ -895,12 +918,14 @@ After completing all tasks:
 - Emergency backup functionality working for data recovery
 
 **Total estimated changes:**
+
 - 1 new file: `session-persistence.js`
 - 3 modified files: `index.js`, `session-lifecycle.js`, `session-manager.js`
 - 1 new test file: `session-persistence.test.js`
 - 2 updated test files: `api-compatibility.test.js`, existing session-manager tests
 
 **Test coverage:**
+
 - API compatibility: 55+ tests
 - Persistence: 10+ tests
 - Integration: Existing Playwright tests verify end-to-end

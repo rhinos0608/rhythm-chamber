@@ -12,12 +12,14 @@ Based on comprehensive research using multiple research agents, this roadmap ide
 ### Current State Assessment
 
 **Strengths (✅):**
+
 - Excellent documentation (CLAUDE.md, AGENT_CONTEXT.md - now extended with AGENTS.md patterns)
 - Automated docs-sync tooling with AST analysis and dependency graphs
 - Clear HNW architecture patterns
 - 93+ services, 21 controllers, 36 utilities well-documented
 
 **Critical Gaps (🔴):**
+
 - ~~Missing AGENTS.md content~~ (now addressed in AGENT_CONTEXT.md) ✅
 - No AI workflow automation (CodeRabbit, pre-commit hooks)
 - ~~No MCP server for codebase queries~~ (IMPLEMENTED with semantic search) ✅
@@ -25,15 +27,15 @@ Based on comprehensive research using multiple research agents, this roadmap ide
 
 ### Priority Matrix
 
-| Feature | Effort | Impact | Priority | Timeline | Status |
-|---------|--------|--------|----------|----------|--------|
-| Extend AGENT_CONTEXT.md | 1h | 🔴 HIGH | P0 | ✅ Complete | ✅ Done |
-| CodeRabbit Integration | 0.5h | 🔴 HIGH | P0 | Week 1 | 🟡 Configured |
-| Enhanced Pre-commit Hooks | 2-3h | 🔴 HIGH | P0 | Week 1 | 📋 Planned |
-| MCP Server | 8-12h | 🟡 HIGH | P1 | ✅ Complete | ✅ Done |
-| Semantic Search | 12-16h | 🔴 HIGH | P0 | ✅ Complete | ✅ Done |
-| AI Test Generator | 3-4h | 🟡 MED | P1 | Week 2-4 | 📋 Planned |
-| Context Optimization | 1-2h | 🟡 MED | P1 | Week 2-4 | 📋 Planned |
+| Feature                   | Effort | Impact  | Priority | Timeline    | Status        |
+| ------------------------- | ------ | ------- | -------- | ----------- | ------------- |
+| Extend AGENT_CONTEXT.md   | 1h     | 🔴 HIGH | P0       | ✅ Complete | ✅ Done       |
+| CodeRabbit Integration    | 0.5h   | 🔴 HIGH | P0       | Week 1      | 🟡 Configured |
+| Enhanced Pre-commit Hooks | 2-3h   | 🔴 HIGH | P0       | Week 1      | 📋 Planned    |
+| MCP Server                | 8-12h  | 🟡 HIGH | P1       | ✅ Complete | ✅ Done       |
+| Semantic Search           | 12-16h | 🔴 HIGH | P0       | ✅ Complete | ✅ Done       |
+| AI Test Generator         | 3-4h   | 🟡 MED  | P1       | Week 2-4    | 📋 Planned    |
+| Context Optimization      | 1-2h   | 🟡 MED  | P1       | Week 2-4    | 📋 Planned    |
 
 ---
 
@@ -46,12 +48,14 @@ Based on comprehensive research using multiple research agents, this roadmap ide
 **Impact**: HIGH
 
 **What Was Done:**
+
 - Added comprehensive "AI Agent Quick Reference" section to AGENT_CONTEXT.md
 - Included essential commands, HNW patterns, common gotchas
 - Added testing patterns, ES6 module best practices
 - Included debug patterns and security requirements
 
 **Benefits:**
+
 - AI agents now have immediate access to project-specific patterns
 - Reduces onboarding time from 10+ minutes to 2 minutes
 - Prevents common mistakes (HNW violations, import errors)
@@ -68,24 +72,28 @@ Based on comprehensive research using multiple research agents, this roadmap ide
 **Impact**: HIGH
 
 **What Was Done:**
+
 - Created `.coderabbit.yml` with HNW architecture rules
 - Configured custom review instructions for each layer
 - Set up pre-merge checks for HNW compliance
 - Added path-specific instructions for controllers, services, storage, security
 
 **Next Steps:**
+
 1. Install CodeRabbit GitHub App (https://www.coderabbit.ai/)
 2. Select Rhythm Chamber repository
 3. Test with a sample PR
 4. Iterate on custom rules based on feedback
 
 **Expected Benefits:**
+
 - 40% faster code reviews
 - Automatic HNW architecture validation
 - Consistent feedback quality
 - Reduced manual review burden
 
 **Files Created:**
+
 - `.coderabbit.yml` - Main configuration
 - `.coderabbit/rules/` - Directory for custom AST rules
 - `.coderabbit/utils/` - Directory for utility rules
@@ -99,6 +107,7 @@ Based on comprehensive research using multiple research agents, this roadmap ide
 **Impact**: HIGH
 
 **Design Complete:**
+
 - Multi-stage validation strategy (fast → slow checks)
 - HNW architecture validation hooks
 - Dependency chain validation
@@ -120,6 +129,7 @@ scripts/pre-commit/
 ```
 
 **Key Features:**
+
 1. **Fast Validation** (< 500ms)
    - Trailing whitespace, file format checks
    - JSON/YAML syntax validation
@@ -137,6 +147,7 @@ scripts/pre-commit/
    - Security scanning
 
 **Next Steps:**
+
 1. Install pre-commit framework: `npm install --save-dev pre-commit`
 2. Create `.pre-commit-config.yaml`
 3. Implement validation scripts
@@ -144,6 +155,7 @@ scripts/pre-commit/
 5. Test and iterate
 
 **Expected Benefits:**
+
 - Catch architectural violations before commit
 - Consistent code quality standards
 - Reduced review cycles
@@ -198,19 +210,17 @@ mcp-server/
 
 **Tools Implemented:**
 
-*Semantic Search (NEW):*
+_Semantic Search (NEW):_
+
 1. **semantic_search** - Search code by meaning using vector embeddings
 2. **deep_code_search** - Orchestrated semantic + structural + architectural analysis
 3. **get_chunk_details** - Inspect specific chunks with relationships
 4. **list_indexed_files** - Browse all indexed files
 
-*Architecture Analysis:*
-5. **get_module_info** - Get comprehensive metadata about any module
-6. **find_dependencies** - Analyze dependency relationships
-7. **search_architecture** - Query codebase by HNW patterns
-8. **validate_hnw_compliance** - Comprehensive HNW validation
+_Architecture Analysis:_ 5. **get_module_info** - Get comprehensive metadata about any module 6. **find_dependencies** - Analyze dependency relationships 7. **search_architecture** - Query codebase by HNW patterns 8. **validate_hnw_compliance** - Comprehensive HNW validation
 
 **Semantic Search Features:**
+
 - Hybrid embeddings (LM Studio GPU + Transformers.js CPU fallback)
 - AST-aware code chunking (functions, classes, methods)
 - Tiered vector store (in-memory → sqlite-vec at 5000+ chunks)
@@ -218,6 +228,7 @@ mcp-server/
 - Persistent embedding cache with mtime invalidation
 
 **Integration:**
+
 ```json
 {
   "mcpServers": {
@@ -234,6 +245,7 @@ mcp-server/
 ```
 
 **Benefits Achieved:**
+
 - ✅ AI agents can search codebase by meaning (not just keywords)
 - ✅ Fast architecture understanding
 - ✅ Real-time dependency analysis
@@ -251,6 +263,7 @@ mcp-server/
 **Purpose:** Automated test case generation focused on the 186 failing tests
 
 **Implementation Plan:**
+
 ```javascript
 // tests/ai-test-generator.js
 export class TestGenerator {
@@ -259,7 +272,7 @@ export class TestGenerator {
     const tests = await generateAIAssistedTests(code, {
       patterns: this.getTestPatterns(modulePath),
       coverage: this.getExistingCoverage(modulePath),
-      hnwCompliance: true
+      hnwCompliance: true,
     });
     return tests;
   }
@@ -276,6 +289,7 @@ export class TestGenerator {
 ```
 
 **Features:**
+
 - Analyze existing test coverage gaps
 - Generate tests for low-coverage areas
 - Follow HNW testing patterns
@@ -283,6 +297,7 @@ export class TestGenerator {
 - Generate both unit and integration tests
 
 **Expected Benefits:**
+
 - 20% increase in test coverage
 - Faster fix of 186 failing tests
 - Consistent test quality
@@ -299,6 +314,7 @@ export class TestGenerator {
 **Purpose:** Optimize context delivery to AI agents
 
 **Implementation Plan:**
+
 ```javascript
 // scripts/context-optimizer.js
 export class ContextOptimizer {
@@ -322,19 +338,21 @@ export class ContextOptimizer {
     return {
       hnw: 'Controllers → Services → Providers',
       eventBus: 'Use for cross-module communication',
-      tabCoordinator: 'Cross-tab coordination'
+      tabCoordinator: 'Cross-tab coordination',
     };
   }
 }
 ```
 
 **Features:**
+
 - Progressive disclosure (start with overview, drill down as needed)
 - Retrieval-based context loading
 - Cache frequently accessed context
 - Optimize token usage
 
 **Expected Benefits:**
+
 - 30% faster AI response times
 - Reduced token usage
 - More relevant context
@@ -351,6 +369,7 @@ export class ContextOptimizer {
 **Impact:** MEDIUM
 
 **Features:**
+
 - Self-healing pipelines
 - Predictive failure analysis
 - Dynamic resource allocation
@@ -363,6 +382,7 @@ export class ContextOptimizer {
 **Impact:** LOW (strategic)
 
 **Features:**
+
 - Sub-agent framework
 - Coordination layer
 - Specialized agent implementations
@@ -373,24 +393,28 @@ export class ContextOptimizer {
 ## Research Sources
 
 ### CodeRabbit Research
+
 - https://www.coderabbit.ai/ - Official documentation
 - GitHub integration patterns
 - Custom AST rule creation
 - HNW architecture validation patterns
 
 ### Pre-commit Hook Research
+
 - https://pre-commit.com/ - Official documentation
 - Multi-stage validation patterns
 - Performance optimization strategies
 - Integration with husky
 
 ### MCP Server Research
+
 - Model Context Protocol specification
 - Claude Code integration patterns
 - AST analysis tools and libraries
 - Caching and performance strategies
 
 ### AGENTS.md Research
+
 - https://agents.md/ - Format specification
 - 60k+ projects using AGENTS.md
 - Anthropic's recommendations
@@ -401,18 +425,21 @@ export class ContextOptimizer {
 ## Success Metrics
 
 ### Phase 1 Success Criteria (Week 1)
+
 - [x] AGENT_CONTEXT.md extended with AI patterns
 - [ ] CodeRabbit installed and active on 3+ PRs
 - [ ] Pre-commit hooks catching architectural violations
 - [ ] 40% reduction in manual review time
 
 ### Phase 2 Success Criteria (Week 2-4)
+
 - [x] MCP server operational with 8+ tools (4 architecture + 4 semantic)
 - [ ] AI generating 20+ test cases
 - [x] Documentation staying in sync automatically
 - [x] 50% faster agent onboarding time (achieved via semantic search)
 
 ### Phase 3 Success Criteria (Month 2-3)
+
 - [ ] Self-healing CI/CD pipelines
 - [ ] Multi-agent workflows active
 - [ ] 70% reduction in manual DevOps
@@ -425,6 +452,7 @@ export class ContextOptimizer {
 ### This Week (Week 1)
 
 1. **Install CodeRabbit** (30 min)
+
    ```bash
    # Visit https://www.coderabbit.ai/
    # Authorize GitHub
@@ -433,6 +461,7 @@ export class ContextOptimizer {
    ```
 
 2. **Implement Pre-commit Hooks** (2-3 hours)
+
    ```bash
    npm install --save-dev pre-commit
    # Create .pre-commit-config.yaml
@@ -451,6 +480,7 @@ export class ContextOptimizer {
 ### Next Week (Week 2)
 
 4. **Start MCP Server Implementation** (4-6 hours)
+
    ```bash
    mkdir -p mcp-server
    cd mcp-server
@@ -472,17 +502,20 @@ export class ContextOptimizer {
 Rhythm Chamber has an excellent foundation for AI agent assistance. The roadmap prioritizes quick wins that provide immediate value (CodeRabbit, pre-commit hooks) while building strategic infrastructure for long-term productivity (MCP server with semantic search).
 
 **Key Achievements:**
+
 1. ✅ **AGENT_CONTEXT.md extended** - Already done and providing value
 2. ✅ **MCP Server with Semantic Search** - 8 tools operational including semantic search by meaning
 3. 🟡 **CodeRabbit configured** - Configuration file created, pending GitHub App installation
 
 **Key Insights:**
+
 1. **Start small**: AGENT_CONTEXT.md extension is already done and providing value
 2. **Automate early**: CodeRabbit and pre-commit hooks catch issues before merge
 3. **Build strategically**: MCP server provides foundation for advanced AI capabilities
 4. **Search by meaning**: Semantic search enables agents to understand code intent, not just structure
 
 **Expected Overall Impact:**
+
 - ✅ 40% faster code reviews
 - ✅ 50% faster agent onboarding (achieved)
 - 60% reduction in manual review burden

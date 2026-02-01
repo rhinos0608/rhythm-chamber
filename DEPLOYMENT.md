@@ -39,12 +39,12 @@ The built files will be in the `dist/` directory.
 
 ### Build Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm run build` | Build production assets to `dist/` |
-| `npm run build:dev` | Alias for `npm run build` |
-| `npm run dev:dist` | Serve the `dist/` directory locally on port 8080 |
-| `npm run dev` | Serve source files (development mode) |
+| Command                 | Description                                              |
+| ----------------------- | -------------------------------------------------------- |
+| `npm run build`         | Build production assets to `dist/`                       |
+| `npm run build:dev`     | Alias for `npm run build`                                |
+| `npm run dev:dist`      | Serve the `dist/` directory locally on port 8080         |
+| `npm run dev`           | Serve source files (development mode)                    |
 | `npm run dev:coop-coep` | Serve with COOP/COEP headers (SharedArrayBuffer support) |
 
 ### Build Output
@@ -75,11 +75,11 @@ The build process provides approximately:
 
 #### Before vs After
 
-| Asset | Original | Minified | Reduction |
-|-------|----------|----------|-----------|
-| main.js | 20.3 KB | 5.8 KB | 71.7% |
-| pattern-worker-pool.js | 27.3 KB | 6.4 KB | 76.7% |
-| styles.css | 96.4 KB | 73.5 KB | 23.8% |
+| Asset                  | Original | Minified | Reduction |
+| ---------------------- | -------- | -------- | --------- |
+| main.js                | 20.3 KB  | 5.8 KB   | 71.7%     |
+| pattern-worker-pool.js | 27.3 KB  | 6.4 KB   | 76.7%     |
+| styles.css             | 96.4 KB  | 73.5 KB  | 23.8%     |
 
 ---
 
@@ -96,6 +96,7 @@ SharedArrayBuffer enables zero-copy data transfer between the main thread and We
 - **Embedding generation**: Local text vectorization
 
 **Performance Impact**:
+
 - **Without SharedArrayBuffer**: Structured clone overhead (~50-200ms per operation)
 - **With SharedArrayBuffer**: Zero-copy memory access (~5-20ms per operation)
 - **Dataset size matters**: Benefits increase with larger datasets (500+ vectors)
@@ -122,11 +123,13 @@ Cross-Origin-Embedder-Policy: require-corp
 **Deployment Steps**:
 
 1. **Install Vercel CLI**:
+
    ```bash
    npm i -g vercel
    ```
 
 2. **Deploy**:
+
    ```bash
    vercel
    ```
@@ -134,6 +137,7 @@ Cross-Origin-Embedder-Policy: require-corp
 3. **Configuration**: The `vercel.json` file in the repository includes COOP/COEP headers
 
 **Notes**:
+
 - SharedArrayBuffer is automatically enabled
 - No additional configuration required
 - Works with custom domains
@@ -145,11 +149,13 @@ Cross-Origin-Embedder-Policy: require-corp
 **Deployment Steps**:
 
 1. **Install Netlify CLI**:
+
    ```bash
    npm i -g netlify-cli
    ```
 
 2. **Deploy**:
+
    ```bash
    netlify deploy --prod
    ```
@@ -157,6 +163,7 @@ Cross-Origin-Embedder-Policy: require-corp
 3. **Configuration**: The `netlify.toml` file in the repository includes COOP/COEP headers
 
 **Notes**:
+
 - SharedArrayBuffer is automatically enabled
 - No additional configuration required
 - Works with custom domains
@@ -168,6 +175,7 @@ Cross-Origin-Embedder-Policy: require-corp
 GitHub Pages does not allow custom HTTP headers, so SharedArrayBuffer **cannot be enabled**.
 
 **Workaround**:
+
 - Rhythm Chamber will automatically fall back to structured clone mode
 - All features work, but with reduced performance for vector operations
 - Consider using Vercel, Netlify, or Cloudflare Pages instead
@@ -180,6 +188,7 @@ GitHub Pages does not allow custom HTTP headers, so SharedArrayBuffer **cannot b
 
 1. **Copy `.htaccess` file** to your web root
 2. **Enable mod_headers**:
+
    ```bash
    sudo a2enmod headers
    sudo systemctl restart apache2
@@ -188,6 +197,7 @@ GitHub Pages does not allow custom HTTP headers, so SharedArrayBuffer **cannot b
 3. **Deploy files** to your web directory
 
 **Notes**:
+
 - The `.htaccess` file includes COOP/COEP headers
 - Works with shared hosting
 - Ensure `AllowOverride All` is set in your Apache config
@@ -252,6 +262,7 @@ server {
      ```
 
 **Notes**:
+
 - Headers must be configured via dashboard (not in repository)
 - SharedArrayBuffer works once headers are added
 - Excellent global CDN performance
@@ -268,10 +279,11 @@ After deployment, verify SharedArrayBuffer is working:
 2. **Go to Console**
 3. **Run**:
    ```javascript
-   typeof SharedArrayBuffer !== 'undefined'
+   typeof SharedArrayBuffer !== 'undefined';
    ```
 
 **Expected Results**:
+
 - `true` with proper COOP/COEP headers
 - `false` without headers (graceful fallback)
 
@@ -308,6 +320,7 @@ console.log('SharedArrayBuffer enabled:', stats.sharedMemoryEnabled);
 **Symptoms**: `typeof SharedArrayBuffer` returns `undefined`
 
 **Solutions**:
+
 1. **Check COOP/COEP headers** are present:
    ```bash
    curl -I https://your-domain.com | grep -i "cross-origin"
@@ -319,6 +332,7 @@ console.log('SharedArrayBuffer enabled:', stats.sharedMemoryEnabled);
 ### Browser Compatibility
 
 **SharedArrayBuffer Support**:
+
 - ✅ Chrome 92+ (Desktop)
 - ✅ Edge 92+ (Desktop)
 - ✅ Firefox 89+ (Desktop)
@@ -350,6 +364,7 @@ Cross-origin embedder policy requires 'corp'
 ### Enabling Source Maps
 
 Edit `scripts/build.mjs`:
+
 ```javascript
 sourcemap: true,  // Change from false
 ```
@@ -357,6 +372,7 @@ sourcemap: true,  // Change from false
 ### Keeping Console Logs
 
 Edit `scripts/build.mjs`:
+
 ```javascript
 drop: [],  // Remove 'console', 'debugger' from drop array
 ```
@@ -364,6 +380,7 @@ drop: [],  // Remove 'console', 'debugger' from drop array
 ### Adjusting Target Browsers
 
 Edit `scripts/build.mjs`:
+
 ```javascript
 target: 'es2020',  // Change to 'es2015', 'esnext', etc.
 ```
@@ -394,6 +411,7 @@ jobs:
 ```
 
 **Netlify** (automatic):
+
 - Connect repository to Netlify
 - Auto-deploys on push to main branch
 - No configuration needed
@@ -403,6 +421,7 @@ jobs:
 ## Support
 
 For deployment issues:
+
 1. Check browser console for errors
 2. Verify COOP/COEP headers are present
 3. Ensure HTTPS is enabled

@@ -45,8 +45,8 @@ rules:
       cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
       technology: [javascript]
       confidence: HIGH
-      verified-by: "Manual security review 2026-01-28"
-      status: "FALSE POSITIVE"
+      verified-by: 'Manual security review 2026-01-28'
+      status: 'FALSE POSITIVE'
 
   # ----------------------------------------------------------------------
   # EXCEPTION: innerHTML usage with escapeHtml() in template literals
@@ -71,8 +71,8 @@ rules:
     metadata:
       category: security
       technology: [javascript]
-      verified-by: "Manual security review 2026-01-28"
-      status: "FALSE POSITIVE"
+      verified-by: 'Manual security review 2026-01-28'
+      status: 'FALSE POSITIVE'
 
   # ----------------------------------------------------------------------
   # EXCEPTION: innerHTML usage with static string literals
@@ -100,8 +100,8 @@ rules:
     metadata:
       category: security
       technology: [javascript]
-      verified-by: "Manual security review 2026-01-28"
-      status: "FALSE POSITIVE"
+      verified-by: 'Manual security review 2026-01-28'
+      status: 'FALSE POSITIVE'
 
   # ----------------------------------------------------------------------
   # EXCEPTION: innerHTML assignment with empty string (container clearing)
@@ -129,8 +129,8 @@ rules:
     metadata:
       category: security
       technology: [javascript]
-      verified-by: "Manual security review 2026-01-28"
-      status: "FALSE POSITIVE"
+      verified-by: 'Manual security review 2026-01-28'
+      status: 'FALSE POSITIVE'
 
   # ----------------------------------------------------------------------
   # EXCEPTION: innerHTML usage with internal application data
@@ -160,8 +160,8 @@ rules:
     metadata:
       category: security
       technology: [javascript]
-      verified-by: "Manual security review 2026-01-28"
-      status: "FALSE POSITIVE"
+      verified-by: 'Manual security review 2026-01-28'
+      status: 'FALSE POSITIVE'
 
   # ----------------------------------------------------------------------
   # EXCEPTION: innerHTML usage with validated dynamic content
@@ -191,8 +191,8 @@ rules:
     metadata:
       category: security
       technology: [javascript]
-      verified-by: "Manual security review 2026-01-28"
-      status: "FALSE POSITIVE"
+      verified-by: 'Manual security review 2026-01-28'
+      status: 'FALSE POSITIVE'
 
 # ----------------------------------------------------------------------
 # CONFIGURATION NOTES

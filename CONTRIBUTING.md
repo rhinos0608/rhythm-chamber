@@ -46,18 +46,18 @@ Thank you for your interest in contributing to Rhythm Chamber! This document pro
 
 ### Development Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start local development server on port 8080 |
-| `npm run dev:coop-coep` | Start dev server with COOP/COEP headers for SharedArrayBuffer |
-| `npm test` | Run E2E tests (Playwright) |
-| `npm run test:unit` | Run unit tests (Vitest) |
-| `npm run test:unit:watch` | Run unit tests in watch mode |
-| `npm run test:ui` | Run Playwright tests with UI |
-| `npm run lint:globals` | Check for accidental window globals |
-| `npm run docs:sync` | Update architecture documentation from code analysis |
-| `npm run docs:watch` | Watch mode for continuous documentation updates |
-| `npm run docs:validate` | Check if documentation is current |
+| Command                   | Description                                                   |
+| ------------------------- | ------------------------------------------------------------- |
+| `npm run dev`             | Start local development server on port 8080                   |
+| `npm run dev:coop-coep`   | Start dev server with COOP/COEP headers for SharedArrayBuffer |
+| `npm test`                | Run E2E tests (Playwright)                                    |
+| `npm run test:unit`       | Run unit tests (Vitest)                                       |
+| `npm run test:unit:watch` | Run unit tests in watch mode                                  |
+| `npm run test:ui`         | Run Playwright tests with UI                                  |
+| `npm run lint:globals`    | Check for accidental window globals                           |
+| `npm run docs:sync`       | Update architecture documentation from code analysis          |
+| `npm run docs:watch`      | Watch mode for continuous documentation updates               |
+| `npm run docs:validate`   | Check if documentation is current                             |
 
 ## Development Workflow
 
@@ -72,6 +72,7 @@ Thank you for your interest in contributing to Rhythm Chamber! This document pro
 ### Making Changes
 
 1. Create a branch from `main`:
+
    ```bash
    git checkout -b feature/your-feature-name
    ```
@@ -79,25 +80,31 @@ Thank you for your interest in contributing to Rhythm Chamber! This document pro
 2. Make your changes following the [Code Style](#code-style) guidelines
 
 3. Test your changes:
+
    ```bash
    npm run test:unit
    npm test
    ```
 
 4. **Update documentation** (required for code changes):
+
    ```bash
    npm run docs:sync
    ```
+
    This automatically updates architecture documentation (AGENT_CONTEXT.md, ARCHITECTURE.md, API.md, etc.) based on your code changes.
 
 5. Commit your changes with clear messages:
+
    ```bash
    git add .
    git commit -m "feat: add new provider support"
    ```
+
    > **Note**: The pre-commit hook will check if documentation is current. If it fails, run `npm run docs:sync` to update.
 
 6. Push to your fork:
+
    ```bash
    git push origin feature/your-feature-name
    ```
@@ -109,17 +116,20 @@ Thank you for your interest in contributing to Rhythm Chamber! This document pro
 Rhythm Chamber uses an automated documentation sync system that keeps architecture documentation aligned with the codebase.
 
 **How it works:**
+
 - **AST Analysis**: Parses JavaScript files to extract metrics (line counts, modules, dependencies)
 - **Git History**: Tracks timestamps and versions from git
 - **Auto-Updates**: Updates documentation headers with current metrics
 
 **When to use:**
+
 - After modifying code in `js/` directory
 - Before committing changes
 - When adding new controllers, services, or utilities
 - After structural refactoring
 
 **Commands:**
+
 ```bash
 npm run docs:sync           # Update documentation once
 npm run docs:watch          # Continuous monitoring while developing
@@ -127,6 +137,7 @@ npm run docs:validate       # Check if docs are current
 ```
 
 **If pre-commit hook fails:**
+
 ```
 ✗ Documentation is outdated
 ℹ  Run: npm run docs:sync
@@ -147,6 +158,7 @@ npm run test:unit:watch    # Run in watch mode for TDD
 ```
 
 When writing unit tests:
+
 - Mock external dependencies (API calls, browser APIs)
 - Test both success and failure cases
 - Use descriptive test names
@@ -177,10 +189,14 @@ Rhythm Chamber uses ES6 modules exclusively. Avoid creating global variables:
 ```javascript
 // Good
 import { Storage } from './storage.js';
-export function processData() { /* ... */ }
+export function processData() {
+  /* ... */
+}
 
 // Bad
-window.Storage = { /* ... */ }
+window.Storage = {
+  /* ... */
+};
 ```
 
 ### JSDoc Comments
@@ -194,7 +210,7 @@ Document public interfaces with JSDoc:
  * @returns {Promise<PatternResult>} Detected patterns
  */
 export async function detectPatterns(streams) {
-    // ...
+  // ...
 }
 ```
 
@@ -207,11 +223,11 @@ import { OperationLock } from './operation-lock.js';
 
 const lock = OperationLock.acquire('processing');
 try {
-    // Your operation here
+  // Your operation here
 } catch (error) {
-    // Handle error
+  // Handle error
 } finally {
-    lock.release();
+  lock.release();
 }
 ```
 
@@ -229,6 +245,7 @@ Rhythm Chamber has completed the v0.9 Security Hardening milestone. When contrib
 ### Security Review Required
 
 Any changes to these areas require security review:
+
 - `js/security/` modules
 - Credential handling
 - Cross-tab communication
@@ -245,6 +262,7 @@ Any changes to these areas require security review:
 ### Reporting Security Issues
 
 If you discover a security vulnerability:
+
 1. Do NOT create a public issue
 2. Email the maintainers directly
 3. Allow 90 days for patch before disclosure
@@ -276,6 +294,7 @@ Use conventional commit prefixes:
 - `security:` - Security fixes
 
 Examples:
+
 ```
 feat: add support for local embeddings
 fix: prevent race condition in tab coordination
@@ -311,6 +330,7 @@ security: invalidate tokens on geographic anomaly
 ### HNW Architecture
 
 The codebase follows the Hierarchical Network Wave (HNW) pattern:
+
 - **Hierarchy**: Clear chain of command (App -> Controller -> Service -> Provider)
 - **Network**: Modular communication via events
 - **Wave**: Deterministic leader election, async/sync separation

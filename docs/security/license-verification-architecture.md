@@ -9,11 +9,13 @@ Rhythm Chamber uses **asymmetric cryptography (ECDSA)** for secure license verif
 ### Before: Vulnerable XOR/HMAC Approach
 
 **Previous Implementation:**
+
 - Used XOR obfuscation (trivially reversible)
 - Later used HMAC-SHA256 with a key stored in localStorage
 - Offline mode derived keys via PBKDF2 but **stored the derived key locally**
 
 **Vulnerabilities:**
+
 - Secret keys visible in client code or localStorage
 - Anyone could extract the key and forge licenses
 - XOR obfuscation provides no real security
@@ -21,12 +23,14 @@ Rhythm Chamber uses **asymmetric cryptography (ECDSA)** for secure license verif
 ### After: Secure ECDSA Asymmetric Cryptography
 
 **Current Implementation:**
+
 - Uses Elliptic Curve Digital Signature Algorithm (ECDSA) with P-256 curve
 - Private key: **NEVER leaves the server**
 - Public key: Embedded in client code (safe to be public)
 - Licenses: Cryptographically signed by server, verified by client
 
 **Security Properties:**
+
 - Private key never exposed to client
 - Public key can only verify signatures, not create them
 - Even with full client code access, licenses cannot be forged
@@ -48,9 +52,9 @@ Server-side (one-time setup):
 
 ```javascript
 const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', {
-    namedCurve: 'P-256',
-    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-    publicKeyEncoding: { type: 'spki', format: 'pem' }
+  namedCurve: 'P-256',
+  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  publicKeyEncoding: { type: 'spki', format: 'pem' },
 });
 
 // Store privateKey SECURELY on server (HSM/KMS recommended)
@@ -61,10 +65,10 @@ const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', {
 
 ```javascript
 const payload = {
-    tier: 'chamber',
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60),
-    features: ['advanced_analysis', 'api_access']
+  tier: 'chamber',
+  iat: Math.floor(Date.now() / 1000),
+  exp: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60,
+  features: ['advanced_analysis', 'api_access'],
 };
 
 const token = createJWT(payload, privateKey);
@@ -77,10 +81,10 @@ const token = createJWT(payload, privateKey);
 const publicKeySpki = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...';
 
 const isValid = await crypto.subtle.verify(
-    { name: 'ECDSA', hash: { name: 'SHA-256' } },
-    importedPublicKey,
-    signatureBytes,
-    dataBytes
+  { name: 'ECDSA', hash: { name: 'SHA-256' } },
+  importedPublicKey,
+  signatureBytes,
+  dataBytes
 );
 ```
 
@@ -138,9 +142,10 @@ node scripts/generate-license.mjs --export-public-key
 The public key is embedded in `/workspaces/rhythm-chamber/js/security/license-verifier.js`:
 
 ```javascript
-const PUBLIC_KEY_SPKI = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...'
-    + '0qC6PgZMlZoAPsKP7dZBE8c7ey-OGBsyUkuhUUofAJG0imK28WHuY3BMQ'
-    + 'cVbXUFH74PUzIdyx6wlez4YQ9MFAQ';
+const PUBLIC_KEY_SPKI =
+  'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...' +
+  '0qC6PgZMlZoAPsKP7dZBE8c7ey-OGBsyUkuhUUofAJG0imK28WHuY3BMQ' +
+  'cVbXUFH74PUzIdyx6wlez4YQ9MFAQ';
 ```
 
 ### Verification Flow
@@ -186,9 +191,11 @@ const PUBLIC_KEY_SPKI = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...'
 ## Testing
 
 The security implementation is tested in:
+
 - `/workspaces/rhythm-chamber/tests/unit/security-license-verifier.test.js`
 
 Run tests:
+
 ```bash
 npm test -- tests/unit/security-license-verifier.test.js
 ```

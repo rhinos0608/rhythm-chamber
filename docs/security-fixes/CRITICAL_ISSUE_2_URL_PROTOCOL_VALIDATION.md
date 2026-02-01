@@ -51,16 +51,24 @@ Only explicitly allowed protocols are accepted (http:, https: by default):
 ```javascript
 // SECURITY: Strict protocol whitelist validation
 if (!allowedProtocols.includes(protocol)) {
-    // Check for known dangerous protocols
-    const dangerousProtocols = ['javascript:', 'data:', 'vbscript:', 'file:', 'about:', 'chrome:', 'chrome-extension:'];
+  // Check for known dangerous protocols
+  const dangerousProtocols = [
+    'javascript:',
+    'data:',
+    'vbscript:',
+    'file:',
+    'about:',
+    'chrome:',
+    'chrome-extension:',
+  ];
 
-    if (dangerousProtocols.includes(protocol)) {
-        return {
-            valid: false,
-            error: `Dangerous protocol "${protocol}" is not allowed for security reasons`
-        };
-    }
-    // ... return error
+  if (dangerousProtocols.includes(protocol)) {
+    return {
+      valid: false,
+      error: `Dangerous protocol "${protocol}" is not allowed for security reasons`,
+    };
+  }
+  // ... return error
 }
 ```
 
@@ -80,23 +88,23 @@ Developers get actionable feedback about security violations:
 
 ```javascript
 // Dangerous protocol
-"Dangerous protocol \"javascript:\" is not allowed for security reasons"
+"Dangerous protocol \"javascript:\" is not allowed for security reasons";
 
 // Invalid protocol
-"URL protocol \"ftp:\" is not allowed. Allowed protocols are: http:, https:"
+"URL protocol \"ftp:\" is not allowed. Allowed protocols are: http:, https:";
 ```
 
 ## Blocked Protocols
 
-| Protocol | Risk | Description |
-|----------|------|-------------|
-| `javascript:` | CRITICAL | Can execute arbitrary JavaScript (XSS) |
-| `data:` | CRITICAL | Can embed arbitrary HTML/JavaScript content (XSS) |
-| `vbscript:` | HIGH | Can execute VBScript (IE, legacy XSS risk) |
-| `file:` | HIGH | Can access local filesystem (privacy/security) |
-| `about:` | MEDIUM | Internal browser pages (phishing risk) |
-| `chrome:` | MEDIUM | Browser internals (privilege escalation) |
-| `chrome-extension:` | MEDIUM | Extension contexts (privilege escalation) |
+| Protocol            | Risk     | Description                                       |
+| ------------------- | -------- | ------------------------------------------------- |
+| `javascript:`       | CRITICAL | Can execute arbitrary JavaScript (XSS)            |
+| `data:`             | CRITICAL | Can embed arbitrary HTML/JavaScript content (XSS) |
+| `vbscript:`         | HIGH     | Can execute VBScript (IE, legacy XSS risk)        |
+| `file:`             | HIGH     | Can access local filesystem (privacy/security)    |
+| `about:`            | MEDIUM   | Internal browser pages (phishing risk)            |
+| `chrome:`           | MEDIUM   | Browser internals (privilege escalation)          |
+| `chrome-extension:` | MEDIUM   | Extension contexts (privilege escalation)         |
 
 ## Test Coverage
 
@@ -148,6 +156,7 @@ node scripts/demo-url-security-fix.js
 ```
 
 Expected output:
+
 - All dangerous protocols: ✓ BLOCKED
 - All safe protocols: ✓ ACCEPTED
 
@@ -163,12 +172,14 @@ This fix works alongside other security measures:
 ## Impact Assessment
 
 ### Before Fix
+
 - ❌ Dangerous protocols accepted by URL constructor
 - ❌ XSS attacks possible via user-controlled URLs
 - ❌ No protocol validation before parsing
 - ❌ Case variations could bypass checks
 
 ### After Fix
+
 - ✅ Dangerous protocols blocked before parsing
 - ✅ Clear error messages for security violations
 - ✅ Case-insensitive protocol matching
@@ -203,23 +214,26 @@ This fix works alongside other security measures:
 ### For Developers
 
 1. **Always validate URLs** before using in sensitive contexts:
+
    ```javascript
    import { validateURL } from './utils/validation/format-validators.js';
 
    const result = validateURL(userInput);
    if (!result.valid) {
-       console.error('Invalid URL:', result.error);
-       return;
+     console.error('Invalid URL:', result.error);
+     return;
    }
    // Safe to use result.normalizedValue
    ```
 
 2. **Use the normalized value** returned by `validateURL()`:
+
    ```javascript
    link.href = result.normalizedValue; // Safe
    ```
 
 3. **Never use user input directly** in URL contexts:
+
    ```javascript
    // ❌ BAD
    link.href = userInput;
@@ -227,7 +241,7 @@ This fix works alongside other security measures:
    // ✅ GOOD
    const result = validateURL(userInput);
    if (result.valid) {
-       link.href = result.normalizedValue;
+     link.href = result.normalizedValue;
    }
    ```
 
