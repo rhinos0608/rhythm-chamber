@@ -38,7 +38,7 @@ export function search({ queryVector, vectors, limit = 5, threshold = 0.5 }) {
             results.push({
                 id,
                 score,
-                payload: item.payload
+                payload: item.payload,
             });
         }
     }

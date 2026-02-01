@@ -74,7 +74,7 @@ function setupResizeHandler() {
     // Throttled resize handler
     const throttle = (fn, delay) => {
         let lastCall = 0;
-        return function(...args) {
+        return function (...args) {
             const now = Date.now();
             if (now - lastCall >= delay) {
                 lastCall = now;
@@ -123,8 +123,9 @@ function toggle() {
 
     // Save to unified storage and localStorage
     if (Storage.setConfig) {
-        Storage.setConfig(SIDEBAR_STATE_KEY, newCollapsed)
-            .catch(err => console.warn('[SidebarStateController] Failed to save sidebar state:', err));
+        Storage.setConfig(SIDEBAR_STATE_KEY, newCollapsed).catch(err =>
+            console.warn('[SidebarStateController] Failed to save sidebar state:', err)
+        );
     }
     localStorage.setItem(SIDEBAR_STATE_KEY, newCollapsed.toString());
 
@@ -145,8 +146,9 @@ function close() {
 
     // Save to unified storage and localStorage
     if (Storage.setConfig) {
-        Storage.setConfig(SIDEBAR_STATE_KEY, true)
-            .catch(err => console.warn('[SidebarStateController] Failed to save sidebar state on close:', err));
+        Storage.setConfig(SIDEBAR_STATE_KEY, true).catch(err =>
+            console.warn('[SidebarStateController] Failed to save sidebar state on close:', err)
+        );
     }
     localStorage.setItem(SIDEBAR_STATE_KEY, 'true');
 
@@ -177,7 +179,7 @@ function getState() {
     const uiState = AppState.get('ui');
     return {
         collapsed: uiState.sidebarCollapsed,
-        hasDOM: !!chatSidebar
+        hasDOM: !!chatSidebar,
     };
 }
 
@@ -204,7 +206,7 @@ export const SidebarStateController = {
     close,
     hideForNonChatViews,
     getState,
-    destroy
+    destroy,
 };
 
 console.log('[SidebarStateController] State controller loaded');

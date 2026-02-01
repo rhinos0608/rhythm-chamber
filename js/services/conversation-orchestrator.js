@@ -47,7 +47,9 @@ function buildSystemPrompt(queryContext = null, semanticContext = null) {
     // CRITICAL: Validate userContext structure before destructuring
     // Prevents null pointer exceptions when personality, patterns, or summary are missing
     if (!userContext?.personality || !userContext?.summary) {
-        console.warn('[ConversationOrchestrator] Invalid userContext: missing personality or summary');
+        console.warn(
+            '[ConversationOrchestrator] Invalid userContext: missing personality or summary'
+        );
         return template; // Return base template without user-specific substitutions
     }
 
@@ -57,18 +59,22 @@ function buildSystemPrompt(queryContext = null, semanticContext = null) {
         ? `${summary.dateRange.start} to ${summary.dateRange.end}`
         : 'Unknown';
 
-    const dataInsights = personality.dataInsights
-        || (summary ? `${summary.totalHours} hours of music, ${summary.uniqueArtists} artists` : 'No data available');
+    const dataInsights =
+        personality.dataInsights ||
+        (summary
+            ? `${summary.totalHours} hours of music, ${summary.uniqueArtists} artists`
+            : 'No data available');
 
     const evidenceItems = personality.allEvidence || [];
-    const evidenceText = evidenceItems.length > 0
-        ? '• ' + evidenceItems.join('\n• ')
-        : 'No specific patterns detected';
+    const evidenceText =
+        evidenceItems.length > 0
+            ? '• ' + evidenceItems.join('\n• ')
+            : 'No specific patterns detected';
 
     const currentDate = new Date().toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'long',
-        day: 'numeric'
+        day: 'numeric',
     });
 
     let prompt = template
@@ -86,7 +92,9 @@ function buildSystemPrompt(queryContext = null, semanticContext = null) {
     const remainingBudget = contextWindow - basePromptBudget;
 
     if (basePromptTokens > basePromptBudget) {
-        console.warn(`[ConversationOrchestrator] Base system prompt (${basePromptTokens} tokens) exceeds budget (${basePromptBudget} tokens). This may cause truncation.`);
+        console.warn(
+            `[ConversationOrchestrator] Base system prompt (${basePromptTokens} tokens) exceeds budget (${basePromptBudget} tokens). This may cause truncation.`
+        );
     }
 
     if (semanticContext) {
@@ -98,14 +106,18 @@ function buildSystemPrompt(queryContext = null, semanticContext = null) {
             const truncationRatio = availableTokens / semanticTokens;
 
             if (truncationRatio < 0.5) {
-                console.warn(`[ConversationOrchestrator] Semantic context too large (${semanticTokens} tokens), would require ${Math.round((1 - truncationRatio) * 100)}% truncation. Skipping semantic context.`);
+                console.warn(
+                    `[ConversationOrchestrator] Semantic context too large (${semanticTokens} tokens), would require ${Math.round((1 - truncationRatio) * 100)}% truncation. Skipping semantic context.`
+                );
             } else {
                 const charsToKeep = Math.floor(semanticContext.length * truncationRatio);
                 // I18N FIX: Use safeTruncate to prevent splitting surrogate pairs (emojis, CJK)
                 // Using empty suffix because "..." is added explicitly in the next line
                 const truncatedContext = Utils.safeTruncate(semanticContext, charsToKeep, '');
                 prompt += `\n\n${truncatedContext}...`;
-                console.log(`[ConversationOrchestrator] Semantic context truncated from ${semanticTokens} to ${_TokenCounter.countTokens(truncatedContext)} tokens to fit within budget.`);
+                console.log(
+                    `[ConversationOrchestrator] Semantic context truncated from ${semanticTokens} to ${_TokenCounter.countTokens(truncatedContext)} tokens to fit within budget.`
+                );
             }
         } else {
             prompt += `\n\n${semanticContext}`;
@@ -117,7 +129,9 @@ function buildSystemPrompt(queryContext = null, semanticContext = null) {
         const queryTokens = _TokenCounter.countTokens(queryContext);
 
         if (currentTokens + queryTokens > contextWindow * 0.9) {
-            console.warn(`[ConversationOrchestrator] Query context (${queryTokens} tokens) would exceed 90% context window. Skipping query context.`);
+            console.warn(
+                `[ConversationOrchestrator] Query context (${queryTokens} tokens) would exceed 90% context window. Skipping query context.`
+            );
         } else {
             prompt += `\n\nRELEVANT DATA FOR THIS QUERY:\n${queryContext}`;
         }
@@ -125,7 +139,9 @@ function buildSystemPrompt(queryContext = null, semanticContext = null) {
 
     const finalTokens = _TokenCounter.countTokens(prompt);
     if (finalTokens > contextWindow) {
-        console.error(`[ConversationOrchestrator] Final system prompt (${finalTokens} tokens) exceeds context window (${contextWindow}). This should not happen.`);
+        console.error(
+            `[ConversationOrchestrator] Final system prompt (${finalTokens} tokens) exceeds context window (${contextWindow}). This should not happen.`
+        );
     }
 
     return prompt;
@@ -156,27 +172,27 @@ function generateQueryContext(message) {
             contextParts.push(`- Unique tracks: ${periodData.uniqueTracks}`);
 
             if (periodData.topArtists.length > 0) {
-                contextParts.push(`\nTop Artists:`);
+                contextParts.push('\nTop Artists:');
                 periodData.topArtists.slice(0, 5).forEach((a, i) => {
                     contextParts.push(`  ${i + 1}. ${a.name} (${a.plays} plays)`);
                 });
             }
 
             if (periodData.topTracks.length > 0) {
-                contextParts.push(`\nTop Tracks:`);
+                contextParts.push('\nTop Tracks:');
                 periodData.topTracks.slice(0, 5).forEach((t, i) => {
                     contextParts.push(`  ${i + 1}. "${t.name}" by ${t.artist} (${t.plays} plays)`);
                 });
             }
         } else {
-            contextParts.push(`Note: No streaming data found for this period.`);
+            contextParts.push('Note: No streaming data found for this period.');
         }
     }
 
     const artistPatterns = [
         /(?:about|listening to|played|play|heard)\s+([A-Za-z][A-Za-z\s&.']+?)(?:\s+in|\s+during|\?|$)/i,
         /(?:when did i|did i listen to|did i play)\s+([A-Za-z][A-Za-z\s&.']+?)(?:\s+in|\?|$)/i,
-        /([A-Za-z][A-Za-z\s&.']+?)\s+(?:plays?|streams?|listening)/i
+        /([A-Za-z][A-Za-z\s&.']+?)\s+(?:plays?|streams?|listening)/i,
     ];
 
     for (const pattern of artistPatterns) {
@@ -190,10 +206,12 @@ function generateQueryContext(message) {
                     contextParts.push(`- Total plays: ${artistData.totalPlays}`);
                     contextParts.push(`- First listened: ${artistData.firstListen}`);
                     contextParts.push(`- Last listened: ${artistData.lastListen}`);
-                    contextParts.push(`- Peak period: ${artistData.peakPeriod} (${artistData.peakPlays} plays)`);
+                    contextParts.push(
+                        `- Peak period: ${artistData.peakPeriod} (${artistData.peakPlays} plays)`
+                    );
 
                     if (artistData.monthlyBreakdown.length > 1) {
-                        contextParts.push(`\nMonthly breakdown:`);
+                        contextParts.push('\nMonthly breakdown:');
                         artistData.monthlyBreakdown.forEach(m => {
                             contextParts.push(`  - ${m.period}: ${m.plays} plays`);
                         });
@@ -203,8 +221,12 @@ function generateQueryContext(message) {
         }
     }
 
-    if (message.toLowerCase().includes('compare') || message.toLowerCase().includes('vs') ||
-        message.toLowerCase().includes('versus') || message.toLowerCase().includes('different')) {
+    if (
+        message.toLowerCase().includes('compare') ||
+        message.toLowerCase().includes('vs') ||
+        message.toLowerCase().includes('versus') ||
+        message.toLowerCase().includes('different')
+    ) {
         const years = message.match(/20\d{2}/g);
         if (years && years.length >= 2) {
             const comparison = _DataQuery.comparePeriods(
@@ -214,14 +236,22 @@ function generateQueryContext(message) {
             );
             if (comparison.found) {
                 contextParts.push(`\nCOMPARISON ${years[0]} vs ${years[1]}:`);
-                contextParts.push(`${years[0]}: ${comparison.period1.totalHours}h, ${comparison.period1.uniqueArtists} artists`);
-                contextParts.push(`${years[1]}: ${comparison.period2.totalHours}h, ${comparison.period2.uniqueArtists} artists`);
+                contextParts.push(
+                    `${years[0]}: ${comparison.period1.totalHours}h, ${comparison.period1.uniqueArtists} artists`
+                );
+                contextParts.push(
+                    `${years[1]}: ${comparison.period2.totalHours}h, ${comparison.period2.uniqueArtists} artists`
+                );
 
                 if (comparison.newArtists.length > 0) {
-                    contextParts.push(`\nNew in ${years[1]}: ${comparison.newArtists.map(a => a.name).join(', ')}`);
+                    contextParts.push(
+                        `\nNew in ${years[1]}: ${comparison.newArtists.map(a => a.name).join(', ')}`
+                    );
                 }
                 if (comparison.droppedArtists.length > 0) {
-                    contextParts.push(`Dropped from ${years[0]}: ${comparison.droppedArtists.map(a => a.name).join(', ')}`);
+                    contextParts.push(
+                        `Dropped from ${years[0]}: ${comparison.droppedArtists.map(a => a.name).join(', ')}`
+                    );
                 }
             }
         }
@@ -231,7 +261,7 @@ function generateQueryContext(message) {
         if (/\b(all.?time|ever|overall|total)\b/i.test(message)) {
             const overall = _DataQuery.queryByTimePeriod(streamsData, {});
             if (overall.found) {
-                contextParts.push(`\nOVERALL TOP ARTISTS:`);
+                contextParts.push('\nOVERALL TOP ARTISTS:');
                 overall.topArtists.slice(0, 10).forEach((a, i) => {
                     contextParts.push(`  ${i + 1}. ${a.name} (${a.plays} plays)`);
                 });
@@ -244,18 +274,70 @@ function generateQueryContext(message) {
 
 function isCommonWord(word) {
     const commonWords = new Set([
-        'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-        'of', 'with', 'by', 'from', 'was', 'were', 'been', 'have', 'has',
-        'did', 'does', 'do', 'is', 'are', 'am', 'what', 'when', 'where',
-        'who', 'why', 'how', 'this', 'that', 'these', 'those', 'my', 'your',
-        'music', 'listening', 'listen', 'played', 'play', 'heard', 'hear'
+        'the',
+        'a',
+        'an',
+        'and',
+        'or',
+        'but',
+        'in',
+        'on',
+        'at',
+        'to',
+        'for',
+        'of',
+        'with',
+        'by',
+        'from',
+        'was',
+        'were',
+        'been',
+        'have',
+        'has',
+        'did',
+        'does',
+        'do',
+        'is',
+        'are',
+        'am',
+        'what',
+        'when',
+        'where',
+        'who',
+        'why',
+        'how',
+        'this',
+        'that',
+        'these',
+        'those',
+        'my',
+        'your',
+        'music',
+        'listening',
+        'listen',
+        'played',
+        'play',
+        'heard',
+        'hear',
     ]);
     return commonWords.has(word.toLowerCase());
 }
 
 function getMonthName(monthNum) {
-    const months = ['January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'];
+    const months = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+    ];
     return months[monthNum - 1] || 'Unknown';
 }
 
@@ -282,5 +364,5 @@ export const ConversationOrchestrator = {
     getUserContext,
     setUserContext,
     getStreamsData,
-    setStreamsData
+    setStreamsData,
 };

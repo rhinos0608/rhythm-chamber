@@ -64,7 +64,10 @@ export async function safeJSONParse(response, fallback = null) {
         return await response.clone().json();
     } catch (error) {
         if (error instanceof SyntaxError) {
-            console.error('[ProviderInterface] JSON parse error - response may be malformed:', error.message);
+            console.error(
+                '[ProviderInterface] JSON parse error - response may be malformed:',
+                error.message
+            );
             // Try to get text for debugging (using the original response since clone was consumed)
             try {
                 const text = await response.text();

@@ -36,13 +36,12 @@ export function detectTimePatterns(streams) {
     }
 
     const intersection = [...morningArtists].filter(a => eveningArtists.has(a));
-    const overlap = morningArtists.size > 0
-        ? intersection.length / morningArtists.size
-        : 0;
+    const overlap = morningArtists.size > 0 ? intersection.length / morningArtists.size : 0;
 
     // Require minimum 100 streams in each bucket to avoid false positives from sparse data
     const MIN_STREAMS_THRESHOLD = 100;
-    const hasEnoughData = morningStreams.length >= MIN_STREAMS_THRESHOLD &&
+    const hasEnoughData =
+        morningStreams.length >= MIN_STREAMS_THRESHOLD &&
         eveningStreams.length >= MIN_STREAMS_THRESHOLD;
 
     return {
@@ -52,13 +51,14 @@ export function detectTimePatterns(streams) {
         eveningStreamCount: eveningStreams.length,
         overlap: Math.round(overlap * 100),
         // Only flag as mood engineer if we have enough data to be confident
-        isMoodEngineer: hasEnoughData && overlap < 0.3 && morningArtists.size > 5 && eveningArtists.size > 5,
+        isMoodEngineer:
+            hasEnoughData && overlap < 0.3 && morningArtists.size > 5 && eveningArtists.size > 5,
         hasEnoughData,
         description: !hasEnoughData
-            ? `Need more listening data for time pattern analysis`
+            ? 'Need more listening data for time pattern analysis'
             : overlap < 0.3
                 ? `Morning vs evening overlap: only ${Math.round(overlap * 100)}% — you use music to set your mood`
-                : `${Math.round(overlap * 100)}% overlap between morning and evening listening`
+                : `${Math.round(overlap * 100)}% overlap between morning and evening listening`,
     };
 }
 
@@ -85,18 +85,17 @@ export function detectSocialPatterns(streams) {
     }
 
     const intersection = [...weekdayArtists].filter(a => weekendArtists.has(a));
-    const overlap = weekdayArtists.size > 0
-        ? intersection.length / weekdayArtists.size
-        : 0;
+    const overlap = weekdayArtists.size > 0 ? intersection.length / weekdayArtists.size : 0;
 
     return {
         weekdayArtistCount: weekdayArtists.size,
         weekendArtistCount: weekendArtists.size,
         overlap: Math.round(overlap * 100),
         isSocialChameleon: overlap < 0.4 && weekdayArtists.size > 10 && weekendArtists.size > 10,
-        description: overlap < 0.4
-            ? `Weekday ≠ weekend: only ${Math.round(overlap * 100)}% overlap — your music shifts by context`
-            : `${Math.round(overlap * 100)}% overlap between weekday and weekend listening`
+        description:
+            overlap < 0.4
+                ? `Weekday ≠ weekend: only ${Math.round(overlap * 100)}% overlap — your music shifts by context`
+                : `${Math.round(overlap * 100)}% overlap between weekday and weekend listening`,
     };
 }
 
@@ -114,7 +113,7 @@ export function detectMoodSearching(streams) {
             clusters,
             count: 0,
             hasMoodSearching: false,
-            description: null
+            description: null,
         };
     }
 
@@ -133,7 +132,7 @@ export function detectMoodSearching(streams) {
                     timestamp: window[0].playedAt,
                     date: window[0].date,
                     skips,
-                    spanMinutes: Math.round(spanMinutes)
+                    spanMinutes: Math.round(spanMinutes),
                 });
                 i += 5; // Skip ahead to avoid overlapping clusters
             }
@@ -144,11 +143,12 @@ export function detectMoodSearching(streams) {
         clusters,
         count: clusters.length,
         hasMoodSearching: clusters.length >= 10,
-        description: clusters.length >= 10
-            ? `${clusters.length} moments of rapid skipping detected — searching for the right feeling`
-            : clusters.length > 0
-                ? `${clusters.length} skip clusters found`
-                : null
+        description:
+            clusters.length >= 10
+                ? `${clusters.length} moments of rapid skipping detected — searching for the right feeling`
+                : clusters.length > 0
+                    ? `${clusters.length} skip clusters found`
+                    : null,
     };
 }
 
@@ -169,7 +169,7 @@ export function detectTrueFavorites(streams) {
             artistStats[artist] = {
                 plays: 0,
                 totalCompletion: 0,
-                fullPlays: 0
+                fullPlays: 0,
             };
         }
 
@@ -187,17 +187,15 @@ export function detectTrueFavorites(streams) {
             artist,
             plays: stats.plays,
             avgCompletion: stats.totalCompletion / stats.plays,
-            fullPlayRate: stats.fullPlays / stats.plays
+            fullPlayRate: stats.fullPlays / stats.plays,
         }))
         .sort((a, b) => b.avgCompletion - a.avgCompletion);
 
-    const topByPlays = Object.entries(artistStats)
-        .sort((a, b) => b[1].plays - a[1].plays)[0];
+    const topByPlays = Object.entries(artistStats).sort((a, b) => b[1].plays - a[1].plays)[0];
 
     const topByEngagement = artistEngagement[0];
 
-    const mismatch = topByPlays && topByEngagement &&
-        topByPlays[0] !== topByEngagement.artist;
+    const mismatch = topByPlays && topByEngagement && topByPlays[0] !== topByEngagement.artist;
 
     return {
         topByPlays: topByPlays ? { artist: topByPlays[0], plays: topByPlays[1].plays } : null,
@@ -205,6 +203,6 @@ export function detectTrueFavorites(streams) {
         hasMismatch: mismatch,
         description: mismatch
             ? `You play ${topByPlays[0]} the most, but you're more engaged with ${topByEngagement.artist}`
-            : null
+            : null,
     };
 }

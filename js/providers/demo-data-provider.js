@@ -52,15 +52,16 @@ export class DemoDataProvider extends ProviderBase {
         }
 
         // Generate or get cached demo streams
-        const streams = typeof demoData.generateDemoStreams === 'function'
-            ? demoData.generateDemoStreams()
-            : demoData.streams || [];
+        const streams =
+            typeof demoData.generateDemoStreams === 'function'
+                ? demoData.generateDemoStreams()
+                : demoData.streams || [];
 
         const normalizedStreams = this.normalizeStreams(streams);
 
         this.emitDataLoaded('streams', {
             count: normalizedStreams.length,
-            source: this.getType()
+            source: this.getType(),
         });
 
         return normalizedStreams;
@@ -113,7 +114,7 @@ export class DemoDataProvider extends ProviderBase {
             totalStreams: 8547,
             uniqueArtists: 203,
             listeningHours: 1424,
-            yearsActive: 5
+            yearsActive: 5,
         };
 
         return this.normalizeSummary(summary);
@@ -134,6 +135,5 @@ export class DemoDataProvider extends ProviderBase {
         return this.validateStreamCount(8547);
     }
 }
-
 
 console.log('[DemoDataProvider] Demo data provider loaded');

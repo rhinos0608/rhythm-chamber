@@ -34,7 +34,7 @@ export const SESSION = Object.freeze({
      * - Case-insensitive (a-z, A-Z, 0-9)
      * - Must be at least 2 characters after pattern validation
      */
-    ID_PATTERN: /^[a-z0-9][a-z0-9\-_]{0,62}[a-z0-9]$/i
+    ID_PATTERN: /^[a-z0-9][a-z0-9\-_]{0,62}[a-z0-9]$/i,
 });
 
 export default SESSION;

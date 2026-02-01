@@ -1,14 +1,16 @@
 /**
  * Native Tool Strategy (Level 1)
  * Handles native OpenAI-style tool_calls from LLM responses
- * 
+ *
  * @module tool-strategies/native-strategy
  */
 
 import { BaseToolStrategy } from './base-strategy.js';
 
 export class NativeToolStrategy extends BaseToolStrategy {
-    get level() { return 1; }
+    get level() {
+        return 1;
+    }
 
     canHandle(responseMessage, capabilityLevel) {
         // Only handle native tool calls at capability level 1
@@ -33,17 +35,19 @@ export class NativeToolStrategy extends BaseToolStrategy {
             onProgress,
             streamsData,
             buildSystemPrompt,
-            callLLM
+            callLLM,
         } = context;
 
-        console.log('[NativeToolStrategy] Processing native tool calls:',
-            responseMessage.tool_calls.map(tc => tc?.function?.name || tc?.id || '<missing>'));
+        console.log(
+            '[NativeToolStrategy] Processing native tool calls:',
+            responseMessage.tool_calls.map(tc => tc?.function?.name || tc?.id || '<missing>')
+        );
 
         // Add assistant's tool call message to conversation
         await this.addToHistory({
             role: 'assistant',
             content: responseMessage.content || null,
-            tool_calls: responseMessage.tool_calls
+            tool_calls: responseMessage.tool_calls,
         });
 
         // Track if any function calls returned errors
@@ -60,9 +64,10 @@ export class NativeToolStrategy extends BaseToolStrategy {
 
             const functionCallData = toolCall?.function || {};
             const functionName = functionCallData.name || '<unknown>';
-            const rawArgs = typeof functionCallData.arguments === 'string'
-                ? functionCallData.arguments
-                : JSON.stringify(functionCallData.arguments ?? {});
+            const rawArgs =
+                typeof functionCallData.arguments === 'string'
+                    ? functionCallData.arguments
+                    : JSON.stringify(functionCallData.arguments ?? {});
 
             // HNW Fix: Emit tool_start BEFORE parsing so listeners see start before any error
             if (onProgress) onProgress({ type: 'tool_start', tool: functionName });
@@ -72,10 +77,16 @@ export class NativeToolStrategy extends BaseToolStrategy {
             try {
                 args = JSON.parse(rawArgs);
             } catch (parseError) {
-                console.warn(`[NativeToolStrategy] Invalid arguments for ${functionName}:`, rawArgs);
+                console.warn(
+                    `[NativeToolStrategy] Invalid arguments for ${functionName}:`,
+                    rawArgs
+                );
                 // Track parse error for proper error reporting
                 hadFunctionErrors = true;
-                functionErrors.push({ function: functionName, error: `Invalid arguments: ${parseError.message}` });
+                functionErrors.push({
+                    function: functionName,
+                    error: `Invalid arguments: ${parseError.message}`,
+                });
                 if (onProgress) onProgress({ type: 'tool_end', tool: functionName, error: true });
                 return {
                     earlyReturn: {
@@ -84,8 +95,13 @@ export class NativeToolStrategy extends BaseToolStrategy {
                         role: 'assistant',
                         isFunctionError: true,
                         hadFunctionErrors: true,
-                        functionErrors: [{ function: functionName, error: `Invalid arguments: ${parseError.message}` }]
-                    }
+                        functionErrors: [
+                            {
+                                function: functionName,
+                                error: `Invalid arguments: ${parseError.message}`,
+                            },
+                        ],
+                    },
                 };
             }
 
@@ -96,7 +112,7 @@ export class NativeToolStrategy extends BaseToolStrategy {
             try {
                 result = await this.executeWithTimeout(functionName, args, streamsData);
             } catch (execError) {
-                console.error(`[NativeToolStrategy] Execution failed:`, execError);
+                console.error('[NativeToolStrategy] Execution failed:', execError);
                 // Track execution error for proper error reporting
                 hadFunctionErrors = true;
                 functionErrors.push({ function: functionName, error: execError.message });
@@ -105,13 +121,16 @@ export class NativeToolStrategy extends BaseToolStrategy {
                 result = { error: execError.message };
             }
 
-            console.log(`[NativeToolStrategy] Result:`, result);
+            console.log('[NativeToolStrategy] Result:', result);
 
             // Check if function returned an error object
             if (result && typeof result === 'object' && 'error' in result) {
                 hadFunctionErrors = true;
                 functionErrors.push({ function: functionName, error: result.error });
-                console.warn(`[NativeToolStrategy] Function ${functionName} returned error:`, result.error);
+                console.warn(
+                    `[NativeToolStrategy] Function ${functionName} returned error:`,
+                    result.error
+                );
             }
 
             if (onProgress) onProgress({ type: 'tool_end', tool: functionName, result });
@@ -120,14 +139,14 @@ export class NativeToolStrategy extends BaseToolStrategy {
             await this.addToHistory({
                 role: 'tool',
                 tool_call_id: toolCall.id,
-                content: JSON.stringify(result)
+                content: JSON.stringify(result),
             });
         }
 
         // Make follow-up call with function results
         const followUpMessages = [
             { role: 'system', content: buildSystemPrompt() },
-            ...this.getHistory()
+            ...this.getHistory(),
         ];
 
         if (onProgress) onProgress({ type: 'thinking' });
@@ -138,26 +157,35 @@ export class NativeToolStrategy extends BaseToolStrategy {
             console.log('[NativeToolStrategy] Follow-up LLM call completed, response:', response);
             // HNW Fix: Safely handle missing choices array
             const choices = Array.isArray(response?.choices) ? response.choices : [];
-            console.log('[NativeToolStrategy] Choices count:', choices.length, 'First choice message:', choices[0]?.message);
+            console.log(
+                '[NativeToolStrategy] Choices count:',
+                choices.length,
+                'First choice message:',
+                choices[0]?.message
+            );
 
             // CRITICAL FIX: Validate we got a valid response message
             const responseMessage = choices[0]?.message;
             if (!responseMessage || (!responseMessage.content && !responseMessage.tool_calls)) {
-                console.warn('[NativeToolStrategy] Follow-up returned invalid message:', responseMessage);
+                console.warn(
+                    '[NativeToolStrategy] Follow-up returned invalid message:',
+                    responseMessage
+                );
                 // Return an error earlyReturn instead of null responseMessage
                 return {
                     earlyReturn: {
                         status: 'error',
-                        content: 'The AI completed the tool call but failed to generate a final response. Please try again.',
-                        role: 'assistant'
+                        content:
+                            'The AI completed the tool call but failed to generate a final response. Please try again.',
+                        role: 'assistant',
                     },
                     hadFunctionErrors,
-                    functionErrors
+                    functionErrors,
                 };
             }
 
             const result = {
-                responseMessage
+                responseMessage,
             };
             // Include function error information if any occurred
             if (hadFunctionErrors) {
@@ -180,10 +208,10 @@ export class NativeToolStrategy extends BaseToolStrategy {
                     content: errorContent,
                     role: 'assistant',
                     hadFunctionErrors,
-                    functionErrors
+                    functionErrors,
                 },
                 hadFunctionErrors,
-                functionErrors
+                functionErrors,
             };
         }
     }

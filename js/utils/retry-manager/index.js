@@ -25,7 +25,7 @@ export {
     DEFAULT_RETRY_CONFIG,
     RetryStrategies,
     classifyError,
-    isRetryable
+    isRetryable,
 } from './retry-config.js';
 
 // ==========================================
@@ -39,7 +39,7 @@ export {
     addJitter,
     calculateBackoffWithJitter,
     calculateBackoffForError,
-    delay
+    delay,
 } from './retry-strategies.js';
 
 // ==========================================
@@ -53,22 +53,16 @@ export {
     retryIfAll,
     retryIfAny,
     retryNever,
-    retryAlways
+    retryAlways,
 } from './retry-strategies.js';
 
 // ==========================================
 // Core Retry Functions
 // ==========================================
 
-export {
-    withRetry
-} from './retry-executor-core.js';
+export { withRetry } from './retry-executor-core.js';
 
-export {
-    retryExponential,
-    retryLinear,
-    retryCustom
-} from './retry-executor-patterns.js';
+export { retryExponential, retryLinear, retryCustom } from './retry-executor-patterns.js';
 
 // ==========================================
 // Advanced Patterns
@@ -78,7 +72,7 @@ export {
     withRetryParallel,
     withFallback,
     withCircuitBreaker,
-    withStrategy
+    withStrategy,
 } from './retry-executor-patterns.js';
 
 // ==========================================
@@ -89,17 +83,14 @@ export {
     retryStorage,
     retryNetwork,
     retryFunction,
-    retryTransaction
+    retryTransaction,
 } from './retry-executor-patterns.js';
 
 // ==========================================
 // Utilities
 // ==========================================
 
-export {
-    withTimeout,
-    RetryContext
-} from './retry-executor-core.js';
+export { withTimeout, RetryContext } from './retry-executor-core.js';
 
 // ==========================================
 // Monitoring (Optional)
@@ -114,23 +105,51 @@ export {
     calculatePerformanceMetrics,
     logRetrySummary,
     createRetryLogger,
-    retryStatistics
+    retryStatistics,
 } from './retry-monitoring.js';
 
 // ==========================================
 // Public API (Backward Compatibility)
 // ==========================================
 
-import { ErrorType as ET, DEFAULT_RETRY_CONFIG as DRC, RetryStrategies as RS } from './retry-config.js';
+import {
+    ErrorType as ET,
+    DEFAULT_RETRY_CONFIG as DRC,
+    RetryStrategies as RS,
+} from './retry-config.js';
 import { classifyError as ce, isRetryable as ir } from './retry-config.js';
-import { calculateExponentialBackoff as ebo, calculateLinearBackoff as lbo, calculateCustomBackoff as cbo,
-    addJitter as aj, calculateBackoffWithJitter as cbwj, calculateBackoffForError as cbfe, delay as d } from './retry-strategies.js';
-import { retryOnErrorTypes as roet, retryWithMaxAttempts as rwma, retryOnStatus as ros,
-    retryIfAll as ria, retryIfAny as riany, retryNever as rn, retryAlways as ra } from './retry-strategies.js';
+import {
+    calculateExponentialBackoff as ebo,
+    calculateLinearBackoff as lbo,
+    calculateCustomBackoff as cbo,
+    addJitter as aj,
+    calculateBackoffWithJitter as cbwj,
+    calculateBackoffForError as cbfe,
+    delay as d,
+} from './retry-strategies.js';
+import {
+    retryOnErrorTypes as roet,
+    retryWithMaxAttempts as rwma,
+    retryOnStatus as ros,
+    retryIfAll as ria,
+    retryIfAny as riany,
+    retryNever as rn,
+    retryAlways as ra,
+} from './retry-strategies.js';
 import { withRetry as wr, withTimeout as wt, RetryContext as RCtx } from './retry-executor-core.js';
-import { retryExponential as rexp, retryLinear as rlin, retryCustom as rcust,
-    withRetryParallel as wrp, withFallback as wfb, withCircuitBreaker as wcb, withStrategy as ws,
-    retryStorage as rs_storage, retryNetwork as rn_network, retryFunction as rf, retryTransaction as rt } from './retry-executor-patterns.js';
+import {
+    retryExponential as rexp,
+    retryLinear as rlin,
+    retryCustom as rcust,
+    withRetryParallel as wrp,
+    withFallback as wfb,
+    withCircuitBreaker as wcb,
+    withStrategy as ws,
+    retryStorage as rs_storage,
+    retryNetwork as rn_network,
+    retryFunction as rf,
+    retryTransaction as rt,
+} from './retry-executor-patterns.js';
 
 /**
  * Unified RetryManager API object
@@ -184,7 +203,7 @@ export const RetryManager = {
 
     // Utilities
     withTimeout: wt,
-    RetryContext: RCtx
+    RetryContext: RCtx,
 };
 
 // Default export for backward compatibility

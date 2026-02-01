@@ -1,17 +1,17 @@
 /**
  * Embeddings Progress Component
- * 
+ *
  * Multi-stage progress indicator for embedding generation:
  * - 6-stage progress (Check → Download → Initialize → Process → Embed → Store)
  * - Overall progress bar with percentage and ETA
  * - Transparency panel (chunks, storage, location)
  * - Background/Pause/Cancel actions
- * 
+ *
  * HNW Considerations:
  * - Hierarchy: Controlled by EmbeddingsTaskManager
  * - Network: Receives events from EventBus for updates
  * - Wave: Smooth animations for progress transitions
- * 
+ *
  * @module embeddings/embeddings-progress
  */
 
@@ -28,7 +28,7 @@ const STAGES = [
     { id: 'initialize', name: 'Initializing', icon: '⚙️', description: 'Loading model' },
     { id: 'process', name: 'Processing', icon: '📄', description: 'Preparing chunks' },
     { id: 'embed', name: 'Embedding', icon: '🧠', description: 'Generating vectors' },
-    { id: 'store', name: 'Storing', icon: '💾', description: 'Saving to IndexedDB' }
+    { id: 'store', name: 'Storing', icon: '💾', description: 'Saving to IndexedDB' },
 ];
 
 // ==========================================
@@ -47,13 +47,15 @@ const PROGRESS_HTML = `
     </div>
     
     <div class="stage-progress">
-        ${STAGES.map((stage, i) => `
+        ${STAGES.map(
+        (stage, i) => `
             <div class="stage-item" id="stage-${stage.id}" data-stage="${i}">
                 <div class="stage-icon">${stage.icon}</div>
                 <div class="stage-name">${stage.name}</div>
             </div>
             ${i < STAGES.length - 1 ? '<div class="stage-connector"></div>' : ''}
-        `).join('')}
+        `
+    ).join('')}
     </div>
     
     <div class="overall-progress">
@@ -226,71 +228,89 @@ function calculateETA(processed, total) {
  */
 function subscribeToEvents() {
     // Model loading events
-    unsubscribers.push(EventBus.on('embedding:model_loaded', (payload) => {
-        setStage(2); // Initialize complete
-        updateTransparency({ backend: `${payload.backend} (${payload.quantization})` });
-    }));
+    unsubscribers.push(
+        EventBus.on('embedding:model_loaded', payload => {
+            setStage(2); // Initialize complete
+            updateTransparency({ backend: `${payload.backend} (${payload.quantization})` });
+        })
+    );
 
     // Generation events
-    unsubscribers.push(EventBus.on('embedding:generation_start', (payload) => {
-        setStage(4); // Embedding stage
-        totalItems = payload.count;
-        processedItems = 0;
-        startTime = Date.now();
-        updateTransparency({ chunks: { processed: 0, total: payload.count } });
-    }));
+    unsubscribers.push(
+        EventBus.on('embedding:generation_start', payload => {
+            setStage(4); // Embedding stage
+            totalItems = payload.count;
+            processedItems = 0;
+            startTime = Date.now();
+            updateTransparency({ chunks: { processed: 0, total: payload.count } });
+        })
+    );
 
-    unsubscribers.push(EventBus.on('embedding:generation_complete', (payload) => {
-        setStage(5); // Store stage
-        setProgress(100, 'Complete!');
-        updateTransparency({ avgTimeMs: payload.avgTimePerEmbedding });
-    }));
+    unsubscribers.push(
+        EventBus.on('embedding:generation_complete', payload => {
+            setStage(5); // Store stage
+            setProgress(100, 'Complete!');
+            updateTransparency({ avgTimeMs: payload.avgTimePerEmbedding });
+        })
+    );
 
     // Error events
-    unsubscribers.push(EventBus.on('embedding:error', (payload) => {
-        const operationEl = document.querySelector('#current-operation .operation-text');
-        if (operationEl) {
-            // Use user-facing message if available, otherwise fall back to technical error
-            const displayMessage = payload.userFacing && payload.userMessage
-                ? payload.userMessage
-                : `Error: ${payload.error}`;
-            operationEl.textContent = displayMessage;
-            operationEl.classList.add('error');
-        }
-
-        // Log technical details for debugging
-        if (payload.technicalDetails) {
-            console.warn('[EmbeddingsProgress] Technical details:', payload.technicalDetails);
-        }
-    }));
-
-    // Checkpoint failed events
-    unsubscribers.push(EventBus.on('embedding:checkpoint_failed', (payload) => {
-        const operationEl = document.querySelector('#current-operation .operation-text');
-        if (operationEl && payload.userFacing) {
-            // Use user-facing message for checkpoint failures
-            operationEl.textContent = payload.userMessage || `Checkpoint failed: ${payload.reason}`;
-            operationEl.classList.add('warning');
-        }
-    }));
-
-    // Task error events
-    unsubscribers.push(EventBus.on('embedding:task_error', (payload) => {
-        const operationEl = document.querySelector('#current-operation .operation-text');
-        if (operationEl) {
-            // Use user-facing message if available
-            const displayMessage = payload.userFacing && payload.userMessage
-                ? payload.userMessage
-                : `Task error: ${payload.error}`;
-            operationEl.textContent = displayMessage;
-            operationEl.classList.add('error');
+    unsubscribers.push(
+        EventBus.on('embedding:error', payload => {
+            const operationEl = document.querySelector('#current-operation .operation-text');
+            if (operationEl) {
+                // Use user-facing message if available, otherwise fall back to technical error
+                const displayMessage =
+                    payload.userFacing && payload.userMessage
+                        ? payload.userMessage
+                        : `Error: ${payload.error}`;
+                operationEl.textContent = displayMessage;
+                operationEl.classList.add('error');
+            }
 
             // Log technical details for debugging
             if (payload.technicalDetails) {
-                console.warn('[EmbeddingsProgress] Task error details:', payload.technicalDetails);
+                console.warn('[EmbeddingsProgress] Technical details:', payload.technicalDetails);
             }
-        }
-    }));
+        })
+    );
+
+    // Checkpoint failed events
+    unsubscribers.push(
+        EventBus.on('embedding:checkpoint_failed', payload => {
+            const operationEl = document.querySelector('#current-operation .operation-text');
+            if (operationEl && payload.userFacing) {
+                // Use user-facing message for checkpoint failures
+                operationEl.textContent =
+                    payload.userMessage || `Checkpoint failed: ${payload.reason}`;
+                operationEl.classList.add('warning');
+            }
+        })
+    );
+
+    // Task error events
+    unsubscribers.push(
+        EventBus.on('embedding:task_error', payload => {
+            const operationEl = document.querySelector('#current-operation .operation-text');
+            if (operationEl) {
+                // Use user-facing message if available
+                const displayMessage =
+                    payload.userFacing && payload.userMessage
+                        ? payload.userMessage
+                        : `Task error: ${payload.error}`;
+                operationEl.textContent = displayMessage;
+                operationEl.classList.add('error');
+
+                // Log technical details for debugging
+                if (payload.technicalDetails) {
+                    console.warn(
+                        '[EmbeddingsProgress] Task error details:',
+                        payload.technicalDetails
+                    );
+                }
+            }
+        })
+    );
 }
 
 /**
@@ -448,7 +468,7 @@ export const EmbeddingsProgress = {
     /**
      * Stage definitions
      */
-    STAGES
+    STAGES,
 };
 
 console.log('[EmbeddingsProgress] Module loaded');

@@ -23,7 +23,7 @@ import { ExportFormat, ScheduleType } from '../metrics-exporter.js';
  * @returns {Function} Cleanup function
  */
 export function setupActions(container, handlers = {}) {
-    const handleActionClick = (event) => {
+    const handleActionClick = event => {
         const actionButton = event.target.closest('[data-action]');
         if (!actionButton) return;
 

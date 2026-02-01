@@ -27,7 +27,7 @@ const CHUNKING_CONFIG = {
     MIN_BATCH_SIZE: 100,
     MAX_BATCH_SIZE: 5000,
     TOP_ARTISTS_COUNT: 50,
-    TOP_ITEMS_PER_CHUNK: 10
+    TOP_ITEMS_PER_CHUNK: 10,
 };
 
 /**
@@ -48,14 +48,14 @@ export class RAGChunkingService {
      * @param {Function} onProgress - Optional progress callback (current, total, message)
      * @returns {Promise<Array<Chunk>>} Array of chunks with metadata
      */
-    async splitDocument(streams, onProgress = () => { }) {
+    async splitDocument(streams, onProgress = () => {}) {
         const chunks = [];
 
         // Phase 1: Group streams by month (with time-budget-aware yielding)
         const byMonth = {};
         await this._processWithBudget(
             streams,
-            (stream) => {
+            stream => {
                 const date = new Date(stream.ts || stream.endTime);
                 const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                 if (!byMonth[monthKey]) byMonth[monthKey] = [];
@@ -76,7 +76,11 @@ export class RAGChunkingService {
 
             // Yield every 10 months
             if (i % 10 === 0 && i > 0) {
-                onProgress(30 + Math.round((i / monthEntries.length) * 20), 100, 'Creating monthly summaries...');
+                onProgress(
+                    30 + Math.round((i / monthEntries.length) * 20),
+                    100,
+                    'Creating monthly summaries...'
+                );
                 await new Promise(resolve => queueMicrotask(resolve));
             }
         }
@@ -85,8 +89,9 @@ export class RAGChunkingService {
         const byArtist = {};
         await this._processWithBudget(
             streams,
-            (stream) => {
-                const artist = stream.master_metadata_album_artist_name || stream.artistName || 'Unknown';
+            stream => {
+                const artist =
+                    stream.master_metadata_album_artist_name || stream.artistName || 'Unknown';
                 if (!byArtist[artist]) byArtist[artist] = [];
                 byArtist[artist].push(stream);
             },
@@ -108,7 +113,11 @@ export class RAGChunkingService {
 
             // Yield every 10 artists
             if (i % 10 === 0 && i > 0) {
-                onProgress(70 + Math.round((i / topArtistEntries.length) * 25), 100, 'Creating artist profiles...');
+                onProgress(
+                    70 + Math.round((i / topArtistEntries.length) * 25),
+                    100,
+                    'Creating artist profiles...'
+                );
                 await new Promise(resolve => queueMicrotask(resolve));
             }
         }
@@ -120,7 +129,10 @@ export class RAGChunkingService {
             chunks.push(...patternChunks);
             console.log(`[RAG Chunking] Added ${patternChunks.length} pattern chunks`);
         } catch (patternError) {
-            console.warn('[RAG Chunking] Pattern chunk creation failed, continuing without:', patternError.message);
+            console.warn(
+                '[RAG Chunking] Pattern chunk creation failed, continuing without:',
+                patternError.message
+            );
         }
 
         onProgress(100, 100, 'Chunks created');
@@ -156,48 +168,56 @@ export class RAGChunkingService {
         if (patterns.comfortDiscovery?.description) {
             chunks.push({
                 type: 'pattern_result',
-                text: `Listening Pattern: Comfort vs Discovery. ${patterns.comfortDiscovery.description}. ` +
+                text:
+                    `Listening Pattern: Comfort vs Discovery. ${patterns.comfortDiscovery.description}. ` +
                     `Comfort ratio: ${(patterns.comfortDiscovery.comfortRatio * 100).toFixed(1)}%. ` +
                     `Discovery ratio: ${(patterns.comfortDiscovery.discoveryRatio * 100).toFixed(1)}%.`,
                 metadata: {
                     patternType: 'comfort_discovery',
                     comfortRatio: patterns.comfortDiscovery.comfortRatio,
-                    discoveryRatio: patterns.comfortDiscovery.discoveryRatio
-                }
+                    discoveryRatio: patterns.comfortDiscovery.discoveryRatio,
+                },
             });
         }
 
         // Ghosted Artists Pattern
         if (patterns.ghostedArtists?.ghosted?.length > 0) {
-            const topGhosted = patterns.ghostedArtists.ghosted.slice(0, 10)
-                .map(a => `${a.artist} (${a.plays} plays, gone since ${a.lastPlayed?.getFullYear() || 'unknown'})`)
+            const topGhosted = patterns.ghostedArtists.ghosted
+                .slice(0, 10)
+                .map(
+                    a =>
+                        `${a.artist} (${a.plays} plays, gone since ${a.lastPlayed?.getFullYear() || 'unknown'})`
+                )
                 .join(', ');
             chunks.push({
                 type: 'pattern_result',
-                text: `Listening Pattern: Ghosted Artists. ${patterns.ghostedArtists.description}. ` +
+                text:
+                    `Listening Pattern: Ghosted Artists. ${patterns.ghostedArtists.description}. ` +
                     `Artists you used to play frequently but stopped: ${topGhosted}.`,
                 metadata: {
                     patternType: 'ghosted_artists',
                     count: patterns.ghostedArtists.ghosted.length,
-                    artists: patterns.ghostedArtists.ghosted.slice(0, 10).map(a => a.artist)
-                }
+                    artists: patterns.ghostedArtists.ghosted.slice(0, 10).map(a => a.artist),
+                },
             });
         }
 
         // Era Detection Pattern
         if (patterns.eras?.hasEras && patterns.eras?.periods?.length > 0) {
-            const erasText = patterns.eras.periods.slice(0, 5)
+            const erasText = patterns.eras.periods
+                .slice(0, 5)
                 .map(e => `${e.genre || 'Mixed'} era (${e.startMonth} to ${e.endMonth})`)
                 .join(', ');
             chunks.push({
                 type: 'pattern_result',
-                text: `Listening Pattern: Musical Eras. ${patterns.eras.description}. ` +
+                text:
+                    `Listening Pattern: Musical Eras. ${patterns.eras.description}. ` +
                     `Distinct listening eras detected: ${erasText}.`,
                 metadata: {
                     patternType: 'eras',
                     eraCount: patterns.eras.periods.length,
-                    periods: patterns.eras.periods.slice(0, 5)
-                }
+                    periods: patterns.eras.periods.slice(0, 5),
+                },
             });
         }
 
@@ -205,13 +225,14 @@ export class RAGChunkingService {
         if (patterns.timePatterns?.isMoodEngineer) {
             chunks.push({
                 type: 'pattern_result',
-                text: `Listening Pattern: Time-Based Habits. ${patterns.timePatterns.description}. ` +
-                    `You are a Mood Engineer who strategically chooses music based on time of day.`,
+                text:
+                    `Listening Pattern: Time-Based Habits. ${patterns.timePatterns.description}. ` +
+                    'You are a Mood Engineer who strategically chooses music based on time of day.',
                 metadata: {
                     patternType: 'time_patterns',
                     isMoodEngineer: true,
-                    hourBreakdown: patterns.timePatterns.hourBreakdown || {}
-                }
+                    hourBreakdown: patterns.timePatterns.hourBreakdown || {},
+                },
             });
         }
 
@@ -219,46 +240,51 @@ export class RAGChunkingService {
         if (patterns.socialPatterns?.isSocialChameleon) {
             chunks.push({
                 type: 'pattern_result',
-                text: `Listening Pattern: Social Listening. ${patterns.socialPatterns.description}. ` +
-                    `Your listening habits adapt based on social context.`,
+                text:
+                    `Listening Pattern: Social Listening. ${patterns.socialPatterns.description}. ` +
+                    'Your listening habits adapt based on social context.',
                 metadata: {
                     patternType: 'social_patterns',
-                    isSocialChameleon: true
-                }
+                    isSocialChameleon: true,
+                },
             });
         }
 
         // Discovery Explosions
         if (patterns.discoveryExplosions?.explosions?.length > 0) {
-            const explosionsText = patterns.discoveryExplosions.explosions.slice(0, 5)
+            const explosionsText = patterns.discoveryExplosions.explosions
+                .slice(0, 5)
                 .map(e => `${e.month} (${e.newArtistCount} new artists)`)
                 .join(', ');
             chunks.push({
                 type: 'pattern_result',
-                text: `Listening Pattern: Discovery Explosions. ${patterns.discoveryExplosions.description}. ` +
+                text:
+                    `Listening Pattern: Discovery Explosions. ${patterns.discoveryExplosions.description}. ` +
                     `Months with unusual spikes in new artist discovery: ${explosionsText}.`,
                 metadata: {
                     patternType: 'discovery_explosions',
                     count: patterns.discoveryExplosions.explosions.length,
-                    months: patterns.discoveryExplosions.explosions.slice(0, 5).map(e => e.month)
-                }
+                    months: patterns.discoveryExplosions.explosions.slice(0, 5).map(e => e.month),
+                },
             });
         }
 
         // True Favorites
         if (patterns.trueFavorites?.favorites?.length > 0) {
-            const favText = patterns.trueFavorites.favorites.slice(0, 10)
+            const favText = patterns.trueFavorites.favorites
+                .slice(0, 10)
                 .map(f => `${f.artist} (${f.plays} plays over ${f.months} months)`)
                 .join(', ');
             chunks.push({
                 type: 'pattern_result',
-                text: `Listening Pattern: True Favorites. ${patterns.trueFavorites.description}. ` +
+                text:
+                    `Listening Pattern: True Favorites. ${patterns.trueFavorites.description}. ` +
                     `Artists you consistently return to month after month: ${favText}.`,
                 metadata: {
                     patternType: 'true_favorites',
                     count: patterns.trueFavorites.favorites.length,
-                    artists: patterns.trueFavorites.favorites.slice(0, 10).map(f => f.artist)
-                }
+                    artists: patterns.trueFavorites.favorites.slice(0, 10).map(f => f.artist),
+                },
             });
         }
 
@@ -266,12 +292,13 @@ export class RAGChunkingService {
         if (patterns.moodSearching?.description) {
             chunks.push({
                 type: 'pattern_result',
-                text: `Listening Pattern: Mood Searching. ${patterns.moodSearching.description}. ` +
-                    `You sometimes search for music to match or alter your mood.`,
+                text:
+                    `Listening Pattern: Mood Searching. ${patterns.moodSearching.description}. ` +
+                    'You sometimes search for music to match or alter your mood.',
                 metadata: {
                     patternType: 'mood_searching',
-                    isActive: patterns.moodSearching.isActive || false
-                }
+                    isActive: patterns.moodSearching.isActive || false,
+                },
             });
         }
 
@@ -282,8 +309,8 @@ export class RAGChunkingService {
                 text: `Overall Listening Patterns Summary: ${patterns.summary}`,
                 metadata: {
                     patternType: 'summary',
-                    evidenceCount: patterns.evidence?.length || 0
-                }
+                    evidenceCount: patterns.evidence?.length || 0,
+                },
             });
         }
 
@@ -297,8 +324,20 @@ export class RAGChunkingService {
      * @returns {string} Formatted month name (e.g., "January 2024")
      */
     getMonthName(year, month) {
-        const months = ['January', 'February', 'March', 'April', 'May', 'June',
-            'July', 'August', 'September', 'October', 'November', 'December'];
+        const months = [
+            'January',
+            'February',
+            'March',
+            'April',
+            'May',
+            'June',
+            'July',
+            'August',
+            'September',
+            'October',
+            'November',
+            'December',
+        ];
         return `${months[month - 1]} ${year}`;
     }
 
@@ -345,14 +384,14 @@ export class RAGChunkingService {
             .slice(0, CHUNKING_CONFIG.TOP_ITEMS_PER_CHUNK)
             .map(([name, count]) => `${name} (${count} plays)`);
 
-        const hours = Math.round(totalMs / 3600000 * 10) / 10;
+        const hours = Math.round((totalMs / 3600000) * 10) / 10;
         const [year, monthNum] = month.split('-');
         const monthName = this.getMonthName(parseInt(year, 10), parseInt(monthNum, 10));
 
         return {
             type: 'monthly_summary',
             text: `In ${monthName}, user listened for ${hours} hours with ${monthStreams.length} plays. Top artists: ${topArtists.join(', ')}. Top tracks: ${topTracks.join(', ')}.`,
-            metadata: { month, plays: monthStreams.length, hours }
+            metadata: { month, plays: monthStreams.length, hours },
         };
     }
 
@@ -386,12 +425,12 @@ export class RAGChunkingService {
             .slice(0, 5)
             .map(([name, count]) => `${name} (${count})`);
 
-        const hours = Math.round(totalMs / 3600000 * 10) / 10;
+        const hours = Math.round((totalMs / 3600000) * 10) / 10;
 
         return {
             type: 'artist_profile',
             text: `Artist: ${artist}. Total plays: ${artistStreams.length}. Listening time: ${hours} hours. First listened: ${this.formatDate(firstListen)}. Last listened: ${this.formatDate(lastListen)}. Top tracks: ${topTracks.join(', ')}.`,
-            metadata: { artist, plays: artistStreams.length, hours }
+            metadata: { artist, plays: artistStreams.length, hours },
         };
     }
 
@@ -405,7 +444,14 @@ export class RAGChunkingService {
      * @param {number} baseProgress - Base progress value
      * @param {Function} onProgress - Progress callback
      */
-    async _processWithBudget(items, processor, phaseName, progressMultiplier, baseProgress = 0, onProgress) {
+    async _processWithBudget(
+        items,
+        processor,
+        phaseName,
+        progressMultiplier,
+        baseProgress = 0,
+        onProgress
+    ) {
         let processed = 0;
         const total = items.length;
         let adaptiveBatchSize = CHUNKING_CONFIG.INITIAL_BATCH_SIZE;
@@ -438,7 +484,11 @@ export class RAGChunkingService {
 
             // Yield to event loop to maintain UI responsiveness
             if (processed < total) {
-                onProgress(baseProgress + Math.round((processed / total) * progressMultiplier), 100, phaseName);
+                onProgress(
+                    baseProgress + Math.round((processed / total) * progressMultiplier),
+                    100,
+                    phaseName
+                );
                 await new Promise(resolve => queueMicrotask(resolve));
             }
         }

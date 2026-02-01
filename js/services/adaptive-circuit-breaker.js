@@ -25,9 +25,9 @@ import { TimeoutError, TimeoutType, isTimeoutError, getUserMessage } from './tim
  * Circuit states
  */
 export const CircuitState = {
-    CLOSED: 'closed',       // Normal operation
-    OPEN: 'open',           // Failing - requests blocked
-    HALF_OPEN: 'half_open'  // Recovery testing
+    CLOSED: 'closed', // Normal operation
+    OPEN: 'open', // Failing - requests blocked
+    HALF_OPEN: 'half_open', // Recovery testing
 };
 
 // ==========================================
@@ -38,17 +38,17 @@ export const CircuitState = {
  * Default circuit breaker configuration
  */
 export const DEFAULT_CONFIG = {
-    failureThreshold: 5,           // Consecutive failures before opening
-    successThreshold: 2,           // Successes in half-open to close
-    timeout: 60000,                // Cooldown before half-open (ms)
-    halfOpenMaxRequests: 3,        // Max requests in half-open
-    volumeThreshold: 5,            // Min requests before circuit can open
-    adaptiveTimeout: true,         // Enable adaptive timeout
-    p95Multiplier: 1.5,           // Timeout = p95 * multiplier
-    minSamples: 10,                // Min samples for p95 calculation
-    defaultTimeout: 30000,         // Default timeout (ms)
-    minTimeout: 5000,              // Minimum adaptive timeout (ms)
-    maxTimeout: 120000             // Maximum adaptive timeout (ms)
+    failureThreshold: 5, // Consecutive failures before opening
+    successThreshold: 2, // Successes in half-open to close
+    timeout: 60000, // Cooldown before half-open (ms)
+    halfOpenMaxRequests: 3, // Max requests in half-open
+    volumeThreshold: 5, // Min requests before circuit can open
+    adaptiveTimeout: true, // Enable adaptive timeout
+    p95Multiplier: 1.5, // Timeout = p95 * multiplier
+    minSamples: 10, // Min samples for p95 calculation
+    defaultTimeout: 30000, // Default timeout (ms)
+    minTimeout: 5000, // Minimum adaptive timeout (ms)
+    maxTimeout: 120000, // Maximum adaptive timeout (ms)
 };
 
 // ==========================================
@@ -96,7 +96,7 @@ function getCircuit(circuitId, config = DEFAULT_CONFIG) {
             successDurations: [],
             createdAt: Date.now(),
             lastStateChange: Date.now(),
-            config: { ...DEFAULT_CONFIG, ...config }
+            config: { ...DEFAULT_CONFIG, ...config },
         });
 
         console.log(`[AdaptiveCircuitBreaker] Circuit created: ${circuitId}`);
@@ -129,7 +129,9 @@ function calculateAdaptiveTimeout(circuit) {
         config.maxTimeout
     );
 
-    console.log(`[AdaptiveCircuitBreaker] ${circuit.circuitId} adaptive timeout: ${adaptiveTimeout}ms (p95: ${p95}ms)`);
+    console.log(
+        `[AdaptiveCircuitBreaker] ${circuit.circuitId} adaptive timeout: ${adaptiveTimeout}ms (p95: ${p95}ms)`
+    );
 
     return adaptiveTimeout;
 }
@@ -150,7 +152,7 @@ export function canExecute(circuitId, config = {}) {
         return {
             allowed: true,
             state: circuit.state,
-            timeout: calculateAdaptiveTimeout(circuit)
+            timeout: calculateAdaptiveTimeout(circuit),
         };
     }
 
@@ -162,11 +164,13 @@ export function canExecute(circuitId, config = {}) {
             setState(circuit, CircuitState.HALF_OPEN);
             circuit.halfOpenRequests = 0;
             circuit.successes = 0;
-            console.log(`[AdaptiveCircuitBreaker] ${circuitId}: OPEN → HALF_OPEN (cooldown elapsed)`);
+            console.log(
+                `[AdaptiveCircuitBreaker] ${circuitId}: OPEN → HALF_OPEN (cooldown elapsed)`
+            );
             return {
                 allowed: true,
                 state: circuit.state,
-                timeout: calculateAdaptiveTimeout(circuit)
+                timeout: calculateAdaptiveTimeout(circuit),
             };
         }
         return {
@@ -174,7 +178,7 @@ export function canExecute(circuitId, config = {}) {
             state: circuit.state,
             reason: `Circuit open for ${circuitId}. Retry in ${Math.ceil((cfg.timeout - elapsed) / 1000)}s`,
             cooldownRemaining: cfg.timeout - elapsed,
-            timeout: cfg.defaultTimeout
+            timeout: cfg.defaultTimeout,
         };
     }
 
@@ -185,20 +189,20 @@ export function canExecute(circuitId, config = {}) {
                 allowed: false,
                 state: circuit.state,
                 reason: `Circuit half-open for ${circuitId}. Waiting for test requests.`,
-                timeout: cfg.defaultTimeout
+                timeout: cfg.defaultTimeout,
             };
         }
         return {
             allowed: true,
             state: circuit.state,
-            timeout: calculateAdaptiveTimeout(circuit)
+            timeout: calculateAdaptiveTimeout(circuit),
         };
     }
 
     return {
         allowed: true,
         state: circuit.state,
-        timeout: calculateAdaptiveTimeout(circuit)
+        timeout: calculateAdaptiveTimeout(circuit),
     };
 }
 
@@ -242,7 +246,7 @@ export function recordSuccess(circuitId, durationMs = 0, config = {}) {
                 circuitId,
                 state: CircuitState.CLOSED,
                 failureCount: circuit.failures,
-                adaptiveTimeout: calculateAdaptiveTimeout(circuit)
+                adaptiveTimeout: calculateAdaptiveTimeout(circuit),
             });
         }
     } else if (circuit.state === CircuitState.CLOSED) {
@@ -270,12 +274,19 @@ export function recordFailure(circuitId, errorMessage = '', config = {}) {
         // Any failure in half-open returns to open
         setState(circuit, CircuitState.OPEN);
         circuit.halfOpenRequests = 0;
-        console.warn(`[AdaptiveCircuitBreaker] ${circuitId}: HALF_OPEN → OPEN (test request failed: ${errorMessage})`);
+        console.warn(
+            `[AdaptiveCircuitBreaker] ${circuitId}: HALF_OPEN → OPEN (test request failed: ${errorMessage})`
+        );
     } else if (circuit.state === CircuitState.CLOSED) {
         // Check if we should open the circuit
-        if (circuit.requestCount >= cfg.volumeThreshold && circuit.failures >= cfg.failureThreshold) {
+        if (
+            circuit.requestCount >= cfg.volumeThreshold &&
+            circuit.failures >= cfg.failureThreshold
+        ) {
             setState(circuit, CircuitState.OPEN);
-            console.warn(`[AdaptiveCircuitBreaker] ${circuitId}: CLOSED → OPEN (${circuit.failures} consecutive failures)`);
+            console.warn(
+                `[AdaptiveCircuitBreaker] ${circuitId}: CLOSED → OPEN (${circuit.failures} consecutive failures)`
+            );
 
             // Emit trip event
             EventBus.emit('CIRCUIT_BREAKER:TRIPPED', {
@@ -283,7 +294,7 @@ export function recordFailure(circuitId, errorMessage = '', config = {}) {
                 state: CircuitState.OPEN,
                 failureCount: circuit.failures,
                 reason: errorMessage,
-                cooldownMs: cfg.timeout
+                cooldownMs: cfg.timeout,
             });
         }
     }
@@ -307,7 +318,7 @@ export async function execute(circuitId, fn, config = {}, options = {}) {
             success: false,
             error: checkResult.reason,
             blocked: true,
-            state: checkResult.state
+            state: checkResult.state,
         };
     }
 
@@ -321,14 +332,16 @@ export async function execute(circuitId, fn, config = {}, options = {}) {
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => {
         timeoutId = setTimeout(() => {
-            reject(new TimeoutError('Adaptive circuit timeout', {
-                timeout,
-                operation: circuitId,
-                provider: circuitId,
-                timeoutType: options.timeoutType || TimeoutType.GENERAL,
-                retryable: true,
-                retryAfter: circuit.config?.timeout || 60000
-            }));
+            reject(
+                new TimeoutError('Adaptive circuit timeout', {
+                    timeout,
+                    operation: circuitId,
+                    provider: circuitId,
+                    timeoutType: options.timeoutType || TimeoutType.GENERAL,
+                    retryable: true,
+                    retryAfter: circuit.config?.timeout || 60000,
+                })
+            );
         }, timeout);
     });
 
@@ -345,16 +358,24 @@ export async function execute(circuitId, fn, config = {}, options = {}) {
             result,
             durationMs,
             state: circuit.state,
-            adaptiveTimeout: timeout
+            adaptiveTimeout: timeout,
         };
     } catch (error) {
         clearTimeout(timeoutId);
         const durationMs = Date.now() - startTime;
         const isTimeoutErrorInstance = isTimeoutError(error);
-        const message = isTimeoutErrorInstance ? error.message : (error instanceof Error ? error.message : String(error));
+        const message = isTimeoutErrorInstance
+            ? error.message
+            : error instanceof Error
+                ? error.message
+                : String(error);
 
         // Record failure
-        if (isTimeoutErrorInstance || message.includes('timeout') || message.includes('timed out')) {
+        if (
+            isTimeoutErrorInstance ||
+            message.includes('timeout') ||
+            message.includes('timed out')
+        ) {
             recordFailure(circuitId, `Timeout after ${durationMs}ms`, config);
         } else {
             recordFailure(circuitId, message, config);
@@ -366,7 +387,7 @@ export async function execute(circuitId, fn, config = {}, options = {}) {
             state: circuit.state,
             durationMs,
             isTimeout: isTimeoutErrorInstance || message.includes('timeout'),
-            userMessage: isTimeoutErrorInstance ? getUserMessage(error) : undefined
+            userMessage: isTimeoutErrorInstance ? getUserMessage(error) : undefined,
         };
     }
 }
@@ -382,7 +403,7 @@ export function getStatus(circuitId) {
     if (!circuit) {
         return {
             circuitId,
-            exists: false
+            exists: false,
         };
     }
 
@@ -391,14 +412,16 @@ export function getStatus(circuitId) {
 
     // Calculate statistics
     const successDurations = circuit.successDurations;
-    const avgDuration = successDurations.length > 0
-        ? Math.round(successDurations.reduce((a, b) => a + b, 0) / successDurations.length)
-        : 0;
+    const avgDuration =
+        successDurations.length > 0
+            ? Math.round(successDurations.reduce((a, b) => a + b, 0) / successDurations.length)
+            : 0;
 
     const sortedDurations = [...successDurations].sort((a, b) => a - b);
-    const p95Duration = successDurations.length > 0
-        ? sortedDurations[Math.max(0, Math.ceil(successDurations.length * 0.95) - 1)]
-        : 0;
+    const p95Duration =
+        successDurations.length > 0
+            ? sortedDurations[Math.max(0, Math.ceil(successDurations.length * 0.95) - 1)]
+            : 0;
 
     const adaptiveTimeout = calculateAdaptiveTimeout(circuit);
 
@@ -413,17 +436,18 @@ export function getStatus(circuitId) {
         isHalfOpen: circuit.state === CircuitState.HALF_OPEN,
         isClosed: circuit.state === CircuitState.CLOSED,
         lastFailureTime: circuit.lastFailureTime,
-        cooldownRemaining: circuit.state === CircuitState.OPEN && circuit.lastFailureTime
-            ? Math.max(0, cfg.timeout - (now - circuit.lastFailureTime))
-            : 0,
+        cooldownRemaining:
+            circuit.state === CircuitState.OPEN && circuit.lastFailureTime
+                ? Math.max(0, cfg.timeout - (now - circuit.lastFailureTime))
+                : 0,
         performance: {
             avgDuration,
             p95Duration,
             adaptiveTimeout,
-            sampleCount: successDurations.length
+            sampleCount: successDurations.length,
         },
         age: now - circuit.createdAt,
-        lastStateChange: now - circuit.lastStateChange
+        lastStateChange: now - circuit.lastStateChange,
     };
 }
 
@@ -506,7 +530,7 @@ export default {
     TimeoutError,
     TimeoutType,
     isTimeoutError,
-    getUserMessage
+    getUserMessage,
 };
 
 console.log('[AdaptiveCircuitBreaker] Module loaded with adaptive timeout support');

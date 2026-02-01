@@ -23,7 +23,7 @@ export async function saveStreams(streams) {
         const result = await IndexedDBCore.put(STORES.STREAMS, {
             id: 'all',
             data: streams,
-            savedAt: new Date().toISOString()
+            savedAt: new Date().toISOString(),
         });
         return result;
     }, true);
@@ -46,19 +46,15 @@ export async function getStreams() {
 export async function appendStreams(newStreams) {
     assertWriteAllowed('appendStreams');
     return queuedOperation(async () => {
-        const result = await IndexedDBCore.atomicUpdate(
-            STORES.STREAMS,
-            'all',
-            (currentValue) => {
-                const existing = currentValue?.data || [];
-                const merged = [...existing, ...newStreams];
-                return {
-                    id: 'all',
-                    data: merged,
-                    savedAt: new Date().toISOString()
-                };
-            }
-        );
+        const result = await IndexedDBCore.atomicUpdate(STORES.STREAMS, 'all', currentValue => {
+            const existing = currentValue?.data || [];
+            const merged = [...existing, ...newStreams];
+            return {
+                id: 'all',
+                data: merged,
+                savedAt: new Date().toISOString(),
+            };
+        });
         return result;
     }, true);
 }

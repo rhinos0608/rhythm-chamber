@@ -1,15 +1,15 @@
 /**
  * Pattern Comparison Service
- * 
+ *
  * Compares listening profiles to find shared tastes, differences, and compatibility.
  * Used for collaborative analysis with friends.
- * 
+ *
  * Comparison Metrics:
  * - Artist overlap (shared favorites)
  * - Genre compatibility
  * - Listening pattern similarity (time, emotion, discovery)
  * - Era alignment (what periods resonate with both)
- * 
+ *
  * @module services/pattern-comparison
  */
 
@@ -35,7 +35,7 @@ function compareProfiles(profile1, profile2) {
         breakdown: {},
         sharedArtists: [],
         uniqueToEach: { profile1: [], profile2: [] },
-        recommendations: []
+        recommendations: [],
     };
 
     // Compare personalities
@@ -48,18 +48,12 @@ function compareProfiles(profile1, profile2) {
 
     // Compare patterns
     if (profile1.patterns && profile2.patterns) {
-        results.breakdown.patterns = comparePatterns(
-            profile1.patterns,
-            profile2.patterns
-        );
+        results.breakdown.patterns = comparePatterns(profile1.patterns, profile2.patterns);
     }
 
     // Compare listening stats
     if (profile1.summary && profile2.summary) {
-        results.breakdown.listening = compareListeningStats(
-            profile1.summary,
-            profile2.summary
-        );
+        results.breakdown.listening = compareListeningStats(profile1.summary, profile2.summary);
     }
 
     // Find shared artists (if streams available)
@@ -77,7 +71,7 @@ function compareProfiles(profile1, profile2) {
 
     EventBus.emit('comparison:complete', {
         compatibility: results.overallCompatibility,
-        sharedArtistCount: results.sharedArtists.length
+        sharedArtistCount: results.sharedArtists.length,
     });
 
     return results;
@@ -120,7 +114,7 @@ function comparePersonalities(p1, p2) {
         compatibility: sameType ? 100 : traitSimilarity,
         insight: sameType
             ? `You're both ${p1.name}s! You likely share similar listening habits.`
-            : `${p1.name} meets ${p2.name} - an interesting combination!`
+            : `${p1.name} meets ${p2.name} - an interesting combination!`,
     };
 }
 
@@ -141,9 +135,10 @@ function comparePatterns(pat1, pat2) {
         const timeDiff = Math.min(diff, 24 - diff);
         comparisons.timeOfDay = {
             similarity: Math.round((1 - timeDiff / 12) * 100),
-            insight: timeDiff <= 2
-                ? 'You listen at similar times!'
-                : `Different schedules - ${peak1}:00 vs ${peak2}:00`
+            insight:
+                timeDiff <= 2
+                    ? 'You listen at similar times!'
+                    : `Different schedules - ${peak1}:00 vs ${peak2}:00`,
         };
     }
 
@@ -156,23 +151,25 @@ function comparePatterns(pat1, pat2) {
             similarity: Math.round((1 - ratioDiff / 100) * 100),
             profile1Ratio: ratio1,
             profile2Ratio: ratio2,
-            insight: ratioDiff < 20
-                ? 'Similar balance between comfort and discovery'
-                : ratio1 > ratio2
-                    ? 'You prefer familiar music more'
-                    : 'Your friend explores more new music'
+            insight:
+                ratioDiff < 20
+                    ? 'Similar balance between comfort and discovery'
+                    : ratio1 > ratio2
+                        ? 'You prefer familiar music more'
+                        : 'Your friend explores more new music',
         };
     }
 
     // Calculate average pattern similarity
     const similarities = Object.values(comparisons).map(c => c.similarity || 0);
-    const avgSimilarity = similarities.length > 0
-        ? Math.round(similarities.reduce((a, b) => a + b, 0) / similarities.length)
-        : 50;
+    const avgSimilarity =
+        similarities.length > 0
+            ? Math.round(similarities.reduce((a, b) => a + b, 0) / similarities.length)
+            : 50;
 
     return {
         ...comparisons,
-        overallSimilarity: avgSimilarity
+        overallSimilarity: avgSimilarity,
     };
 }
 
@@ -185,22 +182,22 @@ function comparePatterns(pat1, pat2) {
 function compareListeningStats(s1, s2) {
     const total1 = s1.totalStreams || s1.streamCount || 0;
     const total2 = s2.totalStreams || s2.streamCount || 0;
-    const hours1 = s1.listeningHours || Math.round(total1 * 3 / 60);
-    const hours2 = s2.listeningHours || Math.round(total2 * 3 / 60);
+    const hours1 = s1.listeningHours || Math.round((total1 * 3) / 60);
+    const hours2 = s2.listeningHours || Math.round((total2 * 3) / 60);
 
-    const volumeRatio = total1 > 0 && total2 > 0
-        ? Math.min(total1, total2) / Math.max(total1, total2)
-        : 0;
+    const volumeRatio =
+        total1 > 0 && total2 > 0 ? Math.min(total1, total2) / Math.max(total1, total2) : 0;
 
     return {
         volumeSimilarity: Math.round(volumeRatio * 100),
         profile1Hours: hours1,
         profile2Hours: hours2,
-        insight: volumeRatio > 0.8
-            ? 'Similar listening volume'
-            : hours1 > hours2
-                ? 'You listen significantly more'
-                : 'Your friend listens more than you'
+        insight:
+            volumeRatio > 0.8
+                ? 'Similar listening volume'
+                : hours1 > hours2
+                    ? 'You listen significantly more'
+                    : 'Your friend listens more than you',
     };
 }
 
@@ -243,14 +240,12 @@ function compareArtists(streams1, streams2) {
         shared: shared.slice(0, 20),
         unique: {
             profile1: unique1.slice(0, 10),
-            profile2: unique2.slice(0, 10)
+            profile2: unique2.slice(0, 10),
         },
         overlapPercentage: (() => {
             const denom = Math.max(artists1.size, artists2.size);
-            return denom === 0
-                ? 0
-                : Math.round((shared.length / denom) * 100);
-        })()
+            return denom === 0 ? 0 : Math.round((shared.length / denom) * 100);
+        })(),
     };
 }
 
@@ -263,7 +258,7 @@ function calculateOverallCompatibility(breakdown) {
     const weights = {
         personality: 0.3,
         patterns: 0.4,
-        listening: 0.3
+        listening: 0.3,
     };
 
     let totalScore = 0;
@@ -296,11 +291,15 @@ function generateRecommendations(results) {
     const recommendations = [];
 
     if (results.sharedArtists.length > 5) {
-        recommendations.push(`Check out ${results.sharedArtists[0]} together - you both love them!`);
+        recommendations.push(
+            `Check out ${results.sharedArtists[0]} together - you both love them!`
+        );
     }
 
     if (results.uniqueToEach.profile2.length > 0) {
-        recommendations.push(`Your friend recommends: ${results.uniqueToEach.profile2.slice(0, 3).join(', ')}`);
+        recommendations.push(
+            `Your friend recommends: ${results.uniqueToEach.profile2.slice(0, 3).join(', ')}`
+        );
     }
 
     if (results.overallCompatibility > 75) {
@@ -318,8 +317,8 @@ function generateRecommendations(results) {
 
 /**
  * Get shared artists between profiles
- * @param {Object} profile1 
- * @param {Object} profile2 
+ * @param {Object} profile1
+ * @param {Object} profile2
  * @returns {string[]} Shared artist names
  */
 function getSharedArtists(profile1, profile2) {
@@ -331,8 +330,8 @@ function getSharedArtists(profile1, profile2) {
 
 /**
  * Get compatibility percentage
- * @param {Object} profile1 
- * @param {Object} profile2 
+ * @param {Object} profile1
+ * @param {Object} profile2
  * @returns {number} 0-100
  */
 function getCompatibility(profile1, profile2) {
@@ -355,8 +354,7 @@ export const PatternComparison = {
     // Individual comparisons
     comparePersonalities,
     comparePatterns,
-    compareArtists
+    compareArtists,
 };
-
 
 console.log('[PatternComparison] Profile comparison service loaded');

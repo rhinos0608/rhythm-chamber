@@ -64,7 +64,7 @@ export class UserDataProvider extends ProviderBase {
         if (normalizedStreams.length > 0) {
             this.emitDataLoaded('streams', {
                 count: normalizedStreams.length,
-                source: this.getType()
+                source: this.getType(),
             });
         }
 
@@ -135,6 +135,5 @@ export class UserDataProvider extends ProviderBase {
         return this.validateStreamCount(streams?.length || 0);
     }
 }
-
 
 console.log('[UserDataProvider] User data provider loaded');

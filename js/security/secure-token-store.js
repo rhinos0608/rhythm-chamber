@@ -1,16 +1,16 @@
 /**
  * SecureTokenStore - Single Authority Token Management
- * 
+ *
  * HNW Hierarchy: ONLY authority for token access.
  * All token operations MUST go through this module.
  * Direct localStorage/IndexedDB access for tokens is forbidden.
- * 
+ *
  * Features:
  * - Mandatory device binding verification on every access
  * - Automatic token invalidation on binding mismatch
  * - Audit logging of all token operations
  * - Impossible to bypass binding verification
- * 
+ *
  * @module security/secure-token-store
  */
 
@@ -52,34 +52,39 @@ function requireSecureContext() {
     if (typeof window !== 'undefined' && !window.isSecureContext) {
         throw new Error(
             '[SecureTokenStore] Secure Context required. ' +
-            'Please access the app via HTTPS or localhost.'
+                'Please access the app via HTTPS or localhost.'
         );
     }
     if (!crypto?.subtle) {
         throw new Error(
             '[SecureTokenStore] crypto.subtle unavailable. ' +
-            'Please access the app via HTTPS or localhost.'
+                'Please access the app via HTTPS or localhost.'
         );
     }
 }
 
 // Enforce secure context at module load, but degrade to fallback instead of crashing
 let _secureContextAvailable = true;
-let _fallbackReason = null;  // Store the reason for fallback (for UI warnings)
-let _hasWarnedAboutFallback = false;  // Track if we've already warned about fallback
+let _fallbackReason = null; // Store the reason for fallback (for UI warnings)
+let _hasWarnedAboutFallback = false; // Track if we've already warned about fallback
 
 try {
     requireSecureContext();
 } catch (error) {
     _secureContextAvailable = false;
     _fallbackReason = error.message;
-    console.warn('[SecureTokenStore] Secure context unavailable, running in fallback mode:', error.message);
+    console.warn(
+        '[SecureTokenStore] Secure context unavailable, running in fallback mode:',
+        error.message
+    );
 
     // Dispatch event for UI to show warning (best effort - may fire before listeners ready)
     if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('secure-context:unavailable', {
-            detail: { reason: error.message }
-        }));
+        window.dispatchEvent(
+            new CustomEvent('secure-context:unavailable', {
+                detail: { reason: error.message },
+            })
+        );
     }
 }
 
@@ -137,7 +142,7 @@ function getSessionSalt() {
         if (typeof crypto?.getRandomValues !== 'function') {
             throw new Error(
                 '[SecureTokenStore] Cryptographically secure random number generator required. ' +
-                'Please use a modern browser with crypto.getRandomValues support.'
+                    'Please use a modern browser with crypto.getRandomValues support.'
             );
         }
 
@@ -168,7 +173,7 @@ async function createBinding(fingerprint) {
     const binding = {
         fingerprint,
         createdAt: Date.now(),
-        salt: getSessionSalt()
+        salt: getSessionSalt(),
     };
 
     try {
@@ -211,7 +216,7 @@ async function verifyBinding() {
             // BINDING MISMATCH - This is a security violation
             audit('binding_mismatch', {
                 expected: binding.fingerprint.substring(0, 8) + '...',
-                actual: currentFingerprint.substring(0, 8) + '...'
+                actual: currentFingerprint.substring(0, 8) + '...',
             });
 
             // Invalidate ALL tokens
@@ -265,7 +270,7 @@ async function verifyBindingReadOnly() {
         // Audit the rate limit violation
         audit('readonly_rate_limit_exceeded', {
             count: readOnlyCheckLog.length,
-            window: '1 minute'
+            window: '1 minute',
         });
 
         console.warn('[SecureTokenStore] Read-only binding check rate limit exceeded');
@@ -274,7 +279,7 @@ async function verifyBindingReadOnly() {
         return {
             valid: false,
             reason: 'rate_limited',
-            message: 'Too many status checks. Please wait before trying again.'
+            message: 'Too many status checks. Please wait before trying again.',
         };
     }
 
@@ -297,7 +302,7 @@ async function verifyBindingReadOnly() {
         // No binding exists yet
         // Audit the first check (useful for detecting initialization)
         audit('readonly_check_no_binding', {
-            fingerprint: currentFingerprint?.substring(0, 8) + '...'
+            fingerprint: currentFingerprint?.substring(0, 8) + '...',
         });
         return { valid: true, reason: 'no_binding_yet' };
     }
@@ -311,7 +316,7 @@ async function verifyBindingReadOnly() {
             audit('readonly_binding_mismatch_detected', {
                 expected: binding.fingerprint.substring(0, 8) + '...',
                 actual: currentFingerprint.substring(0, 8) + '...',
-                timestamp: now
+                timestamp: now,
             });
 
             // Return mismatch status WITHOUT invalidating tokens (read-only)
@@ -319,14 +324,15 @@ async function verifyBindingReadOnly() {
             return {
                 valid: false,
                 reason: 'fingerprint_mismatch',
-                warning: 'Binding mismatch detected in read-only mode. Full verification will invalidate tokens.'
+                warning:
+                    'Binding mismatch detected in read-only mode. Full verification will invalidate tokens.',
             };
         }
 
         // Audit successful checks periodically (not every time to reduce noise)
         if (readOnlyCheckLog.length % 5 === 0) {
             audit('readonly_binding_ok', {
-                fingerprint: currentFingerprint.substring(0, 8) + '...'
+                fingerprint: currentFingerprint.substring(0, 8) + '...',
             });
         }
 
@@ -377,7 +383,7 @@ async function store(tokenKey, value, options = {}) {
         value,
         storedAt: Date.now(),
         expiresAt: options.expiresIn ? Date.now() + options.expiresIn : null,
-        metadata: options.metadata || {}
+        metadata: options.metadata || {},
     };
 
     try {
@@ -388,18 +394,15 @@ async function store(tokenKey, value, options = {}) {
         if (!IndexedDBCore) {
             const error = new Error(
                 '[SecureTokenStore] IndexedDB is required for secure token storage. ' +
-                'localStorage fallback has been removed for security reasons. ' +
-                'Please use a modern browser with IndexedDB support.'
+                    'localStorage fallback has been removed for security reasons. ' +
+                    'Please use a modern browser with IndexedDB support.'
             );
             console.error(error.message);
             audit('token_store_blocked', { tokenKey, reason: 'indexeddb_unavailable' });
             return false;
         }
 
-        await IndexedDBCore.put(
-            IndexedDBCore.STORES.TOKENS,
-            { key: storageKey, ...tokenData }
-        );
+        await IndexedDBCore.put(IndexedDBCore.STORES.TOKENS, { key: storageKey, ...tokenData });
 
         audit('token_stored', { tokenKey, hasExpiry: !!options.expiresIn, storage: 'indexeddb' });
         return true;
@@ -426,7 +429,10 @@ async function retrieve(tokenKey) {
     const bindingResult = await verifyBinding();
 
     if (!bindingResult.valid) {
-        console.error('[SecureTokenStore] Cannot retrieve: binding invalid -', bindingResult.reason);
+        console.error(
+            '[SecureTokenStore] Cannot retrieve: binding invalid -',
+            bindingResult.reason
+        );
         audit('token_retrieve_blocked', { tokenKey, reason: bindingResult.reason });
         return null;
     }
@@ -440,15 +446,14 @@ async function retrieve(tokenKey) {
         // Only use IndexedDB for secure token storage
 
         if (!IndexedDBCore) {
-            console.warn('[SecureTokenStore] IndexedDB unavailable - cannot retrieve token securely');
+            console.warn(
+                '[SecureTokenStore] IndexedDB unavailable - cannot retrieve token securely'
+            );
             audit('token_retrieve_blocked', { tokenKey, reason: 'indexeddb_unavailable' });
             return null;
         }
 
-        const record = await IndexedDBCore.get(
-            IndexedDBCore.STORES.TOKENS,
-            storageKey
-        );
+        const record = await IndexedDBCore.get(IndexedDBCore.STORES.TOKENS, storageKey);
         tokenData = record;
 
         if (!tokenData) {
@@ -486,7 +491,10 @@ async function retrieveWithOptions(tokenKey) {
     const bindingResult = await verifyBinding();
 
     if (!bindingResult.valid) {
-        console.error('[SecureTokenStore] Cannot retrieveWithOptions: binding invalid -', bindingResult.reason);
+        console.error(
+            '[SecureTokenStore] Cannot retrieveWithOptions: binding invalid -',
+            bindingResult.reason
+        );
         audit('token_retrieve_blocked', { tokenKey, reason: bindingResult.reason });
         return null;
     }
@@ -498,15 +506,14 @@ async function retrieveWithOptions(tokenKey) {
 
         // SECURITY FIX (MEDIUM Issue #12): Eliminated localStorage fallback for tokens
         if (!IndexedDBCore) {
-            console.warn('[SecureTokenStore] IndexedDB unavailable - cannot retrieve token securely');
+            console.warn(
+                '[SecureTokenStore] IndexedDB unavailable - cannot retrieve token securely'
+            );
             audit('token_retrieve_blocked', { tokenKey, reason: 'indexeddb_unavailable' });
             return null;
         }
 
-        const record = await IndexedDBCore.get(
-            IndexedDBCore.STORES.TOKENS,
-            storageKey
-        );
+        const record = await IndexedDBCore.get(IndexedDBCore.STORES.TOKENS, storageKey);
         tokenData = record;
 
         if (!tokenData) {
@@ -526,7 +533,7 @@ async function retrieveWithOptions(tokenKey) {
         return {
             value: tokenData.value,
             expiresIn: tokenData.expiresAt ? tokenData.expiresAt - Date.now() : undefined,
-            metadata: tokenData.metadata || {}
+            metadata: tokenData.metadata || {},
         };
     } catch (error) {
         console.error('[SecureTokenStore] retrieveWithOptions failed:', error);
@@ -550,7 +557,10 @@ async function invalidate(tokenKey) {
     const bindingResult = await verifyBinding();
 
     if (!bindingResult.valid && bindingResult.reason !== 'no_binding_yet') {
-        console.error('[SecureTokenStore] Cannot invalidate: binding invalid -', bindingResult.reason);
+        console.error(
+            '[SecureTokenStore] Cannot invalidate: binding invalid -',
+            bindingResult.reason
+        );
         audit('token_invalidate_blocked', { tokenKey, reason: bindingResult.reason });
         return false;
     }
@@ -559,10 +569,7 @@ async function invalidate(tokenKey) {
 
     try {
         if (IndexedDBCore) {
-            await IndexedDBCore.delete(
-                IndexedDBCore.STORES.TOKENS,
-                storageKey
-            );
+            await IndexedDBCore.delete(IndexedDBCore.STORES.TOKENS, storageKey);
         }
         localStorage.removeItem(storageKey);
 
@@ -640,7 +647,7 @@ function audit(operation, details = {}) {
         auditLog.push({
             operation,
             details,
-            timestamp: Date.now()
+            timestamp: Date.now(),
         });
 
         // Keep only last N entries
@@ -690,7 +697,7 @@ async function getStatus() {
         bindingValid: bindingResult.valid,
         bindingReason: bindingResult.reason,
         fingerprint: _deviceFingerprint ? _deviceFingerprint.substring(0, 8) + '...' : null,
-        auditLogSize: getAuditLog().length
+        auditLogSize: getAuditLog().length,
     };
 }
 
@@ -715,7 +722,9 @@ async function init() {
 export const SecureTokenStore = {
     isAvailable: () => _secureContextAvailable,
     getFallbackReason: () => _fallbackReason,
-    markFallbackWarned: () => { _hasWarnedAboutFallback = true; },
+    markFallbackWarned: () => {
+        _hasWarnedAboutFallback = true;
+    },
     hasWarnedFallback: () => _hasWarnedAboutFallback,
     // Initialization
     init,
@@ -735,8 +744,7 @@ export const SecureTokenStore = {
     clearAuditLog,
 
     // Status
-    getStatus
+    getStatus,
 };
-
 
 console.log('[SecureTokenStore] Module loaded (binding-enforced token storage)');

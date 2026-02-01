@@ -12,13 +12,13 @@ const logger = createLogger('Spotify:OAuthManager');
 // OAuth endpoints
 const ENDPOINTS = {
     authorize: 'https://accounts.spotify.com/authorize',
-    token: 'https://accounts.spotify.com/api/token'
+    token: 'https://accounts.spotify.com/api/token',
 };
 
 // Storage keys
 const STORAGE_KEYS = {
     CODE_VERIFIER: 'spotify_code_verifier',
-    OAUTH_STATE: 'spotify_oauth_state'
+    OAUTH_STATE: 'spotify_oauth_state',
 };
 
 /**
@@ -117,7 +117,9 @@ export class OAuthManager {
      */
     static async initiateLogin() {
         if (!this.isConfigured()) {
-            throw new Error('Spotify is not configured. Please add your Client ID and redirectUri to config.js');
+            throw new Error(
+                'Spotify is not configured. Please add your Client ID and redirectUri to config.js'
+            );
         }
 
         const codeVerifier = generateCodeVerifier();
@@ -140,27 +142,35 @@ export class OAuthManager {
             sessionStorage.setItem(STORAGE_KEYS.CODE_VERIFIER, codeVerifier);
         } catch (e) {
             // FAIL CLOSED - sessionStorage is required for secure OAuth flow
-            logger.error('sessionStorage required for secure OAuth flow. Please enable cookies/storage in your browser.', e);
+            logger.error(
+                'sessionStorage required for secure OAuth flow. Please enable cookies/storage in your browser.',
+                e
+            );
 
             // Dispatch event for UI to show error
             if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('spotify:auth-error', {
-                    detail: {
-                        reason: 'session_storage_unavailable',
-                        message: 'Secure OAuth requires sessionStorage. Please enable cookies/storage in your browser settings.'
-                    }
-                }));
+                window.dispatchEvent(
+                    new CustomEvent('spotify:auth-error', {
+                        detail: {
+                            reason: 'session_storage_unavailable',
+                            message:
+                                'Secure OAuth requires sessionStorage. Please enable cookies/storage in your browser settings.',
+                        },
+                    })
+                );
             }
 
             throw new Error(
                 'sessionStorage required for secure OAuth flow. ' +
-                'Please enable cookies/storage in your browser settings.'
+                    'Please enable cookies/storage in your browser settings.'
             );
         }
 
         const redirectUri = ConfigLoader.get('spotify.redirectUri');
         if (!redirectUri || typeof redirectUri !== 'string') {
-            throw new Error('Spotify redirectUri is missing or invalid. Set spotify.redirectUri in config.js to your app callback URL.');
+            throw new Error(
+                'Spotify redirectUri is missing or invalid. Set spotify.redirectUri in config.js to your app callback URL.'
+            );
         }
 
         const params = new URLSearchParams({
@@ -169,7 +179,7 @@ export class OAuthManager {
             scope: ConfigLoader.get('spotify.scopes', []).join(' '),
             redirect_uri: redirectUri,
             code_challenge_method: 'S256',
-            code_challenge: codeChallenge
+            code_challenge: codeChallenge,
         });
 
         // SECURITY: Generate and store state parameter for CSRF protection
@@ -184,7 +194,7 @@ export class OAuthManager {
             logger.error('sessionStorage required for OAuth state parameter', e);
             throw new Error(
                 'sessionStorage required for secure OAuth flow. ' +
-                'Please enable cookies/storage in your browser settings.'
+                    'Please enable cookies/storage in your browser settings.'
             );
         }
 
@@ -208,7 +218,7 @@ export class OAuthManager {
             logger.error('OAuth state mismatch - possible CSRF attack');
             throw new Error(
                 'Security verification failed. The authorization flow may have been tampered with. ' +
-                'Please try connecting again.'
+                    'Please try connecting again.'
             );
         }
 
@@ -235,15 +245,15 @@ export class OAuthManager {
             const response = await fetch(ENDPOINTS.token, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
+                    'Content-Type': 'application/x-www-form-urlencoded',
                 },
                 body: new URLSearchParams({
                     client_id: ConfigLoader.get('spotify.clientId'),
                     grant_type: 'authorization_code',
                     code: code,
                     redirect_uri: ConfigLoader.get('spotify.redirectUri'),
-                    code_verifier: codeVerifier
-                })
+                    code_verifier: codeVerifier,
+                }),
             });
 
             if (!response.ok) {

@@ -12,7 +12,7 @@ import {
     RETRY_CONFIG,
     classifyError,
     isRetryable,
-    ErrorType
+    ErrorType,
 } from '../../utils/resilient-retry.js';
 
 // Legacy constants for backward compatibility
@@ -100,14 +100,14 @@ async function withRetry(fn, functionName = 'function') {
                     `[Functions] Attempt ${attempt}/${MAX_FUNCTION_RETRIES + 1} for ${functionName} failed:`,
                     error.message
                 );
-            }
+            },
         });
 
         // Log success with context
         if (context.attempt > 0) {
             console.log(
                 `[Functions] ${functionName} succeeded after ${context.attempt + 1} attempts ` +
-                `(total delay: ${context.totalDelayTime}ms)`
+                    `(total delay: ${context.totalDelayTime}ms)`
             );
         }
 
@@ -123,8 +123,7 @@ export const FunctionRetry = {
     MAX_RETRIES: MAX_FUNCTION_RETRIES,
     isTransientError,
     withRetry,
-    validateRetryConfig
+    validateRetryConfig,
 };
 
 console.log('[FunctionRetry] Module loaded (delegating to resilient-retry.js)');
-

@@ -1,14 +1,16 @@
 /**
  * Prompt Injection Strategy (Levels 2/3)
  * Handles function calls parsed from text responses using <function_call> tags
- * 
+ *
  * @module tool-strategies/prompt-injection-strategy
  */
 
 import { BaseToolStrategy } from './base-strategy.js';
 
 export class PromptInjectionStrategy extends BaseToolStrategy {
-    get level() { return 2; }
+    get level() {
+        return 2;
+    }
 
     /**
      * Persist partial results to conversation history
@@ -22,14 +24,15 @@ export class PromptInjectionStrategy extends BaseToolStrategy {
 
         await this.addToHistory({
             role: 'assistant',
-            content: content
+            content: content,
         });
-        const partialResultsMessage = this.FunctionCallingFallback?.buildFunctionResultsMessage?.(results) ||
+        const partialResultsMessage =
+            this.FunctionCallingFallback?.buildFunctionResultsMessage?.(results) ||
             `Partial results (${reason}): ${JSON.stringify(results, null, 2)}`;
         await this.addToHistory({
             role: 'user',
             content: partialResultsMessage,
-            isSystem: true
+            isSystem: true,
         });
     }
 
@@ -40,7 +43,8 @@ export class PromptInjectionStrategy extends BaseToolStrategy {
         }
 
         const content = responseMessage?.content || '';
-        const parsedCalls = this.FunctionCallingFallback?.parseFunctionCallsFromText?.(content) || [];
+        const parsedCalls =
+            this.FunctionCallingFallback?.parseFunctionCallsFromText?.(content) || [];
 
         if (parsedCalls.length === 0) {
             return this.confidence(0, 'No function calls parsed from text');
@@ -48,8 +52,11 @@ export class PromptInjectionStrategy extends BaseToolStrategy {
 
         // Moderate-high confidence, scaled by number of calls found
         // More calls = slightly higher confidence (max 0.85)
-        const confidence = Math.min(0.85, 0.75 + (parsedCalls.length * 0.02));
-        return this.confidence(confidence, `Parsed ${parsedCalls.length} function call(s) from text`);
+        const confidence = Math.min(0.85, 0.75 + parsedCalls.length * 0.02);
+        return this.confidence(
+            confidence,
+            `Parsed ${parsedCalls.length} function call(s) from text`
+        );
     }
 
     async execute(context) {
@@ -61,7 +68,7 @@ export class PromptInjectionStrategy extends BaseToolStrategy {
             capabilityLevel,
             streamsData,
             buildSystemPrompt,
-            callLLM
+            callLLM,
         } = context;
 
         const content = responseMessage?.content || '';
@@ -71,14 +78,22 @@ export class PromptInjectionStrategy extends BaseToolStrategy {
 
         // Early return if FunctionCallingFallback is unavailable or no calls parsed
         if (!parsedCalls || parsedCalls.length === 0) {
-            console.warn('[PromptInjectionStrategy] FunctionCallingFallback unavailable or no calls parsed');
+            console.warn(
+                '[PromptInjectionStrategy] FunctionCallingFallback unavailable or no calls parsed'
+            );
             return { responseMessage };
         }
 
-        console.log(`[PromptInjectionStrategy] Level ${capabilityLevel}: Parsed ${parsedCalls.length} function calls from text`);
+        console.log(
+            `[PromptInjectionStrategy] Level ${capabilityLevel}: Parsed ${parsedCalls.length} function calls from text`
+        );
 
         if (onProgress) {
-            onProgress({ type: 'fallback_parsing', level: capabilityLevel, calls: parsedCalls.length });
+            onProgress({
+                type: 'fallback_parsing',
+                level: capabilityLevel,
+                calls: parsedCalls.length,
+            });
         }
 
         // Execute each parsed function call
@@ -101,9 +116,9 @@ export class PromptInjectionStrategy extends BaseToolStrategy {
                 const abortController = new AbortController();
                 const timeoutId = setTimeout(() => abortController.abort(), this.TIMEOUT_MS);
 
-                result = await this.Functions?.execute?.(call.name, call.arguments, streamsData, {
-                    signal: abortController.signal
-                }) ?? { error: 'Functions module not available' };
+                result = (await this.Functions?.execute?.(call.name, call.arguments, streamsData, {
+                    signal: abortController.signal,
+                })) ?? { error: 'Functions module not available' };
 
                 clearTimeout(timeoutId);
             } catch (execError) {
@@ -112,21 +127,28 @@ export class PromptInjectionStrategy extends BaseToolStrategy {
                     execError.message = `Function ${call.name} timed out after ${this.TIMEOUT_MS}ms`;
                 }
 
-                console.error(`[PromptInjectionStrategy] Execution failed for ${call.name}:`, execError);
+                console.error(
+                    `[PromptInjectionStrategy] Execution failed for ${call.name}:`,
+                    execError
+                );
                 if (onProgress) onProgress({ type: 'tool_end', tool: call.name, error: true });
 
                 // HNW Fix: Persist any partial successes to history before returning error
                 // Note: tool_end events for successful calls were already emitted during the loop
                 // so we don't re-emit them here to avoid duplicate progress events
-                await this._persistPartialResults(content, results, `execution failed: ${execError.message}`);
+                await this._persistPartialResults(
+                    content,
+                    results,
+                    `execution failed: ${execError.message}`
+                );
 
                 return {
                     earlyReturn: {
                         status: 'error',
                         content: `Function '${call.name}' failed: ${execError.message}. Please try again or select a different model.`,
                         role: 'assistant',
-                        isFunctionError: true
-                    }
+                        isFunctionError: true,
+                    },
                 };
             }
 
@@ -135,32 +157,40 @@ export class PromptInjectionStrategy extends BaseToolStrategy {
         }
 
         // HNW Fix: Use optional chaining for buildFunctionResultsMessage and provide fallback
-        const resultsMessage = this.FunctionCallingFallback?.buildFunctionResultsMessage?.(results) ??
+        const resultsMessage =
+            this.FunctionCallingFallback?.buildFunctionResultsMessage?.(results) ??
             `Function results: ${JSON.stringify(results, null, 2)}`;
 
         // Add responses to conversation history
         await this.addToHistory({
             role: 'assistant',
-            content: content
+            content: content,
         });
         await this.addToHistory({
             role: 'user',
             content: resultsMessage,
-            isSystem: true
+            isSystem: true,
         });
 
         // Make follow-up call with function results
         const followUpMessages = [
             { role: 'system', content: buildSystemPrompt() },
-            ...this.getHistory()
+            ...this.getHistory(),
         ];
 
         if (onProgress) onProgress({ type: 'thinking' });
 
         try {
-            const followUpResponse = await callLLM(providerConfig, key, followUpMessages, undefined);
+            const followUpResponse = await callLLM(
+                providerConfig,
+                key,
+                followUpMessages,
+                undefined
+            );
             // HNW Fix: Safely handle missing/empty choices array
-            const choices = Array.isArray(followUpResponse?.choices) ? followUpResponse.choices : [];
+            const choices = Array.isArray(followUpResponse?.choices)
+                ? followUpResponse.choices
+                : [];
             const message = choices.find(c => c?.message)?.message ?? followUpResponse?.message;
 
             if (message) {
@@ -168,27 +198,29 @@ export class PromptInjectionStrategy extends BaseToolStrategy {
             }
 
             // Fallback if no valid message found
-            console.warn('[PromptInjectionStrategy] No valid message in followUpResponse, returning direct results');
-            const directResponse = results.map(r =>
-                `${r.name}: ${JSON.stringify(r.result, null, 2)}`
-            ).join('\n\n');
+            console.warn(
+                '[PromptInjectionStrategy] No valid message in followUpResponse, returning direct results'
+            );
+            const directResponse = results
+                .map(r => `${r.name}: ${JSON.stringify(r.result, null, 2)}`)
+                .join('\n\n');
             return {
                 responseMessage: {
                     role: 'assistant',
-                    content: `I found this data for you:\n\n${directResponse}`
-                }
+                    content: `I found this data for you:\n\n${directResponse}`,
+                },
             };
         } catch (error) {
             console.error('[PromptInjectionStrategy] Follow-up call failed:', error);
             // Return results directly if follow-up fails
-            const directResponse = results.map(r =>
-                `${r.name}: ${JSON.stringify(r.result, null, 2)}`
-            ).join('\n\n');
+            const directResponse = results
+                .map(r => `${r.name}: ${JSON.stringify(r.result, null, 2)}`)
+                .join('\n\n');
             return {
                 responseMessage: {
                     role: 'assistant',
-                    content: `I found this data for you:\n\n${directResponse}`
-                }
+                    content: `I found this data for you:\n\n${directResponse}`,
+                },
             };
         }
     }

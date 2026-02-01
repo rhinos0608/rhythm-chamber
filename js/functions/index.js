@@ -49,7 +49,9 @@ export function initialize() {
         Functions.templateSchemas = SchemaRegistry.getTemplateSchemas();
         Functions.allSchemas = SchemaRegistry.getAllSchemas();
 
-        console.log(`[Functions] Loaded ${Functions.allSchemas.length} function schemas (refactored architecture)`);
+        console.log(
+            `[Functions] Loaded ${Functions.allSchemas.length} function schemas (refactored architecture)`
+        );
     } catch (error) {
         console.error('[Functions] Failed to initialize schema arrays:', error);
         // Set empty arrays to prevent undefined errors
@@ -235,7 +237,7 @@ export const Functions = {
     // Discovery - delegates to SchemaRegistry
     getAvailableFunctions,
     hasFunction,
-    getFunctionSchema
+    getFunctionSchema,
 };
 
 // Also export individual modules for direct access if needed
@@ -263,8 +265,9 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 } else if (typeof window === 'undefined') {
     // Node.js environment - initialize after modules load
     // Defer to next tick to break circular dependency
-    if (typeof process !== 'undefined' && process.nextTick) {
-        process.nextTick(initialize);
+    const nodeProcess = typeof globalThis !== 'undefined' ? globalThis.process : undefined;
+    if (nodeProcess?.nextTick) {
+        nodeProcess.nextTick(initialize);
     } else {
         setTimeout(initialize, 0);
     }

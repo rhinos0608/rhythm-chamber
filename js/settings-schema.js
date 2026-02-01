@@ -27,7 +27,7 @@ const OPENROUTER_MODELS = [
     'xiaomi/mimo-v2-flash:free',
     'google/gemini-2.0-flash-exp:free',
     'meta-llama/llama-3.1-8b-instruct:free',
-    'microsoft/phi-3-medium-128k-instruct:free'
+    'microsoft/phi-3-medium-128k-instruct:free',
 ];
 
 /** Available Gemini models */
@@ -38,7 +38,7 @@ const GEMINI_MODELS = [
     'gemini-2.0-flash-lite',
     'gemini-1.5-flash',
     'gemini-2.5-pro',
-    'gemini-1.5-pro'
+    'gemini-1.5-pro',
 ];
 
 /** Available LLM providers */
@@ -65,7 +65,7 @@ export const SETTINGS_SCHEMA = {
     _version: {
         type: 'number',
         default: SETTINGS_SCHEMA_VERSION,
-        required: true
+        required: true,
     },
 
     // LLM Provider settings
@@ -74,25 +74,25 @@ export const SETTINGS_SCHEMA = {
         default: {
             provider: 'ollama',
             ollamaEndpoint: 'http://localhost:11434',
-            lmstudioEndpoint: 'http://localhost:1234/v1'
+            lmstudioEndpoint: 'http://localhost:1234/v1',
         },
         properties: {
             provider: {
                 type: 'enum',
                 values: LLM_PROVIDERS,
-                default: 'ollama'
+                default: 'ollama',
             },
             ollamaEndpoint: {
                 type: 'url',
                 default: 'http://localhost:11434',
-                pattern: /^https?:\/\/.+/i
+                pattern: /^https?:\/\/.+/i,
             },
             lmstudioEndpoint: {
                 type: 'url',
                 default: 'http://localhost:1234/v1',
-                pattern: /^https?:\/\/.+/i
-            }
-        }
+                pattern: /^https?:\/\/.+/i,
+            },
+        },
     },
 
     // OpenRouter settings
@@ -106,7 +106,7 @@ export const SETTINGS_SCHEMA = {
             topP: 0.9,
             frequencyPenalty: 0,
             presencePenalty: 0,
-            contextWindow: 4096
+            contextWindow: 4096,
         },
         properties: {
             apiKey: {
@@ -114,50 +114,50 @@ export const SETTINGS_SCHEMA = {
                 default: '',
                 sensitive: true,
                 minLength: 0,
-                maxLength: 256
+                maxLength: 256,
             },
             model: {
                 type: 'string',
                 default: 'xiaomi/mimo-v2-flash:free',
-                pattern: /^[a-z0-9\/\-.:free]+$/
+                pattern: /^[a-z0-9/\-.:free]+$/,
             },
             maxTokens: {
                 type: 'number',
                 default: 4500,
                 min: 100,
-                max: 128000
+                max: 128000,
             },
             temperature: {
                 type: 'number',
                 default: 0.7,
                 min: 0,
-                max: 2
+                max: 2,
             },
             topP: {
                 type: 'number',
                 default: 0.9,
                 min: 0,
-                max: 1
+                max: 1,
             },
             frequencyPenalty: {
                 type: 'number',
                 default: 0,
                 min: -2,
-                max: 2
+                max: 2,
             },
             presencePenalty: {
                 type: 'number',
                 default: 0,
                 min: -2,
-                max: 2
+                max: 2,
             },
             contextWindow: {
                 type: 'number',
                 default: 4096,
                 min: 1024,
-                max: 128000
-            }
-        }
+                max: 128000,
+            },
+        },
     },
 
     // Ollama settings
@@ -167,33 +167,33 @@ export const SETTINGS_SCHEMA = {
             model: 'llama3.2',
             temperature: 0.7,
             topP: 0.9,
-            maxTokens: 2000
+            maxTokens: 2000,
         },
         properties: {
             model: {
                 type: 'string',
                 default: 'llama3.2',
-                minLength: 1
+                minLength: 1,
             },
             temperature: {
                 type: 'number',
                 default: 0.7,
                 min: 0,
-                max: 2
+                max: 2,
             },
             topP: {
                 type: 'number',
                 default: 0.9,
                 min: 0,
-                max: 1
+                max: 1,
             },
             maxTokens: {
                 type: 'number',
                 default: 2000,
                 min: 100,
-                max: 32000
-            }
-        }
+                max: 32000,
+            },
+        },
     },
 
     // LM Studio settings
@@ -203,33 +203,33 @@ export const SETTINGS_SCHEMA = {
             model: 'local-model',
             temperature: 0.7,
             topP: 0.9,
-            maxTokens: 2000
+            maxTokens: 2000,
         },
         properties: {
             model: {
                 type: 'string',
                 default: 'local-model',
-                minLength: 1
+                minLength: 1,
             },
             temperature: {
                 type: 'number',
                 default: 0.7,
                 min: 0,
-                max: 2
+                max: 2,
             },
             topP: {
                 type: 'number',
                 default: 0.9,
                 min: 0,
-                max: 1
+                max: 1,
             },
             maxTokens: {
                 type: 'number',
                 default: 2000,
                 min: 100,
-                max: 32000
-            }
-        }
+                max: 32000,
+            },
+        },
     },
 
     // Gemini settings
@@ -240,7 +240,7 @@ export const SETTINGS_SCHEMA = {
             model: 'gemini-2.5-flash',
             maxTokens: 8192,
             temperature: 0.7,
-            topP: 0.9
+            topP: 0.9,
         },
         properties: {
             apiKey: {
@@ -248,39 +248,39 @@ export const SETTINGS_SCHEMA = {
                 default: '',
                 sensitive: true,
                 minLength: 0,
-                maxLength: 256
+                maxLength: 256,
             },
             model: {
                 type: 'enum',
                 values: GEMINI_MODELS,
-                default: 'gemini-2.5-flash'
+                default: 'gemini-2.5-flash',
             },
             maxTokens: {
                 type: 'number',
                 default: 8192,
                 min: 100,
-                max: 8192
+                max: 8192,
             },
             temperature: {
                 type: 'number',
                 default: 0.7,
                 min: 0,
-                max: 2
+                max: 2,
             },
             topP: {
                 type: 'number',
                 default: 0.9,
                 min: 0,
-                max: 1
-            }
-        }
+                max: 1,
+            },
+        },
     },
 
     // Spotify settings
     spotify: {
         type: 'object',
         default: {
-            clientId: ''
+            clientId: '',
         },
         properties: {
             clientId: {
@@ -288,10 +288,10 @@ export const SETTINGS_SCHEMA = {
                 default: '',
                 sensitive: true,
                 minLength: 0,
-                maxLength: 256
-            }
-        }
-    }
+                maxLength: 256,
+            },
+        },
+    },
 };
 
 // ==========================================
@@ -389,7 +389,9 @@ function validateValue(key, value, schemaDef) {
 
         case 'enum':
             if (!schemaDef.values.includes(value)) {
-                errors.push(`${key}: invalid value "${value}", must be one of ${schemaDef.values.join(', ')}`);
+                errors.push(
+                    `${key}: invalid value "${value}", must be one of ${schemaDef.values.join(', ')}`
+                );
                 sanitized = schemaDef.default;
             }
             break;
@@ -419,7 +421,7 @@ function validateValue(key, value, schemaDef) {
     return {
         valid: errors.length === 0,
         errors,
-        sanitized
+        sanitized,
     };
 }
 
@@ -451,7 +453,7 @@ function validateObject(obj, properties, prefix = '') {
     return {
         valid: errors.length === 0,
         errors,
-        sanitized
+        sanitized,
     };
 }
 
@@ -476,7 +478,9 @@ export function validateSettings(settings) {
     if (settings._version !== undefined && typeof settings._version === 'number') {
         sanitized._version = settings._version;
         if (settings._version > SETTINGS_SCHEMA_VERSION) {
-            warnings.push(`Settings version ${settings._version} is newer than current schema version ${SETTINGS_SCHEMA_VERSION}`);
+            warnings.push(
+                `Settings version ${settings._version} is newer than current schema version ${SETTINGS_SCHEMA_VERSION}`
+            );
         }
     } else {
         // No version in settings - this is a legacy settings object
@@ -523,7 +527,7 @@ export function validateSettings(settings) {
         valid: errors.length === 0,
         errors,
         warnings,
-        sanitized
+        sanitized,
     };
 }
 
@@ -559,7 +563,7 @@ export function mergeWithDefaults(partial = {}) {
     // Return sanitized settings merged with defaults
     return {
         ...defaults,
-        ...validation.sanitized
+        ...validation.sanitized,
     };
 }
 
@@ -577,7 +581,7 @@ export function mergeWithDefaults(partial = {}) {
 export const SETTINGS_MIGRATIONS = {
     // Migration from v0 (unversioned) to v1
     // Adds _version field and ensures all required sections exist
-    1: (settings) => {
+    1: settings => {
         const migrated = { ...settings };
         migrated._version = 1;
 
@@ -652,7 +656,7 @@ export const SettingsSchema = {
     migrations: SETTINGS_MIGRATIONS,
 
     // Schema access
-    schema: SETTINGS_SCHEMA
+    schema: SETTINGS_SCHEMA,
 };
 
 console.log(`[SettingsSchema] Schema module loaded (v${SETTINGS_SCHEMA_VERSION})`);

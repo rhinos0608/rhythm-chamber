@@ -96,13 +96,13 @@ export class StorageDegradationManager {
         // Initialize cleanup and handlers first (before detector)
         this._cleanup = new CleanupStrategies({
             eventBus,
-            storage: null // Will use default Storage import
+            storage: null, // Will use default Storage import
         });
 
         this._handlers = new TierHandlers({
             eventBus,
             cleanupStrategies: this._cleanup,
-            autoCleanupEnabled
+            autoCleanupEnabled,
         });
 
         // Wire up tier changes from detector to handlers BEFORE creating detector
@@ -132,7 +132,7 @@ export class StorageDegradationManager {
         // Now initialize detector - its initial check will be captured by the listener above
         this._detector = new DegradationDetector({
             eventBus,
-            checkIntervalMs
+            checkIntervalMs,
         });
 
         performance.mark('storage-degradation-manager-init');
@@ -249,7 +249,7 @@ export class StorageDegradationManager {
             chunks: await Storage.getChunks(),
             settings: await Storage.getAllSettings(),
             timestamp: Date.now(),
-            version: '1.0.0'
+            version: '1.0.0',
         };
 
         const json = JSON.stringify(data, null, 2);
@@ -287,7 +287,7 @@ export class StorageDegradationManager {
         const frozenTiers = [
             DegradationTier.CRITICAL,
             DegradationTier.EXCEEDED,
-            DegradationTier.EMERGENCY
+            DegradationTier.EMERGENCY,
         ];
         return frozenTiers.includes(this._detector.getCurrentTier());
     }
@@ -303,15 +303,18 @@ export class StorageDegradationManager {
             if (this.isEmbeddingFrozen()) {
                 return {
                     blocked: true,
-                    reason: `Embedding generation paused: storage at ${this._detector.getCurrentTier()} tier`
+                    reason: `Embedding generation paused: storage at ${this._detector.getCurrentTier()} tier`,
                 };
             }
         }
 
-        if (this._handlers.isReadOnlyMode() && ['write', 'update', 'delete'].includes(operationType)) {
+        if (
+            this._handlers.isReadOnlyMode() &&
+            ['write', 'update', 'delete'].includes(operationType)
+        ) {
             return {
                 blocked: true,
-                reason: 'Storage is in read-only mode due to quota constraints'
+                reason: 'Storage is in read-only mode due to quota constraints',
             };
         }
 
@@ -336,24 +339,24 @@ export class StorageDegradationManager {
             chunks: { count: 0, estimatedBytes: 0, priority: 'high' },
             streams: { count: 0, estimatedBytes: 0, priority: 'high' },
             personality: { count: 0, estimatedBytes: 0, priority: 'never' },
-            settings: { count: 0, estimatedBytes: 0, priority: 'never' }
+            settings: { count: 0, estimatedBytes: 0, priority: 'never' },
         };
 
         try {
             const { Storage } = await import('../../storage.js');
 
             // Sessions
-            const sessions = await Storage.getAllChatSessions?.() || [];
+            const sessions = (await Storage.getAllChatSessions?.()) || [];
             breakdown.sessions.count = sessions.length;
             breakdown.sessions.estimatedBytes = JSON.stringify(sessions).length;
 
             // Streams
-            const streams = await Storage.getStreams?.() || [];
+            const streams = (await Storage.getStreams?.()) || [];
             breakdown.streams.count = streams.length;
             breakdown.streams.estimatedBytes = JSON.stringify(streams).length;
 
             // Chunks (estimate)
-            const chunks = await Storage.getChunks?.() || [];
+            const chunks = (await Storage.getChunks?.()) || [];
             breakdown.chunks.count = chunks.length;
             breakdown.chunks.estimatedBytes = JSON.stringify(chunks).length;
 
@@ -365,7 +368,7 @@ export class StorageDegradationManager {
             }
 
             // Settings
-            const settings = await Storage.getAllSettings?.() || {};
+            const settings = (await Storage.getAllSettings?.()) || {};
             breakdown.settings.count = Object.keys(settings).length;
             breakdown.settings.estimatedBytes = JSON.stringify(settings).length;
 
@@ -383,20 +386,23 @@ export class StorageDegradationManager {
             }
 
             // Calculate totals and percentages
-            const totalBytes = Object.values(breakdown).reduce((sum, cat) => sum + cat.estimatedBytes, 0);
+            const totalBytes = Object.values(breakdown).reduce(
+                (sum, cat) => sum + cat.estimatedBytes,
+                0
+            );
             for (const category of Object.keys(breakdown)) {
-                breakdown[category].percentage = totalBytes > 0
-                    ? Math.round((breakdown[category].estimatedBytes / totalBytes) * 100)
-                    : 0;
+                breakdown[category].percentage =
+                    totalBytes > 0
+                        ? Math.round((breakdown[category].estimatedBytes / totalBytes) * 100)
+                        : 0;
             }
 
             breakdown.total = {
                 estimatedBytes: totalBytes,
-                formattedSize: this._formatBytes(totalBytes)
+                formattedSize: this._formatBytes(totalBytes),
             };
 
             return breakdown;
-
         } catch (error) {
             console.error('[StorageDegradationManager] Failed to get storage breakdown:', error);
             return breakdown;

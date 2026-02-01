@@ -111,18 +111,19 @@ function renderEmptyState() {
  * @param {string} currentId - Current active session ID
  */
 function renderSessions(sessions, currentId) {
-    sidebarSessions.innerHTML = sessions.map(session => {
-        const isActive = session.id === currentId;
-        const date = new Date(session.updatedAt || session.createdAt);
-        const dateStr = formatRelativeDate(date);
-        const emoji = session.metadata?.personalityEmoji || '🎵';
-        const title = session.title || 'New Chat';
-        const activeLabel = isActive ? ' (current)' : '';
+    sidebarSessions.innerHTML = sessions
+        .map(session => {
+            const isActive = session.id === currentId;
+            const date = new Date(session.updatedAt || session.createdAt);
+            const dateStr = formatRelativeDate(date);
+            const emoji = session.metadata?.personalityEmoji || '🎵';
+            const title = session.title || 'New Chat';
+            const activeLabel = isActive ? ' (current)' : '';
 
-        // SAFE: Use data-action attributes instead of inline onclick to prevent XSS
-        // session.id is escaped via escapeHtml() to prevent injection
-        // A11Y: Added proper roles and labels for screen readers
-        return `
+            // SAFE: Use data-action attributes instead of inline onclick to prevent XSS
+            // session.id is escaped via escapeHtml() to prevent injection
+            // A11Y: Added proper roles and labels for screen readers
+            return `
             <div class="session-item ${isActive ? 'active' : ''}"
                  role="listitem"
                  tabindex="${isActive ? '0' : '-1'}"
@@ -150,7 +151,8 @@ function renderSessions(sessions, currentId) {
                 </div>
             </div>
         `;
-    }).join('');
+        })
+        .join('');
 }
 
 /**
@@ -166,8 +168,7 @@ function getContainer() {
  * @returns {boolean}
  */
 function hasSessions() {
-    return sidebarSessions &&
-           sidebarSessions.querySelector('.session-item') !== null;
+    return sidebarSessions && sidebarSessions.querySelector('.session-item') !== null;
 }
 
 /**
@@ -175,9 +176,7 @@ function hasSessions() {
  * @returns {NodeList}
  */
 function getSessionElements() {
-    return sidebarSessions ?
-           sidebarSessions.querySelectorAll('.session-item') :
-           [];
+    return sidebarSessions ? sidebarSessions.querySelectorAll('.session-item') : [];
 }
 
 /**
@@ -244,7 +243,7 @@ export const SessionListController = {
     getSessionElement,
     removeSessionElement,
     updateActiveState,
-    destroy
+    destroy,
 };
 
 console.log('[SessionListController] Session list controller loaded');

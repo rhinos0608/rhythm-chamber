@@ -26,20 +26,18 @@ const MIGRATION_CONFIG_KEYS = [
     'rhythm_chamber_rag_checkpoint_cipher',
     'rhythm_chamber_current_session',
     'rhythm_chamber_sidebar_collapsed',
-    'rhythm_chamber_persistence_consent'
+    'rhythm_chamber_persistence_consent',
 ];
 
 // Token keys to migrate to TOKENS store
 const MIGRATION_TOKEN_KEYS = [
     'spotify_access_token',
     'spotify_token_expiry',
-    'spotify_refresh_token'
+    'spotify_refresh_token',
 ];
 
 // Keys that must stay in localStorage (require sync access)
-const MIGRATION_EXEMPT_KEYS = [
-    'rhythm_chamber_emergency_backup'
-];
+const MIGRATION_EXEMPT_KEYS = ['rhythm_chamber_emergency_backup'];
 
 // ==========================================
 // Legacy Token Helpers
@@ -53,10 +51,7 @@ async function getLegacyTokenValue(key) {
 
     if (IndexedDBCore) {
         try {
-            const record = await IndexedDBCore.get(
-                IndexedDBCore.STORES.TOKENS,
-                key
-            );
+            const record = await IndexedDBCore.get(IndexedDBCore.STORES.TOKENS, key);
             return record ? record.value : null;
         } catch (err) {
             console.warn(`[Migration] Error reading legacy token '${key}':`, err);
@@ -88,10 +83,7 @@ async function hasLegacyTokens() {
     if (IndexedDBCore) {
         for (const key of MIGRATION_TOKEN_KEYS) {
             try {
-                const record = await IndexedDBCore.get(
-                    IndexedDBCore.STORES.TOKENS,
-                    key
-                );
+                const record = await IndexedDBCore.get(IndexedDBCore.STORES.TOKENS, key);
                 if (record?.value != null) {
                     return true;
                 }
@@ -125,10 +117,7 @@ async function getMigrationState() {
             return null;
         }
 
-        return await IndexedDBCore.get(
-            IndexedDBCore.STORES.MIGRATION,
-            'migration_state'
-        );
+        return await IndexedDBCore.get(IndexedDBCore.STORES.MIGRATION, 'migration_state');
     } catch (err) {
         console.warn('[Migration] Error getting migration state:', err);
         return null;
@@ -157,10 +146,7 @@ async function getCheckpoint() {
         if (!IndexedDBCore) {
             return null;
         }
-        return await IndexedDBCore.get(
-            IndexedDBCore.STORES.MIGRATION,
-            'migration_checkpoint'
-        );
+        return await IndexedDBCore.get(IndexedDBCore.STORES.MIGRATION, 'migration_checkpoint');
     } catch (err) {
         console.warn('[Migration] Error getting checkpoint:', err);
         return null;
@@ -169,16 +155,16 @@ async function getCheckpoint() {
 
 /**
  * Save checkpoint for resumable migration
- * 
+ *
  * WRITE-AHEAD MODE: When intent is specified, this is a write-ahead checkpoint
  * that records the INTENT to perform an operation. After the operation succeeds,
  * call saveCheckpoint again with status='complete' to mark it done.
- * 
+ *
  * On resume:
  * - 'pending': Re-execute the operation (may have failed before completing)
  * - 'complete': Skip this key (already done)
  * - 'failed': Skip (already failed, don't retry)
- * 
+ *
  * @param {Object} checkpoint - Checkpoint data
  * @param {string} [checkpoint.intent] - Operation intent: 'config' | 'token'
  * @param {string} [checkpoint.key] - Key being processed
@@ -193,7 +179,7 @@ async function saveCheckpoint(checkpoint) {
         await IndexedDBCore.put(IndexedDBCore.STORES.MIGRATION, {
             id: 'migration_checkpoint',
             ...checkpoint,
-            timestamp: Date.now()
+            timestamp: Date.now(),
         });
     } catch (err) {
         console.warn('[Migration] Error saving checkpoint:', err);
@@ -218,7 +204,7 @@ async function saveWriteAheadCheckpoint(intent, key, index, keysProcessed, total
         keysProcessed,
         totalKeys,
         status: 'pending',
-        phase: intent
+        phase: intent,
     });
 }
 
@@ -240,7 +226,7 @@ async function markCheckpointComplete(intent, key, index, keysProcessed, totalKe
         keysProcessed,
         totalKeys,
         status: 'complete',
-        phase: intent
+        phase: intent,
     });
 }
 
@@ -255,7 +241,15 @@ async function markCheckpointComplete(intent, key, index, keysProcessed, totalKe
  * @param {number} [lastProcessedIndex] - Last successfully processed index
  * @returns {Promise<void>}
  */
-async function markCheckpointFailed(intent, key, index, error, keysProcessed, totalKeys, lastProcessedIndex) {
+async function markCheckpointFailed(
+    intent,
+    key,
+    index,
+    error,
+    keysProcessed,
+    totalKeys,
+    lastProcessedIndex
+) {
     await saveCheckpoint({
         intent,
         key,
@@ -265,7 +259,7 @@ async function markCheckpointFailed(intent, key, index, error, keysProcessed, to
         totalKeys,
         status: 'failed',
         error,
-        phase: intent
+        phase: intent,
     });
 }
 
@@ -278,10 +272,7 @@ async function clearCheckpoint() {
         return;
     }
     try {
-        await IndexedDBCore.delete(
-            IndexedDBCore.STORES.MIGRATION,
-            'migration_checkpoint'
-        );
+        await IndexedDBCore.delete(IndexedDBCore.STORES.MIGRATION, 'migration_checkpoint');
     } catch (err) {
         // Ignore - checkpoint may not exist
     }
@@ -320,7 +311,7 @@ async function backupLocalStorage() {
         id: 'pre_migration_backup',
         backup,
         timestamp: Date.now(),
-        version: MIGRATION_MODULE_VERSION
+        version: MIGRATION_MODULE_VERSION,
     });
 
     console.log(`[Migration] Backed up ${Object.keys(backup).length} localStorage keys`);
@@ -368,7 +359,10 @@ async function rollbackMigration() {
             JSON.stringify(backup.backup);
         } catch (e) {
             console.error('[Migration] Backup is corrupted, cannot rollback:', e);
-            EventBus.emit('migration:rollback_failed', { reason: 'corrupted_backup', error: e.message });
+            EventBus.emit('migration:rollback_failed', {
+                reason: 'corrupted_backup',
+                error: e.message,
+            });
             return false;
         }
 
@@ -388,7 +382,7 @@ async function rollbackMigration() {
             lastProcessedIndex: -1,
             keysProcessed: 0,
             totalKeys: backupKeys.length,
-            status: 'pending'
+            status: 'pending',
         });
 
         // Restore localStorage with per-key validation
@@ -427,16 +421,18 @@ async function rollbackMigration() {
         await markCheckpointComplete('restore', 'all', 0, restoredCount, backupKeys.length);
 
         // Only clear migration state after successful restore
-        await IndexedDBCore.delete(
-            IndexedDBCore.STORES.MIGRATION,
-            'migration_state'
-        );
+        await IndexedDBCore.delete(IndexedDBCore.STORES.MIGRATION, 'migration_state');
 
         if (failedKeys.length > 0) {
-            console.warn(`[Migration] Rollback completed with ${failedKeys.length} failed keys:`, failedKeys);
+            console.warn(
+                `[Migration] Rollback completed with ${failedKeys.length} failed keys:`,
+                failedKeys
+            );
         }
 
-        console.log(`[Migration] Migration rolled back successfully (${restoredCount}/${backupKeys.length} keys restored)`);
+        console.log(
+            `[Migration] Migration rolled back successfully (${restoredCount}/${backupKeys.length} keys restored)`
+        );
         return true;
     } catch (err) {
         console.error('[Migration] Rollback failed:', err);
@@ -453,7 +449,7 @@ async function rollbackMigration() {
  * Migrate data from localStorage to IndexedDB
  * Idempotent - safe to call multiple times
  * Supports checkpointing for crash recovery
- * 
+ *
  * @param {function(number, number, string): void} [onProgress] - Progress callback (current, total, message)
  * @returns {Promise<{migrated: boolean, keysProcessed: number}>}
  */
@@ -497,7 +493,7 @@ async function migrateFromLocalStorage(onProgress = null) {
     const allConfigKeys = [...MIGRATION_CONFIG_KEYS];
     const allTokenKeys = [...MIGRATION_TOKEN_KEYS];
     const totalKeys = allConfigKeys.length + allTokenKeys.length;
-    let keysProcessed = (checkpoint && needsVersionMigration) ? checkpoint.keysProcessed : 0;
+    let keysProcessed = checkpoint && needsVersionMigration ? checkpoint.keysProcessed : 0;
     const CHECKPOINT_INTERVAL = 100; // Save checkpoint every 100 records (for larger migrations)
 
     // HNW Reliability: Calculate 50% checkpoint for small migrations
@@ -522,10 +518,18 @@ async function migrateFromLocalStorage(onProgress = null) {
                     console.error(`[Migration] Corrupted JSON for key '${key}':`, {
                         error: parseError.message,
                         valueLength: value.length,
-                        valuePreview: value.substring(0, 100)
+                        valuePreview: value.substring(0, 100),
                     });
                     // Skip this key - don't migrate invalid data
-                    await markCheckpointFailed('config', key, i, `Invalid JSON: ${parseError.message}`, keysProcessed, totalKeys, i - 1);
+                    await markCheckpointFailed(
+                        'config',
+                        key,
+                        i,
+                        `Invalid JSON: ${parseError.message}`,
+                        keysProcessed,
+                        totalKeys,
+                        i - 1
+                    );
                     continue; // Skip to next key
                 }
                 await ConfigAPI.setConfig(key, parsedValue);
@@ -536,7 +540,15 @@ async function migrateFromLocalStorage(onProgress = null) {
             } catch (err) {
                 console.warn(`[Migration] Failed to migrate key '${key}':`, err);
                 // Mark as failed so we skip on resume
-                await markCheckpointFailed('config', key, i, err.message || String(err), keysProcessed, totalKeys, i - 1);
+                await markCheckpointFailed(
+                    'config',
+                    key,
+                    i,
+                    err.message || String(err),
+                    keysProcessed,
+                    totalKeys,
+                    i - 1
+                );
             }
         }
 
@@ -548,11 +560,12 @@ async function migrateFromLocalStorage(onProgress = null) {
         // Legacy checkpoint logic for large migrations (keep for compatibility)
         const currentIndex = i + 1;
         const isSmallMigration = totalKeys < CHECKPOINT_INTERVAL;
-        const shouldCheckpointHalfway = isSmallMigration &&
+        const shouldCheckpointHalfway =
+            isSmallMigration &&
             currentIndex === halfwayPoint &&
             !checkpointedHalfway &&
             halfwayPoint > 0;
-        const shouldCheckpointInterval = (currentIndex % CHECKPOINT_INTERVAL === 0);
+        const shouldCheckpointInterval = currentIndex % CHECKPOINT_INTERVAL === 0;
 
         if (shouldCheckpointHalfway || shouldCheckpointInterval) {
             await saveCheckpoint({
@@ -560,11 +573,13 @@ async function migrateFromLocalStorage(onProgress = null) {
                 keysProcessed,
                 totalKeys,
                 phase: 'config',
-                checkpointedHalfway: checkpointedHalfway || shouldCheckpointHalfway
+                checkpointedHalfway: checkpointedHalfway || shouldCheckpointHalfway,
             });
             if (shouldCheckpointHalfway) {
                 checkpointedHalfway = true;
-                console.log(`[Migration] Checkpoint at 50% (${currentIndex}/${totalKeys}) for small migration`);
+                console.log(
+                    `[Migration] Checkpoint at 50% (${currentIndex}/${totalKeys}) for small migration`
+                );
             }
         }
     }
@@ -595,7 +610,7 @@ async function migrateFromLocalStorage(onProgress = null) {
                         const rawExpiry = legacyTokenValues.spotify_token_expiry;
                         const expiryMs = parseExpiryMs(rawExpiry);
                         const options = {
-                            metadata: { source: 'migration' }
+                            metadata: { source: 'migration' },
                         };
                         if (expiryMs !== null) {
                             options.expiresIn = Math.max(0, expiryMs - Date.now());
@@ -610,7 +625,7 @@ async function migrateFromLocalStorage(onProgress = null) {
                         }
                     } else if (key === 'spotify_refresh_token') {
                         migrated = await SecureTokenStore.store(key, value, {
-                            metadata: { source: 'migration' }
+                            metadata: { source: 'migration' },
                         });
                         if (migrated) {
                             migratedTokenKeys.add(key);
@@ -633,7 +648,7 @@ async function migrateFromLocalStorage(onProgress = null) {
                         keysProcessed,
                         totalKeys,
                         phase: 'token',
-                        lastKey: key
+                        lastKey: key,
                     });
                 }
             } catch (err) {
@@ -653,7 +668,7 @@ async function migrateFromLocalStorage(onProgress = null) {
         id: 'migration_state',
         version: MIGRATION_MODULE_VERSION,
         completedAt: new Date().toISOString(),
-        keysProcessed
+        keysProcessed,
     });
 
     // Clear checkpoint on success
@@ -696,7 +711,7 @@ export const StorageMigration = {
     VERSION: MIGRATION_MODULE_VERSION,
     KEYS_TO_MIGRATE: MIGRATION_CONFIG_KEYS,
     TOKEN_KEYS: MIGRATION_TOKEN_KEYS,
-    EXEMPT_KEYS: MIGRATION_EXEMPT_KEYS
+    EXEMPT_KEYS: MIGRATION_EXEMPT_KEYS,
 };
 
 console.log('[StorageMigration] Migration module loaded with checkpoint support');

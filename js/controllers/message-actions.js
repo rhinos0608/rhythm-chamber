@@ -71,14 +71,21 @@ function addAssistantMessageActions(messageEl, text) {
     copyBtn.innerHTML = '📋';
     copyBtn.title = 'Copy';
     copyBtn.onclick = () => {
-        navigator.clipboard.writeText(text).then(() => {
-            copyBtn.innerHTML = '✓';
-            setTimeout(() => { copyBtn.innerHTML = '📋'; }, 1500);
-        }).catch((err) => {
-            console.error('[MessageActions] Failed to copy text:', err);
-            copyBtn.innerHTML = '✗';
-            setTimeout(() => { copyBtn.innerHTML = '📋'; }, 1500);
-        });
+        navigator.clipboard
+            .writeText(text)
+            .then(() => {
+                copyBtn.innerHTML = '✓';
+                setTimeout(() => {
+                    copyBtn.innerHTML = '📋';
+                }, 1500);
+            })
+            .catch(err => {
+                console.error('[MessageActions] Failed to copy text:', err);
+                copyBtn.innerHTML = '✗';
+                setTimeout(() => {
+                    copyBtn.innerHTML = '📋';
+                }, 1500);
+            });
     };
     actionsDiv.appendChild(copyBtn);
 
@@ -244,7 +251,7 @@ export const MessageActions = {
     addAssistantMessageActions,
     addErrorMessageActions,
     enableEditMode,
-    restoreFocusToChatInput
+    restoreFocusToChatInput,
 };
 
 console.log('[MessageActions] Module loaded');

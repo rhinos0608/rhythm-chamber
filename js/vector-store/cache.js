@@ -17,12 +17,12 @@ import { LRUCache, DEFAULT_VECTOR_MAX_SIZE } from '../storage/lru-cache.js';
  */
 export function createVectorCache(maxVectors = DEFAULT_VECTOR_MAX_SIZE, onEvict = null) {
     const vectors = new LRUCache(maxVectors, {
-        onEvict: (key) => {
+        onEvict: key => {
             console.log(`[VectorStore] Evicting vector ${key} from LRU cache`);
             if (onEvict) {
                 onEvict(key);
             }
-        }
+        },
     });
 
     /**
@@ -71,10 +71,10 @@ export function createVectorCache(maxVectors = DEFAULT_VECTOR_MAX_SIZE, onEvict 
 
     return {
         // Map-like interface
-        get: (key) => vectors.get(key),
+        get: key => vectors.get(key),
         set: (key, value) => vectors.set(key, value),
-        has: (key) => vectors.has(key),
-        delete: (key) => vectors.delete(key),
+        has: key => vectors.has(key),
+        delete: key => vectors.delete(key),
         clear: () => vectors.clear(),
         get size() {
             return vectors.size;
@@ -100,11 +100,11 @@ export function createVectorCache(maxVectors = DEFAULT_VECTOR_MAX_SIZE, onEvict 
         getStats,
         pin,
         unpin,
-        setMaxSize: (size) => vectors.setMaxSize(size),
-        enableAutoScale: (enabled) => vectors.enableAutoScale(enabled),
-        isPinned: (key) => vectors.isPinned(key),
+        setMaxSize: size => vectors.setMaxSize(size),
+        enableAutoScale: enabled => vectors.enableAutoScale(enabled),
+        isPinned: key => vectors.isPinned(key),
         get pinnedCount() {
             return vectors.pinnedCount;
-        }
+        },
     };
 }

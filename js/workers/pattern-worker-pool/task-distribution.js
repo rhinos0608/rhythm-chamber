@@ -31,7 +31,7 @@ export const PATTERN_GROUPS = [
     // Worker 2: Artist analysis patterns
     ['detectSocialPatterns', 'detectGhostedArtists', 'detectDiscoveryExplosions'],
     // Worker 3: Engagement patterns
-    ['detectMoodSearching', 'detectTrueFavorites']
+    ['detectMoodSearching', 'detectTrueFavorites'],
 ];
 
 // ==========================================
@@ -82,7 +82,7 @@ export function getState() {
         pendingResultCount,
         paused,
         backpressureListeners,
-        resultConsumptionCalls
+        resultConsumptionCalls,
     };
 }
 
@@ -99,9 +99,11 @@ export function handleWorkerMessage(event) {
     if (type === 'HEARTBEAT_RESPONSE') {
         if (workerInfo) {
             // Heartbeat tracking is handled by worker-lifecycle module
-            if (false) { // Set to true for verbose logging
-                console.log(`[TaskDistribution] Worker heartbeat received at ${new Date(timestamp).toISOString()}`);
-            }
+            // Verbose logging is intentionally disabled in production.
+            // To debug, temporarily uncomment the line below.
+            // console.log(
+            //     `[TaskDistribution] Worker heartbeat received at ${new Date(timestamp).toISOString()}`
+            // );
         }
         return;
     }
@@ -140,7 +142,7 @@ export function handleWorkerMessage(event) {
                 type: 'partial',
                 pattern,
                 progress: progressPercent,
-                result: partialResult
+                result: partialResult,
             });
         }
 
@@ -148,7 +150,9 @@ export function handleWorkerMessage(event) {
         pendingResultCount++;
         checkBackpressure();
 
-        console.log(`[TaskDistribution] Partial result: ${pattern} (${Math.round(progressPercent * 100)}%)`);
+        console.log(
+            `[TaskDistribution] Partial result: ${pattern} (${Math.round(progressPercent * 100)}%)`
+        );
         return;
     }
 
@@ -231,7 +235,7 @@ export function handleWorkerError(error) {
         workerIndex,
         error: errorMessage,
         timestamp: Date.now(),
-        affectedPatterns: PATTERN_GROUPS[workerIndex] || []
+        affectedPatterns: PATTERN_GROUPS[workerIndex] || [],
     });
     console.log('[TaskDistribution] Emitted pattern:worker_failure event');
 
@@ -300,7 +304,7 @@ export async function detectAllPatterns(streams, chunks, onProgress = null) {
     const dispatchPlan = workers
         .map((workerInfo, index) => ({
             workerInfo,
-            patternGroup: PATTERN_GROUPS[index] || []
+            patternGroup: PATTERN_GROUPS[index] || [],
         }))
         .filter(entry => entry.patternGroup.length > 0);
     const activeWorkerCount = dispatchPlan.length;
@@ -314,7 +318,7 @@ export async function detectAllPatterns(streams, chunks, onProgress = null) {
             errors: [],
             completedWorkers: 0,
             totalWorkers: activeWorkerCount,
-            startTime: Date.now()
+            startTime: Date.now(),
         };
 
         pendingRequests.set(reqId, request);
@@ -332,13 +336,15 @@ export async function detectAllPatterns(streams, chunks, onProgress = null) {
                 requestId: reqId,
                 streams,
                 chunks,
-                patterns: patternGroup
+                patterns: patternGroup,
             });
 
             workerInfo.busy = true;
         });
 
-        console.log(`[TaskDistribution] Dispatched request ${reqId} to ${activeWorkerCount} workers`);
+        console.log(
+            `[TaskDistribution] Dispatched request ${reqId} to ${activeWorkerCount} workers`
+        );
     });
 }
 
@@ -366,7 +372,7 @@ export async function detectWithSingleWorker(streams, chunks, onProgress) {
             errors: [],
             completedWorkers: 0,
             totalWorkers: 1,
-            startTime: Date.now()
+            startTime: Date.now(),
         };
 
         pendingRequests.set(reqId, request);
@@ -379,7 +385,7 @@ export async function detectWithSingleWorker(streams, chunks, onProgress) {
             requestId: reqId,
             streams,
             chunks,
-            patterns: allPatterns
+            patterns: allPatterns,
         });
 
         workers[0].busy = true;
@@ -429,11 +435,15 @@ export function aggregateResults(results) {
 function checkBackpressure() {
     if (pendingResultCount >= BACKPRESSURE_THRESHOLD && !paused) {
         paused = true;
-        console.warn(`[TaskDistribution] Backpressure: pausing (${pendingResultCount} pending results)`);
+        console.warn(
+            `[TaskDistribution] Backpressure: pausing (${pendingResultCount} pending results)`
+        );
         notifyBackpressureListeners('backpressure', { pending: pendingResultCount });
     } else if (paused && pendingResultCount < BACKPRESSURE_RESUME_THRESHOLD) {
         paused = false;
-        console.log(`[TaskDistribution] Backpressure: resuming (${pendingResultCount} pending results)`);
+        console.log(
+            `[TaskDistribution] Backpressure: resuming (${pendingResultCount} pending results)`
+        );
         notifyBackpressureListeners('resume', { pending: pendingResultCount });
     }
 }
@@ -458,7 +468,9 @@ export function onResultConsumed(requestId) {
 
     // MEDIUM FIX Issue #18: Log suspicious decrements (potential bug in caller code)
     if (beforeCount === 0 && requestId) {
-        console.warn(`[TaskDistribution] onResultConsumed called with pendingResultCount=0 for request ${requestId}. This may indicate a bug in caller code.`);
+        console.warn(
+            `[TaskDistribution] onResultConsumed called with pendingResultCount=0 for request ${requestId}. This may indicate a bug in caller code.`
+        );
     }
 
     // Check if we should resume (now handled by checkBackpressure)
@@ -534,7 +546,7 @@ export function getBackpressureState() {
         paused,
         backpressureThreshold: BACKPRESSURE_THRESHOLD,
         backpressureResumeThreshold: BACKPRESSURE_RESUME_THRESHOLD,
-        listenerCount: backpressureListeners.length
+        listenerCount: backpressureListeners.length,
     };
 }
 

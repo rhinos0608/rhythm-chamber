@@ -65,13 +65,17 @@ export class StreamBuffer {
         // This prevents malicious or buggy servers from sending extremely high sequence numbers
         // that would bypass the buffer size check while still causing memory issues
         if (seq > this.#nextExpectedSeq + MAX_SEQUENCE_GAP) {
-            console.warn(`[StreamBuffer] Rejecting sequence ${seq} - too far ahead of expected ${this.#nextExpectedSeq} (gap: ${seq - this.#nextExpectedSeq})`);
+            console.warn(
+                `[StreamBuffer] Rejecting sequence ${seq} - too far ahead of expected ${this.#nextExpectedSeq} (gap: ${seq - this.#nextExpectedSeq})`
+            );
             return false;
         }
 
         // Edge case: Reject duplicate or old sequence numbers
         if (seq < this.#nextExpectedSeq) {
-            console.warn(`[StreamBuffer] Rejecting stale sequence ${seq} - already processed (expecting ${this.#nextExpectedSeq})`);
+            console.warn(
+                `[StreamBuffer] Rejecting stale sequence ${seq} - already processed (expecting ${this.#nextExpectedSeq})`
+            );
             return false;
         }
 
@@ -104,11 +108,15 @@ export class StreamBuffer {
                         }
                     }
                     this.#sequenceBuffer.delete(newOldest);
-                    console.warn(`[StreamBuffer] Sequence buffer full (${MAX_SEQUENCE_BUFFER_SIZE}), dropped seq ${newOldest}`);
+                    console.warn(
+                        `[StreamBuffer] Sequence buffer full (${MAX_SEQUENCE_BUFFER_SIZE}), dropped seq ${newOldest}`
+                    );
                 }
             } else {
                 this.#sequenceBuffer.delete(oldestSeq);
-                console.warn(`[StreamBuffer] Sequence buffer full (${MAX_SEQUENCE_BUFFER_SIZE}), dropped seq ${oldestSeq}`);
+                console.warn(
+                    `[StreamBuffer] Sequence buffer full (${MAX_SEQUENCE_BUFFER_SIZE}), dropped seq ${oldestSeq}`
+                );
             }
         }
 
@@ -128,7 +136,9 @@ export class StreamBuffer {
         if (!processed && this.#sequenceBuffer.size > 5) {
             if (!this.#gapDetected) {
                 this.#gapDetected = true;
-                console.warn(`[StreamBuffer] SSE sequence gap detected: expecting ${this.#nextExpectedSeq}, got ${seq}, buffered ${this.#sequenceBuffer.size}`);
+                console.warn(
+                    `[StreamBuffer] SSE sequence gap detected: expecting ${this.#nextExpectedSeq}, got ${seq}, buffered ${this.#sequenceBuffer.size}`
+                );
             }
         }
 
@@ -160,7 +170,11 @@ export class StreamBuffer {
         const bufferedSeqs = Array.from(this.#sequenceBuffer.keys()).sort((a, b) => a - b);
         const gaps = [];
 
-        for (let i = this.#nextExpectedSeq; i < Math.max(...bufferedSeqs, this.#nextExpectedSeq); i++) {
+        for (
+            let i = this.#nextExpectedSeq;
+            i < Math.max(...bufferedSeqs, this.#nextExpectedSeq);
+            i++
+        ) {
             if (!this.#sequenceBuffer.has(i)) {
                 gaps.push(i);
             }
@@ -169,7 +183,7 @@ export class StreamBuffer {
         return {
             pending: this.#sequenceBuffer.size,
             nextExpected: this.#nextExpectedSeq,
-            gaps
+            gaps,
         };
     }
 }
@@ -195,7 +209,7 @@ export function createStreamBuffer() {
 // Export a default for convenience
 export default {
     StreamBuffer,
-    createStreamBuffer
+    createStreamBuffer,
 };
 
 console.log('[StreamBuffer] Stream buffer utility loaded');

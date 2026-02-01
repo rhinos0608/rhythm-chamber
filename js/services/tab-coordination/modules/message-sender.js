@@ -86,7 +86,9 @@ export function startPendingMessageCleanup() {
         for (const [senderId, senderQueue] of pendingMessages.entries()) {
             for (const [seq, pending] of senderQueue.entries()) {
                 if (now - pending.timestamp > MAX_PENDING_TIME_MS) {
-                    console.warn(`[TabCoordination] Auto-cleaning expired pending message seq=${seq} from ${senderId}`);
+                    console.warn(
+                        `[TabCoordination] Auto-cleaning expired pending message seq=${seq} from ${senderId}`
+                    );
                     senderQueue.delete(seq);
                     cleaned++;
                 }
@@ -213,14 +215,16 @@ function queuePendingMessage(senderId, seq, message) {
 
     // Check if queue is getting too large (prevent memory issues)
     if (senderQueue.size >= 50) {
-        console.warn(`[TabCoordination] Pending message queue full for ${senderId}, dropping message seq=${seq}`);
+        console.warn(
+            `[TabCoordination] Pending message queue full for ${senderId}, dropping message seq=${seq}`
+        );
         return false;
     }
 
     senderQueue.set(seq, {
         message,
         timestamp: Date.now(),
-        retries: 0
+        retries: 0,
     });
 
     return true;
@@ -248,14 +252,19 @@ function processPendingMessages(senderId, expectedSeq, processFn) {
 
         // Check if message has expired
         if (now - pending.timestamp > MAX_PENDING_TIME_MS) {
-            console.warn(`[TabCoordination] Pending message seq=${currentSeq} from ${senderId} expired, processing anyway`);
+            console.warn(
+                `[TabCoordination] Pending message seq=${currentSeq} from ${senderId} expired, processing anyway`
+            );
         }
 
         try {
             processFn(pending.message);
             processed++;
         } catch (error) {
-            console.error(`[TabCoordination] Error processing pending message seq=${currentSeq}:`, error);
+            console.error(
+                `[TabCoordination] Error processing pending message seq=${currentSeq}:`,
+                error
+            );
         }
 
         senderQueue.delete(currentSeq);
@@ -265,12 +274,17 @@ function processPendingMessages(senderId, expectedSeq, processFn) {
     // Clean up expired messages
     for (const [seq, pending] of senderQueue.entries()) {
         if (now - pending.timestamp > MAX_PENDING_TIME_MS) {
-            console.warn(`[TabCoordination] Pending message seq=${seq} from ${senderId} expired, processing anyway`);
+            console.warn(
+                `[TabCoordination] Pending message seq=${seq} from ${senderId} expired, processing anyway`
+            );
             try {
                 processFn(pending.message);
                 processed++;
             } catch (error) {
-                console.error(`[TabCoordination] Error processing expired pending message seq=${seq}:`, error);
+                console.error(
+                    `[TabCoordination] Error processing expired pending message seq=${seq}:`,
+                    error
+                );
             }
             senderQueue.delete(seq);
         }
@@ -330,7 +344,9 @@ export function checkForMessageGaps(senderId, lastSeq, currentSeq) {
 
         // Only warn once per sender for a given gap to avoid spam
         if (!gapWarnedSenders.has(senderId)) {
-            console.warn(`[TabCoordination] Message gap detected from ${senderId}: missing seq ${lastSeq + 1} to ${currentSeq - 1} (${gapSize} messages)`);
+            console.warn(
+                `[TabCoordination] Message gap detected from ${senderId}: missing seq ${lastSeq + 1} to ${currentSeq - 1} (${gapSize} messages)`
+            );
             gapWarnedSenders.add(senderId);
 
             // Auto-clear warning after 10 seconds
@@ -380,7 +396,7 @@ function withNonce(msg) {
         senderId: TAB_ID,
         origin: typeof window !== 'undefined' ? window.location.origin : 'unknown',
         timestamp,
-        nonce
+        nonce,
     };
 }
 

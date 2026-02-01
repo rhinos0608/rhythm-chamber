@@ -14,10 +14,10 @@ import { HealthStatus } from '../provider-health-authority.js';
  * @enum {number}
  */
 export const ProviderPriority = Object.freeze({
-    OPENROUTER: 1,    // Primary cloud provider
-    LM_STUDIO: 2,     // Local inference
-    OLLAMA: 3,        // Local inference
-    FALLBACK: 4       // Static fallback responses
+    OPENROUTER: 1, // Primary cloud provider
+    LM_STUDIO: 2, // Local inference
+    OLLAMA: 3, // Local inference
+    FALLBACK: 4, // Static fallback responses
 });
 
 /**
@@ -51,7 +51,7 @@ export function createDefaultProviderConfigs() {
         priority: ProviderPriority.OPENROUTER,
         timeoutMs: 60000,
         isLocal: false,
-        maxRetries: 3
+        maxRetries: 3,
     });
 
     // LM Studio - Local inference
@@ -60,7 +60,7 @@ export function createDefaultProviderConfigs() {
         priority: ProviderPriority.LM_STUDIO,
         timeoutMs: 90000,
         isLocal: true,
-        maxRetries: 2
+        maxRetries: 2,
     });
 
     // Ollama - Local inference
@@ -69,7 +69,7 @@ export function createDefaultProviderConfigs() {
         priority: ProviderPriority.OLLAMA,
         timeoutMs: 90000,
         isLocal: true,
-        maxRetries: 2
+        maxRetries: 2,
     });
 
     // Fallback responses - Static data
@@ -78,7 +78,7 @@ export function createDefaultProviderConfigs() {
         priority: ProviderPriority.FALLBACK,
         timeoutMs: 0,
         isLocal: true,
-        maxRetries: 0
+        maxRetries: 0,
     });
 
     return configs;
@@ -88,6 +88,6 @@ export function createDefaultProviderConfigs() {
  * Default configuration values
  */
 export const DEFAULT_CONFIG = Object.freeze({
-    BLACKLIST_DURATION_MS: 300000,      // 5 minutes
-    HEALTH_CHECK_INTERVAL_MS: 60000     // 1 minute
+    BLACKLIST_DURATION_MS: 300000, // 5 minutes
+    HEALTH_CHECK_INTERVAL_MS: 60000, // 1 minute
 });

@@ -42,13 +42,13 @@ async function executeDataFunction(functionName, args, streams) {
     // Validate streams for data functions
     const streamsValidation = FunctionValidator.validateStreams(streams);
     if (!streamsValidation.valid) {
-        return { error: streamsValidation.error || "No streaming data available." };
+        return { error: streamsValidation.error || 'No streaming data available.' };
     }
 
     // Validate DataQuery is available
     const dataQueryValidation = FunctionValidator.validateDataQuery();
     if (!dataQueryValidation.valid) {
-        return { error: dataQueryValidation.error || "DataQuery module not loaded." };
+        return { error: dataQueryValidation.error || 'DataQuery module not loaded.' };
     }
 
     // Find executor (includes artifact, playlist, and semantic executors)
@@ -57,7 +57,7 @@ async function executeDataFunction(functionName, args, streams) {
         ...AnalyticsExecutors,
         ...ArtifactExecutors,
         ...PlaylistExecutors,
-        ...SemanticExecutors
+        ...SemanticExecutors,
     };
 
     const executor = allExecutors[functionName];
@@ -135,10 +135,13 @@ export const FunctionExecutor = {
         // HNW Defensive: Validate arguments against schema
         const argsValidation = FunctionValidator.validateFunctionArgs(functionName, args);
         if (!argsValidation.valid) {
-            console.warn(`[FunctionExecutor] Schema validation failed for ${functionName}:`, argsValidation.errors);
+            console.warn(
+                `[FunctionExecutor] Schema validation failed for ${functionName}:`,
+                argsValidation.errors
+            );
             return {
                 error: `Invalid arguments for ${functionName}: ${argsValidation.errors.join(', ')}`,
-                validationErrors: argsValidation.errors
+                validationErrors: argsValidation.errors,
             };
         }
 
@@ -152,7 +155,7 @@ export const FunctionExecutor = {
 
         // Data functions require streams
         return await executeDataFunction(functionName, normalizedArgs, streams);
-    }
+    },
 };
 
 console.log('[FunctionExecutor] Module loaded');

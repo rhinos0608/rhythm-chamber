@@ -37,14 +37,14 @@ export function Ok(data) {
         ok: true,
         isOk: () => true,
         isErr: () => false,
-        map: (fn) => Ok(fn(data)),
-        mapErr: (fn) => Ok(data),
-        andThen: (fn) => fn(data),
-        orElse: (fn) => Ok(data),
+        map: fn => Ok(fn(data)),
+        mapErr: fn => Ok(data),
+        andThen: fn => fn(data),
+        orElse: fn => Ok(data),
         unwrap: () => data,
         unwrapOr: () => data,
         unwrapOrElse: () => data,
-        match: (patterns) => (patterns.ok?.(data) ?? patterns._?.(data))
+        match: patterns => patterns.ok?.(data) ?? patterns._?.(data),
     };
 }
 
@@ -63,14 +63,16 @@ export function Err(error, context = {}) {
         ok: false,
         isOk: () => false,
         isErr: () => true,
-        map: (fn) => Err(error, context),
-        mapErr: (fn) => Err(fn(error), context),
-        andThen: (fn) => Err(error, context),
-        orElse: (fn) => fn(error, context),
-        unwrap: () => { throw new Error(String(error)); },
-        unwrapOr: (defaultValue) => defaultValue,
-        unwrapOrElse: (fn) => fn(error, context),
-        match: (patterns) => (patterns.err?.(error, context) ?? patterns._?.(error, context))
+        map: fn => Err(error, context),
+        mapErr: fn => Err(fn(error), context),
+        andThen: fn => Err(error, context),
+        orElse: fn => fn(error, context),
+        unwrap: () => {
+            throw new Error(String(error));
+        },
+        unwrapOr: defaultValue => defaultValue,
+        unwrapOrElse: fn => fn(error, context),
+        match: patterns => patterns.err?.(error, context) ?? patterns._?.(error, context),
     };
 }
 
@@ -172,9 +174,7 @@ export const Result = {
                 errors.push(result.error);
             }
         }
-        return errors.length > 0
-            ? Err(errors, { count: errors.length })
-            : Ok(values);
+        return errors.length > 0 ? Err(errors, { count: errors.length }) : Ok(values);
     },
 
     /**
@@ -205,7 +205,7 @@ export const Result = {
      */
     fromPromise(promise) {
         return promise.then(Ok).catch(Err);
-    }
+    },
 };
 
 export default Result;

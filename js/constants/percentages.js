@@ -16,7 +16,7 @@ export const ANOMALY_THRESHOLD = Object.freeze({
      * Default variance threshold for anomaly detection
      * 20% variance from expected timing triggers anomaly
      */
-    DEFAULT: 0.20,
+    DEFAULT: 0.2,
 });
 
 /**
@@ -51,13 +51,13 @@ export const COVERAGE_LEVELS = Object.freeze({
      * High coverage threshold
      * Static artist map covers ~80% of typical listening history
      */
-    HIGH: 0.80,
+    HIGH: 0.8,
 
     /**
      * Medium coverage threshold
      * Moderate coverage of listening history
      */
-    MEDIUM: 0.50,
+    MEDIUM: 0.5,
 
     /**
      * Low coverage threshold

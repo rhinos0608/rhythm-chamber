@@ -35,9 +35,9 @@ SessionLifecycle.initialize(
         getSessionData: SessionState.getSessionData,
         setSessionData: SessionState.setSessionData,
         updateSessionData: SessionState.updateSessionData,
-        getHistory: SessionState.getHistory
+        getHistory: SessionState.getHistory,
     },
-    EventBus  // Inject EventBus for event emission (HNW compliance)
+    EventBus // Inject EventBus for event emission (HNW compliance)
 );
 
 // Re-export all module exports for internal use
@@ -128,17 +128,14 @@ export function createManager() {
         // ==========================================
 
         async saveCurrentSession() {
-            return await ErrorBoundary.wrap(
-                async () => SessionPersistence.saveCurrentSession(),
-                {
-                    context: 'sessionSave',
-                    fallback: false,
-                    rethrow: false,
-                    onError: (error) => {
-                        console.error('[SessionManager] Failed to save current session:', error);
-                    }
-                }
-            );
+            return await ErrorBoundary.wrap(async () => SessionPersistence.saveCurrentSession(), {
+                context: 'sessionSave',
+                fallback: false,
+                rethrow: false,
+                onError: error => {
+                    console.error('[SessionManager] Failed to save current session:', error);
+                },
+            });
         },
 
         async saveConversation(delayMs) {
@@ -149,9 +146,9 @@ export function createManager() {
                     context: 'sessionSaveConversation',
                     fallback: null,
                     rethrow: false,
-                    onError: (error) => {
+                    onError: error => {
                         console.error('[SessionManager] Failed to save conversation:', error);
-                    }
+                    },
                 }
             );
         },
@@ -163,26 +160,23 @@ export function createManager() {
                     context: 'sessionFlushPending',
                     fallback: false,
                     rethrow: false,
-                    onError: (error) => {
+                    onError: error => {
                         console.error('[SessionManager] Failed to flush pending save:', error);
-                    }
+                    },
                 }
             );
         },
 
         emergencyBackupSync() {
             // Sync operation - use wrapSync, best-effort only
-            ErrorBoundary.wrapSync(
-                () => SessionPersistence.emergencyBackupSync(),
-                {
-                    context: 'sessionEmergencyBackup',
-                    fallback: null,
-                    rethrow: false,
-                    onError: (error) => {
-                        console.warn('[SessionManager] Emergency backup failed:', error);
-                    }
-                }
-            );
+            ErrorBoundary.wrapSync(() => SessionPersistence.emergencyBackupSync(), {
+                context: 'sessionEmergencyBackup',
+                fallback: null,
+                rethrow: false,
+                onError: error => {
+                    console.warn('[SessionManager] Emergency backup failed:', error);
+                },
+            });
         },
 
         async recoverEmergencyBackup() {
@@ -192,9 +186,12 @@ export function createManager() {
                     context: 'sessionRecoverBackup',
                     fallback: null,
                     rethrow: false,
-                    onError: (error) => {
-                        console.error('[SessionManager] Failed to recover emergency backup:', error);
-                    }
+                    onError: error => {
+                        console.error(
+                            '[SessionManager] Failed to recover emergency backup:',
+                            error
+                        );
+                    },
                 }
             );
         },
@@ -209,17 +206,14 @@ export function createManager() {
          */
         getHistory() {
             // Safe sync operation - return empty array on error
-            return ErrorBoundary.wrapSync(
-                () => SessionState.getHistory(),
-                {
-                    context: 'sessionGetHistory',
-                    fallback: [],
-                    rethrow: false,
-                    onError: (error) => {
-                        console.error('[SessionManager] Failed to get history:', error);
-                    }
-                }
-            );
+            return ErrorBoundary.wrapSync(() => SessionState.getHistory(), {
+                context: 'sessionGetHistory',
+                fallback: [],
+                rethrow: false,
+                onError: error => {
+                    console.error('[SessionManager] Failed to get history:', error);
+                },
+            });
         },
 
         /**
@@ -228,17 +222,14 @@ export function createManager() {
          * @returns {Promise<void>}
          */
         async addMessageToHistory(message) {
-            return await ErrorBoundary.wrap(
-                async () => SessionState.addMessageToHistory(message),
-                {
-                    context: 'sessionAddMessage',
-                    fallback: false,
-                    rethrow: true,
-                    onError: (error) => {
-                        console.error('[SessionManager] Failed to add message to history:', error);
-                    }
-                }
-            );
+            return await ErrorBoundary.wrap(async () => SessionState.addMessageToHistory(message), {
+                context: 'sessionAddMessage',
+                fallback: false,
+                rethrow: true,
+                onError: error => {
+                    console.error('[SessionManager] Failed to add message to history:', error);
+                },
+            });
         },
 
         /**
@@ -253,9 +244,9 @@ export function createManager() {
                     context: 'sessionAddMessages',
                     fallback: false,
                     rethrow: true,
-                    onError: (error) => {
+                    onError: error => {
                         console.error('[SessionManager] Failed to add messages to history:', error);
-                    }
+                    },
                 }
             );
         },
@@ -266,17 +257,14 @@ export function createManager() {
          * @returns {Promise<void>}
          */
         async truncateHistory(length) {
-            return await ErrorBoundary.wrap(
-                async () => SessionState.truncateHistory(length),
-                {
-                    context: 'sessionTruncate',
-                    fallback: false,
-                    rethrow: true,
-                    onError: (error) => {
-                        console.error('[SessionManager] Failed to truncate history:', error);
-                    }
-                }
-            );
+            return await ErrorBoundary.wrap(async () => SessionState.truncateHistory(length), {
+                context: 'sessionTruncate',
+                fallback: false,
+                rethrow: true,
+                onError: error => {
+                    console.error('[SessionManager] Failed to truncate history:', error);
+                },
+            });
         },
 
         /**
@@ -291,9 +279,12 @@ export function createManager() {
                     context: 'sessionRemoveMessage',
                     fallback: false,
                     rethrow: true,
-                    onError: (error) => {
-                        console.error('[SessionManager] Failed to remove message from history:', error);
-                    }
+                    onError: error => {
+                        console.error(
+                            '[SessionManager] Failed to remove message from history:',
+                            error
+                        );
+                    },
                 }
             );
         },
@@ -303,18 +294,15 @@ export function createManager() {
          * @returns {Promise<void>}
          */
         async clearConversation() {
-            return await ErrorBoundary.wrap(
-                async () => SessionLifecycle.clearAllSessions(),
-                {
-                    context: 'sessionClear',
-                    fallback: false,
-                    rethrow: true,
-                    onError: (error) => {
-                        console.error('[SessionManager] Failed to clear conversation:', error);
-                    }
-                }
-            );
-        }
+            return await ErrorBoundary.wrap(async () => SessionLifecycle.clearAllSessions(), {
+                context: 'sessionClear',
+                fallback: false,
+                rethrow: true,
+                onError: error => {
+                    console.error('[SessionManager] Failed to clear conversation:', error);
+                },
+            });
+        },
     };
 
     return instance;

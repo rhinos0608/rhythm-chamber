@@ -76,7 +76,7 @@ export const WriteAheadLog = {
 
     // Constants
     WalStatus,
-    WalPriority
+    WalPriority,
 };
 
 // Re-export constants for direct imports

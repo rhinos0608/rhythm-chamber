@@ -1,9 +1,9 @@
 /**
  * Centralized Storage Keys
- * 
+ *
  * Single source of truth for all localStorage and IndexedDB key constants.
  * Import this module to avoid scattered magic strings across the codebase.
- * 
+ *
  * @module storage/keys
  */
 
@@ -103,7 +103,7 @@ const STORAGE_KEYS = {
     LICENSE: 'rhythm_chamber_license',
     GENRE_CACHE: 'rhythm_chamber_genre_cache',
     DEMO_SESSION: 'rhythm_chamber_demo_session',
-    SECURITY_CHECKLIST_SEEN: 'rhythm_chamber_security_checklist_seen'
+    SECURITY_CHECKLIST_SEEN: 'rhythm_chamber_security_checklist_seen',
 };
 
 // Freeze to prevent accidental modification
@@ -113,4 +113,3 @@ Object.freeze(STORAGE_KEYS);
 export { STORAGE_KEYS };
 
 console.log('[Storage Keys] Centralized storage key constants loaded');
-

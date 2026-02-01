@@ -40,7 +40,9 @@ export const FunctionRetryHandler = {
         }
 
         // Fallback: execute without retry
-        console.warn(`[FunctionRetryHandler] Retry not available for ${functionName}, executing without retry`);
+        console.warn(
+            `[FunctionRetryHandler] Retry not available for ${functionName}, executing without retry`
+        );
         return await Promise.resolve(executorFn());
     },
 
@@ -66,8 +68,8 @@ export const FunctionRetryHandler = {
      * @returns {boolean} True if retry logic is available
      */
     isRetryAvailable() {
-        return !!(FunctionRetry?.withRetry);
-    }
+        return !!FunctionRetry?.withRetry;
+    },
 };
 
 console.log('[FunctionRetryHandler] Module loaded');

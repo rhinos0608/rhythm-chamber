@@ -12,20 +12,20 @@
  */
 
 const LOG_LEVELS = {
-  TRACE: 0,
-  DEBUG: 1,
-  INFO: 2,
-  WARN: 3,
-  ERROR: 4,
-  NONE: 5
+    TRACE: 0,
+    DEBUG: 1,
+    INFO: 2,
+    WARN: 3,
+    ERROR: 4,
+    NONE: 5,
 };
 
 // Detect environment: development if localhost, 127.0.0.1, or file://
-const isDevelopment = typeof window !== 'undefined' && (
-  window.location?.hostname === 'localhost' ||
-  window.location?.hostname === '127.0.0.1' ||
-  window.location?.protocol === 'file:'
-);
+const isDevelopment =
+    typeof window !== 'undefined' &&
+    (window.location?.hostname === 'localhost' ||
+        window.location?.hostname === '127.0.0.1' ||
+        window.location?.protocol === 'file:');
 
 // Default to DEBUG in development, INFO in production
 const DEFAULT_LEVEL = isDevelopment ? LOG_LEVELS.DEBUG : LOG_LEVELS.INFO;
@@ -42,14 +42,14 @@ let releaseStage = isDevelopment ? 'development' : 'production';
  * @param {boolean} [options.isDev] - Override development detection
  */
 export function configureLogger(options = {}) {
-  if (options.level !== undefined) {
-    currentLevel = options.level;
-  }
-  if (options.releaseStage) {
-    releaseStage = options.releaseStage;
-  } else if (options.isDev !== undefined) {
-    releaseStage = options.isDev ? 'development' : 'production';
-  }
+    if (options.level !== undefined) {
+        currentLevel = options.level;
+    }
+    if (options.releaseStage) {
+        releaseStage = options.releaseStage;
+    } else if (options.isDev !== undefined) {
+        releaseStage = options.isDev ? 'development' : 'production';
+    }
 }
 
 /**
@@ -58,7 +58,7 @@ export function configureLogger(options = {}) {
  * @returns {number} Current log level
  */
 export function getLogLevel() {
-  return currentLevel;
+    return currentLevel;
 }
 
 /**
@@ -67,7 +67,9 @@ export function getLogLevel() {
  * @returns {string} Log level name
  */
 export function getLogLevelName() {
-  return Object.entries(LOG_LEVELS).find(([_, value]) => value === currentLevel)?.[0] ?? 'UNKNOWN';
+    return (
+        Object.entries(LOG_LEVELS).find(([_, value]) => value === currentLevel)?.[0] ?? 'UNKNOWN'
+    );
 }
 
 /**
@@ -77,25 +79,25 @@ export function getLogLevelName() {
  * @returns {boolean} True if logs at this level would be output
  */
 export function isLevelEnabled(level) {
-  return level >= currentLevel;
+    return level >= currentLevel;
 }
 
 /**
  * Keys that indicate sensitive data (case-insensitive match)
  */
 const SENSITIVE_KEYS = [
-  'token',
-  'key',
-  'secret',
-  'password',
-  'pass',
-  'apiKey',
-  'apikey',
-  'authorization',
-  'auth',
-  'credential',
-  'session',
-  'cookie'
+    'token',
+    'key',
+    'secret',
+    'password',
+    'pass',
+    'apiKey',
+    'apikey',
+    'authorization',
+    'auth',
+    'credential',
+    'session',
+    'cookie',
 ];
 
 /**
@@ -105,8 +107,8 @@ const SENSITIVE_KEYS = [
  * @returns {boolean} True if key appears to be sensitive
  */
 function isSensitiveKey(key) {
-  const lowerKey = key.toLowerCase();
-  return SENSITIVE_KEYS.some(sensitive => lowerKey.includes(sensitive));
+    const lowerKey = key.toLowerCase();
+    return SENSITIVE_KEYS.some(sensitive => lowerKey.includes(sensitive));
 }
 
 /**
@@ -116,79 +118,79 @@ function isSensitiveKey(key) {
  * @returns {*} Sanitized data
  */
 function sanitize(data, depth = 0, maxDepth = 5) {
-  // Prevent infinite recursion
-  if (depth > maxDepth) {
-    return '[Max depth reached]';
-  }
-
-  // Primitives and null/undefined pass through
-  if (data === null || data === undefined) {
-    return data;
-  }
-
-  // Handle errors specially - preserve message and stack
-  if (data instanceof Error) {
-    const error = {
-      name: data.name,
-      message: sanitizeErrorMessage(data.message)
-    };
-    if (data.stack) {
-      // Sanitize stack trace - remove potential query strings with tokens
-      error.stack = sanitizeErrorMessage(data.stack);
+    // Prevent infinite recursion
+    if (depth > maxDepth) {
+        return '[Max depth reached]';
     }
-    return error;
-  }
 
-  // Handle DOMException
-  if (data instanceof DOMException) {
-    return {
-      name: data.name,
-      message: sanitizeErrorMessage(data.message),
-      code: data.code
-    };
-  }
+    // Primitives and null/undefined pass through
+    if (data === null || data === undefined) {
+        return data;
+    }
 
-  // Handle Dates
-  if (data instanceof Date) {
-    return data.toISOString();
-  }
-
-  // Handle Regex
-  if (data instanceof RegExp) {
-    return data.toString();
-  }
-
-  // Handle Arrays
-  if (Array.isArray(data)) {
-    return data.map(item => sanitize(item, depth + 1, maxDepth));
-  }
-
-  // Handle Objects (but not null, already handled)
-  if (typeof data === 'object') {
-    const sanitized = {};
-    for (const [key, value] of Object.entries(data)) {
-      if (isSensitiveKey(key)) {
-        // Redact sensitive values
-        if (typeof value === 'string' && value.length > 0) {
-          sanitized[key] = '[REDACTED]';
-        } else if (typeof value === 'object' && value !== null) {
-          sanitized[key] = '[REDACTED]';
-        } else {
-          sanitized[key] = '[REDACTED]';
+    // Handle errors specially - preserve message and stack
+    if (data instanceof Error) {
+        const error = {
+            name: data.name,
+            message: sanitizeErrorMessage(data.message),
+        };
+        if (data.stack) {
+            // Sanitize stack trace - remove potential query strings with tokens
+            error.stack = sanitizeErrorMessage(data.stack);
         }
-      } else {
-        sanitized[key] = sanitize(value, depth + 1, maxDepth);
-      }
+        return error;
     }
-    return sanitized;
-  }
 
-  // Strings, numbers, booleans pass through (but sanitize for sensitive patterns)
-  if (typeof data === 'string') {
-    return sanitizeString(data);
-  }
+    // Handle DOMException
+    if (data instanceof DOMException) {
+        return {
+            name: data.name,
+            message: sanitizeErrorMessage(data.message),
+            code: data.code,
+        };
+    }
 
-  return data;
+    // Handle Dates
+    if (data instanceof Date) {
+        return data.toISOString();
+    }
+
+    // Handle Regex
+    if (data instanceof RegExp) {
+        return data.toString();
+    }
+
+    // Handle Arrays
+    if (Array.isArray(data)) {
+        return data.map(item => sanitize(item, depth + 1, maxDepth));
+    }
+
+    // Handle Objects (but not null, already handled)
+    if (typeof data === 'object') {
+        const sanitized = {};
+        for (const [key, value] of Object.entries(data)) {
+            if (isSensitiveKey(key)) {
+                // Redact sensitive values
+                if (typeof value === 'string' && value.length > 0) {
+                    sanitized[key] = '[REDACTED]';
+                } else if (typeof value === 'object' && value !== null) {
+                    sanitized[key] = '[REDACTED]';
+                } else {
+                    sanitized[key] = '[REDACTED]';
+                }
+            } else {
+                sanitized[key] = sanitize(value, depth + 1, maxDepth);
+            }
+        }
+        return sanitized;
+    }
+
+    // Strings, numbers, booleans pass through (but sanitize for sensitive patterns)
+    if (typeof data === 'string') {
+        return sanitizeString(data);
+    }
+
+    return data;
 }
 
 /**
@@ -198,9 +200,9 @@ function sanitize(data, depth = 0, maxDepth = 5) {
  * @returns {string} Sanitized string
  */
 function sanitizeString(str) {
-  // Look for common API key patterns and redact
-  // This is basic protection - more sophisticated patterns could be added
-  return str;
+    // Look for common API key patterns and redact
+    // This is basic protection - more sophisticated patterns could be added
+    return str;
 }
 
 /**
@@ -210,17 +212,17 @@ function sanitizeString(str) {
  * @returns {string} Sanitized message
  */
 function sanitizeErrorMessage(message) {
-  if (!message || typeof message !== 'string') {
-    return message;
-  }
+    if (!message || typeof message !== 'string') {
+        return message;
+    }
 
-  // Remove potential tokens from error messages (basic pattern)
-  // Looks for things like "Bearer sk-..." or "Bearer eyJ..."
-  return message
-    .replace(/Bearer\s+[A-Za-z0-9\-._~+/]+=*/gi, 'Bearer [REDACTED]')
-    .replace(/sk-[a-zA-Z0-9]{20,}/g, 'sk-[REDACTED]')
-    .replace(/AIza[a-zA-Z0-9\-_]{35}/g, 'AIza[REDACTED]')
-    .replace(/xox[baprs]-[a-zA-Z0-9\-]{10,}/g, 'xox[baprs]-[REDACTED]');
+    // Remove potential tokens from error messages (basic pattern)
+    // Looks for things like "Bearer sk-..." or "Bearer eyJ..."
+    return message
+        .replace(/Bearer\s+[A-Za-z0-9\-._~+/]+=*/gi, 'Bearer [REDACTED]')
+        .replace(/sk-[a-zA-Z0-9]{20,}/g, 'sk-[REDACTED]')
+        .replace(/AIza[a-zA-Z0-9\-_]{35}/g, 'AIza[REDACTED]')
+        .replace(/xox[baprs]-[a-zA-Z0-9-]{10,}/g, 'xox[baprs]-[REDACTED]');
 }
 
 /**
@@ -232,8 +234,8 @@ function sanitizeErrorMessage(message) {
  * @returns {string} Formatted message
  */
 function formatMessage(module, level, message) {
-  const timestamp = new Date().toISOString().split('T')[1].slice(0, 12);
-  return `[${timestamp}] [${module}] ${message}`;
+    const timestamp = new Date().toISOString().split('T')[1].slice(0, 12);
+    return `[${timestamp}] [${module}] ${message}`;
 }
 
 /**
@@ -246,26 +248,26 @@ function formatMessage(module, level, message) {
  * @param {...*} args - Additional arguments
  */
 function log(level, levelName, module, message, ...args) {
-  if (level < currentLevel) {
-    return;
-  }
+    if (level < currentLevel) {
+        return;
+    }
 
-  const formattedMessage = formatMessage(module, levelName, message);
-  const sanitizedArgs = args.map(arg => sanitize(arg));
+    const formattedMessage = formatMessage(module, levelName, message);
+    const sanitizedArgs = args.map(arg => sanitize(arg));
 
-  switch (levelName) {
-    case 'TRACE':
-    case 'DEBUG':
-    case 'INFO':
-      console.log(formattedMessage, ...sanitizedArgs);
-      break;
-    case 'WARN':
-      console.warn(formattedMessage, ...sanitizedArgs);
-      break;
-    case 'ERROR':
-      console.error(formattedMessage, ...sanitizedArgs);
-      break;
-  }
+    switch (levelName) {
+        case 'TRACE':
+        case 'DEBUG':
+        case 'INFO':
+            console.log(formattedMessage, ...sanitizedArgs);
+            break;
+        case 'WARN':
+            console.warn(formattedMessage, ...sanitizedArgs);
+            break;
+        case 'ERROR':
+            console.error(formattedMessage, ...sanitizedArgs);
+            break;
+    }
 }
 
 /**
@@ -280,13 +282,13 @@ function log(level, levelName, module, message, ...args) {
  * @returns {Object} Logger object with trace, debug, info, warn, error methods
  */
 export function createLogger(moduleName) {
-  return {
-    trace: (message, ...args) => log(LOG_LEVELS.TRACE, 'TRACE', moduleName, message, ...args),
-    debug: (message, ...args) => log(LOG_LEVELS.DEBUG, 'DEBUG', moduleName, message, ...args),
-    info: (message, ...args) => log(LOG_LEVELS.INFO, 'INFO', moduleName, message, ...args),
-    warn: (message, ...args) => log(LOG_LEVELS.WARN, 'WARN', moduleName, message, ...args),
-    error: (message, ...args) => log(LOG_LEVELS.ERROR, 'ERROR', moduleName, message, ...args),
-  };
+    return {
+        trace: (message, ...args) => log(LOG_LEVELS.TRACE, 'TRACE', moduleName, message, ...args),
+        debug: (message, ...args) => log(LOG_LEVELS.DEBUG, 'DEBUG', moduleName, message, ...args),
+        info: (message, ...args) => log(LOG_LEVELS.INFO, 'INFO', moduleName, message, ...args),
+        warn: (message, ...args) => log(LOG_LEVELS.WARN, 'WARN', moduleName, message, ...args),
+        error: (message, ...args) => log(LOG_LEVELS.ERROR, 'ERROR', moduleName, message, ...args),
+    };
 }
 
 /**
@@ -311,5 +313,5 @@ configureLogger();
 
 // Log initialization in development only
 if (isDevelopment) {
-  console.log('[Logger] Initialized with level:', getLogLevelName(), '(development mode)');
+    console.log('[Logger] Initialized with level:', getLogLevelName(), '(development mode)');
 }

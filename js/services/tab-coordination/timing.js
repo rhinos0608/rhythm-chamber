@@ -3,20 +3,20 @@ const TimingConfig = {
         baselineMs: 300,
         maxWindowMs: 600,
         calibrationIterations: 10000,
-        adaptiveMultiplier: 60
+        adaptiveMultiplier: 60,
     },
     heartbeat: {
         intervalMs: 3000,
         maxMissed: 2,
-        skewToleranceMs: 2000
+        skewToleranceMs: 2000,
     },
     failover: {
         promotionDelayMs: 100,
-        verificationMs: 500
+        verificationMs: 500,
     },
     bootstrap: {
-        windowMs: 2000
-    }
+        windowMs: 2000,
+    },
 };
 
 let ELECTION_WINDOW_MS = calculateElectionWindow();
@@ -27,7 +27,7 @@ const MAX_UNSIGNED_MESSAGES = 3;
 
 const IS_TEST_ENV =
     (typeof import.meta !== 'undefined' && import.meta?.env?.MODE === 'test') ||
-    (typeof process !== 'undefined' && !!process?.env?.VITEST);
+    (typeof globalThis !== 'undefined' && !!globalThis.process?.env?.VITEST);
 
 function calculateElectionWindow() {
     const BASELINE_MS = TimingConfig?.election?.baselineMs ?? 300;
@@ -49,8 +49,12 @@ function calculateElectionWindow() {
         void sum;
 
         const duration = performance.now() - start;
-        const calculated = Math.round(Math.min(MAX_WINDOW_MS, Math.max(BASELINE_MS, duration * multiplier + BASELINE_MS)));
-        console.log(`[TabCoordination] Device calibration: ${duration.toFixed(2)}ms → ${calculated}ms election window`);
+        const calculated = Math.round(
+            Math.min(MAX_WINDOW_MS, Math.max(BASELINE_MS, duration * multiplier + BASELINE_MS))
+        );
+        console.log(
+            `[TabCoordination] Device calibration: ${duration.toFixed(2)}ms → ${calculated}ms election window`
+        );
         return calculated;
     } catch (e) {
         console.warn('[TabCoordination] Calibration failed, using baseline:', e.message);
@@ -77,12 +81,15 @@ function allowUnsignedMessage() {
     unsignedMessageCount++;
 
     if (unsignedMessageCount === 1 && typeof document !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('security:unsigned-message', {
-            detail: {
-                message: 'Tab coordination is initializing. Some messages may not be fully verified.',
-                severity: 'warning'
-            }
-        }));
+        window.dispatchEvent(
+            new CustomEvent('security:unsigned-message', {
+                detail: {
+                    message:
+                        'Tab coordination is initializing. Some messages may not be fully verified.',
+                    severity: 'warning',
+                },
+            })
+        );
     }
 
     return true;
@@ -128,5 +135,5 @@ export {
     getElectionWindowMs,
     getHeartbeatIntervalMs,
     getMaxMissedHeartbeats,
-    isInBootstrapWindow
+    isInBootstrapWindow,
 };

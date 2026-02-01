@@ -46,7 +46,8 @@ export function parseMarkdown(text) {
     // Very long inputs can cause regex to hang the browser
     if (text.length > MAX_MARKDOWN_LENGTH) {
         // Truncate safely using Array.from to handle surrogate pairs, then escape
-        const truncated = escapeHtml(Array.from(text).slice(0, MAX_MARKDOWN_LENGTH).join('')) +
+        const truncated =
+            escapeHtml(Array.from(text).slice(0, MAX_MARKDOWN_LENGTH).join('')) +
             '<span class="truncated-indicator">... (content truncated)</span>';
         return `<p>${truncated}</p>`;
     }
@@ -69,13 +70,13 @@ export function parseMarkdown(text) {
     // REDOS FIX: Use character class limits to prevent catastrophic backtracking
     // Instead of [\s\S]+? which can backtrack on complex patterns, use {0,5000} limit
     processedText = processedText
-        .replace(/\*\*([^\*]{1,5000})\*\*/g, '<strong>$1</strong>')
+        .replace(/\*\*([^*]{1,5000})\*\*/g, '<strong>$1</strong>')
         .replace(/__([^_]{1,5000})__/g, '<strong>$1</strong>');
 
     // Process italic: *text* or _text_
     // REDOS FIX: Use character class limits and avoid complex lookbehind/lookahead patterns
     processedText = processedText
-        .replace(/(?<!\*)\*([^\*]{1,500})\*(?!\*)/g, '<em>$1</em>')
+        .replace(/(?<!\*)\*([^*]{1,500})\*(?!\*)/g, '<em>$1</em>')
         .replace(/(?<!_)_([^_]{1,500})_(?!_)/g, '<em>$1</em>');
 
     // Restore code blocks
@@ -85,9 +86,7 @@ export function parseMarkdown(text) {
 
     // Process line breaks
     // Convert double newlines to paragraph breaks, single to line breaks
-    processedText = processedText
-        .replace(/\n\n+/g, '</p><p>')
-        .replace(/\n/g, '<br>');
+    processedText = processedText.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>');
 
     // Wrap in paragraphs if we have content
     if (!processedText.includes('<p>') && !processedText.includes('</p>')) {
@@ -99,7 +98,7 @@ export function parseMarkdown(text) {
 
 // Export a default for convenience
 export default {
-    parseMarkdown
+    parseMarkdown,
 };
 
 console.log('[Parser] Parser utilities loaded');

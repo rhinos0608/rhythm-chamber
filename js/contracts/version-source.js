@@ -74,7 +74,9 @@ export function getVersionSource() {
  */
 export function getActiveData() {
     if (!_versionSource) {
-        throw new Error('[VersionSource] No version source registered. Call registerVersionSource() first.');
+        throw new Error(
+            '[VersionSource] No version source registered. Call registerVersionSource() first.'
+        );
     }
     return _versionSource.getActiveData();
 }
@@ -87,7 +89,9 @@ export function getActiveData() {
  */
 export function isDemoMode() {
     if (!_versionSource) {
-        throw new Error('[VersionSource] No version source registered. Call registerVersionSource() first.');
+        throw new Error(
+            '[VersionSource] No version source registered. Call registerVersionSource() first.'
+        );
     }
     if (typeof _versionSource.isDemoMode === 'function') {
         return _versionSource.isDemoMode();

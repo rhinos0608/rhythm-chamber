@@ -57,8 +57,12 @@ export function buildSharedVectorData(vectorsMap) {
             expectedDimensions = currentDimensions;
         } else if (currentDimensions !== expectedDimensions) {
             // Log a more prominent warning for dimension mismatch
-            console.warn(`[VectorStore] DIMENSION MISMATCH DETECTED at index ${i}: expected ${expectedDimensions}, got ${currentDimensions}. Vector ID: ${item.id}`);
-            console.warn('[VectorStore] Falling back to slower search path. Consider cleaning up mismatched vectors.');
+            console.warn(
+                `[VectorStore] DIMENSION MISMATCH DETECTED at index ${i}: expected ${expectedDimensions}, got ${currentDimensions}. Vector ID: ${item.id}`
+            );
+            console.warn(
+                '[VectorStore] Falling back to slower search path. Consider cleaning up mismatched vectors.'
+            );
             return null;
         }
 

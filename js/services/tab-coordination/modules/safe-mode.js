@@ -83,6 +83,6 @@ export function broadcastSafeModeChange(enabled, reason) {
         type: MESSAGE_TYPES.SAFE_MODE_CHANGED,
         tabId: TAB_ID,
         enabled,
-        reason
+        reason,
     });
 }

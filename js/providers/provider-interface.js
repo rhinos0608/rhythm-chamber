@@ -14,10 +14,7 @@
  */
 
 // Re-export everything from the new modular interface
-export {
-    ProviderInterface,
-    default
-} from './interface/index.js';
+export { ProviderInterface, default } from './interface/index.js';
 
 // Re-export all named exports for backward compatibility
 export {
@@ -53,7 +50,7 @@ export {
 
     // Availability
     isProviderAvailable,
-    getAvailableProviders
+    getAvailableProviders,
 } from './interface/index.js';
 
 // Import and log after re-exporting

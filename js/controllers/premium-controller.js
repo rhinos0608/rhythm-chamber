@@ -95,7 +95,7 @@ const PremiumController = {
 
             // Setup event handlers
             LemonSqueezyService.setupEventHandlers({
-                onCheckoutSuccess: async (data) => {
+                onCheckoutSuccess: async data => {
                     console.log('[PremiumController] Checkout successful:', data);
 
                     // Activate license if key provided
@@ -103,20 +103,26 @@ const PremiumController = {
                         const result = await LemonSqueezyService.activateLicense(data.licenseKey);
                         if (result.success) {
                             // Show success message
-                            Settings.showToast('Premium activated! Enjoy unlimited playlists.', 5000);
+                            Settings.showToast(
+                                'Premium activated! Enjoy unlimited playlists.',
+                                5000
+                            );
                             // Refresh UI to show premium features
                             setTimeout(() => {
                                 window.location.reload();
                             }, 1500);
                         } else {
                             // Show activation error
-                            Settings.showToast(`Activation failed: ${result.message || 'Unknown error'}`, 5000);
+                            Settings.showToast(
+                                `Activation failed: ${result.message || 'Unknown error'}`,
+                                5000
+                            );
                         }
                     }
                 },
                 onCheckoutClosed: () => {
                     console.log('[PremiumController] Checkout closed');
-                }
+                },
             });
 
             this._lemonSqueezyInitialized = true;
@@ -178,7 +184,7 @@ const PremiumController = {
         if (modalContent) {
             this._focusTrap = createFocusTrap(modalContent, {
                 onEscape: () => this.hideModal(),
-                initialFocus: '.upgrade-modal-close-btn'
+                initialFocus: '.upgrade-modal-close-btn',
             });
             this._focusTrap.activate();
         }
@@ -191,9 +197,10 @@ const PremiumController = {
     async _handleUpgrade(plan) {
         console.log(`[PremiumController] Opening ${plan} checkout`);
 
-        const result = plan === 'monthly'
-            ? await LemonSqueezyService.openMonthlyCheckout()
-            : await LemonSqueezyService.openYearlyCheckout();
+        const result =
+            plan === 'monthly'
+                ? await LemonSqueezyService.openMonthlyCheckout()
+                : await LemonSqueezyService.openYearlyCheckout();
 
         if (!result.success) {
             // Show error message
@@ -284,7 +291,7 @@ const PremiumController = {
         switch (type) {
             case 'playlist': {
                 // SAFE: Escape dynamic reason message
-                const escapedReason = escapeHtml(data.reason || 'You\'ve used your free playlist.');
+                const escapedReason = escapeHtml(data.reason || "You've used your free playlist.");
                 return {
                     title: '✨ Unlock Unlimited Playlists',
                     body: `
@@ -314,7 +321,7 @@ const PremiumController = {
                             <span class="price-label">Premium Access</span>
                             <span class="price-value">$4.99/mo or $39/yr</span>
                         </div>
-                    `
+                    `,
                 };
             }
 
@@ -357,7 +364,7 @@ const PremiumController = {
                             <span class="price-label">Premium Access</span>
                             <span class="price-value">$4.99/mo or $39/yr</span>
                         </div>
-                    `
+                    `,
                 };
             }
 
@@ -391,7 +398,7 @@ const PremiumController = {
                             <span class="price-label">Premium Access</span>
                             <span class="price-value">$4.99/mo or $39/yr</span>
                         </div>
-                    `
+                    `,
                 };
             }
         }
@@ -404,7 +411,7 @@ const PremiumController = {
         if (!this._modal) return;
 
         // Event delegation for actions
-        this._modal.addEventListener('click', (e) => {
+        this._modal.addEventListener('click', e => {
             const action = e.target.closest('[data-action]')?.dataset.action;
 
             switch (action) {
@@ -424,13 +431,13 @@ const PremiumController = {
         });
 
         // Escape key to close (additional to focus trap)
-        this._modal.addEventListener('keydown', (e) => {
+        this._modal.addEventListener('keydown', e => {
             if (e.key === 'Escape') {
                 e.preventDefault();
                 this.hideModal();
             }
         });
-    }
+    },
 };
 
 // ==========================================
@@ -439,7 +446,7 @@ const PremiumController = {
 
 // Listen for showUpgradeModal events (for integration with other modules)
 if (typeof window !== 'undefined') {
-    window.addEventListener('showUpgradeModal', (event) => {
+    window.addEventListener('showUpgradeModal', event => {
         const { feature } = event.detail || {};
         if (feature) {
             PremiumController.showUpgradeModal(feature);

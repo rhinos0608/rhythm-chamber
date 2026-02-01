@@ -1,14 +1,14 @@
 /**
  * Universal Schema System
- * 
+ *
  * Provider-agnostic function schema format with adapters for different LLM providers.
  * Enables future-proofing against API changes and multi-provider support.
- * 
+ *
  * Currently supports:
  * - OpenAI format (including OpenRouter)
  * - Anthropic Claude format
  * - Google Gemini format
- * 
+ *
  * @module functions/schemas/universal-schema
  */
 
@@ -49,7 +49,7 @@ const SCHEMA_VERSION = '1.0.0';
 /**
  * Convert universal schema to OpenAI function calling format
  * Works with: OpenAI API, OpenRouter, Azure OpenAI
- * 
+ *
  * @param {UniversalSchema} schema - Universal schema
  * @returns {Object} OpenAI-format function schema
  */
@@ -72,9 +72,9 @@ function toOpenAI(schema) {
             parameters: {
                 type: 'object',
                 properties,
-                required
-            }
-        }
+                required,
+            },
+        },
     };
 }
 
@@ -84,7 +84,7 @@ function toOpenAI(schema) {
 function buildOpenAIProperty(param) {
     const prop = {
         type: param.type,
-        description: param.description
+        description: param.description,
     };
 
     if (param.enum) {
@@ -107,7 +107,7 @@ function buildOpenAIProperty(param) {
 
 /**
  * Convert universal schema to Anthropic Claude tool format
- * 
+ *
  * @param {UniversalSchema} schema - Universal schema
  * @returns {Object} Anthropic-format tool schema
  */
@@ -115,7 +115,7 @@ function toAnthropic(schema) {
     const inputSchema = {
         type: 'object',
         properties: {},
-        required: []
+        required: [],
     };
 
     for (const param of schema.parameters) {
@@ -128,7 +128,7 @@ function toAnthropic(schema) {
     return {
         name: schema.name,
         description: schema.description,
-        input_schema: inputSchema
+        input_schema: inputSchema,
     };
 }
 
@@ -138,7 +138,7 @@ function toAnthropic(schema) {
 function buildAnthropicProperty(param) {
     const prop = {
         type: param.type,
-        description: param.description
+        description: param.description,
     };
 
     if (param.enum) {
@@ -161,7 +161,7 @@ function buildAnthropicProperty(param) {
 
 /**
  * Convert universal schema to Google Gemini function declarations format
- * 
+ *
  * @param {UniversalSchema} schema - Universal schema
  * @returns {Object} Gemini-format function declaration
  */
@@ -169,7 +169,7 @@ function toGemini(schema) {
     const parameters = {
         type: 'OBJECT',
         properties: {},
-        required: []
+        required: [],
     };
 
     for (const param of schema.parameters) {
@@ -182,7 +182,7 @@ function toGemini(schema) {
     return {
         name: schema.name,
         description: schema.description,
-        parameters
+        parameters,
     };
 }
 
@@ -192,16 +192,16 @@ function toGemini(schema) {
  */
 function buildGeminiProperty(param) {
     const typeMap = {
-        'string': 'STRING',
-        'number': 'NUMBER',
-        'boolean': 'BOOLEAN',
-        'array': 'ARRAY',
-        'object': 'OBJECT'
+        string: 'STRING',
+        number: 'NUMBER',
+        boolean: 'BOOLEAN',
+        array: 'ARRAY',
+        object: 'OBJECT',
     };
 
     const prop = {
         type: typeMap[param.type] || 'STRING',
-        description: param.description
+        description: param.description,
     };
 
     if (param.enum) {
@@ -228,7 +228,7 @@ function buildGeminiProperty(param) {
 
 /**
  * Convert an array of universal schemas to provider-specific format
- * 
+ *
  * @param {UniversalSchema[]} schemas - Array of universal schemas
  * @param {'openai' | 'anthropic' | 'gemini'} provider - Target provider
  * @returns {Object[]} Provider-specific schemas
@@ -237,7 +237,7 @@ function convertSchemas(schemas, provider) {
     const converters = {
         openai: toOpenAI,
         anthropic: toAnthropic,
-        gemini: toGemini
+        gemini: toGemini,
     };
 
     const converter = converters[provider];
@@ -250,7 +250,7 @@ function convertSchemas(schemas, provider) {
 
 /**
  * Create a universal schema from a simplified definition
- * 
+ *
  * @param {string} name - Function name
  * @param {string} description - Function description
  * @param {Object} paramDefs - Parameter definitions { name: { type, description, required?, enum? } }
@@ -267,7 +267,7 @@ function createSchema(name, description, paramDefs = {}) {
             required: def.required || false,
             enum: def.enum,
             items: def.items,
-            properties: def.properties
+            properties: def.properties,
         });
     }
 
@@ -275,7 +275,7 @@ function createSchema(name, description, paramDefs = {}) {
         name,
         description,
         parameters,
-        schemaVersion: SCHEMA_VERSION
+        schemaVersion: SCHEMA_VERSION,
     };
 }
 
@@ -294,8 +294,7 @@ export const UniversalSchema = {
 
     // Utilities
     convertSchemas,
-    createSchema
+    createSchema,
 };
-
 
 console.log('[UniversalSchema] Provider-agnostic schema system loaded');

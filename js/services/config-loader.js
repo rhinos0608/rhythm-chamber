@@ -93,10 +93,11 @@ function getEnvVar(names) {
     }
 
     // process.env (Node.js / SSR compatibility)
-    if (typeof process !== 'undefined' && process.env) {
+    const nodeProcess = typeof globalThis !== 'undefined' ? globalThis.process : undefined;
+    if (nodeProcess?.env) {
         for (const name of names) {
-            if (process.env[name] !== undefined) {
-                return process.env[name];
+            if (nodeProcess.env[name] !== undefined) {
+                return nodeProcess.env[name];
             }
         }
     }
@@ -194,7 +195,7 @@ function getEnvConfigOverrides() {
     if (stripePriceLifetime) {
         overrides.stripe = {
             ...overrides.stripe,
-            prices: { ...overrides.stripe?.prices, lifetime: stripePriceLifetime }
+            prices: { ...overrides.stripe?.prices, lifetime: stripePriceLifetime },
         };
     }
 
@@ -202,7 +203,7 @@ function getEnvConfigOverrides() {
     if (stripePriceMonthly) {
         overrides.stripe = {
             ...overrides.stripe,
-            prices: { ...overrides.stripe?.prices, monthly: stripePriceMonthly }
+            prices: { ...overrides.stripe?.prices, monthly: stripePriceMonthly },
         };
     }
 
@@ -234,15 +235,12 @@ const CRITICAL_DEFAULTS = {
         apiUrl: 'https://openrouter.ai/api/v1/chat/completions',
         model: 'xiaomi/mimo-v2-flash:free',
         maxTokens: 4500,
-        temperature: 0.7
+        temperature: 0.7,
     },
     spotify: {
         clientId: '',
         redirectUri: typeof window !== 'undefined' ? window.location.origin + '/app.html' : '',
-        scopes: [
-            'user-read-recently-played',
-            'user-top-read'
-        ]
+        scopes: ['user-read-recently-played', 'user-top-read'],
     },
     lemonsqueezy: {
         storeUrl: '',
@@ -250,21 +248,21 @@ const CRITICAL_DEFAULTS = {
         variantYearly: '',
         variantLifetime: '',
         validationEndpoint: '',
-        apiKey: ''
+        apiKey: '',
     },
     stripe: {
         publishableKey: '',
         prices: {
             lifetime: '',
-            monthly: ''
-        }
+            monthly: '',
+        },
     },
     app: {
         name: 'Rhythm Chamber',
-        url: typeof window !== 'undefined' ? window.location.origin : ''
+        url: typeof window !== 'undefined' ? window.location.origin : '',
     },
     PAYMENT_MODE: '', // Empty = MVP mode, 'chamber' = production mode
-    env: 'development'
+    env: 'development',
 };
 
 // ==========================================
@@ -332,7 +330,7 @@ async function load(options = {}) {
                 logger.info(`Loading config (attempt ${attempt}/${MAX_RETRIES})...`);
 
                 const response = await fetch(configUrl, {
-                    cache: forceRefresh ? 'no-cache' : 'default'
+                    cache: forceRefresh ? 'no-cache' : 'default',
                 });
 
                 if (!response.ok) {
@@ -355,7 +353,10 @@ async function load(options = {}) {
                     const envOverrides = getEnvConfigOverrides();
                     const appliedOverrides = applyEnvOverrides(loadedConfig, envOverrides);
                     if (Object.keys(appliedOverrides).length > 0) {
-                        logger.info('Applied environment variable overrides:', Object.keys(appliedOverrides));
+                        logger.info(
+                            'Applied environment variable overrides:',
+                            Object.keys(appliedOverrides)
+                        );
                     }
                 }
 
@@ -373,7 +374,6 @@ async function load(options = {}) {
 
                 isLoading = false;
                 return loadedConfig;
-
             } catch (error) {
                 lastError = error;
                 logger.warn(`Attempt ${attempt} failed:`, error.message);
@@ -421,7 +421,7 @@ async function load(options = {}) {
 
         emitEvent('config:failed', {
             error: loadError,
-            usingDefaults: true
+            usingDefaults: true,
         });
 
         isLoading = false;
@@ -511,7 +511,7 @@ function getLoadStatus() {
     return {
         failed: loadFailed,
         error: loadError,
-        usingDefaults: loadFailed && loadedConfig !== null
+        usingDefaults: loadFailed && loadedConfig !== null,
     };
 }
 
@@ -600,7 +600,9 @@ function validateConfig(config) {
         if (config.openrouter.apiKey && config.openrouter.apiKey.length > 0) {
             const apiKey = config.openrouter.apiKey;
             if (!apiKey.startsWith('sk-or-v1-')) {
-                warnings.push('openrouter.apiKey format may be invalid (should start with sk-or-v1-)');
+                warnings.push(
+                    'openrouter.apiKey format may be invalid (should start with sk-or-v1-)'
+                );
             }
             if (apiKey.length < 40) {
                 warnings.push('openrouter.apiKey seems too short');
@@ -641,7 +643,11 @@ function validateConfig(config) {
             }
         }
         // Warn if variant IDs are missing when storeUrl is configured
-        if (config.lemonsqueezy.storeUrl && !config.lemonsqueezy.variantMonthly && !config.lemonsqueezy.variantYearly) {
+        if (
+            config.lemonsqueezy.storeUrl &&
+            !config.lemonsqueezy.variantMonthly &&
+            !config.lemonsqueezy.variantYearly
+        ) {
             warnings.push('lemonsqueezy variant IDs are missing (variantMonthly, variantYearly)');
         }
     }
@@ -666,7 +672,7 @@ function validateConfig(config) {
 
     return {
         valid: warnings.length === 0,
-        warnings
+        warnings,
     };
 }
 
@@ -681,11 +687,12 @@ function validateConfig(config) {
  */
 function cacheConfig(config) {
     // Check for localStorage in window or global (for test environments)
-    const storage = typeof window !== 'undefined' && window.localStorage
-        ? window.localStorage
-        : typeof global !== 'undefined' && global.localStorage
-            ? global.localStorage
-            : null;
+    const storage =
+        typeof window !== 'undefined' && window.localStorage
+            ? window.localStorage
+            : typeof globalThis !== 'undefined' && globalThis.localStorage
+                ? globalThis.localStorage
+                : null;
 
     if (!storage) {
         return;
@@ -701,10 +708,13 @@ function cacheConfig(config) {
             cacheable.stripe = { ...cacheable.stripe, publishableKey: '' };
         }
 
-        storage.setItem(CONFIG_CACHE_KEY, JSON.stringify({
-            config: cacheable,
-            timestamp: Date.now()
-        }));
+        storage.setItem(
+            CONFIG_CACHE_KEY,
+            JSON.stringify({
+                config: cacheable,
+                timestamp: Date.now(),
+            })
+        );
     } catch (e) {
         // Handle quota exceeded errors specifically
         if (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014) {
@@ -722,11 +732,12 @@ function cacheConfig(config) {
  */
 function getCachedConfig() {
     // Check for localStorage in window or global (for test environments)
-    const storage = typeof window !== 'undefined' && window.localStorage
-        ? window.localStorage
-        : typeof global !== 'undefined' && global.localStorage
-            ? global.localStorage
-            : null;
+    const storage =
+        typeof window !== 'undefined' && window.localStorage
+            ? window.localStorage
+            : typeof globalThis !== 'undefined' && globalThis.localStorage
+                ? globalThis.localStorage
+                : null;
 
     if (!storage) {
         return null;
@@ -757,11 +768,12 @@ function getCachedConfig() {
  */
 function clearCache() {
     // Check for localStorage in window or global (for test environments)
-    const storage = typeof window !== 'undefined' && window.localStorage
-        ? window.localStorage
-        : typeof global !== 'undefined' && global.localStorage
-            ? global.localStorage
-            : null;
+    const storage =
+        typeof window !== 'undefined' && window.localStorage
+            ? window.localStorage
+            : typeof globalThis !== 'undefined' && globalThis.localStorage
+                ? globalThis.localStorage
+                : null;
 
     if (!storage) {
         return;
@@ -854,7 +866,9 @@ function installWindowProxy() {
     //   import { ConfigLoader } from './config-loader.js';
     //   const config = await ConfigLoader.load();
     //   const value = ConfigLoader.get('path.to.value');
-    logger.warn('installWindowProxy() is deprecated. Use ES module imports instead: import { ConfigLoader } from "./config-loader.js"');
+    logger.warn(
+        'installWindowProxy() is deprecated. Use ES module imports instead: import { ConfigLoader } from "./config-loader.js"'
+    );
 }
 
 // ==========================================
@@ -883,7 +897,7 @@ const ConfigLoader = {
     getConfigUrl,
 
     // Constants (for testing)
-    CRITICAL_DEFAULTS
+    CRITICAL_DEFAULTS,
 };
 
 export { ConfigLoader };

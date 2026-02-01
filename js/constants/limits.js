@@ -65,7 +65,7 @@ export const QUOTA_THRESHOLDS = Object.freeze({
      * Warning threshold (80% of quota)
      * Warn user to clean up data when quota usage exceeds this
      */
-    WARNING_THRESHOLD: 0.80,
+    WARNING_THRESHOLD: 0.8,
 
     /**
      * Critical threshold (95% of quota)

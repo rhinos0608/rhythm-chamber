@@ -1,6 +1,6 @@
 /**
  * System Prompts for Rhythm Chamber
- * 
+ *
  * Edit these prompts to customize the chat experience.
  * Changes take effect immediately on page reload.
  */
@@ -8,7 +8,7 @@
 const Prompts = {
     /**
      * Main system prompt for personality-aware chat
-     * 
+     *
      * Available placeholders:
      * - {{personality_name}} - e.g., "The Mood Engineer"
      * - {{tagline}} - e.g., "You use music to change your state."
@@ -56,7 +56,8 @@ IMPORTANT: Use the available functions to get precise data rather than guessing.
      * Fallback responses when API is unavailable
      */
     fallback: {
-        noApiKey: `To explore deeper questions, connect an OpenRouter API key in settings. Until then, I can share what I've detected from your patterns.`,
+        noApiKey:
+            "To explore deeper questions, connect an OpenRouter API key in settings. Until then, I can share what I've detected from your patterns.",
 
         yearQuery: (year, patterns) => {
             const range = patterns.summary?.dateRange;
@@ -64,7 +65,7 @@ IMPORTANT: Use the available functions to get precise data rather than guessing.
                 return `Your data starts from ${range.start}, so I don't have visibility into ${year}. What I can tell you about is what happened from ${range.start} onwards - would you like to explore that instead?`;
             }
             return null; // Let normal fallback handle it
-        }
+        },
     },
 
     /**
@@ -72,41 +73,49 @@ IMPORTANT: Use the available functions to get precise data rather than guessing.
      */
     personalities: {
         emotional_archaeologist: {
-            revealIntro: "You don't just listen to music — you use it to process feelings. Your library is a scrapbook of emotional eras.",
-            chatContext: "This user processes emotions through music and has distinct listening eras tied to life events."
+            revealIntro:
+                "You don't just listen to music — you use it to process feelings. Your library is a scrapbook of emotional eras.",
+            chatContext:
+                'This user processes emotions through music and has distinct listening eras tied to life events.',
         },
         mood_engineer: {
-            revealIntro: "You strategically deploy music to shift your emotional state. Morning you and evening you have different soundtracks.",
-            chatContext: "This user actively uses music to change their mood and has distinct time-of-day patterns."
+            revealIntro:
+                'You strategically deploy music to shift your emotional state. Morning you and evening you have different soundtracks.',
+            chatContext:
+                'This user actively uses music to change their mood and has distinct time-of-day patterns.',
         },
         discovery_junkie: {
-            revealIntro: "You're constantly seeking new artists. Your playlists never settle — there's always something new to find.",
-            chatContext: "This user prioritizes novelty and discovering new music over replaying favorites."
+            revealIntro:
+                "You're constantly seeking new artists. Your playlists never settle — there's always something new to find.",
+            chatContext:
+                'This user prioritizes novelty and discovering new music over replaying favorites.',
         },
         comfort_curator: {
-            revealIntro: "Same songs for years, and you wouldn't have it any other way. You've found your sound and you're sticking with it.",
-            chatContext: "This user values familiarity and has a core rotation of beloved songs."
+            revealIntro:
+                "Same songs for years, and you wouldn't have it any other way. You've found your sound and you're sticking with it.",
+            chatContext: 'This user values familiarity and has a core rotation of beloved songs.',
         },
         social_chameleon: {
-            revealIntro: "Weekday you and weekend you have different playlists. Your music adapts to the social situation.",
-            chatContext: "This user's listening changes significantly based on context (weekday vs weekend, etc)."
-        }
+            revealIntro:
+                'Weekday you and weekend you have different playlists. Your music adapts to the social situation.',
+            chatContext:
+                "This user's listening changes significantly based on context (weekday vs weekend, etc).",
+        },
     },
 
     /**
      * Suggested questions shown in chat UI
      */
     suggestions: [
-        "What does my music say about me?",
-        "Which artist do I not listen to anymore?",
-        "Which artist do I listen to the most?",
-        "What are my favorite genres?",
-        "What patterns do you see?"
-    ]
+        'What does my music say about me?',
+        'Which artist do I not listen to anymore?',
+        'Which artist do I listen to the most?',
+        'What are my favorite genres?',
+        'What patterns do you see?',
+    ],
 };
 
 // ES Module export
 export { Prompts };
 
 console.log('[Prompts] Module loaded');
-

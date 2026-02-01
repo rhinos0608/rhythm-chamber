@@ -13,7 +13,7 @@ export {
     isValidStore,
     getAllStoreNames,
     supportsTransactions,
-    getStoreMetadata
+    getStoreMetadata,
 } from './registry.js';
 
 // Streams Store
@@ -24,7 +24,7 @@ export {
     clearStreams,
     hasStreams,
     getStreamCount,
-    getStreamsHash
+    getStreamsHash,
 } from './streams.js';
 
 // Chunks Store
@@ -37,7 +37,7 @@ export {
     clearChunks,
     getChunkCount,
     hasChunks,
-    getChunksByStream
+    getChunksByStream,
 } from './chunks.js';
 
 // Sessions Store
@@ -50,7 +50,7 @@ export {
     clearAllSessions,
     clearExpiredSessions,
     getSessionsByDateRange,
-    searchSessions
+    searchSessions,
 } from './sessions.js';
 
 // Artifacts Store
@@ -68,5 +68,5 @@ export {
     clearEmbeddings,
     getEmbeddingCount,
     saveArtifact,
-    getArtifact
+    getArtifact,
 } from './artifacts.js';

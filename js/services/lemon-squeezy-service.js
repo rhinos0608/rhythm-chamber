@@ -43,7 +43,7 @@ const API_KEY = ConfigLoader.get('lemonsqueezy.apiKey', '');
 const VARIANT_IDS = {
     chamber_monthly: ConfigLoader.get('lemonsqueezy.variantMonthly', ''),
     chamber_yearly: ConfigLoader.get('lemonsqueezy.variantYearly', ''),
-    chamber_lifetime: ConfigLoader.get('lemonsqueezy.variantLifetime', '')
+    chamber_lifetime: ConfigLoader.get('lemonsqueezy.variantLifetime', ''),
 };
 
 /**
@@ -107,8 +107,8 @@ async function verifyCheckoutLicense(licenseKey) {
                 body: JSON.stringify({
                     action: 'validate',
                     licenseKey,
-                    instanceName: INSTANCE_NAME
-                })
+                    instanceName: INSTANCE_NAME,
+                }),
             });
 
             if (response.ok) {
@@ -117,7 +117,7 @@ async function verifyCheckoutLicense(licenseKey) {
                     return {
                         valid: true,
                         tier: data.tier || 'chamber',
-                        instanceId: data.instanceId
+                        instanceId: data.instanceId,
                     };
                 }
                 return { valid: false, error: data.error || 'Invalid license' };
@@ -129,14 +129,14 @@ async function verifyCheckoutLicense(licenseKey) {
             const response = await fetch('https://api.lemonsqueezy.com/v1/licenses/activate', {
                 method: 'POST',
                 headers: {
-                    'Accept': 'application/vnd.api+json',
+                    Accept: 'application/vnd.api+json',
                     'Content-Type': 'application/vnd.api+json',
-                    'Authorization': `Bearer ${API_KEY}`
+                    Authorization: `Bearer ${API_KEY}`,
                 },
                 body: JSON.stringify({
                     license_key: licenseKey,
-                    instance_name: INSTANCE_NAME
-                })
+                    instance_name: INSTANCE_NAME,
+                }),
             });
 
             if (response.ok) {
@@ -145,7 +145,7 @@ async function verifyCheckoutLicense(licenseKey) {
                     return {
                         valid: true,
                         tier: 'chamber',
-                        instanceId: data.instance?.id
+                        instanceId: data.instance?.id,
                     };
                 }
             }
@@ -154,11 +154,20 @@ async function verifyCheckoutLicense(licenseKey) {
         // SECURITY: If no validation method is available, fail closed
         // This prevents attackers from bypassing license checks by blocking network requests
         logger.warn('No server-side validation available, rejecting license key');
-        return { valid: false, error: 'VERIFICATION_UNAVAILABLE', message: 'License verification unavailable. Please check your connection or try again later.' };
+        return {
+            valid: false,
+            error: 'VERIFICATION_UNAVAILABLE',
+            message:
+                'License verification unavailable. Please check your connection or try again later.',
+        };
     } catch (error) {
         logger.error('License verification failed:', error);
         // SECURITY: On network failure, fail closed rather than fail open
-        return { valid: false, error: 'VERIFICATION_UNAVAILABLE', message: 'Could not verify license key. Please check your connection and try again.' };
+        return {
+            valid: false,
+            error: 'VERIFICATION_UNAVAILABLE',
+            message: 'Could not verify license key. Please check your connection and try again.',
+        };
     }
 }
 
@@ -174,7 +183,7 @@ function setupEventHandlers(handlers = {}) {
 
     // Default handlers
     const defaultHandlers = {
-        onCheckoutSuccess: async (data) => {
+        onCheckoutSuccess: async data => {
             logger.info('Checkout successful, verifying license key...');
 
             // SECURITY: Verify license key server-side before trusting it
@@ -186,7 +195,7 @@ function setupEventHandlers(handlers = {}) {
                 // Notify handler of verification failure
                 handlers.onCheckoutError?.({
                     error: 'VERIFICATION_FAILED',
-                    message: verification.error || 'Could not verify license key'
+                    message: verification.error || 'Could not verify license key',
                 });
                 return;
             }
@@ -196,7 +205,7 @@ function setupEventHandlers(handlers = {}) {
                 ...data,
                 verified: verification.verified !== false, // true unless explicitly false
                 tier: verification.tier || data.tier,
-                instanceId: verification.instanceId
+                instanceId: verification.instanceId,
             };
 
             logger.info('License verified successfully:', verifiedData.tier);
@@ -205,20 +214,19 @@ function setupEventHandlers(handlers = {}) {
         onCheckoutClosed: () => {
             logger.info('Checkout closed');
             handlers.onCheckoutClosed?.();
-        }
+        },
     };
 
     // Setup LemonSqueezy event handler
     window.LemonSqueezy.Setup({
-        eventHandler: (event) => {
+        eventHandler: event => {
             const eventName = event.event;
             const eventData = event.data || {};
 
             switch (eventName) {
-                case 'Checkout.Success':
+                case 'Checkout.Success': {
                     // Extract license key from event data
-                    const licenseKey = eventData.meta?.license_key?.key ||
-                                     eventData.license_key;
+                    const licenseKey = eventData.meta?.license_key?.key || eventData.license_key;
 
                     // SECURITY: Verify license key before processing
                     defaultHandlers.onCheckoutSuccess({
@@ -226,9 +234,10 @@ function setupEventHandlers(handlers = {}) {
                         orderId: eventData.order_number,
                         customerEmail: eventData.meta?.customer_email,
                         variantId: eventData.meta?.variant_id,
-                        ...eventData
+                        ...eventData,
                     });
                     break;
+                }
 
                 case 'Checkout.Close':
                     defaultHandlers.onCheckoutClosed();
@@ -242,7 +251,7 @@ function setupEventHandlers(handlers = {}) {
             if (handlers[eventName]) {
                 handlers[eventName](eventData);
             }
-        }
+        },
     });
 
     logger.info('Lemon.js event handlers configured');
@@ -260,12 +269,7 @@ function setupEventHandlers(handlers = {}) {
  * @returns {Promise<{success: boolean, error?: string}>}
  */
 async function openCheckout(variantId, options = {}) {
-    const {
-        email,
-        name,
-        discountCode,
-        customData = {}
-    } = options;
+    const { email, name, discountCode, customData = {} } = options;
 
     // Check if store is configured
     if (!STORE_URL) {
@@ -273,7 +277,7 @@ async function openCheckout(variantId, options = {}) {
         return {
             success: false,
             error: 'NOT_CONFIGURED',
-            message: 'Payment integration coming soon! For now, enjoy the free tier.'
+            message: 'Payment integration coming soon! For now, enjoy the free tier.',
         };
     }
 
@@ -282,7 +286,7 @@ async function openCheckout(variantId, options = {}) {
         return {
             success: false,
             error: 'NO_VARIANT',
-            message: 'Product variant not configured'
+            message: 'Product variant not configured',
         };
     }
 
@@ -322,13 +326,12 @@ async function openCheckout(variantId, options = {}) {
         window.LemonSqueezy.Url.Open(checkoutUrl);
 
         return { success: true };
-
     } catch (e) {
         logger.error('Checkout initiation failed:', e);
         return {
             success: false,
             error: 'CHECKOUT_FAILED',
-            message: e.message || 'Failed to open checkout'
+            message: e.message || 'Failed to open checkout',
         };
     }
 }
@@ -377,7 +380,7 @@ async function validateLicense(licenseKey, instanceId = null) {
         return {
             valid: false,
             error: 'NO_KEY',
-            message: 'License key is required'
+            message: 'License key is required',
         };
     }
 
@@ -396,13 +399,12 @@ async function validateLicense(licenseKey, instanceId = null) {
         }
 
         return result;
-
     } catch (e) {
         logger.error('License validation failed:', e);
         return {
             valid: false,
             error: 'VALIDATION_ERROR',
-            message: e.message
+            message: e.message,
         };
     }
 }
@@ -417,14 +419,14 @@ async function validateViaWorker(licenseKey, instanceId) {
     const response = await fetch(VALIDATION_ENDPOINT, {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
         },
         body: JSON.stringify({
             action: 'validate',
             licenseKey,
             instanceId,
-            instanceName: INSTANCE_NAME
-        })
+            instanceName: INSTANCE_NAME,
+        }),
     });
 
     if (!response.ok) {
@@ -439,14 +441,14 @@ async function validateViaWorker(licenseKey, instanceId) {
             tier: data.tier || 'chamber',
             instanceId: data.instanceId,
             expiresAt: data.expiresAt || null,
-            activatedAt: data.activatedAt || null
+            activatedAt: data.activatedAt || null,
         };
     }
 
     return {
         valid: false,
         error: data.error || 'INVALID',
-        message: data.message || 'License key is invalid'
+        message: data.message || 'License key is invalid',
     };
 }
 
@@ -458,8 +460,8 @@ async function validateViaWorker(licenseKey, instanceId) {
  */
 async function validateViaAPI(licenseKey, instanceId) {
     const url = instanceId
-        ? `https://api.lemonsqueezy.com/v1/licenses/validate`
-        : `https://api.lemonsqueezy.com/v1/licenses/activate`;
+        ? 'https://api.lemonsqueezy.com/v1/licenses/validate'
+        : 'https://api.lemonsqueezy.com/v1/licenses/activate';
 
     const body = instanceId
         ? { license_key: licenseKey, instance_id: instanceId }
@@ -468,11 +470,11 @@ async function validateViaAPI(licenseKey, instanceId) {
     const response = await fetch(url, {
         method: 'POST',
         headers: {
-            'Accept': 'application/vnd.api+json',
+            Accept: 'application/vnd.api+json',
             'Content-Type': 'application/vnd.api+json',
-            'Authorization': `Bearer ${API_KEY}`
+            Authorization: `Bearer ${API_KEY}`,
         },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -486,7 +488,7 @@ async function validateViaAPI(licenseKey, instanceId) {
         return {
             valid: false,
             error: 'API_ERROR',
-            message: data.error
+            message: data.error,
         };
     }
 
@@ -497,7 +499,7 @@ async function validateViaAPI(licenseKey, instanceId) {
         return {
             valid: false,
             error: 'INACTIVE',
-            message: `License status: ${licenseKeyData.status}`
+            message: `License status: ${licenseKeyData.status}`,
         };
     }
 
@@ -508,7 +510,7 @@ async function validateViaAPI(licenseKey, instanceId) {
             return {
                 valid: false,
                 error: 'EXPIRED',
-                message: 'License has expired'
+                message: 'License has expired',
             };
         }
     }
@@ -518,7 +520,7 @@ async function validateViaAPI(licenseKey, instanceId) {
         tier: 'chamber',
         instanceId: data.instance?.id,
         expiresAt: licenseKeyData.expires_at,
-        activatedAt: licenseKeyData.created_at
+        activatedAt: licenseKeyData.created_at,
     };
 }
 
@@ -538,11 +540,12 @@ async function validateLocally(licenseKey) {
             return {
                 valid: false,
                 error: 'INVALID_FORMAT',
-                message: 'Invalid license key format. Expected JWT format (header.payload.signature) or legacy format (payload.signature).'
+                message:
+                    'Invalid license key format. Expected JWT format (header.payload.signature) or legacy format (payload.signature).',
             };
         }
 
-        let header, payloadB64, signature, payload;
+        let header, payloadB64, signature;
 
         if (parts.length === 3) {
             // Standard JWT format: header.payload.signature
@@ -550,14 +553,17 @@ async function validateLocally(licenseKey) {
 
             // Decode header
             try {
-                const headerBytes = Uint8Array.from(atob(headerB64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+                const headerBytes = Uint8Array.from(
+                    atob(headerB64.replace(/-/g, '+').replace(/_/g, '/')),
+                    c => c.charCodeAt(0)
+                );
                 const headerJson = new TextDecoder().decode(headerBytes);
                 header = JSON.parse(headerJson);
             } catch (e) {
                 return {
                     valid: false,
                     error: 'INVALID_HEADER',
-                    message: 'Invalid JWT header'
+                    message: 'Invalid JWT header',
                 };
             }
 
@@ -570,25 +576,29 @@ async function validateLocally(licenseKey) {
         }
 
         // Decode payload
-        const payloadBytes = Uint8Array.from(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+        const payloadBytes = Uint8Array.from(
+            atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')),
+            c => c.charCodeAt(0)
+        );
         const payloadJson = new TextDecoder().decode(payloadBytes);
-        payload = JSON.parse(payloadJson);
+        const payload = JSON.parse(payloadJson);
 
         // Verify header algorithm
         if (header.alg !== 'HS256') {
             return {
                 valid: false,
                 error: 'UNSUPPORTED_ALGORITHM',
-                message: `Unsupported algorithm: ${header.alg}. Expected HS256.`
+                message: `Unsupported algorithm: ${header.alg}. Expected HS256.`,
             };
         }
 
         // Verify signature using derived secret
         // For JWT: sign header.payload
         // For legacy: sign payload only
-        const dataToSign = parts.length === 3
-            ? `${parts[0]}.${parts[1]}`  // header.payload
-            : payloadB64;                // payload only (legacy)
+        const dataToSign =
+            parts.length === 3
+                ? `${parts[0]}.${parts[1]}` // header.payload
+                : payloadB64; // payload only (legacy)
 
         const isValid = await verifySignature(dataToSign, signature, payloadB64);
 
@@ -596,7 +606,8 @@ async function validateLocally(licenseKey) {
             return {
                 valid: false,
                 error: 'INVALID_SIGNATURE',
-                message: 'License signature verification failed. Token may have been tampered with.'
+                message:
+                    'License signature verification failed. Token may have been tampered with.',
             };
         }
 
@@ -605,7 +616,7 @@ async function validateLocally(licenseKey) {
             return {
                 valid: false,
                 error: 'INVALID_TIER',
-                message: `Invalid tier: ${payload.tier || 'undefined'}`
+                message: `Invalid tier: ${payload.tier || 'undefined'}`,
             };
         }
 
@@ -615,7 +626,7 @@ async function validateLocally(licenseKey) {
             return {
                 valid: false,
                 error: 'EXPIRED',
-                message: `License expired at ${new Date(payload.exp * 1000).toISOString()}`
+                message: `License expired at ${new Date(payload.exp * 1000).toISOString()}`,
             };
         }
 
@@ -624,7 +635,7 @@ async function validateLocally(licenseKey) {
             return {
                 valid: false,
                 error: 'NOT_YET_VALID',
-                message: `License not valid until ${new Date(payload.nbf * 1000).toISOString()}`
+                message: `License not valid until ${new Date(payload.nbf * 1000).toISOString()}`,
             };
         }
 
@@ -634,15 +645,14 @@ async function validateLocally(licenseKey) {
             instanceId: payload.instanceId || null,
             expiresAt: payload.exp ? new Date(payload.exp * 1000).toISOString() : null,
             activatedAt: payload.iat ? new Date(payload.iat * 1000).toISOString() : null,
-            features: payload.features || []
+            features: payload.features || [],
         };
-
     } catch (e) {
         logger.warn('License validation error:', e);
         return {
             valid: false,
             error: 'PARSE_ERROR',
-            message: `Could not parse license key: ${e.message}`
+            message: `Could not parse license key: ${e.message}`,
         };
     }
 }
@@ -684,7 +694,6 @@ async function verifySignature(dataToSign, signature, payloadB64 = null) {
         const dataBytes = new TextEncoder().encode(dataToSign);
 
         return await crypto.subtle.verify('HMAC', key, signatureBytes, dataBytes);
-
     } catch (e) {
         logger.warn('Signature verification failed:', e);
         return false;
@@ -698,8 +707,14 @@ async function verifySignature(dataToSign, signature, payloadB64 = null) {
  */
 async function deriveSecret() {
     // Obfuscated key parts (XOR encoded)
-    const OBF_P1 = [0x7f, 0x9a, 0x3c, 0xe5, 0x21, 0x88, 0x4d, 0xb2, 0x5c, 0x13, 0x77, 0xf4, 0x8e, 0x29, 0x6a, 0x41, 0xbc];
-    const OBF_P2 = [0x42, 0xf7, 0x81, 0x1c, 0x99, 0x34, 0xaa, 0x5e, 0x35, 0x88, 0x1c, 0x9d, 0xb2, 0x74, 0x18, 0x5d, 0xcf];
+    const OBF_P1 = [
+        0x7f, 0x9a, 0x3c, 0xe5, 0x21, 0x88, 0x4d, 0xb2, 0x5c, 0x13, 0x77, 0xf4, 0x8e, 0x29, 0x6a,
+        0x41, 0xbc,
+    ];
+    const OBF_P2 = [
+        0x42, 0xf7, 0x81, 0x1c, 0x99, 0x34, 0xaa, 0x5e, 0x35, 0x88, 0x1c, 0x9d, 0xb2, 0x74, 0x18,
+        0x5d, 0xcf,
+    ];
 
     // XOR decode
     const combined = new Uint8Array(OBF_P1.length);
@@ -716,7 +731,10 @@ async function deriveSecret() {
     // Hash to create final secret
     const hash = await crypto.subtle.digest('SHA-256', result);
     const hashArray = Array.from(new Uint8Array(hash));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 32);
+    return hashArray
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('')
+        .substring(0, 32);
 }
 
 /**
@@ -729,7 +747,7 @@ async function activateLicense(licenseKey) {
     if (!licenseKey) {
         return {
             success: false,
-            error: 'NO_KEY'
+            error: 'NO_KEY',
         };
     }
 
@@ -741,7 +759,7 @@ async function activateLicense(licenseKey) {
             return {
                 success: false,
                 error: validation.error,
-                message: validation.message
+                message: validation.message,
             };
         }
 
@@ -751,7 +769,7 @@ async function activateLicense(licenseKey) {
             instanceId: validation.instanceId,
             activatedAt: validation.activatedAt || new Date().toISOString(),
             expiresAt: validation.expiresAt,
-            source: 'lemonsqueezy'
+            source: 'lemonsqueezy',
         });
 
         if (!stored) {
@@ -759,7 +777,7 @@ async function activateLicense(licenseKey) {
             return {
                 success: false,
                 error: 'STORAGE_FAILED',
-                message: 'Failed to store license securely'
+                message: 'Failed to store license securely',
             };
         }
 
@@ -769,14 +787,14 @@ async function activateLicense(licenseKey) {
             licenseKey: await hashKey(licenseKey), // Store hash, not raw key
             instanceId: validation.instanceId,
             activatedAt: validation.activatedAt || new Date().toISOString(),
-            expiresAt: validation.expiresAt
+            expiresAt: validation.expiresAt,
         };
 
         localStorage.setItem('rhythm_chamber_license', JSON.stringify(licenseData));
 
         // Emit activation event
         const event = new CustomEvent('licenseActivated', {
-            detail: { tier: validation.tier }
+            detail: { tier: validation.tier },
         });
         window.dispatchEvent(event);
 
@@ -784,15 +802,14 @@ async function activateLicense(licenseKey) {
 
         return {
             success: true,
-            tier: validation.tier
+            tier: validation.tier,
         };
-
     } catch (e) {
         logger.error('License activation failed:', e);
         return {
             success: false,
             error: 'ACTIVATION_FAILED',
-            message: e.message
+            message: e.message,
         };
     }
 }
@@ -857,7 +874,7 @@ function getPricingInfo() {
             variantId: VARIANT_IDS.chamber_monthly,
             price: '$4.99',
             interval: 'month',
-            displayPrice: '$4.99/mo'
+            displayPrice: '$4.99/mo',
         },
         yearly: {
             variantId: VARIANT_IDS.chamber_yearly,
@@ -865,14 +882,14 @@ function getPricingInfo() {
             interval: 'year',
             displayPrice: '$39/yr',
             savings: '35%',
-            equivalentMonthly: '$3.25/mo'
+            equivalentMonthly: '$3.25/mo',
         },
         lifetime: {
             variantId: VARIANT_IDS.chamber_lifetime,
             price: '$99.00',
             interval: 'lifetime',
-            displayPrice: '$99 (one-time)'
-        }
+            displayPrice: '$99 (one-time)',
+        },
     };
 }
 
@@ -903,10 +920,10 @@ export const LemonSqueezyService = {
 
     // Constants
     VARIANT_IDS,
-    STORE_URL
+    STORE_URL,
 };
 
 logger.info('Module loaded - Lemon Squeezy payment service initialized', {
     configured: isConfigured(),
-    variants: Object.keys(VARIANT_IDS).filter(k => VARIANT_IDS[k])
+    variants: Object.keys(VARIANT_IDS).filter(k => VARIANT_IDS[k]),
 });

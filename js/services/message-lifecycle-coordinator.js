@@ -39,16 +39,16 @@ import { ErrorBoundary } from './error-boundary.js';
 const CHAT_EVENT_SCHEMAS = {
     'chat:message_sent': {
         description: 'User message sent',
-        payload: { messageId: 'string?', content: 'string' }
+        payload: { messageId: 'string?', content: 'string' },
     },
     'chat:response_received': {
         description: 'Assistant response received',
-        payload: { messageId: 'string?', content: 'string' }
+        payload: { messageId: 'string?', content: 'string' },
     },
     'chat:error': {
         description: 'Chat error occurred',
-        payload: { error: 'string', recoverable: 'boolean' }
-    }
+        payload: { error: 'string', recoverable: 'boolean' },
+    },
 };
 
 // Dependencies (injected via init)
@@ -90,7 +90,11 @@ function renderMessagesToDOM(messages) {
         return;
     }
 
-    console.log('[MessageLifecycleCoordinator] Found chat container, adding', messages.length, 'messages');
+    console.log(
+        '[MessageLifecycleCoordinator] Found chat container, adding',
+        messages.length,
+        'messages'
+    );
     messages.forEach(msg => {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${msg.role}`;
@@ -104,7 +108,11 @@ function renderMessagesToDOM(messages) {
         }
 
         chatMessagesContainer.appendChild(messageDiv);
-        console.log('[MessageLifecycleCoordinator] Added message:', msg.role, msg.content.substring(0, 50));
+        console.log(
+            '[MessageLifecycleCoordinator] Added message:',
+            msg.role,
+            msg.content.substring(0, 50)
+        );
     });
 
     // Auto-scroll to bottom
@@ -133,9 +141,10 @@ function getInitializationErrors() {
  */
 function requireInitialized() {
     if (!_isInitialized) {
-        const errorMsg = _initializationErrors.length > 0
-            ? `[MessageLifecycleCoordinator] Service not properly initialized. Errors: ${_initializationErrors.join(', ')}`
-            : '[MessageLifecycleCoordinator] Service not initialized. Call init() first.';
+        const errorMsg =
+            _initializationErrors.length > 0
+                ? `[MessageLifecycleCoordinator] Service not properly initialized. Errors: ${_initializationErrors.join(', ')}`
+                : '[MessageLifecycleCoordinator] Service not initialized. Call init() first.';
         throw new Error(errorMsg);
     }
 }
@@ -174,8 +183,15 @@ function init(dependencies) {
         _WaveTelemetry = dependencies.WaveTelemetry;
 
         // Validate required dependencies
-        const requiredDeps = ['SessionManager', 'ConversationOrchestrator', 'ToolCallHandlingService',
-                             'FallbackResponseService', 'Settings', 'Config', 'Functions'];
+        const requiredDeps = [
+            'SessionManager',
+            'ConversationOrchestrator',
+            'ToolCallHandlingService',
+            'FallbackResponseService',
+            'Settings',
+            'Config',
+            'Functions',
+        ];
         for (const dep of requiredDeps) {
             if (!dependencies[dep]) {
                 _initializationErrors.push(`Missing required dependency: ${dep}`);
@@ -188,7 +204,10 @@ function init(dependencies) {
             MessageValidator.init();
         } catch (error) {
             _initializationErrors.push(`MessageValidator initialization failed: ${error.message}`);
-            console.error('[MessageLifecycleCoordinator] MessageValidator initialization error:', error);
+            console.error(
+                '[MessageLifecycleCoordinator] MessageValidator initialization error:',
+                error
+            );
             initializationSuccess = false;
         }
 
@@ -199,33 +218,47 @@ function init(dependencies) {
                 TokenCountingService: dependencies.TokenCountingService,
                 Config: _Config,
                 Settings: _Settings,
-                WaveTelemetry: dependencies.WaveTelemetry
+                WaveTelemetry: dependencies.WaveTelemetry,
             });
         } catch (error) {
-            _initializationErrors.push(`LLMApiOrchestrator initialization failed: ${error.message}`);
-            console.error('[MessageLifecycleCoordinator] LLMApiOrchestrator initialization error:', error);
+            _initializationErrors.push(
+                `LLMApiOrchestrator initialization failed: ${error.message}`
+            );
+            console.error(
+                '[MessageLifecycleCoordinator] LLMApiOrchestrator initialization error:',
+                error
+            );
             initializationSuccess = false;
         }
 
         // Initialize StreamProcessor with error handling
         try {
             StreamProcessor.init({
-                Settings: _Settings
+                Settings: _Settings,
             });
         } catch (error) {
             _initializationErrors.push(`StreamProcessor initialization failed: ${error.message}`);
-            console.error('[MessageLifecycleCoordinator] StreamProcessor initialization error:', error);
+            console.error(
+                '[MessageLifecycleCoordinator] StreamProcessor initialization error:',
+                error
+            );
             initializationSuccess = false;
         }
 
         // Only mark as initialized if all services succeeded
         if (initializationSuccess && _initializationErrors.length === 0) {
             _isInitialized = true;
-            console.log('[MessageLifecycleCoordinator] Successfully initialized with delegated services');
+            console.log(
+                '[MessageLifecycleCoordinator] Successfully initialized with delegated services'
+            );
         } else {
-            console.error('[MessageLifecycleCoordinator] Initialization completed with errors:',
-                         _initializationErrors);
-            console.warn('[MessageLifecycleCoordinator] Service may not function correctly due to initialization failures');
+            console.error(
+                '[MessageLifecycleCoordinator] Initialization completed with errors:',
+                _initializationErrors
+            );
+            console.warn(
+                '[MessageLifecycleCoordinator] Service may not function correctly due to initialization failures'
+            );
         }
     } catch (error) {
         _initializationErrors.push(`Critical initialization error: ${error.message}`);
@@ -257,9 +290,7 @@ async function sendMessage(message, optionsOrKey = null, options = {}) {
     // Normalize optionsOrKey into options early for validation
     // This ensures flags like isRegeneration are available for duplicate check
     if (!options || Object.keys(options).length === 0) {
-        options = (typeof optionsOrKey === 'string')
-            ? { apiKey: optionsOrKey }
-            : (optionsOrKey || {});
+        options = typeof optionsOrKey === 'string' ? { apiKey: optionsOrKey } : optionsOrKey || {};
     } else {
         // Merge optionsOrKey into options if both are provided
         if (optionsOrKey && typeof optionsOrKey !== 'string') {
@@ -268,11 +299,16 @@ async function sendMessage(message, optionsOrKey = null, options = {}) {
     }
 
     // ISSUE 2: Input validation at entry point
-    const validation = MessageValidator.validateMessage(message, { skipDuplicateCheck: options?.isRegeneration });
+    const validation = MessageValidator.validateMessage(message, {
+        skipDuplicateCheck: options?.isRegeneration,
+    });
     if (!validation.valid) {
         console.warn('[MessageLifecycleCoordinator] Message validation failed:', validation.error);
         // Return error response instead of throwing to maintain graceful degradation
-        return MessageErrorHandler.buildErrorResponse(validation.error, new Error(validation.error));
+        return MessageErrorHandler.buildErrorResponse(
+            validation.error,
+            new Error(validation.error)
+        );
     }
 
     const bypassQueue = options?.bypassQueue === true;
@@ -280,11 +316,15 @@ async function sendMessage(message, optionsOrKey = null, options = {}) {
     // SECURITY: Validate bypassQueue usage - require explicit allowBypass flag
     // Hardened security: throw error instead of warning to prevent silent bypass
     if (bypassQueue && !options?.allowBypass) {
-        throw new Error('[MessageLifecycleCoordinator] Security violation: bypassQueue requires explicit allowBypass flag. Queue bypass is restricted to authorized internal operations only.');
+        throw new Error(
+            '[MessageLifecycleCoordinator] Security violation: bypassQueue requires explicit allowBypass flag. Queue bypass is restricted to authorized internal operations only.'
+        );
     }
 
     if (bypassQueue) {
-        console.log('[MessageLifecycleCoordinator] Bypassing turn queue for internal operation (with explicit allowBypass)');
+        console.log(
+            '[MessageLifecycleCoordinator] Bypassing turn queue for internal operation (with explicit allowBypass)'
+        );
         return processMessage(message, optionsOrKey);
     } else {
         return TurnQueue.push(message, optionsOrKey);
@@ -301,7 +341,21 @@ async function sendMessage(message, optionsOrKey = null, options = {}) {
  * @param {Object|string} optionsOrKey - Options object or API key string
  */
 async function processMessage(message, optionsOrKey = null) {
-    const turnBudget = TimeoutBudget.allocate('chat_turn', 60000);
+    // Get settings async to ensure we have the latest configuration
+    const settings = (await _Settings?.getSettingsAsync?.()) || {};
+    const provider = settings.llm?.provider || 'openrouter';
+
+    // Build provider config to get the appropriate timeout
+    const config = _Config?.openrouter || {};
+    const providerConfig = LLMApiOrchestrator.buildProviderConfig(provider, settings, config);
+
+    // Use provider's configured timeout for budget alignment
+    const turnBudgetMs = providerConfig.timeout || 60000;
+    const turnBudget = TimeoutBudget.allocate('chat_turn', turnBudgetMs);
+
+    console.log(
+        `[MessageLifecycleCoordinator] Allocated ${turnBudgetMs}ms budget for ${providerConfig.isLocal ? 'local' : 'cloud'} provider: ${provider}`
+    );
 
     // Flag to track if we've committed the user message to history
     let userMessageCommitted = false;
@@ -313,7 +367,9 @@ async function processMessage(message, optionsOrKey = null) {
 
         // ISSUE 1: Staging pattern - don't add user message yet
         // Will only commit after successful response
-        console.log('[MessageLifecycleCoordinator] Staging user message (not committed until successful response)');
+        console.log(
+            '[MessageLifecycleCoordinator] Staging user message (not committed until successful response)'
+        );
 
         let semanticContext = null;
         const RAG = _ModuleRegistry?.getModuleSync('RAG');
@@ -324,9 +380,12 @@ async function processMessage(message, optionsOrKey = null) {
                     context: 'ragSemanticSearch',
                     fallback: null,
                     rethrow: false,
-                    onError: (err) => {
-                        console.warn('[MessageLifecycleCoordinator] RAG semantic search failed:', err.message);
-                    }
+                    onError: err => {
+                        console.warn(
+                            '[MessageLifecycleCoordinator] RAG semantic search failed:',
+                            err.message
+                        );
+                    },
                 }
             );
             if (semanticContext) {
@@ -338,38 +397,43 @@ async function processMessage(message, optionsOrKey = null) {
 
         // Build messages array with staged user message (not yet in history)
         const messages = [
-            { role: 'system', content: _ConversationOrchestrator.buildSystemPrompt(null, semanticContext) },
+            {
+                role: 'system',
+                content: _ConversationOrchestrator.buildSystemPrompt(null, semanticContext),
+            },
             ...conversationHistory,
-            { role: 'user', content: message }  // Staged - not in history yet
+            { role: 'user', content: message }, // Staged - not in history yet
         ];
 
-        const options = (typeof optionsOrKey === 'string')
-            ? { apiKey: optionsOrKey }
-            : (optionsOrKey || {});
+        const options =
+            typeof optionsOrKey === 'string' ? { apiKey: optionsOrKey } : optionsOrKey || {};
 
         const { apiKey, onProgress } = options;
 
-        const settings = _Settings?.getSettings?.() || {};
-
-        const provider = settings.llm?.provider || 'openrouter';
+        // Settings, providerConfig and provider already retrieved at function start for timeout budget
         console.log('[MessageLifecycleCoordinator] Using LLM provider:', provider);
 
-        const config = _Config?.openrouter || {};
-
-        // Use LLMApiOrchestrator for provider configuration and API key management
-        const providerConfig = LLMApiOrchestrator.buildProviderConfig(provider, settings, config);
-        const key = LLMApiOrchestrator.getApiKey(provider, apiKey, settings, config);
+        // Get API key using the already-built providerConfig
+        const key = LLMApiOrchestrator.getApiKey(
+            provider,
+            apiKey,
+            settings,
+            _Config?.openrouter || {}
+        );
 
         // Handle fallback when no API key is available
         if (LLMApiOrchestrator.shouldUseFallback(provider, key)) {
             const queryContext = _ConversationOrchestrator.generateQueryContext(message);
-            const fallbackResponse = _FallbackResponseService.generateFallbackResponse(message, queryContext);
+            const fallbackResponse = _FallbackResponseService.generateFallbackResponse(
+                message,
+                queryContext
+            );
 
             // CRITICAL FIX: Add user and assistant messages atomically in a single transaction
             // This prevents race conditions where other operations could interleave between the two adds
             const messagesToAdd = [
                 { role: 'user', content: message },
-                { role: 'assistant', content: fallbackResponse }
+                { role: 'assistant', content: fallbackResponse },
             ];
             await _SessionManager.addMessagesToHistory(messagesToAdd);
             userMessageCommitted = true;
@@ -384,7 +448,7 @@ async function processMessage(message, optionsOrKey = null) {
                 content: fallbackResponse,
                 status: 'success',
                 role: 'assistant',
-                isFallback: true
+                isFallback: true,
             };
         }
 
@@ -400,7 +464,7 @@ async function processMessage(message, optionsOrKey = null) {
             messages: messages.slice(1),
             ragContext: semanticContext,
             tools: useTools ? tools : [],
-            model: providerConfig.model
+            model: providerConfig.model,
         });
 
         console.log('[MessageLifecycleCoordinator] Token count:', tokenInfo);
@@ -409,23 +473,28 @@ async function processMessage(message, optionsOrKey = null) {
             const recommended = LLMApiOrchestrator.getRecommendedTokenAction(tokenInfo);
 
             tokenInfo.warnings.forEach(warning => {
-                console.warn(`[MessageLifecycleCoordinator] Token warning [${warning.level}]: ${warning.message}`);
+                console.warn(
+                    `[MessageLifecycleCoordinator] Token warning [${warning.level}]: ${warning.message}`
+                );
             });
 
             if (recommended.action === 'truncate') {
                 console.log('[MessageLifecycleCoordinator] Applying truncation strategy...');
 
-                const truncatedParams = LLMApiOrchestrator.truncateToTarget({
-                    systemPrompt: messages[0].content,
-                    messages: messages.slice(1),
-                    ragContext: semanticContext,
-                    tools: useTools ? tools : [],
-                    model: providerConfig.model
-                }, Math.floor(tokenInfo.contextWindow * 0.9));
+                const truncatedParams = LLMApiOrchestrator.truncateToTarget(
+                    {
+                        systemPrompt: messages[0].content,
+                        messages: messages.slice(1),
+                        ragContext: semanticContext,
+                        tools: useTools ? tools : [],
+                        model: providerConfig.model,
+                    },
+                    Math.floor(tokenInfo.contextWindow * 0.9)
+                );
 
                 const truncatedMessages = [
                     { role: 'system', content: truncatedParams.systemPrompt },
-                    ...truncatedParams.messages
+                    ...truncatedParams.messages,
                 ];
 
                 messages.length = 0;
@@ -436,56 +505,62 @@ async function processMessage(message, optionsOrKey = null) {
                     useTools = false;
                 }
 
-                StreamProcessor.notifyProgress(onProgress, StreamProcessor.createTokenWarningEvent(
-                    'Context too large - conversation truncated',
-                    tokenInfo,
-                    true
-                ));
+                StreamProcessor.notifyProgress(
+                    onProgress,
+                    StreamProcessor.createTokenWarningEvent(
+                        'Context too large - conversation truncated',
+                        tokenInfo,
+                        true
+                    )
+                );
             } else if (recommended.action === 'warn_user') {
-                StreamProcessor.notifyProgress(onProgress, StreamProcessor.createTokenWarningEvent(
-                    recommended.message,
-                    tokenInfo,
-                    false
-                ));
+                StreamProcessor.notifyProgress(
+                    onProgress,
+                    StreamProcessor.createTokenWarningEvent(recommended.message, tokenInfo, false)
+                );
             }
         }
 
-        StreamProcessor.notifyProgress(onProgress, StreamProcessor.createTokenUpdateEvent(tokenInfo));
+        StreamProcessor.notifyProgress(
+            onProgress,
+            StreamProcessor.createTokenUpdateEvent(tokenInfo)
+        );
 
         try {
             StreamProcessor.notifyProgress(onProgress, StreamProcessor.createThinkingEvent());
 
-            let apiMessages = messages;
-            let apiTools = useTools ? tools : undefined;
+            const apiMessages = messages;
+            const apiTools = useTools ? tools : undefined;
 
             // Wrap LLM API call with error boundary for graceful failure
-            let response = await ErrorBoundary.wrap(
-                async () => LLMApiOrchestrator.callLLM(
-                    providerConfig,
-                    key,
-                    apiMessages,
-                    apiTools,
-                    LLMApiOrchestrator.isLocalProvider(provider) ? onProgress : null,
-                    turnBudget.signal
-                ),
+            const response = await ErrorBoundary.wrap(
+                async () =>
+                    LLMApiOrchestrator.callLLM(
+                        providerConfig,
+                        key,
+                        apiMessages,
+                        apiTools,
+                        LLMApiOrchestrator.isLocalProvider(provider) ? onProgress : null,
+                        turnBudget.signal
+                    ),
                 {
                     context: 'llmApiCall',
                     telemetry: _WaveTelemetry,
-                    onError: (error) => {
+                    onError: error => {
                         // Log detailed error for debugging
                         console.error('[MessageLifecycleCoordinator] LLM API call failed:', {
                             provider: providerConfig.provider,
                             model: providerConfig.model,
                             error: error.message,
-                            timestamp: new Date().toISOString()
+                            timestamp: new Date().toISOString(),
                         });
                         // Emit event for UI notification
                         EventBus.emit('chat:error', {
                             error: error.message,
                             recoverable: true,
-                            context: 'llm_api_call'
+                            context: 'llm_api_call',
                         });
-                    }
+                    },
                 }
             );
 
@@ -493,8 +568,15 @@ async function processMessage(message, optionsOrKey = null) {
             const providerName = providerConfig.provider || 'LLM';
             const validation = MessageErrorHandler.validateLLMResponse(response, providerName);
             if (!validation.valid) {
-                console.error('[MessageLifecycleCoordinator] Invalid response from provider:', providerName, validation.error, response);
-                throw new Error(`${providerName} returned an invalid response: ${validation.error}`);
+                console.error(
+                    '[MessageLifecycleCoordinator] Invalid response from provider:',
+                    providerName,
+                    validation.error,
+                    response
+                );
+                throw new Error(
+                    `${providerName} returned an invalid response: ${validation.error}`
+                );
             }
             let responseMessage = response.choices[0].message;
 
@@ -514,11 +596,13 @@ async function processMessage(message, optionsOrKey = null) {
                 hasResponseMessage: !!toolHandlingResult?.responseMessage,
                 hasEarlyReturn: !!toolHandlingResult?.earlyReturn,
                 earlyReturnStatus: toolHandlingResult?.earlyReturn?.status,
-                hadFunctionErrors: toolHandlingResult?.hadFunctionErrors
+                hadFunctionErrors: toolHandlingResult?.hadFunctionErrors,
             });
 
             if (toolHandlingResult?.earlyReturn) {
-                const earlyReturnContent = MessageErrorHandler.getEarlyReturnAssistantMessage(toolHandlingResult.earlyReturn);
+                const earlyReturnContent = MessageErrorHandler.getEarlyReturnAssistantMessage(
+                    toolHandlingResult.earlyReturn
+                );
                 const messagesToAdd = [{ role: 'user', content: message }];
 
                 if (earlyReturnContent) {
@@ -542,12 +626,15 @@ async function processMessage(message, optionsOrKey = null) {
                         }
                         userMessageCommitted = true;
                     } catch (commitError) {
-                        console.error('[MessageLifecycleCoordinator] Failed to commit messages to history:', commitError);
+                        console.error(
+                            '[MessageLifecycleCoordinator] Failed to commit messages to history:',
+                            commitError
+                        );
                         // Return early return without saving - messages weren't committed
                         return {
                             ...toolHandlingResult.earlyReturn,
                             error: 'Failed to save message to history',
-                            status: 'error'
+                            status: 'error',
                         };
                     }
                 }
@@ -559,14 +646,17 @@ async function processMessage(message, optionsOrKey = null) {
 
             // DIAGNOSTIC: Check if responseMessage is null after tool handling
             if (!toolHandlingResult?.responseMessage) {
-                console.error('[MessageLifecycleCoordinator] Tool handling returned null responseMessage!', {
-                    originalResponseMessage: responseMessage,
-                    toolHandlingResult
-                });
+                console.error(
+                    '[MessageLifecycleCoordinator] Tool handling returned null responseMessage!',
+                    {
+                        originalResponseMessage: responseMessage,
+                        toolHandlingResult,
+                    }
+                );
             }
             responseMessage = toolHandlingResult.responseMessage || responseMessage;
 
-            const assistantContent = responseMessage?.content || 'I couldn\'t generate a response.';
+            const assistantContent = responseMessage?.content || "I couldn't generate a response.";
 
             // CRITICAL FIX: Add user and assistant messages atomically in a single transaction
             // This prevents race conditions where other operations could interleave between the two adds
@@ -574,7 +664,7 @@ async function processMessage(message, optionsOrKey = null) {
                 // Batch add both messages at once for atomicity
                 const messagesToAdd = [
                     { role: 'user', content: message },
-                    { role: 'assistant', content: assistantContent }
+                    { role: 'assistant', content: assistantContent },
                 ];
                 await _SessionManager.addMessagesToHistory(messagesToAdd);
                 // Render messages to DOM
@@ -586,7 +676,7 @@ async function processMessage(message, optionsOrKey = null) {
                 // Only add the assistant response
                 const assistantMsg = {
                     role: 'assistant',
-                    content: assistantContent
+                    content: assistantContent,
                 };
                 await _SessionManager.addMessageToHistory(assistantMsg);
                 // Render assistant message to DOM
@@ -598,9 +688,8 @@ async function processMessage(message, optionsOrKey = null) {
             return {
                 content: assistantContent,
                 status: 'success',
-                role: 'assistant'
+                role: 'assistant',
             };
-
         } catch (error) {
             console.error('[MessageLifecycleCoordinator] Chat error:', error);
 
@@ -611,7 +700,10 @@ async function processMessage(message, optionsOrKey = null) {
             // ISSUE 6: Mark error messages to exclude from LLM context
             // The 'error' flag allows filtering when building context for future turns
             if (!userMessageCommitted) {
-                const errorMessagesToAdd = MessageErrorHandler.buildErrorMessagesArray(message, errorMessage);
+                const errorMessagesToAdd = MessageErrorHandler.buildErrorMessagesArray(
+                    message,
+                    errorMessage
+                );
                 await _SessionManager.addMessagesToHistory(errorMessagesToAdd);
                 userMessageCommitted = true;
             } else {
@@ -619,7 +711,7 @@ async function processMessage(message, optionsOrKey = null) {
                     role: 'assistant',
                     content: errorMessage,
                     error: true,
-                    excludeFromContext: true
+                    excludeFromContext: true,
                 });
             }
             await _SessionManager.saveConversation();
@@ -748,5 +840,5 @@ export const MessageLifecycleCoordinator = {
     editMessage,
     clearHistory,
     getHistory,
-    clearDuplicateCache: MessageValidator.clearDuplicateCache  // Expose for testing/intentional re-submission scenarios
+    clearDuplicateCache: MessageValidator.clearDuplicateCache, // Expose for testing/intentional re-submission scenarios
 };

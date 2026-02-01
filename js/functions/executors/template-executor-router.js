@@ -46,7 +46,7 @@ export const TemplateExecutorRouter = {
      */
     async executeTemplate(functionName, args) {
         const executor = TemplateExecutors?.[functionName];
-        
+
         if (!executor) {
             return { error: `Unknown template function: ${functionName}` };
         }
@@ -65,7 +65,7 @@ export const TemplateExecutorRouter = {
      */
     getTemplateFunctionNames() {
         return SchemaRegistry.getTemplateSchemas().map(s => s.function.name);
-    }
+    },
 };
 
 console.log('[TemplateExecutorRouter] Module loaded');

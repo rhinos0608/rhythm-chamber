@@ -113,12 +113,12 @@ const LocalVectorStore = {
 
         // Initialize worker manager
         if (!workerManager) {
-            workerManager = createWorkerManager(
-                (queryVector, limit, threshold) => search({
+            workerManager = createWorkerManager((queryVector, limit, threshold) =>
+                search({
                     queryVector,
                     vectors,
                     limit,
-                    threshold
+                    threshold,
                 })
             );
         }
@@ -149,7 +149,7 @@ const LocalVectorStore = {
 
         // Process retry queue
         if (retryQueue.size > 0) {
-            await retryQueue.processRetries((item) => persistence.persistVector(item));
+            await retryQueue.processRetries(item => persistence.persistVector(item));
         }
 
         // Persist to IndexedDB - track failures for retry
@@ -200,7 +200,7 @@ const LocalVectorStore = {
             queryVector,
             vectors,
             limit,
-            threshold
+            threshold,
         });
     },
 
@@ -226,7 +226,7 @@ const LocalVectorStore = {
             workerManager,
             vectors,
             (qv, l, t) => this.search(qv, l, t),
-            (vectorsMap) => buildSharedVectorData(vectorsMap)
+            vectorsMap => buildSharedVectorData(vectorsMap)
         );
 
         return searchAsyncFn(queryVector, limit, threshold);
@@ -303,13 +303,13 @@ const LocalVectorStore = {
                 lru: { evictionCount: 0, hitRate: 0, autoScaleEnabled: false },
                 sharedMemory: {
                     available: isSharedArrayBufferAvailable(),
-                    enabled: false
+                    enabled: false,
                 },
                 retryQueue: {
                     size: 0,
                     oldestEntryAge: null,
-                    maxRetries: 0
-                }
+                    maxRetries: 0,
+                },
             };
         }
 
@@ -335,11 +335,13 @@ const LocalVectorStore = {
         const lruStats = vectors.getStats();
 
         // Get retry queue metrics
-        const retryMetrics = retryQueue ? retryQueue.getMetrics() : {
-            size: 0,
-            oldestEntryAge: null,
-            maxRetries: 0
-        };
+        const retryMetrics = retryQueue
+            ? retryQueue.getMetrics()
+            : {
+                size: 0,
+                oldestEntryAge: null,
+                maxRetries: 0,
+            };
 
         return {
             count,
@@ -348,24 +350,24 @@ const LocalVectorStore = {
             dimensions: {
                 min: minDimensions === Infinity ? 0 : minDimensions,
                 max: maxDimensions,
-                avg: avgDimensions
+                avg: avgDimensions,
             },
             storage: {
                 bytes: estimatedBytes,
-                megabytes: parseFloat(estimatedMB)
+                megabytes: parseFloat(estimatedMB),
             },
             lru: {
                 evictionCount: lruStats.evictionCount,
                 hitRate: lruStats.hitRate,
                 hitCount: lruStats.hitCount,
                 missCount: lruStats.missCount,
-                autoScaleEnabled: autoScaleEnabled
+                autoScaleEnabled: autoScaleEnabled,
             },
             sharedMemory: {
                 available: isSharedArrayBufferAvailable(),
-                enabled: isSharedArrayBufferAvailable() && count > 0
+                enabled: isSharedArrayBufferAvailable() && count > 0,
             },
-            retryQueue: retryMetrics
+            retryQueue: retryMetrics,
         };
     },
 
@@ -434,7 +436,7 @@ const LocalVectorStore = {
      */
     isAutoScaleEnabled() {
         return autoScaleEnabled;
-    }
+    },
 };
 
 // ==========================================

@@ -45,11 +45,15 @@ export function setupWakeFromSleepDetection() {
             if (!getIsPrimaryTab()) {
                 // Secondary tab woke from sleep, initiate re-election
                 initiateReElection().catch(error => {
-                    console.error('[TabCoordination] Re-election error after sleep detection:', error, {
-                        sleepDurationMs: delta,
-                        isPrimaryTab: getIsPrimaryTab(),
-                        tabId: TAB_ID
-                    });
+                    console.error(
+                        '[TabCoordination] Re-election error after sleep detection:',
+                        error,
+                        {
+                            sleepDurationMs: delta,
+                            isPrimaryTab: getIsPrimaryTab(),
+                            tabId: TAB_ID,
+                        }
+                    );
                 });
             }
         }

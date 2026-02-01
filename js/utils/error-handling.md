@@ -5,6 +5,7 @@ Centralized error handling utilities to address the "Error Handling Sprawl" anti
 ## Overview
 
 This module provides:
+
 - **Error Classification**: Categorize errors by type and severity
 - **User-Friendly Formatting**: Convert technical errors to actionable user messages
 - **Provider-Specific Hints**: Context-aware recovery suggestions for different services
@@ -16,8 +17,12 @@ This module provides:
 The module is located at `js/utils/error-handling.js` and can be imported as an ES module:
 
 ```javascript
-import { ErrorHandler, ErrorType, ErrorSeverity, ErrorRecoverability }
-  from './utils/error-handling.js';
+import {
+  ErrorHandler,
+  ErrorType,
+  ErrorSeverity,
+  ErrorRecoverability,
+} from './utils/error-handling.js';
 ```
 
 ## Quick Start
@@ -33,7 +38,7 @@ try {
   // Classify the error
   const classified = ErrorHandler.classify(error, {
     provider: 'openrouter',
-    operation: 'chat_completion'
+    operation: 'chat_completion',
   });
 
   // Log with appropriate severity
@@ -52,7 +57,7 @@ try {
 } catch (error) {
   const classified = ErrorHandler.classify(error, {
     provider: 'openrouter',
-    operation: 'chat_completion'
+    operation: 'chat_completion',
   });
 
   // Check if recoverable
@@ -60,7 +65,7 @@ try {
     const recovered = await ErrorHandler.attemptRecovery(classified, {
       maxRetries: 3,
       retryDelayMs: 1000,
-      retryCallback: () => callLLM(messages)
+      retryCallback: () => callLLM(messages),
     });
 
     if (recovered.success) {
@@ -79,6 +84,7 @@ try {
 The module recognizes these error categories:
 
 ### LLM Provider Errors
+
 - `ErrorType.LLM_PROVIDER_ERROR` - Generic provider error
 - `ErrorType.LLM_TIMEOUT` - Request timed out
 - `ErrorType.LLM_RATE_LIMIT` - Rate limit exceeded
@@ -88,6 +94,7 @@ The module recognizes these error categories:
 - `ErrorType.LLM_MODEL_UNAVAILABLE` - Requested model not available
 
 ### Storage Errors
+
 - `ErrorType.STORAGE_QUOTA_EXCEEDED` - Browser storage full
 - `ErrorType.STORAGE_TRANSACTION_FAILED` - IndexedDB transaction failed
 - `ErrorType.STORAGE_INDEXEDDB_UNAVAILABLE` - IndexedDB not supported
@@ -96,12 +103,14 @@ The module recognizes these error categories:
 - `ErrorType.STORAGE_FATAL_STATE` - Critical storage failure
 
 ### Network Errors
+
 - `ErrorType.NETWORK_OFFLINE` - No internet connection
 - `ErrorType.NETWORK_TIMEOUT` - Network request timed out
 - `ErrorType.NETWORK_CONNECTION_REFUSED` - Service unreachable
 - `ErrorType.NETWORK_DNS_FAILURE` - DNS resolution failed
 
 ### Validation Errors
+
 - `ErrorType.VALIDATION_MISSING_REQUIRED` - Required parameter missing
 - `ErrorType.VALIDATION_INVALID_TYPE` - Parameter type mismatch
 - `ErrorType.VALIDATION_INVALID_FORMAT` - Parameter format invalid
@@ -109,6 +118,7 @@ The module recognizes these error categories:
 - `ErrorType.VALIDATION_SCHEMA_MISMATCH` - Schema validation failed
 
 ### Transaction Errors
+
 - `ErrorType.TRANSACTION_NESTED_NOT_SUPPORTED` - Nested transaction detected
 - `ErrorType.TRANSACTION_TIMEOUT` - Transaction timed out
 - `ErrorType.TRANSACTION_ROLLBACK_FAILED` - Rollback failed
@@ -140,6 +150,7 @@ Each error is marked with recoverability:
 Classify a raw error into a standardized error object.
 
 **Parameters:**
+
 - `error` (Error|string|unknown) - The error to classify
 - `context` (Object) - Additional context
   - `provider` (string, optional) - LLM provider name
@@ -149,11 +160,12 @@ Classify a raw error into a standardized error object.
 **Returns:** `ClassifiedError` object
 
 **Example:**
+
 ```javascript
 const classified = ErrorHandler.classify(error, {
   provider: 'anthropic',
   operation: 'chat_completion',
-  metadata: { model: 'claude-3-opus', maxTokens: 4096 }
+  metadata: { model: 'claude-3-opus', maxTokens: 4096 },
 });
 ```
 
@@ -162,6 +174,7 @@ const classified = ErrorHandler.classify(error, {
 Format error for display to users.
 
 **Parameters:**
+
 - `classifiedError` (ClassifiedError) - The error to format
 - `options` (Object, optional)
   - `includeHint` (boolean, default: true) - Include recovery hint
@@ -171,11 +184,12 @@ Format error for display to users.
 **Returns:** Formatted string for user display
 
 **Example:**
+
 ```javascript
 const message = ErrorHandler.formatForUser(classified, {
   includeHint: true,
   includeSeverity: true,
-  includeTimestamp: false
+  includeTimestamp: false,
 });
 // Returns: "⚠️ **Rate Limit Exceeded**\n\nRate limit exceeded.\n\n💡 Tip: Wait a moment..."
 ```
@@ -185,11 +199,13 @@ const message = ErrorHandler.formatForUser(classified, {
 Format error for logging/debugging.
 
 **Parameters:**
+
 - `classifiedError` (ClassifiedError) - The error to format
 
 **Returns:** Object with technical details
 
 **Example:**
+
 ```javascript
 const logEntry = ErrorHandler.formatForLog(classified);
 console.error(logEntry);
@@ -201,11 +217,13 @@ console.error(logEntry);
 Format error for toast notifications.
 
 **Parameters:**
+
 - `classifiedError` (ClassifiedError) - The error to format
 
 **Returns:** Short string for temporary display
 
 **Example:**
+
 ```javascript
 showToast(ErrorHandler.formatForToast(classified), 5000);
 // Shows: "Rate limit exceeded. Please wait."
@@ -216,6 +234,7 @@ showToast(ErrorHandler.formatForToast(classified), 5000);
 Log error with appropriate severity level.
 
 **Parameters:**
+
 - `classifiedError` (ClassifiedError) - The error to log
 - `options` (Object, optional)
   - `includeStack` (boolean, default: true) - Include stack trace
@@ -225,10 +244,11 @@ Log error with appropriate severity level.
 **Returns:** Log entry object
 
 **Example:**
+
 ```javascript
 const logEntry = ErrorHandler.log(classified, {
   includeStack: true,
-  includeContext: true
+  includeContext: true,
 });
 ```
 
@@ -237,6 +257,7 @@ const logEntry = ErrorHandler.log(classified, {
 Attempt automatic recovery from error.
 
 **Parameters:**
+
 - `classifiedError` (ClassifiedError) - The error to recover from
 - `options` (Object, optional)
   - `maxRetries` (number, default: 3) - Maximum retry attempts
@@ -246,11 +267,12 @@ Attempt automatic recovery from error.
 **Returns:** Promise with recovery result
 
 **Example:**
+
 ```javascript
 const recovered = await ErrorHandler.attemptRecovery(classified, {
   maxRetries: 3,
   retryDelayMs: 1000,
-  retryCallback: () => callLLM(messages)
+  retryCallback: () => callLLM(messages),
 });
 
 if (recovered.success) {
@@ -288,7 +310,7 @@ Check if error can be automatically recovered.
 ```javascript
 if (ErrorHandler.isRecoverable(classified)) {
   const recovered = await ErrorHandler.attemptRecovery(classified, {
-    retryCallback: () => operation()
+    retryCallback: () => operation(),
   });
 }
 ```
@@ -309,20 +331,20 @@ if (ErrorHandler.requiresUserAction(classified)) {
 Handle multiple errors from batch operations.
 
 **Parameters:**
+
 - `errors` (Array<Error>) - Array of errors
 - `context` (Object) - Shared context for all errors
 
 **Returns:** Batch error summary
 
 **Example:**
+
 ```javascript
 const results = await Promise.allSettled(operations);
-const errors = results
-  .filter(r => r.status === 'rejected')
-  .map(r => r.reason);
+const errors = results.filter(r => r.status === 'rejected').map(r => r.reason);
 
 const batchError = ErrorHandler.handleBatchErrors(errors, {
-  operation: 'batch_import'
+  operation: 'batch_import',
 });
 
 console.log(`${batchError.total} errors occurred`);
@@ -336,6 +358,7 @@ console.log('Max severity:', batchError.maxSeverity);
 Replace scattered error handling with centralized utilities:
 
 **Before:**
+
 ```javascript
 // In message-lifecycle-coordinator.js
 try {
@@ -345,7 +368,7 @@ try {
     ollama: 'Ensure Ollama is running (`ollama serve`)',
     lmstudio: 'Check LM Studio server is enabled',
     gemini: 'Verify your Gemini API key in Settings',
-    openrouter: 'Check your OpenRouter API key in Settings'
+    openrouter: 'Check your OpenRouter API key in Settings',
   };
   const hint = providerHints[provider] || 'Check your provider settings';
   return `**Connection Error**\n\n${error.message}\n\n💡 **Tip:** ${hint}\n\nClick "Try Again" after fixing the issue.`;
@@ -353,6 +376,7 @@ try {
 ```
 
 **After:**
+
 ```javascript
 import { ErrorHandler } from './utils/error-handling.js';
 
@@ -361,7 +385,7 @@ try {
 } catch (error) {
   const classified = ErrorHandler.classify(error, {
     provider: settings.llm?.provider || 'openrouter',
-    operation: 'chat_completion'
+    operation: 'chat_completion',
   });
 
   ErrorHandler.log(classified);
@@ -374,6 +398,7 @@ try {
 Standardize storage error handling:
 
 **Before:**
+
 ```javascript
 // In indexeddb.js
 try {
@@ -391,6 +416,7 @@ try {
 ```
 
 **After:**
+
 ```javascript
 import { ErrorHandler, ErrorType } from './utils/error-handling.js';
 
@@ -399,7 +425,7 @@ try {
 } catch (error) {
   const classified = ErrorHandler.classify(error, {
     operation: 'storage_put',
-    metadata: { storeName }
+    metadata: { storeName },
   });
 
   if (ErrorHandler.isType(classified, ErrorType.STORAGE_QUOTA_EXCEEDED)) {
@@ -416,6 +442,7 @@ try {
 Simplify transaction error handling:
 
 **Before:**
+
 ```javascript
 // In transaction.js
 try {
@@ -431,6 +458,7 @@ try {
 ```
 
 **After:**
+
 ```javascript
 import { ErrorHandler, ErrorType } from './utils/error-handling.js';
 
@@ -438,7 +466,7 @@ try {
   await transaction(callback);
 } catch (error) {
   const classified = ErrorHandler.classify(error, {
-    operation: 'storage_transaction'
+    operation: 'storage_transaction',
   });
 
   // Re-throw with user-friendly message
@@ -464,7 +492,7 @@ try {
 ```javascript
 if (ErrorHandler.isRecoverable(classified)) {
   const recovered = await ErrorHandler.attemptRecovery(classified, {
-    retryCallback: () => operation()
+    retryCallback: () => operation(),
   });
   if (recovered.success) return result;
 }
@@ -487,7 +515,7 @@ if (ErrorHandler.isSevere(classified)) {
 ```javascript
 ErrorHandler.log(classified, {
   includeStack: true,
-  includeContext: true
+  includeContext: true,
 });
 ```
 
@@ -502,8 +530,8 @@ const classified = ErrorHandler.classify(error, {
   metadata: {
     model: 'claude-3-opus',
     maxTokens: 4096,
-    temperature: 0.7
-  }
+    temperature: 0.7,
+  },
 });
 ```
 
@@ -537,7 +565,7 @@ async function sendMessageWithRetry(message, options = {}) {
     const classified = ErrorHandler.classify(error, {
       provider,
       operation: 'chat_completion',
-      metadata: { messageLength: message.length }
+      metadata: { messageLength: message.length },
     });
 
     // Log the error
@@ -550,7 +578,7 @@ async function sendMessageWithRetry(message, options = {}) {
       const recovered = await ErrorHandler.attemptRecovery(classified, {
         maxRetries,
         retryDelayMs: 1000,
-        retryCallback: () => callLLM(provider, message)
+        retryCallback: () => callLLM(provider, message),
       });
 
       if (recovered.success) {
@@ -565,7 +593,7 @@ async function sendMessageWithRetry(message, options = {}) {
       showErrorModal({
         title: 'Configuration Required',
         message: ErrorHandler.formatForUser(classified),
-        severity: classified.severity
+        severity: classified.severity,
       });
     } else {
       // Show toast notification
@@ -584,18 +612,14 @@ async function sendMessageWithRetry(message, options = {}) {
 import { ErrorHandler } from './utils/error-handling.js';
 
 async function processBatch(items) {
-  const results = await Promise.allSettled(
-    items.map(item => processItem(item))
-  );
+  const results = await Promise.allSettled(items.map(item => processItem(item)));
 
-  const errors = results
-    .filter(r => r.status === 'rejected')
-    .map(r => r.reason);
+  const errors = results.filter(r => r.status === 'rejected').map(r => r.reason);
 
   if (errors.length > 0) {
     const batchError = ErrorHandler.handleBatchErrors(errors, {
       operation: 'batch_process',
-      metadata: { itemCount: items.length }
+      metadata: { itemCount: items.length },
     });
 
     console.log(`Batch completed with ${batchError.total} errors`);
@@ -616,11 +640,11 @@ async function processBatch(items) {
 
 ```typescript
 interface ClassifiedError {
-  type: string;                    // ErrorType enum value
-  severity: string;                // ErrorSeverity enum value
-  recoverable: string;             // ErrorRecoverability enum value
-  message: string;                 // User-friendly error message
-  hint: string | null;             // Recovery hint or null
+  type: string; // ErrorType enum value
+  severity: string; // ErrorSeverity enum value
+  recoverable: string; // ErrorRecoverability enum value
+  message: string; // User-friendly error message
+  hint: string | null; // Recovery hint or null
   originalError: {
     name: string;
     message: string;
@@ -633,7 +657,7 @@ interface ClassifiedError {
     operation?: string;
     [key: string]: any;
   };
-  timestamp: string;               // ISO 8601 timestamp
+  timestamp: string; // ISO 8601 timestamp
 }
 ```
 
@@ -642,11 +666,13 @@ interface ClassifiedError {
 To migrate existing error handling:
 
 1. **Import the module:**
+
    ```javascript
    import { ErrorHandler } from './utils/error-handling.js';
    ```
 
 2. **Replace provider-specific error handling:**
+
    ```javascript
    // Before
    if (error.message.includes('rate limit')) {
@@ -661,6 +687,7 @@ To migrate existing error handling:
    ```
 
 3. **Use centralized formatting:**
+
    ```javascript
    // Before
    const message = `Error: ${error.message}\n\nPlease try again.`;
@@ -670,6 +697,7 @@ To migrate existing error handling:
    ```
 
 4. **Add automatic recovery:**
+
    ```javascript
    // Before
    try {
@@ -686,7 +714,7 @@ To migrate existing error handling:
      const classified = ErrorHandler.classify(error);
      if (ErrorHandler.isRecoverable(classified)) {
        const recovered = await ErrorHandler.attemptRecovery(classified, {
-         retryCallback: () => operation()
+         retryCallback: () => operation(),
        });
        if (recovered.success) return recovered.result;
      }
@@ -706,13 +734,14 @@ If an error is classified as `UNKNOWN_ERROR`:
    ```javascript
    const classified = ErrorHandler.classify(error, {
      provider: 'custom_provider',
-     operation: 'custom_operation'
+     operation: 'custom_operation',
    });
    ```
 
 ### Recovery Not Attempted
 
 Check that:
+
 1. Error recoverability is `RECOVERABLE` or `RECOVERABLE_WITH_RETRY`
 2. `retryCallback` is provided to `attemptRecovery()`
 3. The callback function returns the operation result
@@ -720,6 +749,7 @@ Check that:
 ### User Messages Not Showing
 
 Ensure you're calling the correct format function:
+
 - `formatForUser()` - Full markdown message with hints
 - `formatForToast()` - Short message for temporary display
 - `formatForLog()` - Technical details for debugging

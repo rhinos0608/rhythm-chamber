@@ -50,10 +50,22 @@ function parseFlexibleDate(dateInput) {
         /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{4})/i
     );
     if (monthYearMatch) {
-        const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun',
-                           'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-        const monthIndex = monthNames.findIndex(m =>
-            m === monthYearMatch[1].toLowerCase().substring(0, 3)
+        const monthNames = [
+            'jan',
+            'feb',
+            'mar',
+            'apr',
+            'may',
+            'jun',
+            'jul',
+            'aug',
+            'sep',
+            'oct',
+            'nov',
+            'dec',
+        ];
+        const monthIndex = monthNames.findIndex(
+            m => m === monthYearMatch[1].toLowerCase().substring(0, 3)
         );
         if (monthIndex >= 0) {
             return new Date(parseInt(monthYearMatch[2]), monthIndex, 1);
@@ -81,8 +93,8 @@ function formatPlaylistTracks(tracks, limit = 20) {
     }
 
     const toShow = tracks.slice(0, limit);
-    const lines = toShow.map((t, i) =>
-        `${i + 1}. ${t.name || t.trackName} by ${t.artist || t.artistName}`
+    const lines = toShow.map(
+        (t, i) => `${i + 1}. ${t.name || t.trackName} by ${t.artist || t.artistName}`
     );
 
     let result = lines.join('\n');
@@ -110,7 +122,7 @@ async function executeCreateEraPlaylist(args, streams) {
         return {
             error: quota.reason || 'Playlist generation requires Premium.',
             premium_required: true,
-            remaining: quota.remaining
+            remaining: quota.remaining,
         };
     }
 
@@ -124,7 +136,7 @@ async function executeCreateEraPlaylist(args, streams) {
 
     if (!startDate) {
         return {
-            error: `Could not parse start date: "${start_date}". Try YYYY-MM-DD format like "2023-03-15" or "March 2023".`
+            error: `Could not parse start date: "${start_date}". Try YYYY-MM-DD format like "2023-03-15" or "March 2023".`,
         };
     }
 
@@ -133,14 +145,14 @@ async function executeCreateEraPlaylist(args, streams) {
         type: 'era',
         startDate: startDate.toISOString().split('T')[0],
         endDate: endDate ? endDate.toISOString().split('T')[0] : undefined,
-        limit: Math.min(limit, 100)
+        limit: Math.min(limit, 100),
     });
 
     if (result.gated) {
         return {
-            error: 'You\'ve used your free playlist. Upgrade to Premium for unlimited playlist generation.',
+            error: "You've used your free playlist. Upgrade to Premium for unlimited playlist generation.",
             premium_required: true,
-            remaining: result.remaining
+            remaining: result.remaining,
         };
     }
 
@@ -153,7 +165,7 @@ async function executeCreateEraPlaylist(args, streams) {
         description: playlist.description,
         track_count: playlist.tracks.length,
         tracks: formatPlaylistTracks(playlist.tracks, 20),
-        remaining_playlists: result.remaining
+        remaining_playlists: result.remaining,
     };
 
     // Add Spotify creation info if requested
@@ -162,7 +174,7 @@ async function executeCreateEraPlaylist(args, streams) {
             type: 'era',
             startDate: startDate.toISOString().split('T')[0],
             endDate: endDate ? endDate.toISOString().split('T')[0] : undefined,
-            limit: Math.min(limit, 100)
+            limit: Math.min(limit, 100),
         });
 
         if (spotifyResult.gated) {
@@ -188,7 +200,7 @@ async function executeCreateEnergyPlaylist(args, streams) {
         return {
             error: quota.reason || 'Playlist generation requires Premium.',
             premium_required: true,
-            remaining: quota.remaining
+            remaining: quota.remaining,
         };
     }
 
@@ -200,14 +212,14 @@ async function executeCreateEnergyPlaylist(args, streams) {
     const result = await PlaylistService.createPlaylist(streams, {
         type: 'energy',
         energy,
-        limit: Math.min(limit, 100)
+        limit: Math.min(limit, 100),
     });
 
     if (result.gated) {
         return {
-            error: 'You\'ve used your free playlist. Upgrade to Premium for unlimited playlist generation.',
+            error: "You've used your free playlist. Upgrade to Premium for unlimited playlist generation.",
             premium_required: true,
-            remaining: result.remaining
+            remaining: result.remaining,
         };
     }
 
@@ -219,7 +231,7 @@ async function executeCreateEnergyPlaylist(args, streams) {
         description: playlist.description,
         track_count: playlist.tracks.length,
         tracks: formatPlaylistTracks(playlist.tracks, 20),
-        remaining_playlists: result.remaining
+        remaining_playlists: result.remaining,
     };
 }
 
@@ -235,7 +247,7 @@ async function executeCreateTimeMachinePlaylist(args, streams) {
         return {
             error: quota.reason || 'Playlist generation requires Premium.',
             premium_required: true,
-            remaining: quota.remaining
+            remaining: quota.remaining,
         };
     }
 
@@ -247,14 +259,14 @@ async function executeCreateTimeMachinePlaylist(args, streams) {
     const result = await PlaylistService.createPlaylist(streams, {
         type: 'time_machine',
         yearsBack: years_back,
-        limit: Math.min(limit, 20)
+        limit: Math.min(limit, 20),
     });
 
     if (result.gated) {
         return {
-            error: 'You\'ve used your free playlist. Upgrade to Premium for unlimited playlist generation.',
+            error: "You've used your free playlist. Upgrade to Premium for unlimited playlist generation.",
             premium_required: true,
-            remaining: result.remaining
+            remaining: result.remaining,
         };
     }
 
@@ -266,7 +278,7 @@ async function executeCreateTimeMachinePlaylist(args, streams) {
         description: playlist.description,
         track_count: playlist.tracks.length,
         tracks: formatPlaylistTracks(playlist.tracks, 30),
-        remaining_playlists: result.remaining
+        remaining_playlists: result.remaining,
     };
 }
 
@@ -283,7 +295,7 @@ async function executeDiscoverNewArtists(args, streams) {
     // This uses the PlaylistService but doesn't consume quota (discovery is free)
     const result = await PlaylistService.createPlaylist(streams, {
         type: 'discovery',
-        limit: Math.min(limit, 25)
+        limit: Math.min(limit, 25),
     });
 
     // Skip quota check for discovery - it's a free feature
@@ -293,14 +305,14 @@ async function executeDiscoverNewArtists(args, streams) {
         return { error: 'Could not generate artist recommendations.' };
     }
 
-    const artistLines = playlist.artists.map((a, i) =>
-        `${i + 1}. ${a.name} - ${a.reason || 'Discovered during ' + a.period}`
+    const artistLines = playlist.artists.map(
+        (a, i) => `${i + 1}. ${a.name} - ${a.reason || 'Discovered during ' + a.period}`
     );
 
     return {
         success: true,
         artist_count: playlist.artists.length,
-        artists: artistLines.join('\n')
+        artists: artistLines.join('\n'),
     };
 }
 
@@ -316,7 +328,7 @@ async function executeCreateVibePlaylist(args, streams) {
         return {
             error: quota.reason || 'Vibe-based playlists require Premium.',
             premium_required: true,
-            remaining: quota.remaining
+            remaining: quota.remaining,
         };
     }
 
@@ -329,7 +341,7 @@ async function executeCreateVibePlaylist(args, streams) {
     if (!RAG.isConfigured()) {
         return {
             error: 'Semantic search is not set up. Please generate embeddings first to use vibe-based playlists.',
-            embeddings_required: true
+            embeddings_required: true,
         };
     }
 
@@ -341,7 +353,7 @@ async function executeCreateVibePlaylist(args, streams) {
             .map(r => ({
                 name: r.payload.metadata.trackName,
                 artist: r.payload.metadata.artistName,
-                score: r.score
+                score: r.score,
             }))
             .slice(0, limit);
 
@@ -349,7 +361,8 @@ async function executeCreateVibePlaylist(args, streams) {
             return {
                 success: true,
                 notice: `No tracks found matching vibe: "${vibe}". Try a different description.`,
-                suggestions: 'Try describing a mood (melancholy, energetic), time (late night, morning), or feeling (nostalgic, hopeful).'
+                suggestions:
+                    'Try describing a mood (melancholy, energetic), time (late night, morning), or feeling (nostalgic, hopeful).',
             };
         }
 
@@ -361,14 +374,13 @@ async function executeCreateVibePlaylist(args, streams) {
             playlist_name: `${vibe.substring(0, 30)}${vibe.length > 30 ? '...' : ''}`,
             description: `Tracks matching the vibe: "${vibe}"`,
             track_count: tracks.length,
-            tracks: formatPlaylistTracks(tracks, 20)
+            tracks: formatPlaylistTracks(tracks, 20),
         };
-
     } catch (error) {
         if (error.message === 'SEMANTIC_SEARCH_REQUIRED') {
             return {
                 error: 'Vibe-based playlists require Premium.',
-                premium_required: true
+                premium_required: true,
             };
         }
         throw error;
@@ -384,8 +396,7 @@ export const PlaylistExecutors = {
     create_energy_playlist: executeCreateEnergyPlaylist,
     create_time_machine_playlist: executeCreateTimeMachinePlaylist,
     discover_new_artists: executeDiscoverNewArtists,
-    create_vibe_playlist: executeCreateVibePlaylist
+    create_vibe_playlist: executeCreateVibePlaylist,
 };
-
 
 logger.info('Module loaded - Playlist executors initialized');

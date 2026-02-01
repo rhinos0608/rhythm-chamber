@@ -18,10 +18,8 @@ export function updatePerformanceTab(container) {
     for (const category of Object.values(PerformanceCategory)) {
         const stats = PerformanceProfiler.getStatistics(category);
 
-        updateElement(container, `perf-${category}-avg`,
-            `${stats.avgDuration.toFixed(2)} ms`);
-        updateElement(container, `perf-${category}-p95`,
-            `${stats.p95Duration.toFixed(2)} ms`);
+        updateElement(container, `perf-${category}-avg`, `${stats.avgDuration.toFixed(2)} ms`);
+        updateElement(container, `perf-${category}-p95`, `${stats.p95Duration.toFixed(2)} ms`);
         updateElement(container, `perf-${category}-count`, stats.count);
     }
 }

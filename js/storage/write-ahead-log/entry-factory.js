@@ -29,7 +29,7 @@ export function createWalEntry(operation, args, priority = WalPriority.NORMAL) {
         createdAt: Date.now(),
         processedAt: null,
         attempts: 0,
-        error: null
+        error: null,
     };
 }
 

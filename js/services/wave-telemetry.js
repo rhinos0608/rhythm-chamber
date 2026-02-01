@@ -11,7 +11,11 @@
  * @module services/wave-telemetry
  */
 
-import { TELEMETRY_LIMITS, ANOMALY_THRESHOLD, PERCENTAGE_MULTIPLIER } from '../constants/percentages.js';
+import {
+    TELEMETRY_LIMITS,
+    ANOMALY_THRESHOLD,
+    PERCENTAGE_MULTIPLIER,
+} from '../constants/percentages.js';
 import { DELAYS } from '../constants/delays.js';
 
 // ==========================================
@@ -111,9 +115,11 @@ function detectAnomalies() {
                 metric,
                 expected: data.expected,
                 actual: Math.round(avg * 10) / 10,
-                variance: (variance * PERCENTAGE_MULTIPLIER).toFixed(1) + '%'
+                variance: (variance * PERCENTAGE_MULTIPLIER).toFixed(1) + '%',
             });
-            console.warn(`[WaveTelemetry] Anomaly detected for ${metric}: expected ${data.expected}ms, actual ${avg.toFixed(1)}ms (${(variance * PERCENTAGE_MULTIPLIER).toFixed(1)}% variance)`);
+            console.warn(
+                `[WaveTelemetry] Anomaly detected for ${metric}: expected ${data.expected}ms, actual ${avg.toFixed(1)}ms (${(variance * PERCENTAGE_MULTIPLIER).toFixed(1)}% variance)`
+            );
         }
     }
 
@@ -128,9 +134,10 @@ function getStatus() {
     const status = {};
 
     for (const [metric, data] of metrics) {
-        const avg = data.samples.length > 0
-            ? data.samples.reduce((a, b) => a + b, 0) / data.samples.length
-            : null;
+        const avg =
+            data.samples.length > 0
+                ? data.samples.reduce((a, b) => a + b, 0) / data.samples.length
+                : null;
 
         const min = data.samples.length > 0 ? Math.min(...data.samples) : null;
         const max = data.samples.length > 0 ? Math.max(...data.samples) : null;
@@ -141,9 +148,13 @@ function getStatus() {
             average: avg !== null ? Math.round(avg * 10) / 10 : null,
             min: min !== null ? Math.round(min * 10) / 10 : null,
             max: max !== null ? Math.round(max * 10) / 10 : null,
-            variance: (data.expected && avg)
-                ? ((Math.abs(avg - data.expected) / data.expected) * PERCENTAGE_MULTIPLIER).toFixed(1) + '%'
-                : null
+            variance:
+                data.expected && avg
+                    ? (
+                        (Math.abs(avg - data.expected) / data.expected) *
+                          PERCENTAGE_MULTIPLIER
+                    ).toFixed(1) + '%'
+                    : null,
         };
     }
 
@@ -181,9 +192,9 @@ function generateUUID() {
         return crypto.randomUUID();
     }
     // Fallback implementation compatible with older environments
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = (Math.random() * 16) | 0;
+        const v = c === 'x' ? r : (r & 0x3) | 0x8;
         return v.toString(16);
     });
 }
@@ -217,7 +228,9 @@ function startWave(origin) {
     if (waves.size >= TELEMETRY_LIMITS.MAX_WAVES) {
         const oldestKey = waves.keys().next().value;
         waves.delete(oldestKey);
-        console.warn(`[WaveTelemetry] LRU eviction: removed oldest wave ${oldestKey} (max ${TELEMETRY_LIMITS.MAX_WAVES} waves reached)`);
+        console.warn(
+            `[WaveTelemetry] LRU eviction: removed oldest wave ${oldestKey} (max ${TELEMETRY_LIMITS.MAX_WAVES} waves reached)`
+        );
     }
 
     const waveId = generateUUID();
@@ -226,7 +239,7 @@ function startWave(origin) {
         origin,
         startTime: Date.now(),
         endTime: null,
-        chain: []
+        chain: [],
     });
     return waveId;
 }
@@ -248,7 +261,7 @@ function recordNode(nodeName, waveId) {
     wave.chain.push({
         node: nodeName,
         parent,
-        timestamp: Date.now()
+        timestamp: Date.now(),
     });
 }
 
@@ -295,7 +308,7 @@ function endWave(waveId) {
         if (latency > BOTTLENECK_THRESHOLD_MS) {
             bottlenecks.push({
                 node: node.node,
-                latency
+                latency,
             });
         }
     }
@@ -305,7 +318,7 @@ function endWave(waveId) {
 
     return {
         totalLatency,
-        bottlenecks
+        bottlenecks,
     };
 }
 
@@ -351,7 +364,7 @@ function cleanupOldWaves(maxAgeMs = DEFAULT_MAX_AGE_MS) {
 
     return {
         removed: toRemove.length,
-        remaining: waves.size
+        remaining: waves.size,
     };
 }
 
@@ -420,7 +433,7 @@ export const WaveTelemetry = {
     ANOMALY_THRESHOLD: ANOMALY_THRESHOLD.DEFAULT,
     MAX_SAMPLES: TELEMETRY_LIMITS.MAX_SAMPLES,
     MAX_WAVES: TELEMETRY_LIMITS.MAX_WAVES,
-    DEFAULT_MAX_AGE_MS
+    DEFAULT_MAX_AGE_MS,
 };
 
 console.log('[WaveTelemetry] Wave timing instrumentation loaded');

@@ -18,35 +18,35 @@ import {
     trackProcessedMessage,
     removeProcessedMessage,
     clearProcessedMessages,
-    MESSAGE_CONFIG
+    MESSAGE_CONFIG,
 } from './validation/message-validator.js';
 
 import {
     _detectNestedQuantifiers,
     _validateRegexPattern,
     _createSafeRegex,
-    _safeRegexTest
+    _safeRegexTest,
 } from './validation/regex-validator.js';
 
 import {
     validateSchema,
     _validateType,
     _validateEnum,
-    _validateObjectProperties
+    _validateObjectProperties,
 } from './validation/schema-validator.js';
 
 import {
     validateURL,
     validateEmail,
     escapeHTMLEntities,
-    sanitizeHTML
+    sanitizeHTML,
 } from './validation/format-validators.js';
 
 import {
     validateState,
     validateStorageKey,
     validateStorageValue,
-    validateBatch
+    validateBatch,
 } from './validation/storage-validators.js';
 
 import {
@@ -56,7 +56,7 @@ import {
     isNonEmptyString,
     isFunction,
     isPromise,
-    ensureNumber
+    ensureNumber,
 } from './validation/type-guards.js';
 
 // Re-export for backward compatibility
@@ -88,7 +88,7 @@ export {
     isNonEmptyString,
     isFunction,
     isPromise,
-    ensureNumber
+    ensureNumber,
 };
 
 // ==========================================
@@ -131,7 +131,7 @@ export function formatValidationError(result, options = {}) {
         return '';
     }
 
-    const errors = result.error ? [result.error] : (result.errors || []);
+    const errors = result.error ? [result.error] : result.errors || [];
     return `${prefix}: ${errors.join(separator)}`;
 }
 
@@ -222,7 +222,7 @@ export const Validation = {
     validateBatch,
 
     // Configuration
-    MESSAGE_CONFIG
+    MESSAGE_CONFIG,
 };
 
 console.log('[Validation] Centralized validation utilities loaded');

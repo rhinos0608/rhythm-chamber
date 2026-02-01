@@ -79,7 +79,7 @@ export const MobileResponsivityController = {
     closeMobileSidebar,
     setMobileSidebarState,
     updateOverlayVisibility,
-    MOBILE_BREAKPOINT
+    MOBILE_BREAKPOINT,
 };
 
 console.log('[MobileResponsivityController] Mobile responsivity controller loaded');

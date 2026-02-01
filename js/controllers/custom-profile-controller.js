@@ -22,9 +22,12 @@ import { escapeHtml } from '../utils/html-escape.js';
 // ==========================================
 
 const EXAMPLE_PROMPTS = {
-    'night-owl-electronic': 'A night owl who loves electronic music, especially techno and house. Listens mostly in the evenings and late nights, enjoys discovering new DJs and remixes.',
-    'road-trip-classic-rock': 'A classic rock enthusiast who loves road trip playlists. Heavy on 70s and 80s rock, especially guitar-driven anthems and singalong tracks.',
-    'jazz-convert': 'Someone who used to listen to pop music but discovered jazz and never looked back. Loves piano jazz, bebop, and modal jazz. Mostly evening listening.'
+    'night-owl-electronic':
+        'A night owl who loves electronic music, especially techno and house. Listens mostly in the evenings and late nights, enjoys discovering new DJs and remixes.',
+    'road-trip-classic-rock':
+        'A classic rock enthusiast who loves road trip playlists. Heavy on 70s and 80s rock, especially guitar-driven anthems and singalong tracks.',
+    'jazz-convert':
+        'Someone who used to listen to pop music but discovered jazz and never looked back. Loves piano jazz, bebop, and modal jazz. Mostly evening listening.',
 };
 
 // ==========================================
@@ -57,7 +60,7 @@ const CustomProfileController = {
         if (modalContent) {
             this._focusTrap = createFocusTrap(modalContent, {
                 onEscape: () => this.hideModal(),
-                initialFocus: '#profile-description-input'
+                initialFocus: '#profile-description-input',
             });
             this._focusTrap.activate();
         }
@@ -184,7 +187,7 @@ const CustomProfileController = {
         if (!this._modal) return;
 
         // Event delegation for actions
-        this._modal.addEventListener('click', (e) => {
+        this._modal.addEventListener('click', e => {
             const action = e.target.closest('[data-action]')?.dataset.action;
 
             switch (action) {
@@ -223,7 +226,7 @@ const CustomProfileController = {
         startChatBtn?.addEventListener('click', () => this._transitionToApp());
 
         // Enter key to submit (Cmd/Ctrl + Enter)
-        textarea?.addEventListener('keydown', (e) => {
+        textarea?.addEventListener('keydown', e => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
                 this._handleGenerate();
@@ -231,7 +234,7 @@ const CustomProfileController = {
         });
 
         // Escape key to close (additional to focus trap)
-        this._modal.addEventListener('keydown', (e) => {
+        this._modal.addEventListener('keydown', e => {
             if (e.key === 'Escape') {
                 e.preventDefault();
                 this.hideModal();
@@ -300,11 +303,11 @@ const CustomProfileController = {
             this._showSuccessState(profile);
 
             console.log('[CustomProfileController] Profile created:', profile.name);
-
         } catch (error) {
             console.error('[CustomProfileController] Synthesis failed:', error);
             this._modal.querySelector('#error-message').textContent =
-                error.message || 'We couldn\'t create a profile from that description. Please try a different description.';
+                error.message ||
+                "We couldn't create a profile from that description. Please try a different description.";
             this._showState('error');
         } finally {
             this._isSynthesizing = false;
@@ -360,14 +363,22 @@ const CustomProfileController = {
                     <div class="profile-stat-label">Template${sourceTemplates.length !== 1 ? 's' : ''} Used</div>
                 </div>
             </div>
-            ${sourceTemplates.length > 0 ? `
+            ${
+    sourceTemplates.length > 0
+        ? `
                 <div class="profile-templates">
                     <span class="templates-label">Built from:</span>
-                    ${sourceTemplates.map(t => `
+                    ${sourceTemplates
+        .map(
+            t => `
                         <span class="template-badge">${escapeHtml(t.name)}</span>
-                    `).join('')}
+                    `
+        )
+        .join('')}
                 </div>
-            ` : ''}
+            `
+        : ''
+}
         `;
 
         this._showState('success');
@@ -380,11 +391,11 @@ const CustomProfileController = {
      */
     _getEmojiForPersonality(type) {
         const emojiMap = {
-            'emotional_archaeologist': '🏛️',
-            'mood_engineer': '🎛️',
-            'discovery_junkie': '🔍',
-            'comfort_curator': '🛋️',
-            'social_chameleon': '🎭'
+            emotional_archaeologist: '🏛️',
+            mood_engineer: '🎛️',
+            discovery_junkie: '🔍',
+            comfort_curator: '🛋️',
+            social_chameleon: '🎭',
         };
         return emojiMap[type] || '🎵';
     },
@@ -401,7 +412,7 @@ const CustomProfileController = {
 
         // Navigate to app
         window.location.href = 'app.html?mode=custom';
-    }
+    },
 };
 
 // ==========================================

@@ -8,7 +8,12 @@
  */
 
 import { EventBus } from '../event-bus.js';
-import { createDefaultProviderConfigs, ProviderPriority, ProviderHealth, DEFAULT_CONFIG } from './config.js';
+import {
+    createDefaultProviderConfigs,
+    ProviderPriority,
+    ProviderHealth,
+    DEFAULT_CONFIG,
+} from './config.js';
 import {
     initializeHealthTracking,
     recordProviderSuccess,
@@ -17,7 +22,7 @@ import {
     removeProviderFromBlacklist,
     getProviderHealth,
     getProviderHealthStatus,
-    getBlacklistStatus
+    getBlacklistStatus,
 } from './health.js';
 import { getProviderPriorityOrder as calcPriorityOrder } from './priority.js';
 import { executeWithFallback } from './execution.js';
@@ -94,7 +99,8 @@ export class ProviderFallbackChain {
     constructor({ eventBus, blacklistDurationMs, healthCheckIntervalMs } = {}) {
         this._eventBus = eventBus || EventBus;
         this._blacklistDurationMs = blacklistDurationMs || DEFAULT_CONFIG.BLACKLIST_DURATION_MS;
-        this._healthCheckIntervalMs = healthCheckIntervalMs || DEFAULT_CONFIG.HEALTH_CHECK_INTERVAL_MS;
+        this._healthCheckIntervalMs =
+            healthCheckIntervalMs || DEFAULT_CONFIG.HEALTH_CHECK_INTERVAL_MS;
 
         this._providerConfigs = createDefaultProviderConfigs();
         this._providerHealth = initializeHealthTracking(this._providerConfigs);
@@ -174,7 +180,7 @@ export class ProviderFallbackChain {
         // Emit health status summary
         this._eventBus.emit('PROVIDER:HEALTH_SUMMARY', {
             timestamp: Date.now(),
-            health: Object.fromEntries(this._providerHealth)
+            health: Object.fromEntries(this._providerHealth),
         });
     }
 

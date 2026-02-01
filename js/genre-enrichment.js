@@ -50,7 +50,7 @@ export {
     isQueueProcessing,
     getAudioFeaturesCacheSize,
     getApiStats,
-    ARTIST_GENRE_MAP
+    ARTIST_GENRE_MAP,
 } from './genre-enrichment/index.js';
 
 // Also provide default export for backward compatibility

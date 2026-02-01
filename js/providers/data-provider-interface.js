@@ -1,16 +1,16 @@
 /**
  * Data Provider Interface
- * 
+ *
  * Unified abstraction for accessing streaming data from different sources:
  * - UserDataProvider: Real user data from Storage
  * - DemoDataProvider: Demo persona data ("The Emo Teen")
  * - SharedDataProvider: Imported friend profiles (future)
- * 
+ *
  * HNW Considerations:
  * - Hierarchy: Single interface for all data sources
  * - Network: Decouples data consumers from storage implementation
  * - Wave: Async operations with consistent loading patterns
- * 
+ *
  * @module providers/data-provider-interface
  */
 
@@ -74,43 +74,57 @@ const DataProviderContract = {
      * Get provider type
      * @returns {DataProviderType}
      */
-    getType: () => { throw new Error('Must implement getType()'); },
+    getType: () => {
+        throw new Error('Must implement getType()');
+    },
 
     /**
      * Check if provider is ready to serve data
      * @returns {Promise<boolean>}
      */
-    isReady: async () => { throw new Error('Must implement isReady()'); },
+    isReady: async () => {
+        throw new Error('Must implement isReady()');
+    },
 
     /**
      * Get streaming history
      * @returns {Promise<Stream[]>}
      */
-    getStreams: async () => { throw new Error('Must implement getStreams()'); },
+    getStreams: async () => {
+        throw new Error('Must implement getStreams()');
+    },
 
     /**
      * Get detected patterns
      * @returns {Promise<Patterns|null>}
      */
-    getPatterns: async () => { throw new Error('Must implement getPatterns()'); },
+    getPatterns: async () => {
+        throw new Error('Must implement getPatterns()');
+    },
 
     /**
      * Get personality result
      * @returns {Promise<Personality|null>}
      */
-    getPersonality: async () => { throw new Error('Must implement getPersonality()'); },
+    getPersonality: async () => {
+        throw new Error('Must implement getPersonality()');
+    },
 
     /**
      * Get summary data
      * @returns {Promise<Object|null>}
      */
-    getSummary: async () => { throw new Error('Must implement getSummary()'); },
+    getSummary: async () => {
+        throw new Error('Must implement getSummary()');
+    },
 
     /**
      * Get stream count
      * @returns {Promise<number>}
      */
-    getStreamCount: async () => { throw new Error('Must implement getStreamCount()'); }
+    getStreamCount: async () => {
+        throw new Error('Must implement getStreamCount()');
+    },
 };
 
 // ==========================================
@@ -160,7 +174,9 @@ async function switchProvider(type) {
     const required = Object.keys(DataProviderContract);
     const missing = required.filter(method => typeof provider[method] !== 'function');
     if (missing.length > 0) {
-        console.error(`[DataProvider] Invalid provider "${type}" missing methods: ${missing.join(', ')}`);
+        console.error(
+            `[DataProvider] Invalid provider "${type}" missing methods: ${missing.join(', ')}`
+        );
         return false;
     }
 
@@ -171,7 +187,7 @@ async function switchProvider(type) {
     // Emit event for UI updates
     EventBus.emit('data:provider_changed', {
         providerType: type,
-        previousType
+        previousType,
     });
 
     console.log(`[DataProvider] Switched to provider: ${type}`);
@@ -296,8 +312,7 @@ export const DataProvider = {
     isReady,
 
     // Contract for implementing providers
-    DataProviderContract
+    DataProviderContract,
 };
-
 
 console.log('[DataProvider] Data provider interface loaded');

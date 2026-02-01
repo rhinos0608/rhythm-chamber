@@ -38,28 +38,28 @@ const API_KEY_PATTERNS = {
     openrouter: {
         pattern: /^sk-or-v1-[a-zA-Z0-9]{32,}$/,
         minLength: 40,
-        description: 'OpenRouter API key (sk-or-v1-...)'
+        description: 'OpenRouter API key (sk-or-v1-...)',
     },
     gemini: {
         pattern: /^AIza[a-zA-Z0-9_-]{33,}$/,
         minLength: 35,
-        description: 'Google AI Studio API key (AIza...)'
+        description: 'Google AI Studio API key (AIza...)',
     },
     claude: {
         pattern: /^sk-ant-[a-zA-Z0-9_-]{40,}$/,
         minLength: 45,
-        description: 'Anthropic API key (sk-ant-...)'
+        description: 'Anthropic API key (sk-ant-...)',
     },
     openai: {
         pattern: /^sk-[a-zA-Z0-9]{48,}$/,
         minLength: 51,
-        description: 'OpenAI API key (sk-...)'
+        description: 'OpenAI API key (sk-...)',
     },
     spotify: {
         pattern: /^[a-zA-Z0-9]{32,}$/,
         minLength: 32,
-        description: 'Spotify Client ID'
-    }
+        description: 'Spotify Client ID',
+    },
 };
 
 /**
@@ -94,7 +94,11 @@ function validateApiKey(provider, key) {
 
     // Check minimum length
     if (trimmed.length < rules.minLength) {
-        return result(false, null, `${rules.description} must be at least ${rules.minLength} characters`);
+        return result(
+            false,
+            null,
+            `${rules.description} must be at least ${rules.minLength} characters`
+        );
     }
 
     // Check format pattern
@@ -131,16 +135,16 @@ function validateUrl(urlString, allowedSchemes = ['http', 'https']) {
         }
 
         // For localhost, allow http without warning
-        const isLocalhost = url.hostname === 'localhost' ||
-                          url.hostname === '127.0.0.1' ||
-                          url.hostname === '[::1]';
+        const isLocalhost =
+            url.hostname === 'localhost' ||
+            url.hostname === '127.0.0.1' ||
+            url.hostname === '[::1]';
 
         if (scheme === 'http' && !isLocalhost) {
             console.warn('[InputValidation] Using HTTP instead of HTTPS is insecure');
         }
 
         return result(true, url.toString());
-
     } catch (e) {
         return result(false, null, 'Invalid URL format');
     }
@@ -166,12 +170,15 @@ function validateNumber(value, min, max, defaultValue = min) {
     const num = Number(value);
 
     if (isNaN(num)) {
-        return result(false, defaultValue, `Value must be a number`);
+        return result(false, defaultValue, 'Value must be a number');
     }
 
     if (num < min || num > max) {
-        return result(false, Math.min(Math.max(num, min), max),
-                     `Value must be between ${min} and ${max}`);
+        return result(
+            false,
+            Math.min(Math.max(num, min), max),
+            `Value must be between ${min} and ${max}`
+        );
     }
 
     return result(true, num);
@@ -200,8 +207,11 @@ function validateStringLength(value, min = 0, max = 1000) {
     }
 
     if (str.length > max) {
-        return result(false, str.slice(0, max),
-                     `Value exceeds maximum length of ${max} characters (truncated)`);
+        return result(
+            false,
+            str.slice(0, max),
+            `Value exceeds maximum length of ${max} characters (truncated)`
+        );
     }
 
     return result(true, str);
@@ -218,15 +228,18 @@ const FILE_TYPE_RULES = {
     json: {
         extensions: ['.json'],
         mimeTypes: ['application/json'],
-        magicBytes: [{ offset: 0, bytes: [0x7B] }, { offset: 0, bytes: [0x5B] }], // { or [
-        maxSize: 500 * 1024 * 1024 // 500MB - matches FileUploadController limit
+        magicBytes: [
+            { offset: 0, bytes: [0x7b] },
+            { offset: 0, bytes: [0x5b] },
+        ], // { or [
+        maxSize: 500 * 1024 * 1024, // 500MB - matches FileUploadController limit
     },
     zip: {
         extensions: ['.zip'],
         mimeTypes: ['application/zip', 'application/x-zip-compressed'],
-        magicBytes: [{ offset: 0, bytes: [0x50, 0x4B, 0x03, 0x04] }], // PK..
-        maxSize: 100 * 1024 * 1024 // 100MB
-    }
+        magicBytes: [{ offset: 0, bytes: [0x50, 0x4b, 0x03, 0x04] }], // PK..
+        maxSize: 100 * 1024 * 1024, // 100MB
+    },
 };
 
 /**
@@ -250,7 +263,7 @@ async function validateFileUpload(file, expectedType) {
     if (!hasValidExtension) {
         return {
             valid: false,
-            error: `File must have ${rules.extensions.join(' or ')} extension`
+            error: `File must have ${rules.extensions.join(' or ')} extension`,
         };
     }
 
@@ -259,7 +272,7 @@ async function validateFileUpload(file, expectedType) {
         const maxSizeMB = (rules.maxSize / 1024 / 1024).toFixed(0);
         return {
             valid: false,
-            error: `File too large (maximum ${maxSizeMB}MB)`
+            error: `File too large (maximum ${maxSizeMB}MB)`,
         };
     }
 
@@ -281,7 +294,7 @@ async function validateFileUpload(file, expectedType) {
         if (!hasValidMagicBytes) {
             return {
                 valid: false,
-                error: `File content does not match ${expectedType.toUpperCase()} format`
+                error: `File content does not match ${expectedType.toUpperCase()} format`,
             };
         }
     } catch (e) {
@@ -312,8 +325,7 @@ function validateUrlParam(param, value, allowedValues = null) {
 
     // Check whitelist if provided
     if (allowedValues && !allowedValues.includes(str)) {
-        return result(false, null,
-                     `Invalid ${param} value. Allowed: ${allowedValues.join(', ')}`);
+        return result(false, null, `Invalid ${param} value. Allowed: ${allowedValues.join(', ')}`);
     }
 
     // Sanitize to prevent XSS if ever rendered
@@ -388,8 +400,8 @@ export const InputValidation = {
     // Export patterns for testing
     _patterns: {
         API_KEY_PATTERNS,
-        FILE_TYPE_RULES
-    }
+        FILE_TYPE_RULES,
+    },
 };
 
 export default InputValidation;

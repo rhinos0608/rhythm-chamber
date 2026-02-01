@@ -48,7 +48,7 @@ export async function executeOperationForReplay(operation, args, isReplay = true
     let safeOperation = operation;
     if (isReplay && operation === 'add') {
         safeOperation = 'put';
-        console.log(`[WAL] Converted 'add' to 'put' for idempotent replay`);
+        console.log("[WAL] Converted 'add' to 'put' for idempotent replay");
     }
 
     // Execute the operation

@@ -1,11 +1,11 @@
 /**
  * Cascading Abort Controller
- * 
+ *
  * Hierarchical AbortController implementation for coordinated cancellation.
  * Parent timeouts automatically signal children, preventing zombie operations.
- * 
+ *
  * HNW Hierarchy: Parent operations can cancel all descendants in a single call.
- * 
+ *
  * @module services/cascading-abort-controller
  */
 
@@ -60,15 +60,21 @@ class CascadingController {
             parent.children.add(this);
 
             // Listen for parent abort
-            parent.signal.addEventListener('abort', () => {
-                if (!this._controller.signal.aborted) {
-                    this._abort(parent.abortReason || 'Parent operation cancelled', true);
-                }
-            }, { once: true });
+            parent.signal.addEventListener(
+                'abort',
+                () => {
+                    if (!this._controller.signal.aborted) {
+                        this._abort(parent.abortReason || 'Parent operation cancelled', true);
+                    }
+                },
+                { once: true }
+            );
         }
 
         if (DEBUG) {
-            console.log(`[CascadingAbort] Created controller: ${operation}${parent ? ` (child of ${parent.operation})` : ''}`);
+            console.log(
+                `[CascadingAbort] Created controller: ${operation}${parent ? ` (child of ${parent.operation})` : ''}`
+            );
         }
     }
 
@@ -115,9 +121,9 @@ class CascadingController {
             try {
                 handler(this.abortReason);
             } catch (e) {
-                console.error(`[CascadingAbort] Cleanup handler error:`, e);
+                console.error('[CascadingAbort] Cleanup handler error:', e);
             }
-            return () => { };
+            return () => {};
         }
 
         this.cleanupHandlers.push(handler);
@@ -150,7 +156,9 @@ class CascadingController {
         this.abortReason = reason;
 
         if (DEBUG) {
-            console.log(`[CascadingAbort] Aborting: ${this.operation} - ${reason}${fromParent ? ' (from parent)' : ''}`);
+            console.log(
+                `[CascadingAbort] Aborting: ${this.operation} - ${reason}${fromParent ? ' (from parent)' : ''}`
+            );
         }
 
         // Abort children first (bottom-up cleanup)
@@ -169,7 +177,13 @@ class CascadingController {
         this.cleanupHandlers = [];
 
         // Abort the native controller
-        this._controller.abort(new CascadingAbortError(this.operation, reason, fromParent ? this.parent?.operation : null));
+        this._controller.abort(
+            new CascadingAbortError(
+                this.operation,
+                reason,
+                fromParent ? this.parent?.operation : null
+            )
+        );
 
         // Remove from parent's children set
         if (this.parent) {
@@ -224,7 +238,7 @@ class CascadingController {
             abortReason: this.abortReason,
             childCount: this.children.size,
             cleanupHandlerCount: this.cleanupHandlers.length,
-            hierarchy: this.getHierarchy()
+            hierarchy: this.getHierarchy(),
         };
     }
 }
@@ -328,22 +342,22 @@ function extractAbortReason(reason, defaultMessage = 'Operation aborted') {
     if (reason === null || reason === undefined) {
         return defaultMessage;
     }
-    
+
     // If reason is an object with a .reason string property, use that
     if (typeof reason === 'object' && reason !== null && typeof reason.reason === 'string') {
         return reason.reason;
     }
-    
+
     // If reason is an Error, use its message
     if (reason instanceof Error) {
         return reason.message;
     }
-    
+
     // If reason is a string, use it
     if (typeof reason === 'string') {
         return reason;
     }
-    
+
     // Otherwise, convert to string
     return String(reason);
 }
@@ -401,8 +415,7 @@ export const CascadingAbort = {
 
     // Class export for instanceof checks
     CascadingController,
-    CascadingAbortError
+    CascadingAbortError,
 };
-
 
 console.log('[CascadingAbort] Cascading Abort Controller loaded');

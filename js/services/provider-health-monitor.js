@@ -20,7 +20,7 @@
 import { EventBus } from './event-bus.js';
 import {
     ProviderHealthAuthority,
-    HealthStatus as AuthorityHealthStatus
+    HealthStatus as AuthorityHealthStatus,
 } from './provider-health-authority.js';
 import { TimeoutError, TimeoutType, isTimeoutError, getUserMessage } from './timeout-error.js';
 import { deepClone } from '../utils/common.js';
@@ -119,7 +119,7 @@ export class ProviderHealthMonitor {
                 blacklistExpiry: null,
                 circuitState: 'closed',
                 cooldownRemaining: 0,
-                isLocal: ['ollama', 'lmstudio', 'fallback'].includes(provider)
+                isLocal: ['ollama', 'lmstudio', 'fallback'].includes(provider),
             });
         }
     }
@@ -185,7 +185,7 @@ export class ProviderHealthMonitor {
         for (const provider of providers) {
             // Get snapshot from ProviderHealthAuthority - the single source of truth
             const snapshot = ProviderHealthAuthority.getProviderSnapshot(provider);
-            
+
             const healthData = this._healthData.get(provider);
             if (healthData && snapshot) {
                 healthData.status = snapshot.status;
@@ -337,9 +337,8 @@ export class ProviderHealthMonitor {
         for (const [provider, data] of this._healthData) {
             // Use structuredClone for deep cloning (modern browsers)
             // Fallback to deepClone utility for older environments
-            snapshot[provider] = typeof structuredClone === 'function'
-                ? structuredClone(data)
-                : deepClone(data);
+            snapshot[provider] =
+                typeof structuredClone === 'function' ? structuredClone(data) : deepClone(data);
         }
         return snapshot;
     }
@@ -418,7 +417,7 @@ export class ProviderHealthMonitor {
             unhealthy,
             blacklisted,
             unknown,
-            overallStatus
+            overallStatus,
         };
     }
 
@@ -432,7 +431,7 @@ export class ProviderHealthMonitor {
         if (!health) {
             return {
                 action: 'none',
-                message: 'Unknown provider'
+                message: 'Unknown provider',
             };
         }
 
@@ -443,35 +442,36 @@ export class ProviderHealthMonitor {
                     message: health.blacklistExpiry
                         ? `Blacklisted until ${new Date(health.blacklistExpiry).toLocaleTimeString()}`
                         : 'Provider temporarily unavailable',
-                    canSwitch: true
+                    canSwitch: true,
                 };
 
             case HealthStatus.UNHEALTHY:
                 return {
                     action: 'switch',
-                    message: 'Provider is experiencing issues. Consider switching to an alternative.',
-                    canSwitch: true
+                    message:
+                        'Provider is experiencing issues. Consider switching to an alternative.',
+                    canSwitch: true,
                 };
 
             case HealthStatus.DEGRADED:
                 return {
                     action: 'optional_switch',
                     message: 'Provider is slow but functional. You can switch if needed.',
-                    canSwitch: true
+                    canSwitch: true,
                 };
 
             case HealthStatus.UNKNOWN:
                 return {
                     action: 'test',
                     message: 'Provider status unknown. Try sending a message to test.',
-                    canSwitch: false
+                    canSwitch: false,
                 };
 
             default:
                 return {
                     action: 'none',
                     message: 'Provider is working normally',
-                    canSwitch: false
+                    canSwitch: false,
                 };
         }
     }
@@ -489,28 +489,29 @@ export class ProviderHealthMonitor {
                 message: getUserMessage(error),
                 canRetry: error.retryable,
                 retryAfter: error.retryAfter,
-                timeoutType: error.timeoutType
+                timeoutType: error.timeoutType,
             };
         }
 
         // Handle generic errors that might be timeout-related
         const errorMessage = error instanceof Error ? error.message : String(error);
-        const isTimeoutRelated = errorMessage.toLowerCase().includes('timeout') ||
-                               errorMessage.toLowerCase().includes('timed out');
+        const isTimeoutRelated =
+            errorMessage.toLowerCase().includes('timeout') ||
+            errorMessage.toLowerCase().includes('timed out');
 
         if (isTimeoutRelated) {
             return {
                 action: 'retry',
                 message: `${provider} request timed out. Please try again.`,
                 canRetry: true,
-                timeoutType: 'unknown'
+                timeoutType: 'unknown',
             };
         }
 
         return {
             action: 'none',
             message: errorMessage,
-            canRetry: false
+            canRetry: false,
         };
     }
 
@@ -545,7 +546,7 @@ export class ProviderHealthMonitor {
                 timeoutType: error.timeoutType,
                 timeout: error.timeout,
                 retryable: error.retryable,
-                retryAfter: error.retryAfter
+                retryAfter: error.retryAfter,
             });
         }
 

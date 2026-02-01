@@ -30,20 +30,20 @@ const SENSITIVE_PATTERNS = [
     'refresh',
     'authorization',
     'bearer',
-    'session'
+    'session',
 ];
 
 /**
  * Patterns that indicate a value might be sensitive
  */
 const SENSITIVE_VALUE_PATTERNS = [
-    /^sk-/,           // Stripe/Service keys
-    /^sk-or-/,        // OpenRouter keys
-    /^Bearer\s+/i,    // Bearer tokens
-    /^Basic\s+/i,     // Basic auth
-    /^ssh-\w+/,      // SSH keys
-    /^\w{20,}$/,     // Long alphanumeric (likely tokens)
-    /[\w-]{32,}/      // Very long strings (likely secrets)
+    /^sk-/, // Stripe/Service keys
+    /^sk-or-/, // OpenRouter keys
+    /^Bearer\s+/i, // Bearer tokens
+    /^Basic\s+/i, // Basic auth
+    /^ssh-\w+/, // SSH keys
+    /^\w{20,}$/, // Long alphanumeric (likely tokens)
+    /[\w-]{32,}/, // Very long strings (likely secrets)
 ];
 
 /**
@@ -192,7 +192,7 @@ const secureLogger = {
     /**
      * Redact an object (for external use)
      */
-    redactObject: (obj) => redactObject(obj)
+    redactObject: obj => redactObject(obj),
 };
 
 // Export the secure logger

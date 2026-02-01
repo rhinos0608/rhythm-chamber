@@ -144,8 +144,8 @@ export class SessionManager {
             createdAt: new Date().toISOString(),
             messages: initialMessages || [],
             metadata: {
-                personality: 'default'
-            }
+                personality: 'default',
+            },
         };
 
         // Update session data with full session object
@@ -232,16 +232,6 @@ export class SessionManager {
      */
     static async renameSession(sessionId, newTitle) {
         return await Internal.renameSession(sessionId, newTitle);
-    }
-
-    /**
-     * Switch to a different session
-     * @public
-     * @param {string} sessionId - Session ID to switch to
-     * @returns {Promise<boolean>} Success status
-     */
-    static async switchSession(sessionId) {
-        return await Internal.switchSession(sessionId);
     }
 
     /**
@@ -452,8 +442,14 @@ export class SessionManager {
             const MAX_BACKUP_AGE = 24 * 60 * 60 * 1000; // 24 hours
 
             // Validate timestamp exists and is within acceptable bounds
-            if (!backup.timestamp || backup.timestamp > now || backup.timestamp < (now - MAX_BACKUP_AGE)) {
-                console.warn('[SessionManager] Emergency backup timestamp invalid or out of range, ignoring');
+            if (
+                !backup.timestamp ||
+                backup.timestamp > now ||
+                backup.timestamp < now - MAX_BACKUP_AGE
+            ) {
+                console.warn(
+                    '[SessionManager] Emergency backup timestamp invalid or out of range, ignoring'
+                );
                 // Clear invalid backup
                 localStorage.removeItem('rhythm_chamber_emergency_backup');
                 return null;

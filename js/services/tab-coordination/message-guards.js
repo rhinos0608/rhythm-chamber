@@ -3,36 +3,36 @@ import { MESSAGE_TYPES } from './constants.js';
 const MESSAGE_SCHEMA = {
     CANDIDATE: {
         required: ['type', 'tabId', 'timestamp'],
-        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock']
+        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock'],
     },
     CLAIM_PRIMARY: {
         required: ['type', 'tabId', 'timestamp'],
-        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock']
+        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock'],
     },
     RELEASE_PRIMARY: {
         required: ['type', 'tabId', 'timestamp'],
-        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock']
+        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock'],
     },
     HEARTBEAT: {
         required: ['type', 'tabId', 'timestamp'],
-        optional: ['senderId', 'seq', 'nonce', 'origin', 'lamportTimestamp', 'vectorClock']
+        optional: ['senderId', 'seq', 'nonce', 'origin', 'lamportTimestamp', 'vectorClock'],
     },
     EVENT_WATERMARK: {
         required: ['type', 'tabId', 'timestamp', 'watermark'],
-        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock']
+        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock'],
     },
     REPLAY_REQUEST: {
         required: ['type', 'tabId', 'timestamp', 'fromWatermark'],
-        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock']
+        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock'],
     },
     REPLAY_RESPONSE: {
         required: ['type', 'tabId', 'timestamp', 'events'],
-        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock']
+        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock'],
     },
     SAFE_MODE_CHANGED: {
         required: ['type', 'tabId', 'timestamp', 'enabled', 'reason'],
-        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock']
-    }
+        optional: ['senderId', 'seq', 'nonce', 'origin', 'vectorClock'],
+    },
 };
 
 function validateMessageStructure(message) {
@@ -40,11 +40,17 @@ function validateMessageStructure(message) {
     try {
         messageSize = JSON.stringify(message).length;
     } catch (e) {
-        return { valid: false, error: 'Message serialization failed (possible circular structure)' };
+        return {
+            valid: false,
+            error: 'Message serialization failed (possible circular structure)',
+        };
     }
     const MAX_MESSAGE_SIZE = 1024 * 1024;
     if (messageSize > MAX_MESSAGE_SIZE) {
-        return { valid: false, error: `Message too large: ${messageSize} bytes (max ${MAX_MESSAGE_SIZE})` };
+        return {
+            valid: false,
+            error: `Message too large: ${messageSize} bytes (max ${MAX_MESSAGE_SIZE})`,
+        };
     }
 
     const MAX_DEPTH = 10;
@@ -76,7 +82,10 @@ function validateMessageStructure(message) {
         return true;
     }
     if (!checkDepth(message)) {
-        return { valid: false, error: `Message object depth exceeds ${MAX_DEPTH} levels or contains circular references` };
+        return {
+            valid: false,
+            error: `Message object depth exceeds ${MAX_DEPTH} levels or contains circular references`,
+        };
     }
 
     const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
@@ -169,7 +178,7 @@ const MESSAGE_RATE_LIMITS = {
     EVENT_WATERMARK: { maxPerSecond: 20 },
     REPLAY_REQUEST: { maxPerSecond: 5 },
     REPLAY_RESPONSE: { maxPerSecond: 10 },
-    SAFE_MODE_CHANGED: { maxPerSecond: 5 }
+    SAFE_MODE_CHANGED: { maxPerSecond: 5 },
 };
 
 const messageRateTracking = new Map();
@@ -272,7 +281,9 @@ function startNonceCleanupInterval() {
             }
 
             if (removedCount > 0) {
-                console.log(`[TabCoordination] Cleaned up ${removedCount} expired nonces (${usedNonces.size} remaining)`);
+                console.log(
+                    `[TabCoordination] Cleaned up ${removedCount} expired nonces (${usedNonces.size} remaining)`
+                );
             }
         }
     }, NONCE_CLEANUP_INTERVAL_MS);
@@ -370,7 +381,14 @@ function pruneStaleRemoteSequences(debugMode = false) {
  * @param {Function} params.processFn - Function to process pending messages
  * @returns {Object} Result object with processing decision
  */
-function checkAndTrackSequence({ seq, senderId, localTabId, debugMode = false, message = null, processFn = null }) {
+function checkAndTrackSequence({
+    seq,
+    senderId,
+    localTabId,
+    debugMode = false,
+    message = null,
+    processFn = null,
+}) {
     // Handle messages without sequence numbers or from self
     if (seq === undefined || !senderId || senderId === localTabId) {
         return { shouldProcess: true, isDuplicate: false, isOutOfOrder: false, shouldQueue: false };
@@ -381,7 +399,9 @@ function checkAndTrackSequence({ seq, senderId, localTabId, debugMode = false, m
     // Check for duplicate messages
     if (seq <= lastSeq) {
         if (debugMode) {
-            console.warn(`[TabCoordination] Duplicate message: seq=${seq} from ${senderId} (last=${lastSeq})`);
+            console.warn(
+                `[TabCoordination] Duplicate message: seq=${seq} from ${senderId} (last=${lastSeq})`
+            );
         }
         return { shouldProcess: false, isDuplicate: true, isOutOfOrder: false, shouldQueue: false };
     }
@@ -394,16 +414,21 @@ function checkAndTrackSequence({ seq, senderId, localTabId, debugMode = false, m
         const gapSize = seq - lastSeq - 1;
         if (!checkForMessageGaps) {
             // Inline gap detection if function not available
-            console.warn(`[TabCoordination] Message gap detected from ${senderId}: missing seq ${lastSeq + 1} to ${seq - 1} (${gapSize} messages)`);
+            console.warn(
+                `[TabCoordination] Message gap detected from ${senderId}: missing seq ${lastSeq + 1} to ${seq - 1} (${gapSize} messages)`
+            );
         }
 
         if (debugMode) {
-            console.warn(`[TabCoordination] Out-of-order message: expected seq=${lastSeq + 1}, got seq=${seq} from ${senderId} (total OOO: ${outOfOrderCount})`);
+            console.warn(
+                `[TabCoordination] Out-of-order message: expected seq=${lastSeq + 1}, got seq=${seq} from ${senderId} (total OOO: ${outOfOrderCount})`
+            );
         }
 
         // Queue the message for later processing
         // We'll process it when the missing sequence numbers arrive
-        if (message && gapSize <= 10) { // Only queue if gap is reasonable
+        if (message && gapSize <= 10) {
+            // Only queue if gap is reasonable
             // Update the sequence tracking to the current message
             // This allows us to track that we've seen this sequence
             remoteSequences.set(senderId, seq);
@@ -415,7 +440,7 @@ function checkAndTrackSequence({ seq, senderId, localTabId, debugMode = false, m
                 isOutOfOrder: true,
                 shouldQueue: true,
                 expectedSeq: lastSeq + 1,
-                gapSize
+                gapSize,
             };
         } else {
             // Gap too large or no message provided, process anyway
@@ -430,7 +455,7 @@ function checkAndTrackSequence({ seq, senderId, localTabId, debugMode = false, m
                 isDuplicate: false,
                 isOutOfOrder: true,
                 shouldQueue: false,
-                gapSize
+                gapSize,
             };
         }
     }
@@ -449,7 +474,7 @@ function checkAndTrackSequence({ seq, senderId, localTabId, debugMode = false, m
         isDuplicate: false,
         isOutOfOrder: false,
         shouldQueue: false,
-        expectedSeq: seq + 1
+        expectedSeq: seq + 1,
     };
 }
 
@@ -492,5 +517,5 @@ export {
     pruneStaleRemoteSequences,
     resetOutOfOrderCount,
     resetSequenceTracking,
-    validateMessageStructure
+    validateMessageStructure,
 };

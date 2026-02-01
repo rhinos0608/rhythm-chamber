@@ -82,7 +82,7 @@ async function showSemanticUpgradeModal() {
  * @param {Function} onProgress - Progress callback (current, total, message)
  * @returns {Promise<Array>} Chunks for embedding
  */
-async function createChunksWithWorker(streams, onProgress = () => { }) {
+async function createChunksWithWorker(streams, onProgress = () => {}) {
     console.log('[RAG] DIAGNOSTIC: createChunksWithWorker() called');
     return await RAGWorkerPool.createChunksWithWorker(streams, onProgress);
 }
@@ -127,8 +127,6 @@ async function checkLocalSupport() {
     return await LocalEmbeddings.isSupported();
 }
 
-
-
 /**
  * Get RAG configuration
  * Uses unified storage API with localStorage fallback
@@ -159,7 +157,6 @@ async function getConfig() {
     }
 }
 
-
 /**
  * Save RAG configuration
  * Uses unified storage API with localStorage fallback
@@ -171,7 +168,7 @@ async function saveConfig(config) {
         generatedAt: config.generatedAt,
         dataHash: config.dataHash,
         storageMode: config.storageMode || 'local',
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
     };
 
     // Store in unified storage (IndexedDB) FIRST - wait for completion
@@ -191,8 +188,6 @@ async function saveConfig(config) {
         console.warn('[RAG] Failed to save to localStorage fallback:', e);
     }
 }
-
-
 
 /**
  * Get RAG configuration synchronously (for UI checks)
@@ -222,7 +217,7 @@ function getConfigSync() {
  */
 function isConfigured() {
     const config = getConfigSync();
-    return !!(config?.embeddingsGenerated);
+    return !!config?.embeddingsGenerated;
 }
 
 /**
@@ -247,7 +242,6 @@ async function isStale() {
     const currentHash = await Storage.getDataHash?.();
     return currentHash !== config.dataHash;
 }
-
 
 /**
  * Get checkpoint for resume
@@ -280,13 +274,13 @@ async function clearCheckpoint() {
 
 /**
  * Get the embedding manifest - tracks what has been embedded
- * 
+ *
  * The manifest stores:
  * - embeddedMonths: Set of month keys (e.g., "2024-03") that have been embedded
  * - embeddedArtists: Set of artist names with their chunk hash
  * - lastEmbeddedDate: The most recent stream date that was embedded
  * - totalChunksEmbedded: Count of all chunks embedded so far
- * 
+ *
  * @returns {Object} The embedding manifest or default empty manifest
  */
 async function getEmbeddingManifest() {
@@ -312,13 +306,13 @@ async function getEmbeddingManifest() {
         embeddedArtists: [],
         lastEmbeddedDate: null,
         totalChunksEmbedded: 0,
-        version: 1
+        version: 1,
     };
 }
 
 /**
  * Save the embedding manifest
- * 
+ *
  * @param {Object} manifest - The manifest to save
  */
 async function saveEmbeddingManifest(manifest) {
@@ -361,12 +355,12 @@ async function clearEmbeddingManifest() {
 
 /**
  * Detect new chunks that haven't been embedded yet
- * 
+ *
  * Compares current streams against the manifest to find:
  * - New months that haven't been summarized
  * - New artists that haven't been profiled
  * - Updated data for existing months (more plays)
- * 
+ *
  * @param {Array} streams - Current streaming data
  * @returns {Object} { newChunks, updatedMonths, summary }
  */
@@ -400,9 +394,7 @@ async function getNewChunks(streams) {
     });
 
     // Find new artists (top 50 that haven't been embedded)
-    const sortedArtists = [...currentArtists.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 50);
+    const sortedArtists = [...currentArtists.entries()].sort((a, b) => b[1] - a[1]).slice(0, 50);
 
     const newArtists = sortedArtists
         .filter(([artist]) => !embeddedArtistsSet.has(artist))
@@ -424,14 +416,14 @@ async function getNewChunks(streams) {
             newMonthsCount: newMonths.length,
             newArtistsCount: newArtists.length,
             hasNewData: totalNewChunks > 0,
-            latestDate: latestDate?.toISOString()
-        }
+            latestDate: latestDate?.toISOString(),
+        },
     };
 }
 
 /**
  * Filter streams to only include data for incremental embedding
- * 
+ *
  * @param {Array} streams - All streaming data
  * @param {Object} incrementalInfo - Output from getNewChunks()
  * @returns {Array} Streams filtered to only new data
@@ -453,7 +445,7 @@ function filterStreamsForIncremental(streams, incrementalInfo) {
 
 /**
  * Update manifest after successful embedding
- * 
+ *
  * @param {Array} embeddedChunks - Chunks that were successfully embedded
  */
 async function updateManifestAfterEmbedding(embeddedChunks) {
@@ -470,7 +462,9 @@ async function updateManifestAfterEmbedding(embeddedChunks) {
         }
     });
 
-    const patternChunkCount = embeddedChunks.filter(chunk => chunk.type === 'pattern_result' || chunk.type === 'pattern_summary').length;
+    const patternChunkCount = embeddedChunks.filter(
+        chunk => chunk.type === 'pattern_result' || chunk.type === 'pattern_summary'
+    ).length;
 
     manifest.embeddedMonths = [...monthsSet];
     manifest.embeddedArtists = [...artistsSet];
@@ -480,10 +474,10 @@ async function updateManifestAfterEmbedding(embeddedChunks) {
 
     await saveEmbeddingManifest(manifest);
 
-    console.log(`[RAG] Updated manifest: ${monthsSet.size} months, ${artistsSet.size} artists embedded`);
+    console.log(
+        `[RAG] Updated manifest: ${monthsSet.size} months, ${artistsSet.size} artists embedded`
+    );
 }
-
-
 
 /**
  * Search for similar vectors (routes to local store)
@@ -506,7 +500,7 @@ async function search(query, limit = 5, abortSignal = null) {
  * @param {object} options - Options including resume, mergeStrategy
  * @param {AbortSignal} abortSignal - Optional signal to cancel operation
  */
-async function generateEmbeddings(onProgress = () => { }, options = {}, abortSignal = null) {
+async function generateEmbeddings(onProgress = () => {}, options = {}, abortSignal = null) {
     // Always route to local mode in WASM-only architecture
     return generateLocalEmbeddings(onProgress, options, abortSignal);
 }
@@ -525,7 +519,7 @@ async function generateEmbeddings(onProgress = () => { }, options = {}, abortSig
  * @param {Function} onProgress - Optional progress callback
  * @returns {Promise<Array>} Chunks for embedding
  */
-async function createChunks(streams, onProgress = () => { }) {
+async function createChunks(streams, onProgress = () => {}) {
     // Delegate to chunking service
     return await ragChunkingService.splitDocument(streams, onProgress);
 }
@@ -550,7 +544,7 @@ async function clearEmbeddings() {
  * @param {AbortSignal} abortSignal - Optional signal to cancel operation
  * @returns {Promise<{success: boolean, chunksProcessed: number, mode: string}>}
  */
-async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abortSignal = null) {
+async function generateLocalEmbeddings(onProgress = () => {}, options = {}, abortSignal = null) {
     // PREMIUM GATE: Check semantic search access
     const { allowed } = await checkSemanticAccess();
     if (!allowed) {
@@ -565,7 +559,9 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abo
     // Check if local embeddings are supported
     const support = await checkLocalSupport();
     if (!support.supported) {
-        throw new Error(`Local embeddings not supported: ${support.reason || 'Browser incompatible'}`);
+        throw new Error(
+            `Local embeddings not supported: ${support.reason || 'Browser incompatible'}`
+        );
     }
 
     // HNW Hierarchy: Acquire operation lock
@@ -598,7 +594,7 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abo
         }
 
         // Initialize LocalEmbeddings (downloads model if needed)
-        await LocalEmbeddings.initialize((pct) => {
+        await LocalEmbeddings.initialize(pct => {
             // Model loading is 0-50% of progress
             onProgress(Math.round(pct / 2), 100, `Loading model... ${pct}%`);
         });
@@ -613,15 +609,27 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abo
         // Get streaming data
         console.log('[RAG] DIAGNOSTIC: About to call Storage.getStreams()...');
         const streams = await Storage.getStreams();
-        console.log('[RAG] DIAGNOSTIC: Storage.getStreams() returned', streams?.length || 0, 'streams');
+        console.log(
+            '[RAG] DIAGNOSTIC: Storage.getStreams() returned',
+            streams?.length || 0,
+            'streams'
+        );
         if (!streams || streams.length === 0) {
             throw new Error('No streaming data found. Please upload your Spotify data first.');
         }
 
         // Create chunks from streaming data (uses worker to avoid UI jank)
-        console.log('[RAG] DIAGNOSTIC: About to call createChunksWithWorker with', streams.length, 'streams...');
+        console.log(
+            '[RAG] DIAGNOSTIC: About to call createChunksWithWorker with',
+            streams.length,
+            'streams...'
+        );
         const chunks = await createChunksWithWorker(streams, onProgress);
-        console.log('[RAG] DIAGNOSTIC: createChunksWithWorker completed, returned', chunks.length, 'chunks');
+        console.log(
+            '[RAG] DIAGNOSTIC: createChunksWithWorker completed, returned',
+            chunks.length,
+            'chunks'
+        );
         const totalChunks = chunks.length;
 
         console.log(`[RAG] Generating local embeddings for ${totalChunks} chunks...`);
@@ -641,13 +649,12 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abo
                 await LocalVectorStore.upsert(i + 1, embedding, {
                     text: chunk.text,
                     type: chunk.type,
-                    metadata: chunk.metadata
+                    metadata: chunk.metadata,
                 });
 
                 // Embedding progress is 50-100%
                 const progress = 50 + Math.round((i / totalChunks) * 50);
                 onProgress(progress, 100, `Embedding ${i + 1}/${totalChunks}...`);
-
             } catch (err) {
                 console.error(`[RAG] Failed to embed chunk ${i}:`, err);
                 throw new Error(`Failed at chunk ${i + 1}: ${err.message}`);
@@ -660,7 +667,7 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abo
             storageMode: 'local',
             chunksCount: totalChunks,
             generatedAt: new Date().toISOString(),
-            dataHash: await Storage.getDataHash?.()
+            dataHash: await Storage.getDataHash?.(),
         });
 
         onProgress(100, 100, '✓ Local embeddings generated successfully!');
@@ -671,9 +678,8 @@ async function generateLocalEmbeddings(onProgress = () => { }, options = {}, abo
             success: true,
             chunksProcessed: totalChunks,
             mode: 'local',
-            dimensions: LOCAL_EMBEDDING_DIMENSIONS
+            dimensions: LOCAL_EMBEDDING_DIMENSIONS,
         };
-
     } finally {
         // HNW Hierarchy: Always release operation lock
         if (embeddingLockId && OperationLock) {
@@ -734,7 +740,7 @@ async function clearLocalEmbeddings() {
     await LocalVectorStore.clear();
 
     // Update config
-    const config = await getConfig() || {};
+    const config = (await getConfig()) || {};
     const newConfig = { ...config };
     delete newConfig.embeddingsGenerated;
     delete newConfig.chunksCount;
@@ -745,7 +751,6 @@ async function clearLocalEmbeddings() {
     console.log('[RAG] Local embeddings cleared');
     return { success: true };
 }
-
 
 /**
  * Get semantic context for a chat query
@@ -777,7 +782,7 @@ export const RAG = {
 
     // Checkpoint management - delegate to checkpoint manager
     getCheckpoint: () => ragCheckpointManager.getCheckpoint(),
-    saveCheckpoint: (data) => ragCheckpointManager.saveCheckpoint(data),
+    saveCheckpoint: data => ragCheckpointManager.saveCheckpoint(data),
     clearCheckpoint: () => ragCheckpointManager.clearCheckpoint(),
 
     search,
@@ -803,7 +808,7 @@ export const RAG = {
     cleanupEmbeddingWorker: () => RAGWorkerPool.cleanup(),
 
     // Constants
-    LOCAL_EMBEDDING_DIMENSIONS
+    LOCAL_EMBEDDING_DIMENSIONS,
 };
 
 // ES Module export - use ModuleRegistry for access instead of window globals

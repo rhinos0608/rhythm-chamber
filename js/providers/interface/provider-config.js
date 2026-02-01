@@ -32,7 +32,7 @@ export function buildProviderConfig(provider, settings, baseConfig) {
                 timeout: PROVIDER_TIMEOUTS.local,
                 // Privacy flag for UI
                 isLocal: true,
-                privacyLevel: 'maximum'
+                privacyLevel: 'maximum',
             };
 
         case 'lmstudio':
@@ -46,7 +46,7 @@ export function buildProviderConfig(provider, settings, baseConfig) {
                 timeout: PROVIDER_TIMEOUTS.local,
                 // Privacy flag for UI
                 isLocal: true,
-                privacyLevel: 'maximum'
+                privacyLevel: 'maximum',
             };
 
         case 'gemini':
@@ -60,7 +60,7 @@ export function buildProviderConfig(provider, settings, baseConfig) {
                 timeout: PROVIDER_TIMEOUTS.cloud,
                 // Privacy flag for UI
                 isLocal: false,
-                privacyLevel: 'cloud'
+                privacyLevel: 'cloud',
             };
 
         case 'openai-compatible':
@@ -73,7 +73,7 @@ export function buildProviderConfig(provider, settings, baseConfig) {
                 maxTokens: llmSettings.maxTokens || 4000,
                 timeout: PROVIDER_TIMEOUTS.cloud,
                 isLocal: false,
-                privacyLevel: 'cloud'
+                privacyLevel: 'cloud',
             };
 
         case 'openrouter':
@@ -81,7 +81,8 @@ export function buildProviderConfig(provider, settings, baseConfig) {
             return {
                 provider: 'openrouter',
                 ...baseConfig,
-                model: llmSettings.openrouterModel || baseConfig?.model || 'xiaomi/mimo-v2-flash:free',
+                model:
+                    llmSettings.openrouterModel || baseConfig?.model || 'xiaomi/mimo-v2-flash:free',
                 temperature: llmSettings.temperature ?? 0.7,
                 topP: 0.9,
                 maxTokens: llmSettings.maxTokens || 4500,
@@ -90,8 +91,7 @@ export function buildProviderConfig(provider, settings, baseConfig) {
                 timeout: PROVIDER_TIMEOUTS.cloud,
                 // Privacy flag for UI
                 isLocal: false,
-                privacyLevel: 'cloud'
+                privacyLevel: 'cloud',
             };
     }
 }
-

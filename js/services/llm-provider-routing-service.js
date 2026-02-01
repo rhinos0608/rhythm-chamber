@@ -1,9 +1,9 @@
 /**
  * LLM Provider Routing Service
- * 
+ *
  * Handles LLM provider configuration and routing for different providers.
  * Extracted from chat.js to separate provider concerns from chat orchestration.
- * 
+ *
  * @module services/llm-provider-routing-service
  */
 
@@ -47,7 +47,9 @@ function buildProviderConfig(provider, settings, baseConfig) {
     // lead to unexpected behavior or security issues
     const VALID_PROVIDERS = ['openrouter', 'ollama', 'lmstudio', 'gemini', 'openai-compatible'];
     if (!provider || typeof provider !== 'string') {
-        throw new TypeError(`Invalid provider: must be a non-empty string. Got: ${typeof provider}`);
+        throw new TypeError(
+            `Invalid provider: must be a non-empty string. Got: ${typeof provider}`
+        );
     }
     const normalizedProvider = provider.toLowerCase().trim();
     if (!VALID_PROVIDERS.includes(normalizedProvider)) {
@@ -73,7 +75,7 @@ function buildProviderConfig(provider, settings, baseConfig) {
                 model: llmSettings.ollamaModel || 'llama3.2',
                 temperature: llmSettings.temperature ?? 0.7,
                 topP: 0.9,
-                maxTokens: llmSettings.maxTokens || 2000
+                maxTokens: llmSettings.maxTokens || 2000,
             };
 
         case 'lmstudio':
@@ -83,7 +85,7 @@ function buildProviderConfig(provider, settings, baseConfig) {
                 model: llmSettings.lmstudioModel || 'local-model',
                 temperature: llmSettings.temperature ?? 0.7,
                 topP: 0.9,
-                maxTokens: llmSettings.maxTokens || 2000
+                maxTokens: llmSettings.maxTokens || 2000,
             };
 
         case 'openrouter':
@@ -91,21 +93,21 @@ function buildProviderConfig(provider, settings, baseConfig) {
             return {
                 provider: 'openrouter',
                 ...baseConfig,
-                model: llmSettings.openrouterModel || baseConfig?.model || 'xiaomi/mimo-v2-flash:free',
+                model:
+                    llmSettings.openrouterModel || baseConfig?.model || 'xiaomi/mimo-v2-flash:free',
                 temperature: llmSettings.temperature ?? 0.7,
                 topP: 0.9,
                 maxTokens: llmSettings.maxTokens || 4500,
                 frequencyPenalty: 0,
-                presencePenalty: 0
+                presencePenalty: 0,
             };
     }
-
 }
 
 /**
  * Call the LLM provider
  * Delegates to ProviderInterface for unified provider routing
- * 
+ *
  * @param {object} config - Provider config from buildProviderConfig
  * @param {string} apiKey - API key (for OpenRouter)
  * @param {Array} messages - Chat messages
@@ -115,7 +117,9 @@ function buildProviderConfig(provider, settings, baseConfig) {
  */
 async function callLLM(config, apiKey, messages, tools, onProgress = null) {
     if (!_ProviderInterface?.callProvider) {
-        throw new Error('ProviderInterface not loaded. Ensure provider modules are included before chat.js.');
+        throw new Error(
+            'ProviderInterface not loaded. Ensure provider modules are included before chat.js.'
+        );
     }
 
     return _ProviderInterface.callProvider(config, apiKey, messages, tools, onProgress);
@@ -131,7 +135,7 @@ const LLMProviderRoutingService = {
 
     // Core operations
     buildProviderConfig,
-    callLLM
+    callLLM,
 };
 
 // ES Module export

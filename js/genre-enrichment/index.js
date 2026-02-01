@@ -28,7 +28,7 @@ export {
     getTopGenres,
     isKnownArtist,
     getAllKnownGenres,
-    getStaticMapSize
+    getStaticMapSize,
 } from './genre-detection.js';
 
 // From genre-enrichment-cache.js
@@ -42,7 +42,7 @@ export {
     isCached,
     getCachedGenres,
     cacheGenres,
-    clearMemoryCache
+    clearMemoryCache,
 } from './genre-enrichment-cache.js';
 
 // From genre-enrichment-musicbrainz.js
@@ -52,7 +52,7 @@ export {
     fetchGenreFromMusicBrainz,
     getQueueSize,
     isProcessing,
-    getQueueState
+    getQueueState,
 } from './genre-enrichment-musicbrainz.js';
 
 // From genre-enrichment-spotify.js
@@ -64,7 +64,7 @@ export {
     getCachedAudioFeatures,
     setCachedAudioFeatures,
     getAudioFeaturesCacheSize,
-    clearAudioFeaturesCache
+    clearAudioFeaturesCache,
 } from './genre-enrichment-spotify.js';
 
 // From genre-enrichment-api.js
@@ -73,7 +73,7 @@ export {
     enrichAudioFeatures,
     getAudioFeaturesSummary,
     getStats,
-    getStatsSync
+    getStatsSync,
 } from './genre-enrichment-api.js';
 
 // From genre-enrichment-data.js
@@ -98,29 +98,25 @@ import {
     getTopGenres as _getTopGenres,
     isKnownArtist as _isKnownArtist,
     getAllKnownGenres as _getAllKnownGenres,
-    getStaticMapSize as _getStaticMapSize
+    getStaticMapSize as _getStaticMapSize,
 } from './genre-detection.js';
 
-import {
-    loadCachedGenres as _loadCachedGenres
-} from './genre-enrichment-cache.js';
+import { loadCachedGenres as _loadCachedGenres } from './genre-enrichment-cache.js';
 
 import {
     queueForEnrichment as _queueForEnrichment,
     getQueueSize as _getQueueSize,
-    isProcessing as _isProcessing
+    isProcessing as _isProcessing,
 } from './genre-enrichment-musicbrainz.js';
 
 import {
     enrichStreams as _enrichStreams,
     enrichAudioFeatures as _enrichAudioFeatures,
     getAudioFeaturesSummary as _getAudioFeaturesSummary,
-    getStats as _getStats
+    getStats as _getStats,
 } from './genre-enrichment-api.js';
 
-import {
-    getAudioFeaturesCacheSize as _getSpotifyCacheSize
-} from './genre-enrichment-spotify.js';
+import { getAudioFeaturesCacheSize as _getSpotifyCacheSize } from './genre-enrichment-spotify.js';
 
 import { getStaticMapSize as _getDataSize } from './genre-enrichment-data.js';
 import { getCacheSize as _getCacheSize } from './genre-enrichment-cache.js';
@@ -161,9 +157,9 @@ export const GenreEnrichment = {
             cachedCount: _getCacheSize(),
             queueLength: _getQueueSize(),
             isProcessing: _isProcessing(),
-            audioFeaturesCacheSize: _getSpotifyCacheSize()
+            audioFeaturesCacheSize: _getSpotifyCacheSize(),
         };
-    }
+    },
 };
 
 // ==========================================

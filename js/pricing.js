@@ -31,8 +31,8 @@ const TIERS = {
             'basic_cards',
             'personality_reveal',
             'demo_mode',
-            'playlist_generation_trial' // 1 free playlist
-        ]
+            'playlist_generation_trial', // 1 free playlist
+        ],
     },
     chamber: {
         name: 'The Chamber',
@@ -43,9 +43,9 @@ const TIERS = {
             'metadata_enrichment',
             'semantic_embeddings',
             'ai_playlist_curator',
-            'monthly_insights' // Coming post-MVP
-        ]
-    }
+            'monthly_insights', // Coming post-MVP
+        ],
+    },
 };
 
 // ==========================================
@@ -57,60 +57,65 @@ const FEATURES = {
     full_local_analysis: {
         name: 'Full Local Analysis',
         description: 'Complete pattern detection and personality classification',
-        tier: 'sovereign'
+        tier: 'sovereign',
     },
     byoi_chat: {
         name: 'BYOI Chat',
         description: 'Bring Your Own Intelligence - use local models or your own API keys',
-        tier: 'sovereign'
+        tier: 'sovereign',
     },
     basic_cards: {
         name: 'Basic Shareable Cards',
         description: 'Generate and share personality cards',
-        tier: 'sovereign'
+        tier: 'sovereign',
     },
     personality_reveal: {
         name: 'Personality Reveal',
-        description: 'Discover your music personality type (Emotional Archaeologist, Mood Engineer, etc.)',
-        tier: 'sovereign'
+        description:
+            'Discover your music personality type (Emotional Archaeologist, Mood Engineer, etc.)',
+        tier: 'sovereign',
     },
     demo_mode: {
         name: 'Demo Mode',
         description: 'Try the app with pre-loaded sample data',
-        tier: 'sovereign'
+        tier: 'sovereign',
     },
     playlist_generation_trial: {
         name: 'Playlist Generation (Trial)',
         description: 'Create 1 playlist to experience the magic',
-        tier: 'sovereign'
+        tier: 'sovereign',
     },
     // Premium tier features
     unlimited_playlists: {
         name: 'Unlimited Playlists',
-        description: 'Create as many AI-curated playlists as you want — era-based, mood-based, time machine, and more',
-        tier: 'chamber'
+        description:
+            'Create as many AI-curated playlists as you want — era-based, mood-based, time machine, and more',
+        tier: 'chamber',
     },
     metadata_enrichment: {
         name: 'Metadata Enrichment',
-        description: 'Enrich your listening history with genres, audio features, BPM, key, and producer credits',
-        tier: 'chamber'
+        description:
+            'Enrich your listening history with genres, audio features, BPM, key, and producer credits',
+        tier: 'chamber',
     },
     semantic_embeddings: {
         name: 'Semantic Search',
-        description: 'Ask questions like "songs that feel like 3 AM existential crisis" — powered by local AI embeddings',
-        tier: 'chamber'
+        description:
+            'Ask questions like "songs that feel like 3 AM existential crisis" — powered by local AI embeddings',
+        tier: 'chamber',
     },
     ai_playlist_curator: {
         name: 'AI Playlist Curator',
-        description: 'Describe any mood or moment, and AI creates the perfect playlist from your history',
-        tier: 'chamber'
+        description:
+            'Describe any mood or moment, and AI creates the perfect playlist from your history',
+        tier: 'chamber',
     },
     monthly_insights: {
         name: 'Monthly AI Insights',
         description: 'Get a monthly email digest with new discoveries about your music evolution',
         tier: 'chamber',
-        coming_soon: true
-    }
+        coming_soon: true,
+    },
 };
 
 // ==========================================
@@ -242,8 +247,8 @@ function showUpgradeUI(feature) {
             tierName: tierInfo.name,
             tierPrice: tierInfo.price,
             featureName: FEATURES[feature].name,
-            featureDescription: FEATURES[feature].description
-        }
+            featureDescription: FEATURES[feature].description,
+        },
     });
 
     window.dispatchEvent(event);
@@ -283,7 +288,7 @@ function migrateLegacyLicense(legacyLicense) {
             tier: 'curator',
             activatedAt: legacyLicense.activatedAt || legacyLicense.date,
             validUntil: null,
-            migrated: true
+            migrated: true,
         };
     }
 
@@ -292,7 +297,7 @@ function migrateLegacyLicense(legacyLicense) {
             tier: 'chamber',
             activatedAt: legacyLicense.activatedAt || legacyLicense.date,
             validUntil: legacyLicense.validUntil,
-            migrated: true
+            migrated: true,
         };
     }
 
@@ -316,8 +321,7 @@ export const Pricing = {
     showUpgradeUI,
     requiresSubscription,
     requiresOneTimePurchase,
-    migrateLegacyLicense
+    migrateLegacyLicense,
 };
-
 
 logger.info('Module loaded - Two-Tier Model initialized');

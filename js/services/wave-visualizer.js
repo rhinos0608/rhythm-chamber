@@ -52,9 +52,7 @@ function render(wave, summary) {
         return '<div class="wave-timeline wave-error">No wave data available</div>';
     }
 
-    const bottleneckNodes = new Set(
-        (summary?.bottlenecks || []).map(b => b.node)
-    );
+    const bottleneckNodes = new Set((summary?.bottlenecks || []).map(b => b.node));
 
     let html = '<div class="wave-timeline">';
 
@@ -127,7 +125,7 @@ function findBottlenecks(wave, threshold = DEFAULT_BOTTLENECK_THRESHOLD) {
         if (latency > threshold) {
             bottlenecks.push({
                 node: node.node,
-                latency
+                latency,
             });
         }
     }
@@ -166,7 +164,7 @@ function getCriticalPath(wave) {
 
         path.push({
             node: node.node,
-            latency
+            latency,
         });
     }
 
@@ -182,7 +180,7 @@ export const WaveVisualizer = {
     findBottlenecks,
     getCriticalPath,
     escapeHtml,
-    DEFAULT_BOTTLENECK_THRESHOLD
+    DEFAULT_BOTTLENECK_THRESHOLD,
 };
 
 console.log('[WaveVisualizer] Wave visualization service loaded');

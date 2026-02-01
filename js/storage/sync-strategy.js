@@ -1,15 +1,15 @@
 /**
  * Sync Strategy Abstraction
- * 
+ *
  * Provides interface for different sync strategies:
  * - LocalOnlySync: Current behavior - all data stays in IndexedDB
  * - CloudSync: Phase 2 - encrypted backup to Supabase (stub)
- * 
+ *
  * HNW Pattern:
  * - Hierarchy: Strategy selection controlled by license tier
  * - Network: Strategies share common interface, isolated implementation
  * - Wave: Sync operations are async with defined timing expectations
- * 
+ *
  * @module storage/sync-strategy
  */
 
@@ -75,7 +75,7 @@ class SyncStrategy {
 
 /**
  * Local-only sync strategy
- * 
+ *
  * All data stays in IndexedDB. No network sync.
  * This is the default strategy for free tier.
  */
@@ -96,7 +96,7 @@ class LocalOnlySync extends SyncStrategy {
         return {
             synced: true,
             version: 1,
-            message: 'Data stored locally (no cloud backup)'
+            message: 'Data stored locally (no cloud backup)',
         };
     }
 
@@ -105,7 +105,7 @@ class LocalOnlySync extends SyncStrategy {
         return {
             data: null,
             version: 0,
-            message: 'Local-only mode - no remote data'
+            message: 'Local-only mode - no remote data',
         };
     }
 
@@ -120,7 +120,7 @@ class LocalOnlySync extends SyncStrategy {
             version: 0,
             pending: false,
             mode: 'local',
-            message: 'Local-only mode - data not backed up to cloud'
+            message: 'Local-only mode - data not backed up to cloud',
         };
     }
 }
@@ -131,12 +131,12 @@ class LocalOnlySync extends SyncStrategy {
 
 /**
  * Device backup strategy (STUB - NOT IMPLEMENTED)
- * 
+ *
  * Provides encrypted backup/restore between devices using Supabase.
  * This is intentionally NOT "Cloud Sync" - it's manual backup/restore
  * with "last-write-wins" semantics. No CRDTs, no conflict resolution,
  * just encrypted blob storage.
- * 
+ *
  * This class exists for interface definition only.
  */
 class DeviceBackup extends SyncStrategy {
@@ -145,7 +145,7 @@ class DeviceBackup extends SyncStrategy {
         this.config = {
             supabaseUrl: config.supabaseUrl || null,
             supabaseKey: config.supabaseKey || null,
-            ...config
+            ...config,
         };
     }
 
@@ -157,7 +157,7 @@ class DeviceBackup extends SyncStrategy {
     }
 
     async push(data) {
-        // Phase 2: 
+        // Phase 2:
         // 1. Encrypt data with Security.encryptData()
         // 2. POST to /api/backup (last-write-wins)
         // 3. Return version
@@ -183,7 +183,7 @@ class DeviceBackup extends SyncStrategy {
             version: 0,
             pending: false,
             mode: 'device-backup',
-            message: 'Device backup coming in Phase 2 (last-write-wins)'
+            message: 'Device backup coming in Phase 2 (last-write-wins)',
         };
     }
 }
@@ -199,7 +199,7 @@ const SyncManager = {
     _currentStrategy: null,
     _strategies: {
         local: LocalOnlySync,
-        'device-backup': DeviceBackup
+        'device-backup': DeviceBackup,
     },
 
     /**
@@ -260,9 +260,13 @@ const SyncManager = {
     getAvailableStrategies() {
         return [
             { name: 'local', available: true },
-            { name: 'device-backup', available: false, reason: 'Coming in Phase 2 (last-write-wins)' }
+            {
+                name: 'device-backup',
+                available: false,
+                reason: 'Coming in Phase 2 (last-write-wins)',
+            },
         ];
-    }
+    },
 };
 
 // ==========================================
@@ -273,4 +277,3 @@ const SyncManager = {
 export { SyncStrategy, LocalOnlySync, DeviceBackup, SyncManager };
 
 console.log('[SyncStrategy] Sync abstraction layer loaded (LocalOnlySync active)');
-

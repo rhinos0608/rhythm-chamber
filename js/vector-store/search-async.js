@@ -35,7 +35,9 @@ export function createAsyncSearch(workerManager, vectorsCache, searchSync, build
 
         // Validate vector dimension matches expected
         if (queryVector.length !== DEFAULT_VECTOR_DIMENSIONS) {
-            console.warn(`[VectorStore] Query vector has wrong dimensions: ${queryVector.length}, expected ${DEFAULT_VECTOR_DIMENSIONS}. Returning empty results.`);
+            console.warn(
+                `[VectorStore] Query vector has wrong dimensions: ${queryVector.length}, expected ${DEFAULT_VECTOR_DIMENSIONS}. Returning empty results.`
+            );
             return [];
         }
 
@@ -47,7 +49,9 @@ export function createAsyncSearch(workerManager, vectorsCache, searchSync, build
 
         // Validate we have vectors to search
         if (vectorsCache.size === 0) {
-            console.warn('[VectorStore] No vectors available to search - embeddings may not have been generated');
+            console.warn(
+                '[VectorStore] No vectors available to search - embeddings may not have been generated'
+            );
             return [];
         }
 
@@ -57,7 +61,7 @@ export function createAsyncSearch(workerManager, vectorsCache, searchSync, build
             vectors: vectorsCache,
             limit,
             threshold,
-            buildSharedData: () => buildSharedData(vectorsCache)
+            buildSharedData: () => buildSharedData(vectorsCache),
         });
     };
 }

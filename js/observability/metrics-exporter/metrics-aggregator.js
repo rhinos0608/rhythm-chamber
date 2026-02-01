@@ -45,7 +45,7 @@ export class MetricsAggregator {
         const aggregated = {
             performance: this._aggregatePerformance(metrics.performance, filters),
             webVitals: this._aggregateWebVitals(metrics.webVitals),
-            memory: this._aggregateMemory(metrics.memory)
+            memory: this._aggregateMemory(metrics.memory),
         };
 
         return aggregated;
@@ -67,7 +67,7 @@ export class MetricsAggregator {
                 min: 0,
                 max: 0,
                 stdDev: 0,
-                percentiles: {}
+                percentiles: {},
             };
         }
 
@@ -83,7 +83,7 @@ export class MetricsAggregator {
             min: sorted[0],
             max: sorted[count - 1],
             stdDev: this._calculateStdDev(sorted, mean),
-            percentiles: {}
+            percentiles: {},
         };
 
         // Calculate requested percentiles
@@ -114,7 +114,7 @@ export class MetricsAggregator {
             statistics,
             windowStart,
             windowEnd: currentTime,
-            count: windowed.length
+            count: windowed.length,
         };
     }
 
@@ -130,7 +130,9 @@ export class MetricsAggregator {
         // Remove duplicates based on timestamp
         const seen = new Set();
         const unique = merged.filter(metric => {
-            const key = metric.timestamp ? `${metric.name}-${metric.timestamp}` : `${metric.name}-${metric.value}`;
+            const key = metric.timestamp
+                ? `${metric.name}-${metric.timestamp}`
+                : `${metric.name}-${metric.value}`;
             if (seen.has(key)) {
                 return false;
             }
@@ -188,7 +190,7 @@ export class MetricsAggregator {
     bufferMetrics(metric) {
         const bufferedMetric = {
             ...metric,
-            timestamp: metric.timestamp || Date.now()
+            timestamp: metric.timestamp || Date.now(),
         };
 
         this._metricsBuffer.push(bufferedMetric);
@@ -258,16 +260,16 @@ export class MetricsAggregator {
             performance: {
                 count: aggregated.performance?.count || 0,
                 total: aggregated.performance?.total || 0,
-                summary: aggregated.performance?.statistics || null
+                summary: aggregated.performance?.statistics || null,
             },
             webVitals: {
                 count: aggregated.webVitals?.count || 0,
-                vitals: aggregated.webVitals?.vitals || {}
+                vitals: aggregated.webVitals?.vitals || {},
             },
             memory: {
                 count: aggregated.memory?.count || 0,
-                summary: aggregated.memory?.statistics || null
-            }
+                summary: aggregated.memory?.statistics || null,
+            },
         };
 
         if (Object.keys(metadata).length > 0) {
@@ -293,9 +295,7 @@ export class MetricsAggregator {
 
         // Apply category filter if specified
         if (filters.categories && filters.categories.length > 0) {
-            measurements = measurements.filter(m =>
-                filters.categories.includes(m.category)
-            );
+            measurements = measurements.filter(m => filters.categories.includes(m.category));
         }
 
         if (measurements.length === 0) {
@@ -309,7 +309,7 @@ export class MetricsAggregator {
         return {
             count: measurements.length,
             total,
-            statistics
+            statistics,
         };
     }
 
@@ -332,7 +332,7 @@ export class MetricsAggregator {
                 vitals[vitalType] = {
                     value: vitalData.latest.value,
                     rating: vitalData.latest.rating,
-                    timestamp: vitalData.latest.timestamp
+                    timestamp: vitalData.latest.timestamp,
                 };
                 count++;
             }
@@ -369,7 +369,7 @@ export class MetricsAggregator {
 
         return {
             count: values.length,
-            statistics
+            statistics,
         };
     }
 

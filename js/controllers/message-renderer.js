@@ -88,7 +88,7 @@ function addMessage(text, role, isError = false, options = {}) {
 export const MessageRenderer = {
     parseMarkdown,
     createMessageElement,
-    addMessage
+    addMessage,
 };
 
 console.log('[MessageRenderer] Module loaded');

@@ -12,7 +12,7 @@ const logger = createLogger('Spotify:RefreshService');
 
 // Token endpoints
 const ENDPOINTS = {
-    token: 'https://accounts.spotify.com/api/token'
+    token: 'https://accounts.spotify.com/api/token',
 };
 
 /**
@@ -21,7 +21,6 @@ const ENDPOINTS = {
  */
 export class RefreshService {
     static #tokenRefreshInterval = null;
-    static #isProcessingOperation = false;
 
     /**
      * HNW Fix: Refresh access token using refresh token
@@ -40,7 +39,7 @@ export class RefreshService {
                 return await navigator.locks.request(
                     'spotify_token_refresh',
                     { mode: 'exclusive', ifAvailable: false },
-                    async (lock) => {
+                    async lock => {
                         if (lock) {
                             // Double-check if another tab already refreshed
                             if (await TokenStore.hasValidToken()) {
@@ -170,13 +169,13 @@ export class RefreshService {
             const response = await fetch(ENDPOINTS.token, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
+                    'Content-Type': 'application/x-www-form-urlencoded',
                 },
                 body: new URLSearchParams({
                     client_id: clientId,
                     grant_type: 'refresh_token',
-                    refresh_token: refreshTokenValue
-                })
+                    refresh_token: refreshTokenValue,
+                }),
             });
 
             if (!response.ok) {
@@ -240,24 +239,26 @@ export class RefreshService {
             return;
         }
 
-        this.#isProcessingOperation = true;
 
         // Check every 5 minutes
-        this.#tokenRefreshInterval = setInterval(async () => {
-            const expiry = await TokenStore.getTokenExpiry();
-            if (!expiry) return;
+        this.#tokenRefreshInterval = setInterval(
+            async () => {
+                const expiry = await TokenStore.getTokenExpiry();
+                if (!expiry) return;
 
-            // Simplified refresh check: refresh if expiring within 10 minutes
-            const timeUntilExpiry = expiry - Date.now();
-            if (timeUntilExpiry < 10 * 60 * 1000 && timeUntilExpiry > 0) {
-                logger.debug('Proactive token refresh...');
-                try {
-                    await this.refreshToken();
-                } catch (error) {
-                    logger.error('Background refresh failed:', error);
+                // Simplified refresh check: refresh if expiring within 10 minutes
+                const timeUntilExpiry = expiry - Date.now();
+                if (timeUntilExpiry < 10 * 60 * 1000 && timeUntilExpiry > 0) {
+                    logger.debug('Proactive token refresh...');
+                    try {
+                        await this.refreshToken();
+                    } catch (error) {
+                        logger.error('Background refresh failed:', error);
+                    }
                 }
-            }
-        }, 5 * 60 * 1000); // 5 minutes
+            },
+            5 * 60 * 1000
+        ); // 5 minutes
 
         logger.debug('Background token refresh started');
     }
@@ -270,7 +271,6 @@ export class RefreshService {
         if (this.#tokenRefreshInterval) {
             clearInterval(this.#tokenRefreshInterval);
             this.#tokenRefreshInterval = null;
-            this.#isProcessingOperation = false;
             logger.debug('Background token refresh stopped');
         }
     }

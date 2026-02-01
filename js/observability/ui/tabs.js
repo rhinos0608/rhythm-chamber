@@ -61,6 +61,6 @@ export function setupTabs(container, onTabSwitch) {
             });
         },
         tabElements,
-        tabClickHandlers
+        tabClickHandlers,
     };
 }

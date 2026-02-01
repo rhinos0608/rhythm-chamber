@@ -1,21 +1,21 @@
 /**
  * Profile Sharing Service
- * 
+ *
  * Handles encrypted export/import of music listening profiles for collaborative analysis.
  * Uses AES-GCM encryption with a user-provided passphrase for privacy.
- * 
+ *
  * Privacy Model:
  * 1. User exports their profile with a passphrase
  * 2. Profile is encrypted client-side using AES-256-GCM
  * 3. Encrypted JSON can be shared via any channel (email, message, etc.)
  * 4. Recipient imports and decrypts with the same passphrase
  * 5. No server involved - fully client-side E2EE
- * 
+ *
  * HNW Considerations:
  * - Hierarchy: Clear authority over own profile data
  * - Network: Decoupled from storage layer, uses DataProvider
  * - Wave: Async encryption/decryption with progress
- * 
+ *
  * @module services/profile-sharing
  */
 
@@ -57,7 +57,7 @@ async function deriveKey(passphrase, salt) {
             name: 'PBKDF2',
             salt,
             iterations: KEY_ITERATIONS,
-            hash: 'SHA-256'
+            hash: 'SHA-256',
         },
         passphraseKey,
         { name: 'AES-GCM', length: 256 },
@@ -80,11 +80,7 @@ async function encryptProfile(data, passphrase) {
     const key = await deriveKey(passphrase, salt);
     const plaintext = encoder.encode(JSON.stringify(data));
 
-    const ciphertext = await crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv },
-        key,
-        plaintext
-    );
+    const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
 
     // Combine salt + iv + ciphertext
     const combined = new Uint8Array(SALT_LENGTH + IV_LENGTH + ciphertext.byteLength);
@@ -122,11 +118,7 @@ async function decryptProfile(encryptedBase64, passphrase) {
 
     const key = await deriveKey(passphrase, salt);
 
-    const plaintext = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv },
-        key,
-        ciphertext
-    );
+    const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
 
     return JSON.parse(decoder.decode(plaintext));
 }
@@ -152,14 +144,16 @@ async function exportProfile(passphrase, options = {}) {
 
     // Get data from DataProvider or Storage
     // Check if modules are actually usable before calling methods
-    const dataProviderAvailable = DataProvider &&
+    const dataProviderAvailable =
+        DataProvider &&
         typeof DataProvider.getPersonality === 'function' &&
         typeof DataProvider.getPatterns === 'function' &&
         typeof DataProvider.getSummary === 'function' &&
         typeof DataProvider.getStreams === 'function' &&
         typeof DataProvider.getStreamCount === 'function';
 
-    const storageAvailable = Storage &&
+    const storageAvailable =
+        Storage &&
         typeof Storage.getPersonality === 'function' &&
         typeof Storage.getStreams === 'function';
 
@@ -173,9 +167,7 @@ async function exportProfile(passphrase, options = {}) {
         ? await DataProvider.getPatterns()
         : personality?.patterns;
 
-    const summary = dataProviderAvailable
-        ? await DataProvider.getSummary()
-        : personality?.summary;
+    const summary = dataProviderAvailable ? await DataProvider.getSummary() : personality?.summary;
 
     let streams = null;
     if (includeStreams) {
@@ -186,26 +178,27 @@ async function exportProfile(passphrase, options = {}) {
                 : null;
     }
 
-    const streamCount = streams?.length ?? (dataProviderAvailable
-        ? await DataProvider.getStreamCount()
-        : 0);
+    const streamCount =
+        streams?.length ?? (dataProviderAvailable ? await DataProvider.getStreamCount() : 0);
 
     // Build profile object
     const profile = {
         version: PROFILE_VERSION,
         exportedAt: new Date().toISOString(),
         displayName,
-        personality: personality ? {
-            type: personality.type,
-            name: personality.name,
-            emoji: personality.emoji,
-            tagline: personality.tagline,
-            traits: personality.traits
-        } : null,
+        personality: personality
+            ? {
+                type: personality.type,
+                name: personality.name,
+                emoji: personality.emoji,
+                tagline: personality.tagline,
+                traits: personality.traits,
+            }
+            : null,
         patterns,
         summary,
         streamCount,
-        streams: includeStreams ? streams : null
+        streams: includeStreams ? streams : null,
     };
 
     // Encrypt
@@ -218,7 +211,7 @@ async function exportProfile(passphrase, options = {}) {
         personalityType: personality?.name || 'Unknown',
         streamCount,
         version: PROFILE_VERSION,
-        encrypted: true
+        encrypted: true,
     };
 
     EventBus.emit('data:profile_exported', { displayName, streamCount });
@@ -247,7 +240,7 @@ async function importProfile(encryptedData, passphrase) {
 
         EventBus.emit('data:profile_imported', {
             displayName: profile.displayName,
-            personalityType: profile.personality?.name
+            personalityType: profile.personality?.name,
         });
 
         return profile;
@@ -274,7 +267,7 @@ const loadedProfiles = new Map();
 function storeProfile(id, profile) {
     loadedProfiles.set(id, {
         ...profile,
-        loadedAt: new Date().toISOString()
+        loadedAt: new Date().toISOString(),
     });
 }
 
@@ -327,8 +320,7 @@ export const ProfileSharing = {
     clearAllProfiles,
 
     // Constants
-    VERSION: PROFILE_VERSION
+    VERSION: PROFILE_VERSION,
 };
-
 
 console.log('[ProfileSharing] Profile sharing service loaded with E2E encryption');

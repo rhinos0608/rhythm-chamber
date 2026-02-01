@@ -37,7 +37,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
     try {
         const response = await fetch(url, {
             ...options,
-            signal: controller.signal
+            signal: controller.signal,
         });
         clearTimeout(timeoutId);
         return response;
@@ -78,7 +78,7 @@ async function fetchWithRetry(url, config = {}) {
         baseDelayMs = 1000,
         maxDelayMs = 10000,
         timeoutMs = 30000,
-        retryOnStatus = [429, 500, 502, 503, 504]
+        retryOnStatus = [429, 500, 502, 503, 504],
     } = config;
 
     // Build retry config from provided parameters
@@ -86,11 +86,11 @@ async function fetchWithRetry(url, config = {}) {
         ...RETRY_CONFIG,
         MAX_RETRIES: maxRetries,
         BASE_DELAY_MS: baseDelayMs,
-        MAX_DELAY_MS: maxDelayMs
+        MAX_DELAY_MS: maxDelayMs,
     };
 
     // Create shouldRetry callback that checks both error classification and HTTP status
-    const createShouldRetry = (retryStatuses) => {
+    const createShouldRetry = retryStatuses => {
         return (error, attempt) => {
             // First check if the error itself is retryable
             const errorType = classifyError(error);
@@ -138,9 +138,9 @@ async function fetchWithRetry(url, config = {}) {
             onRetry: (error, attempt, delay) => {
                 console.warn(
                     `[Utils] Retrying after ${delay}ms ` +
-                    `(attempt ${attempt}/${maxRetries}, ${error.message})`
+                        `(attempt ${attempt}/${maxRetries}, ${error.message})`
                 );
-            }
+            },
         }
     );
 
@@ -163,49 +163,44 @@ async function fetchWithAuth(url, config = {}) {
     const {
         options = {},
         timeoutMs = 30000,
-        onAuthError = null,     // Callback to refresh token on 401
+        onAuthError = null, // Callback to refresh token on 401
         maxAuthRetries = 1,
-        getAuthHeader = null    // Callback to get updated auth header after refresh
+        getAuthHeader = null, // Callback to get updated auth header after refresh
     } = config;
     let authRetries = 0;
     let currentOptions = { ...options };
 
     while (authRetries <= maxAuthRetries) {
-        try {
-            const response = await fetchWithTimeout(url, currentOptions, timeoutMs);
+        const response = await fetchWithTimeout(url, currentOptions, timeoutMs);
 
-            // Handle 401 Unauthorized - attempt token refresh
-            if (response.status === 401 && onAuthError && authRetries < maxAuthRetries) {
-                console.warn('[Utils] Got 401, attempting auth refresh...');
-                authRetries++;
+        // Handle 401 Unauthorized - attempt token refresh
+        if (response.status === 401 && onAuthError && authRetries < maxAuthRetries) {
+            console.warn('[Utils] Got 401, attempting auth refresh...');
+            authRetries++;
 
-                const refreshed = await onAuthError();
-                if (refreshed) {
-                    // Update authorization header if callback provided
-                    if (getAuthHeader) {
-                        const newAuthHeader = await getAuthHeader();
-                        if (newAuthHeader) {
-                            currentOptions = {
-                                ...currentOptions,
-                                headers: {
-                                    ...currentOptions.headers,
-                                    'Authorization': newAuthHeader
-                                }
-                            };
-                        }
+            const refreshed = await onAuthError();
+            if (refreshed) {
+                // Update authorization header if callback provided
+                if (getAuthHeader) {
+                    const newAuthHeader = await getAuthHeader();
+                    if (newAuthHeader) {
+                        currentOptions = {
+                            ...currentOptions,
+                            headers: {
+                                ...currentOptions.headers,
+                                Authorization: newAuthHeader,
+                            },
+                        };
                     }
-                    continue; // Retry with refreshed token
                 }
-
-                // Refresh failed - return original response
-                return response;
+                continue; // Retry with refreshed token
             }
 
+            // Refresh failed - return original response
             return response;
-        } catch (err) {
-            // Don't retry on network errors
-            throw err;
         }
+
+        return response;
     }
 
     // Should not reach here, but safety fallback
@@ -230,7 +225,7 @@ function simpleHash(data) {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
         const char = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
+        hash = (hash << 5) - hash + char;
         hash = hash & hash; // Convert to 32-bit integer
     }
     return Math.abs(hash).toString(36);
@@ -310,10 +305,10 @@ function formatDuration(seconds) {
 
 /**
  * Circuit breaker for storage fallback operations
- * 
+ *
  * Prevents 4 serial timeout attempts (2+ min waits) during onboarding
  * by failing fast after consecutive failures.
- * 
+ *
  * Usage:
  *   const breaker = StorageCircuitBreaker.getBreaker('indexeddb');
  *   if (breaker.canAttempt()) {
@@ -332,8 +327,8 @@ const StorageCircuitBreaker = {
     _breakers: {},
 
     // Configuration
-    MAX_FAILURES: 2,           // Max consecutive failures before circuit opens
-    COOLDOWN_MS: 30000,        // 30 second cooldown before retry
+    MAX_FAILURES: 2, // Max consecutive failures before circuit opens
+    COOLDOWN_MS: 30000, // 30 second cooldown before retry
     HALF_OPEN_TIMEOUT_MS: 5000, // Fast timeout when testing after cooldown
 
     /**
@@ -345,10 +340,10 @@ const StorageCircuitBreaker = {
         if (!this._breakers[name]) {
             this._breakers[name] = {
                 name,
-                state: 'closed',      // closed, open, half-open
+                state: 'closed', // closed, open, half-open
                 failureCount: 0,
                 lastFailureTime: null,
-                lastSuccessTime: null
+                lastSuccessTime: null,
             };
         }
         return this._breakers[name];
@@ -410,7 +405,9 @@ const StorageCircuitBreaker = {
             console.log(`[StorageCircuitBreaker] ${name}: Back to open (test failed)`);
         } else if (breaker.failureCount >= this.MAX_FAILURES) {
             breaker.state = 'open';
-            console.warn(`[StorageCircuitBreaker] ${name}: Circuit opened after ${breaker.failureCount} failures`);
+            console.warn(
+                `[StorageCircuitBreaker] ${name}: Circuit opened after ${breaker.failureCount} failures`
+            );
         }
     },
 
@@ -436,7 +433,7 @@ const StorageCircuitBreaker = {
                 state: breaker.state,
                 failures: breaker.failureCount,
                 lastFailure: breaker.lastFailureTime,
-                lastSuccess: breaker.lastSuccessTime
+                lastSuccess: breaker.lastSuccessTime,
             };
         }
         return status;
@@ -461,7 +458,7 @@ const StorageCircuitBreaker = {
         for (const name of Object.keys(this._breakers)) {
             this.reset(name);
         }
-    }
+    },
 };
 
 /**
@@ -494,8 +491,7 @@ export const Utils = {
     throttle,
     formatDuration,
     safeTruncate,
-    StorageCircuitBreaker
+    StorageCircuitBreaker,
 };
-
 
 console.log('[Utils] Module loaded with StorageCircuitBreaker');

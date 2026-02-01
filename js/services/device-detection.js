@@ -30,7 +30,7 @@ const DeviceType = Object.freeze({
     PHONE: 'phone',
     TABLET: 'tablet',
     DESKTOP: 'desktop',
-    UNKNOWN: 'unknown'
+    UNKNOWN: 'unknown',
 });
 
 /**
@@ -39,9 +39,9 @@ const DeviceType = Object.freeze({
  * @enum {string}
  */
 const DeviceCapability = Object.freeze({
-    HIGH: 'high',      // Desktop, fast CPU, plenty of RAM
-    MEDIUM: 'medium',  // Tablet, mid-range CPU, moderate RAM
-    LOW: 'low'         // Phone, slow CPU, limited RAM
+    HIGH: 'high', // Desktop, fast CPU, plenty of RAM
+    MEDIUM: 'medium', // Tablet, mid-range CPU, moderate RAM
+    LOW: 'low', // Phone, slow CPU, limited RAM
 });
 
 /**
@@ -154,7 +154,7 @@ function getDeviceInfo() {
         hardwareConcurrency: navigator.hardwareConcurrency || 2,
         deviceMemory: navigator.deviceMemory || 4,
         maxTouchPoints: navigator.maxTouchPoints || 0,
-        userAgent: navigator.userAgent
+        userAgent: navigator.userAgent,
     };
 }
 
@@ -168,11 +168,11 @@ function getDeviceInfo() {
  * @enum {string}
  */
 const ConnectionQuality = Object.freeze({
-    EXCELLENT: 'excellent',  // WiFi, fast 4G
-    GOOD: 'good',            // 3G, slow 4G
-    FAIR: 'fair',            // 2G, unstable
-    POOR: 'poor',            // Very slow, offline
-    UNKNOWN: 'unknown'
+    EXCELLENT: 'excellent', // WiFi, fast 4G
+    GOOD: 'good', // 3G, slow 4G
+    FAIR: 'fair', // 2G, unstable
+    POOR: 'poor', // Very slow, offline
+    UNKNOWN: 'unknown',
 });
 
 /**
@@ -186,7 +186,7 @@ const networkState = {
     saveData: false,
     lastUpdate: Date.now(),
     listeners: [],
-    isMonitoring: false
+    isMonitoring: false,
 };
 
 /**
@@ -303,8 +303,10 @@ function startNetworkMonitoring() {
         const isOnlineNow = isOnline();
         networkState.listeners.forEach(listener => {
             try {
-                listener(isOnlineNow ? ConnectionQuality.GOOD : ConnectionQuality.POOR,
-                       isOnlineNow ? ConnectionQuality.POOR : ConnectionQuality.GOOD);
+                listener(
+                    isOnlineNow ? ConnectionQuality.GOOD : ConnectionQuality.POOR,
+                    isOnlineNow ? ConnectionQuality.POOR : ConnectionQuality.GOOD
+                );
             } catch (err) {
                 console.warn('[DeviceDetection] Online/offline listener error:', err);
             }
@@ -353,7 +355,7 @@ function getNetworkState() {
         rtt: networkState.rtt,
         saveData: networkState.saveData,
         online: isOnline(),
-        lastUpdate: networkState.lastUpdate
+        lastUpdate: networkState.lastUpdate,
     };
 }
 
@@ -372,7 +374,7 @@ const visibilityState = {
     visibleDuration: 0,
     transitionCount: 0,
     listeners: [],
-    isMonitoring: false
+    isMonitoring: false,
 };
 
 /**
@@ -397,7 +399,7 @@ function getVisibilityStats() {
         visibleDuration: visibilityState.visibleDuration,
         transitionCount: visibilityState.transitionCount,
         lastHiddenAt: visibilityState.lastHidden,
-        lastVisibleAt: visibilityState.lastVisible
+        lastVisibleAt: visibilityState.lastVisible,
     };
 }
 
@@ -443,10 +445,10 @@ function startVisibilityMonitoring() {
 
             if (isHidden) {
                 visibilityState.lastHidden = transitionTime;
-                visibilityState.visibleDuration += (transitionTime - visibilityState.lastVisible);
+                visibilityState.visibleDuration += transitionTime - visibilityState.lastVisible;
             } else {
                 visibilityState.lastVisible = transitionTime;
-                visibilityState.hiddenDuration += (transitionTime - visibilityState.lastHidden);
+                visibilityState.hiddenDuration += transitionTime - visibilityState.lastHidden;
             }
 
             // Notify listeners
@@ -503,19 +505,19 @@ function getAdaptiveTiming() {
         heartbeat: {
             intervalMs: 3000,
             maxMissed: 2,
-            visibilityWaitMs: 5000
+            visibilityWaitMs: 5000,
         },
         // Election timing
         election: {
             windowMs: 300,
-            calibrationIterations: 10000
+            calibrationIterations: 10000,
         },
         // Timeout multipliers
         multipliers: {
             mobile: 1.5,
             tablet: 1.2,
-            desktop: 1.0
-        }
+            desktop: 1.0,
+        },
     };
 
     // Adjust for device type
@@ -599,7 +601,7 @@ const heartbeatQuality = {
     maxSamples: 20,
     lastAnomalyTime: 0,
     anomalyCount: 0,
-    isDegraded: false
+    isDegraded: false,
 };
 
 /**
@@ -617,7 +619,7 @@ function recordHeartbeatQuality(intervalMs) {
         expectedInterval,
         variance,
         variancePercent,
-        isAnomalous: variancePercent > 50 // 50% variance threshold
+        isAnomalous: variancePercent > 50, // 50% variance threshold
     });
 
     // Keep only recent samples
@@ -650,7 +652,7 @@ function checkHeartbeatDegradation() {
     if (!wasDegraded && heartbeatQuality.isDegraded) {
         console.warn('[DeviceDetection] Heartbeat quality degraded:', {
             anomalyRate: anomalyRate.toFixed(1) + '%',
-            recentSamples: recentSamples.length
+            recentSamples: recentSamples.length,
         });
     }
 
@@ -668,7 +670,7 @@ function getHeartbeatQualityStats() {
             sampleCount: 0,
             avgVariance: 0,
             maxVariance: 0,
-            degraded: false
+            degraded: false,
         };
     }
 
@@ -682,12 +684,12 @@ function getHeartbeatQualityStats() {
         avgVariance: Math.round(avgVariance),
         maxVariance: Math.round(maxVariance),
         degraded: heartbeatQuality.isDegraded,
-        anomalyRate: (anomalousCount / samples.length * 100).toFixed(1) + '%',
+        anomalyRate: ((anomalousCount / samples.length) * 100).toFixed(1) + '%',
         recentSamples: samples.slice(-5).map(s => ({
             interval: Math.round(s.intervalMs),
             variance: Math.round(s.variance),
-            variancePercent: s.variancePercent.toFixed(1) + '%'
-        }))
+            variancePercent: s.variancePercent.toFixed(1) + '%',
+        })),
     };
 }
 
@@ -729,7 +731,7 @@ export const DeviceDetection = {
     // Constants
     DeviceType,
     DeviceCapability,
-    ConnectionQuality
+    ConnectionQuality,
 };
 
 export default DeviceDetection;

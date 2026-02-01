@@ -1,13 +1,13 @@
 /**
  * Timeout Wrapper Utility
- * 
+ *
  * Provides timeout-based recovery with progressive escalation.
- * 
+ *
  * HNW Considerations:
  * - Hierarchy: Single authority for timeout enforcement
  * - Network: Prevents cascade failures from hanging operations
  * - Wave: Predictable timing behavior with fallback paths
- * 
+ *
  * @module utils/timeout-wrapper
  */
 
@@ -40,7 +40,7 @@ export class TimeoutError extends Error {
 
 /**
  * Wrap a promise with a timeout
- * 
+ *
  * @param {Promise|Function} promiseOrFn - Promise or async function to wrap
  * @param {number} timeoutMs - Timeout in milliseconds
  * @param {Object} [options] - Additional options
@@ -63,11 +63,13 @@ export async function withTimeout(promiseOrFn, timeoutMs, options = {}) {
             if (abortController) {
                 abortController.abort();
             }
-            reject(new TimeoutError(
-                `Operation${operation ? ` '${operation}'` : ''} timed out after ${timeoutMs}ms`,
-                timeoutMs,
-                operation
-            ));
+            reject(
+                new TimeoutError(
+                    `Operation${operation ? ` '${operation}'` : ''} timed out after ${timeoutMs}ms`,
+                    timeoutMs,
+                    operation
+                )
+            );
         }, timeoutMs);
     });
 
@@ -90,10 +92,10 @@ export async function withTimeout(promiseOrFn, timeoutMs, options = {}) {
 
 /**
  * Wrap an operation with progressive timeout escalation
- * 
+ *
  * Tries the operation multiple times with increasing timeouts,
  * useful for operations that may succeed with more time.
- * 
+ *
  * @param {Function} operationFn - Async function to execute (called fresh each attempt)
  * @param {Object} [options] - Configuration options
  * @param {number[]} [options.timeouts] - Array of timeout durations in ms (default: [5000, 15000, 30000])
@@ -105,13 +107,7 @@ export async function withTimeout(promiseOrFn, timeoutMs, options = {}) {
  * @throws {TimeoutError} If all attempts timeout and no fallback provided
  */
 export async function withProgressiveTimeout(operationFn, options = {}) {
-    const {
-        timeouts = [5000, 15000, 30000],
-        fallback,
-        operation,
-        onAttempt,
-        onRetry
-    } = options;
+    const { timeouts = [5000, 15000, 30000], fallback, operation, onAttempt, onRetry } = options;
 
     let lastError;
 
@@ -122,11 +118,12 @@ export async function withProgressiveTimeout(operationFn, options = {}) {
             onAttempt?.(attempt + 1, timeoutMs);
 
             if (attempt > 0) {
-                console.log(`[TimeoutWrapper] Attempt ${attempt + 1}/${timeouts.length} with ${timeoutMs}ms timeout`);
+                console.log(
+                    `[TimeoutWrapper] Attempt ${attempt + 1}/${timeouts.length} with ${timeoutMs}ms timeout`
+                );
             }
 
             return await withTimeout(operationFn, timeoutMs, { operation });
-
         } catch (error) {
             lastError = error;
 
@@ -155,9 +152,9 @@ export async function withProgressiveTimeout(operationFn, options = {}) {
 
 /**
  * Create a timeout-wrapped version of an async function
- * 
+ *
  * Useful for creating timeout-aware API clients.
- * 
+ *
  * @param {Function} fn - Async function to wrap
  * @param {number} timeoutMs - Default timeout in milliseconds
  * @param {Object} [options] - Default options for withTimeout
@@ -175,20 +172,19 @@ export function createTimeoutWrapper(fn, timeoutMs, options = {}) {
             fnArgs = args.slice(0, -1);
         }
 
-        return withTimeout(
-            () => fn(...fnArgs),
-            timeout,
-            { ...options, operation: fn.name || 'wrapped function' }
-        );
+        return withTimeout(() => fn(...fnArgs), timeout, {
+            ...options,
+            operation: fn.name || 'wrapped function',
+        });
     };
 }
 
 /**
  * Race multiple operations with individual timeouts
- * 
+ *
  * Returns the first operation to complete successfully.
  * Useful for fallback chains (try fast operation, fall back to slower one).
- * 
+ *
  * @param {Array<{fn: Function, timeout: number, name?: string}>} operations - Operations to race
  * @returns {Promise<{result: *, operation: string}>} First successful result with operation name
  * @throws {Error} If all operations fail
@@ -216,7 +212,7 @@ export async function raceWithTimeouts(operations) {
 
 /**
  * Create an AbortController that auto-aborts after timeout
- * 
+ *
  * @param {number} timeoutMs - Timeout in milliseconds
  * @returns {{controller: AbortController, cleanup: Function}} Controller and cleanup function
  */
@@ -226,13 +222,13 @@ export function createTimeoutAbortController(timeoutMs) {
 
     return {
         controller,
-        cleanup: () => clearTimeout(timeoutId)
+        cleanup: () => clearTimeout(timeoutId),
     };
 }
 
 /**
  * Sleep utility
- * 
+ *
  * @param {number} ms - Milliseconds to sleep
  * @returns {Promise<void>}
  */
@@ -251,8 +247,7 @@ export const TimeoutWrapper = {
     createTimeoutWrapper,
     raceWithTimeouts,
     createTimeoutAbortController,
-    sleep
+    sleep,
 };
-
 
 console.log('[TimeoutWrapper] Module loaded');

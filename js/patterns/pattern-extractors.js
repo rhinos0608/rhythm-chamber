@@ -31,11 +31,12 @@ export function detectComfortDiscoveryRatio(streams) {
         isComfortCurator: ratio > 50,
         isDiscoveryJunkie: ratio < 10,
         signal: ratio > 50 ? 'comfort' : ratio < 10 ? 'discovery' : 'balanced',
-        description: ratio > 50
-            ? `You average ${Math.round(ratio)} plays per artist — you know what you love`
-            : ratio < 10
-                ? `Only ${Math.round(ratio)} plays per artist — always seeking new sounds`
-                : `${Math.round(ratio)} plays per artist — balanced explorer`
+        description:
+            ratio > 50
+                ? `You average ${Math.round(ratio)} plays per artist — you know what you love`
+                : ratio < 10
+                    ? `Only ${Math.round(ratio)} plays per artist — always seeking new sounds`
+                    : `${Math.round(ratio)} plays per artist — balanced explorer`,
     };
 }
 
@@ -61,7 +62,7 @@ export function detectEras(streams, chunks) {
         start: weeklyChunks[0].startDate,
         end: weeklyChunks[0].startDate,
         topArtists: weeklyChunks[0].topArtists || [],
-        weeks: 1
+        weeks: 1,
     };
 
     for (let i = 1; i < weeklyChunks.length; i++) {
@@ -83,7 +84,7 @@ export function detectEras(streams, chunks) {
                 start: curr.startDate,
                 end: curr.startDate,
                 topArtists: curr.topArtists || [],
-                weeks: 1
+                weeks: 1,
             };
         } else {
             currentEra.end = curr.startDate;
@@ -100,11 +101,12 @@ export function detectEras(streams, chunks) {
         eras,
         hasEras: eras.length >= 3,
         eraCount: eras.length,
-        description: eras.length >= 3
-            ? `${eras.length} distinct listening eras detected — you mark time through sound`
-            : eras.length > 0
-                ? `${eras.length} listening phases found`
-                : 'Consistent listening taste over time'
+        description:
+            eras.length >= 3
+                ? `${eras.length} distinct listening eras detected — you mark time through sound`
+                : eras.length > 0
+                    ? `${eras.length} listening phases found`
+                    : 'Consistent listening taste over time',
     };
 }
 
@@ -121,14 +123,28 @@ export function detectEras(streams, chunks) {
  */
 export function detectGhostedArtists(streams) {
     if (!streams || streams.length === 0) {
-        return { ghosted: [], activeUntilEnd: [], hasGhosted: false, count: 0, activeCount: 0, description: null };
+        return {
+            ghosted: [],
+            activeUntilEnd: [],
+            hasGhosted: false,
+            count: 0,
+            activeCount: 0,
+            description: null,
+        };
     }
 
     // Filter streams to only those with valid timestamps
     const validStreams = streams.filter(s => s && s.playedAt && !isNaN(new Date(s.playedAt)));
 
     if (validStreams.length === 0) {
-        return { ghosted: [], activeUntilEnd: [], hasGhosted: false, count: 0, activeCount: 0, description: null };
+        return {
+            ghosted: [],
+            activeUntilEnd: [],
+            hasGhosted: false,
+            count: 0,
+            activeCount: 0,
+            description: null,
+        };
     }
 
     // Find the actual end date of the dataset
@@ -155,7 +171,7 @@ export function detectGhostedArtists(streams) {
                 firstPlay: date,
                 lastPlay: date,
                 peakMonth: null,
-                peakPlays: 0
+                peakPlays: 0,
             };
         }
 
@@ -179,7 +195,7 @@ export function detectGhostedArtists(streams) {
                 artist,
                 totalPlays: data.plays,
                 lastPlayed: data.lastPlay.toISOString().split('T')[0],
-                daysSince: Math.floor((now - data.lastPlay) / (24 * 60 * 60 * 1000))
+                daysSince: Math.floor((now - data.lastPlay) / (24 * 60 * 60 * 1000)),
             });
         } else if (data.plays >= 100 && data.lastPlay < oneYearAgo) {
             // True ghosted artist
@@ -187,7 +203,7 @@ export function detectGhostedArtists(streams) {
                 artist,
                 totalPlays: data.plays,
                 lastPlayed: data.lastPlay.toISOString().split('T')[0],
-                daysSince: Math.floor((now - data.lastPlay) / (24 * 60 * 60 * 1000))
+                daysSince: Math.floor((now - data.lastPlay) / (24 * 60 * 60 * 1000)),
             });
         }
     }
@@ -213,7 +229,7 @@ export function detectGhostedArtists(streams) {
         count: ghosted.length,
         activeCount: activeUntilEnd.length,
         description,
-        datasetEndDate: datasetEndDate.toISOString().split('T')[0]
+        datasetEndDate: datasetEndDate.toISOString().split('T')[0],
     };
 }
 
@@ -252,9 +268,8 @@ export function detectDiscoveryExplosions(streams, chunks) {
     }
 
     const rates = Object.values(monthlyNewArtists);
-    const median = rates.length > 0
-        ? rates.sort((a, b) => a - b)[Math.floor(rates.length / 2)]
-        : 10;
+    const median =
+        rates.length > 0 ? rates.sort((a, b) => a - b)[Math.floor(rates.length / 2)] : 10;
 
     const explosions = [];
     for (const [month, count] of Object.entries(monthlyNewArtists)) {
@@ -262,7 +277,7 @@ export function detectDiscoveryExplosions(streams, chunks) {
             explosions.push({
                 month,
                 newArtists: count,
-                multiplier: Math.round(count / median * 10) / 10
+                multiplier: Math.round((count / median) * 10) / 10,
             });
         }
     }
@@ -273,8 +288,9 @@ export function detectDiscoveryExplosions(streams, chunks) {
         explosions: explosions?.slice(0, 3) || [],
         hasExplosions: explosions.length > 0,
         baselineRate: median,
-        description: explosions.length > 0
-            ? `Discovery explosion${explosions.length > 1 ? 's' : ''} detected — ${explosions[0].newArtists} new artists in ${explosions[0].month}`
-            : null
+        description:
+            explosions.length > 0
+                ? `Discovery explosion${explosions.length > 1 ? 's' : ''} detected — ${explosions[0].newArtists} new artists in ${explosions[0].month}`
+                : null,
     };
 }

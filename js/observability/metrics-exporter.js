@@ -44,7 +44,7 @@ export const ExportFormat = Object.freeze({
     CSV: 'csv',
     PROMETHEUS: 'prometheus',
     INFLUXDB: 'influxdb',
-    STATSD: 'statsd'
+    STATSD: 'statsd',
 });
 
 /**
@@ -57,7 +57,7 @@ export const ScheduleType = Object.freeze({
     HOURLY: 'hourly',
     DAILY: 'daily',
     WEEKLY: 'weekly',
-    MONTHLY: 'monthly'
+    MONTHLY: 'monthly',
 });
 
 /**
@@ -69,7 +69,7 @@ export const ExternalService = Object.freeze({
     DATADOG: 'datadog',
     NEWRELIC: 'newrelic',
     PROMETHEUS_PUSHGATEWAY: 'prometheus_pushgateway',
-    CUSTOM_ENDPOINT: 'custom_endpoint'
+    CUSTOM_ENDPOINT: 'custom_endpoint',
 });
 
 // ============================================================================
@@ -278,7 +278,9 @@ export class MetricsExporter {
                 });
 
                 this._scheduledJobs = new Map(revivedJobs);
-                this._externalServices = await this._decryptExternalServices(config.externalServices || []);
+                this._externalServices = await this._decryptExternalServices(
+                    config.externalServices || []
+                );
             }
         } catch (error) {
             console.warn('[MetricsExporter] Failed to load configuration:', error);
@@ -295,7 +297,7 @@ export class MetricsExporter {
 
             const config = {
                 scheduledJobs: Object.fromEntries(this._scheduledJobs),
-                externalServices: encryptedServices
+                externalServices: encryptedServices,
             };
             localStorage.setItem(this._storageKey, JSON.stringify(config));
         } catch (error) {
@@ -352,7 +354,6 @@ export class MetricsExporter {
             job.lastRun = new Date();
             job.nextRun = this._calculateNextRun(job.config.schedule);
             job.successCount++;
-
         } catch (error) {
             console.error(`[MetricsExporter] Job execution failed: ${job.name}`, error);
             job.failureCount++;
@@ -373,7 +374,7 @@ export class MetricsExporter {
             performance: {},
             webVitals: {},
             memory: {},
-            system: {}
+            system: {},
         };
 
         if (PerformanceProfiler) {
@@ -396,7 +397,7 @@ export class MetricsExporter {
             cookieEnabled: navigator.cookieEnabled,
             onLine: navigator.onLine,
             deviceMemory: navigator.deviceMemory,
-            hardwareConcurrency: navigator.hardwareConcurrency
+            hardwareConcurrency: navigator.hardwareConcurrency,
         };
 
         return metrics;
@@ -425,10 +426,13 @@ export class MetricsExporter {
             try {
                 await this._strategies.pushExport(serviceConfig.endpoint, data, {
                     headers: serviceConfig.headers,
-                    timeout: serviceConfig.timeout
+                    timeout: serviceConfig.timeout,
                 });
             } catch (error) {
-                console.error(`[MetricsExporter] Failed to send to ${serviceConfig.service}:`, error);
+                console.error(
+                    `[MetricsExporter] Failed to send to ${serviceConfig.service}:`,
+                    error
+                );
             }
         }
     }
@@ -449,10 +453,11 @@ export class MetricsExporter {
                 return new Date(now.getTime() + 86400000);
             case ScheduleType.WEEKLY:
                 return new Date(now.getTime() + 604800000);
-            case ScheduleType.MONTHLY:
+            case ScheduleType.MONTHLY: {
                 const nextMonth = new Date(now);
                 nextMonth.setMonth(nextMonth.getMonth() + 1);
                 return nextMonth;
+            }
             default:
                 return now;
         }
@@ -478,7 +483,9 @@ export class MetricsExporter {
                 if (service.credentials && Object.keys(service.credentials).length > 0) {
                     const key = await this._deriveEncryptionKey();
                     const iv = crypto.getRandomValues(new Uint8Array(12));
-                    const encodedCredentials = new TextEncoder().encode(JSON.stringify(service.credentials));
+                    const encodedCredentials = new TextEncoder().encode(
+                        JSON.stringify(service.credentials)
+                    );
 
                     const encryptedData = await crypto.subtle.encrypt(
                         { name: 'AES-GCM', iv },
@@ -489,7 +496,7 @@ export class MetricsExporter {
                     encryptedService.credentials = {
                         encrypted: Array.from(new Uint8Array(encryptedData)),
                         iv: Array.from(iv),
-                        algorithm: 'AES-GCM'
+                        algorithm: 'AES-GCM',
                     };
                 }
 
@@ -576,7 +583,7 @@ export class MetricsExporter {
                 name: 'PBKDF2',
                 salt: new TextEncoder().encode(salt),
                 iterations,
-                hash: 'SHA-256'
+                hash: 'SHA-256',
             },
             passwordKey,
             { name: 'AES-GCM', length: 256 },
@@ -691,7 +698,7 @@ export class MetricsExporter {
             createdAt: new Date().toISOString(),
             nextRun: nextRun.toISOString(),
             lastRun: null,
-            runCount: 0
+            runCount: 0,
         };
 
         this._scheduledJobs.set(jobId, job);
@@ -781,7 +788,7 @@ export class MetricsExporter {
         this._externalServices.push({
             ...serviceConfig,
             addedAt: new Date().toISOString(),
-            lastUsed: null
+            lastUsed: null,
         });
 
         await this._saveConfiguration();
@@ -849,7 +856,7 @@ export class MetricsExporter {
                 series.push({
                     metric: key,
                     points: [[Date.now(), value]],
-                    type: 'gauge'
+                    type: 'gauge',
                 });
             }
         }
@@ -874,7 +881,7 @@ export class MetricsExporter {
                     name: key,
                     value: value,
                     timestamp: Date.now(),
-                    'interval.type': 'cumulative'
+                    'interval.type': 'cumulative',
                 });
             }
         }
@@ -914,20 +921,24 @@ export async function getMetricsExporter() {
     }
 
     if (initFailed) {
-        throw new Error('MetricsExporter initialization previously failed. Call resetMetricsExporter() to retry.');
+        throw new Error(
+            'MetricsExporter initialization previously failed. Call resetMetricsExporter() to retry.'
+        );
     }
 
     if (MetricsExporterInitPromise) {
         return MetricsExporterInitPromise;
     }
 
-    MetricsExporterInitPromise = MetricsExporter.create().then(instance => {
-        MetricsExporterSingleton = instance;
-        return instance;
-    }).catch(error => {
-        initFailed = true;
-        throw error;
-    });
+    MetricsExporterInitPromise = MetricsExporter.create()
+        .then(instance => {
+            MetricsExporterSingleton = instance;
+            return instance;
+        })
+        .catch(error => {
+            initFailed = true;
+            throw error;
+        });
 
     return MetricsExporterInitPromise;
 }

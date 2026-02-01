@@ -39,18 +39,18 @@ export const DEFAULT_CONFIG = {
     ewmaAlpha: 0.2,
 
     // System load thresholds
-    cpuThresholdHigh: 80,         // CPU % considered high load
-    cpuThresholdLow: 50,          // CPU % considered low load
-    memoryThresholdHigh: 90,      // Memory % considered high load
-    latencyThresholdHigh: 100,    // Event processing latency (ms) considered high
+    cpuThresholdHigh: 80, // CPU % considered high load
+    cpuThresholdLow: 50, // CPU % considered low load
+    memoryThresholdHigh: 90, // Memory % considered high load
+    latencyThresholdHigh: 100, // Event processing latency (ms) considered high
 
     // Rate adjustment factors
-    rateDecreaseFactor: 0.5,      // Decrease rate by 50% on high load
-    rateIncreaseFactor: 1.1,      // Increase rate by 10% on low load
+    rateDecreaseFactor: 0.5, // Decrease rate by 50% on high load
+    rateIncreaseFactor: 1.1, // Increase rate by 10% on low load
 
     // Sampling
-    sampleWindowMs: 1000,         // Window for rate calculation
-    performanceSampleSize: 50     // Number of latency samples to track
+    sampleWindowMs: 1000, // Window for rate calculation
+    performanceSampleSize: 50, // Number of latency samples to track
 };
 
 // ==========================================
@@ -84,7 +84,7 @@ const systemMetrics = {
     cpuUsage: 0,
     memoryUsage: 0,
     eventLatency: 0,
-    lastUpdate: Date.now()
+    lastUpdate: Date.now(),
 };
 
 // ==========================================
@@ -110,12 +110,14 @@ export function createRateLimiter(name, config = {}) {
             windowStart: Date.now(),
             latencySamples: [],
             lastAdjustment: Date.now(),
-            config: cfg
+            config: cfg,
         });
 
         const DEBUG = globalThis.DEBUG ?? false;
         if (DEBUG) {
-            console.log(`[AdaptiveRateLimiter] Rate limiter created: ${name} (max: ${cfg.maxEventsPerSecond} events/sec)`);
+            console.log(
+                `[AdaptiveRateLimiter] Rate limiter created: ${name} (max: ${cfg.maxEventsPerSecond} events/sec)`
+            );
         }
     }
 
@@ -152,14 +154,14 @@ export function checkLimit(name) {
         return {
             allowed: false,
             currentRate: limiter.currentRate,
-            reason: `Rate limit exceeded (${limiter.eventCount}/${limiter.currentRate} events/sec)`
+            reason: `Rate limit exceeded (${limiter.eventCount}/${limiter.currentRate} events/sec)`,
         };
     }
 
     limiter.eventCount++;
     return {
         allowed: true,
-        currentRate: limiter.currentRate
+        currentRate: limiter.currentRate,
     };
 }
 
@@ -197,20 +199,21 @@ function adjustRate(limiter, eventBus = defaultEventBus) {
     }
 
     // Calculate average latency
-    const avgLatency = limiter.latencySamples.length > 0
-        ? limiter.latencySamples.reduce((a, b) => a + b, 0) / limiter.latencySamples.length
-        : 0;
+    const avgLatency =
+        limiter.latencySamples.length > 0
+            ? limiter.latencySamples.reduce((a, b) => a + b, 0) / limiter.latencySamples.length
+            : 0;
 
     // Determine system load state
     const highLoad =
-        (systemMetrics.cpuUsage >= cfg.cpuThresholdHigh) ||
-        (systemMetrics.memoryUsage >= cfg.memoryThresholdHigh) ||
-        (avgLatency >= cfg.latencyThresholdHigh);
+        systemMetrics.cpuUsage >= cfg.cpuThresholdHigh ||
+        systemMetrics.memoryUsage >= cfg.memoryThresholdHigh ||
+        avgLatency >= cfg.latencyThresholdHigh;
 
     const lowLoad =
-        (systemMetrics.cpuUsage <= cfg.cpuThresholdLow) &&
-        (systemMetrics.memoryUsage < cfg.memoryThresholdHigh) &&
-        (avgLatency < cfg.latencyThresholdHigh);
+        systemMetrics.cpuUsage <= cfg.cpuThresholdLow &&
+        systemMetrics.memoryUsage < cfg.memoryThresholdHigh &&
+        avgLatency < cfg.latencyThresholdHigh;
 
     // Calculate target rate using EWMA
     if (highLoad) {
@@ -239,8 +242,8 @@ function adjustRate(limiter, eventBus = defaultEventBus) {
         if (DEBUG) {
             console.log(
                 `[AdaptiveRateLimiter] ${limiter.name}: Rate ${action} ` +
-                `${oldRate} → ${limiter.currentRate} events/sec ` +
-                `(target: ${Math.round(limiter.targetRate)}, avg latency: ${Math.round(avgLatency)}ms)`
+                    `${oldRate} → ${limiter.currentRate} events/sec ` +
+                    `(target: ${Math.round(limiter.targetRate)}, avg latency: ${Math.round(avgLatency)}ms)`
             );
         }
 
@@ -253,8 +256,8 @@ function adjustRate(limiter, eventBus = defaultEventBus) {
             avgLatency,
             systemLoad: {
                 cpu: systemMetrics.cpuUsage,
-                memory: systemMetrics.memoryUsage
-            }
+                memory: systemMetrics.memoryUsage,
+            },
         });
     }
 }
@@ -291,13 +294,14 @@ export function getStatus(name) {
     if (!limiter) {
         return {
             name,
-            exists: false
+            exists: false,
         };
     }
 
-    const avgLatency = limiter.latencySamples.length > 0
-        ? limiter.latencySamples.reduce((a, b) => a + b, 0) / limiter.latencySamples.length
-        : 0;
+    const avgLatency =
+        limiter.latencySamples.length > 0
+            ? limiter.latencySamples.reduce((a, b) => a + b, 0) / limiter.latencySamples.length
+            : 0;
 
     return {
         name,
@@ -307,7 +311,7 @@ export function getStatus(name) {
         utilization: (limiter.eventCount / limiter.currentRate) * 100,
         avgLatency: Math.round(avgLatency),
         sampleCount: limiter.latencySamples.length,
-        config: limiter.config
+        config: limiter.config,
     };
 }
 
@@ -377,7 +381,7 @@ export default {
     getAllStatus,
     reset,
     remove,
-    getSystemMetrics
+    getSystemMetrics,
 };
 
 const DEBUG = globalThis.DEBUG ?? false;

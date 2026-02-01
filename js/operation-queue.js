@@ -9,7 +9,7 @@
 import { OperationLock } from './operation-lock.js';
 import { LockAcquisitionError } from './operation-lock-errors.js';
 
-const normalizeBlockers = (blockedBy) => {
+const normalizeBlockers = blockedBy => {
     if (!Array.isArray(blockedBy)) return [];
     return [...new Set(blockedBy.filter(Boolean))].sort();
 };
@@ -30,7 +30,7 @@ const PRIORITY = {
     LOW: 0,
     NORMAL: 1,
     HIGH: 2,
-    CRITICAL: 3
+    CRITICAL: 3,
 };
 
 /**
@@ -42,7 +42,7 @@ const STATUS = {
     PROCESSING: 'processing',
     COMPLETED: 'completed',
     FAILED: 'failed',
-    CANCELLED: 'cancelled'
+    CANCELLED: 'cancelled',
 };
 
 /**
@@ -82,10 +82,7 @@ class QueuedOperation {
 
         try {
             // Use OperationLock with timeout
-            const lockId = await OperationLock.acquireWithTimeout(
-                this.operationName,
-                this.timeout
-            );
+            const lockId = await OperationLock.acquireWithTimeout(this.operationName, this.timeout);
 
             try {
                 this.result = await this.operationFn();
@@ -114,8 +111,10 @@ class QueuedOperation {
      * @returns {boolean}
      */
     canRetry() {
-        return this.attempts < this.maxAttempts &&
-            (this.status === STATUS.PENDING || this.status === STATUS.FAILED);
+        return (
+            this.attempts < this.maxAttempts &&
+            (this.status === STATUS.PENDING || this.status === STATUS.FAILED)
+        );
     }
 
     /**
@@ -144,7 +143,7 @@ class OperationQueue {
             processing: [],
             completed: [],
             failed: [],
-            cancelled: []
+            cancelled: [],
         };
         // MEMORY LEAK FIX #4: Track listener registrations to prevent duplicates
         // Uses WeakMap to avoid memory leaks - entries are automatically garbage collected
@@ -221,21 +220,29 @@ class OperationQueue {
                 const history = blockedHistory.get(operation.operationName) || [];
                 history.push({
                     blockedBy: check.blockedBy,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
                 });
                 blockedHistory.set(operation.operationName, history);
 
                 // Check for circular wait: if we've been blocked by the same operations
                 // multiple times, we may be in a deadlock scenario
                 if (history.length > 3) {
-                    const recentBlocks = history.slice(-3).map(entry => normalizeBlockers(entry.blockedBy));
+                    const recentBlocks = history
+                        .slice(-3)
+                        .map(entry => normalizeBlockers(entry.blockedBy));
                     const currentBlockers = normalizeBlockers(check.blockedBy);
-                    const sameBlockers = recentBlocks.every(blockers => blockersEqual(blockers, currentBlockers));
+                    const sameBlockers = recentBlocks.every(blockers =>
+                        blockersEqual(blockers, currentBlockers)
+                    );
 
                     if (sameBlockers) {
-                        console.error(`[OperationQueue] Circular wait detected for '${operation.operationName}' - blocked by: ${currentBlockers.join(', ')}`);
+                        console.error(
+                            `[OperationQueue] Circular wait detected for '${operation.operationName}' - blocked by: ${currentBlockers.join(', ')}`
+                        );
                         operation.status = STATUS.FAILED;
-                        operation.error = new Error(`Deadlock detected: circular wait on locks ${currentBlockers.join(', ')}`);
+                        operation.error = new Error(
+                            `Deadlock detected: circular wait on locks ${currentBlockers.join(', ')}`
+                        );
                         this.queue.shift();
                         operation.reject(operation.error);
                         this.emit('failed', operation);
@@ -247,9 +254,13 @@ class OperationQueue {
 
                 // Fail if exceeded max retries to avoid indefinite blocking
                 if (preCheckRetries >= MAX_PRE_CHECK_RETRIES) {
-                    console.error(`[OperationQueue] Operation '${operation.operationName}' exceeded max pre-check retries (${MAX_PRE_CHECK_RETRIES})`);
+                    console.error(
+                        `[OperationQueue] Operation '${operation.operationName}' exceeded max pre-check retries (${MAX_PRE_CHECK_RETRIES})`
+                    );
                     operation.status = STATUS.FAILED;
-                    operation.error = new Error(`Lock pre-check timeout after ${MAX_PRE_CHECK_RETRIES} retries`);
+                    operation.error = new Error(
+                        `Lock pre-check timeout after ${MAX_PRE_CHECK_RETRIES} retries`
+                    );
                     this.queue.shift();
                     operation.reject(operation.error);
                     this.emit('failed', operation);
@@ -260,7 +271,9 @@ class OperationQueue {
 
                 // Cannot acquire lock, wait and retry
                 const waitTime = operation.retryDelay;
-                console.log(`[OperationQueue] Waiting ${waitTime}ms for lock on '${operation.operationName}' (blocked by: ${check.blockedBy.join(', ')}) [retry ${preCheckRetries}/${MAX_PRE_CHECK_RETRIES}]`);
+                console.log(
+                    `[OperationQueue] Waiting ${waitTime}ms for lock on '${operation.operationName}' (blocked by: ${check.blockedBy.join(', ')}) [retry ${preCheckRetries}/${MAX_PRE_CHECK_RETRIES}]`
+                );
 
                 // Wait before retry
                 await new Promise(resolve => setTimeout(resolve, waitTime));
@@ -295,10 +308,11 @@ class OperationQueue {
                 // Resolve promise
                 operation.resolve(result);
                 this.emit('completed', operation);
-
             } catch (error) {
                 if (operation.canRetry()) {
-                    console.warn(`[OperationQueue] Operation '${operation.operationName}' failed (attempt ${operation.attempts}/${operation.maxAttempts}), will retry`);
+                    console.warn(
+                        `[OperationQueue] Operation '${operation.operationName}' failed (attempt ${operation.attempts}/${operation.maxAttempts}), will retry`
+                    );
 
                     // Wait before retry
                     await new Promise(resolve => setTimeout(resolve, operation.retryDelay));
@@ -311,7 +325,10 @@ class OperationQueue {
                     this.queue.shift();
                     operation.reject(error);
                     this.emit('failed', operation);
-                    console.error(`[OperationQueue] Operation '${operation.operationName}' failed permanently:`, error);
+                    console.error(
+                        `[OperationQueue] Operation '${operation.operationName}' failed permanently:`,
+                        error
+                    );
                 }
             }
         }
@@ -367,7 +384,7 @@ class OperationQueue {
             pending,
             processing,
             failed,
-            isProcessing: this.processing
+            isProcessing: this.processing,
         };
     }
 
@@ -384,7 +401,7 @@ class OperationQueue {
             attempts: op.attempts,
             maxAttempts: op.maxAttempts,
             createdAt: op.createdAt,
-            error: op.error ? op.error.message : null
+            error: op.error ? op.error.message : null,
         }));
     }
 
@@ -397,12 +414,12 @@ class OperationQueue {
      */
     clearCompleted() {
         const initialLength = this.queue.length;
-        const clearedCount = this.queue.filter(op =>
-            op.status === STATUS.COMPLETED || op.status === STATUS.FAILED
+        const clearedCount = this.queue.filter(
+            op => op.status === STATUS.COMPLETED || op.status === STATUS.FAILED
         ).length;
 
-        this.queue = this.queue.filter(op =>
-            op.status === STATUS.PENDING || op.status === STATUS.PROCESSING
+        this.queue = this.queue.filter(
+            op => op.status === STATUS.PENDING || op.status === STATUS.PROCESSING
         );
 
         // Clean up listeners for completed operations
@@ -434,7 +451,7 @@ class OperationQueue {
             pending: 0,
             processing: 0,
             cancelled: 0,
-            listenersCleared: 0
+            listenersCleared: 0,
         };
 
         // Cancel all pending operations
@@ -451,7 +468,10 @@ class OperationQueue {
 
         // Clear all event listeners to prevent memory leaks
         const listenerCounts = this.clearAllListeners();
-        stats.listenersCleared = Object.values(listenerCounts).reduce((sum, count) => sum + count, 0);
+        stats.listenersCleared = Object.values(listenerCounts).reduce(
+            (sum, count) => sum + count,
+            0
+        );
 
         // Clear the queue
         stats.cancelled = this.queue.length;
@@ -474,7 +494,7 @@ class OperationQueue {
                 try {
                     callback(operation);
                 } catch (error) {
-                    console.error(`[OperationQueue] Event listener error:`, error);
+                    console.error('[OperationQueue] Event listener error:', error);
                 }
             });
         }
@@ -497,7 +517,9 @@ class OperationQueue {
         }
 
         if (typeof callback !== 'function') {
-            console.error(`[OperationQueue] Event listener must be a function, got: ${typeof callback}`);
+            console.error(
+                `[OperationQueue] Event listener must be a function, got: ${typeof callback}`
+            );
             return false;
         }
 
@@ -630,7 +652,7 @@ const OperationQueueModule = {
     OperationQueue,
     QueuedOperation,
     PRIORITY,
-    STATUS
+    STATUS,
 };
 
 // ES Module exports

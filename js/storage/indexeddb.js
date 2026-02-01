@@ -31,39 +31,25 @@ import {
     getConnectionStatus,
     isUsingFallback,
     getStorageBackend,
-    activateFallback
+    activateFallback,
 } from './indexeddb/connection.js';
 
-import {
-    get,
-    getAll,
-    count
-} from './indexeddb/operations/read.js';
+import { get, getAll, count } from './indexeddb/operations/read.js';
 
-import {
-    put,
-    clear,
-    deleteRecord
-} from './indexeddb/operations/write.js';
+import { put, clear, deleteRecord } from './indexeddb/operations/write.js';
 
-import {
-    getAllByIndex,
-    atomicUpdate,
-    transaction
-} from './indexeddb/indexing.js';
+import { getAllByIndex, atomicUpdate, transaction } from './indexeddb/indexing.js';
 
-import {
-    detectWriteConflict
-} from './indexeddb/conflict.js';
+import { detectWriteConflict } from './indexeddb/conflict.js';
 
-import {
-    INDEXEDDB_NAME,
-    INDEXEDDB_VERSION,
-    INDEXEDDB_STORES
-} from './indexeddb/config.js';
+import { INDEXEDDB_NAME, INDEXEDDB_VERSION, INDEXEDDB_STORES } from './indexeddb/config.js';
 
 // Re-export constants for backward compatibility
-export { INDEXEDDB_NAME as DB_NAME, INDEXEDDB_VERSION as DB_VERSION, INDEXEDDB_STORES as STORES } from './indexeddb/config.js';
+export {
+    INDEXEDDB_NAME as DB_NAME,
+    INDEXEDDB_VERSION as DB_VERSION,
+    INDEXEDDB_STORES as STORES,
+} from './indexeddb/config.js';
 
 // Export IndexedDBCore object for grouped exports (backward compatibility)
 export const IndexedDBCore = {
@@ -97,7 +83,7 @@ export const IndexedDBCore = {
     atomicUpdate,
 
     // Conflict detection
-    detectWriteConflict
+    detectWriteConflict,
 };
 
 console.log('[IndexedDBCore] Core module loaded (refactored)');

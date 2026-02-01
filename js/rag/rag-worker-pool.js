@@ -65,7 +65,7 @@ function getWorker() {
         console.log('[RAGWorkerPool] EmbeddingWorker initialized');
 
         // Set up error handler for cleanup
-        embeddingWorker.onerror = (error) => {
+        embeddingWorker.onerror = error => {
             console.warn('[RAGWorkerPool] EmbeddingWorker error:', error.message);
             cleanup();
         };
@@ -146,7 +146,7 @@ async function execute(task, data, onProgress = () => {}) {
 
         // Set up message handler ONCE to prevent race conditions
         if (!worker._chunksHandlerSetup) {
-            worker.onmessage = (event) => {
+            worker.onmessage = event => {
                 const { type, requestId: rid, current, total, message, chunks } = event.data;
 
                 // CRITICAL FIX: Validate request timestamp to reject stale responses
@@ -163,7 +163,7 @@ async function execute(task, data, onProgress = () => {}) {
                             messageType: type,
                             responseAge: `${Math.round(responseAge / 1000)}s`,
                             maxAge: `${Math.round(MAX_RESPONSE_AGE_MS / 1000)}s`,
-                            reason: 'Response timestamp exceeds maximum allowed age'
+                            reason: 'Response timestamp exceeds maximum allowed age',
                         });
                         return;
                     }
@@ -173,10 +173,13 @@ async function execute(task, data, onProgress = () => {}) {
                 if (!pending) {
                     // Log late response for debugging
                     const now = Date.now();
-                    const age = requestIdParts.length >= 3 ? {
-                        extracted: requestIdParts[2],
-                        ageMs: now - parseInt(requestIdParts[2])
-                    } : { unknown: true };
+                    const age =
+                        requestIdParts.length >= 3
+                            ? {
+                                extracted: requestIdParts[2],
+                                ageMs: now - parseInt(requestIdParts[2]),
+                            }
+                            : { unknown: true };
 
                     console.warn('[RAGWorkerPool] LATE RESPONSE DETECTED:', {
                         requestId: rid,
@@ -184,7 +187,7 @@ async function execute(task, data, onProgress = () => {}) {
                         timestamp: now,
                         requestAge: age,
                         pendingRequests: Array.from(pendingWorkerRequests.keys()),
-                        reason: 'Request already completed, timed out, or cleaned up'
+                        reason: 'Request already completed, timed out, or cleaned up',
                     });
                     return;
                 }
@@ -211,9 +214,12 @@ async function execute(task, data, onProgress = () => {}) {
         // Capture the original error handler before assigning new one
         const originalOnError = worker.onerror;
 
-        worker.onerror = async (error) => {
+        worker.onerror = async error => {
             clearTimeout(timeoutId);
-            console.warn('[RAGWorkerPool] Worker error, falling back to async main thread:', error.message);
+            console.warn(
+                '[RAGWorkerPool] Worker error, falling back to async main thread:',
+                error.message
+            );
 
             // FIX: Remove the pending request from the map BEFORE resolving/rejecting
             // This prevents memory leaks and allows proper cleanup
@@ -234,7 +240,10 @@ async function execute(task, data, onProgress = () => {}) {
                 try {
                     originalOnError.call(worker, error);
                 } catch (handlerError) {
-                    console.warn('[RAGWorkerPool] Original error handler failed:', handlerError.message);
+                    console.warn(
+                        '[RAGWorkerPool] Original error handler failed:',
+                        handlerError.message
+                    );
                 }
             }
         };
@@ -287,7 +296,7 @@ function getStatus() {
     return {
         workerAvailable: !!embeddingWorker,
         pendingRequests: pendingWorkerRequests.size,
-        workerUrl: WORKER_URL
+        workerUrl: WORKER_URL,
     };
 }
 
@@ -304,7 +313,7 @@ const RAGWorkerPool = {
     cleanup,
 
     // Status
-    getStatus
+    getStatus,
 };
 
 export { RAGWorkerPool };

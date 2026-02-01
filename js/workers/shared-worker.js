@@ -1,21 +1,21 @@
 /**
  * Shared Worker for Cross-Tab Coordination
- * 
+ *
  * This SharedWorker acts as a central message hub when BroadcastChannel is unavailable.
  * It maintains connections to all open tabs and routes messages between them.
- * 
+ *
  * Features:
  * - Tab registration and tracking
  * - Message broadcast to all tabs except sender
  * - Tab disconnect detection
  * - Leader election coordination
- * 
+ *
  * @module workers/shared-worker
  */
 
 import { WORKER_TIMEOUTS } from '../config/timeouts.js';
 
-'use strict';
+('use strict');
 
 // ==========================================
 // State
@@ -63,12 +63,12 @@ self.onconnect = function (event) {
     connectedPorts.set(portId, port);
 
     // Set up message handler for this port
-    port.onmessage = (messageEvent) => {
+    port.onmessage = messageEvent => {
         handleMessage(portId, port, messageEvent.data);
     };
 
     // Set up error handler
-    port.onmessageerror = (error) => {
+    port.onmessageerror = error => {
         console.error(`[SharedWorker] Message error on ${portId}:`, error);
     };
 
@@ -77,7 +77,7 @@ self.onconnect = function (event) {
         type: 'CONNECTED',
         portId,
         tabCount: connectedPorts.size,
-        currentLeader
+        currentLeader,
     });
 
     // Start the port
@@ -145,22 +145,25 @@ function handleRegister(portId, port, tabId) {
     tabMetadata.set(portId, {
         tabId,
         connectedAt: Date.now(),
-        lastHeartbeat: Date.now()
+        lastHeartbeat: Date.now(),
     });
 
     // Notify all tabs of new connection
-    broadcastToAll({
-        type: 'TAB_CONNECTED',
-        tabId,
-        tabCount: connectedPorts.size
-    }, portId);
+    broadcastToAll(
+        {
+            type: 'TAB_CONNECTED',
+            tabId,
+            tabCount: connectedPorts.size,
+        },
+        portId
+    );
 
     // Send current state to new tab
     port.postMessage({
         type: 'STATE_SYNC',
         tabCount: connectedPorts.size,
         currentLeader,
-        connectedTabs: Array.from(tabMetadata.values()).map(m => m.tabId)
+        connectedTabs: Array.from(tabMetadata.values()).map(m => m.tabId),
     });
 }
 
@@ -192,7 +195,9 @@ function handleBroadcast(senderPortId, message) {
  * @param {string} [claimId] - Unique claim ID for ACK matching
  */
 function handleClaimPrimary(portId, tabId, claimId) {
-    console.log(`[SharedWorker] Tab ${tabId} claiming primary${claimId ? ` (claimId: ${claimId})` : ''}`);
+    console.log(
+        `[SharedWorker] Tab ${tabId} claiming primary${claimId ? ` (claimId: ${claimId})` : ''}`
+    );
 
     const port = connectedPorts.get(portId);
     if (!port) {
@@ -210,15 +215,18 @@ function handleClaimPrimary(portId, tabId, claimId) {
             type: 'LEADER_GRANTED',
             leaderId: tabId,
             claimId,
-            timestamp: Date.now()
+            timestamp: Date.now(),
         });
 
         // Then broadcast leadership change to all other tabs
-        broadcastToAll({
-            type: 'LEADER_ELECTED',
-            leaderId: tabId,
-            claimId
-        }, portId);  // Exclude the claimer from this broadcast
+        broadcastToAll(
+            {
+                type: 'LEADER_ELECTED',
+                leaderId: tabId,
+                claimId,
+            },
+            portId
+        ); // Exclude the claimer from this broadcast
     } else {
         // Conflict - notify claimer of current leader with ACK
         port.postMessage({
@@ -226,7 +234,7 @@ function handleClaimPrimary(portId, tabId, claimId) {
             currentLeader,
             reason: 'leader_exists',
             claimId,
-            timestamp: Date.now()
+            timestamp: Date.now(),
         });
     }
 }
@@ -244,7 +252,7 @@ function handleReleasePrimary(portId, tabId) {
         // Broadcast for re-election
         broadcastToAll({
             type: 'LEADER_RELEASED',
-            previousLeader: tabId
+            previousLeader: tabId,
         });
     }
 }
@@ -271,14 +279,14 @@ function handleDisconnect(portId, tabId) {
         broadcastToAll({
             type: 'LEADER_DISCONNECTED',
             previousLeader: disconnectedTabId,
-            tabCount: connectedPorts.size
+            tabCount: connectedPorts.size,
         });
     } else if (disconnectedTabId) {
         // Notify remaining tabs
         broadcastToAll({
             type: 'TAB_DISCONNECTED',
             tabId: disconnectedTabId,
-            tabCount: connectedPorts.size
+            tabCount: connectedPorts.size,
         });
     }
 }
@@ -344,7 +352,10 @@ function startCleanupInterval() {
         clearInterval(cleanupIntervalId);
     }
     // Run cleanup every 10 seconds (2x heartbeat interval)
-    cleanupIntervalId = setInterval(cleanupStaleConnections, WORKER_TIMEOUTS.HEARTBEAT_INTERVAL_MS * 2);
+    cleanupIntervalId = setInterval(
+        cleanupStaleConnections,
+        WORKER_TIMEOUTS.HEARTBEAT_INTERVAL_MS * 2
+    );
 }
 
 /**

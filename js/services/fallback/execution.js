@@ -69,7 +69,7 @@ export async function executeWithFallback(
                 success: false,
                 latencyMs: 0,
                 error: new Error('Provider blacklisted'),
-                timestamp: Date.now()
+                timestamp: Date.now(),
             });
             continue;
         }
@@ -89,17 +89,20 @@ export async function executeWithFallback(
                     success: true,
                     latencyMs: result.latencyMs,
                     error: null,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
                 });
 
-                performance.measure('provider-fallback-chain-success', 'provider-fallback-chain-start');
+                performance.measure(
+                    'provider-fallback-chain-success',
+                    'provider-fallback-chain-start'
+                );
 
                 return {
                     success: true,
                     provider: providerName,
                     attemptsCount: attempts.length,
                     attempts,
-                    response: result.response
+                    response: result.response,
                 };
             } else {
                 attempts.push({
@@ -107,25 +110,30 @@ export async function executeWithFallback(
                     success: false,
                     latencyMs: result.latencyMs,
                     error: result.error,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
                 });
 
-                console.error(`[ProviderFallbackChain] Provider ${providerName} failed:`, result.error?.message);
+                console.error(
+                    `[ProviderFallbackChain] Provider ${providerName} failed:`,
+                    result.error?.message
+                );
 
                 // Continue to next provider
                 continue;
             }
-
         } catch (error) {
             attempts.push({
                 provider: providerName,
                 success: false,
                 latencyMs: 0,
                 error,
-                timestamp: Date.now()
+                timestamp: Date.now(),
             });
 
-            console.error(`[ProviderFallbackChain] Provider ${providerName} failed with exception:`, error.message);
+            console.error(
+                `[ProviderFallbackChain] Provider ${providerName} failed with exception:`,
+                error.message
+            );
 
             // Continue to next provider
             continue;
@@ -141,7 +149,7 @@ export async function executeWithFallback(
         attemptsCount: attempts.length,
         attempts,
         response: null,
-        error: new Error('All providers failed')
+        error: new Error('All providers failed'),
     };
 }
 
@@ -171,7 +179,7 @@ async function executeProviderWithCircuitBreaker(
             success: false,
             latencyMs: 0,
             error: new Error(checkResult.reason),
-            response: null
+            response: null,
         };
     }
 
@@ -183,10 +191,13 @@ async function executeProviderWithCircuitBreaker(
 
     try {
         // Execute provider call
-        const response = await executeProviderCall(
-            providerConfigs,
-            { provider, apiKey, messages, tools, onProgress }
-        );
+        const response = await executeProviderCall(providerConfigs, {
+            provider,
+            apiKey,
+            messages,
+            tools,
+            onProgress,
+        });
 
         const latencyMs = performance.now() - startTime;
 
@@ -197,9 +208,8 @@ async function executeProviderWithCircuitBreaker(
             success: true,
             latencyMs,
             response,
-            error: null
+            error: null,
         };
-
     } catch (error) {
         const latencyMs = performance.now() - startTime;
 
@@ -210,7 +220,7 @@ async function executeProviderWithCircuitBreaker(
             success: false,
             latencyMs,
             error,
-            response: null
+            response: null,
         };
     } finally {
         // Clean up half-open tracking
@@ -227,7 +237,10 @@ async function executeProviderWithCircuitBreaker(
  * @param {Object} options - Call options
  * @returns {Promise<Object>} Provider response
  */
-async function executeProviderCall(providerConfigs, { provider, apiKey, messages, tools, onProgress }) {
+async function executeProviderCall(
+    providerConfigs,
+    { provider, apiKey, messages, tools, onProgress }
+) {
     // Fallback provider returns static response
     if (provider === 'fallback') {
         return generateFallbackResponse(messages);
@@ -239,10 +252,7 @@ async function executeProviderCall(providerConfigs, { provider, apiKey, messages
         throw new Error(`Unknown provider: ${provider}`);
     }
 
-    const providerConfig = await ProviderInterface.buildProviderConfig(
-        provider,
-        { apiKey }
-    );
+    const providerConfig = await ProviderInterface.buildProviderConfig(provider, { apiKey });
 
     // Execute provider call with timeout
     let timeoutId = null;
@@ -250,8 +260,11 @@ async function executeProviderCall(providerConfigs, { provider, apiKey, messages
         const response = await Promise.race([
             ProviderInterface.callProvider(providerConfig, apiKey, messages, tools, onProgress),
             new Promise((_, reject) => {
-                timeoutId = setTimeout(() => reject(new Error('Provider timeout')), config.timeoutMs);
-            })
+                timeoutId = setTimeout(
+                    () => reject(new Error('Provider timeout')),
+                    config.timeoutMs
+                );
+            }),
         ]);
         return response;
     } finally {

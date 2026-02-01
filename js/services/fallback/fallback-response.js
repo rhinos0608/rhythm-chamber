@@ -26,7 +26,7 @@ export async function generateFallbackResponse(messages) {
         content: fallbackResponse,
         status: 'success',
         role: 'assistant',
-        isFallback: true
+        isFallback: true,
     };
 }
 
@@ -42,6 +42,6 @@ function generateQueryContext(message) {
         message,
         timestamp: Date.now(),
         hasPersonality: false,
-        hasPatterns: false
+        hasPatterns: false,
     };
 }

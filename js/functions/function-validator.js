@@ -25,11 +25,19 @@ try {
 } catch (e) {
     // Handle different error types gracefully
     if (e instanceof SyntaxError) {
-        console.warn('[FunctionValidator] Validation utils module has syntax errors, using basic validation');
+        console.warn(
+            '[FunctionValidator] Validation utils module has syntax errors, using basic validation'
+        );
     } else if (e instanceof TypeError && e.message.includes('Failed to fetch')) {
-        console.warn('[FunctionValidator] Validation utils module not found, using basic validation');
+        console.warn(
+            '[FunctionValidator] Validation utils module not found, using basic validation'
+        );
     } else {
-        console.warn('[FunctionValidator] Validation utils not available:', e.message, '- using basic validation');
+        console.warn(
+            '[FunctionValidator] Validation utils not available:',
+            e.message,
+            '- using basic validation'
+        );
     }
     // FunctionValidation remains undefined, falling back to basic validation
 }
@@ -64,11 +72,15 @@ export const FunctionValidator = {
         if (args == null || typeof args !== 'object') {
             // If args is null, undefined, or not an object, reject as invalid
             // This prevents TypeError when accessing args properties
-            console.warn(`[FunctionValidator] Invalid args type for ${functionName}: ${args === null ? 'null' : typeof args}`);
+            console.warn(
+                `[FunctionValidator] Invalid args type for ${functionName}: ${args === null ? 'null' : typeof args}`
+            );
             return {
                 valid: false,
-                errors: [`Invalid arguments: expected object, got ${args === null ? 'null' : typeof args}`],
-                normalizedArgs: {}
+                errors: [
+                    `Invalid arguments: expected object, got ${args === null ? 'null' : typeof args}`,
+                ],
+                normalizedArgs: {},
             };
         }
 
@@ -98,7 +110,9 @@ export const FunctionValidator = {
 
                 // Unknown parameter (not in schema) - log but don't fail
                 if (!paramSchema) {
-                    console.warn(`[FunctionValidator] Unknown parameter '${key}' for ${functionName}`);
+                    console.warn(
+                        `[FunctionValidator] Unknown parameter '${key}' for ${functionName}`
+                    );
                     continue;
                 }
 
@@ -111,7 +125,11 @@ export const FunctionValidator = {
                     if (expectedType === 'integer' && typeof value === 'number') {
                         continue; // integers are numbers in JS
                     }
-                    if (expectedType === 'number' && typeof value === 'string' && !isNaN(Number(value))) {
+                    if (
+                        expectedType === 'number' &&
+                        typeof value === 'string' &&
+                        !isNaN(Number(value))
+                    ) {
                         normalizedArgs[key] = Number(value); // Normalize string numbers
                         continue;
                     }
@@ -125,18 +143,26 @@ export const FunctionValidator = {
                     if (typeof value === 'string') {
                         const normalized = value.trim();
                         const exactMatch = paramSchema.enum.find(e => e === normalized);
-                        const caseMatch = paramSchema.enum.find(e => e.toLowerCase() === normalized.toLowerCase());
+                        const caseMatch = paramSchema.enum.find(
+                            e => e.toLowerCase() === normalized.toLowerCase()
+                        );
 
                         if (exactMatch) {
                             normalizedArgs[key] = exactMatch;
                         } else if (caseMatch) {
-                            console.warn(`[FunctionValidator] Normalized '${key}' from "${value}" to "${caseMatch}"`);
+                            console.warn(
+                                `[FunctionValidator] Normalized '${key}' from "${value}" to "${caseMatch}"`
+                            );
                             normalizedArgs[key] = caseMatch;
                         } else {
-                            errors.push(`Parameter '${key}' must be one of: ${paramSchema.enum.join(', ')}`);
+                            errors.push(
+                                `Parameter '${key}' must be one of: ${paramSchema.enum.join(', ')}`
+                            );
                         }
                     } else {
-                        errors.push(`Parameter '${key}' must be one of: ${paramSchema.enum.join(', ')}`);
+                        errors.push(
+                            `Parameter '${key}' must be one of: ${paramSchema.enum.join(', ')}`
+                        );
                     }
                 }
             }
@@ -145,7 +171,7 @@ export const FunctionValidator = {
         return {
             valid: errors.length === 0,
             errors,
-            normalizedArgs: Object.keys(normalizedArgs).length > 0 ? normalizedArgs : args
+            normalizedArgs: Object.keys(normalizedArgs).length > 0 ? normalizedArgs : args,
         };
     },
 
@@ -164,7 +190,7 @@ export const FunctionValidator = {
         const valid = Array.isArray(streams) && streams.length > 0;
         return {
             valid,
-            error: valid ? '' : "No streaming data available."
+            error: valid ? '' : 'No streaming data available.',
         };
     },
 
@@ -182,9 +208,9 @@ export const FunctionValidator = {
         const valid = !!DataQuery;
         return {
             valid,
-            error: valid ? '' : "DataQuery module not loaded."
+            error: valid ? '' : 'DataQuery module not loaded.',
         };
-    }
+    },
 };
 
 console.log('[FunctionValidator] Module loaded');

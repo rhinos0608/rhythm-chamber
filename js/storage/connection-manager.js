@@ -12,7 +12,12 @@
  * @module storage/connection-manager
  */
 
-import { withRetry, databaseRetryStrategy, classifyError, ErrorType } from '../utils/resilient-retry.js';
+import {
+    withRetry,
+    databaseRetryStrategy,
+    classifyError,
+    ErrorType,
+} from '../utils/resilient-retry.js';
 import { EventBus } from '../services/event-bus.js';
 
 // ==========================================
@@ -27,7 +32,7 @@ export const ConnectionState = {
     CONNECTING: 'connecting',
     CONNECTED: 'connected',
     FAILED: 'failed',
-    FALLBACK: 'fallback'
+    FALLBACK: 'fallback',
 };
 
 /**
@@ -69,8 +74,8 @@ const CONNECTION_RETRY_CONFIG = {
         BASE_DELAY_MS: 500,
         MAX_DELAY_MS: 5000,
         JITTER_MS: 100,
-        EXPONENTIAL_BASE: 2
-    }
+        EXPONENTIAL_BASE: 2,
+    },
 };
 
 // ==========================================
@@ -120,7 +125,7 @@ async function openConnection(dbName, version, onUpgrade = null) {
                     createdAt: Date.now(),
                     lastUsed: Date.now(),
                     failureCount: 0,
-                    lastError: null
+                    lastError: null,
                 });
 
                 return new Promise((resolve, reject) => {
@@ -139,7 +144,7 @@ async function openConnection(dbName, version, onUpgrade = null) {
                         EventBus.emit('storage:connection_failed', {
                             dbName,
                             error: error.message,
-                            recoverable: entry.failureCount < MAX_FAILURES_BEFORE_FALLBACK
+                            recoverable: entry.failureCount < MAX_FAILURES_BEFORE_FALLBACK,
                         });
 
                         reject(error);
@@ -158,13 +163,13 @@ async function openConnection(dbName, version, onUpgrade = null) {
                         // Emit connection established event
                         EventBus.emit('storage:connection_established', {
                             dbName,
-                            attempts: entry.failureCount + 1
+                            attempts: entry.failureCount + 1,
                         });
 
                         resolve({ db });
                     };
 
-                    request.onupgradeneeded = (event) => {
+                    request.onupgradeneeded = event => {
                         if (onUpgrade) {
                             try {
                                 onUpgrade(event);
@@ -181,7 +186,7 @@ async function openConnection(dbName, version, onUpgrade = null) {
                         EventBus.emit('storage:connection_blocked', {
                             dbName,
                             reason: 'another_tab',
-                            message: 'Close other tabs using this application'
+                            message: 'Close other tabs using this application',
                         });
                         reject(error);
                     };
@@ -196,9 +201,9 @@ async function openConnection(dbName, version, onUpgrade = null) {
                         attempt: attempt + 1,
                         maxAttempts: CONNECTION_RETRY_CONFIG.maxRetries + 1,
                         nextRetryMs: delay,
-                        error: error.message
+                        error: error.message,
                     });
-                }
+                },
             }
         );
 
@@ -210,11 +215,15 @@ async function openConnection(dbName, version, onUpgrade = null) {
         // Check if we should enter fallback mode
         if (failureCount >= MAX_FAILURES_BEFORE_FALLBACK) {
             fallbackMode = true;
-            console.error('[ConnectionManager] Entering fallback mode after', failureCount, 'failures');
+            console.error(
+                '[ConnectionManager] Entering fallback mode after',
+                failureCount,
+                'failures'
+            );
             EventBus.emit('storage:fallback_mode_activated', {
                 dbName,
                 failureCount,
-                reason: 'max_failures_exceeded'
+                reason: 'max_failures_exceeded',
             });
         }
 
@@ -296,10 +305,14 @@ async function exitFallbackMode() {
     }
 
     if (successCount > 0) {
-        console.log('[ConnectionManager] Exited fallback mode, reconnected to', successCount, 'databases');
+        console.log(
+            '[ConnectionManager] Exited fallback mode, reconnected to',
+            successCount,
+            'databases'
+        );
         EventBus.emit('storage:fallback_mode_exited', {
             successCount,
-            totalDatabases: connectionPool.size
+            totalDatabases: connectionPool.size,
         });
         return true;
     } else {
@@ -338,7 +351,8 @@ async function executeWithRetry(dbName, storeNames, mode, operation) {
                 let operationResult;
                 transaction.oncomplete = () => resolve(operationResult);
                 transaction.onerror = () => reject(transaction.error);
-                transaction.onabort = () => reject(transaction.error || new Error('Transaction aborted'));
+                transaction.onabort = () =>
+                    reject(transaction.error || new Error('Transaction aborted'));
 
                 try {
                     operationResult = operation(transaction);
@@ -357,7 +371,10 @@ async function executeWithRetry(dbName, storeNames, mode, operation) {
 
             if (attempt < maxTransactionRetries) {
                 const delay = 100 * Math.pow(2, attempt);
-                console.warn(`[ConnectionManager] Transaction retry ${attempt + 1}/${maxTransactionRetries} after ${delay}ms:`, error.message);
+                console.warn(
+                    `[ConnectionManager] Transaction retry ${attempt + 1}/${maxTransactionRetries} after ${delay}ms:`,
+                    error.message
+                );
                 await new Promise(resolve => setTimeout(resolve, delay));
             }
         }
@@ -378,7 +395,7 @@ function getConnectionStats() {
         connecting: 0,
         failed: 0,
         fallbackMode,
-        connections: {}
+        connections: {},
     };
 
     for (const [dbName, entry] of connectionPool.entries()) {
@@ -388,7 +405,7 @@ function getConnectionStats() {
             failureCount: entry.failureCount,
             lastError: entry.lastError?.message || null,
             age: Date.now() - entry.createdAt,
-            idle: Date.now() - entry.lastUsed
+            idle: Date.now() - entry.lastUsed,
         };
 
         switch (entry.state) {
@@ -445,7 +462,7 @@ export const ConnectionManager = {
     // Utilities
     getConnectionStats,
     closeAllConnections,
-    reset
+    reset,
 };
 
 console.log('[ConnectionManager] Module loaded with fallback chain support');

@@ -24,9 +24,9 @@ import { Mutex } from '../utils/concurrency/mutex.js';
 // Constants
 // ==========================================
 
-const LOCK_ACQUISITION_TIMEOUT_MS = 5000;  // 5 second timeout for lock acquisition
-const MAX_RETRY_ATTEMPTS = 3;  // Maximum retry attempts with exponential backoff
-const BASE_RETRY_DELAY_MS = 100;  // Base delay for exponential backoff
+const LOCK_ACQUISITION_TIMEOUT_MS = 5000; // 5 second timeout for lock acquisition
+const MAX_RETRY_ATTEMPTS = 3; // Maximum retry attempts with exponential backoff
+const BASE_RETRY_DELAY_MS = 100; // Base delay for exponential backoff
 
 /**
  * Session Lock Manager
@@ -38,7 +38,7 @@ export class SessionLockManager {
      */
     constructor() {
         // Lock for preventing session switches during message processing
-        this._processingSessionId = null;  // Session ID currently being processed
+        this._processingSessionId = null; // Session ID currently being processed
         this._processingMutex = new Mutex();
 
         // Wait-for graph for proactive circular wait detection
@@ -118,7 +118,12 @@ export class SessionLockManager {
         // Mark as waiting
         this._waitingSessions.add(waitingSession);
 
-        console.debug('[SessionLockManager] Registered wait:', waitingSession, '->', blockingSession);
+        console.debug(
+            '[SessionLockManager] Registered wait:',
+            waitingSession,
+            '->',
+            blockingSession
+        );
     }
 
     /**
@@ -167,48 +172,65 @@ export class SessionLockManager {
 
                 // Check timeout
                 if (Date.now() - startTime > LOCK_ACQUISITION_TIMEOUT_MS) {
-                    console.warn('[SessionLockManager] Lock acquisition timeout after', LOCK_ACQUISITION_TIMEOUT_MS, 'ms');
+                    console.warn(
+                        '[SessionLockManager] Lock acquisition timeout after',
+                        LOCK_ACQUISITION_TIMEOUT_MS,
+                        'ms'
+                    );
                     return {
                         locked: false,
                         currentSessionId: this._processingSessionId,
-                        error: 'Lock acquisition timeout'
+                        error: 'Lock acquisition timeout',
                     };
                 }
 
                 // PROACTIVE CIRCULAR WAIT DETECTION: Check if acquiring would create a cycle
                 // Only check if we would be waiting for a different session
-                if (this._processingSessionId !== null && this._processingSessionId !== expectedSessionId) {
+                if (
+                    this._processingSessionId !== null &&
+                    this._processingSessionId !== expectedSessionId
+                ) {
                     // Check if this acquisition would create a cycle
                     if (this._wouldCreateCycle(expectedSessionId, this._processingSessionId)) {
-                        console.warn('[SessionLockManager] Circular wait detected - would create deadlock');
+                        console.warn(
+                            '[SessionLockManager] Circular wait detected - would create deadlock'
+                        );
                         return {
                             locked: false,
                             currentSessionId: this._processingSessionId,
-                            error: 'Circular wait detected'
+                            error: 'Circular wait detected',
                         };
                     }
                 }
 
                 // CIRCULAR WAIT DETECTION: Check if we're waiting for ourselves
                 if (this._processingSessionId === expectedSessionId && !registeredWait) {
-                    console.warn('[SessionLockManager] Circular wait detected - same session already holds lock');
+                    console.warn(
+                        '[SessionLockManager] Circular wait detected - same session already holds lock'
+                    );
                     return {
                         locked: false,
                         currentSessionId: this._processingSessionId,
-                        error: 'Circular wait detected'
+                        error: 'Circular wait detected',
                     };
                 }
 
                 // Try to acquire lock using mutex with timeout
                 try {
                     const timeoutPromise = new Promise((_, reject) => {
-                        setTimeout(() => reject(new Error('Lock wait timeout')), LOCK_ACQUISITION_TIMEOUT_MS);
+                        setTimeout(
+                            () => reject(new Error('Lock wait timeout')),
+                            LOCK_ACQUISITION_TIMEOUT_MS
+                        );
                     });
 
                     // Try to acquire the lock
                     const lockPromise = this._processingMutex.runExclusive(async () => {
                         // If there's already a lock by a different session
-                        if (this._processingSessionId !== null && this._processingSessionId !== expectedSessionId) {
+                        if (
+                            this._processingSessionId !== null &&
+                            this._processingSessionId !== expectedSessionId
+                        ) {
                             // If this session was registered as waiting, it means the lock holder changed
                             // This is expected behavior - allow acquisition
                             if (!registeredWait) {
@@ -238,18 +260,25 @@ export class SessionLockManager {
                     return {
                         locked: true,
                         currentSessionId: expectedSessionId,
-                        release: release
+                        release: release,
                     };
-
                 } catch (error) {
-                    console.warn('[SessionLockManager] Lock acquisition attempt', attemptCount, 'failed:', error.message);
+                    console.warn(
+                        '[SessionLockManager] Lock acquisition attempt',
+                        attemptCount,
+                        'failed:',
+                        error.message
+                    );
 
                     // If it's a timeout or session switch, return failure immediately
-                    if (error.message.includes('Lock wait timeout') || error.message.includes('Session switched')) {
+                    if (
+                        error.message.includes('Lock wait timeout') ||
+                        error.message.includes('Session switched')
+                    ) {
                         return {
                             locked: false,
                             currentSessionId: this._processingSessionId,
-                            error: error.message
+                            error: error.message,
                         };
                     }
 
@@ -262,13 +291,16 @@ export class SessionLockManager {
             }
 
             // All retries exhausted
-            console.warn('[SessionLockManager] Lock acquisition failed after', MAX_RETRY_ATTEMPTS, 'attempts');
+            console.warn(
+                '[SessionLockManager] Lock acquisition failed after',
+                MAX_RETRY_ATTEMPTS,
+                'attempts'
+            );
             return {
                 locked: false,
                 currentSessionId: this._processingSessionId,
-                error: 'Max retry attempts exceeded'
+                error: 'Max retry attempts exceeded',
             };
-
         } finally {
             // Clean up wait-for graph registration on failure
             if (registeredWait) {
@@ -299,7 +331,10 @@ export class SessionLockManager {
      * @returns {void}
      */
     forceReleaseLock() {
-        console.warn('[SessionLockManager] Force releasing lock for session:', this._processingSessionId);
+        console.warn(
+            '[SessionLockManager] Force releasing lock for session:',
+            this._processingSessionId
+        );
         this._processingSessionId = null;
     }
 
@@ -311,7 +346,7 @@ export class SessionLockManager {
         return {
             currentLock: this._processingSessionId,
             isLocked: this._processingSessionId !== null,
-            mutexLocked: this._processingMutex.isLocked()
+            mutexLocked: this._processingMutex.isLocked(),
         };
     }
 }

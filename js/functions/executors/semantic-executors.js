@@ -19,7 +19,7 @@ async function executeSemanticSearch(args, streams) {
     // Validate query
     if (!query || typeof query !== 'string') {
         return {
-            error: "Search query must be a non-empty string. Please provide a natural language description of what you're looking for."
+            error: "Search query must be a non-empty string. Please provide a natural language description of what you're looking for.",
         };
     }
 
@@ -33,7 +33,7 @@ async function executeSemanticSearch(args, streams) {
         // Check if RAG is configured (embeddings exist)
         if (!RAG.isConfigured?.()) {
             return {
-                error: "Semantic search is not available. The user needs to generate embeddings first. Please suggest they go to Settings > Semantic Search > Generate Embeddings, or use a different search method like searching for specific tracks or artists."
+                error: 'Semantic search is not available. The user needs to generate embeddings first. Please suggest they go to Settings > Semantic Search > Generate Embeddings, or use a different search method like searching for specific tracks or artists.',
             };
         }
 
@@ -46,7 +46,8 @@ async function executeSemanticSearch(args, streams) {
                 query,
                 count: 0,
                 results: [],
-                message: "No relevant matches found for this query. The user's listening history may not contain patterns matching this description, or they may need to regenerate embeddings."
+                message:
+                    "No relevant matches found for this query. The user's listening history may not contain patterns matching this description, or they may need to regenerate embeddings.",
             };
         }
 
@@ -64,17 +65,16 @@ async function executeSemanticSearch(args, streams) {
                         month: payload.metadata?.month,
                         year: payload.metadata?.year,
                         artist: payload.metadata?.artist,
-                        period: payload.metadata?.period
-                    }
+                        period: payload.metadata?.period,
+                    },
                 };
-            })
+            }),
         };
-
     } catch (err) {
         // Return helpful error message instead of throwing
         console.error('[SemanticExecutors] Search failed:', err);
         return {
-            error: `Semantic search encountered an error: ${err.message}. Please try a different query or use a standard search method.`
+            error: `Semantic search encountered an error: ${err.message}. Please try a different query or use a standard search method.`,
         };
     }
 }
@@ -85,7 +85,7 @@ async function executeSemanticSearch(args, streams) {
 
 // ES Module export
 export const SemanticExecutors = {
-    semantic_search: executeSemanticSearch
+    semantic_search: executeSemanticSearch,
 };
 
 console.log('[SemanticExecutors] Module loaded');

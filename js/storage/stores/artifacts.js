@@ -25,7 +25,7 @@ export async function savePersonality(personality) {
         return IndexedDBCore.put(STORES.PERSONALITY, {
             id: 'result',
             ...personality,
-            savedAt: new Date().toISOString()
+            savedAt: new Date().toISOString(),
         });
     }, true);
 }
@@ -108,7 +108,7 @@ export async function clearAllSettings() {
  */
 export async function saveEmbeddings(embeddings) {
     return queuedOperation(async () => {
-        await IndexedDBCore.transaction(STORES.EMBEDDINGS, 'readwrite', (store) => {
+        await IndexedDBCore.transaction(STORES.EMBEDDINGS, 'readwrite', store => {
             for (const embedding of embeddings) {
                 store.put(embedding);
             }
@@ -153,7 +153,7 @@ export async function getEmbeddingCount() {
 export async function saveArtifact(type, artifact) {
     const storeMap = {
         personality: STORES.PERSONALITY,
-        embeddings: STORES.EMBEDDINGS
+        embeddings: STORES.EMBEDDINGS,
     };
 
     const storeName = storeMap[type];
@@ -175,7 +175,7 @@ export async function saveArtifact(type, artifact) {
 export async function getArtifact(type, id = 'result') {
     const storeMap = {
         personality: STORES.PERSONALITY,
-        embeddings: STORES.EMBEDDINGS
+        embeddings: STORES.EMBEDDINGS,
     };
 
     const storeName = storeMap[type];

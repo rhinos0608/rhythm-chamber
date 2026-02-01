@@ -12,7 +12,13 @@
 
 // Import classes and functions from sub-modules
 import { RecoveryStrategies } from './recovery-strategies.js';
-import { RecoveryOrchestration, determineRecoveryDomain, determineRecoveryPriority, shouldHandleRecovery, hasConflictingRecovery as hasConflictingRecoveryStatic } from './recovery-orchestration.js';
+import {
+    RecoveryOrchestration,
+    determineRecoveryDomain,
+    determineRecoveryPriority,
+    shouldHandleRecovery,
+    hasConflictingRecovery as hasConflictingRecoveryStatic,
+} from './recovery-orchestration.js';
 import { RecoveryLockManager } from './recovery-lock-manager.js';
 import { RecoveryDomain, RecoveryPriority, RecoveryState } from './constants.js';
 
@@ -57,7 +63,7 @@ export function createCoordinator() {
     const orchestration = new RecoveryOrchestration({
         eventBus,
         strategies,
-        lockManager
+        lockManager,
     });
 
     const instance = {
@@ -121,7 +127,7 @@ export function createCoordinator() {
             this._recoveryPlans.clear();
             this._lockManager.destroy();
             coordinatorInstance = null;
-        }
+        },
     };
 
     // Sync state with orchestration
@@ -156,7 +162,11 @@ export async function processErrorEvent(event, data) {
     const priority = determineRecoveryPriority(data);
 
     if (shouldHandleRecovery({ domain, priority, ...data })) {
-        const request = await coordinator._orchestration.createRecoveryRequest(domain, priority, data);
+        const request = await coordinator._orchestration.createRecoveryRequest(
+            domain,
+            priority,
+            data
+        );
         return coordinator.coordinateRecovery(request);
     }
 
@@ -183,6 +193,6 @@ export function getRecoveryStatus() {
         activeRecoveries: coordinator._activeRecoveries.size,
         queuedPlans: coordinator._recoveryPlans.size,
         registeredHandlers: coordinator._recoveryHandlers.size,
-        currentState: coordinator.getCurrentState()
+        currentState: coordinator.getCurrentState(),
     };
 }

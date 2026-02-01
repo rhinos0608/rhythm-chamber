@@ -15,7 +15,7 @@ import { safeJsonParse } from '../utils/safe-json.js';
 // Configuration
 // ==========================================
 
-const LMSTUDIO_TIMEOUT_MS = 90000;  // 90 seconds for local models
+const LMSTUDIO_TIMEOUT_MS = 90000; // 90 seconds for local models
 const LMSTUDIO_DEFAULT_ENDPOINT = 'http://localhost:1234/v1';
 
 // ==========================================
@@ -36,7 +36,7 @@ function validateEndpoint(endpoint) {
         if (!['http:', 'https:'].includes(url.protocol)) {
             return {
                 valid: false,
-                error: 'Invalid protocol. Only HTTP/HTTPS are allowed.'
+                error: 'Invalid protocol. Only HTTP/HTTPS are allowed.',
             };
         }
 
@@ -46,7 +46,7 @@ function validateEndpoint(endpoint) {
         const allowedPatterns = [
             'localhost',
             '127.0.0.1',
-            '[::1]',  // IPv6 localhost
+            '[::1]', // IPv6 localhost
         ];
 
         // Check if hostname matches any allowed pattern
@@ -65,7 +65,7 @@ function validateEndpoint(endpoint) {
         if (!isAllowed && !isLoopback) {
             return {
                 valid: false,
-                error: `Invalid hostname "${hostname}". LM Studio endpoint must be localhost (127.0.0.1).`
+                error: `Invalid hostname "${hostname}". LM Studio endpoint must be localhost (127.0.0.1).`,
             };
         }
 
@@ -77,7 +77,7 @@ function validateEndpoint(endpoint) {
         if (portNum < 1024 || portNum > 65535) {
             return {
                 valid: false,
-                error: `Invalid port "${port}". Port must be between 1024 and 65535.`
+                error: `Invalid port "${port}". Port must be between 1024 and 65535.`,
             };
         }
 
@@ -85,7 +85,7 @@ function validateEndpoint(endpoint) {
     } catch (e) {
         return {
             valid: false,
-            error: `Invalid endpoint URL: ${e.message}`
+            error: `Invalid endpoint URL: ${e.message}`,
         };
     }
 }
@@ -105,7 +105,9 @@ function validateEndpoint(endpoint) {
 async function call(config, messages, tools, onProgress = null) {
     // Validate required parameters
     if (!config?.model) {
-        throw new Error('LM Studio model is required but not configured. Ensure a model is loaded in LM Studio.');
+        throw new Error(
+            'LM Studio model is required but not configured. Ensure a model is loaded in LM Studio.'
+        );
     }
     if (!Array.isArray(messages) || messages.length === 0) {
         throw new Error('Messages array is required and must not be empty');
@@ -126,7 +128,7 @@ async function call(config, messages, tools, onProgress = null) {
         max_tokens: config.maxTokens,
         temperature: config.temperature,
         top_p: config.topP,
-        stream: useStreaming
+        stream: useStreaming,
     };
 
     // Add tools if provided
@@ -148,10 +150,10 @@ async function call(config, messages, tools, onProgress = null) {
         const response = await fetch(`${endpoint}/chat/completions`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
             },
             body: JSON.stringify(body),
-            signal: controller.signal
+            signal: controller.signal,
         });
 
         // Only clear timeout if it hasn't fired yet
@@ -182,7 +184,9 @@ async function call(config, messages, tools, onProgress = null) {
                 // Only fallback if there was an actual error during streaming
                 if (!result.streamError) {
                     // Valid empty response - return as-is
-                    console.warn('[LMStudio] Streaming succeeded but returned no content (valid for some prompts)');
+                    console.warn(
+                        '[LMStudio] Streaming succeeded but returned no content (valid for some prompts)'
+                    );
                     return result;
                 }
 
@@ -204,7 +208,7 @@ async function call(config, messages, tools, onProgress = null) {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(fallbackBody),
-                        signal: fallbackController.signal
+                        signal: fallbackController.signal,
                     });
 
                     // Only clear timeout if it hasn't fired yet
@@ -221,7 +225,10 @@ async function call(config, messages, tools, onProgress = null) {
 
                     // Emit the full content through onProgress for UI update
                     if (fallbackResult.choices?.[0]?.message?.content) {
-                        onProgress({ type: 'token', token: fallbackResult.choices[0].message.content });
+                        onProgress({
+                            type: 'token',
+                            token: fallbackResult.choices[0].message.content,
+                        });
                     }
 
                     return fallbackResult;
@@ -250,8 +257,14 @@ async function call(config, messages, tools, onProgress = null) {
             throw new Error(`LM Studio request timed out after ${timeout / 1000} seconds`);
         }
         // Catch network errors (server not running)
-        if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.name === 'TypeError') {
-            throw new Error('Cannot connect to LM Studio. Make sure the server is running at ' + endpoint);
+        if (
+            err.message.includes('Failed to fetch') ||
+            err.message.includes('NetworkError') ||
+            err.name === 'TypeError'
+        ) {
+            throw new Error(
+                'Cannot connect to LM Studio. Make sure the server is running at ' + endpoint
+            );
         }
         throw err;
     }
@@ -307,10 +320,10 @@ async function handleStreamingResponse(response, onProgress) {
     let thinkingContent = '';
     let inThinking = false;
     let lastMessage = null;
-    let toolCallsAccumulator = [];  // Collect tool calls from streaming
-    let toolCallsById = {};  // Track tool calls by id for proper assembly
-    let buffer = '';  // Buffer for incomplete chunks
-    let streamError = false;  // HIGH FIX #10: Track if stream had an error
+    let toolCallsAccumulator = []; // Collect tool calls from streaming
+    const toolCallsById = {}; // Track tool calls by id for proper assembly
+    let buffer = ''; // Buffer for incomplete chunks
+    let streamError = false; // HIGH FIX #10: Track if stream had an error
 
     try {
         while (true) {
@@ -343,41 +356,41 @@ async function handleStreamingResponse(response, onProgress) {
 
                 // Handle SSE data: prefix
                 if (trimmedLine.startsWith('data: ')) {
-                data = trimmedLine.slice(6);
-                if (data === '[DONE]') continue;
-            }
-
-            // Skip non-JSON lines (SSE comments, empty data, etc.)
-            if (!data.startsWith('{')) continue;
-
-            const parsed = safeJsonParse(data, null);
-            if (!parsed) continue;
-
-            // Handle both streaming delta format AND complete message format
-            const delta = parsed.choices?.[0]?.delta;
-            const message = parsed.choices?.[0]?.message;
-
-            // For complete (non-streaming) responses embedded in stream
-            if (message?.content && !delta) {
-                fullContent = message.content;
-                if (message.tool_calls) {
-                    for (const tc of message.tool_calls) {
-                        toolCallsById[tc.id || `call_${Object.keys(toolCallsById).length}`] = {
-                            id: tc.id || `call_${Object.keys(toolCallsById).length}`,
-                            type: 'function',
-                            function: {
-                                name: tc.function?.name || '',
-                                // CRITICAL FIX #4: Use normalizeToolArguments to handle type confusion
-                                arguments: normalizeToolArguments(tc.function?.arguments)
-                            }
-                        };
-                    }
+                    data = trimmedLine.slice(6);
+                    if (data === '[DONE]') continue;
                 }
-                lastMessage = parsed;
-                continue;
-            }
 
-            if (delta?.content) {
+                // Skip non-JSON lines (SSE comments, empty data, etc.)
+                if (!data.startsWith('{')) continue;
+
+                const parsed = safeJsonParse(data, null);
+                if (!parsed) continue;
+
+                // Handle both streaming delta format AND complete message format
+                const delta = parsed.choices?.[0]?.delta;
+                const message = parsed.choices?.[0]?.message;
+
+                // For complete (non-streaming) responses embedded in stream
+                if (message?.content && !delta) {
+                    fullContent = message.content;
+                    if (message.tool_calls) {
+                        for (const tc of message.tool_calls) {
+                            toolCallsById[tc.id || `call_${Object.keys(toolCallsById).length}`] = {
+                                id: tc.id || `call_${Object.keys(toolCallsById).length}`,
+                                type: 'function',
+                                function: {
+                                    name: tc.function?.name || '',
+                                    // CRITICAL FIX #4: Use normalizeToolArguments to handle type confusion
+                                    arguments: normalizeToolArguments(tc.function?.arguments),
+                                },
+                            };
+                        }
+                    }
+                    lastMessage = parsed;
+                    continue;
+                }
+
+                if (delta?.content) {
                     const token = delta.content;
 
                     // Detect thinking blocks (<think>...</think>)
@@ -425,8 +438,8 @@ async function handleStreamingResponse(response, onProgress) {
                                 type: 'function',
                                 function: {
                                     name: tc.function?.name || '',
-                                    arguments: tc.function?.arguments || ''
-                                }
+                                    arguments: tc.function?.arguments || '',
+                                },
                             };
                         } else {
                             // Append arguments for chunked tool calls
@@ -440,66 +453,73 @@ async function handleStreamingResponse(response, onProgress) {
                     }
                 }
 
-            lastMessage = parsed;
-        }
-    }
-
-    // Process any remaining buffer content
-    if (buffer.trim()) {
-        let data = buffer.trim();
-        if (data.startsWith('data: ')) {
-            data = data.slice(6);
-        }
-        if (data.startsWith('{')) {
-            const parsed = safeJsonParse(data, null);
-            if (parsed) {
-                const message = parsed.choices?.[0]?.message;
-                if (message?.content) {
-                    fullContent = message.content;
-                }
-                if (message?.tool_calls) {
-                    for (const tc of message.tool_calls) {
-                        toolCallsById[tc.id || `call_${Object.keys(toolCallsById).length}`] = {
-                            id: tc.id || `call_${Object.keys(toolCallsById).length}`,
-                            type: 'function',
-                            function: {
-                                name: tc.function?.name || '',
-                                // CRITICAL FIX #4: Use normalizeToolArguments to handle type confusion
-                                arguments: normalizeToolArguments(tc.function?.arguments)
-                            }
-                        };
-                    }
-                }
                 lastMessage = parsed;
             }
         }
-    }
 
-    // Finalize tool calls array (outside the while loop)
-    toolCallsAccumulator = Object.values(toolCallsById);
+        // Process any remaining buffer content
+        if (buffer.trim()) {
+            let data = buffer.trim();
+            if (data.startsWith('data: ')) {
+                data = data.slice(6);
+            }
+            if (data.startsWith('{')) {
+                const parsed = safeJsonParse(data, null);
+                if (parsed) {
+                    const message = parsed.choices?.[0]?.message;
+                    if (message?.content) {
+                        fullContent = message.content;
+                    }
+                    if (message?.tool_calls) {
+                        for (const tc of message.tool_calls) {
+                            toolCallsById[tc.id || `call_${Object.keys(toolCallsById).length}`] = {
+                                id: tc.id || `call_${Object.keys(toolCallsById).length}`,
+                                type: 'function',
+                                function: {
+                                    name: tc.function?.name || '',
+                                    // CRITICAL FIX #4: Use normalizeToolArguments to handle type confusion
+                                    arguments: normalizeToolArguments(tc.function?.arguments),
+                                },
+                            };
+                        }
+                    }
+                    lastMessage = parsed;
+                }
+            }
+        }
 
-    // Build OpenAI-compatible response
-    const responseMessage = {
-        role: 'assistant',
-        content: fullContent || null
-    };
+        // Finalize tool calls array (outside the while loop)
+        toolCallsAccumulator = Object.values(toolCallsById);
 
-    // Add tool calls if present
-    if (toolCallsAccumulator.length > 0) {
-        responseMessage.tool_calls = toolCallsAccumulator;
-    }
+        // Build OpenAI-compatible response
+        const responseMessage = {
+            role: 'assistant',
+            content: fullContent || null,
+        };
 
-    console.log('[LMStudio] Streaming complete - content length:', fullContent.length, 'tool_calls:', toolCallsAccumulator.length);
+        // Add tool calls if present
+        if (toolCallsAccumulator.length > 0) {
+            responseMessage.tool_calls = toolCallsAccumulator;
+        }
 
-    return {
-        choices: [{
-            message: responseMessage,
-            finish_reason: toolCallsAccumulator.length > 0 ? 'tool_calls' : 'stop'
-        }],
-        model: lastMessage?.model,
-        thinking: thinkingContent || undefined,
-        streamError  // HIGH FIX #10: Indicate if there was a stream error
-    };
+        console.log(
+            '[LMStudio] Streaming complete - content length:',
+            fullContent.length,
+            'tool_calls:',
+            toolCallsAccumulator.length
+        );
+
+        return {
+            choices: [
+                {
+                    message: responseMessage,
+                    finish_reason: toolCallsAccumulator.length > 0 ? 'tool_calls' : 'stop',
+                },
+            ],
+            model: lastMessage?.model,
+            thinking: thinkingContent || undefined,
+            streamError, // HIGH FIX #10: Indicate if there was a stream error
+        };
     } catch (streamErr) {
         console.error('[LMStudio] Streaming error:', streamErr);
         streamError = true;
@@ -528,7 +548,7 @@ async function detectServer(endpoint = LMSTUDIO_DEFAULT_ENDPOINT) {
         const timeoutId = setTimeout(() => controller.abort(), 5000);
 
         const response = await fetch(`${endpoint}/models`, {
-            signal: controller.signal
+            signal: controller.signal,
         });
 
         clearTimeout(timeoutId);
@@ -574,7 +594,7 @@ async function listModels(endpoint = LMSTUDIO_DEFAULT_ENDPOINT) {
 
     try {
         const response = await fetch(`${endpoint}/models`, {
-            signal: controller.signal
+            signal: controller.signal,
         });
 
         clearTimeout(timeoutId);
@@ -618,9 +638,7 @@ export const LMStudioProvider = {
     // Provider info
     name: 'lmstudio',
     displayName: 'LM Studio',
-    type: 'local'
+    type: 'local',
 };
 
-
 console.log('[LMStudioProvider] Provider loaded');
-

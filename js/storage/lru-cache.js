@@ -105,11 +105,14 @@ export class LRUCache {
         } else if (this._cache.size >= this.maxSize) {
             // CRITICAL FIX for High Issue #6: Skip pinned items when selecting eviction candidate
             // Get oldest unpinned item for eviction
-            const unpinnedEntries = [...this._cache.entries()]
-                .filter(([k]) => !this._pinnedItems.has(k));
+            const unpinnedEntries = [...this._cache.entries()].filter(
+                ([k]) => !this._pinnedItems.has(k)
+            );
 
             if (unpinnedEntries.length === 0) {
-                console.warn('[LRUCache] All items pinned, cannot evict. Cache will exceed maxSize.');
+                console.warn(
+                    '[LRUCache] All items pinned, cannot evict. Cache will exceed maxSize.'
+                );
                 // Still set the value, but allow overflow
                 this._cache.set(key, value);
                 return false;
@@ -354,7 +357,9 @@ export class LRUCache {
                 const maxBasedOnQuota = Math.floor((availableBytes * 0.1) / BYTES_PER_VECTOR);
                 const newMax = Math.max(1000, Math.min(maxBasedOnQuota, 50000)); // Cap at 50k
 
-                console.log(`[LRUCache] Auto-scaled max size to ${newMax} based on ${Math.round(availableBytes / 1024 / 1024)}MB available`);
+                console.log(
+                    `[LRUCache] Auto-scaled max size to ${newMax} based on ${Math.round(availableBytes / 1024 / 1024)}MB available`
+                );
                 this.setMaxSize(newMax);
 
                 return newMax;
@@ -371,9 +376,10 @@ export class LRUCache {
      * @returns {Object} Statistics object
      */
     getStats() {
-        const hitRate = (this._hitCount + this._missCount) > 0
-            ? (this._hitCount / (this._hitCount + this._missCount))
-            : 0;
+        const hitRate =
+            this._hitCount + this._missCount > 0
+                ? this._hitCount / (this._hitCount + this._missCount)
+                : 0;
 
         return {
             size: this._cache.size,
@@ -384,7 +390,7 @@ export class LRUCache {
             missCount: this._missCount,
             hitRate: Math.round(hitRate * 100) / 100, // 2 decimal places
             autoScaleEnabled: this.autoScaleEnabled,
-            pendingEvictions: this._pendingEvictions.length
+            pendingEvictions: this._pendingEvictions.length,
         };
     }
 

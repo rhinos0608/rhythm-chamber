@@ -65,7 +65,7 @@ function setStreamsData(streams) {
  * Regenerate the last assistant response
  * Removes the last assistant message and re-sends the last user message
  * Handles function call sequences: user -> assistant(tool_calls) -> tool -> assistant
- * 
+ *
  * @param {Array} conversationHistory - Current conversation history
  * @param {Function} sendMessageFn - Function to call for sending message
  * @param {Object} options - Options for sendMessage
@@ -76,11 +76,17 @@ async function regenerateLastResponse(conversationHistory, sendMessageFn, option
 
     // Check for stale data context before regeneration
     // The user may have uploaded new data since this message was generated
-    const lastAssistantMsg = conversationHistory.slice().reverse().find(m => m.role === 'assistant');
+    const lastAssistantMsg = conversationHistory
+        .slice()
+        .reverse()
+        .find(m => m.role === 'assistant');
     if (lastAssistantMsg && DataVersion.checkRegenerationContext) {
         const staleCheck = DataVersion.checkRegenerationContext(lastAssistantMsg);
         if (staleCheck.shouldWarn) {
-            console.warn('[MessageOperations] Regenerating with stale data context:', staleCheck.message);
+            console.warn(
+                '[MessageOperations] Regenerating with stale data context:',
+                staleCheck.message
+            );
             // Notify caller via callback if provided
             if (options?.onStaleData) {
                 options.onStaleData(staleCheck.message);
@@ -123,7 +129,7 @@ async function regenerateLastResponse(conversationHistory, sendMessageFn, option
 /**
  * Delete a specific message index from history
  * Note: Deleting a message changes the context for subsequent messages
- * 
+ *
  * @param {number} index - Index of message to delete
  * @param {Array} conversationHistory - Current conversation history
  * @returns {boolean} Success status
@@ -138,7 +144,7 @@ function deleteMessage(index, conversationHistory) {
 /**
  * Edit a user message
  * Truncates history to that point, updates message, and regenerates response
- * 
+ *
  * @param {number} index - Index of message to edit
  * @param {string} newText - New message text
  * @param {Array} conversationHistory - Current conversation history
@@ -161,7 +167,7 @@ async function editMessage(index, newText, conversationHistory, sendMessageFn, o
 
 /**
  * Analyze user message and generate relevant data context
- * 
+ *
  * @param {string} message - User message
  * @returns {string|null} Query context or null
  */
@@ -188,20 +194,20 @@ function generateQueryContext(message) {
             contextParts.push(`- Unique tracks: ${periodData.uniqueTracks}`);
 
             if (periodData.topArtists.length > 0) {
-                contextParts.push(`\nTop Artists:`);
+                contextParts.push('\nTop Artists:');
                 periodData.topArtists.slice(0, 5).forEach((a, i) => {
                     contextParts.push(`  ${i + 1}. ${a.name} (${a.plays} plays)`);
                 });
             }
 
             if (periodData.topTracks.length > 0) {
-                contextParts.push(`\nTop Tracks:`);
+                contextParts.push('\nTop Tracks:');
                 periodData.topTracks.slice(0, 5).forEach((t, i) => {
                     contextParts.push(`  ${i + 1}. "${t.name}" by ${t.artist} (${t.plays} plays)`);
                 });
             }
         } else {
-            contextParts.push(`Note: No streaming data found for this period.`);
+            contextParts.push('Note: No streaming data found for this period.');
         }
     }
 
@@ -209,7 +215,7 @@ function generateQueryContext(message) {
     const artistPatterns = [
         /(?:about|listening to|played|play|heard)\s+([A-Za-z][A-Za-z\s&.']+?)(?:\s+in|\s+during|\?|$)/i,
         /(?:when did i|did i listen to|did i play)\s+([A-Za-z][A-Za-z\s&.']+?)(?:\s+in|\?|$)/i,
-        /([A-Za-z][A-Za-z\s&.']+?)\s+(?:plays?|streams?|listening)/i
+        /([A-Za-z][A-Za-z\s&.']+?)\s+(?:plays?|streams?|listening)/i,
     ];
 
     for (const pattern of artistPatterns) {
@@ -223,10 +229,12 @@ function generateQueryContext(message) {
                     contextParts.push(`- Total plays: ${artistData.totalPlays}`);
                     contextParts.push(`- First listened: ${artistData.firstListen}`);
                     contextParts.push(`- Last listened: ${artistData.lastListen}`);
-                    contextParts.push(`- Peak period: ${artistData.peakPeriod} (${artistData.peakPlays} plays)`);
+                    contextParts.push(
+                        `- Peak period: ${artistData.peakPeriod} (${artistData.peakPlays} plays)`
+                    );
 
                     if (artistData.monthlyBreakdown.length > 1) {
-                        contextParts.push(`\nMonthly breakdown:`);
+                        contextParts.push('\nMonthly breakdown:');
                         artistData.monthlyBreakdown.forEach(m => {
                             contextParts.push(`  - ${m.period}: ${m.plays} plays`);
                         });
@@ -237,8 +245,12 @@ function generateQueryContext(message) {
     }
 
     // Check for comparison queries
-    if (message.toLowerCase().includes('compare') || message.toLowerCase().includes('vs') ||
-        message.toLowerCase().includes('versus') || message.toLowerCase().includes('different')) {
+    if (
+        message.toLowerCase().includes('compare') ||
+        message.toLowerCase().includes('vs') ||
+        message.toLowerCase().includes('versus') ||
+        message.toLowerCase().includes('different')
+    ) {
         const years = message.match(/20\d{2}/g);
         if (years && years.length >= 2) {
             const comparison = _DataQuery.comparePeriods(
@@ -248,14 +260,22 @@ function generateQueryContext(message) {
             );
             if (comparison.found) {
                 contextParts.push(`\nCOMPARISON ${years[0]} vs ${years[1]}:`);
-                contextParts.push(`${years[0]}: ${comparison.period1.totalHours}h, ${comparison.period1.uniqueArtists} artists`);
-                contextParts.push(`${years[1]}: ${comparison.period2.totalHours}h, ${comparison.period2.uniqueArtists} artists`);
+                contextParts.push(
+                    `${years[0]}: ${comparison.period1.totalHours}h, ${comparison.period1.uniqueArtists} artists`
+                );
+                contextParts.push(
+                    `${years[1]}: ${comparison.period2.totalHours}h, ${comparison.period2.uniqueArtists} artists`
+                );
 
                 if (comparison.newArtists.length > 0) {
-                    contextParts.push(`\nNew in ${years[1]}: ${comparison.newArtists.map(a => a.name).join(', ')}`);
+                    contextParts.push(
+                        `\nNew in ${years[1]}: ${comparison.newArtists.map(a => a.name).join(', ')}`
+                    );
                 }
                 if (comparison.droppedArtists.length > 0) {
-                    contextParts.push(`Dropped from ${years[0]}: ${comparison.droppedArtists.map(a => a.name).join(', ')}`);
+                    contextParts.push(
+                        `Dropped from ${years[0]}: ${comparison.droppedArtists.map(a => a.name).join(', ')}`
+                    );
                 }
             }
         }
@@ -267,7 +287,7 @@ function generateQueryContext(message) {
         if (/\b(all.?time|ever|overall|total)\b/i.test(message)) {
             const overall = _DataQuery.queryByTimePeriod(streamsData, {});
             if (overall.found) {
-                contextParts.push(`\nOVERALL TOP ARTISTS:`);
+                contextParts.push('\nOVERALL TOP ARTISTS:');
                 overall.topArtists.slice(0, 10).forEach((a, i) => {
                     contextParts.push(`  ${i + 1}. ${a.name} (${a.plays} plays)`);
                 });
@@ -281,7 +301,7 @@ function generateQueryContext(message) {
 /**
  * Generate a fallback response when API is unavailable
  * Now uses query context to provide data-driven answers
- * 
+ *
  * @param {string} message - User message
  * @param {string|null} queryContext - Query context from generateQueryContext
  * @returns {string} Fallback response
@@ -301,7 +321,7 @@ function generateFallbackResponse(message, queryContext) {
 
         // Check for time period data
         if (queryContext.includes('DATA FOR')) {
-            const topArtistMatch = queryContext.match(/1\. ([^\(]+) \((\d+) plays\)/);
+            const topArtistMatch = queryContext.match(/1\. ([^(]+) \((\d+) plays\)/);
             const hoursMatch = queryContext.match(/Listening time: (\d+) hours/);
             const periodMatch = queryContext.match(/DATA FOR ([^:]+):/);
 
@@ -337,8 +357,12 @@ function generateFallbackResponse(message, queryContext) {
     }
 
     // Existing fallback logic for common patterns
-    if (lowerMessage.includes('2020') || lowerMessage.includes('2021') ||
-        lowerMessage.includes('2022') || lowerMessage.includes('2023')) {
+    if (
+        lowerMessage.includes('2020') ||
+        lowerMessage.includes('2021') ||
+        lowerMessage.includes('2022') ||
+        lowerMessage.includes('2023')
+    ) {
         const year = message.match(/20\d{2}/)?.[0];
         if (patterns.eras && patterns.eras.eras.length > 0) {
             const era = patterns.eras.eras.find(e => e.start.includes(year));
@@ -354,7 +378,7 @@ function generateFallbackResponse(message, queryContext) {
             const ghost = patterns.ghostedArtists.ghosted[0];
             return `${ghost.artist} stands out — you played them ${ghost.totalPlays} times, then just... stopped ${ghost.daysSince} days ago. That's a significant shift. Something changed?`;
         }
-        return `I can see some artists you've moved on from, but the full picture needs the chat API. Your personality type suggests you process music emotionally, so these changes might be meaningful.`;
+        return "I can see some artists you've moved on from, but the full picture needs the chat API. Your personality type suggests you process music emotionally, so these changes might be meaningful.";
     }
 
     if (lowerMessage.includes('favorite') || lowerMessage.includes('love')) {
@@ -366,20 +390,21 @@ function generateFallbackResponse(message, queryContext) {
 
     // Default response - provider-aware messaging
     const currentProvider = Settings?.getSettings?.()?.llm?.provider || 'openrouter';
-    const providerHint = currentProvider === 'openrouter'
-        ? 'connect an OpenRouter API key in settings'
-        : currentProvider === 'lmstudio'
-            ? 'ensure LM Studio is running with a model loaded'
-            : currentProvider === 'ollama'
-                ? 'ensure Ollama is running (ollama serve)'
-                : 'configure an LLM provider in settings';
+    const providerHint =
+        currentProvider === 'openrouter'
+            ? 'connect an OpenRouter API key in settings'
+            : currentProvider === 'lmstudio'
+                ? 'ensure LM Studio is running with a model loaded'
+                : currentProvider === 'ollama'
+                    ? 'ensure Ollama is running (ollama serve)'
+                    : 'configure an LLM provider in settings';
 
     return `As ${personality.name}, ${personality.tagline.toLowerCase()} ${personality.allEvidence?.[0] || ''}\n\nTo explore deeper questions, ${providerHint}. Until then, I can tell you about your patterns: ${patterns.summary?.totalHours || 'many'} hours of music across ${patterns.summary?.uniqueArtists || 'many'} artists.`;
 }
 
 /**
  * Get semantic context from RAG if configured
- * 
+ *
  * @param {string} message - User message
  * @param {number} limit - Number of context chunks to retrieve
  * @returns {Promise<string|null>} Semantic context or null
@@ -400,7 +425,7 @@ async function getSemanticContext(message, limit = 3) {
 
 /**
  * Calculate token usage for a request
- * 
+ *
  * @param {Object} params - Token calculation parameters
  * @returns {Object} Token info
  */
@@ -410,7 +435,7 @@ function calculateTokenUsage(params) {
             total: 0,
             contextWindow: 4000,
             usagePercent: 0,
-            warnings: []
+            warnings: [],
         };
     }
 
@@ -419,7 +444,7 @@ function calculateTokenUsage(params) {
 
 /**
  * Get recommended action based on token usage
- * 
+ *
  * @param {Object} tokenInfo - Token information
  * @returns {Object} Recommended action
  */
@@ -433,7 +458,7 @@ function getRecommendedTokenAction(tokenInfo) {
 
 /**
  * Truncate request to target token count
- * 
+ *
  * @param {Object} params - Parameters to truncate
  * @param {number} targetTokens - Target token count
  * @returns {Object} Truncated parameters
@@ -455,11 +480,51 @@ function truncateToTarget(params, targetTokens) {
  */
 function isCommonWord(word) {
     const commonWords = new Set([
-        'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-        'of', 'with', 'by', 'from', 'was', 'were', 'been', 'have', 'has',
-        'did', 'does', 'do', 'is', 'are', 'am', 'what', 'when', 'where',
-        'who', 'why', 'how', 'this', 'that', 'these', 'those', 'my', 'your',
-        'music', 'listening', 'listen', 'played', 'play', 'heard', 'hear'
+        'the',
+        'a',
+        'an',
+        'and',
+        'or',
+        'but',
+        'in',
+        'on',
+        'at',
+        'to',
+        'for',
+        'of',
+        'with',
+        'by',
+        'from',
+        'was',
+        'were',
+        'been',
+        'have',
+        'has',
+        'did',
+        'does',
+        'do',
+        'is',
+        'are',
+        'am',
+        'what',
+        'when',
+        'where',
+        'who',
+        'why',
+        'how',
+        'this',
+        'that',
+        'these',
+        'those',
+        'my',
+        'your',
+        'music',
+        'listening',
+        'listen',
+        'played',
+        'play',
+        'heard',
+        'hear',
     ]);
     return commonWords.has(word.toLowerCase());
 }
@@ -468,8 +533,20 @@ function isCommonWord(word) {
  * Get month name from number
  */
 function getMonthName(monthNum) {
-    const months = ['January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'];
+    const months = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+    ];
     return months[monthNum - 1] || 'Unknown';
 }
 
@@ -489,7 +566,7 @@ const MessageOperations = {
     getSemanticContext,
     calculateTokenUsage,
     getRecommendedTokenAction,
-    truncateToTarget
+    truncateToTarget,
 };
 
 // ES Module export

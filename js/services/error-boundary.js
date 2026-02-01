@@ -1,19 +1,19 @@
 /**
  * Error Boundary for UI Widgets
- * 
+ *
  * Provides React-style error boundaries for vanilla JavaScript.
  * Wraps async operations and renders recovery UI on failure.
- * 
+ *
  * Features:
  * - Isolates widget crashes from affecting the whole app
  * - Shows user-friendly error UI with retry button
  * - Logs errors for debugging
  * - Preserves original content for recovery
- * 
+ *
  * Usage:
  *   const boundary = new ErrorBoundary('Chat', '.chat-container');
  *   await boundary.wrap(async () => { ... });
- * 
+ *
  * @module services/error-boundary
  */
 
@@ -69,7 +69,7 @@ export class ErrorBoundary {
         this.lastError = null;
         this.lastContext = null;
         this.originalContent = null;
-        this.originalNodes = null;  // L1 FIX: Store DOM nodes to preserve event handlers
+        this.originalNodes = null; // L1 FIX: Store DOM nodes to preserve event handlers
         this.retryFn = null;
 
         // Unique ID for this boundary
@@ -335,13 +335,13 @@ export class ErrorBoundary {
  * @param {Object} options.telemetry - Telemetry service with record() method
  * @returns {Promise<*>} Operation result or fallback value
  */
-ErrorBoundary.wrap = async function(operation, options = {}) {
+ErrorBoundary.wrap = async function (operation, options = {}) {
     const {
         fallback = null,
         context = 'unknown',
         onError = null,
         rethrow = true,
-        telemetry = null
+        telemetry = null,
     } = options;
 
     try {
@@ -351,7 +351,7 @@ ErrorBoundary.wrap = async function(operation, options = {}) {
         const errorContext = {
             context,
             timestamp: Date.now(),
-            ...options
+            ...options,
         };
 
         // Log error with context
@@ -373,7 +373,7 @@ ErrorBoundary.wrap = async function(operation, options = {}) {
                 telemetry.record('error_boundary_caught', {
                     context,
                     error: error.message,
-                    errorType: error.constructor.name
+                    errorType: error.constructor.name,
                 });
             } catch (telemetryError) {
                 console.warn('[ErrorBoundary] Failed to record telemetry:', telemetryError);
@@ -404,13 +404,13 @@ ErrorBoundary.wrap = async function(operation, options = {}) {
  * @param {Object} options - Configuration options (same as wrap)
  * @returns {*} Operation result or fallback value
  */
-ErrorBoundary.wrapSync = function(operation, options = {}) {
+ErrorBoundary.wrapSync = function (operation, options = {}) {
     const {
         fallback = null,
         context = 'unknown',
         onError = null,
         rethrow = true,
-        telemetry = null
+        telemetry = null,
     } = options;
 
     try {
@@ -420,7 +420,7 @@ ErrorBoundary.wrapSync = function(operation, options = {}) {
         const errorContext = {
             context,
             timestamp: Date.now(),
-            ...options
+            ...options,
         };
 
         // Log error with context
@@ -442,7 +442,7 @@ ErrorBoundary.wrapSync = function(operation, options = {}) {
                 telemetry.record('error_boundary_caught', {
                     context,
                     error: error.message,
-                    errorType: error.constructor.name
+                    errorType: error.constructor.name,
                 });
             } catch (telemetryError) {
                 console.warn('[ErrorBoundary] Failed to record telemetry:', telemetryError);
@@ -481,7 +481,7 @@ export function createChatBoundary(options = {}) {
             console.error(msg, error);
             // Could also send to analytics
         },
-        ...options
+        ...options,
     });
 }
 
@@ -495,7 +495,7 @@ export function createCardBoundary(options = {}) {
         onError: (msg, error, context) => {
             console.error(msg, error);
         },
-        ...options
+        ...options,
     });
 }
 
@@ -541,7 +541,7 @@ function showErrorToast(message) {
 export function installGlobalErrorHandler() {
     if (typeof window === 'undefined') return;
 
-    window.addEventListener('error', (event) => {
+    window.addEventListener('error', event => {
         console.error('[GlobalErrorBoundary] Uncaught error:', event.error);
         // Show user-facing toast for non-developer errors
         if (event.error && !event.error.message.includes('ResizeObserver')) {
@@ -550,7 +550,7 @@ export function installGlobalErrorHandler() {
         }
     });
 
-    window.addEventListener('unhandledrejection', (event) => {
+    window.addEventListener('unhandledrejection', event => {
         console.error('[GlobalErrorBoundary] Unhandled promise rejection:', event.reason);
         // Prevent the default browser error logging
         event.preventDefault();

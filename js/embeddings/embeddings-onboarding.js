@@ -1,17 +1,17 @@
 /**
  * Embeddings Onboarding Component
- * 
+ *
  * Feature discovery modal explaining local embeddings:
  * - Privacy verification UI
  * - Compatibility checking (WebGPU, WASM, IndexedDB, storage)
  * - Storage preview bar
  * - Enable/Cancel buttons
- * 
+ *
  * HNW Considerations:
  * - Hierarchy: Entry point for embedding feature activation
  * - Network: Checks all dependencies before enabling
  * - Wave: Sequential compatibility checks with visual feedback
- * 
+ *
  * @module embeddings/embeddings-onboarding
  */
 
@@ -90,7 +90,7 @@ const ModalManager = {
      */
     isActive(modalId) {
         return this.activeModals.has(modalId);
-    }
+    },
 };
 
 // ==========================================
@@ -184,7 +184,9 @@ let isSettled = false;
 async function runCompatibilityChecks() {
     // Prevent reentry - return existing promise if checks are in progress
     if (isChecking && compatibilityPromise) {
-        console.log('[EmbeddingsOnboarding] Compatibility checks already in progress, returning existing promise');
+        console.log(
+            '[EmbeddingsOnboarding] Compatibility checks already in progress, returning existing promise'
+        );
         return compatibilityPromise;
     }
 
@@ -198,15 +200,22 @@ async function runCompatibilityChecks() {
             updateCheckStatus('check-wasm', 'checking');
             const wasmSupported = await checkWASM();
             compatibilityResults.wasm = wasmSupported;
-            updateCheckStatus('check-wasm', wasmSupported ? 'pass' : 'fail', wasmSupported ? 'Available' : 'Not supported');
+            updateCheckStatus(
+                'check-wasm',
+                wasmSupported ? 'pass' : 'fail',
+                wasmSupported ? 'Available' : 'Not supported'
+            );
 
             // WebGPU Check (optional enhancement) - wrapped in try-catch for safety
             updateCheckStatus('check-webgpu', 'checking');
             try {
                 const webgpuResult = await BatteryAwareModeSelector.checkWebGPUSupport();
                 compatibilityResults.webgpu = webgpuResult.supported;
-                updateCheckStatus('check-webgpu', webgpuResult.supported ? 'pass' : 'optional',
-                    webgpuResult.supported ? '100x faster' : 'Using WASM');
+                updateCheckStatus(
+                    'check-webgpu',
+                    webgpuResult.supported ? 'pass' : 'optional',
+                    webgpuResult.supported ? '100x faster' : 'Using WASM'
+                );
             } catch (webgpuError) {
                 // WebGPU check failed - log error and use safe default
                 console.error('[EmbeddingsOnboarding] WebGPU check failed:', webgpuError);
@@ -218,21 +227,30 @@ async function runCompatibilityChecks() {
             updateCheckStatus('check-indexeddb', 'checking');
             const indexedDBSupported = await checkIndexedDB();
             compatibilityResults.indexeddb = indexedDBSupported;
-            updateCheckStatus('check-indexeddb', indexedDBSupported ? 'pass' : 'fail',
-                indexedDBSupported ? 'Available' : 'Required');
+            updateCheckStatus(
+                'check-indexeddb',
+                indexedDBSupported ? 'pass' : 'fail',
+                indexedDBSupported ? 'Available' : 'Required'
+            );
 
             // Storage Check
             updateCheckStatus('check-storage', 'checking');
             const storageResult = await checkStorage();
             compatibilityResults.storage = storageResult;
-            updateCheckStatus('check-storage', storageResult.ok ? 'pass' : 'fail',
-                storageResult.ok ? 'Sufficient' : 'Low space');
+            updateCheckStatus(
+                'check-storage',
+                storageResult.ok ? 'pass' : 'fail',
+                storageResult.ok ? 'Sufficient' : 'Low space'
+            );
 
             // Update storage preview
             updateStoragePreview(storageResult);
 
             // Enable button if minimum requirements met
-            const canEnable = compatibilityResults.wasm && compatibilityResults.indexeddb && compatibilityResults.storage?.ok;
+            const canEnable =
+                compatibilityResults.wasm &&
+                compatibilityResults.indexeddb &&
+                compatibilityResults.storage?.ok;
             const enableBtn = document.getElementById('onboarding-enable');
             if (enableBtn) {
                 enableBtn.disabled = !canEnable;
@@ -254,8 +272,7 @@ async function runCompatibilityChecks() {
  */
 async function checkWASM() {
     try {
-        if (typeof WebAssembly === 'object' &&
-            typeof WebAssembly.instantiate === 'function') {
+        if (typeof WebAssembly === 'object' && typeof WebAssembly.instantiate === 'function') {
             const module = new WebAssembly.Module(
                 Uint8Array.of(0x0, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00)
             );
@@ -271,7 +288,7 @@ async function checkWASM() {
  * Check IndexedDB support
  */
 async function checkIndexedDB() {
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
         try {
             const request = indexedDB.open('__test__');
             request.onerror = () => resolve(false);
@@ -307,7 +324,7 @@ async function checkStorage() {
                 usedMB,
                 totalMB,
                 availableMB,
-                percentUsed
+                percentUsed,
             };
         }
     } catch (e) {
@@ -402,7 +419,7 @@ function show() {
         return Promise.resolve(false);
     }
 
-    currentShowPromise = new Promise((resolve) => {
+    currentShowPromise = new Promise(resolve => {
         // Reset settled flag
         isSettled = false;
 
@@ -419,9 +436,11 @@ function show() {
         runCompatibilityChecks();
 
         // Single cleanup function to prevent multiple resolves
-        const cleanup = (result) => {
+        const cleanup = result => {
             if (isSettled) {
-                console.warn('[EmbeddingsOnboarding] Promise already settled, ignoring duplicate resolve');
+                console.warn(
+                    '[EmbeddingsOnboarding] Promise already settled, ignoring duplicate resolve'
+                );
                 return;
             }
             isSettled = true;
@@ -451,18 +470,21 @@ function show() {
             EventBus.emit('embedding:onboarding_complete', { enabled: true });
             cleanup(true);
         };
-        const onOverlayClick = (e) => {
+        const onOverlayClick = e => {
             if (e.target === modal) {
                 cleanup(false);
             }
         };
-        const handleEscape = (e) => {
+        const handleEscape = e => {
             // Edge case: Only handle Escape if modal is visible and focused (ESCAPE CONFLICT FIX)
             // Prevents closing modal when user is typing elsewhere on the page
             if (e.key === 'Escape' && modal?.parentNode === document.body) {
                 // Robust check: determine if this modal is topmost using elementsFromPoint
                 const rect = modal.getBoundingClientRect();
-                const topElement = document.elementsFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)[0];
+                const topElement = document.elementsFromPoint(
+                    rect.left + rect.width / 2,
+                    rect.top + rect.height / 2
+                )[0];
                 const isTopmost = topElement === modal || modal.contains(topElement);
 
                 if (isTopmost) {
@@ -521,7 +543,7 @@ export const EmbeddingsOnboarding = {
     /**
      * Access to ModalManager for other modules
      */
-    ModalManager
+    ModalManager,
 };
 
 console.log('[EmbeddingsOnboarding] Module loaded');

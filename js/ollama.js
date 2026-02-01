@@ -26,36 +26,69 @@ const GENERATION_TIMEOUT_MS = 120000; // 2 minutes for generation
 // Models recommended for music analysis
 // These have good instruction following and context understanding
 const RECOMMENDED_MODELS = [
-    { id: 'llama3.2', name: 'Llama 3.2 (8B)', recommended: true, notes: 'Best balance of speed and quality' },
+    {
+        id: 'llama3.2',
+        name: 'Llama 3.2 (8B)',
+        recommended: true,
+        notes: 'Best balance of speed and quality',
+    },
     { id: 'llama3.2:1b', name: 'Llama 3.2 (1B)', recommended: false, notes: 'Fast, lower quality' },
-    { id: 'mistral', name: 'Mistral (7B)', recommended: true, notes: 'Good for creative responses' },
-    { id: 'deepseek-r1:8b', name: 'DeepSeek R1 (8B)', recommended: true, notes: 'Strong reasoning' },
-    { id: 'qwen2.5:7b', name: 'Qwen 2.5 (7B)', recommended: true, notes: 'Good multilingual support' },
+    {
+        id: 'mistral',
+        name: 'Mistral (7B)',
+        recommended: true,
+        notes: 'Good for creative responses',
+    },
+    {
+        id: 'deepseek-r1:8b',
+        name: 'DeepSeek R1 (8B)',
+        recommended: true,
+        notes: 'Strong reasoning',
+    },
+    {
+        id: 'qwen2.5:7b',
+        name: 'Qwen 2.5 (7B)',
+        recommended: true,
+        notes: 'Good multilingual support',
+    },
     { id: 'phi3', name: 'Phi-3 (3.8B)', recommended: false, notes: 'Microsoft, fast inference' },
-    { id: 'gemma2:9b', name: 'Gemma 2 (9B)', recommended: true, notes: 'Google, good quality' }
+    { id: 'gemma2:9b', name: 'Gemma 2 (9B)', recommended: true, notes: 'Google, good quality' },
 ];
 
 // Models known to support function/tool calling
 // Updated 2026-01 with expanded Ollama tool support
 const TOOL_CAPABLE_MODELS = [
     // Llama family
-    'llama3.2', 'llama3.1', 'llama3.3',
+    'llama3.2',
+    'llama3.1',
+    'llama3.3',
     // Mistral family
-    'mistral', 'mistral-nemo', 'mixtral',
+    'mistral',
+    'mistral-nemo',
+    'mixtral',
     // Qwen family
-    'qwen2.5', 'qwen2.5-coder', 'qwen2',
+    'qwen2.5',
+    'qwen2.5-coder',
+    'qwen2',
     // DeepSeek family
-    'deepseek-r1', 'deepseek-coder', 'deepseek-v2', 'deepseek',
+    'deepseek-r1',
+    'deepseek-coder',
+    'deepseek-v2',
+    'deepseek',
     // Cohere Command
-    'command-r', 'command-r-plus',
+    'command-r',
+    'command-r-plus',
     // Granite
-    'granite3-dense', 'granite3.1-dense',
+    'granite3-dense',
+    'granite3.1-dense',
     // Hermes (fine-tuned for function calling)
-    'hermes3', 'nous-hermes', 'hermes',
+    'hermes3',
+    'nous-hermes',
+    'hermes',
     // NVIDIA Nemotron
     'nemotron',
     // Functionary (specialized for function calling)
-    'functionary'
+    'functionary',
 ];
 
 // ==========================================
@@ -106,8 +139,8 @@ async function ollamaFetch(path, options = {}, timeout = CONNECTION_TIMEOUT_MS) 
             signal: controller.signal,
             headers: {
                 'Content-Type': 'application/json',
-                ...options.headers
-            }
+                ...options.headers,
+            },
         });
 
         // Only clear timeout if it hasn't fired yet
@@ -144,26 +177,26 @@ async function detectServer() {
         if (!response.ok) {
             return {
                 available: false,
-                error: `Server returned ${response.status}`
+                error: `Server returned ${response.status}`,
             };
         }
 
         const data = await response.json();
         return {
             available: true,
-            version: data.version || 'unknown'
+            version: data.version || 'unknown',
         };
     } catch (error) {
         // Distinguish between connection refused vs timeout
         if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
             return {
                 available: false,
-                error: 'Ollama not running. Start with: ollama serve'
+                error: 'Ollama not running. Start with: ollama serve',
             };
         }
         return {
             available: false,
-            error: error.message
+            error: error.message,
         };
     }
 }
@@ -202,7 +235,7 @@ async function listModels() {
             modified: model.modified_at,
             details: model.details || {},
             family: model.details?.family || 'unknown',
-            parameterSize: model.details?.parameter_size || 'unknown'
+            parameterSize: model.details?.parameter_size || 'unknown',
         }));
     } catch (error) {
         console.error('[Ollama] Failed to list models:', error);
@@ -220,7 +253,7 @@ async function getRecommendedModels() {
 
     return RECOMMENDED_MODELS.map(rec => ({
         ...rec,
-        installed: installedIds.some(id => id.includes(rec.id.split(':')[0]))
+        installed: installedIds.some(id => id.includes(rec.id.split(':')[0])),
     }));
 }
 
@@ -240,11 +273,15 @@ function supportsToolCalling(modelName) {
  * @param {function} onProgress - Progress callback
  * @returns {Promise<void>}
  */
-async function pullModel(modelName, onProgress = () => { }) {
-    const response = await ollamaFetch('/api/pull', {
-        method: 'POST',
-        body: JSON.stringify({ name: modelName, stream: true })
-    }, GENERATION_TIMEOUT_MS * 5); // 10 minutes for large models
+async function pullModel(modelName, onProgress = () => {}) {
+    const response = await ollamaFetch(
+        '/api/pull',
+        {
+            method: 'POST',
+            body: JSON.stringify({ name: modelName, stream: true }),
+        },
+        GENERATION_TIMEOUT_MS * 5
+    ); // 10 minutes for large models
 
     if (!response.ok) {
         throw new Error(`Failed to pull model: ${response.status}`);
@@ -267,12 +304,14 @@ async function pullModel(modelName, onProgress = () => { }) {
                         status: data.status,
                         completed: data.completed,
                         total: data.total,
-                        percent: Math.round((data.completed / data.total) * 100)
+                        percent: Math.round((data.completed / data.total) * 100),
                     });
                 } else if (data && data.status) {
                     onProgress({ status: data.status });
                 }
-            } catch { /* Ignore non-JSON errors */ }
+            } catch {
+                /* Ignore non-JSON errors */
+            }
         }
     }
 }
@@ -298,11 +337,12 @@ function preprocessMessages(messages) {
                     function: {
                         name: tc.function.name,
                         // Convert string arguments back to object if needed
-                        arguments: typeof tc.function.arguments === 'string'
-                            ? safeJsonParse(tc.function.arguments, {})
-                            : tc.function.arguments
-                    }
-                }))
+                        arguments:
+                            typeof tc.function.arguments === 'string'
+                                ? safeJsonParse(tc.function.arguments, {})
+                                : tc.function.arguments,
+                    },
+                })),
             };
         }
         return msg;
@@ -323,7 +363,7 @@ async function chat(messages, model, options = {}) {
         maxTokens = 2000,
         stream = false,
         onToken = null,
-        tools = null // Function calling tools
+        tools = null, // Function calling tools
     } = options;
 
     const requestBody = {
@@ -333,8 +373,8 @@ async function chat(messages, model, options = {}) {
         options: {
             temperature,
             top_p: topP,
-            num_predict: maxTokens
-        }
+            num_predict: maxTokens,
+        },
     };
 
     // Add tools if provided and model supports them
@@ -342,10 +382,14 @@ async function chat(messages, model, options = {}) {
         requestBody.tools = tools;
     }
 
-    const response = await ollamaFetch('/api/chat', {
-        method: 'POST',
-        body: JSON.stringify(requestBody)
-    }, GENERATION_TIMEOUT_MS);
+    const response = await ollamaFetch(
+        '/api/chat',
+        {
+            method: 'POST',
+            body: JSON.stringify(requestBody),
+        },
+        GENERATION_TIMEOUT_MS
+    );
 
     if (!response.ok) {
         const errorText = await response.text();
@@ -365,10 +409,14 @@ async function chat(messages, model, options = {}) {
 
             // Make a new non-streaming request
             const fallbackRequestBody = { ...requestBody, stream: false };
-            const fallbackResponse = await ollamaFetch('/api/chat', {
-                method: 'POST',
-                body: JSON.stringify(fallbackRequestBody)
-            }, GENERATION_TIMEOUT_MS);
+            const fallbackResponse = await ollamaFetch(
+                '/api/chat',
+                {
+                    method: 'POST',
+                    body: JSON.stringify(fallbackRequestBody),
+                },
+                GENERATION_TIMEOUT_MS
+            );
 
             if (!fallbackResponse.ok) {
                 throw new Error(`Ollama fallback failed: ${fallbackResponse.status}`);
@@ -386,7 +434,7 @@ async function chat(messages, model, options = {}) {
                 content: fallbackData.message?.content || '',
                 model: fallbackData.model,
                 done: fallbackData.done,
-                toolCalls: fallbackData.message?.tool_calls || null
+                toolCalls: fallbackData.message?.tool_calls || null,
             };
         }
 
@@ -402,9 +450,10 @@ async function chat(messages, model, options = {}) {
         // Performance metrics
         evalCount: data.eval_count,
         evalDuration: data.eval_duration,
-        tokensPerSecond: data.eval_count && data.eval_duration
-            ? (data.eval_count / (data.eval_duration / 1e9)).toFixed(1)
-            : null
+        tokensPerSecond:
+            data.eval_count && data.eval_duration
+                ? (data.eval_count / (data.eval_duration / 1e9)).toFixed(1)
+                : null,
     };
 }
 
@@ -420,8 +469,8 @@ async function handleStreamingResponse(response, onToken) {
 
     let fullContent = '';
     let lastData = null;
-    let buffer = '';  // Buffer for incomplete chunks
-    let streamError = false;  // HIGH FIX #10: Track if stream had an error
+    let buffer = ''; // Buffer for incomplete chunks
+    let streamError = false; // HIGH FIX #10: Track if stream had an error
 
     try {
         while (true) {
@@ -470,7 +519,7 @@ async function handleStreamingResponse(response, onToken) {
         model: lastData?.model,
         done: true,
         toolCalls: lastData?.message?.tool_calls || null,
-        streamError  // HIGH FIX #10: Indicate if there was a stream error
+        streamError, // HIGH FIX #10: Indicate if there was a stream error
     };
 }
 
@@ -487,22 +536,26 @@ async function generate(prompt, model, options = {}) {
         topP = 0.9,
         maxTokens = 2000,
         stream = false,
-        onToken = null
+        onToken = null,
     } = options;
 
-    const response = await ollamaFetch('/api/generate', {
-        method: 'POST',
-        body: JSON.stringify({
-            model,
-            prompt,
-            stream,
-            options: {
-                temperature,
-                top_p: topP,
-                num_predict: maxTokens
-            }
-        })
-    }, GENERATION_TIMEOUT_MS);
+    const response = await ollamaFetch(
+        '/api/generate',
+        {
+            method: 'POST',
+            body: JSON.stringify({
+                model,
+                prompt,
+                stream,
+                options: {
+                    temperature,
+                    top_p: topP,
+                    num_predict: maxTokens,
+                },
+            }),
+        },
+        GENERATION_TIMEOUT_MS
+    );
 
     if (!response.ok) {
         throw new Error(`Ollama generate failed: ${response.status}`);
@@ -548,10 +601,14 @@ async function embed(input, model = 'nomic-embed-text') {
     const embeddings = [];
 
     for (const text of inputs) {
-        const response = await ollamaFetch('/api/embeddings', {
-            method: 'POST',
-            body: JSON.stringify({ model, prompt: text })
-        }, GENERATION_TIMEOUT_MS);
+        const response = await ollamaFetch(
+            '/api/embeddings',
+            {
+                method: 'POST',
+                body: JSON.stringify({ model, prompt: text }),
+            },
+            GENERATION_TIMEOUT_MS
+        );
 
         if (!response.ok) {
             throw new Error(`Ollama embedding failed: ${response.status}`);
@@ -571,7 +628,7 @@ async function embed(input, model = 'nomic-embed-text') {
 /**
  * Unified interface for chat.js integration
  * Matches the signature expected by the LLM provider abstraction
- * 
+ *
  * @param {Array} messages - Chat messages
  * @param {object} config - Full config including model, temperature, stream, onToken
  * @param {Array} tools - Function calling tools (optional)
@@ -589,7 +646,7 @@ async function chatCompletion(messages, config, tools = null) {
         topP = 0.9,
         maxTokens = 2000,
         stream = false,
-        onToken = null
+        onToken = null,
     } = config;
 
     // For streaming, we need to handle thinking blocks
@@ -597,40 +654,43 @@ async function chatCompletion(messages, config, tools = null) {
     let inThinking = false;
     let streamedContent = '';
 
-    const wrappedOnToken = stream && onToken ? (token) => {
-        // Detect thinking blocks (<think>...</think>)
-        if (token.includes('<think>')) {
-            inThinking = true;
-            const parts = token.split('<think>');
-            if (parts[0]) {
-                streamedContent += parts[0];
-                onToken(parts[0], false);
-            }
-            thinkingContent += parts[1] || '';
-            return;
-        }
+    const wrappedOnToken =
+        stream && onToken
+            ? token => {
+                // Detect thinking blocks (<think>...</think>)
+                if (token.includes('<think>')) {
+                    inThinking = true;
+                    const parts = token.split('<think>');
+                    if (parts[0]) {
+                        streamedContent += parts[0];
+                        onToken(parts[0], false);
+                    }
+                    thinkingContent += parts[1] || '';
+                    return;
+                }
 
-        if (token.includes('</think>')) {
-            inThinking = false;
-            const parts = token.split('</think>');
-            thinkingContent += parts[0] || '';
-            // Emit thinking complete event
-            onToken('[thinking]' + thinkingContent + '[/thinking]', true);
-            thinkingContent = '';
-            if (parts[1]) {
-                streamedContent += parts[1];
-                onToken(parts[1], false);
-            }
-            return;
-        }
+                if (token.includes('</think>')) {
+                    inThinking = false;
+                    const parts = token.split('</think>');
+                    thinkingContent += parts[0] || '';
+                    // Emit thinking complete event
+                    onToken('[thinking]' + thinkingContent + '[/thinking]', true);
+                    thinkingContent = '';
+                    if (parts[1]) {
+                        streamedContent += parts[1];
+                        onToken(parts[1], false);
+                    }
+                    return;
+                }
 
-        if (inThinking) {
-            thinkingContent += token;
-        } else {
-            streamedContent += token;
-            onToken(token, false);
-        }
-    } : null;
+                if (inThinking) {
+                    thinkingContent += token;
+                } else {
+                    streamedContent += token;
+                    onToken(token, false);
+                }
+            }
+            : null;
 
     const response = await chat(messages, model, {
         temperature,
@@ -638,22 +698,24 @@ async function chatCompletion(messages, config, tools = null) {
         maxTokens,
         stream,
         onToken: wrappedOnToken,
-        tools: tools && supportsToolCalling(model) ? tools : null
+        tools: tools && supportsToolCalling(model) ? tools : null,
     });
 
     // Convert to OpenAI-compatible format for chat.js
     const result = {
-        choices: [{
-            message: {
-                role: 'assistant',
-                content: stream ? streamedContent : response.content
+        choices: [
+            {
+                message: {
+                    role: 'assistant',
+                    content: stream ? streamedContent : response.content,
+                },
+                finish_reason: response.done ? 'stop' : 'length',
             },
-            finish_reason: response.done ? 'stop' : 'length'
-        }],
+        ],
         model: response.model,
         usage: {
-            completion_tokens: response.evalCount || 0
-        }
+            completion_tokens: response.evalCount || 0,
+        },
     };
 
     // Include thinking content if captured
@@ -669,10 +731,11 @@ async function chatCompletion(messages, config, tools = null) {
             function: {
                 name: tc.function.name,
                 // CRITICAL FIX #4: Use safeJsonStringify for tool arguments
-                arguments: typeof tc.function.arguments === 'string'
-                    ? tc.function.arguments  // Already a string, use as-is
-                    : JSON.stringify(tc.function.arguments || {})  // Convert object to JSON string
-            }
+                arguments:
+                    typeof tc.function.arguments === 'string'
+                        ? tc.function.arguments // Already a string, use as-is
+                        : JSON.stringify(tc.function.arguments || {}), // Convert object to JSON string
+            },
         }));
     }
 
@@ -707,9 +770,8 @@ export const Ollama = {
     // Constants
     DEFAULT_ENDPOINT: DEFAULT_OLLAMA_ENDPOINT,
     RECOMMENDED_MODELS,
-    TOOL_CAPABLE_MODELS
+    TOOL_CAPABLE_MODELS,
 };
 
 // ES Module export - use ModuleRegistry for access instead of window globals
 console.log('[Ollama] Module loaded');
-

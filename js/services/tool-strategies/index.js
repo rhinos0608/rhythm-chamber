@@ -1,7 +1,7 @@
 /**
  * Tool Strategy Index
  * Exports all tool strategies for ES module import
- * 
+ *
  * @module tool-strategies
  */
 

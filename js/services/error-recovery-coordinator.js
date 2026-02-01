@@ -44,7 +44,14 @@ export class ErrorRecoveryCoordinator {
      * @param {number} dependencies.maxQueueDepth - Maximum recovery queue depth (default: 10)
      * @param {number} dependencies.queueTimeoutMs - Queue timeout in milliseconds (default: 30000)
      */
-    constructor({ eventBus, operationLock, tabCoordinator, stateMachine, maxQueueDepth = 10, queueTimeoutMs = 30000 } = {}) {
+    constructor({
+        eventBus,
+        operationLock,
+        tabCoordinator,
+        stateMachine,
+        maxQueueDepth = 10,
+        queueTimeoutMs = 30000,
+    } = {}) {
         this._eventBus = eventBus || EventBus;
         this._maxQueueDepth = maxQueueDepth;
         this._queueTimeoutMs = queueTimeoutMs;
@@ -92,7 +99,7 @@ export class ErrorRecoveryCoordinator {
             domainCounts: new Map(),
             errorCounts: new Map(),
             totalRecoveryTimeMs: 0,
-            successRate: 0
+            successRate: 0,
         };
     }
 

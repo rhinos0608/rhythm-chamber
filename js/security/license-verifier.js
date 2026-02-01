@@ -67,12 +67,13 @@ const LICENSE_VERIFY_TIMEOUT = 10000; // 10 seconds
 //
 const PUBLIC_KEYS = {
     // Current production key (v1)
-    'v1': 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE' +
-          '0qC6PgZMlZoAPsKP7dZBE8c7ey-OGBsyUkuhUUofAJG0imK28WHuY3BMQ' +
-          'cVbXUFH74PUzIdyx6wlez4YQ9MFAQ',
+    v1:
+        'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE' +
+        '0qC6PgZMlZoAPsKP7dZBE8c7ey-OGBsyUkuhUUofAJG0imK28WHuY3BMQ' +
+        'cVbXUFH74PUzIdyx6wlez4YQ9MFAQ',
     // Placeholder for v2 key (future rotation)
     // When rotating: generate new key, update 'v2', then change ACTIVE_KEY_VERSION
-    'v2': null
+    v2: null,
 };
 
 // The active key version used for verification
@@ -109,7 +110,7 @@ async function generateDeviceFingerprint() {
         navigator.deviceMemory || 'unknown',
         screen.width + 'x' + screen.height,
         new Date().getTimezoneOffset(),
-        window.location.origin  // Domain binding
+        window.location.origin, // Domain binding
     ];
 
     const data = components.join('|');
@@ -191,7 +192,7 @@ function parseJWT(token) {
             header,
             payload,
             signature: parts[2],
-            raw: token
+            raw: token,
         };
     } catch (e) {
         logger.error('Failed to parse JWT:', e);
@@ -215,7 +216,7 @@ async function importPublicKey() {
 
     try {
         // Decode base64URL public key to raw bytes
-        const base64UrlToBase64 = (str) => {
+        const base64UrlToBase64 = str => {
             return str.replace(/-/g, '+').replace(/_/g, '/');
         };
         const base64PublicKey = base64UrlToBase64(PUBLIC_KEY_SPKI);
@@ -227,7 +228,7 @@ async function importPublicKey() {
             publicKeyBytes,
             {
                 name: 'ECDSA',
-                namedCurve: 'P-256'
+                namedCurve: 'P-256',
             },
             false, // Not extractable (security)
             ['verify']
@@ -261,7 +262,7 @@ async function verifyECDSA(data, signature) {
         const isValid = await crypto.subtle.verify(
             {
                 name: 'ECDSA',
-                hash: { name: 'SHA-256' }
+                hash: { name: 'SHA-256' },
             },
             key,
             sigBytes,
@@ -286,10 +287,10 @@ async function verifyECDSA(data, signature) {
  */
 async function verifyLicenseWithServer(licenseToken) {
     const deviceFingerprint = await generateDeviceFingerprint();
-    
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), LICENSE_VERIFY_TIMEOUT);
-    
+
     try {
         const response = await fetch(LICENSE_SERVER_URL, {
             method: 'POST',
@@ -299,13 +300,13 @@ async function verifyLicenseWithServer(licenseToken) {
             body: JSON.stringify({
                 token: licenseToken,
                 deviceFingerprint: deviceFingerprint,
-                origin: window.location.origin
+                origin: window.location.origin,
             }),
-            signal: controller.signal
+            signal: controller.signal,
         });
-        
+
         clearTimeout(timeoutId);
-        
+
         if (!response.ok) {
             // Server returned error status
             const errorData = await response.json().catch(() => ({}));
@@ -314,12 +315,12 @@ async function verifyLicenseWithServer(licenseToken) {
                 error: 'SERVER_ERROR',
                 message: errorData.message || `Server error: ${response.status}`,
                 serverError: true,
-                statusCode: response.status
+                statusCode: response.status,
             };
         }
-        
+
         const result = await response.json();
-        
+
         return {
             valid: result.valid === true,
             tier: result.tier,
@@ -329,29 +330,32 @@ async function verifyLicenseWithServer(licenseToken) {
             features: result.features || [],
             offlineMode: false,
             serverVerified: true,
-            error: result.valid === true ? null : (result.error || 'SERVER_REJECTED'),
-            message: result.message
+            error: result.valid === true ? null : result.error || 'SERVER_REJECTED',
+            message: result.message,
         };
-        
     } catch (error) {
         clearTimeout(timeoutId);
-        
+
         // Network error - signal to fallback to offline mode
-        if (error.name === 'AbortError' || error.name === 'TypeError' || error.message?.includes('fetch')) {
+        if (
+            error.name === 'AbortError' ||
+            error.name === 'TypeError' ||
+            error.message?.includes('fetch')
+        ) {
             return {
                 valid: false,
                 error: 'NETWORK_ERROR',
                 message: 'Network unavailable, falling back to offline verification',
                 networkError: true,
-                offlineFallback: true
+                offlineFallback: true,
             };
         }
-        
+
         return {
             valid: false,
             error: 'SERVER_VERIFICATION_FAILED',
             message: error.message || 'Server verification failed',
-            serverError: true
+            serverError: true,
         };
     }
 }
@@ -385,7 +389,7 @@ async function verifyLicenseOffline(licenseToken) {
             valid: false,
             error: 'INVALID_FORMAT',
             message: 'License token must be in JWT format (header.payload.signature)',
-            offlineMode: true
+            offlineMode: true,
         };
     }
 
@@ -395,7 +399,7 @@ async function verifyLicenseOffline(licenseToken) {
             valid: false,
             error: 'UNSUPPORTED_ALGORITHM',
             message: `Unsupported algorithm: ${jwt.header.alg}. Expected ES256.`,
-            offlineMode: true
+            offlineMode: true,
         };
     }
 
@@ -405,7 +409,7 @@ async function verifyLicenseOffline(licenseToken) {
             valid: false,
             error: 'INVALID_TYPE',
             message: `Invalid token type: ${jwt.header.typ}. Expected JWT.`,
-            offlineMode: true
+            offlineMode: true,
         };
     }
 
@@ -417,8 +421,9 @@ async function verifyLicenseOffline(licenseToken) {
         return {
             valid: false,
             error: 'INVALID_SIGNATURE',
-            message: 'License signature verification failed. Token may have been tampered with or forged.',
-            offlineMode: true
+            message:
+                'License signature verification failed. Token may have been tampered with or forged.',
+            offlineMode: true,
         };
     }
 
@@ -429,7 +434,7 @@ async function verifyLicenseOffline(licenseToken) {
             valid: false,
             error: 'INVALID_TIER',
             message: `Invalid tier: ${payload.tier}`,
-            offlineMode: true
+            offlineMode: true,
         };
     }
 
@@ -440,20 +445,20 @@ async function verifyLicenseOffline(licenseToken) {
             valid: false,
             error: 'EXPIRED',
             message: `License expired at ${new Date(payload.exp * 1000).toISOString()}`,
-            offlineMode: true
+            offlineMode: true,
         };
     }
-    
+
     // Verify not before
     if (payload.nbf && payload.nbf > now) {
         return {
             valid: false,
             error: 'NOT_YET_VALID',
             message: `License not valid until ${new Date(payload.nbf * 1000).toISOString()}`,
-            offlineMode: true
+            offlineMode: true,
         };
     }
-    
+
     // Verify device binding if present
     if (payload.deviceBinding) {
         const deviceFingerprint = await generateDeviceFingerprint();
@@ -462,11 +467,11 @@ async function verifyLicenseOffline(licenseToken) {
                 valid: false,
                 error: 'DEVICE_MISMATCH',
                 message: 'License is bound to a different device',
-                offlineMode: true
+                offlineMode: true,
             };
         }
     }
-    
+
     // License is valid in offline mode
     return {
         valid: true,
@@ -476,7 +481,7 @@ async function verifyLicenseOffline(licenseToken) {
         expiresAt: payload.exp ? new Date(payload.exp * 1000).toISOString() : null,
         features: payload.features || [],
         offlineMode: true,
-        serverVerified: false
+        serverVerified: false,
     };
 }
 
@@ -526,7 +531,7 @@ async function verifyLicense(licenseToken) {
         return {
             ...serverResult,
             offlineMode: false,
-            serverRejected: true
+            serverRejected: true,
         };
     }
 
@@ -536,7 +541,7 @@ async function verifyLicense(licenseToken) {
         error: serverResult.error || 'VERIFICATION_FAILED',
         message: serverResult.message || 'License verification failed',
         offlineMode: false,
-        serverVerified: false
+        serverVerified: false,
     };
 }
 
@@ -561,18 +566,23 @@ async function storeLicense(licenseToken, metadata = {}) {
 
         // Create integrity checksum
         const checksumInput = `${licenseToken}:${verification.tier}:${await generateDeviceFingerprint()}`;
-        const checksumBytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(checksumInput));
-        const checksum = Array.from(new Uint8Array(checksumBytes)).map(b => b.toString(16).padStart(2, '0')).join('');
+        const checksumBytes = await crypto.subtle.digest(
+            'SHA-256',
+            new TextEncoder().encode(checksumInput)
+        );
+        const checksum = Array.from(new Uint8Array(checksumBytes))
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('');
 
         // Store with integrity protection
         const licenseData = {
-            token: licenseToken,  // Store signed token, not just data
+            token: licenseToken, // Store signed token, not just data
             checksum,
             tier: verification.tier,
             storedAt: Date.now(),
             offlineMode: verification.offlineMode || false,
             serverVerified: verification.serverVerified || false,
-            metadata
+            metadata,
         };
 
         localStorage.setItem(LICENSE_STORAGE_KEY, JSON.stringify(licenseData));
@@ -582,7 +592,6 @@ async function storeLicense(licenseToken, metadata = {}) {
 
         logger.info('License stored with integrity protection:', verification.tier);
         return true;
-
     } catch (e) {
         logger.error('Failed to store license:', e);
         return false;
@@ -604,8 +613,13 @@ async function loadLicense() {
 
         // Verify integrity
         const checksumInput = `${licenseData.token}:${licenseData.tier}:${await generateDeviceFingerprint()}`;
-        const checksumBytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(checksumInput));
-        const expectedChecksum = Array.from(new Uint8Array(checksumBytes)).map(b => b.toString(16).padStart(2, '0')).join('');
+        const checksumBytes = await crypto.subtle.digest(
+            'SHA-256',
+            new TextEncoder().encode(checksumInput)
+        );
+        const expectedChecksum = Array.from(new Uint8Array(checksumBytes))
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('');
 
         if (licenseData.checksum !== expectedChecksum) {
             logger.error('License integrity check failed - data may be corrupted or tampered');
@@ -624,9 +638,8 @@ async function loadLicense() {
         return {
             ...verification,
             storedAt: licenseData.storedAt,
-            metadata: licenseData.metadata
+            metadata: licenseData.metadata,
         };
-
     } catch (e) {
         logger.error('Failed to load license:', e);
         return null;
@@ -656,7 +669,7 @@ function updateCache(verification) {
         tier: verification.tier,
         expiresAt: verification.expiresAt,
         offlineMode: verification.offlineMode || false,
-        cachedAt: Date.now()
+        cachedAt: Date.now(),
     };
     localStorage.setItem(LICENSE_CACHE_KEY, JSON.stringify(cache));
 }
@@ -776,9 +789,11 @@ export const LicenseVerifier = {
 
     // Key rotation support (M2 Fix)
     PUBLIC_KEYS,
-    ACTIVE_KEY_VERSION
+    ACTIVE_KEY_VERSION,
 };
 
 export default LicenseVerifier;
 
-logger.info('Cryptographic license verifier loaded (ECDSA with server+offline mode, key rotation support)');
+logger.info(
+    'Cryptographic license verifier loaded (ECDSA with server+offline mode, key rotation support)'
+);

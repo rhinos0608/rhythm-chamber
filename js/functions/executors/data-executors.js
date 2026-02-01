@@ -39,13 +39,14 @@ function executeGetTopArtists(args, streams) {
         const result = DataQuery.getTopArtistsForPeriod(streams, {
             year,
             month,
-            limit: normalizedLimit
+            limit: normalizedLimit,
         });
 
         if (!result.found) {
             return {
-                error: `No data found for ${validation.formatPeriodLabel({ year, month })}. ` +
-                    `The user's data may not include this period.`
+                error:
+                    `No data found for ${validation.formatPeriodLabel({ year, month })}. ` +
+                    "The user's data may not include this period.",
             };
         }
 
@@ -56,14 +57,14 @@ function executeGetTopArtists(args, streams) {
             top_artists: result.topArtists.map((a, i) => ({
                 rank: i + 1,
                 name: a.name,
-                plays: a.plays
-            }))
+                plays: a.plays,
+            })),
         };
     }
 
     if (filtered.length === 0) {
         return {
-            error: `No data found for ${validation.formatPeriodLabel({ year, month, quarter, season })}.`
+            error: `No data found for ${validation.formatPeriodLabel({ year, month, quarter, season })}.`,
         };
     }
 
@@ -80,7 +81,7 @@ function executeGetTopArtists(args, streams) {
 
     // Sort by chosen metric
     const sorted = Object.values(artistData)
-        .sort((a, b) => sort_by === 'time' ? b.minutes - a.minutes : b.plays - a.plays)
+        .sort((a, b) => (sort_by === 'time' ? b.minutes - a.minutes : b.plays - a.plays))
         .slice(0, normalizedLimit);
 
     return {
@@ -92,8 +93,8 @@ function executeGetTopArtists(args, streams) {
             rank: i + 1,
             name: a.name,
             plays: a.plays,
-            minutes: Math.round(a.minutes)
-        }))
+            minutes: Math.round(a.minutes),
+        })),
     };
 }
 
@@ -119,12 +120,12 @@ function executeGetTopTracks(args, streams) {
         const result = DataQuery.getTopTracksForPeriod(streams, {
             year,
             month,
-            limit: normalizedLimit
+            limit: normalizedLimit,
         });
 
         if (!result.found) {
             return {
-                error: `No data found for ${validation.formatPeriodLabel({ year, month })}.`
+                error: `No data found for ${validation.formatPeriodLabel({ year, month })}.`,
             };
         }
 
@@ -136,14 +137,14 @@ function executeGetTopTracks(args, streams) {
                 rank: i + 1,
                 name: t.name,
                 artist: t.artist,
-                plays: t.plays
-            }))
+                plays: t.plays,
+            })),
         };
     }
 
     if (filtered.length === 0) {
         return {
-            error: `No data found for ${validation.formatPeriodLabel({ year, month, quarter, season })}.`
+            error: `No data found for ${validation.formatPeriodLabel({ year, month, quarter, season })}.`,
         };
     }
 
@@ -156,7 +157,7 @@ function executeGetTopTracks(args, streams) {
                 name: stream.trackName,
                 artist: stream.artistName,
                 plays: 0,
-                minutes: 0
+                minutes: 0,
             };
         }
         trackData[key].plays += 1;
@@ -164,7 +165,7 @@ function executeGetTopTracks(args, streams) {
     }
 
     const sorted = Object.values(trackData)
-        .sort((a, b) => sort_by === 'time' ? b.minutes - a.minutes : b.plays - a.plays)
+        .sort((a, b) => (sort_by === 'time' ? b.minutes - a.minutes : b.plays - a.plays))
         .slice(0, normalizedLimit);
 
     const totalMs = filtered.reduce((sum, s) => sum + (s.msPlayed || 0), 0);
@@ -179,8 +180,8 @@ function executeGetTopTracks(args, streams) {
             name: t.name,
             artist: t.artist,
             plays: t.plays,
-            minutes: Math.round(t.minutes)
-        }))
+            minutes: Math.round(t.minutes),
+        })),
     };
 }
 
@@ -190,8 +191,9 @@ function executeGetArtistHistory(args, streams) {
 
     if (!result.found) {
         return {
-            error: `No plays found for "${artist_name}". ` +
-                `The artist may not be in the user's listening history, or the name might be spelled differently.`
+            error:
+                `No plays found for "${artist_name}". ` +
+                "The artist may not be in the user's listening history, or the name might be spelled differently.",
         };
     }
 
@@ -202,7 +204,7 @@ function executeGetArtistHistory(args, streams) {
         last_listen: result.lastListen,
         peak_period: result.peakPeriod,
         peak_plays: result.peakPlays,
-        monthly_breakdown: result.monthlyBreakdown
+        monthly_breakdown: result.monthlyBreakdown,
     };
 }
 
@@ -235,12 +237,14 @@ function executeGetListeningStats(args, streams) {
             unique_tracks: result.uniqueTracks,
             date_range: result.dateRange,
             top_artists: result.topArtists.slice(0, 5).map(a => ({ name: a.name, plays: a.plays })),
-            top_tracks: result.topTracks.slice(0, 5).map(t => ({ name: t.name, artist: t.artist, plays: t.plays }))
+            top_tracks: result.topTracks
+                .slice(0, 5)
+                .map(t => ({ name: t.name, artist: t.artist, plays: t.plays })),
         };
     }
 
     if (filtered.length === 0) {
-        return { error: "No streaming data available for this period." };
+        return { error: 'No streaming data available for this period.' };
     }
 
     const totalMs = filtered.reduce((sum, s) => sum + (s.msPlayed || 0), 0);
@@ -271,29 +275,26 @@ function executeGetListeningStats(args, streams) {
     const dates = filtered.map(s => s.date).sort();
 
     return {
-        period: validation.formatPeriodLabel({ year, month, quarter, season }) || "All time",
+        period: validation.formatPeriodLabel({ year, month, quarter, season }) || 'All time',
         total_plays: filtered.length,
         total_hours: Math.round(totalMs / 3600000),
         unique_artists: uniqueArtists,
         unique_tracks: uniqueTracks,
         date_range: { start: dates[0], end: dates[dates.length - 1] },
         top_artists: topArtists,
-        top_tracks: topTracks
+        top_tracks: topTracks,
     };
 }
 
 function executeComparePeriods(args, streams) {
     const { year1, year2 } = args;
-    const result = DataQuery.comparePeriods(
-        streams,
-        { year: year1 },
-        { year: year2 }
-    );
+    const result = DataQuery.comparePeriods(streams, { year: year1 }, { year: year2 });
 
     if (!result.found) {
         return {
-            error: `Could not compare ${year1} and ${year2}. ` +
-                `One or both years may not be in the user's data.`
+            error:
+                `Could not compare ${year1} and ${year2}. ` +
+                "One or both years may not be in the user's data.",
         };
     }
 
@@ -302,18 +303,18 @@ function executeComparePeriods(args, streams) {
             year: year1,
             total_hours: result.period1.totalHours,
             unique_artists: result.period1.uniqueArtists,
-            total_plays: result.period1.totalPlays
+            total_plays: result.period1.totalPlays,
         },
         period2: {
             year: year2,
             total_hours: result.period2.totalHours,
             unique_artists: result.period2.uniqueArtists,
-            total_plays: result.period2.totalPlays
+            total_plays: result.period2.totalPlays,
         },
         hours_change: result.hoursChange,
         diversity_change: result.diversityChange,
         new_artists_in_year2: result.newArtists.map(a => a.name),
-        dropped_from_year1: result.droppedArtists.map(a => a.name)
+        dropped_from_year1: result.droppedArtists.map(a => a.name),
     };
 }
 
@@ -323,8 +324,9 @@ function executeSearchTracks(args, streams) {
 
     if (!result.found) {
         return {
-            error: `No plays found for track "${track_name}". ` +
-                `The track may not be in the user's listening history, or the name might be spelled differently.`
+            error:
+                `No plays found for track "${track_name}". ` +
+                "The track may not be in the user's listening history, or the name might be spelled differently.",
         };
     }
 
@@ -334,7 +336,7 @@ function executeSearchTracks(args, streams) {
         total_plays: result.totalPlays,
         total_hours: result.totalHours,
         first_listen: result.firstListen,
-        last_listen: result.lastListen
+        last_listen: result.lastListen,
     };
 }
 
@@ -349,9 +351,7 @@ export const DataExecutors = {
     get_artist_history: executeGetArtistHistory,
     get_listening_stats: executeGetListeningStats,
     compare_periods: executeComparePeriods,
-    search_tracks: executeSearchTracks
+    search_tracks: executeSearchTracks,
 };
 
-
 console.log('[DataExecutors] Module loaded');
-

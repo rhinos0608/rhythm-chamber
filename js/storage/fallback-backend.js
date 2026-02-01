@@ -25,7 +25,7 @@ import { EventBus } from '../services/event-bus.js';
  */
 const FALLBACK_MODES = {
     MEMORY: 'memory',
-    LOCALSTORAGE: 'localStorage'
+    LOCALSTORAGE: 'localStorage',
 };
 
 // Current fallback mode (determined at init)
@@ -276,7 +276,7 @@ async function get(storeName, key) {
                 return {
                     id: key,
                     data: storedData,
-                    savedAt: stored.savedAt || Date.now()
+                    savedAt: stored.savedAt || Date.now(),
                 };
             } else {
                 // Key-value stores
@@ -442,7 +442,7 @@ function getStats() {
         mode: currentMode,
         isPrivate: currentMode === FALLBACK_MODES.MEMORY,
         memoryEntries: memoryStore.size,
-        hasLocalStorage: isLocalStorageAvailable()
+        hasLocalStorage: isLocalStorageAvailable(),
     };
 }
 
@@ -501,7 +501,7 @@ async function init() {
     EventBus.emit('storage:fallback_active', {
         mode: currentMode,
         isPrivate,
-        message: getFallbackMessage(currentMode, isPrivate)
+        message: getFallbackMessage(currentMode, isPrivate),
     });
 
     return { mode: currentMode, isPrivate };
@@ -536,8 +536,8 @@ function showFallbackWarning(mode) {
         message,
         actions: [
             { label: 'Continue with temporary storage', action: 'continue' },
-            { label: 'How to enable full storage', action: 'learn_more' }
-        ]
+            { label: 'How to enable full storage', action: 'learn_more' },
+        ],
     });
 
     console.warn('[Fallback] ', message);
@@ -565,7 +565,7 @@ export const FallbackBackend = {
     count,
 
     // Utility
-    clearAll
+    clearAll,
 };
 
 console.log('[FallbackBackend] Module loaded');

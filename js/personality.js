@@ -8,37 +8,42 @@ const PERSONALITY_TYPES = {
         name: 'The Emotional Archaeologist',
         emoji: '🏛️',
         tagline: 'You mark time through sound.',
-        description: 'You don\'t just listen to music — you use it to process feelings. Your library is a scrapbook of emotional eras.',
-        signals: ['distinct eras', 'high repeat', 'genre shifts']
+        description:
+            "You don't just listen to music — you use it to process feelings. Your library is a scrapbook of emotional eras.",
+        signals: ['distinct eras', 'high repeat', 'genre shifts'],
     },
     mood_engineer: {
         name: 'The Mood Engineer',
         emoji: '🎛️',
         tagline: 'You use music to change your state.',
-        description: 'You strategically deploy music to shift your emotional state. Morning you and evening you have different soundtracks.',
-        signals: ['time-of-day patterns', 'mood searching']
+        description:
+            'You strategically deploy music to shift your emotional state. Morning you and evening you have different soundtracks.',
+        signals: ['time-of-day patterns', 'mood searching'],
     },
     discovery_junkie: {
         name: 'The Discovery Junkie',
         emoji: '🔍',
         tagline: 'Always hunting for the next sound.',
-        description: 'You\'re constantly seeking new artists. Your playlists never settle — there\'s always something new to find.',
-        signals: ['low plays-per-artist', 'high unique count']
+        description:
+            "You're constantly seeking new artists. Your playlists never settle — there's always something new to find.",
+        signals: ['low plays-per-artist', 'high unique count'],
     },
     comfort_curator: {
         name: 'The Comfort Curator',
         emoji: '🛋️',
         tagline: 'You know what you love.',
-        description: 'Same songs for years, and you wouldn\'t have it any other way. You\'ve found your sound and you\'re sticking with it.',
-        signals: ['high repeat rate', 'slow to change']
+        description:
+            "Same songs for years, and you wouldn't have it any other way. You've found your sound and you're sticking with it.",
+        signals: ['high repeat rate', 'slow to change'],
     },
     social_chameleon: {
         name: 'The Social Chameleon',
         emoji: '🎭',
         tagline: 'Your music shifts by context.',
-        description: 'Weekday you and weekend you have different playlists. Your music adapts to the social situation.',
-        signals: ['weekday ≠ weekend', 'context-dependent']
-    }
+        description:
+            'Weekday you and weekend you have different playlists. Your music adapts to the social situation.',
+        signals: ['weekday ≠ weekend', 'context-dependent'],
+    },
 };
 
 /**
@@ -50,7 +55,7 @@ function scorePersonality(patterns) {
         mood_engineer: 0,
         discovery_junkie: 0,
         comfort_curator: 0,
-        social_chameleon: 0
+        social_chameleon: 0,
     };
 
     const evidence = {
@@ -58,7 +63,7 @@ function scorePersonality(patterns) {
         mood_engineer: [],
         discovery_junkie: [],
         comfort_curator: [],
-        social_chameleon: []
+        social_chameleon: [],
     };
 
     // Detailed breakdown for explainer UI
@@ -72,13 +77,22 @@ function scorePersonality(patterns) {
         if (ratio > 50) {
             scores.comfort_curator += 3;
             evidence.comfort_curator.push(patterns.comfortDiscovery.description);
-            breakdown.push({ label: `Comfort ratio: ${ratio.toFixed(0)} plays/artist (loyal listener)`, points: 3 });
+            breakdown.push({
+                label: `Comfort ratio: ${ratio.toFixed(0)} plays/artist (loyal listener)`,
+                points: 3,
+            });
         } else if (ratio < 10) {
             scores.discovery_junkie += 3;
             evidence.discovery_junkie.push(patterns.comfortDiscovery.description);
-            breakdown.push({ label: `Comfort ratio: ${ratio.toFixed(0)} plays/artist (explorer)`, points: 3 });
+            breakdown.push({
+                label: `Comfort ratio: ${ratio.toFixed(0)} plays/artist (explorer)`,
+                points: 3,
+            });
         } else {
-            breakdown.push({ label: `Comfort ratio: ${ratio.toFixed(0)} plays/artist (balanced)`, points: 0 });
+            breakdown.push({
+                label: `Comfort ratio: ${ratio.toFixed(0)} plays/artist (balanced)`,
+                points: 0,
+            });
         }
     }
 
@@ -86,13 +100,20 @@ function scorePersonality(patterns) {
     if (patterns.eras && typeof patterns.eras === 'object' && patterns.eras.hasEras) {
         scores.emotional_archaeologist += 3;
         evidence.emotional_archaeologist.push(patterns.eras.description);
-        breakdown.push({ label: `Eras: ${patterns.eras.count || 0} distinct periods detected`, points: 3 });
+        breakdown.push({
+            label: `Eras: ${patterns.eras.count || 0} distinct periods detected`,
+            points: 3,
+        });
     } else {
         breakdown.push({ label: 'Eras: No distinct periods found', points: 0 });
     }
 
     // Time patterns
-    if (patterns.timePatterns && typeof patterns.timePatterns === 'object' && patterns.timePatterns.isMoodEngineer) {
+    if (
+        patterns.timePatterns &&
+        typeof patterns.timePatterns === 'object' &&
+        patterns.timePatterns.isMoodEngineer
+    ) {
         scores.mood_engineer += 3;
         evidence.mood_engineer.push(patterns.timePatterns.description);
         breakdown.push({ label: 'Time patterns: Morning ≠ Evening', points: 3 });
@@ -101,7 +122,11 @@ function scorePersonality(patterns) {
     }
 
     // Social patterns
-    if (patterns.socialPatterns && typeof patterns.socialPatterns === 'object' && patterns.socialPatterns.isSocialChameleon) {
+    if (
+        patterns.socialPatterns &&
+        typeof patterns.socialPatterns === 'object' &&
+        patterns.socialPatterns.isSocialChameleon
+    ) {
         scores.social_chameleon += 2;
         evidence.social_chameleon.push(patterns.socialPatterns.description);
         breakdown.push({ label: 'Social patterns: Weekday ≠ Weekend', points: 2 });
@@ -110,41 +135,67 @@ function scorePersonality(patterns) {
     }
 
     // Ghosted artists (indicates emotional processing)
-    if (patterns.ghostedArtists && typeof patterns.ghostedArtists === 'object' && patterns.ghostedArtists.hasGhosted) {
+    if (
+        patterns.ghostedArtists &&
+        typeof patterns.ghostedArtists === 'object' &&
+        patterns.ghostedArtists.hasGhosted
+    ) {
         scores.emotional_archaeologist += 2;
         // EDGE CASE FIX: Add safety check for ghosted array access
-        const ghosted = Array.isArray(patterns.ghostedArtists.ghosted) && patterns.ghostedArtists.ghosted[0];
+        const ghosted =
+            Array.isArray(patterns.ghostedArtists.ghosted) && patterns.ghostedArtists.ghosted[0];
         if (ghosted) {
             evidence.emotional_archaeologist.push(
                 `You used to play ${ghosted.artist} constantly (${ghosted.totalPlays} times), then stopped ${ghosted.daysSince} days ago`
             );
         }
-        breakdown.push({ label: `Ghosted artists: ${patterns.ghostedArtists.ghosted?.length || 0} detected`, points: 2 });
+        breakdown.push({
+            label: `Ghosted artists: ${patterns.ghostedArtists.ghosted?.length || 0} detected`,
+            points: 2,
+        });
     } else {
         breakdown.push({ label: 'Ghosted artists: None detected', points: 0 });
     }
 
     // Discovery explosions
-    if (patterns.discoveryExplosions && typeof patterns.discoveryExplosions === 'object' && patterns.discoveryExplosions.hasExplosions) {
+    if (
+        patterns.discoveryExplosions &&
+        typeof patterns.discoveryExplosions === 'object' &&
+        patterns.discoveryExplosions.hasExplosions
+    ) {
         scores.discovery_junkie += 2;
         scores.emotional_archaeologist += 1;
         evidence.discovery_junkie.push(patterns.discoveryExplosions.description);
-        breakdown.push({ label: `Discovery explosions: ${patterns.discoveryExplosions.count || 0} periods found`, points: 3 });
+        breakdown.push({
+            label: `Discovery explosions: ${patterns.discoveryExplosions.count || 0} periods found`,
+            points: 3,
+        });
     } else {
         breakdown.push({ label: 'Discovery explosions: None detected', points: 0 });
     }
 
     // Mood searching
-    if (patterns.moodSearching && typeof patterns.moodSearching === 'object' && patterns.moodSearching.hasMoodSearching) {
+    if (
+        patterns.moodSearching &&
+        typeof patterns.moodSearching === 'object' &&
+        patterns.moodSearching.hasMoodSearching
+    ) {
         scores.mood_engineer += 2;
         evidence.mood_engineer.push(patterns.moodSearching.description);
-        breakdown.push({ label: `Mood searching: ${patterns.moodSearching.count || 0} rapid-skip moments`, points: 2 });
+        breakdown.push({
+            label: `Mood searching: ${patterns.moodSearching.count || 0} rapid-skip moments`,
+            points: 2,
+        });
     } else {
         breakdown.push({ label: 'Mood searching: No rapid-skip patterns', points: 0 });
     }
 
     // True favorites mismatch (indicates engagement over habit)
-    if (patterns.trueFavorites && typeof patterns.trueFavorites === 'object' && patterns.trueFavorites.hasMismatch) {
+    if (
+        patterns.trueFavorites &&
+        typeof patterns.trueFavorites === 'object' &&
+        patterns.trueFavorites.hasMismatch
+    ) {
         scores.mood_engineer += 1;
         evidence.mood_engineer.push(patterns.trueFavorites.description);
         breakdown.push({ label: 'True favorites: Engagement differs from habit', points: 1 });
@@ -160,8 +211,7 @@ function classifyPersonality(patterns) {
     const { scores, evidence, breakdown } = scorePersonality(patterns);
 
     // Sort by score
-    const ranked = Object.entries(scores)
-        .sort((a, b) => b[1] - a[1]);
+    const ranked = Object.entries(scores).sort((a, b) => b[1] - a[1]);
 
     const primaryType = ranked[0][0];
     const primaryScore = ranked[0][1];
@@ -181,8 +231,14 @@ function classifyPersonality(patterns) {
     // Also include pattern descriptions that weren't in scored evidence
     // This ensures users see ALL detected patterns, not just those that contributed to scoring
     const patternFields = [
-        'comfortDiscovery', 'eras', 'timePatterns', 'socialPatterns',
-        'ghostedArtists', 'discoveryExplosions', 'moodSearching', 'trueFavorites'
+        'comfortDiscovery',
+        'eras',
+        'timePatterns',
+        'socialPatterns',
+        'ghostedArtists',
+        'discoveryExplosions',
+        'moodSearching',
+        'trueFavorites',
     ];
     for (const field of patternFields) {
         const pattern = patterns[field];
@@ -208,7 +264,7 @@ function classifyPersonality(patterns) {
         allEvidence: [...new Set(allEvidence)].slice(0, 8),
         scores,
         breakdown,
-        dataInsights // New field for prompt injection
+        dataInsights, // New field for prompt injection
     };
 }
 
@@ -222,7 +278,7 @@ function formatInsights(insights) {
         `• Total Time: ${(insights.totalMinutes || 0).toLocaleString()} minutes`,
         `• Distinct Artists: ${(insights.uniqueArtists || 0).toLocaleString()}`,
         `• Top Artist: ${insights.topArtist?.name || 'Unknown'} (${(insights.topArtist?.minutes || 0).toLocaleString()} mins, ${insights.topArtist?.percentile || 'N/A'})`,
-        `• Busiest Listening Day: ${insights.peakDay || 'N/A'}`
+        `• Busiest Listening Day: ${insights.peakDay || 'N/A'}`,
     ].join('\n');
 }
 
@@ -251,14 +307,15 @@ function generateRevealInsight(personality, patterns) {
     let eraExamples = '';
     if (patterns.eras && patterns.eras.eras.length > 0) {
         const eras = patterns.eras.eras.slice(0, 2);
-        eraExamples = '\n\nYour listening shows distinct eras:\n' +
+        eraExamples =
+            '\n\nYour listening shows distinct eras:\n' +
             eras.map(era => `• ${era.start}: ${era.topArtists.slice(0, 2).join(', ')}`).join('\n');
     }
 
     return {
         headline: name,
         body: description + eraExamples,
-        evidence: allEvidence
+        evidence: allEvidence,
     };
 }
 
@@ -274,30 +331,34 @@ const LITE_PERSONALITY_TYPES = {
         name: 'The Current Obsessor',
         emoji: '🎯',
         tagline: 'Deep in one sound right now.',
-        description: 'You\'re currently fixated on specific artists. When something clicks, you go ALL in.',
-        signals: ['high repeat in recent', 'focused listening']
+        description:
+            "You're currently fixated on specific artists. When something clicks, you go ALL in.",
+        signals: ['high repeat in recent', 'focused listening'],
     },
     sound_explorer: {
         name: 'The Sound Explorer',
         emoji: '🧭',
         tagline: 'Always seeking new territory.',
-        description: 'Even your recent listens are diverse. You\'re constantly discovering and sampling new sounds.',
-        signals: ['high diversity', 'many artists in recent plays']
+        description:
+            "Even your recent listens are diverse. You're constantly discovering and sampling new sounds.",
+        signals: ['high diversity', 'many artists in recent plays'],
     },
     taste_keeper: {
         name: 'The Taste Keeper',
         emoji: '🏠',
         tagline: 'You know exactly what you love.',
-        description: 'Your current favorites match your all-time favorites. You\'ve found your sound and you own it.',
-        signals: ['stable taste', 'consistent over time']
+        description:
+            "Your current favorites match your all-time favorites. You've found your sound and you own it.",
+        signals: ['stable taste', 'consistent over time'],
     },
     taste_shifter: {
         name: 'The Taste Shifter',
         emoji: '🌊',
         tagline: 'Your sound is evolving.',
-        description: 'What you\'re into now is different from your history. Your musical journey is in motion.',
-        signals: ['shifting taste', 'new discoveries']
-    }
+        description:
+            "What you're into now is different from your history. Your musical journey is in motion.",
+        signals: ['shifting taste', 'new discoveries'],
+    },
 };
 
 /**
@@ -310,14 +371,14 @@ function classifyLitePersonality(litePatterns) {
         current_obsessor: 0,
         sound_explorer: 0,
         taste_keeper: 0,
-        taste_shifter: 0
+        taste_shifter: 0,
     };
 
     const evidence = {
         current_obsessor: [],
         sound_explorer: [],
         taste_keeper: [],
-        taste_shifter: []
+        taste_shifter: [],
     };
 
     // Diversity signals
@@ -356,8 +417,7 @@ function classifyLitePersonality(litePatterns) {
     }
 
     // Sort by score
-    const ranked = Object.entries(scores)
-        .sort((a, b) => b[1] - a[1]);
+    const ranked = Object.entries(scores).sort((a, b) => b[1] - a[1]);
 
     const primaryType = ranked[0][0];
     const primaryScore = ranked[0][1];
@@ -384,7 +444,8 @@ function classifyLitePersonality(litePatterns) {
         allEvidence: [...new Set(allEvidence)].slice(0, 4),
         scores,
         isLitePersonality: true,
-        upsellMessage: 'This is a snapshot based on your recent activity. Upload your full Spotify history for the complete picture — eras, ghosted artists, life events, and more.'
+        upsellMessage:
+            'This is a snapshot based on your recent activity. Upload your full Spotify history for the complete picture — eras, ghosted artists, life events, and more.',
     };
 }
 
@@ -412,8 +473,7 @@ export const Personality = {
     scorePersonality,
     classifyPersonality,
     classifyLitePersonality,
-    generateRevealInsight
+    generateRevealInsight,
 };
-
 
 console.log('[Personality] Module loaded');

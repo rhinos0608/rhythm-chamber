@@ -48,7 +48,9 @@ export function safeJsonParse(json, defaultValue = null, options = {}) {
         // Run optional validator
         if (validator && typeof validator === 'function') {
             if (!validator(parsed)) {
-                console.warn('[SafeJson] Validation failed for parsed JSON, returning defaultValue');
+                console.warn(
+                    '[SafeJson] Validation failed for parsed JSON, returning defaultValue'
+                );
                 return defaultValue;
             }
         }
@@ -63,7 +65,11 @@ export function safeJsonParse(json, defaultValue = null, options = {}) {
         }
 
         // For security: detect potential prototype pollution attempts
-        if (json.includes('__proto__') || json.includes('constructor') || json.includes('prototype')) {
+        if (
+            json.includes('__proto__') ||
+            json.includes('constructor') ||
+            json.includes('prototype')
+        ) {
             console.warn('[SafeJson] Possible prototype pollution attempt detected in JSON');
         }
 
@@ -141,21 +147,21 @@ export const Validators = {
     /**
      * Validate plain object (no arrays, null)
      */
-    isObject: (value) => {
+    isObject: value => {
         return value !== null && typeof value === 'object' && !Array.isArray(value);
     },
 
     /**
      * Validate array
      */
-    isArray: (value) => {
+    isArray: value => {
         return Array.isArray(value);
     },
 
     /**
      * Validate config object with expected keys
      */
-    hasKeys: (keys) => (value) => {
+    hasKeys: keys => value => {
         if (!Validators.isObject(value)) return false;
         return keys.every(key => key in value);
     },
@@ -163,12 +169,14 @@ export const Validators = {
     /**
      * Validate session structure
      */
-    isSession: (value) => {
-        return Validators.isObject(value) &&
+    isSession: value => {
+        return (
+            Validators.isObject(value) &&
             typeof value.id === 'string' &&
             Array.isArray(value.messages) &&
-            typeof value.createdAt === 'string';
-    }
+            typeof value.createdAt === 'string'
+        );
+    },
 };
 
 export default {
@@ -176,7 +184,7 @@ export default {
     safeGetLocalStorage,
     safeGetSessionStorage,
     safeJsonStringify,
-    Validators
+    Validators,
 };
 
 console.log('[SafeJson] Module loaded');

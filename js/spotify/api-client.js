@@ -15,7 +15,7 @@ const ENDPOINTS = {
     recentlyPlayed: 'https://api.spotify.com/v1/me/player/recently-played',
     topArtists: 'https://api.spotify.com/v1/me/top/artists',
     topTracks: 'https://api.spotify.com/v1/me/top/tracks',
-    me: 'https://api.spotify.com/v1/me'
+    me: 'https://api.spotify.com/v1/me',
 };
 
 /**
@@ -32,7 +32,7 @@ export class ApiClient {
      */
     static async apiRequest(url, options = {}) {
         // Ensure we have a valid token first
-        if (!await TokenStore.hasValidToken()) {
+        if (!(await TokenStore.hasValidToken())) {
             // Try to refresh if possible
             if (await TokenStore.canRefreshToken()) {
                 const refreshed = await RefreshService.refreshToken();
@@ -49,9 +49,9 @@ export class ApiClient {
         const response = await fetch(url, {
             ...options,
             headers: {
-                'Authorization': `Bearer ${token}`,
-                ...options.headers
-            }
+                Authorization: `Bearer ${token}`,
+                ...options.headers,
+            },
         });
 
         if (response.status === 401) {
@@ -65,9 +65,9 @@ export class ApiClient {
                 const retryResponse = await fetch(url, {
                     ...options,
                     headers: {
-                        'Authorization': `Bearer ${newToken}`,
-                        ...options.headers
-                    }
+                        Authorization: `Bearer ${newToken}`,
+                        ...options.headers,
+                    },
                 });
 
                 if (retryResponse.ok) {
@@ -103,21 +103,24 @@ export class ApiClient {
             const retryResponse = await fetch(url, {
                 ...options,
                 headers: {
-                    'Authorization': `Bearer ${token}`,
-                    ...options.headers
-                }
+                    Authorization: `Bearer ${token}`,
+                    ...options.headers,
+                },
             });
 
             if (!retryResponse.ok) {
                 const error = await retryResponse.json().catch(() => ({}));
-                throw new Error(error.error?.message || `API request failed after retry: ${retryResponse.status}`);
+                throw new Error(
+                    error.error?.message ||
+                        `API request failed after retry: ${retryResponse.status}`
+                );
             }
 
             return retryResponse.json();
         }
 
         if (!response.ok) {
-            const error = await response.json().catch((err) => {
+            const error = await response.json().catch(err => {
                 console.warn('[Spotify] Failed to parse error response:', err);
                 return {};
             });
@@ -172,6 +175,6 @@ export class ApiClient {
      * @returns {Promise<boolean>}
      */
     static async isReady() {
-        return await TokenStore.hasValidToken() || await TokenStore.canRefreshToken();
+        return (await TokenStore.hasValidToken()) || (await TokenStore.canRefreshToken());
     }
 }

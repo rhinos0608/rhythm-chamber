@@ -41,24 +41,24 @@ import * as SessionPersistence from './session-persistence.js';
 export const SESSION_EVENT_SCHEMAS = {
     'session:created': {
         description: 'New session created',
-        payload: { sessionId: 'string', title: 'string' }
+        payload: { sessionId: 'string', title: 'string' },
     },
     'session:loaded': {
         description: 'Session loaded from storage',
-        payload: { sessionId: 'string', messageCount: 'number' }
+        payload: { sessionId: 'string', messageCount: 'number' },
     },
     'session:switched': {
         description: 'Switched to different session',
-        payload: { fromSessionId: 'string|null', toSessionId: 'string' }
+        payload: { fromSessionId: 'string|null', toSessionId: 'string' },
     },
     'session:deleted': {
         description: 'Session deleted',
-        payload: { sessionId: 'string' }
+        payload: { sessionId: 'string' },
     },
     'session:updated': {
         description: 'Session data updated',
-        payload: { sessionId: 'string', field: 'string' }
-    }
+        payload: { sessionId: 'string', field: 'string' },
+    },
 };
 
 // ==========================================
@@ -123,9 +123,9 @@ export function reset() {
  * @returns {string} A randomly generated UUID following version 4 format
  */
 export function generateUUID() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = (Math.random() * 16) | 0;
+        const v = c === 'x' ? r : (r & 0x3) | 0x8;
         return v.toString(16);
     });
 }
@@ -154,10 +154,12 @@ export function isValidUUID(sessionId) {
  * @returns {boolean} True if session has valid structure
  */
 export function validateSession(session) {
-    return session
-        && typeof session.id === 'string'
-        && Array.isArray(session.messages)
-        && typeof session.createdAt === 'string';
+    return (
+        session &&
+        typeof session.id === 'string' &&
+        Array.isArray(session.messages) &&
+        typeof session.createdAt === 'string'
+    );
 }
 
 /**
@@ -170,7 +172,11 @@ export function validateSession(session) {
 function generateSessionTitle(messages) {
     const firstUserMsg = messages.find(m => m.role === 'user');
     // EDGE CASE FIX: Add explicit check for non-empty string content
-    if (firstUserMsg?.content && typeof firstUserMsg.content === 'string' && firstUserMsg.content.trim().length > 0) {
+    if (
+        firstUserMsg?.content &&
+        typeof firstUserMsg.content === 'string' &&
+        firstUserMsg.content.trim().length > 0
+    ) {
         // Edge case: Use Array.from to respect grapheme clusters and avoid splitting emoji
         const chars = Array.from(firstUserMsg.content.trim());
         const title = chars.slice(0, 50).join('');
@@ -257,16 +263,16 @@ export function saveConversation(delayMs = 2000) {
  * @returns {Promise<boolean>} True if save succeeded, false otherwise
  */
 export async function saveCurrentSession() {
-    const currentSessionId = SessionState.getCurrentSessionId();
+    const currentSessionId = stateAccessor?.getCurrentSessionId?.() ?? null;
     if (!currentSessionId || !Storage.saveSession) {
         return false;
     }
 
     // Get messages from module-local memory (thread-safe access)
-    const sessionData = SessionState.getSessionData();
+    const sessionData = stateAccessor?.getSessionData?.() ?? {};
     const messages = sessionData.messages || [];
     const messageCount = messages.length;
-    const currentSessionCreatedAt = SessionState.getCurrentSessionCreatedAt();
+    const currentSessionCreatedAt = stateAccessor?.getCurrentSessionCreatedAt?.() ?? new Date().toISOString();
 
     // Warn when approaching message limit (DATA LOSS WARNING)
     if (messageCount >= MESSAGE_LIMIT_WARNING_THRESHOLD && !hasWarnedAboutMessageLimit) {
@@ -277,7 +283,9 @@ export async function saveCurrentSession() {
                 6000
             );
         }
-        console.warn(`[SessionLifecycle] Approaching message limit: ${messageCount}/${MAX_SAVED_MESSAGES}`);
+        console.warn(
+            `[SessionLifecycle] Approaching message limit: ${messageCount}/${MAX_SAVED_MESSAGES}`
+        );
     }
 
     try {
@@ -285,9 +293,13 @@ export async function saveCurrentSession() {
         // System prompts are critical for LLM behavior - they should not be truncated
         const systemMessages = messages.filter(m => m.role === 'system');
         const nonSystemMessages = messages.filter(m => m.role !== 'system');
-        const messagesToSave = messageCount > MAX_SAVED_MESSAGES
-            ? [...systemMessages, ...nonSystemMessages.slice(-(MAX_SAVED_MESSAGES - systemMessages.length))]
-            : messages;
+        const messagesToSave =
+            messageCount > MAX_SAVED_MESSAGES
+                ? [
+                    ...systemMessages,
+                    ...nonSystemMessages.slice(-(MAX_SAVED_MESSAGES - systemMessages.length)),
+                ]
+                : messages;
 
         const session = {
             id: currentSessionId,
@@ -297,14 +309,16 @@ export async function saveCurrentSession() {
             metadata: {
                 personalityName: window._userContext?.personality?.name || 'Unknown',
                 personalityEmoji: window._userContext?.personality?.emoji || '🎵',
-                isLiteMode: false
-            }
+                isLiteMode: false,
+            },
         };
 
         // Log warning when messages are actually truncated (DATA LOSS WARNING)
         if (messageCount > MAX_SAVED_MESSAGES) {
             const truncatedCount = messageCount - messagesToSave.length;
-            console.warn(`[SessionLifecycle] Truncated ${truncatedCount} old messages (kept ${systemMessages.length} system prompts + ${MAX_SAVED_MESSAGES - systemMessages.length} most recent)`);
+            console.warn(
+                `[SessionLifecycle] Truncated ${truncatedCount} old messages (kept ${systemMessages.length} system prompts + ${MAX_SAVED_MESSAGES - systemMessages.length} most recent)`
+            );
         }
 
         await Storage.saveSession(session);
@@ -315,7 +329,10 @@ export async function saveCurrentSession() {
         console.error('[SessionLifecycle] Failed to save session:', e);
         // HIGH PRIORITY FIX: Notify user of save failure - this is a data loss risk
         if (typeof window !== 'undefined' && window.showToast) {
-            window.showToast('Warning: Failed to save conversation. Data may be lost on refresh.', 5000);
+            window.showToast(
+                'Warning: Failed to save conversation. Data may be lost on refresh.',
+                5000
+            );
         }
         return false;
     }
@@ -347,7 +364,7 @@ export async function createSession(initialMessages = []) {
         stateAccessor.syncSessionIdToAppState?.(currentSessionId);
         stateAccessor.setSessionData?.({
             id: currentSessionId,
-            messages: initialMessages
+            messages: initialMessages,
         });
     }
 
@@ -356,7 +373,9 @@ export async function createSession(initialMessages = []) {
         Storage.setConfig(SESSION_CURRENT_SESSION_KEY, currentSessionId).catch(e => {
             console.error('[SessionLifecycle] Failed to save session ID to unified storage:', e);
             // Log warning - toast notification removed (no global window.showToast)
-            console.warn('[SessionLifecycle] Session may not be remembered on reload due to storage issues.');
+            console.warn(
+                '[SessionLifecycle] Session may not be remembered on reload due to storage issues.'
+            );
         });
     }
     try {
@@ -364,7 +383,9 @@ export async function createSession(initialMessages = []) {
     } catch (e) {
         console.error('[SessionLifecycle] Failed to set current session ID in localStorage:', e);
         // Log warning - toast notification removed (no global window.showToast)
-        console.warn('[SessionLifecycle] Session may not be remembered on reload due to storage issues.');
+        console.warn(
+            '[SessionLifecycle] Session may not be remembered on reload due to storage issues.'
+        );
     }
 
     // CRITICAL FIX: Always persist session to storage before emitting event
@@ -434,28 +455,46 @@ export async function loadSession(sessionId) {
             // HIGH PRIORITY FIX: Use updateSessionData mutex to prevent race conditions
             await stateAccessor.updateSessionData?.(() => ({
                 id: session.id,
-                messages: session.messages || []
+                messages: session.messages || [],
             }));
         }
 
         // Save current session ID to unified storage and localStorage
         if (Storage.setConfig) {
             Storage.setConfig(SESSION_CURRENT_SESSION_KEY, session.id).catch(e => {
-                console.error('[SessionLifecycle] Failed to save session ID to unified storage:', e);
-                console.warn('[SessionLifecycle] Session may not be remembered on reload due to storage issues.');
+                console.error(
+                    '[SessionLifecycle] Failed to save session ID to unified storage:',
+                    e
+                );
+                console.warn(
+                    '[SessionLifecycle] Session may not be remembered on reload due to storage issues.'
+                );
             });
         }
         try {
             localStorage.setItem(SESSION_CURRENT_SESSION_KEY, session.id);
         } catch (e) {
-            console.error('[SessionLifecycle] Failed to set current session ID in localStorage:', e);
-            console.warn('[SessionLifecycle] Session may not be remembered on reload due to storage issues.');
+            console.error(
+                '[SessionLifecycle] Failed to set current session ID in localStorage:',
+                e
+            );
+            console.warn(
+                '[SessionLifecycle] Session may not be remembered on reload due to storage issues.'
+            );
         }
 
-        console.log('[SessionLifecycle] Loaded session:', sessionId, 'with', (session.messages || []).length, 'messages');
-        notifySessionUpdate('session:loaded', { sessionId, messageCount: (session.messages || []).length });
+        console.log(
+            '[SessionLifecycle] Loaded session:',
+            sessionId,
+            'with',
+            (session.messages || []).length,
+            'messages'
+        );
+        notifySessionUpdate('session:loaded', {
+            sessionId,
+            messageCount: (session.messages || []).length,
+        });
         return session;
-
     } catch (e) {
         console.error('[SessionLifecycle] Failed to load session:', e);
         return null;
@@ -495,7 +534,10 @@ export async function switchSession(sessionId) {
         lockResult = await acquireProcessingLock(currentSessionId);
         if (lockResult.locked) break;
 
-        console.warn('[SessionLifecycle] Failed to acquire lock for session switch:', lockResult.error);
+        console.warn(
+            '[SessionLifecycle] Failed to acquire lock for session switch:',
+            lockResult.error
+        );
         if (attempt >= MAX_SWITCH_RETRIES) {
             return false;
         }
@@ -521,7 +563,10 @@ export async function switchSession(sessionId) {
 
         const session = await loadSession(sessionId);
         if (session) {
-            notifySessionUpdate('session:switched', { fromSessionId: previousSessionId, toSessionId: sessionId });
+            notifySessionUpdate('session:switched', {
+                fromSessionId: previousSessionId,
+                toSessionId: sessionId,
+            });
             // Cleanup resources for previous session AFTER event is emitted to prevent memory leaks
             if (previousSessionId) {
                 cleanupSessionResources(previousSessionId);

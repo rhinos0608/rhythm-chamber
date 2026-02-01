@@ -26,7 +26,7 @@ export async function checkOpenRouterHealth() {
             status: 'no_key',
             reason: 'No API key configured',
             models: [],
-            latencyMs: 0
+            latencyMs: 0,
         };
     }
 
@@ -35,8 +35,8 @@ export async function checkOpenRouterHealth() {
         const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT);
 
         const response = await fetch('https://openrouter.ai/api/v1/models', {
-            headers: { 'Authorization': `Bearer ${apiKey}` },
-            signal: controller.signal
+            headers: { Authorization: `Bearer ${apiKey}` },
+            signal: controller.signal,
         });
         clearTimeout(timeoutId);
 
@@ -48,7 +48,7 @@ export async function checkOpenRouterHealth() {
                 status: 'invalid_key',
                 reason: 'API key is invalid or expired',
                 models: [],
-                latencyMs
+                latencyMs,
             };
         }
 
@@ -58,7 +58,7 @@ export async function checkOpenRouterHealth() {
                 status: 'error',
                 reason: `API error: ${response.status}`,
                 models: [],
-                latencyMs
+                latencyMs,
             };
         }
 
@@ -71,7 +71,7 @@ export async function checkOpenRouterHealth() {
             models: models.slice(0, 20), // Limit to first 20 for display
             totalModels: models.length,
             hasKey: true,
-            latencyMs
+            latencyMs,
         };
     } catch (error) {
         const latencyMs = Date.now() - start;
@@ -81,7 +81,7 @@ export async function checkOpenRouterHealth() {
                 status: 'timeout',
                 reason: 'Connection timeout - check your internet',
                 models: [],
-                latencyMs
+                latencyMs,
             };
         }
         // Distinguish JSON parse errors from other errors
@@ -91,7 +91,7 @@ export async function checkOpenRouterHealth() {
                 status: 'parse_error',
                 reason: 'Invalid response format from API',
                 models: [],
-                latencyMs
+                latencyMs,
             };
         }
         return {
@@ -99,7 +99,7 @@ export async function checkOpenRouterHealth() {
             status: 'error',
             reason: error.message,
             models: [],
-            latencyMs
+            latencyMs,
         };
     }
 }
@@ -117,7 +117,7 @@ export async function checkOllamaHealth() {
         const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT);
 
         const response = await fetch(`${endpoint}/api/tags`, {
-            signal: controller.signal
+            signal: controller.signal,
         });
         clearTimeout(timeoutId);
 
@@ -129,7 +129,7 @@ export async function checkOllamaHealth() {
                 status: 'not_running',
                 reason: `Ollama responded with error: ${response.status}`,
                 models: [],
-                latencyMs
+                latencyMs,
             };
         }
 
@@ -142,7 +142,7 @@ export async function checkOllamaHealth() {
                 status: 'running_no_models',
                 reason: 'No models installed. Run: ollama pull llama3.2',
                 models: [],
-                latencyMs
+                latencyMs,
             };
         }
 
@@ -150,7 +150,7 @@ export async function checkOllamaHealth() {
             available: true,
             status: 'ready',
             models,
-            latencyMs
+            latencyMs,
         };
     } catch (error) {
         const latencyMs = Date.now() - start;
@@ -160,7 +160,7 @@ export async function checkOllamaHealth() {
                 status: 'not_running',
                 reason: 'Connection timeout - is Ollama running? Try: ollama serve',
                 models: [],
-                latencyMs
+                latencyMs,
             };
         }
         // Distinguish JSON parse errors from network errors
@@ -170,7 +170,7 @@ export async function checkOllamaHealth() {
                 status: 'parse_error',
                 reason: 'Invalid response from Ollama',
                 models: [],
-                latencyMs
+                latencyMs,
             };
         }
         // CORS or network error usually means Ollama isn't running
@@ -179,7 +179,7 @@ export async function checkOllamaHealth() {
             status: 'not_running',
             reason: 'Cannot connect to Ollama. Start it with: ollama serve',
             models: [],
-            latencyMs
+            latencyMs,
         };
     }
 }
@@ -197,7 +197,7 @@ export async function checkLMStudioHealth() {
         const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT);
 
         const response = await fetch(`${endpoint}/models`, {
-            signal: controller.signal
+            signal: controller.signal,
         });
         clearTimeout(timeoutId);
 
@@ -209,7 +209,7 @@ export async function checkLMStudioHealth() {
                 status: 'not_running',
                 reason: `LM Studio responded with error: ${response.status}`,
                 models: [],
-                latencyMs
+                latencyMs,
             };
         }
 
@@ -222,7 +222,7 @@ export async function checkLMStudioHealth() {
                 status: 'running_no_models',
                 reason: 'No models loaded. Load a model in LM Studio.',
                 models: [],
-                latencyMs
+                latencyMs,
             };
         }
 
@@ -230,7 +230,7 @@ export async function checkLMStudioHealth() {
             available: true,
             status: 'ready',
             models,
-            latencyMs
+            latencyMs,
         };
     } catch (error) {
         const latencyMs = Date.now() - start;
@@ -240,7 +240,7 @@ export async function checkLMStudioHealth() {
                 status: 'not_running',
                 reason: 'Connection timeout - is LM Studio running with server enabled?',
                 models: [],
-                latencyMs
+                latencyMs,
             };
         }
         // Distinguish JSON parse errors from network errors
@@ -250,7 +250,7 @@ export async function checkLMStudioHealth() {
                 status: 'parse_error',
                 reason: 'Invalid response from LM Studio',
                 models: [],
-                latencyMs
+                latencyMs,
             };
         }
         return {
@@ -258,7 +258,7 @@ export async function checkLMStudioHealth() {
             status: 'not_running',
             reason: 'Cannot connect to LM Studio. Enable the local server in LM Studio settings.',
             models: [],
-            latencyMs
+            latencyMs,
         };
     }
 }
@@ -277,7 +277,7 @@ export async function checkGeminiHealth() {
             status: 'no_key',
             reason: 'No API key configured',
             models: [],
-            latencyMs: 0
+            latencyMs: 0,
         };
     }
 
@@ -286,10 +286,13 @@ export async function checkGeminiHealth() {
         const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT);
 
         // Use Authorization header instead of query parameter to avoid exposing the key
-        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/models', {
-            headers: { 'Authorization': `Bearer ${apiKey}` },
-            signal: controller.signal
-        });
+        const response = await fetch(
+            'https://generativelanguage.googleapis.com/v1beta/openai/models',
+            {
+                headers: { Authorization: `Bearer ${apiKey}` },
+                signal: controller.signal,
+            }
+        );
         clearTimeout(timeoutId);
 
         const latencyMs = Date.now() - start;
@@ -300,7 +303,7 @@ export async function checkGeminiHealth() {
                 status: 'invalid_key',
                 reason: 'API key is invalid or expired',
                 models: [],
-                latencyMs
+                latencyMs,
             };
         }
 
@@ -310,7 +313,7 @@ export async function checkGeminiHealth() {
                 status: 'error',
                 reason: `API error: ${response.status}`,
                 models: [],
-                latencyMs
+                latencyMs,
             };
         }
 
@@ -323,7 +326,7 @@ export async function checkGeminiHealth() {
             models: models.slice(0, 20),
             totalModels: models.length,
             hasKey: true,
-            latencyMs
+            latencyMs,
         };
     } catch (error) {
         const latencyMs = Date.now() - start;
@@ -333,7 +336,7 @@ export async function checkGeminiHealth() {
                 status: 'timeout',
                 reason: 'Connection timeout - check your internet',
                 models: [],
-                latencyMs
+                latencyMs,
             };
         }
         // Distinguish JSON parse errors from other errors
@@ -343,7 +346,7 @@ export async function checkGeminiHealth() {
                 status: 'parse_error',
                 reason: 'Invalid response format from Gemini API',
                 models: [],
-                latencyMs
+                latencyMs,
             };
         }
         return {
@@ -351,7 +354,7 @@ export async function checkGeminiHealth() {
             status: 'error',
             reason: error.message,
             models: [],
-            latencyMs
+            latencyMs,
         };
     }
 }
@@ -370,7 +373,7 @@ export async function checkOpenAICompatibleHealth() {
             status: 'not_configured',
             reason: 'No API endpoint configured',
             models: [],
-            latencyMs: 0
+            latencyMs: 0,
         };
     }
 
@@ -395,7 +398,7 @@ export async function checkOpenAICompatibleHealth() {
 
         const response = await fetch(modelsUrl, {
             headers,
-            signal: controller.signal
+            signal: controller.signal,
         });
         clearTimeout(timeoutId);
 
@@ -407,7 +410,7 @@ export async function checkOpenAICompatibleHealth() {
                 status: 'invalid_key',
                 reason: 'API key is invalid or expired',
                 models: [],
-                latencyMs
+                latencyMs,
             };
         }
 
@@ -417,7 +420,7 @@ export async function checkOpenAICompatibleHealth() {
                 status: 'error',
                 reason: `API error: ${response.status}`,
                 models: [],
-                latencyMs
+                latencyMs,
             };
         }
 
@@ -434,7 +437,7 @@ export async function checkOpenAICompatibleHealth() {
             models: models.slice(0, 20),
             totalModels: models.length,
             hasKey: !!config.apiKey,
-            latencyMs
+            latencyMs,
         };
     } catch (error) {
         const latencyMs = Date.now() - start;
@@ -444,7 +447,7 @@ export async function checkOpenAICompatibleHealth() {
                 status: 'timeout',
                 reason: 'Connection timeout - check your endpoint URL',
                 models: [],
-                latencyMs
+                latencyMs,
             };
         }
         return {
@@ -452,7 +455,7 @@ export async function checkOpenAICompatibleHealth() {
             status: 'error',
             reason: error.message,
             models: [],
-            latencyMs
+            latencyMs,
         };
     }
 }
@@ -475,7 +478,7 @@ export async function checkHealth() {
         checkOllamaHealth(),
         checkLMStudioHealth(),
         checkGeminiHealth(),
-        checkOpenAICompatibleHealth()
+        checkOpenAICompatibleHealth(),
     ]);
 
     return { openrouter, ollama, lmstudio, gemini, openaiCompatible };

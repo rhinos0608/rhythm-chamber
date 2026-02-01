@@ -40,8 +40,9 @@ function checkLLMAvailability(passedSettings = null) {
 
     // Check provider-specific availability
     switch (provider) {
-        case 'openrouter':
-            const hasKey = Settings?.hasApiKey?.() ||
+        case 'openrouter': {
+            const hasKey =
+                Settings?.hasApiKey?.() ||
                 (settings.openrouter?.apiKey &&
                     settings.openrouter.apiKey !== '' &&
                     settings.openrouter.apiKey !== 'your-api-key-here');
@@ -49,6 +50,7 @@ function checkLLMAvailability(passedSettings = null) {
                 return { available: false, provider, reason: 'OpenRouter API key not configured' };
             }
             return { available: true, provider, reason: 'OpenRouter ready' };
+        }
 
         case 'ollama':
             // Ollama is local, assume available if configured
@@ -78,7 +80,8 @@ function checkLLMAvailability(passedSettings = null) {
 function buildDescriptionPrompt(personality, patterns, summary) {
     const topArtist = patterns?.trueFavorites?.topByPlays?.artist || 'your favorite artist';
     const topEngaged = patterns?.trueFavorites?.topByEngagement?.artist || topArtist;
-    const ghostedArtists = (patterns?.ghostedArtists?.ghosted ?? []).slice(0, 3).map(a => a.artist) || [];
+    const ghostedArtists =
+        (patterns?.ghostedArtists?.ghosted ?? []).slice(0, 3).map(a => a.artist) || [];
     const eras = patterns?.eras?.eras?.length || 0;
     const streamCount = summary?.totalStreams?.toLocaleString() || 'thousands of';
     const hours = summary?.totalHours?.toLocaleString() || 'many';
@@ -98,12 +101,14 @@ function buildDescriptionPrompt(personality, patterns, summary) {
     }
 
     if (patterns?.timePatterns?.isMoodEngineer) {
-        context += `\n- Different music tastes between morning and evening`;
+        context += '\n- Different music tastes between morning and evening';
     }
 
-    if (patterns?.discoveryExplosions?.hasExplosions &&
+    if (
+        patterns?.discoveryExplosions?.hasExplosions &&
         Array.isArray(patterns.discoveryExplosions.explosions) &&
-        patterns.discoveryExplosions.explosions.length > 0) {
+        patterns.discoveryExplosions.explosions.length > 0
+    ) {
         const explosion = patterns.discoveryExplosions.explosions[0];
         context += `\n- Discovery explosion: ${explosion.newArtists} new artists in ${explosion.month}`;
     }
@@ -142,7 +147,7 @@ Write the description now:`;
 async function generateDescription(personality, patterns, summary, onProgress = null) {
     // CRITICAL: Use async getSettingsAsync to read saved settings from IndexedDB
     // The sync getSettings() returns defaults when cache is empty
-    const settings = await Settings?.getSettingsAsync?.() || {};
+    const settings = (await Settings?.getSettingsAsync?.()) || {};
 
     const availability = checkLLMAvailability(settings);
 
@@ -158,7 +163,8 @@ async function generateDescription(personality, patterns, summary, onProgress = 
     }
 
     const prompt = buildDescriptionPrompt(personality, patterns, summary);
-    const systemPrompt = 'You are a creative writer specializing in music journalism. Be concise and insightful.';
+    const systemPrompt =
+        'You are a creative writer specializing in music journalism. Be concise and insightful.';
 
     try {
         const provider = settings.llm?.provider || availability.provider || 'ollama';
@@ -169,7 +175,11 @@ async function generateDescription(personality, patterns, summary, onProgress = 
 
         // Use ProviderInterface to build config and call the provider
         if (ProviderInterface?.buildProviderConfig && ProviderInterface?.callProvider) {
-            const providerConfig = ProviderInterface.buildProviderConfig(provider, settings, baseConfig);
+            const providerConfig = ProviderInterface.buildProviderConfig(
+                provider,
+                settings,
+                baseConfig
+            );
 
             // Override some settings for shorter generation
             providerConfig.maxTokens = 200;
@@ -177,7 +187,7 @@ async function generateDescription(personality, patterns, summary, onProgress = 
 
             const messages = [
                 { role: 'system', content: systemPrompt },
-                { role: 'user', content: prompt }
+                { role: 'user', content: prompt },
             ];
 
             const response = await ProviderInterface.callProvider(
@@ -208,7 +218,6 @@ async function generateDescription(personality, patterns, summary, onProgress = 
 
         console.warn('[ProfileDescGen] No suitable LLM call method available');
         return null;
-
     } catch (error) {
         console.error('[ProfileDescGen] Generation failed:', error);
         return null;
@@ -221,25 +230,32 @@ async function generateDescription(personality, patterns, summary, onProgress = 
 async function callOpenRouterDirect(prompt, settings) {
     const apiKey = settings?.openrouter?.apiKey || ConfigLoader.get('openrouter.apiKey');
     const model = settings?.openrouter?.model || 'xiaomi/mimo-v2-flash:free';
-    const apiUrl = ConfigLoader.get('openrouter.apiUrl', 'https://openrouter.ai/api/v1/chat/completions');
+    const apiUrl = ConfigLoader.get(
+        'openrouter.apiUrl',
+        'https://openrouter.ai/api/v1/chat/completions'
+    );
 
     const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
-            'Authorization': `Bearer ${apiKey}`,
+            Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
             'HTTP-Referer': window.location.origin,
-            'X-Title': 'Rhythm Chamber'
+            'X-Title': 'Rhythm Chamber',
         },
         body: JSON.stringify({
             model,
             messages: [
-                { role: 'system', content: 'You are a creative writer specializing in music journalism. Be concise and insightful.' },
-                { role: 'user', content: prompt }
+                {
+                    role: 'system',
+                    content:
+                        'You are a creative writer specializing in music journalism. Be concise and insightful.',
+                },
+                { role: 'user', content: prompt },
             ],
             max_tokens: 200,
-            temperature: 0.8
-        })
+            temperature: 0.8,
+        }),
     });
 
     if (!response.ok) {
@@ -257,8 +273,7 @@ async function callOpenRouterDirect(prompt, settings) {
 export const ProfileDescriptionGenerator = {
     checkLLMAvailability,
     generateDescription,
-    buildDescriptionPrompt
+    buildDescriptionPrompt,
 };
-
 
 console.log('[ProfileDescriptionGenerator] Module loaded');

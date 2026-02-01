@@ -13,8 +13,19 @@
  * @module utils/retry-manager/retry-executor-patterns
  */
 
-import { DEFAULT_RETRY_CONFIG, classifyError, isRetryable, ErrorType, RetryStrategies } from './retry-config.js';
-import { calculateLinearBackoff, calculateCustomBackoff, addJitter, delay } from './retry-strategies.js';
+import {
+    DEFAULT_RETRY_CONFIG,
+    classifyError,
+    isRetryable,
+    ErrorType,
+    RetryStrategies,
+} from './retry-config.js';
+import {
+    calculateLinearBackoff,
+    calculateCustomBackoff,
+    addJitter,
+    delay,
+} from './retry-strategies.js';
 import { withRetry } from './retry-executor-core.js';
 
 // ==========================================
@@ -30,7 +41,7 @@ import { withRetry } from './retry-executor-core.js';
 export async function retryExponential(fn, options = {}) {
     const { result } = await withRetry(fn, {
         ...options,
-        useJitter: true
+        useJitter: true,
     });
     return result;
 }
@@ -62,7 +73,9 @@ export async function retryLinear(fn, options = {}) {
 
             const DEBUG = globalThis.DEBUG ?? false;
             if (DEBUG) {
-                console.log(`[RetryManager] Linear retry ${attempt + 1}/${maxRetries} after ${delayWithJitter}ms`);
+                console.log(
+                    `[RetryManager] Linear retry ${attempt + 1}/${maxRetries} after ${delayWithJitter}ms`
+                );
             }
             await delay(delayWithJitter);
         }
@@ -95,7 +108,9 @@ export async function retryCustom(fn, backoffFn, options = {}) {
 
             const DEBUG = globalThis.DEBUG ?? false;
             if (DEBUG) {
-                console.log(`[RetryManager] Custom retry ${attempt + 1}/${maxRetries} after ${delayWithJitter}ms`);
+                console.log(
+                    `[RetryManager] Custom retry ${attempt + 1}/${maxRetries} after ${delayWithJitter}ms`
+                );
             }
             await delay(delayWithJitter);
         }
@@ -159,16 +174,13 @@ export async function withFallback(fns, options = {}) {
             }
 
             // Log fallback
-            console.warn(
-                `[RetryManager] Fallback ${i + 1}/${fns.length} failed: ${error.message}`
-            );
+            console.warn(`[RetryManager] Fallback ${i + 1}/${fns.length} failed: ${error.message}`);
 
             // If this is the last function, throw
             if (i === fns.length - 1) {
-                throw new Error(
-                    `All fallbacks exhausted. Last error: ${error.message}`,
-                    { cause: error }
-                );
+                throw new Error(`All fallbacks exhausted. Last error: ${error.message}`, {
+                    cause: error,
+                });
             }
         }
     }
@@ -222,7 +234,7 @@ export async function withStrategy(fn, strategyName, optionsOverride = {}) {
 
     const { result } = await withRetry(fn, {
         config: strategy,
-        ...optionsOverride
+        ...optionsOverride,
     });
 
     return result;

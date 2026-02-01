@@ -86,17 +86,17 @@ const TokenCounter = {
         if (usagePercent > 85) {
             warnings.push({
                 level: 'critical',
-                message: `Context usage critical (${usagePercent.toFixed(1)}%). Request may fail.`
+                message: `Context usage critical (${usagePercent.toFixed(1)}%). Request may fail.`,
             });
         } else if (usagePercent > 70) {
             warnings.push({
                 level: 'high',
-                message: `Context usage high (${usagePercent.toFixed(1)}%). Consider truncating.`
+                message: `Context usage high (${usagePercent.toFixed(1)}%). Consider truncating.`,
             });
         } else if (usagePercent > 50) {
             warnings.push({
                 level: 'medium',
-                message: `Context usage moderate (${usagePercent.toFixed(1)}%).`
+                message: `Context usage moderate (${usagePercent.toFixed(1)}%).`,
             });
         }
 
@@ -108,7 +108,7 @@ const TokenCounter = {
             total,
             contextWindow,
             usagePercent,
-            warnings
+            warnings,
         };
     },
 
@@ -119,23 +119,23 @@ const TokenCounter = {
         if (usage > 85) {
             return {
                 action: 'truncate',
-                message: 'Context window nearly full. Truncating older messages recommended.'
+                message: 'Context window nearly full. Truncating older messages recommended.',
             };
         } else if (usage > 70) {
             return {
                 action: 'warn_user',
-                message: 'Context window approaching limit. Consider starting a new conversation.'
+                message: 'Context window approaching limit. Consider starting a new conversation.',
             };
         } else if (usage > 50) {
             return {
                 action: 'monitor',
-                message: 'Context usage is moderate. Monitor for further increases.'
+                message: 'Context usage is moderate. Monitor for further increases.',
             };
         }
 
         return {
             action: 'none',
-            message: 'Token usage is healthy.'
+            message: 'Token usage is healthy.',
         };
     },
 
@@ -152,7 +152,7 @@ const TokenCounter = {
             messages: [...(request.messages || [])],
             ragContext: request.ragContext,
             tools: request.tools,
-            model: request.model
+            model: request.model,
         };
 
         // Calculate how many tokens we need to remove
@@ -181,14 +181,18 @@ const TokenCounter = {
         const minMessages = 2; // Always keep at least 2 recent messages
         while (tokensToRemove > 0 && result.messages.length > minMessages) {
             const removedMessage = result.messages.shift(); // Remove oldest
-            const removedTokens = this.countTokens(`${removedMessage.role}: ${removedMessage.content || ''}`);
+            const removedTokens = this.countTokens(
+                `${removedMessage.role}: ${removedMessage.content || ''}`
+            );
             tokensToRemove -= removedTokens;
         }
 
         // If still over limit, truncate the oldest remaining message
         if (tokensToRemove > 0 && result.messages.length > 0) {
             const oldestMessage = result.messages[0];
-            const currentMessageTokens = this.countTokens(`${oldestMessage.role}: ${oldestMessage.content || ''}`);
+            const currentMessageTokens = this.countTokens(
+                `${oldestMessage.role}: ${oldestMessage.content || ''}`
+            );
             const targetMessageTokens = Math.max(0, currentMessageTokens - tokensToRemove);
             const charsToKeep = targetMessageTokens * 4;
 
@@ -219,7 +223,7 @@ const TokenCounter = {
         // if (tokenCounter) tokenCounter.style.display = 'none';
 
         console.log('[TokenCounter] Display reset');
-    }
+    },
 };
 
 // ES Module export

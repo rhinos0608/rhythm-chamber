@@ -53,7 +53,7 @@ const TOKEN_BINDING_PREFIX = 'rhythm_chamber_token_binding_';
 // ==========================================
 
 let _lastFailure = null;
-let _secureContextAvailable = null;  // null = not yet checked, checked at runtime
+let _secureContextAvailable = null; // null = not yet checked, checked at runtime
 let _fallbackReason = null;
 
 // ==========================================
@@ -67,7 +67,7 @@ function checkSecureContext() {
     if (result.secure && typeof crypto?.getRandomValues !== 'function') {
         return {
             secure: false,
-            reason: 'CSPRNG unavailable: crypto.getRandomValues is required for secure operations'
+            reason: 'CSPRNG unavailable: crypto.getRandomValues is required for secure operations',
         };
     }
 
@@ -77,7 +77,7 @@ function checkSecureContext() {
 /**
  * Check and cache secure context availability
  * @returns {{secure: boolean, reason?: string}}
-*/
+ */
 function ensureSecureContextChecked() {
     if (_secureContextAvailable === null) {
         const contextCheck = checkSecureContext();
@@ -89,7 +89,7 @@ function ensureSecureContextChecked() {
     }
     return {
         secure: _secureContextAvailable,
-        reason: _fallbackReason
+        reason: _fallbackReason,
     };
 }
 
@@ -139,8 +139,9 @@ async function generateDeviceFingerprint() {
     if (!context.secure) {
         _lastFailure = {
             code: 'INSECURE_CONTEXT',
-            userMessage: context.reason || 'Secure context required. Please access via HTTPS or localhost.',
-            technicalDetails: 'crypto.subtle is unavailable'
+            userMessage:
+                context.reason || 'Secure context required. Please access via HTTPS or localhost.',
+            technicalDetails: 'crypto.subtle is unavailable',
         };
         return null;
     }
@@ -177,7 +178,7 @@ async function generateDeviceFingerprint() {
         _lastFailure = {
             code: 'FINGERPRINT_FAILED',
             userMessage: 'Failed to generate device fingerprint. Please use a modern browser.',
-            technicalDetails: error.message
+            technicalDetails: error.message,
         };
         return null;
     }
@@ -199,8 +200,9 @@ async function createTokenBinding(token) {
     if (!context.secure) {
         _lastFailure = {
             code: 'INSECURE_CONTEXT',
-            userMessage: context.reason || 'Secure context required. Please access via HTTPS or localhost.',
-            technicalDetails: 'crypto.subtle is unavailable'
+            userMessage:
+                context.reason || 'Secure context required. Please access via HTTPS or localhost.',
+            technicalDetails: 'crypto.subtle is unavailable',
         };
         return false;
     }
@@ -209,7 +211,7 @@ async function createTokenBinding(token) {
         _lastFailure = {
             code: 'INVALID_TOKEN',
             userMessage: 'Invalid token provided',
-            technicalDetails: 'Token must be a non-empty string'
+            technicalDetails: 'Token must be a non-empty string',
         };
         return false;
     }
@@ -224,7 +226,7 @@ async function createTokenBinding(token) {
             token,
             fingerprint,
             createdAt: Date.now(),
-            salt: getSessionSalt()
+            salt: getSessionSalt(),
         };
 
         const bindingKey = TOKEN_BINDING_PREFIX + token;
@@ -238,7 +240,7 @@ async function createTokenBinding(token) {
         _lastFailure = {
             code: 'BINDING_FAILED',
             userMessage: 'Failed to create token binding',
-            technicalDetails: error.message
+            technicalDetails: error.message,
         };
         return false;
     }
@@ -255,7 +257,7 @@ async function verifyTokenBinding(token) {
     if (!context.secure) {
         return {
             valid: false,
-            reason: 'insecure_context'
+            reason: 'insecure_context',
         };
     }
 
@@ -267,7 +269,7 @@ async function verifyTokenBinding(token) {
         if (!bindingJson) {
             return {
                 valid: false,
-                reason: 'no_binding'
+                reason: 'no_binding',
             };
         }
 
@@ -278,7 +280,7 @@ async function verifyTokenBinding(token) {
         if (!constantTimeCompare(binding.fingerprint, currentFingerprint)) {
             return {
                 valid: false,
-                reason: 'fingerprint_mismatch'
+                reason: 'fingerprint_mismatch',
             };
         }
 
@@ -286,7 +288,7 @@ async function verifyTokenBinding(token) {
     } catch (error) {
         return {
             valid: false,
-            reason: 'verification_failed'
+            reason: 'verification_failed',
         };
     }
 }
@@ -342,7 +344,7 @@ export const TokenBinding = {
 
     // Diagnostics
     getTokenBindingFailure,
-    checkSecureContext
+    checkSecureContext,
 };
 
 // Also export individual functions for named imports
@@ -353,5 +355,5 @@ export {
     generateDeviceFingerprint,
     getTokenBindingFailure,
     checkSecureContext,
-    getSessionSalt
+    getSessionSalt,
 };

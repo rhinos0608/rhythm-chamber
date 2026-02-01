@@ -29,7 +29,7 @@ export const PerformanceCategory = Object.freeze({
     TAB_COORDINATION: 'tab_coordination',
     EMBEDDING_GENERATION: 'embedding_generation',
     EMBEDDING_INITIALIZATION: 'embedding_initialization',
-    OBSERVABILITY: 'observability'
+    OBSERVABILITY: 'observability',
 });
 
 /**
@@ -171,7 +171,12 @@ export class PerformanceProfiler {
      * @param {number} options.maxSnapshots - Maximum memory snapshots to store
      * @param {number} options.maxDegradationAlerts - Maximum degradation alerts to store
      */
-    constructor({ enabled = true, maxMeasurements = 1000, maxSnapshots, maxDegradationAlerts } = {}) {
+    constructor({
+        enabled = true,
+        maxMeasurements = 1000,
+        maxSnapshots,
+        maxDegradationAlerts,
+    } = {}) {
         this._enabled = enabled && this._isPerformanceAPIAvailable();
         this._maxMeasurements = maxMeasurements;
         if (maxSnapshots !== undefined) {
@@ -200,9 +205,11 @@ export class PerformanceProfiler {
      * @returns {boolean} True if Performance API available
      */
     _isPerformanceAPIAvailable() {
-        return typeof performance !== 'undefined' &&
+        return (
+            typeof performance !== 'undefined' &&
             typeof performance.mark === 'function' &&
-            typeof performance.measure === 'function';
+            typeof performance.measure === 'function'
+        );
     }
 
     /**
@@ -246,7 +253,7 @@ export class PerformanceProfiler {
                     name,
                     category: categoryName,
                     metadata: options.metadata || {},
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
                 });
             }
 
@@ -286,7 +293,12 @@ export class PerformanceProfiler {
             }
 
             // Create measurement record
-            const measurement = this._createMeasurementRecord(name, categoryName, entry, options.metadata);
+            const measurement = this._createMeasurementRecord(
+                name,
+                categoryName,
+                entry,
+                options.metadata
+            );
 
             // Store measurement
             this._storeMeasurement(measurement);
@@ -333,7 +345,7 @@ export class PerformanceProfiler {
             const measurement = this.measure(name, startMark, endMark, {
                 category: categoryName,
                 metadata: { ...options.metadata, ...stopOptions.metadata },
-                detailed: stopOptions.detailed || options.detailed
+                detailed: stopOptions.detailed || options.detailed,
             });
 
             return measurement;
@@ -377,7 +389,7 @@ export class PerformanceProfiler {
             endTime: entry.startTime + entry.duration,
             duration: entry.duration,
             metadata: metadata || {},
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         };
     }
 
@@ -413,7 +425,10 @@ export class PerformanceProfiler {
         if (this._measurements.size > this._maxMeasurements) {
             // Remove oldest measurements from each category
             for (const [category, measurements] of this._categoryMeasurements) {
-                while (measurements.length > this._maxMeasurements / Object.values(PerformanceCategory).length) {
+                while (
+                    measurements.length >
+                    this._maxMeasurements / Object.values(PerformanceCategory).length
+                ) {
                     const removed = measurements.shift();
                     this._measurements.delete(removed.id);
                 }
@@ -515,7 +530,7 @@ export class PerformanceProfiler {
                 maxDuration: 0,
                 medianDuration: 0,
                 p95Duration: 0,
-                p99Duration: 0
+                p99Duration: 0,
             };
         }
 
@@ -539,7 +554,8 @@ export class PerformanceProfiler {
             maxDuration: durations[durations.length - 1],
             medianDuration,
             p95Duration: durations[Math.floor((durations.length - 1) * 0.95)],
-            p99Duration: durations[Math.min(Math.floor(durations.length * 0.99), durations.length - 1)]
+            p99Duration:
+                durations[Math.min(Math.floor(durations.length * 0.99), durations.length - 1)],
         };
     }
 
@@ -555,14 +571,14 @@ export class PerformanceProfiler {
             totalMeasurements: this._measurements.size,
             categories: {},
             slowestOperations: this._getSlowestOperations(10),
-            statistics: this.getStatistics()
+            statistics: this.getStatistics(),
         };
 
         // Add per-category statistics
         for (const category of Object.values(PerformanceCategory)) {
             report.categories[category] = {
                 measurements: this.getMeasurementsByCategory(category).length,
-                statistics: this.getStatistics(category)
+                statistics: this.getStatistics(category),
             };
         }
 
@@ -616,7 +632,7 @@ export class PerformanceProfiler {
             version: '1.0.0',
             exportDate: new Date().toISOString(),
             measurements: Array.from(this._measurements.values()),
-            report: this.getPerformanceReport()
+            report: this.getPerformanceReport(),
         };
         return JSON.stringify(data, null, 2);
     }
@@ -677,7 +693,7 @@ export class PerformanceProfiler {
                 totalJSHeapSize: memory.totalJSHeapSize,
                 jsHeapSizeLimit: memory.jsHeapSizeLimit,
                 usagePercentage: (memory.usedJSHeapSize / memory.jsHeapSizeLimit) * 100,
-                metadata
+                metadata,
             };
 
             // Store snapshot with pruning
@@ -708,21 +724,23 @@ export class PerformanceProfiler {
                 currentUsage: null,
                 averageUsage: null,
                 peakUsage: null,
-                usageTrend: 'unknown'
+                usageTrend: 'unknown',
             };
         }
 
         const usages = this._memorySnapshots.map(s => s.usagePercentage);
         const current = this._memorySnapshots[this._memorySnapshots.length - 1];
         // Guard against division by zero
-        const average = usages.length > 0 ? usages.reduce((sum, u) => sum + u, 0) / usages.length : 0;
+        const average =
+            usages.length > 0 ? usages.reduce((sum, u) => sum + u, 0) / usages.length : 0;
         const peak = Math.max(...usages);
 
         // Determine trend
         const recent = usages.slice(-10);
         const older = usages.slice(0, 10);
         // Guard against division by zero
-        const avgRecent = recent.length > 0 ? recent.reduce((sum, u) => sum + u, 0) / recent.length : 0;
+        const avgRecent =
+            recent.length > 0 ? recent.reduce((sum, u) => sum + u, 0) / recent.length : 0;
         const avgOlder = older.length > 0 ? older.reduce((sum, u) => sum + u, 0) / older.length : 0;
 
         let trend = 'stable';
@@ -741,8 +759,8 @@ export class PerformanceProfiler {
             currentBytes: {
                 used: current.usedJSHeapSize,
                 total: current.totalJSHeapSize,
-                limit: current.jsHeapSizeLimit
-            }
+                limit: current.jsHeapSizeLimit,
+            },
         };
     }
 
@@ -756,7 +774,7 @@ export class PerformanceProfiler {
         this._performanceBudgets.set(category, {
             threshold: budget.threshold || 1000,
             action: budget.action || 'warn',
-            degradationThreshold: budget.degradationThreshold || 50
+            degradationThreshold: budget.degradationThreshold || 50,
         });
     }
 
@@ -780,8 +798,8 @@ export class PerformanceProfiler {
                     measurement: measurement.name,
                     duration: measurement.duration,
                     threshold: budget.threshold,
-                    budgetAction: budget.action
-                }
+                    budgetAction: budget.action,
+                },
             };
 
             this._addDegradationAlert(alert);
@@ -814,8 +832,8 @@ export class PerformanceProfiler {
                     measurement: measurement.name,
                     currentDuration: measurement.duration,
                     baselineDuration: avgBaseline,
-                    degradation: degradation
-                }
+                    degradation: degradation,
+                },
             };
 
             this._addDegradationAlert(alert);
@@ -831,7 +849,8 @@ export class PerformanceProfiler {
         if (this._memorySnapshots.length < 5) return;
 
         const recentSnapshots = this._memorySnapshots.slice(-10);
-        const avgUsage = recentSnapshots.reduce((sum, s) => sum + s.usagePercentage, 0) / recentSnapshots.length;
+        const avgUsage =
+            recentSnapshots.reduce((sum, s) => sum + s.usagePercentage, 0) / recentSnapshots.length;
         const threshold = 80; // 80% memory usage threshold
 
         if (snapshot.usagePercentage > threshold && avgUsage > threshold * 0.8) {
@@ -845,8 +864,8 @@ export class PerformanceProfiler {
                     currentUsage: snapshot.usagePercentage,
                     usedBytes: snapshot.usedJSHeapSize,
                     totalBytes: snapshot.totalJSHeapSize,
-                    limitBytes: snapshot.jsHeapSizeLimit
-                }
+                    limitBytes: snapshot.jsHeapSizeLimit,
+                },
             };
 
             this._addDegradationAlert(alert);
@@ -909,7 +928,9 @@ export class PerformanceProfiler {
         if (recent.length >= sampleSize) {
             const durations = recent.map(m => m.duration);
             this._baselinePerformance.set(category, durations);
-            console.log(`[PerformanceProfiler] Established baseline for ${category} with ${durations.length} samples`);
+            console.log(
+                `[PerformanceProfiler] Established baseline for ${category} with ${durations.length} samples`
+            );
         }
     }
 
@@ -927,10 +948,10 @@ export class PerformanceProfiler {
             degradation: {
                 alerts: this.getDegradationAlerts(),
                 criticalCount: this.getDegradationAlerts('critical').length,
-                warningCount: this.getDegradationAlerts('warning').length
+                warningCount: this.getDegradationAlerts('warning').length,
             },
             budgets: this._getBudgetStatus(),
-            memorySnapshots: this._memorySnapshots.slice(-20) // Last 20 snapshots
+            memorySnapshots: this._memorySnapshots.slice(-20), // Last 20 snapshots
         };
     }
 
@@ -957,7 +978,7 @@ export class PerformanceProfiler {
                     averageDuration: avgDuration,
                     maxDuration,
                     budgetExceededCount: budgetExceeded,
-                    budgetExceededPercentage: (budgetExceeded / recent.length) * 100
+                    budgetExceededPercentage: (budgetExceeded / recent.length) * 100,
                 };
             }
         }
@@ -1017,7 +1038,10 @@ export default PerformanceProfilerSingleton;
 
 // Convenience exports for common patterns
 export const mark = (name, options) => PerformanceProfilerSingleton.mark(name, options);
-export const measure = (name, startMark, endMark, options) => PerformanceProfilerSingleton.measure(name, startMark, endMark, options);
-export const startOperation = (name, options) => PerformanceProfilerSingleton.startOperation(name, options);
-export const measureAsync = (name, operation, options) => PerformanceProfilerSingleton.measureAsync(name, operation, options);
+export const measure = (name, startMark, endMark, options) =>
+    PerformanceProfilerSingleton.measure(name, startMark, endMark, options);
+export const startOperation = (name, options) =>
+    PerformanceProfilerSingleton.startOperation(name, options);
+export const measureAsync = (name, operation, options) =>
+    PerformanceProfilerSingleton.measureAsync(name, operation, options);
 export const getPerformanceReport = () => PerformanceProfilerSingleton.getPerformanceReport();

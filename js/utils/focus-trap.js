@@ -19,7 +19,7 @@ const FOCUSABLE_SELECTOR = [
     'input:not([disabled])',
     'select:not([disabled])',
     '[tabindex]:not([tabindex="-1"])',
-    '[contenteditable="true"]'
+    '[contenteditable="true"]',
 ].join(', ');
 
 /**
@@ -35,9 +35,8 @@ function getFocusableElements(container) {
     // Filter out elements that are visually hidden or in hidden containers
     return focusable.filter(el => {
         const style = window.getComputedStyle(el);
-        const isVisible = style.display !== 'none' &&
-                         style.visibility !== 'hidden' &&
-                         style.opacity !== '0';
+        const isVisible =
+            style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
         const isNotHidden = el.offsetParent !== null || el.getBoundingClientRect().width > 0;
         return isVisible && isNotHidden;
     });
@@ -107,7 +106,9 @@ export function createFocusTrap(container, options = {}) {
 
     // Edge case: Validate container is actually an HTMLElement (FOCUS TRAP FIX)
     if (!(container instanceof HTMLElement)) {
-        const error = new Error(`[FocusTrap] Container must be an HTMLElement, got ${typeof container}`);
+        const error = new Error(
+            `[FocusTrap] Container must be an HTMLElement, got ${typeof container}`
+        );
         error.code = 'FOCUS_TRAP_INVALID_CONTAINER';
         throw error;
     }
@@ -124,7 +125,7 @@ export function createFocusTrap(container, options = {}) {
         onActivate = null,
         onDeactivate = null,
         initialFocus = null,
-        returnFocusOnDeactivate = true
+        returnFocusOnDeactivate = true,
     } = options;
 
     let isActive = false;
@@ -161,7 +162,7 @@ export function createFocusTrap(container, options = {}) {
     /**
      * Handle keyboard events
      */
-    const handleKeydown = (e) => {
+    const handleKeydown = e => {
         if (!isActive) return;
 
         // Handle Escape key
@@ -295,7 +296,7 @@ export function createFocusTrap(container, options = {}) {
         // Exposed for testing
         getFirstFocusable,
         getLastFocusable,
-        getFocusableElements: () => getFocusableElements(container)
+        getFocusableElements: () => getFocusableElements(container),
     };
 }
 
@@ -306,20 +307,16 @@ export function createFocusTrap(container, options = {}) {
  * @returns {Object} Focus trap control object with show/hide methods
  */
 export function createModalFocusTrap(modalElement, options = {}) {
-    const {
-        onShow = null,
-        onHide = null,
-        closeOnEscape = true,
-        ...trapOptions
-    } = options;
+    const { onShow = null, onHide = null, closeOnEscape = true, ...trapOptions } = options;
 
     // Find the actual modal content if modalElement is an overlay
-    const modalContent = modalElement.querySelector('.modal-content, .settings-content, .tools-content') ||
-                        modalElement;
+    const modalContent =
+        modalElement.querySelector('.modal-content, .settings-content, .tools-content') ||
+        modalElement;
 
     const trap = createFocusTrap(modalContent, {
         onEscape: closeOnEscape ? () => hide() : null,
-        ...trapOptions
+        ...trapOptions,
     });
 
     /**
@@ -354,7 +351,7 @@ export function createModalFocusTrap(modalElement, options = {}) {
         deactivate: () => trap?.deactivate(),
         update: () => trap?.update(),
         active: () => trap?.active(),
-        destroy: () => trap?.destroy()
+        destroy: () => trap?.destroy(),
     };
 }
 
@@ -382,7 +379,8 @@ export function setupModalFocusTrap(modalId, onClose) {
         throw error;
     }
 
-    const modalContent = modal.querySelector('.modal-content, .settings-content, .tools-content') || modal;
+    const modalContent =
+        modal.querySelector('.modal-content, .settings-content, .tools-content') || modal;
 
     // Store the previously focused element
     const previousFocus = document.activeElement;
@@ -395,7 +393,7 @@ export function setupModalFocusTrap(modalId, onClose) {
     }
 
     // Handle keyboard events
-    const handleKeydown = (e) => {
+    const handleKeydown = e => {
         if (e.key === 'Escape' && onClose) {
             e.preventDefault();
             onClose();

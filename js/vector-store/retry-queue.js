@@ -7,12 +7,7 @@
  * @module vector-store/retry-queue
  */
 
-import {
-    RETRY_TIMEOUT,
-    MAX_RETRIES,
-    RETRY_COOLDOWN_MS,
-    MAX_RETRIES_PER_UPSERT
-} from './config.js';
+import { RETRY_TIMEOUT, MAX_RETRIES, RETRY_COOLDOWN_MS, MAX_RETRIES_PER_UPSERT } from './config.js';
 
 /**
  * Create a retry queue manager
@@ -47,7 +42,9 @@ export function createRetryQueue(vectorsMap) {
 
         // Check cooldown before retrying (prevents retry storms)
         if (timeSinceLastRetry < RETRY_COOLDOWN_MS) {
-            console.log(`[VectorStore] Retry cooldown active, skipping retry (${RETRY_COOLDOWN_MS - timeSinceLastRetry}ms remaining)`);
+            console.log(
+                `[VectorStore] Retry cooldown active, skipping retry (${RETRY_COOLDOWN_MS - timeSinceLastRetry}ms remaining)`
+            );
             return 0;
         }
 
@@ -59,7 +56,9 @@ export function createRetryQueue(vectorsMap) {
         for (const [retryId, metadata] of entries) {
             // Limit retries per upsert (prevents retry storms)
             if (retriesAttempted >= MAX_RETRIES_PER_UPSERT) {
-                console.log(`[VectorStore] Reached max retries per upsert (${MAX_RETRIES_PER_UPSERT}), stopping retry loop`);
+                console.log(
+                    `[VectorStore] Reached max retries per upsert (${MAX_RETRIES_PER_UPSERT}), stopping retry loop`
+                );
                 break;
             }
 
@@ -88,7 +87,9 @@ export function createRetryQueue(vectorsMap) {
             if (!retryItem) {
                 // Vector was deleted - clean up retry entry immediately
                 failedPersists.delete(retryId);
-                console.log(`[VectorStore] Vector ${retryId} no longer exists, cleaned up retry entry`);
+                console.log(
+                    `[VectorStore] Vector ${retryId} no longer exists, cleaned up retry entry`
+                );
                 continue;
             }
 
@@ -101,17 +102,22 @@ export function createRetryQueue(vectorsMap) {
                 await persistFn(retryItem);
                 failedPersists.delete(retryId);
                 retryInProgress.delete(retryId);
-                console.log(`[VectorStore] Successfully retried persist for ${retryId} (attempt ${metadata.retryCount + 1})`);
+                console.log(
+                    `[VectorStore] Successfully retried persist for ${retryId} (attempt ${metadata.retryCount + 1})`
+                );
             } catch (e) {
                 // Clone metadata before mutation to avoid reference sharing issues
                 const updatedMetadata = {
                     timestamp: now,
                     retryCount: metadata.retryCount + 1,
-                    lastError: e.message
+                    lastError: e.message,
                 };
                 failedPersists.set(retryId, updatedMetadata);
                 retryInProgress.delete(retryId);
-                console.warn(`[VectorStore] Retry ${updatedMetadata.retryCount}/${MAX_RETRIES} failed for ${retryId}:`, e);
+                console.warn(
+                    `[VectorStore] Retry ${updatedMetadata.retryCount}/${MAX_RETRIES} failed for ${retryId}:`,
+                    e
+                );
                 // Keep in failedPersists for next retry
             }
         }
@@ -134,7 +140,7 @@ export function createRetryQueue(vectorsMap) {
         failedPersists.set(id, {
             timestamp: Date.now(),
             retryCount: 0,
-            lastError: error.message
+            lastError: error.message,
         });
     }
 
@@ -182,7 +188,7 @@ export function createRetryQueue(vectorsMap) {
         return {
             size: failedPersists.size,
             oldestEntryAge: oldestRetry ? now - oldestRetry : null,
-            maxRetries
+            maxRetries,
         };
     }
 
@@ -194,6 +200,6 @@ export function createRetryQueue(vectorsMap) {
         getMetrics,
         get size() {
             return failedPersists.size;
-        }
+        },
     };
 }

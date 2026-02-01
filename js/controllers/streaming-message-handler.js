@@ -23,7 +23,7 @@ const VALID_TOOL_NAMES = [
     'DataQuery',
     'PatternAnalyzer',
     'PersonalityClassifier',
-    'StreamProcessor'
+    'StreamProcessor',
 ];
 
 /**
@@ -71,8 +71,12 @@ function processSequencedChunk(seq, data, handler) {
     // CRITICAL: If no chunk arrives within 30 seconds, assume stream failed
     // and reset buffer to prevent stale data corruption in subsequent streams
     activeTimeout = setTimeout(() => {
-        console.warn('[StreamingMessageHandler] Chunk processing timeout - resetting buffer to prevent corruption');
-        console.warn('[StreamingMessageHandler] This indicates a network interruption or stalled stream');
+        console.warn(
+            '[StreamingMessageHandler] Chunk processing timeout - resetting buffer to prevent corruption'
+        );
+        console.warn(
+            '[StreamingMessageHandler] This indicates a network interruption or stalled stream'
+        );
         resetSequenceBuffer();
         activeTimeout = null;
     }, CHUNK_PROCESSING_TIMEOUT);
@@ -127,7 +131,10 @@ function addLoadingMessage() {
     const id = 'msg-' + Date.now();
     const messages = document.getElementById(CHAT_UI_MESSAGE_CONTAINER_ID);
     if (!messages) {
-        console.error('[StreamingMessageHandler] Cannot add loading message: container not found', { id, containerId: CHAT_UI_MESSAGE_CONTAINER_ID });
+        console.error('[StreamingMessageHandler] Cannot add loading message: container not found', {
+            id,
+            containerId: CHAT_UI_MESSAGE_CONTAINER_ID,
+        });
         return null;
     }
 
@@ -150,12 +157,15 @@ function addLoadingMessage() {
 function updateLoadingMessage(id, state) {
     const el = document.getElementById(id);
     if (!el) {
-        console.warn('[StreamingMessageHandler] Cannot update loading message: element not found', { id, stateType: state.type });
+        console.warn('[StreamingMessageHandler] Cannot update loading message: element not found', {
+            id,
+            stateType: state.type,
+        });
         return;
     }
 
     switch (state.type) {
-        case 'tool_start':
+        case 'tool_start': {
             el.className = 'message tool-execution';
             // SECURITY: Validate tool name against whitelist before display
             const startToolName = isValidToolName(state.tool) ? state.tool : 'tool';
@@ -166,8 +176,9 @@ function updateLoadingMessage(id, state) {
             // Review date: 2026-01-28
             el.innerHTML = `<span class="icon">⚡</span> Analyzing data with ${escapeHtml(startToolName)}...`;
             break;
+        }
 
-        case 'tool_end':
+        case 'tool_end': {
             el.className = 'message assistant loading';
             // SECURITY: Validate tool name against whitelist before display
             const toolName = isValidToolName(state.tool) ? state.tool : 'Tool';
@@ -186,6 +197,7 @@ function updateLoadingMessage(id, state) {
                 <div class="typing-indicator"><span></span><span></span><span></span></div>
             `;
             break;
+        }
 
         case 'thinking':
             if (state.content) {
@@ -197,7 +209,8 @@ function updateLoadingMessage(id, state) {
                     // security-validated: Static HTML only, no dynamic content
                     // Template structure is hardcoded with no user input
                     // Review date: 2026-01-28
-                    thinkingEl.innerHTML = '<summary>💭 Model reasoning</summary><div class="thinking-content"></div>';
+                    thinkingEl.innerHTML =
+                        '<summary>💭 Model reasoning</summary><div class="thinking-content"></div>';
                     el.insertBefore(thinkingEl, el.firstChild);
                 }
                 const content = thinkingEl.querySelector('.thinking-content');
@@ -208,11 +221,12 @@ function updateLoadingMessage(id, state) {
                 // security-validated: Static HTML only, no dynamic content
                 // Template structure is hardcoded with no user input
                 // Review date: 2026-01-28
-                el.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+                el.innerHTML =
+                    '<div class="typing-indicator"><span></span><span></span><span></span></div>';
             }
             break;
 
-        case 'token':
+        case 'token': {
             // Streaming token
             if (!el.dataset.streaming) {
                 // First token - switch to streaming mode
@@ -240,6 +254,7 @@ function updateLoadingMessage(id, state) {
                 if (messages) messages.scrollTop = messages.scrollHeight;
             }
             break;
+        }
 
         case 'token_update':
             // Update token counter display
@@ -357,11 +372,16 @@ function removeMessageElement(id) {
  */
 function finalizeStreamedMessage(messageEl, fullContent) {
     if (!messageEl) {
-        console.error('[StreamingMessageHandler] Cannot finalize streamed message: element is null', { contentLength: fullContent?.length });
+        console.error(
+            '[StreamingMessageHandler] Cannot finalize streamed message: element is null',
+            { contentLength: fullContent?.length }
+        );
         // Fallback: create a new message element
         const messages = document.getElementById(CHAT_UI_MESSAGE_CONTAINER_ID);
         if (!messages) {
-            console.error('[StreamingMessageHandler] Container not found for fallback message creation');
+            console.error(
+                '[StreamingMessageHandler] Container not found for fallback message creation'
+            );
             return;
         }
         const newEl = createMessageElement(fullContent || 'No content', 'assistant', false);
@@ -443,7 +463,7 @@ export const StreamingMessageHandler = {
     processSequencedChunk,
     resetSequenceBuffer,
     getSequenceBufferStatus,
-    cleanupStreamingHandler
+    cleanupStreamingHandler,
 };
 
 console.log('[StreamingMessageHandler] Module loaded');

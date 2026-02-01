@@ -36,7 +36,7 @@ let currentRenameKeydownHandler = null;
 let renameInProgress = false;
 
 // Focus trap cleanup for delete chat modal
-let deleteChatModalFocusTrapCleanup = null;
+const deleteChatModalFocusTrapCleanup = null;
 
 // DOM elements (lazily initialized)
 let chatSidebar = null;
@@ -108,7 +108,7 @@ async function initSidebar() {
     // Register for session updates from EventBus
     // FIX: Subscribe to all session events via wildcard for automatic future event support
     // The '*' wildcard receives all events, so we filter for session-related ones
-    const unsubscribeSessionEvents = EventBus.on('*', (data) => {
+    const unsubscribeSessionEvents = EventBus.on('*', data => {
         // Only re-render for session-related events
         const sessionEventPrefix = 'session:';
         if (data?.event?.startsWith(sessionEventPrefix)) {
@@ -228,8 +228,9 @@ function toggleSidebar() {
 
     // Save to unified storage and localStorage
     if (Storage.setConfig) {
-        Storage.setConfig(SIDEBAR_STATE_KEY, newCollapsed)
-            .catch(err => console.warn('[SidebarController] Failed to save sidebar state:', err));
+        Storage.setConfig(SIDEBAR_STATE_KEY, newCollapsed).catch(err =>
+            console.warn('[SidebarController] Failed to save sidebar state:', err)
+        );
     }
     localStorage.setItem(SIDEBAR_STATE_KEY, newCollapsed.toString());
 
@@ -252,8 +253,9 @@ function closeSidebar() {
 
     // Save to unified storage and localStorage
     if (Storage.setConfig) {
-        Storage.setConfig(SIDEBAR_STATE_KEY, true)
-            .catch(err => console.warn('[SidebarController] Failed to save sidebar state on close:', err));
+        Storage.setConfig(SIDEBAR_STATE_KEY, true).catch(err =>
+            console.warn('[SidebarController] Failed to save sidebar state on close:', err)
+        );
     }
     localStorage.setItem(SIDEBAR_STATE_KEY, 'true');
 
@@ -303,18 +305,19 @@ async function renderSessionList() {
     // All dynamic content is escaped before insertion into DOM
     // Review date: 2026-01-28
     // Security analysis: docs/security/audits/2026-01-28-dom-xss-analysis.md
-    sidebarSessions.innerHTML = sessionsToRender.map(session => {
-        const isActive = session.id === currentId;
-        const date = new Date(session.updatedAt || session.createdAt);
-        const dateStr = formatRelativeDate(date);
-        const emoji = session.metadata?.personalityEmoji || '🎵';
-        const title = session.title || 'New Chat';
-        const activeLabel = isActive ? ' (current)' : '';
+    sidebarSessions.innerHTML = sessionsToRender
+        .map(session => {
+            const isActive = session.id === currentId;
+            const date = new Date(session.updatedAt || session.createdAt);
+            const dateStr = formatRelativeDate(date);
+            const emoji = session.metadata?.personalityEmoji || '🎵';
+            const title = session.title || 'New Chat';
+            const activeLabel = isActive ? ' (current)' : '';
 
-        // SAFE: Use data-action attributes instead of inline onclick to prevent XSS
-        // session.id is escaped via escapeHtml() to prevent injection
-        // A11Y: Added proper roles and labels for screen readers
-        return `
+            // SAFE: Use data-action attributes instead of inline onclick to prevent XSS
+            // session.id is escaped via escapeHtml() to prevent injection
+            // A11Y: Added proper roles and labels for screen readers
+            return `
             <div class="session-item ${isActive ? 'active' : ''}"
                  role="listitem"
                  tabindex="${isActive ? '0' : '-1'}"
@@ -342,7 +345,8 @@ async function renderSessionList() {
                 </div>
             </div>
         `;
-    }).join('');
+        })
+        .join('');
 }
 
 /**
@@ -620,7 +624,7 @@ async function handleSessionRename(sessionId) {
         renameInProgress = false;
     };
 
-    currentRenameKeydownHandler = (e) => {
+    currentRenameKeydownHandler = e => {
         if (e.key === 'Enter') {
             input.blur();
         } else if (e.key === 'Escape') {
@@ -703,7 +707,7 @@ export const SidebarController = {
     // Utilities
     formatRelativeDate,
     escapeHtml, // Export centralized escapeHtml utility
-    appendMessage
+    appendMessage,
 };
 
 // Teardown helper to remove subscriptions and listeners
@@ -732,12 +736,18 @@ SidebarController.destroy = function destroySidebarController() {
     _sessionEventUnsubscribers = [];
 
     // Legacy cleanup for old _sessionHandler
-    if (SidebarController._sessionHandler && typeof SidebarController._sessionHandler === 'function') {
+    if (
+        SidebarController._sessionHandler &&
+        typeof SidebarController._sessionHandler === 'function'
+    ) {
         try {
             SidebarController._sessionHandler();
             SidebarController._sessionHandler = null;
         } catch (e) {
-            console.warn('[SidebarController] Failed to unregister old session update callback:', e);
+            console.warn(
+                '[SidebarController] Failed to unregister old session update callback:',
+                e
+            );
         }
     }
 
@@ -762,9 +772,7 @@ SidebarController.destroy = function destroySidebarController() {
     }
 };
 
-
 console.log('[SidebarController] Controller loaded');
 
 // SECURITY: Removed global window exposure to reduce attack surface
 // The controller is now accessible via ES module imports only
-

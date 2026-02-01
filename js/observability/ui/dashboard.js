@@ -154,7 +154,9 @@ export function createPerformanceTab() {
     return `
         <div class="tab-content" data-tab="performance">
             <div class="performance-categories">
-                ${Object.values(PerformanceCategory).map(category => `
+                ${Object.values(PerformanceCategory)
+        .map(
+            category => `
                     <div class="category-section" data-category="${category}">
                         <h3>${formatCategoryName(category)}</h3>
                         <div class="category-stats">
@@ -175,7 +177,9 @@ export function createPerformanceTab() {
                             <canvas id="perf-${category}-chart"></canvas>
                         </div>
                     </div>
-                `).join('')}
+                `
+        )
+        .join('')}
             </div>
         </div>
     `;

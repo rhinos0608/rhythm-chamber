@@ -30,16 +30,32 @@ const MAX_DELEGATION_ATTEMPTS = 3;
 export function determineRecoveryDomain(event, data) {
     const eventLower = event.toLowerCase();
 
-    if (eventLower.includes('security') || eventLower.includes('auth') || data?.domain === 'security') {
+    if (
+        eventLower.includes('security') ||
+        eventLower.includes('auth') ||
+        data?.domain === 'security'
+    ) {
         return RecoveryDomain.SECURITY;
     }
-    if (eventLower.includes('storage') || eventLower.includes('indexeddb') || data?.domain === 'storage') {
+    if (
+        eventLower.includes('storage') ||
+        eventLower.includes('indexeddb') ||
+        data?.domain === 'storage'
+    ) {
         return RecoveryDomain.STORAGE;
     }
-    if (eventLower.includes('network') || eventLower.includes('fetch') || data?.domain === 'network') {
+    if (
+        eventLower.includes('network') ||
+        eventLower.includes('fetch') ||
+        data?.domain === 'network'
+    ) {
         return RecoveryDomain.NETWORK;
     }
-    if (eventLower.includes('provider') || eventLower.includes('ai') || data?.domain === 'provider') {
+    if (
+        eventLower.includes('provider') ||
+        eventLower.includes('ai') ||
+        data?.domain === 'provider'
+    ) {
         return RecoveryDomain.PROVIDER;
     }
     if (eventLower.includes('ui') || eventLower.includes('widget') || data?.domain === 'ui') {
@@ -189,7 +205,7 @@ export class RecoveryOrchestration {
             tabId: 'unknown', // Will be set by coordinator
             expiresAt: Date.now() + RECOVERY_TTL_MS,
             delegationAttempts: 0,
-            maxDelegations: MAX_DELEGATION_ATTEMPTS
+            maxDelegations: MAX_DELEGATION_ATTEMPTS,
         };
     }
 
@@ -228,7 +244,7 @@ export class RecoveryOrchestration {
             steps,
             estimatedDurationMs,
             requiresLock,
-            lockName
+            lockName,
         };
     }
 
@@ -276,10 +292,9 @@ export class RecoveryOrchestration {
                 metadata: {
                     recoveryId: plan.request.id,
                     domain: plan.request.domain,
-                    stepsCompleted: plan.steps.length
-                }
+                    stepsCompleted: plan.steps.length,
+                },
             };
-
         } catch (error) {
             console.error('[RecoveryOrchestration] Recovery execution failed:', error);
             return {
@@ -289,8 +304,8 @@ export class RecoveryOrchestration {
                 error,
                 metadata: {
                     recoveryId: plan.request.id,
-                    domain: plan.request.domain
-                }
+                    domain: plan.request.domain,
+                },
             };
         } finally {
             this._currentState = RecoveryState.IDLE;
@@ -311,18 +326,20 @@ export class RecoveryOrchestration {
 
         // Check if recovery request has expired
         if (request.expiresAt && Date.now() > request.expiresAt) {
-            console.warn(`[RecoveryOrchestration] Recovery ${request.id} expired (TTL: ${RECOVERY_TTL_MS}ms)`);
+            console.warn(
+                `[RecoveryOrchestration] Recovery ${request.id} expired (TTL: ${RECOVERY_TTL_MS}ms)`
+            );
             this._eventBus.emit('RECOVERY:EXPIRED', {
                 recoveryId: request.id,
                 domain: request.domain,
-                age: Date.now() - request.timestamp
+                age: Date.now() - request.timestamp,
             });
             return {
                 success: false,
                 action: 'expired',
                 durationMs: 0,
                 error: null,
-                metadata: { reason: 'ttl_expired', requestId: request.id }
+                metadata: { reason: 'ttl_expired', requestId: request.id },
             };
         }
 
@@ -335,7 +352,7 @@ export class RecoveryOrchestration {
                 action: 'queued',
                 durationMs: 0,
                 error: null,
-                metadata: { reason: 'conflicting_recovery' }
+                metadata: { reason: 'conflicting_recovery' },
             };
         }
 
@@ -372,12 +389,17 @@ export class RecoveryOrchestration {
     async _queueRecovery(request) {
         // Check queue depth limit
         if (this._activeRecoveries.size >= this._maxQueueDepth) {
-            console.warn(`[RecoveryOrchestration] Queue depth exceeded (${this._activeRecoveries.size}/${this._maxQueueDepth}), dropping oldest recovery`);
+            console.warn(
+                `[RecoveryOrchestration] Queue depth exceeded (${this._activeRecoveries.size}/${this._maxQueueDepth}), dropping oldest recovery`
+            );
 
             const oldestId = this._activeRecoveries.keys().next().value;
             if (oldestId) {
                 this._activeRecoveries.delete(oldestId);
-                this._eventBus.emit('RECOVERY:DROPPED', { recoveryId: oldestId, reason: 'queue_depth_exceeded' });
+                this._eventBus.emit('RECOVERY:DROPPED', {
+                    recoveryId: oldestId,
+                    reason: 'queue_depth_exceeded',
+                });
             }
         }
 
@@ -480,7 +502,7 @@ export class RecoveryOrchestration {
     _emitStateChange() {
         this._eventBus.emit('RECOVERY:STATE_CHANGE', {
             state: this._currentState,
-            recoveryId: this._currentRecoveryId
+            recoveryId: this._currentRecoveryId,
         });
     }
 }

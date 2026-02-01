@@ -25,7 +25,7 @@ export const RecoveryDomain = Object.freeze({
     UI: 'ui',
     OPERATIONAL: 'operational',
     NETWORK: 'network',
-    PROVIDER: 'provider'
+    PROVIDER: 'provider',
 });
 
 /**
@@ -39,7 +39,7 @@ export const RecoveryState = Object.freeze({
     RECOVERING: 'recovering',
     COMPLETED: 'completed',
     FAILED: 'failed',
-    CANCELLED: 'cancelled'
+    CANCELLED: 'cancelled',
 });
 
 /**

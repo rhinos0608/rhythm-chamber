@@ -41,7 +41,7 @@ export async function put(storeName, data, options = {}) {
     // Check write authority unless bypassed
     if (!options.bypassAuthority && !checkWriteAuthority(storeName, 'put')) {
         if (AUTHORITY_CONFIG.strictMode) {
-            throw new Error(`Write denied: Tab is in read-only mode`);
+            throw new Error('Write denied: Tab is in read-only mode');
         } else {
             return; // No-op in non-strict mode
         }
@@ -50,11 +50,13 @@ export async function put(storeName, data, options = {}) {
     // Add VectorClock timestamp for dual-write protection and conflict detection
     // Skip for read-only stores or if explicitly bypassed
     const clockState = writeVectorClock.tick();
-    const stampedData = options.skipWriteEpoch ? data : {
-        ...data,
-        _writeEpoch: clockState,
-        _writerId: writeVectorClock.processId
-    };
+    const stampedData = options.skipWriteEpoch
+        ? data
+        : {
+            ...data,
+            _writeEpoch: clockState,
+            _writerId: writeVectorClock.processId,
+        };
 
     try {
         const database = await initDatabase();
@@ -87,7 +89,8 @@ export async function put(storeName, data, options = {}) {
                 }
                 transaction.oncomplete = () => resolve();
                 transaction.onerror = () => reject(transaction.error);
-                transaction.onabort = () => reject(transaction.error || new Error('Transaction aborted'));
+                transaction.onabort = () =>
+                    reject(transaction.error || new Error('Transaction aborted'));
             });
         }
 
@@ -121,7 +124,7 @@ export async function clear(storeName, options = {}) {
     // Check write authority unless bypassed
     if (!options.bypassAuthority && !checkWriteAuthority(storeName, 'clear')) {
         if (AUTHORITY_CONFIG.strictMode) {
-            throw new Error(`Write denied: Tab is in read-only mode`);
+            throw new Error('Write denied: Tab is in read-only mode');
         } else {
             return; // No-op in non-strict mode
         }
@@ -163,7 +166,7 @@ export async function deleteRecord(storeName, key, options = {}) {
     // Check write authority unless bypassed
     if (!options.bypassAuthority && !checkWriteAuthority(storeName, 'delete')) {
         if (AUTHORITY_CONFIG.strictMode) {
-            throw new Error(`Write denied: Tab is in read-only mode`);
+            throw new Error('Write denied: Tab is in read-only mode');
         } else {
             return; // No-op in non-strict mode
         }

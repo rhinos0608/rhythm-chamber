@@ -34,7 +34,7 @@ const DEFAULT_QUOTA_CONFIG = Object.freeze({
     largeWriteThresholdBytes: QUOTA_THRESHOLDS.LARGE_WRITE_THRESHOLD_BYTES,
 
     // Fallback quota from constants
-    fallbackQuotaBytes: QUOTA_THRESHOLDS.FALLBACK_QUOTA_BYTES
+    fallbackQuotaBytes: QUOTA_THRESHOLDS.FALLBACK_QUOTA_BYTES,
 });
 
 // Mutable config that can be modified
@@ -51,7 +51,7 @@ let currentStatus = {
     percentage: 0,
     availableBytes: DEFAULT_QUOTA_CONFIG.fallbackQuotaBytes, // Initial available = full quota
     isBlocked: false,
-    tier: 'normal' // 'normal' | 'warning' | 'critical'
+    tier: 'normal', // 'normal' | 'warning' | 'critical'
 };
 let isInitialized = false;
 
@@ -85,7 +85,7 @@ function createReservation(sizeBytes) {
     const reservationId = `res_${Date.now()}_${++reservationIdCounter}`;
     pendingReservations.set(reservationId, {
         size: sizeBytes,
-        timestamp: Date.now()
+        timestamp: Date.now(),
     });
     console.log(`[QuotaManager] Created reservation ${reservationId} for ${sizeBytes} bytes`);
     return reservationId;
@@ -101,7 +101,9 @@ function releaseReservation(reservationId) {
     if (pendingReservations.has(reservationId)) {
         const reservation = pendingReservations.get(reservationId);
         pendingReservations.delete(reservationId);
-        console.log(`[QuotaManager] Released reservation ${reservationId} (${reservation.size} bytes)`);
+        console.log(
+            `[QuotaManager] Released reservation ${reservationId} (${reservation.size} bytes)`
+        );
     }
 }
 
@@ -222,7 +224,7 @@ async function checkNow(pendingWriteSizeBytes = 0) {
             percentage: effectivePercentage,
             availableBytes: effectiveAvailable,
             isBlocked: false,
-            tier: 'normal'
+            tier: 'normal',
         };
 
         // Determine tier and emit events based on effective percentage
@@ -235,7 +237,7 @@ async function checkNow(pendingWriteSizeBytes = 0) {
                     usageBytes: currentStatus.usageBytes,
                     quotaBytes: currentStatus.quotaBytes,
                     percentage: currentStatus.percentage,
-                    pendingWriteSizeBytes: pendingWriteSizeBytes
+                    pendingWriteSizeBytes: pendingWriteSizeBytes,
                 });
             }
         } else if (effectivePercentage >= QUOTA_CONFIG.warningThreshold * 100) {
@@ -247,7 +249,7 @@ async function checkNow(pendingWriteSizeBytes = 0) {
                     usageBytes: currentStatus.usageBytes,
                     quotaBytes: currentStatus.quotaBytes,
                     percentage: currentStatus.percentage,
-                    pendingWriteSizeBytes: pendingWriteSizeBytes
+                    pendingWriteSizeBytes: pendingWriteSizeBytes,
                 });
             }
         } else if (previousTier !== 'normal') {
@@ -256,7 +258,7 @@ async function checkNow(pendingWriteSizeBytes = 0) {
             EventBus.emit('storage:quota_normal', {
                 usageBytes: currentStatus.usageBytes,
                 quotaBytes: currentStatus.quotaBytes,
-                percentage: currentStatus.percentage
+                percentage: currentStatus.percentage,
             });
         }
 
@@ -268,7 +270,7 @@ async function checkNow(pendingWriteSizeBytes = 0) {
                 usageBytes: currentStatus.usageBytes,
                 quotaBytes: currentStatus.quotaBytes,
                 availableBytes: currentStatus.availableBytes,
-                pendingWriteSizeBytes: pendingWriteSizeBytes
+                pendingWriteSizeBytes: pendingWriteSizeBytes,
             };
             emitLocalEvent('threshold_exceeded', thresholdPayload);
             EventBus.emit('storage:threshold_exceeded', thresholdPayload);
@@ -291,7 +293,7 @@ async function getStorageEstimate() {
         const estimate = await navigator.storage.estimate();
         return {
             usage: estimate.usage || 0,
-            quota: estimate.quota || QUOTA_CONFIG.fallbackQuotaBytes
+            quota: estimate.quota || QUOTA_CONFIG.fallbackQuotaBytes,
         };
     }
 
@@ -299,7 +301,7 @@ async function getStorageEstimate() {
     console.warn('[QuotaManager] navigator.storage.estimate() not available');
     return {
         usage: 0,
-        quota: QUOTA_CONFIG.fallbackQuotaBytes
+        quota: QUOTA_CONFIG.fallbackQuotaBytes,
     };
 }
 
@@ -388,7 +390,7 @@ async function checkWriteFits(writeSizeBytes) {
     return {
         fits,
         currentStatus: status,
-        reservationId // CRITICAL FIX for Issue #5: Return reservation ID for later release
+        reservationId, // CRITICAL FIX for Issue #5: Return reservation ID for later release
     };
 }
 
@@ -419,7 +421,9 @@ function setCriticalThreshold(threshold) {
     if (threshold > 0 && threshold < 1) {
         // Ensure critical > warning
         if (threshold <= QUOTA_CONFIG.warningThreshold) {
-            console.error('[QuotaManager] Critical threshold must be greater than warning threshold');
+            console.error(
+                '[QuotaManager] Critical threshold must be greater than warning threshold'
+            );
             return false;
         }
         QUOTA_CONFIG.criticalThreshold = threshold;
@@ -445,7 +449,7 @@ function reset() {
         percentage: 0,
         availableBytes: DEFAULT_QUOTA_CONFIG.fallbackQuotaBytes,
         isBlocked: false,
-        tier: 'normal'
+        tier: 'normal',
     };
 
     // CRITICAL FIX for Issue #5: Clear pending reservations
@@ -488,7 +492,7 @@ function emitLocalEvent(event, data) {
 function on(event, handler) {
     if (typeof handler !== 'function') {
         console.error('[QuotaManager] Handler must be a function');
-        return () => { };
+        return () => {};
     }
 
     if (!eventListeners.has(event)) {
@@ -535,7 +539,7 @@ export const QuotaManager = {
     getStatus,
     isWriteBlocked,
     notifyLargeWrite,
-    checkWriteFits,  // CRITICAL FIX for High Issue #12: Pre-flight quota estimation
+    checkWriteFits, // CRITICAL FIX for High Issue #12: Pre-flight quota estimation
     setWarningThreshold,
     setCriticalThreshold,
     stopPolling,
@@ -559,7 +563,7 @@ export const QuotaManager = {
     // Expose cleanup threshold for testing
     get cleanupThreshold() {
         return CLEANUP_THRESHOLD_PERCENT;
-    }
+    },
 };
 
 console.log('[QuotaManager] Quota monitoring service loaded');

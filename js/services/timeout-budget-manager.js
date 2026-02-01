@@ -1,12 +1,12 @@
 /**
  * Timeout Budget Manager
- * 
+ *
  * Allocates timeout budget hierarchically. Prevents budget exhaustion
  * by subdividing time across nested operations.
- * 
+ *
  * HNW Hierarchy: Provides structured timeout allocation where
  * parent operations subdivide budget to child operations.
- * 
+ *
  * @module services/timeout-budget-manager
  */
 
@@ -19,7 +19,7 @@
  */
 class BudgetExhaustedError extends Error {
     constructor({ operation, allocated, consumed, parent, reason = null }) {
-        const message = reason 
+        const message = reason
             ? `Timeout budget exhausted for ${operation}: ${reason}`
             : `Timeout budget exhausted for ${operation}: allocated ${allocated}ms, consumed ${consumed}ms`;
         super(message);
@@ -39,7 +39,7 @@ class BudgetExhaustedError extends Error {
 /**
  * Represents an allocated timeout budget with abort signal integration
  * HNW Hierarchy: Links timeout budgets to AbortControllers for cascading cleanup
- * 
+ *
  * STRICT HIERARCHY RULES:
  * 1. Child budget cannot exceed parent's remaining time at creation
  * 2. Child's remaining() is always min(ownRemaining, parent.remaining())
@@ -68,7 +68,7 @@ class TimeoutBudgetInstance {
         if (parent) {
             const parentDeadline = parent.startTime + parent.budgetMs;
             const childDeadline = this.startTime + budgetMs;
-            
+
             if (childDeadline > parentDeadline) {
                 const parentRemaining = parent.remaining();
                 throw new BudgetExhaustedError({
@@ -76,7 +76,7 @@ class TimeoutBudgetInstance {
                     allocated: budgetMs,
                     consumed: 0,
                     parent: parent.operation,
-                    reason: `Child deadline (${budgetMs}ms) exceeds parent remaining (${parentRemaining}ms)`
+                    reason: `Child deadline (${budgetMs}ms) exceeds parent remaining (${parentRemaining}ms)`,
                 });
             }
         }
@@ -133,15 +133,15 @@ class TimeoutBudgetInstance {
      */
     remaining() {
         if (this.aborted) return 0;
-        
+
         const ownRemaining = Math.max(0, this.budgetMs - this.elapsed());
-        
+
         // STRICT HIERARCHY: Child remaining is capped by parent remaining
         if (this.parent) {
             const parentRemaining = this.parent.remaining();
             return Math.min(ownRemaining, parentRemaining);
         }
-        
+
         return ownRemaining;
     }
 
@@ -229,9 +229,11 @@ class TimeoutBudgetInstance {
                 const result = handler(reason);
                 // FIX: If handler returns a Promise, track it for proper await
                 if (result && typeof result.then === 'function') {
-                    results.push(result.catch(e => {
-                        console.error('[TimeoutBudget] Async abort handler error:', e);
-                    }));
+                    results.push(
+                        result.catch(e => {
+                            console.error('[TimeoutBudget] Async abort handler error:', e);
+                        })
+                    );
                 }
             } catch (e) {
                 console.error('[TimeoutBudget] Sync abort handler error:', e);
@@ -258,12 +260,12 @@ class TimeoutBudgetInstance {
 
     /**
      * Subdivide budget for a child operation
-     * 
+     *
      * STRICT HIERARCHY RULES:
      * 1. Child budget cannot exceed parent's remaining time
      * 2. Child deadline cannot exceed parent deadline
      * 3. Child inherits parent's abort signal (cascade)
-     * 
+     *
      * @param {string} childOperation - Child operation name
      * @param {number} childBudgetMs - Budget for child (must fit within remaining)
      * @param {Object} [options] - Options including signal
@@ -280,21 +282,23 @@ class TimeoutBudgetInstance {
                 allocated: childBudgetMs,
                 consumed: this.budgetMs - available,
                 parent: this.operation,
-                reason: `Requested ${childBudgetMs}ms but only ${available}ms available from parent "${this.operation}"`
+                reason: `Requested ${childBudgetMs}ms but only ${available}ms available from parent "${this.operation}"`,
             });
         }
 
         // Child inherits parent's signal by default (ensures cascade abort)
         const childOptions = {
             ...options,
-            signal: options.signal ?? this.signal
+            signal: options.signal ?? this.signal,
         };
 
         // Create child with this as parent (triggers deadline validation in constructor)
         const child = new TimeoutBudgetInstance(childOperation, childBudgetMs, this, childOptions);
         this.children.push(child);
-        
-        console.log(`[TimeoutBudget] Subdivided ${this.operation} → ${childOperation}: ${childBudgetMs}ms of ${available}ms available`);
+
+        console.log(
+            `[TimeoutBudget] Subdivided ${this.operation} → ${childOperation}: ${childBudgetMs}ms of ${available}ms available`
+        );
 
         return child;
     }
@@ -309,7 +313,7 @@ class TimeoutBudgetInstance {
 
     /**
      * Assert budget is available, throw if exhausted
-     * 
+     *
      * @param {string} [context] - Context for error message
      */
     assertAvailable(context = null) {
@@ -318,7 +322,7 @@ class TimeoutBudgetInstance {
                 operation: context || this.operation,
                 allocated: this.budgetMs,
                 consumed: this.elapsed(),
-                parent: this.parent?.operation || null
+                parent: this.parent?.operation || null,
             });
         }
     }
@@ -339,7 +343,7 @@ class TimeoutBudgetInstance {
             aborted: this.aborted,
             hasParent: !!this.parent,
             parentOperation: this.parent?.operation || null,
-            children: this.children.map(c => c.getAccounting())
+            children: this.children.map(c => c.getAccounting()),
         };
     }
 }
@@ -353,29 +357,29 @@ class TimeoutBudgetInstance {
  */
 const DEFAULT_BUDGETS = {
     // LLM operations
-    llm_call: 60000,            // 60 seconds for cloud LLM
-    local_llm_call: 90000,      // 90 seconds for local LLM
+    llm_call: 60000, // 60 seconds for cloud LLM
+    local_llm_call: 90000, // 90 seconds for local LLM
 
     // Function calling
-    function_call: 10000,       // 10 seconds per function call
+    function_call: 10000, // 10 seconds per function call
 
     // Embedding operations
     embedding_generation: 30000, // 30 seconds
-    vector_search: 5000,        // 5 seconds
+    vector_search: 5000, // 5 seconds
 
     // Network operations
-    network_latency: 5000,      // 5 second buffer
+    network_latency: 5000, // 5 second buffer
 
     // Parsing
-    file_parse: 30000,          // 30 seconds for file parsing
-    pattern_detection: 20000    // 20 seconds for pattern detection
+    file_parse: 30000, // 30 seconds for file parsing
+    pattern_detection: 20000, // 20 seconds for pattern detection
 };
 
 /**
  * Default non-time-based limits
  */
 const DEFAULT_LIMITS = {
-    max_function_calls: 5       // Max 5 function calls per turn
+    max_function_calls: 5, // Max 5 function calls per turn
 };
 
 /**
@@ -395,14 +399,14 @@ const OPERATION_COMPLEXITY = {
     // Complex operations (2x)
     llm_call: 2.0,
     local_llm_call: 2.5,
-    embedding_generation: 2.0
+    embedding_generation: 2.0,
 };
 
 /**
  * Calculate adaptive timeout based on operation type and payload size
- * 
+ *
  * Formula: baseTimeout * (1 + log10(max(1, payloadSize / 1MB))) * complexityMultiplier
- * 
+ *
  * @param {Object} options
  * @param {string} options.operation - Operation type
  * @param {number} [options.payloadSize=0] - Payload size in bytes
@@ -428,7 +432,9 @@ function adaptiveTimeout({ operation, payloadSize = 0, minTimeout = 5000, maxTim
     // Clamp to min/max bounds
     const result = Math.max(minTimeout, Math.min(adaptedMs, maxTimeout));
 
-    console.log(`[TimeoutBudget] Adaptive timeout for ${operation}: base=${baseTimeout}ms, size=${payloadSize}b, complexity=${complexity}x → ${result}ms`);
+    console.log(
+        `[TimeoutBudget] Adaptive timeout for ${operation}: base=${baseTimeout}ms, size=${payloadSize}b, complexity=${complexity}x → ${result}ms`
+    );
 
     return result;
 }
@@ -451,7 +457,7 @@ function createBudgetId(operation) {
 
 /**
  * Allocate a timeout budget for an operation
- * 
+ *
  * @param {string} operation - Operation name
  * @param {number} [budgetMs] - Budget in milliseconds (uses default if not specified)
  * @param {Object} [options] - Options including signal for external AbortController
@@ -472,7 +478,7 @@ function allocate(operation, budgetMs = null, options = {}) {
 
 /**
  * Get an active budget by operation name
- * 
+ *
  * @param {string} operation - Operation name
  * @returns {TimeoutBudgetInstance|null}
  */
@@ -492,8 +498,11 @@ function getBudget(operation) {
  * @param {string|TimeoutBudgetInstance} operationOrInstance - Operation name or budget instance
  */
 function release(operationOrInstance) {
-    const isInstance = operationOrInstance instanceof TimeoutBudgetInstance ||
-        (operationOrInstance && typeof operationOrInstance === 'object' && 'operation' in operationOrInstance);
+    const isInstance =
+        operationOrInstance instanceof TimeoutBudgetInstance ||
+        (operationOrInstance &&
+            typeof operationOrInstance === 'object' &&
+            'operation' in operationOrInstance);
 
     let budgetId = isInstance ? operationOrInstance.id : null;
     const operation = isInstance ? operationOrInstance.operation : operationOrInstance;
@@ -508,7 +517,9 @@ function release(operationOrInstance) {
 
     const budget = budgetId ? activeBudgets.get(budgetId) : null;
     if (budget) {
-        console.log(`[TimeoutBudget] Released ${budget.operation}: elapsed ${budget.elapsed()}ms of ${budget.budgetMs}ms (id: ${budget.id})`);
+        console.log(
+            `[TimeoutBudget] Released ${budget.operation}: elapsed ${budget.elapsed()}ms of ${budget.budgetMs}ms (id: ${budget.id})`
+        );
         // CRITICAL: Call dispose to clean up AbortController resources and event listeners
         budget.dispose();
         activeBudgets.delete(budgetId);
@@ -517,7 +528,7 @@ function release(operationOrInstance) {
 
 /**
  * Execute a function with timeout budget
- * 
+ *
  * @param {string} operation - Operation name
  * @param {number} budgetMs - Budget in milliseconds
  * @param {function(TimeoutBudgetInstance): Promise<*>} fn - Function to execute
@@ -525,9 +536,7 @@ function release(operationOrInstance) {
  */
 async function withBudget(operation, budgetMs, fn) {
     const budget = allocate(operation, budgetMs);
-    const timeoutDelay = Number.isFinite(budgetMs)
-        ? budgetMs
-        : (budget?.budgetMs ?? 0);
+    const timeoutDelay = Number.isFinite(budgetMs) ? budgetMs : (budget?.budgetMs ?? 0);
 
     try {
         // Create AbortController for timeout
@@ -539,14 +548,16 @@ async function withBudget(operation, budgetMs, fn) {
                 fn(budget),
                 new Promise((_, reject) => {
                     controller.signal.addEventListener('abort', () => {
-                        reject(new BudgetExhaustedError({
-                            operation,
-                            allocated: timeoutDelay,
-                            consumed: budget.elapsed(),
-                            parent: null
-                        }));
+                        reject(
+                            new BudgetExhaustedError({
+                                operation,
+                                allocated: timeoutDelay,
+                                consumed: budget.elapsed(),
+                                parent: null,
+                            })
+                        );
                     });
-                })
+                }),
             ]);
 
             clearTimeout(timeoutId);
@@ -562,7 +573,7 @@ async function withBudget(operation, budgetMs, fn) {
 
 /**
  * Get accounting for all active budgets
- * 
+ *
  * @returns {Object[]}
  */
 function getActiveAccounting() {
@@ -571,7 +582,7 @@ function getActiveAccounting() {
 
 /**
  * Get default budget for an operation
- * 
+ *
  * @param {string} operation - Operation name
  * @returns {number|null}
  */
@@ -581,7 +592,7 @@ function getDefaultBudget(operation) {
 
 /**
  * Set custom default budget
- * 
+ *
  * @param {string} operation - Operation name
  * @param {number} budgetMs - Budget in milliseconds
  */
@@ -617,7 +628,7 @@ const TimeoutBudget = {
     // Constants
     DEFAULT_BUDGETS,
     DEFAULT_LIMITS,
-    OPERATION_COMPLEXITY
+    OPERATION_COMPLEXITY,
 };
 
 // ES Module export

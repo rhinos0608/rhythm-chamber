@@ -19,7 +19,7 @@ import {
     checkLMStudioHealth,
     checkGeminiHealth,
     checkOpenAICompatibleHealth,
-    checkHealth
+    checkHealth,
 } from './health-checks.js';
 import { isProviderAvailable, getAvailableProviders } from './availability.js';
 
@@ -51,7 +51,7 @@ export const ProviderInterface = {
     normalizeProviderError,
 
     // Constants
-    TIMEOUTS: PROVIDER_TIMEOUTS
+    TIMEOUTS: PROVIDER_TIMEOUTS,
 };
 
 // ES Module export for backward compatibility
@@ -91,7 +91,9 @@ export {
 
     // Availability
     isProviderAvailable,
-    getAvailableProviders
+    getAvailableProviders,
 };
 
-console.log('[ProviderInterface] LLM provider abstraction layer loaded (refactored modular architecture)');
+console.log(
+    '[ProviderInterface] LLM provider abstraction layer loaded (refactored modular architecture)'
+);

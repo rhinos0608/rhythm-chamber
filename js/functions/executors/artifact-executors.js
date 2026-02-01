@@ -1,9 +1,9 @@
 /**
  * Artifact Executors Module
- * 
+ *
  * Executors for artifact-producing function calls.
  * These return both narrative text AND an ArtifactSpec for visualization.
- * 
+ *
  * @module functions/executors/artifact-executors
  */
 
@@ -14,7 +14,7 @@ import {
     createBarChart,
     createTimeline,
     createTable,
-    ARTIFACT_TYPES
+    ARTIFACT_TYPES,
 } from '../../artifacts/artifact-spec.js';
 
 const logger = createLogger('ArtifactExecutors');
@@ -33,7 +33,7 @@ function validateArgs(args, functionName) {
     if (!args || typeof args !== 'object') {
         return {
             valid: false,
-            error: `[${functionName}] Invalid arguments: expected object, got ${typeof args}`
+            error: `[${functionName}] Invalid arguments: expected object, got ${typeof args}`,
         };
     }
     return { valid: true };
@@ -54,7 +54,7 @@ function getDateRange(timeRange) {
 
     return {
         start: new Date(startYear, startMonth - 1, 1),
-        end: new Date(endYear, endMonth, 0) // Last day of month
+        end: new Date(endYear, endMonth, 0), // Last day of month
     };
 }
 
@@ -73,18 +73,20 @@ function groupByGranularity(streams, granularity = 'month') {
             case 'day':
                 key = date.toISOString().split('T')[0];
                 break;
-            case 'week':
+            case 'week': {
                 const weekStart = new Date(date);
                 weekStart.setDate(date.getDate() - date.getDay());
                 key = weekStart.toISOString().split('T')[0];
                 break;
+            }
             case 'month':
                 key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                 break;
-            case 'quarter':
+            case 'quarter': {
                 const quarter = Math.floor(date.getMonth() / 3) + 1;
                 key = `${date.getFullYear()}-Q${quarter}`;
                 break;
+            }
             case 'year':
                 key = String(date.getFullYear());
                 break;
@@ -109,14 +111,16 @@ function calculateMetric(streams, metric) {
         case 'plays':
             return streams.length;
         case 'hours':
-            return streams.reduce((sum, s) => sum + ((s.msPlayed || s.ms_played || 0) / 3600000), 0);
+            return streams.reduce((sum, s) => sum + (s.msPlayed || s.ms_played || 0) / 3600000, 0);
         case 'unique_artists':
-            return new Set(streams.map(s => s.artistName || s.master_metadata_album_artist_name)).size;
+            return new Set(streams.map(s => s.artistName || s.master_metadata_album_artist_name))
+                .size;
         case 'unique_tracks':
             return new Set(streams.map(s => s.trackName || s.master_metadata_track_name)).size;
-        case 'avg_session_length':
+        case 'avg_session_length': {
             const totalMs = streams.reduce((sum, s) => sum + (s.msPlayed || s.ms_played || 0), 0);
             return streams.length > 0 ? totalMs / streams.length / 60000 : 0; // in minutes
+        }
         default:
             return streams.length;
     }
@@ -152,7 +156,7 @@ function getMetricLabel(metric) {
         unique_tracks: 'Unique Tracks',
         avg_session_length: 'Avg Session Length',
         tracks: 'Tracks',
-        sessions: 'Sessions'
+        sessions: 'Sessions',
     };
     return labels[metric] || metric;
 }
@@ -186,7 +190,11 @@ function visualize_trend(args, streams) {
     if (filter_artist) {
         const artistLower = filter_artist.toLowerCase();
         filtered = filtered.filter(s => {
-            const artist = (s.artistName || s.master_metadata_album_artist_name || '').toLowerCase();
+            const artist = (
+                s.artistName ||
+                s.master_metadata_album_artist_name ||
+                ''
+            ).toLowerCase();
             return artist.includes(artistLower);
         });
     }
@@ -194,7 +202,7 @@ function visualize_trend(args, streams) {
     if (filtered.length === 0) {
         return {
             message: `No listening data found for the specified time range ${time_range.start_year}-${time_range.end_year}.`,
-            artifact: null
+            artifact: null,
         };
     }
 
@@ -203,7 +211,7 @@ function visualize_trend(args, streams) {
     const data = Array.from(groups.entries())
         .map(([period, periodStreams]) => ({
             period,
-            value: calculateMetric(periodStreams, metric)
+            value: calculateMetric(periodStreams, metric),
         }))
         .sort((a, b) => a.period.localeCompare(b.period));
 
@@ -222,9 +230,9 @@ function visualize_trend(args, streams) {
         xType: 'temporal',
         explanation: [
             `This chart shows your ${getMetricLabel(metric).toLowerCase()} over time.`,
-            `Data spans from ${time_range.start_year} to ${time_range.end_year}, grouped by ${granularity}.`
+            `Data spans from ${time_range.start_year} to ${time_range.end_year}, grouped by ${granularity}.`,
         ],
-        annotations: annotations || []
+        annotations: annotations || [],
     });
     artifact.subtitle = subtitle;
 
@@ -243,8 +251,8 @@ function visualize_trend(args, streams) {
             max,
             min,
             peak_period: peakPeriod,
-            total_periods: data.length
-        }
+            total_periods: data.length,
+        },
     };
 }
 
@@ -281,7 +289,11 @@ function visualize_comparison(args, streams) {
             if (artist_name) {
                 const artistLower = artist_name.toLowerCase();
                 yearStreams = yearStreams.filter(s => {
-                    const artist = (s.artistName || s.master_metadata_album_artist_name || '').toLowerCase();
+                    const artist = (
+                        s.artistName ||
+                        s.master_metadata_album_artist_name ||
+                        ''
+                    ).toLowerCase();
                     return artist.includes(artistLower);
                 });
             }
@@ -304,10 +316,14 @@ function visualize_comparison(args, streams) {
 
             title = artist_name
                 ? `${artist_name} - Top Artists`
-                : (year ? `Top Artists in ${year}` : 'All-Time Top Artists');
+                : year
+                    ? `Top Artists in ${year}`
+                    : 'All-Time Top Artists';
             explanation = [
                 `Your top ${data.length} artists by ${getMetricLabel(metric).toLowerCase()}.`,
-                year ? `Based on your listening data from ${year}.` : 'Based on all available listening data.'
+                year
+                    ? `Based on your listening data from ${year}.`
+                    : 'Based on all available listening data.',
             ];
             break;
         }
@@ -336,7 +352,9 @@ function visualize_comparison(args, streams) {
                 .slice(0, safeLimit);
 
             title = year ? `Top Tracks in ${year}` : 'All-Time Top Tracks';
-            explanation = [`Your top ${data.length} tracks by ${getMetricLabel(metric).toLowerCase()}.`];
+            explanation = [
+                `Your top ${data.length} tracks by ${getMetricLabel(metric).toLowerCase()}.`,
+            ];
             break;
         }
 
@@ -344,7 +362,7 @@ function visualize_comparison(args, streams) {
             if (!periods || periods.length < 2) {
                 return {
                     message: 'Period comparison requires at least 2 periods to compare.',
-                    artifact: null
+                    artifact: null,
                 };
             }
 
@@ -357,13 +375,16 @@ function visualize_comparison(args, streams) {
                 });
 
                 data.push({
-                    category: period.label || `${period.year}${period.month ? `-${period.month}` : ''}`,
-                    value: calculateMetric(periodStreams, metric)
+                    category:
+                        period.label || `${period.year}${period.month ? `-${period.month}` : ''}`,
+                    value: calculateMetric(periodStreams, metric),
                 });
             }
 
             title = `${getMetricLabel(metric)} Comparison`;
-            explanation = [`Comparing ${getMetricLabel(metric).toLowerCase()} across ${periods.length} time periods.`];
+            explanation = [
+                `Comparing ${getMetricLabel(metric).toLowerCase()} across ${periods.length} time periods.`,
+            ];
             break;
         }
 
@@ -371,13 +392,17 @@ function visualize_comparison(args, streams) {
             if (!artist_name) {
                 return {
                     message: 'Artist plays requires an artist name.',
-                    artifact: null
+                    artifact: null,
                 };
             }
 
             const artistLower = artist_name.toLowerCase();
             const artistStreams = streams.filter(s => {
-                const artist = (s.artistName || s.master_metadata_album_artist_name || '').toLowerCase();
+                const artist = (
+                    s.artistName ||
+                    s.master_metadata_album_artist_name ||
+                    ''
+                ).toLowerCase();
                 return artist.includes(artistLower);
             });
 
@@ -400,14 +425,14 @@ function visualize_comparison(args, streams) {
         default:
             return {
                 message: `Unknown comparison type: ${comparison_type}`,
-                artifact: null
+                artifact: null,
             };
     }
 
     if (data.length === 0) {
         return {
             message: 'No data found for the specified comparison.',
-            artifact: null
+            artifact: null,
         };
     }
 
@@ -417,7 +442,7 @@ function visualize_comparison(args, streams) {
         categoryField: 'category',
         valueField: 'value',
         horizontal: true,
-        explanation
+        explanation,
     });
 
     const topItem = data[0];
@@ -428,8 +453,8 @@ function visualize_comparison(args, streams) {
         summary: {
             top_item: topItem.category,
             top_value: topItem.value,
-            total_items: data.length
-        }
+            total_items: data.length,
+        },
     };
 }
 
@@ -461,20 +486,26 @@ function show_listening_timeline(args, streams) {
             if (!artist_name) {
                 return {
                     message: 'Artist journey requires an artist name.',
-                    artifact: null
+                    artifact: null,
                 };
             }
 
             const artistLower = artist_name.toLowerCase();
-            const artistStreams = streams.filter(s => {
-                const artist = (s.artistName || s.master_metadata_album_artist_name || '').toLowerCase();
-                return artist.includes(artistLower);
-            }).sort((a, b) => new Date(a.ts || a.endTime) - new Date(b.ts || b.endTime));
+            const artistStreams = streams
+                .filter(s => {
+                    const artist = (
+                        s.artistName ||
+                        s.master_metadata_album_artist_name ||
+                        ''
+                    ).toLowerCase();
+                    return artist.includes(artistLower);
+                })
+                .sort((a, b) => new Date(a.ts || a.endTime) - new Date(b.ts || b.endTime));
 
             if (artistStreams.length === 0) {
                 return {
                     message: `No listening history found for "${artist_name}".`,
-                    artifact: null
+                    artifact: null,
                 };
             }
 
@@ -483,7 +514,7 @@ function show_listening_timeline(args, streams) {
             const firstDate = new Date(firstListen.ts || firstListen.endTime);
             events.push({
                 date: firstDate.toISOString(),
-                label: `First listened to ${artist_name}`
+                label: `First listened to ${artist_name}`,
             });
 
             // Find peak month
@@ -499,7 +530,7 @@ function show_listening_timeline(args, streams) {
             if (peakMonth) {
                 events.push({
                     date: `${peakMonth}-15`,
-                    label: `Peak listening: ${peakCount} plays`
+                    label: `Peak listening: ${peakCount} plays`,
                 });
             }
 
@@ -508,13 +539,13 @@ function show_listening_timeline(args, streams) {
             const lastDate = new Date(lastListen.ts || lastListen.endTime);
             events.push({
                 date: lastDate.toISOString(),
-                label: 'Most recent listen'
+                label: 'Most recent listen',
             });
 
             title = `Your Journey with ${artist_name}`;
             explanation = [
                 `You first discovered ${artist_name} in ${firstDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}.`,
-                `Total plays: ${artistStreams.length}`
+                `Total plays: ${artistStreams.length}`,
             ];
             break;
         }
@@ -541,20 +572,20 @@ function show_listening_timeline(args, streams) {
                 .filter(([artist]) => (artistCounts.get(artist) || 0) >= 5) // Only significant artists
                 .map(([artist, { date }]) => ({
                     date: date.toISOString(),
-                    label: `Discovered ${artist}`
+                    label: `Discovered ${artist}`,
                 }))
                 .sort((a, b) => new Date(a.date) - new Date(b.date))
                 .slice(0, safeLimit);
 
             title = 'Artist Discovery Timeline';
-            explanation = [`Key artist discoveries over time (artists with 5+ plays).`];
+            explanation = ['Key artist discoveries over time (artists with 5+ plays).'];
             break;
         }
 
         case 'milestones': {
             // Calculate cumulative milestones
-            const sortedStreams = [...streams].sort((a, b) =>
-                new Date(a.ts || a.endTime) - new Date(b.ts || b.endTime)
+            const sortedStreams = [...streams].sort(
+                (a, b) => new Date(a.ts || a.endTime) - new Date(b.ts || b.endTime)
             );
 
             const milestones = [100, 500, 1000, 5000, 10000, 25000, 50000, 100000];
@@ -566,13 +597,15 @@ function show_listening_timeline(args, streams) {
                     const date = new Date(stream.ts || stream.endTime);
                     events.push({
                         date: date.toISOString(),
-                        label: `${count.toLocaleString()} plays milestone`
+                        label: `${count.toLocaleString()} plays milestone`,
                     });
                 }
             }
 
             title = 'Listening Milestones';
-            explanation = [`Your listening journey from first play to ${count.toLocaleString()} total plays.`];
+            explanation = [
+                `Your listening journey from first play to ${count.toLocaleString()} total plays.`,
+            ];
             break;
         }
 
@@ -597,13 +630,14 @@ function show_listening_timeline(args, streams) {
                     artistCounts.set(artist, (artistCounts.get(artist) || 0) + 1);
                 }
 
-                const topArtist = Array.from(artistCounts.entries())
-                    .sort((a, b) => b[1] - a[1])[0]?.[0];
+                const topArtist = Array.from(artistCounts.entries()).sort(
+                    (a, b) => b[1] - a[1]
+                )[0]?.[0];
 
                 if (prevTopArtist && topArtist !== prevTopArtist) {
                     transitions.push({
                         date: `${month}-15`,
-                        label: `Transition: ${prevTopArtist} → ${topArtist}`
+                        label: `Transition: ${prevTopArtist} → ${topArtist}`,
                     });
                 }
                 prevTopArtist = topArtist;
@@ -618,14 +652,14 @@ function show_listening_timeline(args, streams) {
         default:
             return {
                 message: `Unknown timeline type: ${timeline_type}`,
-                artifact: null
+                artifact: null,
             };
     }
 
     if (events.length === 0) {
         return {
             message: 'No events found for the specified timeline.',
-            artifact: null
+            artifact: null,
         };
     }
 
@@ -634,15 +668,15 @@ function show_listening_timeline(args, streams) {
         events,
         dateField: 'date',
         labelField: 'label',
-        explanation
+        explanation,
     });
 
     return {
         message: `Here's your ${title.toLowerCase()} showing ${events.length} key moments.`,
         artifact,
         summary: {
-            event_count: events.length
-        }
+            event_count: events.length,
+        },
     };
 }
 
@@ -659,28 +693,29 @@ function show_listening_heatmap(args, streams) {
     if (!args || typeof args !== 'object') {
         return {
             message: '[show_listening_heatmap] Invalid arguments: expected object',
-            artifact: null
+            artifact: null,
         };
     }
 
     const { year, metric = 'plays' } = args;
 
     // Default to most recent year with data, or current year if empty
-    const targetYear = year || (streams.length > 0
-        ? Math.max(...streams.map(s => new Date(s.ts || s.endTime).getFullYear()))
-        : new Date().getFullYear()
-    );
+    const targetYear =
+        year ||
+        (streams.length > 0
+            ? Math.max(...streams.map(s => new Date(s.ts || s.endTime).getFullYear()))
+            : new Date().getFullYear());
 
     logger.debug('Executing show_listening_heatmap', { year: targetYear, metric });
 
-    const yearStreams = streams.filter(s =>
-        new Date(s.ts || s.endTime).getFullYear() === targetYear
+    const yearStreams = streams.filter(
+        s => new Date(s.ts || s.endTime).getFullYear() === targetYear
     );
 
     if (yearStreams.length === 0) {
         return {
             message: `No listening data found for ${targetYear}.`,
-            artifact: null
+            artifact: null,
         };
     }
 
@@ -704,9 +739,12 @@ function show_listening_heatmap(args, streams) {
     // Convert to array
     const data = Array.from(dailyData.entries()).map(([date, stats]) => ({
         date,
-        value: metric === 'hours' ? stats.hours :
-            metric === 'unique_artists' ? stats.artists.size :
-                stats.plays
+        value:
+            metric === 'hours'
+                ? stats.hours
+                : metric === 'unique_artists'
+                    ? stats.artists.size
+                    : stats.plays,
     }));
 
     const title = `${targetYear} Listening Activity`;
@@ -722,14 +760,14 @@ function show_listening_heatmap(args, streams) {
         view: {
             kind: 'heatmap',
             x: { field: 'date', type: 'temporal' },
-            y: { field: 'value', type: 'quantitative' }
+            y: { field: 'value', type: 'quantitative' },
         },
         data,
         annotations: [],
         explanation: [
             `You listened on ${totalDays} days in ${targetYear}.`,
-            `Total ${getMetricLabel(metric).toLowerCase()}: ${formatMetricValue(totalValue, metric)}`
-        ]
+            `Total ${getMetricLabel(metric).toLowerCase()}: ${formatMetricValue(totalValue, metric)}`,
+        ],
     };
 
     return {
@@ -737,8 +775,8 @@ function show_listening_heatmap(args, streams) {
         artifact,
         summary: {
             days_active: totalDays,
-            total: totalValue
-        }
+            total: totalValue,
+        },
     };
 }
 
@@ -799,7 +837,7 @@ function show_data_table(args, streams) {
                     track: item.track,
                     artist: item.artist,
                     plays: item.plays,
-                    hours: item.hours.toFixed(1)
+                    hours: item.hours.toFixed(1),
                 }));
 
             columns = [
@@ -807,10 +845,12 @@ function show_data_table(args, streams) {
                 { field: 'track', label: 'Track' },
                 { field: 'artist', label: 'Artist' },
                 { field: 'plays', label: 'Plays' },
-                { field: 'hours', label: 'Hours' }
+                { field: 'hours', label: 'Hours' },
             ];
 
-            title = year ? `Top Tracks in ${year}${month ? ` (${getMonthName(month)})` : ''}` : 'All-Time Top Tracks';
+            title = year
+                ? `Top Tracks in ${year}${month ? ` (${getMonthName(month)})` : ''}`
+                : 'All-Time Top Tracks';
             explanation = [`Detailed stats for your top ${data.length} tracks.`];
             break;
         }
@@ -837,7 +877,7 @@ function show_data_table(args, streams) {
                     artist: item.artist,
                     plays: item.plays,
                     hours: item.hours.toFixed(1),
-                    tracks: item.tracks.size
+                    tracks: item.tracks.size,
                 }));
 
             columns = [
@@ -845,7 +885,7 @@ function show_data_table(args, streams) {
                 { field: 'artist', label: 'Artist' },
                 { field: 'plays', label: 'Plays' },
                 { field: 'hours', label: 'Hours' },
-                { field: 'tracks', label: 'Unique Tracks' }
+                { field: 'tracks', label: 'Unique Tracks' },
             ];
 
             title = year ? `Top Artists in ${year}` : 'All-Time Top Artists';
@@ -860,8 +900,13 @@ function show_data_table(args, streams) {
                 .map(([month, monthStreams]) => ({
                     month,
                     plays: monthStreams.length,
-                    hours: (monthStreams.reduce((sum, s) => sum + (s.msPlayed || s.ms_played || 0), 0) / 3600000).toFixed(1),
-                    artists: new Set(monthStreams.map(s => s.artistName || s.master_metadata_album_artist_name)).size
+                    hours: (
+                        monthStreams.reduce((sum, s) => sum + (s.msPlayed || s.ms_played || 0), 0) /
+                        3600000
+                    ).toFixed(1),
+                    artists: new Set(
+                        monthStreams.map(s => s.artistName || s.master_metadata_album_artist_name)
+                    ).size,
                 }))
                 .sort((a, b) => a.month.localeCompare(b.month));
 
@@ -869,11 +914,11 @@ function show_data_table(args, streams) {
                 { field: 'month', label: 'Month' },
                 { field: 'plays', label: 'Plays' },
                 { field: 'hours', label: 'Hours' },
-                { field: 'artists', label: 'Artists' }
+                { field: 'artists', label: 'Artists' },
             ];
 
             title = 'Listening by Month';
-            explanation = [`Monthly breakdown of your listening activity.`];
+            explanation = ['Monthly breakdown of your listening activity.'];
             break;
         }
 
@@ -881,13 +926,17 @@ function show_data_table(args, streams) {
             if (!artist_name) {
                 return {
                     message: 'Artist tracks table requires an artist name.',
-                    artifact: null
+                    artifact: null,
                 };
             }
 
             const artistLower = artist_name.toLowerCase();
             const artistStreams = filtered.filter(s => {
-                const artist = (s.artistName || s.master_metadata_album_artist_name || '').toLowerCase();
+                const artist = (
+                    s.artistName ||
+                    s.master_metadata_album_artist_name ||
+                    ''
+                ).toLowerCase();
                 return artist.includes(artistLower);
             });
 
@@ -910,14 +959,14 @@ function show_data_table(args, streams) {
                     rank: i + 1,
                     track: item.track,
                     plays: item.plays,
-                    hours: item.hours.toFixed(1)
+                    hours: item.hours.toFixed(1),
                 }));
 
             columns = [
                 { field: 'rank', label: '#' },
                 { field: 'track', label: 'Track' },
                 { field: 'plays', label: 'Plays' },
-                { field: 'hours', label: 'Hours' }
+                { field: 'hours', label: 'Hours' },
             ];
 
             title = `${artist_name} - Top Tracks`;
@@ -928,14 +977,14 @@ function show_data_table(args, streams) {
         default:
             return {
                 message: `Unknown table type: ${table_type}`,
-                artifact: null
+                artifact: null,
             };
     }
 
     if (data.length === 0) {
         return {
             message: 'No data found for the specified table.',
-            artifact: null
+            artifact: null,
         };
     }
 
@@ -943,22 +992,34 @@ function show_data_table(args, streams) {
         title,
         data,
         columns,
-        explanation
+        explanation,
     });
 
     return {
         message: `Here's your ${title.toLowerCase()} with ${data.length} entries.`,
         artifact,
         summary: {
-            row_count: data.length
-        }
+            row_count: data.length,
+        },
     };
 }
 
 // Helper for month names
 function getMonthName(month) {
-    const months = ['January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'];
+    const months = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+    ];
     return months[month - 1] || '';
 }
 
@@ -971,7 +1032,7 @@ export const ArtifactExecutors = {
     visualize_comparison,
     show_listening_timeline,
     show_listening_heatmap,
-    show_data_table
+    show_data_table,
 };
 
 logger.info('Artifact executors loaded');

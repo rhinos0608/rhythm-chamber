@@ -1,9 +1,9 @@
 /**
  * Spotify Controller
- * 
+ *
  * Handles Spotify OAuth flow, token management, and data fetching.
  * Extracted from app.js to separate Spotify concerns from main app flow.
- * 
+ *
  * @module controllers/spotify-controller
  */
 
@@ -87,7 +87,7 @@ async function handleSpotifyCallback(code, state) {
         startBackgroundRefresh();
 
         // Validate session before fetching
-        if (!await _Spotify.ensureValidToken()) {
+        if (!(await _Spotify.ensureValidToken())) {
             if (_showToast) _showToast('Session expired. Reconnecting...');
             const refreshed = await _Spotify.refreshToken();
             if (!refreshed) {
@@ -96,7 +96,7 @@ async function handleSpotifyCallback(code, state) {
         }
 
         // Fetch data from Spotify
-        const spotifyData = await _Spotify.fetchSnapshotData((message) => {
+        const spotifyData = await _Spotify.fetchSnapshotData(message => {
             _ViewController.updateProgress(message);
         });
 
@@ -109,7 +109,7 @@ async function handleSpotifyCallback(code, state) {
         // Update app state
         if (_AppState) {
             _AppState.update('lite', {
-                liteData: liteData
+                liteData: liteData,
             });
         }
 
@@ -118,7 +118,9 @@ async function handleSpotifyCallback(code, state) {
         const instantInsight = _Patterns.detectImmediateVibe(liteData);
 
         // Update UI with instant insight
-        _ViewController.updateProgress(`Quick snapshot ready!<br><br>${instantInsight}<br><br><small>Full analysis requires complete history for accurate personality detection</small>`);
+        _ViewController.updateProgress(
+            `Quick snapshot ready!<br><br>${instantInsight}<br><br><small>Full analysis requires complete history for accurate personality detection</small>`
+        );
 
         // Wait a moment for user to read
         await new Promise(r => setTimeout(r, 2000));
@@ -150,7 +152,6 @@ async function handleSpotifyCallback(code, state) {
         // MEMORY LEAK FIX: Stop background refresh after successful callback
         // The interval is only needed during long-running operations
         stopBackgroundRefresh();
-
     } catch (error) {
         console.error('[SpotifyController] Callback error:', error);
         // Stop background refresh on error to prevent lingering intervals
@@ -173,25 +174,34 @@ function startBackgroundRefresh() {
     stopBackgroundRefresh();
 
     // Check token every 5 minutes
-    backgroundRefreshInterval = setInterval(async () => {
-        try {
-            const needsRefresh = await _Spotify.checkTokenRefreshNeeded();
-            if (needsRefresh) {
-                console.log('[SpotifyController] Background token refresh needed, refreshing...');
-                await _Spotify.refreshToken();
+    backgroundRefreshInterval = setInterval(
+        async () => {
+            try {
+                const needsRefresh = await _Spotify.checkTokenRefreshNeeded();
+                if (needsRefresh) {
+                    console.log(
+                        '[SpotifyController] Background token refresh needed, refreshing...'
+                    );
+                    await _Spotify.refreshToken();
+                }
+            } catch (error) {
+                console.warn('[SpotifyController] Background refresh failed:', error);
+                // Notify user of background refresh failure
+                if (_showToast) {
+                    _showToast(
+                        'Background token refresh failed. You may need to reconnect to Spotify.'
+                    );
+                } else {
+                    console.warn(
+                        '[SpotifyController] Background refresh failed - user may need to reconnect'
+                    );
+                }
+                // Stop the interval to prevent repeated failures
+                stopBackgroundRefresh();
             }
-        } catch (error) {
-            console.warn('[SpotifyController] Background refresh failed:', error);
-            // Notify user of background refresh failure
-            if (_showToast) {
-                _showToast('Background token refresh failed. You may need to reconnect to Spotify.');
-            } else {
-                console.warn('[SpotifyController] Background refresh failed - user may need to reconnect');
-            }
-            // Stop the interval to prevent repeated failures
-            stopBackgroundRefresh();
-        }
-    }, 5 * 60 * 1000); // 5 minutes
+        },
+        5 * 60 * 1000
+    ); // 5 minutes
 
     console.log('[SpotifyController] Background token refresh started');
 }
@@ -258,21 +268,21 @@ async function getSessionStatus() {
         return { configured: false, valid: false, error: 'Spotify module not available' };
     }
 
-        try {
-            const configured = _Spotify.isConfigured();
-            const valid = configured ? await _Spotify.ensureValidToken() : false;
-            const token = configured ? await _Spotify.getAccessToken() : null;
+    try {
+        const configured = _Spotify.isConfigured();
+        const valid = configured ? await _Spotify.ensureValidToken() : false;
+        const token = configured ? await _Spotify.getAccessToken() : null;
 
-            return {
-                configured,
-                valid,
-                hasToken: !!token
-            };
-        } catch (error) {
-            return {
-                configured: _Spotify.isConfigured(),
-                valid: false,
-            error: error.message
+        return {
+            configured,
+            valid,
+            hasToken: !!token,
+        };
+    } catch (error) {
+        return {
+            configured: _Spotify.isConfigured(),
+            valid: false,
+            error: error.message,
         };
     }
 }
@@ -288,7 +298,7 @@ async function fetchSnapshotData(progressCallback) {
     }
 
     // Validate session first
-    if (!await validateSession()) {
+    if (!(await validateSession())) {
         throw new Error('Invalid or expired Spotify session');
     }
 
@@ -332,8 +342,7 @@ export const SpotifyController = {
     isConfigured,
     getSessionStatus,
     fetchSnapshotData,
-    transformForAnalysis
+    transformForAnalysis,
 };
-
 
 console.log('[SpotifyController] Controller loaded');

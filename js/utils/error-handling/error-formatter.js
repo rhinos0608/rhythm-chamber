@@ -22,11 +22,7 @@ import { sanitizeMessage, sanitizeStack } from './error-sanitizer.js';
  * @returns {string} Formatted error message for user display
  */
 export function formatForUser(classifiedError, options = {}) {
-    const {
-        includeHint = true,
-        includeSeverity = true,
-        includeTimestamp = false
-    } = options;
+    const { includeHint = true, includeSeverity = true, includeTimestamp = false } = options;
 
     let message = '';
 
@@ -37,7 +33,7 @@ export function formatForUser(classifiedError, options = {}) {
             [ErrorSeverity.HIGH]: '⚠️',
             [ErrorSeverity.MEDIUM]: '⚡',
             [ErrorSeverity.LOW]: 'ℹ️',
-            [ErrorSeverity.INFO]: '💡'
+            [ErrorSeverity.INFO]: '💡',
         };
         message += `${severityIcons[classifiedError.severity] || '⚠️'} `;
     }
@@ -84,7 +80,7 @@ export function formatForLog(classifiedError) {
         originalMessage: sanitizeMessage(classifiedError.originalError?.message),
         originalStack: sanitizeStack(classifiedError.originalError?.stack),
         context: classifiedError.context,
-        timestamp: classifiedError.timestamp
+        timestamp: classifiedError.timestamp,
     };
 }
 
@@ -105,9 +101,11 @@ export function formatForToast(classifiedError) {
         [ErrorType.NETWORK_OFFLINE]: 'No internet connection.',
         [ErrorType.NETWORK_TIMEOUT]: 'Network timeout. Please retry.',
         [ErrorType.VALIDATION_MISSING_REQUIRED]: 'Missing required information.',
-        [ErrorType.TRANSACTION_TIMEOUT]: 'Operation timed out. Please retry.'
+        [ErrorType.TRANSACTION_TIMEOUT]: 'Operation timed out. Please retry.',
     };
 
-    return shortMessages[classifiedError.type] ||
-           classifiedError.message.split('\n')[0].substring(0, 100);
+    return (
+        shortMessages[classifiedError.type] ||
+        classifiedError.message.split('\n')[0].substring(0, 100)
+    );
 }

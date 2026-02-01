@@ -1,16 +1,16 @@
 /**
  * Temporal Analysis Service
- * 
+ *
  * Analyzes listening trends over time for the Temporal Analysis Dashboard.
  * Provides 5-year trend visualization, genre evolution, and discovery prediction.
- * 
+ *
  * Features:
  * - Taste evolution tracking over years
  * - Genre diversity trends
  * - Artist discovery velocity
  * - Seasonal pattern analysis
  * - Future prediction modeling
- * 
+ *
  * @module services/temporal-analysis
  */
 
@@ -25,7 +25,7 @@ const TIME_RANGES = {
     LAST_5_YEARS: '5_years',
     LAST_YEAR: 'year',
     LAST_6_MONTHS: '6_months',
-    LAST_MONTH: 'month'
+    LAST_MONTH: 'month',
 };
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -37,7 +37,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 /**
  * Get taste evolution over time
  * Shows how listening preferences have changed year over year
- * 
+ *
  * @param {Array} streams - User streaming history
  * @param {Object} [options] - Analysis options
  * @returns {Object} Taste evolution data
@@ -56,12 +56,14 @@ function getTasteEvolution(streams, options = {}) {
 
         // Calculate metrics for each year
         const topArtists = getTopN(yearStreams, 'master_metadata_album_artist_name', 10);
-        const uniqueArtists = new Set(yearStreams.map(s => s.master_metadata_album_artist_name)).size;
+        const uniqueArtists = new Set(yearStreams.map(s => s.master_metadata_album_artist_name))
+            .size;
         const totalStreams = yearStreams.length;
         const yearNumber = parseInt(year);
-        const daysInPeriod = yearNumber === new Date().getFullYear()
-            ? getElapsedDaysInYear(yearNumber)
-            : getDaysInYear(yearNumber);
+        const daysInPeriod =
+            yearNumber === new Date().getFullYear()
+                ? getElapsedDaysInYear(yearNumber)
+                : getDaysInYear(yearNumber);
 
         // Calculate discovery rate (% of artists listened to for first time this year)
         const discoveryRate = calculateDiscoveryRate(
@@ -76,12 +78,12 @@ function getTasteEvolution(streams, options = {}) {
             uniqueArtists,
             topArtists,
             discoveryRate,
-            avgDailyStreams: daysInPeriod > 0 ? Math.round(totalStreams / daysInPeriod) : 0
+            avgDailyStreams: daysInPeriod > 0 ? Math.round(totalStreams / daysInPeriod) : 0,
         };
     });
 
     EventBus.emit('temporal:evolution_calculated', {
-        yearsAnalyzed: years.length
+        yearsAnalyzed: years.length,
     });
 
     return { years, evolution };
@@ -90,7 +92,7 @@ function getTasteEvolution(streams, options = {}) {
 /**
  * Get diversity trend over time
  * Measures how eclectic listening becomes over years
- * 
+ *
  * @param {Array} streams - User streaming history
  * @returns {Object} Diversity trend data
  */
@@ -104,46 +106,53 @@ function getDiversityTrend(streams) {
 
     const trend = months.map(month => {
         const monthStreams = byMonth[month];
-        const uniqueArtists = new Set(monthStreams.map(s => s.master_metadata_album_artist_name)).size;
+        const uniqueArtists = new Set(monthStreams.map(s => s.master_metadata_album_artist_name))
+            .size;
         const totalStreams = monthStreams.length;
 
         // Diversity = unique artists / total streams (normalized)
-        const diversityScore = totalStreams > 0
-            ? Math.round((uniqueArtists / Math.sqrt(totalStreams)) * 100)
-            : 0;
+        const diversityScore =
+            totalStreams > 0 ? Math.round((uniqueArtists / Math.sqrt(totalStreams)) * 100) : 0;
 
         return {
             month,
             diversityScore,
             uniqueArtists,
-            totalStreams
+            totalStreams,
         };
     });
 
-    const averageDiversity = trend.length > 0
-        ? Math.round(trend.reduce((sum, t) => sum + t.diversityScore, 0) / trend.length)
-        : 0;
+    const averageDiversity =
+        trend.length > 0
+            ? Math.round(trend.reduce((sum, t) => sum + t.diversityScore, 0) / trend.length)
+            : 0;
 
     // Calculate trend direction (last 6 months vs previous 6 months)
     const recentSlice = trend.slice(-6);
     const previousSlice = trend.slice(-12, -6);
     // Guard against division by zero
-    const recentAvg = recentSlice.length > 0
-        ? recentSlice.reduce((s, t) => s + t.diversityScore, 0) / recentSlice.length
-        : null;
-    const previousAvg = previousSlice.length > 0
-        ? previousSlice.reduce((s, t) => s + t.diversityScore, 0) / previousSlice.length
-        : null;
+    const recentAvg =
+        recentSlice.length > 0
+            ? recentSlice.reduce((s, t) => s + t.diversityScore, 0) / recentSlice.length
+            : null;
+    const previousAvg =
+        previousSlice.length > 0
+            ? previousSlice.reduce((s, t) => s + t.diversityScore, 0) / previousSlice.length
+            : null;
     let trendDirection = 'insufficient_data';
     if (recentAvg !== null && previousAvg !== null) {
-        trendDirection = recentAvg > previousAvg ? 'increasing' :
-            recentAvg < previousAvg ? 'decreasing' : 'stable';
+        trendDirection =
+            recentAvg > previousAvg
+                ? 'increasing'
+                : recentAvg < previousAvg
+                    ? 'decreasing'
+                    : 'stable';
     }
     let insight;
     if (trendDirection === 'increasing') {
         insight = 'Your music taste is becoming more diverse!';
     } else if (trendDirection === 'decreasing') {
-        insight = 'You\'re focusing on a core set of artists';
+        insight = "You're focusing on a core set of artists";
     } else if (trendDirection === 'insufficient_data') {
         insight = 'Not enough data to determine your diversity trend yet';
     } else {
@@ -154,14 +163,14 @@ function getDiversityTrend(streams) {
         trend,
         averageDiversity,
         trendDirection,
-        insight
+        insight,
     };
 }
 
 /**
  * Get artist discovery prediction
  * Predicts how many new artists user will discover in coming months
- * 
+ *
  * @param {Array} streams - User streaming history
  * @returns {Object} Discovery prediction
  */
@@ -191,16 +200,17 @@ function getDiscoveryPrediction(streams) {
 
         discoveryRates.push({
             month,
-            discoveries: newDiscoveries
+            discoveries: newDiscoveries,
         });
     }
 
     // Calculate trend from last 6 months
     const recentRates = discoveryRates.slice(-6);
     // Guard against division by zero
-    const avgRecent = recentRates.length > 0
-        ? recentRates.reduce((s, r) => s + r.discoveries, 0) / recentRates.length
-        : 0;
+    const avgRecent =
+        recentRates.length > 0
+            ? recentRates.reduce((s, r) => s + r.discoveries, 0) / recentRates.length
+            : 0;
 
     // Simple linear prediction for next 3 months
     const prediction = [];
@@ -216,7 +226,7 @@ function getDiscoveryPrediction(streams) {
         prediction.push({
             month: monthKey,
             predictedDiscoveries,
-            isEstimate: true
+            isEstimate: true,
         });
     }
 
@@ -224,9 +234,10 @@ function getDiscoveryPrediction(streams) {
     const recentDiscoveries = recentRates.map(r => r.discoveries);
     const variance = calculateVariance(recentDiscoveries);
     // Guard against division by zero
-    const meanRecent = recentDiscoveries.length > 0
-        ? recentDiscoveries.reduce((s, v) => s + v, 0) / recentDiscoveries.length
-        : 0;
+    const meanRecent =
+        recentDiscoveries.length > 0
+            ? recentDiscoveries.reduce((s, v) => s + v, 0) / recentDiscoveries.length
+            : 0;
     const stddev = Math.sqrt(variance);
     const cov = meanRecent === 0 ? Infinity : stddev / meanRecent;
     const rawConfidence = 100 - (Number.isFinite(cov) ? cov * 100 : 100);
@@ -237,7 +248,7 @@ function getDiscoveryPrediction(streams) {
         prediction,
         confidence,
         totalArtistsDiscovered: knownArtists.size,
-        insight: `Based on your patterns, you'll likely discover ~${Math.round(avgRecent)} new artists per month`
+        insight: `Based on your patterns, you'll likely discover ~${Math.round(avgRecent)} new artists per month`,
     };
 }
 
@@ -263,7 +274,7 @@ function getYearComparison(streams, year1, year2) {
             year2: { year: year2, totalStreams: 0, uniqueArtists: 0, topArtists: [] },
             changes: { streamsChange: 0, artistsChange: 0 },
             consistentArtists: [],
-            consistentArtistCount: 0
+            consistentArtistCount: 0,
         };
     }
 
@@ -271,10 +282,10 @@ function getYearComparison(streams, year1, year2) {
     const y1Streams = byYear[year1] || [];
     const y2Streams = byYear[year2] || [];
 
-    const getYearStats = (yearStreams) => ({
+    const getYearStats = yearStreams => ({
         totalStreams: yearStreams.length,
         uniqueArtists: new Set(yearStreams.map(s => s.master_metadata_album_artist_name)).size,
-        topArtists: getTopN(yearStreams, 'master_metadata_album_artist_name', 5)
+        topArtists: getTopN(yearStreams, 'master_metadata_album_artist_name', 5),
     });
 
     const stats1 = getYearStats(y1Streams);
@@ -290,10 +301,10 @@ function getYearComparison(streams, year1, year2) {
         year2: { year: year2, ...stats2 },
         changes: {
             streamsChange: stats2.totalStreams - stats1.totalStreams,
-            artistsChange: stats2.uniqueArtists - stats1.uniqueArtists
+            artistsChange: stats2.uniqueArtists - stats1.uniqueArtists,
         },
         consistentArtists: consistent.slice(0, 10),
-        consistentArtistCount: consistent.length
+        consistentArtistCount: consistent.length,
     };
 }
 
@@ -368,9 +379,7 @@ function calculateDiscoveryRate(artistsThisYear, byYear, currentYear) {
         }
     }
 
-    return artistsThisYear.size > 0
-        ? Math.round((newArtists / artistsThisYear.size) * 100)
-        : 0;
+    return artistsThisYear.size > 0 ? Math.round((newArtists / artistsThisYear.size) * 100) : 0;
 }
 
 /**
@@ -392,7 +401,7 @@ function getElapsedDaysInYear(year) {
  */
 function getDaysInYear(year) {
     const y = parseInt(year);
-    return (y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0)) ? 366 : 365;
+    return y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0) ? 366 : 365;
 }
 
 /**
@@ -403,7 +412,9 @@ function calculateVariance(arr) {
     if (arr.length === 0) return 0;
     // Guard against division by zero
     const mean = arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-    return arr.length > 0 ? arr.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / arr.length : 0;
+    return arr.length > 0
+        ? arr.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / arr.length
+        : 0;
 }
 
 // ==========================================
@@ -422,8 +433,7 @@ export const TemporalAnalysis = {
     groupByMonth,
 
     // Constants
-    TIME_RANGES
+    TIME_RANGES,
 };
-
 
 console.log('[TemporalAnalysis] Temporal analysis service loaded');

@@ -21,7 +21,13 @@ import * as TransportCreation from './modules/transport-creation.js';
 import { DeviceDetection } from '../device-detection.js';
 import { Crypto } from '../../security/crypto.js';
 
-import { CHANNEL_NAME, MESSAGE_TYPES, TAB_EVENT_SCHEMAS, TAB_ID, vectorClock } from './constants.js';
+import {
+    CHANNEL_NAME,
+    MESSAGE_TYPES,
+    TAB_EVENT_SCHEMAS,
+    TAB_ID,
+    vectorClock,
+} from './constants.js';
 import {
     TimingConfig,
     allowUnsignedMessage,
@@ -29,7 +35,7 @@ import {
     getElectionWindowMs,
     getHeartbeatIntervalMs,
     getMaxMissedHeartbeats,
-    isInBootstrapWindow
+    isInBootstrapWindow,
 } from './timing.js';
 import {
     MESSAGE_RATE_LIMITS,
@@ -42,7 +48,7 @@ import {
     isRateLimited,
     pruneStaleRemoteSequences,
     resetOutOfOrderCount,
-    validateMessageStructure
+    validateMessageStructure,
 } from './message-guards.js';
 
 // ==========================================
@@ -50,7 +56,11 @@ import {
 // ==========================================
 
 // Import from shared-state to prevent circular dependencies
-import { debugMode as sharedDebugMode, setDebugMode, isKeySessionActive as sharedIsKeySessionActive } from './modules/shared-state.js';
+import {
+    debugMode as sharedDebugMode,
+    setDebugMode,
+    isKeySessionActive as sharedIsKeySessionActive,
+} from './modules/shared-state.js';
 
 // Re-export for backward compatibility
 export let debugMode = sharedDebugMode;
@@ -100,8 +110,10 @@ async function init() {
 
     // TESTING FALLBACK: Check for test marker in sessionStorage
     try {
-        const isTestEnvironment = (typeof import.meta !== 'undefined' && import.meta.env &&
-                                   (import.meta.env.MODE === 'test' || import.meta.env.DEV));
+        const isTestEnvironment =
+            typeof import.meta !== 'undefined' &&
+            import.meta.env &&
+            (import.meta.env.MODE === 'test' || import.meta.env.DEV);
         if (isTestEnvironment) {
             const testMarker = sessionStorage.getItem('test_simulate_primary_tab');
             if (testMarker) {
@@ -121,8 +133,10 @@ async function init() {
         if (existingPrimary) {
             const data = JSON.parse(existingPrimary);
             const ageMs = Date.now() - data.timestamp;
-            const isTestEnvironment = (typeof import.meta !== 'undefined' && import.meta.env &&
-                                      (import.meta.env.MODE === 'test' || import.meta.env.DEV));
+            const isTestEnvironment =
+                typeof import.meta !== 'undefined' &&
+                import.meta.env &&
+                (import.meta.env.MODE === 'test' || import.meta.env.DEV);
             const electionWindowMs = isTestEnvironment ? 30000 : 5000;
 
             if (ageMs < electionWindowMs && data.tabId !== TAB_ID && data.isPrimary) {
@@ -167,18 +181,24 @@ async function init() {
     // Delayed re-check for late-joining tabs
     setTimeout(async () => {
         if (Authority.getIsPrimaryTab()) {
-            MessageSender.sendMessage({
-                type: MESSAGE_TYPES.CLAIM_PRIMARY,
-                tabId: TAB_ID,
-                vectorClock: vectorClock.tick()
-            }, true);
+            MessageSender.sendMessage(
+                {
+                    type: MESSAGE_TYPES.CLAIM_PRIMARY,
+                    tabId: TAB_ID,
+                    vectorClock: vectorClock.tick(),
+                },
+                true
+            );
 
             try {
-                localStorage.setItem('rhythm_chamber_tab_election', JSON.stringify({
-                    tabId: TAB_ID,
-                    timestamp: Date.now(),
-                    isPrimary: true
-                }));
+                localStorage.setItem(
+                    'rhythm_chamber_tab_election',
+                    JSON.stringify({
+                        tabId: TAB_ID,
+                        timestamp: Date.now(),
+                        isPrimary: true,
+                    })
+                );
             } catch (e) {
                 // localStorage might not be available
             }
@@ -186,7 +206,7 @@ async function init() {
     }, 100);
 
     // Listen for localStorage events from other tabs
-    window.addEventListener('storage', async (e) => {
+    window.addEventListener('storage', async e => {
         if (e.key === 'rhythm_chamber_tab_election' && e.newValue && Authority.getIsPrimaryTab()) {
             try {
                 const data = JSON.parse(e.newValue);
@@ -242,7 +262,9 @@ function isWriteAllowed() {
 
 function assertWriteAuthority(operation = 'write operation') {
     if (!Authority.getIsPrimaryTab()) {
-        const error = new Error(`Write authority denied: ${operation}. This tab is in read-only mode.`);
+        const error = new Error(
+            `Write authority denied: ${operation}. This tab is in read-only mode.`
+        );
         error.code = 'WRITE_AUTHORITY_DENIED';
         error.isSecondaryTab = true;
         error.suggestion = 'Close other tabs or refresh this page to become primary';
@@ -270,7 +292,9 @@ const TabCoordinator = {
     // Timing
     configureTiming,
     getTimingConfig() {
-        return structuredClone ? structuredClone(TimingConfig) : JSON.parse(JSON.stringify(TimingConfig));
+        return structuredClone
+            ? structuredClone(TimingConfig)
+            : JSON.parse(JSON.stringify(TimingConfig));
     },
 
     // Device Detection (delegated)
@@ -286,7 +310,7 @@ const TabCoordinator = {
     // Vector Clock
     getVectorClock: () => vectorClock.clone(),
     getVectorClockState: () => vectorClock.toJSON(),
-    isConflict: (remoteClock) => vectorClock.isConcurrent(remoteClock),
+    isConflict: remoteClock => vectorClock.isConcurrent(remoteClock),
 
     // Watermark & Replay
     updateEventWatermark: Watermark.updateEventWatermark,
@@ -323,19 +347,31 @@ const TabCoordinator = {
     validateMessageStructure,
     MESSAGE_SCHEMA,
     MESSAGE_TYPES,
-    getMessageRateLimit: (type) => MESSAGE_RATE_LIMITS[type],
+    getMessageRateLimit: type => MESSAGE_RATE_LIMITS[type],
     getRateTracking,
 
     // Internal (for testing)
     _startHeartbeat: Heartbeat.startHeartbeat,
-    _stopHeartbeat: Heartbeat.stopHeartbeat
+    _stopHeartbeat: Heartbeat.stopHeartbeat,
 };
 
 // ==========================================
 // Module Re-exports (for direct access if needed)
 // ==========================================
 
-export { Authority, Election, Heartbeat, Watermark, MessageSender, MessageQueue, MessageHandler, SafeMode, Monitoring, SleepDetection, TransportCreation };
+export {
+    Authority,
+    Election,
+    Heartbeat,
+    Watermark,
+    MessageSender,
+    MessageQueue,
+    MessageHandler,
+    SafeMode,
+    Monitoring,
+    SleepDetection,
+    TransportCreation,
+};
 
 // Main export - backward compatible
 export { TabCoordinator };

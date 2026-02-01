@@ -1,17 +1,17 @@
 /**
  * Artifact Renderer Module
- * 
+ *
  * Deterministic SVG renderer for artifact visualizations.
  * Renders validated ArtifactSpec objects into vanilla SVG elements.
  * No external dependencies - CSP-compliant.
- * 
+ *
  * Supported chart types:
  * - line_chart: Time series with optional annotations
  * - bar_chart: Horizontal/vertical bars
  * - table: Simple data table
  * - timeline: Event timeline with markers
  * - heatmap: Calendar-style intensity map
- * 
+ *
  * @module artifacts/renderer
  */
 
@@ -31,18 +31,18 @@ const CHART_DEFAULTS = {
     height: 200,
     padding: { top: 20, right: 20, bottom: 40, left: 50 },
     colors: {
-        primary: '#8b5cf6',      // Purple accent
-        secondary: '#06b6d4',    // Cyan 
+        primary: '#8b5cf6', // Purple accent
+        secondary: '#06b6d4', // Cyan
         grid: 'rgba(255,255,255,0.1)',
         text: '#a1a1aa',
         background: 'rgba(0,0,0,0.2)',
-        annotation: '#fbbf24'    // Amber for annotations
+        annotation: '#fbbf24', // Amber for annotations
     },
     fontSize: {
         label: 11,
         title: 13,
-        value: 10
-    }
+        value: 10,
+    },
 };
 
 // ==========================================
@@ -51,7 +51,7 @@ const CHART_DEFAULTS = {
 
 /**
  * Render an artifact spec to a DOM element
- * 
+ *
  * @param {Object} spec - Validated and sanitized ArtifactSpec
  * @param {HTMLElement} container - Container element to render into
  * @param {Object} [options] - Render options
@@ -67,7 +67,9 @@ export function renderArtifact(spec, container, options = {}) {
 
     // Defensive check: spec.view must exist before destructuring
     if (!spec.view || typeof spec.view !== 'object') {
-        logger.error('Invalid spec: view property is missing or invalid', { artifactId: spec.artifactId });
+        logger.error('Invalid spec: view property is missing or invalid', {
+            artifactId: spec.artifactId,
+        });
         const errorMsg = document.createElement('div');
         errorMsg.className = 'artifact-error';
         errorMsg.textContent = 'Invalid artifact specification';
@@ -241,10 +243,14 @@ function renderLineChart(spec, options = {}) {
     // Calculate scales
     const xMin = Math.min(...xValues);
     const xMax = Math.max(...xValues);
-    const yDomain = spec.view.y?.domain || [Math.min(0, Math.min(...yValues)), Math.max(...yValues)];
+    const yDomain = spec.view.y?.domain || [
+        Math.min(0, Math.min(...yValues)),
+        Math.max(...yValues),
+    ];
 
-    const xScale = (v) => padding.left + ((v - xMin) / (xMax - xMin || 1)) * plotWidth;
-    const yScale = (v) => padding.top + plotHeight - ((v - yDomain[0]) / (yDomain[1] - yDomain[0] || 1)) * plotHeight;
+    const xScale = v => padding.left + ((v - xMin) / (xMax - xMin || 1)) * plotWidth;
+    const yScale = v =>
+        padding.top + plotHeight - ((v - yDomain[0]) / (yDomain[1] - yDomain[0] || 1)) * plotHeight;
 
     // Draw grid
     drawGrid(svg, padding, plotWidth, plotHeight, 5);
@@ -263,9 +269,14 @@ function renderLineChart(spec, options = {}) {
     const areaPath = document.createElementNS(SVG_NS, 'path');
     const lastXIndex = xValues.length > 0 ? xValues.length - 1 : 0;
     const firstXIndex = 0;
-    const areaPoints = xValues.length > 0
-        ? [...points, `${xScale(xValues[lastXIndex])},${yScale(yDomain[0])}`, `${xScale(xValues[firstXIndex])},${yScale(yDomain[0])}`]
-        : [];
+    const areaPoints =
+        xValues.length > 0
+            ? [
+                ...points,
+                `${xScale(xValues[lastXIndex])},${yScale(yDomain[0])}`,
+                `${xScale(xValues[firstXIndex])},${yScale(yDomain[0])}`,
+            ]
+            : [];
     areaPath.setAttribute('d', xValues.length > 0 ? `M ${areaPoints.join(' L ')} Z` : '');
     areaPath.setAttribute('fill', `url(#gradient-${spec.artifactId})`);
     areaPath.setAttribute('opacity', '0.3');
@@ -311,7 +322,17 @@ function renderLineChart(spec, options = {}) {
     }
 
     // Draw axes labels
-    drawAxisLabels(svg, xValues, yDomain, xScale, yScale, padding, plotWidth, plotHeight, spec.view.x?.type);
+    drawAxisLabels(
+        svg,
+        xValues,
+        yDomain,
+        xScale,
+        yScale,
+        padding,
+        plotWidth,
+        plotHeight,
+        spec.view.x?.type
+    );
 
     return svg;
 }
@@ -322,7 +343,8 @@ function renderLineChart(spec, options = {}) {
 
 function renderBarChart(spec, options = {}) {
     const width = options.width || CHART_DEFAULTS.width;
-    const height = options.height || Math.max(CHART_DEFAULTS.height, (spec.data?.length || 0) * 30 + 60);
+    const height =
+        options.height || Math.max(CHART_DEFAULTS.height, (spec.data?.length || 0) * 30 + 60);
     const padding = { ...CHART_DEFAULTS.padding, left: 100 };
 
     const svg = createSvg(width, height);
@@ -345,7 +367,7 @@ function renderBarChart(spec, options = {}) {
     const maxValue = values.length > 0 ? Math.max(...values) : 1; // Default to 1 to avoid divide-by-zero
 
     // Guard against divide-by-zero when maxValue === 0
-    const getMaxScale = (val) => maxValue > 0 ? val / maxValue : 0;
+    const getMaxScale = val => (maxValue > 0 ? val / maxValue : 0);
 
     if (horizontal) {
         const barHeight = Math.min(25, (plotHeight - (data.length - 1) * 4) / data.length);
@@ -506,10 +528,12 @@ function renderTimeline(spec, options = {}) {
     const labelField = spec.view.labelField || 'label';
 
     // Parse dates and sort
-    const events = data.map(d => ({
-        date: new Date(d[dateField]),
-        label: d[labelField]
-    })).filter(e => !isNaN(e.date.getTime()));
+    const events = data
+        .map(d => ({
+            date: new Date(d[dateField]),
+            label: d[labelField],
+        }))
+        .filter(e => !isNaN(e.date.getTime()));
 
     events.sort((a, b) => a.date - b.date);
 
@@ -518,9 +542,10 @@ function renderTimeline(spec, options = {}) {
     const maxDate = events[events.length - 1]?.date.getTime() || 0;
     // Handle single event case: center the event on the timeline
     const dateRange = maxDate - minDate;
-    const xScale = events.length === 1
-        ? (d) => padding.left + plotWidth / 2  // Center single event
-        : (d) => padding.left + ((d - minDate) / (dateRange || 1)) * plotWidth;
+    const xScale =
+        events.length === 1
+            ? d => padding.left + plotWidth / 2 // Center single event
+            : d => padding.left + ((d - minDate) / (dateRange || 1)) * plotWidth;
 
     // Draw timeline axis
     const axisY = height / 2;
@@ -593,8 +618,8 @@ function renderHeatmap(spec, options = {}) {
     const weekCount = 52;
     const dayCount = 7;
 
-    const width = options.width || (weekCount * (cellSize + cellGap) + 60);
-    const height = options.height || (dayCount * (cellSize + cellGap) + 40);
+    const width = options.width || weekCount * (cellSize + cellGap) + 60;
+    const height = options.height || dayCount * (cellSize + cellGap) + 40;
 
     const svg = createSvg(width, height);
     const data = spec.data || [];
@@ -624,7 +649,7 @@ function renderHeatmap(spec, options = {}) {
     const startDate = new Date(today);
     startDate.setDate(startDate.getDate() - 364);
 
-    const getColor = (value) => {
+    const getColor = value => {
         if (!value) return CHART_DEFAULTS.colors.background;
         const intensity = Math.min(1, value / maxValue);
         const r = Math.round(139 + (255 - 139) * (1 - intensity));
@@ -716,7 +741,17 @@ function drawGrid(svg, padding, plotWidth, plotHeight, lines) {
     }
 }
 
-function drawAxisLabels(svg, xValues, yDomain, xScale, yScale, padding, plotWidth, plotHeight, xType) {
+function drawAxisLabels(
+    svg,
+    xValues,
+    yDomain,
+    xScale,
+    yScale,
+    padding,
+    plotWidth,
+    plotHeight,
+    xType
+) {
     // Y-axis labels
     const ySteps = 3;
     for (let i = 0; i <= ySteps; i++) {
@@ -744,7 +779,8 @@ function drawAxisLabels(svg, xValues, yDomain, xScale, yScale, padding, plotWidt
         startLabel.setAttribute('text-anchor', 'start');
         startLabel.setAttribute('fill', CHART_DEFAULTS.colors.text);
         startLabel.setAttribute('font-size', CHART_DEFAULTS.fontSize.value);
-        startLabel.textContent = xType === 'temporal' ? formatDate(new Date(firstX)) : String(firstX);
+        startLabel.textContent =
+            xType === 'temporal' ? formatDate(new Date(firstX)) : String(firstX);
         svg.appendChild(startLabel);
 
         const endLabel = document.createElementNS(SVG_NS, 'text');
@@ -764,7 +800,13 @@ function drawAnnotations(svg, annotations, xField, xScale, yScale, data, yValues
         const annotationKey = ann.x ?? ann[xField];
         if (annotationKey === undefined) continue;
 
-        const idx = data.findIndex(d => d[xField] == annotationKey || String(d[xField]) === String(annotationKey));
+        const idx = data.findIndex(
+            d =>
+                d[xField] === annotationKey ||
+                ((d[xField] === null || d[xField] === undefined) &&
+                    (annotationKey === null || annotationKey === undefined)) ||
+                String(d[xField]) === String(annotationKey)
+        );
         if (idx === -1) continue;
 
         const x = xScale(parseValue(annotationKey || data[idx][xField], 'temporal'));
@@ -816,7 +858,20 @@ function formatDate(date) {
     if (!(date instanceof Date) || isNaN(date.getTime())) {
         return '';
     }
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+    ];
     return `${months[date.getMonth()]} ${date.getFullYear()}`;
 }
 
@@ -832,7 +887,7 @@ function truncate(str, maxLen) {
 
 export const ArtifactRenderer = {
     render: renderArtifact,
-    CHART_DEFAULTS
+    CHART_DEFAULTS,
 };
 
 logger.info('Module loaded');

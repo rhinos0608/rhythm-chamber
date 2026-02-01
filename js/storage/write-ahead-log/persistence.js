@@ -36,9 +36,10 @@ export function saveWal() {
         // Apply count limit BEFORE sorting for better performance
         // Sorting is O(n log n), so reducing n first is more efficient
         const sortedBySequence = activeEntries.sort((a, b) => b.sequence - a.sequence);
-        const entriesToSave = sortedBySequence.length > CONFIG.MAX_SIZE
-            ? sortedBySequence.slice(0, CONFIG.MAX_SIZE)  // Get most recent entries (newest first)
-            : sortedBySequence;
+        const entriesToSave =
+            sortedBySequence.length > CONFIG.MAX_SIZE
+                ? sortedBySequence.slice(0, CONFIG.MAX_SIZE) // Get most recent entries (newest first)
+                : sortedBySequence;
 
         // Validate JSON.stringify result before committing
         // This prevents partial writes if quota is exceeded mid-serialization
@@ -51,7 +52,9 @@ export function saveWal() {
 
         // Check size before writing (prevent quota exceeded errors)
         if (serialized.length > CONFIG.MAX_SIZE_BYTES) {
-            console.warn(`[WAL] WAL size (${serialized.length} bytes) exceeds safe limit, truncating`);
+            console.warn(
+                `[WAL] WAL size (${serialized.length} bytes) exceeds safe limit, truncating`
+            );
 
             // Try reducing size by keeping newest entries until it fits
             let truncatedEntries = entriesToSave;
@@ -63,7 +66,9 @@ export function saveWal() {
                 if (truncatedSerialized.length <= CONFIG.MAX_SIZE_BYTES) {
                     localStorage.setItem(STORAGE_KEYS.WAL, truncatedSerialized);
                     localStorage.setItem(STORAGE_KEYS.SEQUENCE, String(walState.sequence));
-                    console.warn(`[WAL] Truncated WAL from ${entriesToSave.length} to ${truncatedEntries.length} entries`);
+                    console.warn(
+                        `[WAL] Truncated WAL from ${entriesToSave.length} to ${truncatedEntries.length} entries`
+                    );
                     return true;
                 }
             }
@@ -166,7 +171,9 @@ export function loadOperationResults() {
                     walState.operationResults.set(entryId, result);
                 }
             }
-            console.log(`[WAL] Loaded ${walState.operationResults.size} operation results from storage`);
+            console.log(
+                `[WAL] Loaded ${walState.operationResults.size} operation results from storage`
+            );
         }
     } catch (error) {
         console.error('[WAL] Failed to load operation results:', error);

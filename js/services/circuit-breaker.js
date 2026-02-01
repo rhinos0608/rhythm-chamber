@@ -29,8 +29,8 @@ import { TimeoutError, TimeoutType, isTimeoutError } from './timeout-error.js';
 // Note: MAX_CALLS_PER_TURN removed per user request.
 // Function calls are now sequential (async/await), not limited.
 // Only timeout and circuit open/close states are enforced.
-const TIMEOUT_MS = 5000;       // 5 second timeout per function
-const COOLDOWN_MS = 60000;     // 1 minute cooldown after trip
+const TIMEOUT_MS = 5000; // 5 second timeout per function
+const COOLDOWN_MS = 60000; // 1 minute cooldown after trip
 
 // ==========================================
 // State
@@ -41,9 +41,9 @@ const COOLDOWN_MS = 60000;     // 1 minute cooldown after trip
  * @enum {string}
  */
 const STATE = {
-    CLOSED: 'closed',     // Normal operation
-    OPEN: 'open',         // Reject all calls
-    HALF_OPEN: 'half_open' // Testing after cooldown
+    CLOSED: 'closed', // Normal operation
+    OPEN: 'open', // Reject all calls
+    HALF_OPEN: 'half_open', // Testing after cooldown
 };
 
 let currentState = STATE.CLOSED;
@@ -52,10 +52,10 @@ let lastTripTime = null;
 let turnStartTime = null;
 
 // Statistics
-let stats = {
+const stats = {
     totalCalls: 0,
     tripsThisTurn: 0,
-    totalTrips: 0
+    totalTrips: 0,
 };
 
 // ==========================================
@@ -78,14 +78,14 @@ function check() {
             return {
                 allowed: false,
                 reason: 'circuit_open',
-                cooldownRemaining: COOLDOWN_MS - elapsed
+                cooldownRemaining: COOLDOWN_MS - elapsed,
             };
         }
     }
 
     // No call count limit - calls are sequential via async/await
     return {
-        allowed: true
+        allowed: true,
     };
 }
 
@@ -184,7 +184,7 @@ function getStatus() {
         lastTripTime,
         turnStartTime,
         isOpen: currentState === STATE.OPEN,
-        timeoutMs: TIMEOUT_MS
+        timeoutMs: TIMEOUT_MS,
     };
 }
 
@@ -203,7 +203,7 @@ async function execute(functionName, fn, options = {}) {
         return {
             success: false,
             error: `Circuit breaker: ${checkResult.reason}`,
-            blocked: true
+            blocked: true,
         };
     }
 
@@ -212,14 +212,16 @@ async function execute(functionName, fn, options = {}) {
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => {
         timeoutId = setTimeout(() => {
-            reject(new TimeoutError('Function execution timed out', {
-                timeout: TIMEOUT_MS,
-                operation: functionName,
-                provider: options.provider || 'CircuitBreaker',
-                timeoutType: options.timeoutType || TimeoutType.GENERAL,
-                retryable: true,
-                retryAfter: COOLDOWN_MS
-            }));
+            reject(
+                new TimeoutError('Function execution timed out', {
+                    timeout: TIMEOUT_MS,
+                    operation: functionName,
+                    provider: options.provider || 'CircuitBreaker',
+                    timeoutType: options.timeoutType || TimeoutType.GENERAL,
+                    retryable: true,
+                    retryAfter: COOLDOWN_MS,
+                })
+            );
         }, TIMEOUT_MS);
     });
 
@@ -239,7 +241,7 @@ async function execute(functionName, fn, options = {}) {
         return {
             success: false,
             error: message,
-            isTimeout: isTimeoutError(error)
+            isTimeout: isTimeoutError(error),
         };
     }
 }
@@ -305,9 +307,7 @@ export const CircuitBreaker = {
     // Re-export timeout error utilities for convenience
     TimeoutError,
     TimeoutType,
-    isTimeoutError
+    isTimeoutError,
 };
 
-
 console.log('[CircuitBreaker] Module loaded (' + TIMEOUT_MS + 'ms timeout, no call limit)');
-

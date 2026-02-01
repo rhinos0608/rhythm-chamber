@@ -41,7 +41,7 @@ class RetryStatistics {
             failedOperations: 0,
             totalRetries: 0,
             totalDelayTime: 0,
-            errorBreakdown: {}
+            errorBreakdown: {},
         };
     }
 
@@ -64,7 +64,8 @@ class RetryStatistics {
             // Track error types
             summary.errors.forEach(error => {
                 const errorType = classifyError(error);
-                this.stats.errorBreakdown[errorType] = (this.stats.errorBreakdown[errorType] || 0) + 1;
+                this.stats.errorBreakdown[errorType] =
+                    (this.stats.errorBreakdown[errorType] || 0) + 1;
             });
         }
     }
@@ -76,15 +77,21 @@ class RetryStatistics {
     getStats() {
         return {
             ...this.stats,
-            successRate: this.stats.totalOperations > 0
-                ? (this.stats.successfulOperations / this.stats.totalOperations * 100).toFixed(2) + '%'
-                : 'N/A',
-            avgRetriesPerOperation: this.stats.totalOperations > 0
-                ? (this.stats.totalRetries / this.stats.totalOperations).toFixed(2)
-                : '0',
-            avgDelayTime: this.stats.totalRetries > 0
-                ? Math.round(this.stats.totalDelayTime / this.stats.totalRetries) + 'ms'
-                : '0ms'
+            successRate:
+                this.stats.totalOperations > 0
+                    ? (
+                        (this.stats.successfulOperations / this.stats.totalOperations) *
+                          100
+                    ).toFixed(2) + '%'
+                    : 'N/A',
+            avgRetriesPerOperation:
+                this.stats.totalOperations > 0
+                    ? (this.stats.totalRetries / this.stats.totalOperations).toFixed(2)
+                    : '0',
+            avgDelayTime:
+                this.stats.totalRetries > 0
+                    ? Math.round(this.stats.totalDelayTime / this.stats.totalRetries) + 'ms'
+                    : '0ms',
         };
     }
 
@@ -98,7 +105,7 @@ class RetryStatistics {
             failedOperations: 0,
             totalRetries: 0,
             totalDelayTime: 0,
-            errorBreakdown: {}
+            errorBreakdown: {},
         };
     }
 }
@@ -117,13 +124,17 @@ const retryStatistics = new RetryStatistics();
  */
 export function enableRetryMonitoring(eventBus = defaultEventBus) {
     const DEBUG = globalThis.DEBUG ?? false;
-    eventBus?.on('retry:attempt', (data) => {
-        // Auto-record retry attempts
-        // Can be extended with more sophisticated monitoring
-        if (DEBUG) {
-            console.debug('[RetryMonitor] Retry attempt detected:', data);
-        }
-    }, { domain: 'retry' });
+    eventBus?.on(
+        'retry:attempt',
+        data => {
+            // Auto-record retry attempts
+            // Can be extended with more sophisticated monitoring
+            if (DEBUG) {
+                console.debug('[RetryMonitor] Retry attempt detected:', data);
+            }
+        },
+        { domain: 'retry' }
+    );
 }
 
 /**
@@ -179,7 +190,7 @@ export function calculatePerformanceMetrics(contexts) {
             avgDelayTime: 0,
             maxDelayTime: 0,
             avgElapsedTime: 0,
-            successRate: 'N/A'
+            successRate: 'N/A',
         };
     }
 
@@ -197,7 +208,7 @@ export function calculatePerformanceMetrics(contexts) {
         avgDelayTime: Math.round(totalDelayTime / contexts.length) + 'ms',
         maxDelayTime: Math.max(...summaries.map(s => s.totalDelayTime)) + 'ms',
         avgElapsedTime: Math.round(totalElapsedTime / contexts.length) + 'ms',
-        successRate: (successfulOps / contexts.length * 100).toFixed(2) + '%'
+        successRate: ((successfulOps / contexts.length) * 100).toFixed(2) + '%',
     };
 }
 
@@ -220,15 +231,18 @@ export function logRetrySummary(context, operationName = 'Operation') {
             succeeded: summary.succeeded,
             elapsedTime: summary.elapsedTime + 'ms',
             totalDelayTime: summary.totalDelayTime + 'ms',
-            errors: summary.errors.length
+            errors: summary.errors.length,
         });
     }
 
     if (summary.errors.length > 0) {
-        console.warn('[RetryMonitor] Errors encountered:', summary.errors.map(e => ({
-            type: classifyError(e),
-            message: e.message
-        })));
+        console.warn(
+            '[RetryMonitor] Errors encountered:',
+            summary.errors.map(e => ({
+                type: classifyError(e),
+                message: e.message,
+            }))
+        );
     }
 }
 
@@ -258,7 +272,7 @@ export function createRetryLogger(domain, eventBus = defaultEventBus) {
             if (DEBUG) {
                 console.error(`[Retry:${domain}] ${message}`, data);
             }
-        }
+        },
     };
 }
 

@@ -13,10 +13,7 @@
  * @module storage-validators
  */
 
-import {
-    validateSchema,
-    _validateObjectProperties
-} from './schema-validator.js';
+import { validateSchema, _validateObjectProperties } from './schema-validator.js';
 
 // ==========================================
 // Type Guards
@@ -85,7 +82,7 @@ export function validateState(state, schema) {
         if (extraProps.length > 0) {
             return {
                 valid: false,
-                errors: [`Unexpected properties: ${extraProps.join(', ')}`]
+                errors: [`Unexpected properties: ${extraProps.join(', ')}`],
             };
         }
     }
@@ -150,7 +147,7 @@ export function validateStorageValue(value, maxSizeKB = 5000) {
         if (sizeKB > maxSizeKB) {
             return {
                 valid: false,
-                error: `Value too large (${sizeKB.toFixed(2)}KB exceeds ${maxSizeKB}KB limit)`
+                error: `Value too large (${sizeKB.toFixed(2)}KB exceeds ${maxSizeKB}KB limit)`,
             };
         }
 

@@ -35,7 +35,7 @@ export function initPatternWorkerHandlers() {
     if (patternWorker) {
         patternWorkerInitialized = true;
 
-        patternWorker.onmessage = (e) => {
+        patternWorker.onmessage = e => {
             // Validate message format before destructuring
             if (!e.data || typeof e.data !== 'object') {
                 console.warn('[Patterns] Received invalid message format');
@@ -75,7 +75,7 @@ export function initPatternWorkerHandlers() {
             }
         };
 
-        patternWorker.onerror = (err) => {
+        patternWorker.onerror = err => {
             // On global error, reject all pending requests
             for (const [requestId, pending] of pendingPatternRequests) {
                 clearTimeout(pending.timeoutId);
@@ -98,7 +98,7 @@ export function initPatternWorkerHandlers() {
  * @param {Function} onProgress - Progress callback (current, total, message)
  * @returns {Promise<Object>} Detected patterns
  */
-export async function detectAllPatternsAsync(streams, chunks, onProgress = () => { }) {
+export async function detectAllPatternsAsync(streams, chunks, onProgress = () => {}) {
     // For small datasets, use sync detection (faster, no worker overhead)
     const WORKER_THRESHOLD = 10000;
     if (streams.length < WORKER_THRESHOLD) {
@@ -107,7 +107,9 @@ export async function detectAllPatternsAsync(streams, chunks, onProgress = () =>
         if (detectAllPatternsSync) {
             return detectAllPatternsSync(streams, chunks);
         } else {
-            throw new Error('Sync detector not available. Make sure index.js calls setSyncDetector().');
+            throw new Error(
+                'Sync detector not available. Make sure index.js calls setSyncDetector().'
+            );
         }
     }
 
@@ -159,7 +161,7 @@ export async function detectAllPatternsAsync(streams, chunks, onProgress = () =>
             resolve,
             reject,
             onProgress,
-            timeoutId
+            timeoutId,
         });
 
         // Start detection with requestId

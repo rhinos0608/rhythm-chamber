@@ -52,7 +52,7 @@ export function createWorker(index) {
     const workerInfo = {
         worker,
         busy: false,
-        processedCount: 0
+        processedCount: 0,
     };
 
     workers.push(workerInfo);
@@ -88,25 +88,30 @@ export function setupHeartbeatChannel(worker, index) {
         // Store the channel for later use
         workerHeartbeatChannels.set(worker, {
             port: channel.port1,
-            index
+            index,
         });
 
         // Setup handler for heartbeat responses on port1
-        channel.port1.onmessage = (event) => {
+        channel.port1.onmessage = event => {
             const { type, timestamp } = event.data;
             if (type === 'HEARTBEAT_RESPONSE') {
                 workerLastHeartbeat.set(worker, timestamp || Date.now());
                 if (HEARTBEAT_DEBUG_LOGS) {
-                    console.log(`[WorkerLifecycle] Worker ${index} heartbeat received via dedicated channel`);
+                    console.log(
+                        `[WorkerLifecycle] Worker ${index} heartbeat received via dedicated channel`
+                    );
                 }
             }
         };
 
         // Transfer port2 to the worker
-        worker.postMessage({
-            type: 'HEARTBEAT_CHANNEL',
-            port: channel.port2
-        }, [channel.port2]);
+        worker.postMessage(
+            {
+                type: 'HEARTBEAT_CHANNEL',
+                port: channel.port2,
+            },
+            [channel.port2]
+        );
 
         console.log(`[WorkerLifecycle] Heartbeat channel established for worker ${index}`);
     } catch (error) {
@@ -116,13 +121,19 @@ export function setupHeartbeatChannel(worker, index) {
             try {
                 channel.port1.close();
             } catch (closeError) {
-                console.error('[WorkerLifecycle] Failed to close port1 during cleanup:', closeError);
+                console.error(
+                    '[WorkerLifecycle] Failed to close port1 during cleanup:',
+                    closeError
+                );
             }
         }
         workerHeartbeatChannels.delete(worker);
 
         // Fallback: some environments don't support MessageChannel transferable
-        console.warn(`[WorkerLifecycle] MessageChannel not available for worker ${index}, using fallback:`, error.message);
+        console.warn(
+            `[WorkerLifecycle] MessageChannel not available for worker ${index}, using fallback:`,
+            error.message
+        );
     }
 }
 
@@ -147,13 +158,13 @@ export function sendHeartbeat() {
                 // Use dedicated heartbeat channel (preferred - doesn't contend with work)
                 channelInfo.port.postMessage({
                     type: 'HEARTBEAT',
-                    timestamp
+                    timestamp,
                 });
             } else {
                 // Fallback: use regular worker postMessage
                 workerInfo.worker.postMessage({
                     type: 'HEARTBEAT',
-                    timestamp
+                    timestamp,
                 });
             }
         } catch (error) {
@@ -181,7 +192,7 @@ export function checkStaleWorkers(onRequestFailed) {
         const lastHeartbeat = workerLastHeartbeat.get(workerInfo.worker);
 
         // If no heartbeat received or heartbeat is too old, mark as stale
-        if (!lastHeartbeat || (now - lastHeartbeat) > WORKER_TIMEOUTS.STALE_WORKER_TIMEOUT_MS) {
+        if (!lastHeartbeat || now - lastHeartbeat > WORKER_TIMEOUTS.STALE_WORKER_TIMEOUT_MS) {
             staleWorkers.push({ workerInfo, index });
         }
     });
@@ -239,7 +250,9 @@ export function restartWorker(workerInfo, index) {
         // Setup new heartbeat channel (completes the initialization)
         setupHeartbeatChannel(newWorker, index);
 
-        console.log(`[WorkerLifecycle] Worker ${index} restarted successfully with new heartbeat channel`);
+        console.log(
+            `[WorkerLifecycle] Worker ${index} restarted successfully with new heartbeat channel`
+        );
         return true;
     } catch (error) {
         console.error(`[WorkerLifecycle] Failed to restart worker ${index}:`, error);
@@ -254,7 +267,10 @@ export function restartWorker(workerInfo, index) {
                 oldChannel.port.close();
             }
         } catch (cleanupError) {
-            console.error('[WorkerLifecycle] Error during cleanup after failed restart:', cleanupError);
+            console.error(
+                '[WorkerLifecycle] Error during cleanup after failed restart:',
+                cleanupError
+            );
         }
 
         // Mark worker as unusable but keep it in the array to maintain indexing
@@ -275,7 +291,9 @@ export function startHeartbeat() {
         return;
     }
 
-    console.log(`[WorkerLifecycle] Starting heartbeat (interval: ${WORKER_TIMEOUTS.HEARTBEAT_INTERVAL_MS}ms)`);
+    console.log(
+        `[WorkerLifecycle] Starting heartbeat (interval: ${WORKER_TIMEOUTS.HEARTBEAT_INTERVAL_MS}ms)`
+    );
 
     heartbeatInterval = setInterval(() => {
         sendHeartbeat();
@@ -313,8 +331,14 @@ export function terminate() {
                 channelInfo.port.close();
             }
         } catch (e) {
-            console.error('[WorkerLifecycle] Failed to close heartbeat channel during termination:', e);
-            EventBus.emit('worker:cleanup_failed', { error: e.message, workerIndex: workers.findIndex(w => w.worker === worker) });
+            console.error(
+                '[WorkerLifecycle] Failed to close heartbeat channel during termination:',
+                e
+            );
+            EventBus.emit('worker:cleanup_failed', {
+                error: e.message,
+                workerIndex: workers.findIndex(w => w.worker === worker),
+            });
         }
     }
     workerHeartbeatChannels.clear();

@@ -22,7 +22,7 @@ export function assertWriteAllowed(operation, moduleName = 'Storage') {
     if (!Crypto.isSecureContext()) {
         throw new Error(
             `[${moduleName}] Write blocked: not in secure context. ` +
-            `Operation '${operation}' requires HTTPS or localhost.`
+                `Operation '${operation}' requires HTTPS or localhost.`
         );
     }
 }

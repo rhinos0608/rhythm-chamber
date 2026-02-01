@@ -23,7 +23,7 @@ import {
     extractSpotifyTrackId,
     getCachedAudioFeatures,
     setCachedAudioFeatures,
-    getAudioFeaturesCacheSize as getSpotifyCacheSize
+    getAudioFeaturesCacheSize as getSpotifyCacheSize,
 } from './genre-enrichment-spotify.js';
 import { getCacheSize } from './genre-enrichment-cache.js';
 
@@ -73,8 +73,8 @@ export async function enrichStreams(streams, options = {}) {
                 premiumRequired: true,
                 premiumFeatures: [
                     'Full metadata enrichment',
-                    'Audio features (BPM, key, danceability)'
-                ]
+                    'Audio features (BPM, key, danceability)',
+                ],
             };
         }
         premiumFeatures.push('Full metadata enrichment');
@@ -116,7 +116,7 @@ export async function enrichStreams(streams, options = {}) {
         enriched,
         total: streams.length,
         coverage: Math.round((enriched / streams.length) * 100),
-        premiumFeatures: premiumFeatures.length > 0 ? premiumFeatures : undefined
+        premiumFeatures: premiumFeatures.length > 0 ? premiumFeatures : undefined,
     };
 }
 
@@ -207,7 +207,6 @@ export async function enrichAudioFeatures(streams) {
             if (i + batchSize < tracksToFetch.length) {
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
-
         } catch (e) {
             if (e.message === 'SPOTIFY_TOKEN_EXPIRED') {
                 // Token expired, stop processing
@@ -252,7 +251,7 @@ export function getAudioFeaturesSummary(streams) {
         avgDanceability: 0,
         avgValence: 0,
         keyDistribution: {},
-        modeDistribution: { major: 0, minor: 0 }
+        modeDistribution: { major: 0, minor: 0 },
     };
 
     let totalBpm = 0;
@@ -303,7 +302,7 @@ export function getStats() {
             cachedCount: getCacheSize(),
             queueLength: getQueueSize(),
             isProcessing: isProcessing(),
-            audioFeaturesCacheSize: getSpotifyCacheSize()
+            audioFeaturesCacheSize: getSpotifyCacheSize(),
         };
     });
 }
@@ -317,6 +316,6 @@ export function getStats() {
 export function getStatsSync() {
     return {
         cachedCount: getCacheSize(),
-        audioFeaturesCacheSize: getSpotifyCacheSize()
+        audioFeaturesCacheSize: getSpotifyCacheSize(),
     };
 }

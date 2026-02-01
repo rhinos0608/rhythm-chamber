@@ -29,7 +29,7 @@ export class BaseToolStrategy {
         this.TIMEOUT_MS = dependencies.timeoutMs || 30000;
     }
 
-    /** 
+    /**
      * Capability level this strategy handles
      * @returns {number} Level 1-4
      */
@@ -40,7 +40,7 @@ export class BaseToolStrategy {
     /**
      * Check if this strategy can handle the given response
      * Returns a confidence object for strategy voting
-     * 
+     *
      * @param {Object} responseMessage - LLM response message
      * @param {number} capabilityLevel - Detected capability level
      * @returns {{ confidence: number, reason: string }} Confidence 0-1 with reason
@@ -96,10 +96,12 @@ export class BaseToolStrategy {
                     reason: check.reason,
                     errorReturn: {
                         status: 'error',
-                        content: this.CircuitBreaker?.getErrorMessage?.(check.reason) ?? 'Circuit breaker is open',
+                        content:
+                            this.CircuitBreaker?.getErrorMessage?.(check.reason) ??
+                            'Circuit breaker is open',
                         role: 'assistant',
-                        isCircuitBreakerError: true
-                    }
+                        isCircuitBreakerError: true,
+                    },
                 };
             }
             this.CircuitBreaker?.recordCall?.();
@@ -133,7 +135,7 @@ export class BaseToolStrategy {
 
         try {
             const result = await this.Functions.execute(functionName, args, streamsData, {
-                signal: abortController.signal
+                signal: abortController.signal,
             });
             clearTimeout(timeoutId);
             return result;
