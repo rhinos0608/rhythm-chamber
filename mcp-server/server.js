@@ -351,6 +351,12 @@ class RhythmChamberMCPServer {
    * Initialize semantic search indexer
    */
   async initializeSemanticIndexer() {
+    // Guard: Don't re-initialize if already exists
+    if (this.semanticIndexer) {
+      console.error('[Rhythm Chamber MCP] Semantic indexer already exists, skipping initialization');
+      return this.semanticIndexer;
+    }
+
     console.error('[Rhythm Chamber MCP] Initializing semantic search indexer...');
 
     try {

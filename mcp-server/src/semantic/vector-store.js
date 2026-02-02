@@ -11,6 +11,7 @@
 import { HybridEmbeddings, cosineSimilarity } from './embeddings.js';
 import { passesFilters as sharedPassesFilters } from './filters.js';
 import { SqliteVectorAdapter } from './sqlite-adapter.js';
+import { unlinkSync, existsSync } from 'fs';
 
 /**
  * Auto-upgrade threshold
@@ -42,6 +43,35 @@ export class VectorStore {
     this._upgradeWarned = false; // Track if we've warned about sqlite upgrade
     this.adapter = null; // SqliteVectorAdapter instance (when useSqlite = true)
     this._migrationInProgress = false; // Track if migration is in progress
+  }
+
+  /**
+   * Initialize or recover VectorStore state
+   * @param {Object} options - Initialization options
+   * @returns {boolean} True if recovery was performed
+   */
+  initialize(options = {}) {
+    // CRITICAL FIX #1: Add recovery mechanism for interrupted migrations
+    // Check if we have a SQLite database but useSqlite flag is false
+    const { adapter = null } = options;
+
+    if (adapter && adapter.isInitialized) {
+      const stats = adapter.getStats();
+      if (stats.chunkCount > 0 && !this.useSqlite) {
+        console.warn(
+          `[VectorStore] Detected existing SQLite database with ${stats.chunkCount} chunks, recovering...`
+        );
+        this.adapter = adapter;
+        this.useSqlite = true;
+        this.chunkCount = stats.chunkCount;
+        this.vectors.clear();
+        this.metadata.clear();
+        console.warn('[VectorStore] Recovery complete: using SQLite backend');
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**
@@ -151,7 +181,8 @@ export class VectorStore {
       updatedAt: Date.now(),
     });
 
-    this.chunkCount++; // Note: This is approximate; use getStats() for accurate count
+    // HIGH FIX #6: Removed this.chunkCount++ - use actual SQLite count from adapter.getStats() in getStats()
+    // The count is now fetched dynamically from SQLite in getStats() for accuracy
   }
 
   /**
@@ -307,7 +338,9 @@ export class VectorStore {
     this._migrationInProgress = true;
 
     try {
-      console.error(`[VectorStore] Starting migration to sqlite-vec (${this.chunkCount} chunks)...`);
+      console.error(
+        `[VectorStore] Starting migration to sqlite-vec (${this.chunkCount} chunks)...`
+      );
 
       // Step 1: Create in-memory backup
       const backup = {
@@ -343,18 +376,21 @@ export class VectorStore {
         }
       }
 
-      // Step 4: Clear in-memory Maps
-      this.vectors.clear();
-      this.metadata.clear();
-
-      // Step 5: Set useSqlite flag
+      // Step 4: Set useSqlite flag BEFORE clearing Maps (CRITICAL FIX #1)
+      // This prevents data loss if verification fails
       this.useSqlite = true;
       this.chunkCount = backup.chunkCount;
 
-      // Step 6: Verify migration (use backup for comparison since Maps are cleared)
-      await this._verifyMigration(10, backup);
+      // Step 5: Clear in-memory Maps
+      this.vectors.clear();
+      this.metadata.clear();
 
-      console.error(`[VectorStore] Migration complete: ${this.chunkCount} chunks migrated to sqlite-vec`);
+      // Step 6: Verify migration (use backup for comparison since Maps are cleared)
+      await this._verifyMigration(Math.min(1000, chunks.length), backup);
+
+      console.error(
+        `[VectorStore] Migration complete: ${this.chunkCount} chunks migrated to sqlite-vec`
+      );
       return true;
     } catch (error) {
       // Rollback: Restore from backup
@@ -363,7 +399,7 @@ export class VectorStore {
       this.metadata = backup.metadata;
       this.useSqlite = false;
 
-      // Clean up failed SQLite database
+      // CRITICAL FIX #2: Clean up failed SQLite database AND delete file
       if (this.adapter) {
         try {
           this.adapter.close();
@@ -371,6 +407,18 @@ export class VectorStore {
           // Ignore close errors during rollback
         }
         this.adapter = null;
+      }
+
+      // Delete the failed database file during rollback
+      if (this.dbPath) {
+        try {
+          if (existsSync(this.dbPath)) {
+            unlinkSync(this.dbPath);
+            console.error(`[VectorStore] Deleted failed database file: ${this.dbPath}`);
+          }
+        } catch (deleteError) {
+          console.warn(`[VectorStore] Failed to delete database file: ${deleteError.message}`);
+        }
       }
 
       throw error;
@@ -393,9 +441,23 @@ export class VectorStore {
     // Use backup metadata if provided, otherwise use current metadata
     const metadataToCompare = backup ? backup.metadata : this.metadata;
     const allIds = Array.from(metadataToCompare.keys());
-    const sample = allIds.sort(() => 0.5 - Math.random()).slice(0, sampleSize);
 
-    console.error(`[VectorStore] Verifying migration with ${sample.length} samples...`);
+    // CRITICAL FIX #4: Verify total count matches
+    const adapterStats = this.adapter.getStats();
+    const expectedCount = backup ? backup.chunkCount : this.chunkCount;
+    if (adapterStats.chunkCount !== expectedCount) {
+      throw new Error(
+        `Verification failed: count mismatch. SQLite has ${adapterStats.chunkCount} chunks, expected ${expectedCount}`
+      );
+    }
+
+    // Use statistically significant sample size (CRITICAL FIX #4)
+    const actualSampleSize = Math.min(sampleSize, allIds.length);
+    const sample = allIds.sort(() => 0.5 - Math.random()).slice(0, actualSampleSize);
+
+    console.error(
+      `[VectorStore] Verifying migration: ${actualSampleSize} samples (total: ${allIds.length} chunks)...`
+    );
 
     for (const chunkId of sample) {
       const fromAdapter = this.adapter.get(chunkId);
@@ -415,7 +477,9 @@ export class VectorStore {
       }
     }
 
-    console.error(`[VectorStore] Verification successful: ${sample.length}/${sample.length} chunks match`);
+    console.error(
+      `[VectorStore] Verification successful: ${sample.length}/${sample.length} chunks match`
+    );
   }
 
   /**
@@ -678,8 +742,12 @@ export class VectorStore {
    * Get statistics
    */
   getStats() {
+    // HIGH FIX #6: Use actual SQLite count from adapter.getStats() when using SQLite backend
+    const chunkCount =
+      this.useSqlite && this.adapter ? this.adapter.getStats().chunkCount : this.chunkCount;
+
     const baseStats = {
-      chunkCount: this.chunkCount,
+      chunkCount,
       dimension: this.dimension,
       useSqlite: this.useSqlite,
       memoryBytes: this._estimateMemoryUsage(),
@@ -704,6 +772,19 @@ export class VectorStore {
       ...baseStats,
       storageType: 'Map (in-memory)',
     };
+  }
+
+  /**
+   * Close the VectorStore and cleanup resources
+   * Closes SQLite connection if using sqlite-vec backend
+   */
+  close() {
+    if (this.useSqlite && this.adapter) {
+      this.adapter.close();
+    }
+    // Clear in-memory Maps
+    this.vectors.clear();
+    this.metadata.clear();
   }
 
   /**

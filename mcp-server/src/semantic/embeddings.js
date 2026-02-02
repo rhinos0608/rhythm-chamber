@@ -372,6 +372,12 @@ export class HybridEmbeddings {
       this.lmStudioAvailable = false;
       return false;
     } catch (error) {
+      // Distinguish AbortError (timeout) from other errors
+      if (error.name === 'AbortError') {
+        console.error('[Embeddings] LM Studio availability check timed out after 5000ms');
+        this.lmStudioAvailable = false;
+        return false;
+      }
       console.error('[Embeddings] LM Studio not available:', error.message);
       this.lmStudioAvailable = false;
       return false;
@@ -416,6 +422,16 @@ export class HybridEmbeddings {
       fallbackAvailable: this.lmStudioAvailable,
       isCodeSpecialized: this.isCodeSpecific(),
     };
+  }
+
+  /**
+   * Get model version string for cache validation
+   * Returns a string that uniquely identifies the model being used
+   */
+  getModelVersion() {
+    const source = this.getCurrentSource();
+    // Return format: "provider/model" for unique identification
+    return `${source.source}/${source.model}`;
   }
 
   /**
@@ -609,6 +625,12 @@ export class HybridEmbeddings {
 
       // Normalize dimension to EMBEDDING_DIMENSION (truncate if API doesn't support dimensions parameter)
       return normalizeEmbeddingDimension(embedding, EMBEDDING_DIMENSION);
+    } catch (error) {
+      // Distinguish AbortError (timeout) from other errors
+      if (error.name === 'AbortError') {
+        throw new Error(`OpenRouter request timed out after ${OPENROUTER_CONFIG.timeout}ms`);
+      }
+      throw error;
     } finally {
       clearFetchTimeout();
     }
@@ -655,6 +677,12 @@ export class HybridEmbeddings {
       return embeddings
         .sort((a, b) => a.index - b.index)
         .map(item => normalizeEmbeddingDimension(item.embedding, EMBEDDING_DIMENSION));
+    } catch (error) {
+      // Distinguish AbortError (timeout) from other errors
+      if (error.name === 'AbortError') {
+        throw new Error(`OpenRouter batch request timed out after 60000ms`);
+      }
+      throw error;
     } finally {
       clearFetchTimeout();
     }
@@ -700,6 +728,12 @@ export class HybridEmbeddings {
 
       // Normalize dimension to EMBEDDING_DIMENSION (truncate if API doesn't support dimensions parameter)
       return normalizeEmbeddingDimension(embedding, EMBEDDING_DIMENSION);
+    } catch (error) {
+      // Distinguish AbortError (timeout) from other errors
+      if (error.name === 'AbortError') {
+        throw new Error(`LM Studio request timed out after 30000ms`);
+      }
+      throw error;
     } finally {
       // CRITICAL FIX: Always clear timeout, even if fetch throws
       clearFetchTimeout();
@@ -751,6 +785,12 @@ export class HybridEmbeddings {
       return embeddings.map(item =>
         normalizeEmbeddingDimension(item.embedding || item, EMBEDDING_DIMENSION)
       );
+    } catch (error) {
+      // Distinguish AbortError (timeout) from other errors
+      if (error.name === 'AbortError') {
+        throw new Error(`LM Studio batch request timed out after 60000ms`);
+      }
+      throw error;
     } finally {
       // CRITICAL FIX: Always clear timeout, even if fetch throws
       clearFetchTimeout();

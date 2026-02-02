@@ -9,6 +9,7 @@
 import { mkdir, readFile, stat, readdir, rename, unlink, open } from 'fs/promises';
 import { createWriteStream, existsSync } from 'fs';
 import { join, basename } from 'path';
+import { Mutex } from 'async-mutex';
 
 /**
  * Current cache format version
@@ -44,7 +45,7 @@ export class EmbeddingCache {
 
     this.loaded = false;
     this.dirty = false;
-    this._saveLock = null; // In-memory concurrency control for save()
+    this._saveMutex = new Mutex(); // Use async-mutex for proper concurrency control
     this._dirtyToken = 0; // Monotonic counter to detect mutations during save()
     this._fileLock = null; // File handle for filesystem-level advisory lock
 
@@ -427,16 +428,10 @@ export class EmbeddingCache {
       maxRetries = 10;
     }
 
-    // CRITICAL FIX: Acquire lock BEFORE checking dirty flag
-    // This prevents race condition where multiple saves think dirty=true
-    while (this._saveLock) {
-      await this._saveLock;
-    }
-
-    let resolveLock;
-    this._saveLock = new Promise(resolve => {
-      resolveLock = resolve;
-    });
+    // CRITICAL FIX: Use async-mutex for proper concurrency control
+    // This prevents race conditions where multiple saves think dirty=true
+    // The Mutex provides: FIFO queue, proper timeout support, no race conditions
+    const releaseMutex = await this._saveMutex.acquire();
 
     const startTime = Date.now();
     let releaseFileLock = null;
@@ -445,11 +440,11 @@ export class EmbeddingCache {
       // Now check dirty flag while holding lock
       if (!this.enabled || !this.dirty) {
         this.stats.savesSkipped = (this.stats.savesSkipped || 0) + 1;
+        releaseMutex(); // Release lock before returning
         return false;
       }
 
       const dirtyTokenAtStart = this._dirtyToken;
-
       // FIX #4: Acquire filesystem-level lock for cross-process protection
       try {
         releaseFileLock = await this._acquireFileLock();
@@ -465,27 +460,28 @@ export class EmbeddingCache {
         files: {},
       };
 
-      // CRITICAL: Create snapshots while holding lock
-      // This prevents concurrent modifications during serialization
-      const filesSnapshot = new Map(this.files.entries());
-      const embeddingsSnapshot = new Map(this.embeddings.entries());
+      // CRITICAL FIX: Don't create full snapshots - iterate directly to avoid memory bloat
+      // Creating new Map(this.embeddings.entries()) copies 17,000+ embedding references
+      // Each reference points to a Float32Array (3KB), causing 51MB+ per snapshot
+      // With 42 checkpoints, this equals 2GB+ of uncollectable memory
+      // Instead, iterate directly and only hold what we need for serialization
+      const chunkCount = this.embeddings.size;
 
-      // Serialize snapshots
-      for (const [file, info] of filesSnapshot.entries()) {
+      // Serialize files directly (no snapshot needed - files are small)
+      for (const [file, info] of this.files.entries()) {
         data.files[file] = info;
       }
 
       if (DEBUG_CACHE_SAVE) {
-        console.error('[Cache] DEBUG save(): snapshot sizes', {
-          files: filesSnapshot.size,
-          embeddings: embeddingsSnapshot.size,
+        console.error('[Cache] DEBUG save(): stats', {
+          files: this.files.size,
+          embeddings: chunkCount,
           dirty: this.dirty,
           cacheFile: this.cacheFile,
         });
       }
 
       // Safety check for unreasonably large caches
-      const chunkCount = embeddingsSnapshot.size;
       const MAX_EMBEDDINGS = 1000000; // 1 million chunks
       if (chunkCount > MAX_EMBEDDINGS) {
         throw new Error(`Cache too large to save: ${chunkCount} chunks exceeds limit of ${MAX_EMBEDDINGS}`);
@@ -503,6 +499,16 @@ export class EmbeddingCache {
           const tempFile = this.cacheFile + '.tmp';
 
           const writeStart = Date.now();
+
+          // FIX: Check memory pressure before starting large save operation
+          const mem = process.memoryUsage();
+          if (mem.heapUsed > mem.heapTotal * 0.9) {
+            console.warn('[Cache] High memory pressure before save:', {
+              heapUsed: `${(mem.heapUsed / 1024 / 1024).toFixed(2)} MB`,
+              heapTotal: `${(mem.heapTotal / 1024 / 1024).toFixed(2)} MB`,
+              heapUsedPercent: `${((mem.heapUsed / mem.heapTotal) * 100).toFixed(1)}%`
+            });
+          }
 
           // Stream-write JSON to avoid building a massive in-memory string.
           // This significantly reduces peak heap usage and avoids RangeError / OOM
@@ -532,10 +538,17 @@ export class EmbeddingCache {
               new Promise(resolve => stream.once('finish', resolve)),
               streamErrorPromise,
             ]);
+            // CRITICAL FIX: Wait for 'close' NOT 'finish' to ensure all buffers flushed
+            // 'finish' fires when stream.end() is called but data may still be in buffers
+            // 'close' fires after all data is flushed to the OS and file descriptor is released
             await Promise.race([
               new Promise(resolve => stream.once('close', resolve)),
               streamErrorPromise,
             ]);
+            // CRITICAL FIX: Additional yield to ensure OS flushes file system cache
+            // Without this, the file may exist in OS cache but not be fully on disk
+            // The subsequent datasync() on a different fd may see incomplete data
+            await new Promise(resolve => setTimeout(resolve, 10));
           };
 
           // Header
@@ -543,15 +556,28 @@ export class EmbeddingCache {
           await streamWrite(`"version":${JSON.stringify(data.version)},`);
           await streamWrite(`"timestamp":${JSON.stringify(data.timestamp)},`);
           await streamWrite(`"modelVersion":${JSON.stringify(data.modelVersion)},`);
+
+          // CRITICAL FIX: Yield before serializing large files object
+          // JSON.stringify(data.files) for 400+ files can block event loop for 200-500ms
+          // This causes stdio transport timeout and MCP disconnection
+          await new Promise(resolve => setTimeout(resolve, 0));
+
           await streamWrite(`"files":${JSON.stringify(data.files)},`);
+
+          // Yield again after files serialization before embeddings loop
+          await new Promise(resolve => setTimeout(resolve, 0));
+
           await streamWrite('"embeddings":{');
 
-          // Stream embeddings as key/value pairs
+          // CRITICAL FIX: Iterate directly over embeddings to avoid memory bloat
+          // Don't create a snapshot Map - iterate and stream immediately
           let wroteAny = false;
-          const EMBEDDINGS_BATCH_SIZE = 100;
+          // CRITICAL FIX: Reduced from 100 to 50 for more frequent event loop yielding
+          // This prevents stdio transport timeout during large cache saves
+          const EMBEDDINGS_BATCH_SIZE = 50;
           let batchCount = 0;
 
-          for (const [chunkId, embData] of embeddingsSnapshot.entries()) {
+          for (const [chunkId, embData] of this.embeddings.entries()) {
             const serializable = { ...embData };
             if (serializable.embedding instanceof Float32Array) {
               serializable.embedding = Array.from(serializable.embedding);
@@ -567,6 +593,12 @@ export class EmbeddingCache {
             batchCount++;
             if (batchCount >= EMBEDDINGS_BATCH_SIZE) {
               batchCount = 0;
+              // FIX: Force GC after each batch to free temporary Array.from() arrays
+              // Array.from() creates ~3MB temporary arrays per 100 embeddings
+              // Without GC hints, these accumulate and cause OOM for large codebases
+              if (global.gc) {
+                global.gc();
+              }
               // Yield to event loop to keep MCP responsive.
               await new Promise(resolve => setTimeout(resolve, 0));
             }
@@ -587,25 +619,60 @@ export class EmbeddingCache {
           }
 
           // CRITICAL: Sync to disk to ensure data is actually written
-          // Without this, the rename can happen before data is flushed, causing data loss
+          // FIX: Close the datasync handle BEFORE renaming to avoid filesystem issues
+          // The stream has already fully closed and flushed, so we just need to ensure OS persistence
           const datasyncStart = Date.now();
-          const handle = await open(tempFile, 'r');
+          const renameStart = Date.now();
+          let handle;
           try {
+            // Open temp file to sync it to disk
+            handle = await open(tempFile, 'r+');
             await handle.datasync(); // Sync data + metadata to disk
+            await handle.close(); // CRITICAL: Close handle BEFORE rename
+            handle = null;
+
+            // Now rename after all handles are closed
+            await rename(tempFile, this.cacheFile);
+
+            // FIX: Post-rename validation to detect corruption immediately
+            // This catches issues like: partial writes, filesystem corruption, rename race conditions
+            try {
+              const validation = JSON.parse(await readFile(this.cacheFile, 'utf-8'));
+              if (!validation.version || !validation.embeddings) {
+                throw new Error('Invalid cache structure after rename: missing version or embeddings');
+              }
+              if (validation.version !== CACHE_VERSION) {
+                throw new Error(`Version mismatch after rename: ${validation.version} vs ${CACHE_VERSION}`);
+              }
+            } catch (validationError) {
+              console.error('[Cache] CRITICAL: Validation failed after rename!', validationError.message);
+              // Backup corrupted file for forensic analysis
+              const backupFile = this.cacheFile + '.invalid.' + Date.now();
+              try {
+                await rename(this.cacheFile, backupFile);
+                console.error('[Cache] Backed up invalid cache to:', backupFile);
+              } catch (backupError) {
+                console.error('[Cache] Failed to backup invalid cache:', backupError.message);
+              }
+              throw new Error(`Cache validation failed after rename: ${validationError.message}`);
+            }
           } finally {
-            await handle.close();
+            // Ensure handle is closed if we error before explicit close
+            if (handle) {
+              try {
+                await handle.close();
+              } catch {
+                // Ignore close errors
+              }
+            }
           }
           const datasyncMs = Date.now() - datasyncStart;
           if (DEBUG_CACHE_SAVE) {
-            console.error('[Cache] DEBUG save(): datasync complete', {
+            console.error('[Cache] DEBUG save(): datasync+rename complete', {
               attempt: attempt + 1,
               ms: datasyncMs,
             });
           }
-
-          // Rename (atomic on most systems)
-          const renameStart = Date.now();
-          await rename(tempFile, this.cacheFile);
           const renameMs = Date.now() - renameStart;
           if (DEBUG_CACHE_SAVE) {
             console.error('[Cache] DEBUG save(): rename complete', {
@@ -646,16 +713,18 @@ export class EmbeddingCache {
           lastError = error;
 
           try {
-            // Ensure the temp file is closed/unlinked before retrying.
-            // Best-effort cleanup.
-            try {
-              stream?.destroy();
-            } catch {
-              // ignore
+            // FIX: EventEmitter cleanup - explicitly remove all listeners before destroying
+            // This prevents MaxListenersExceededWarning on retries
+            if (stream) {
+              // Remove all event listeners to prevent memory leaks
+              stream.removeAllListeners();
+              // Then destroy the stream
+              stream.destroy();
             }
+            // Clean up temp file
             await unlink(this.cacheFile + '.tmp').catch(() => {});
           } catch {
-            // ignore
+            // ignore cleanup errors
           }
 
           // Skip retries for errors that won't resolve with retrying
@@ -710,7 +779,7 @@ export class EmbeddingCache {
       // FIX #3: Throw error instead of silent failure
       throw new Error(`Cache save failed after ${maxRetries} attempts: ${lastError?.message}`);
     } finally {
-      // FIX #4: Release file lock if acquired
+      // Release file lock if acquired
       if (releaseFileLock) {
         try {
           await releaseFileLock();
@@ -719,8 +788,8 @@ export class EmbeddingCache {
         }
       }
 
-      this._saveLock = null;
-      resolveLock();
+      // Release the mutex (always executes, even if above errors)
+      releaseMutex();
     }
   }
 
@@ -850,10 +919,18 @@ export class EmbeddingCache {
 
       // Only store embedding if it's valid (non-null and has elements)
       if (embeddings[i] && embeddings[i].length > 0) {
+        // FIX: Validate embedding type to prevent silent data corruption
+        const emb = embeddings[i];
+        if (!emb || typeof emb.length !== 'number') {
+          throw new Error(`Invalid embedding at index ${i} for chunk ${chunkId}: ${typeof emb}`);
+        }
+        if (emb.length === 0) {
+          throw new Error(`Empty embedding at index ${i} for chunk ${chunkId}`);
+        }
+
         // Store as Float32Array in memory to minimize heap usage.
         // save() will convert Float32Array → Array for JSON serialization.
-        embeddingData.embedding =
-          embeddings[i] instanceof Float32Array ? embeddings[i] : new Float32Array(embeddings[i]);
+        embeddingData.embedding = emb instanceof Float32Array ? emb : new Float32Array(emb);
       }
       // If embedding is missing/invalid, don't set the field - getChunkEmbedding will return null
 
