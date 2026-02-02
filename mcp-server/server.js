@@ -482,20 +482,22 @@ function setupShutdownHandlers(mcpServer) {
     // CRITICAL: Wait for any in-progress indexing to complete before saving cache
     // But add a timeout to avoid waiting forever for large codebases
     if (mcpServer._indexingPromise) {
-      console.error('[Rhythm Chamber MCP] Waiting for indexing to complete (max 10s)...');
+      console.error('[Rhythm Chamber MCP] Waiting for indexing to complete (max 5 minutes)...');
       console.error(
         '[Rhythm Chamber MCP] DEBUG: _indexingPromise exists:',
         !!mcpServer._indexingPromise
       );
       try {
         // Wait with timeout - if indexing takes too long, save what we have
+        // FIX: Increased timeout to 300s (5 minutes) for LM Studio batch processing
+        // LM Studio processes embeddings in batches which can take longer
         const result = await Promise.race([
           mcpServer._indexingPromise,
           new Promise((_, reject) =>
             setTimeout(() => {
               console.error('[Rhythm Chamber MCP] DEBUG: Timeout callback triggered');
               reject(new Error('Indexing timeout'));
-            }, 10000)
+            }, 300000)
           ),
         ]);
         console.error('[Rhythm Chamber MCP] Indexing complete');
@@ -555,6 +557,17 @@ function setupShutdownHandlers(mcpServer) {
       }
     }
 
+    // FIX: Close semantic indexer to release SQLite adapter
+    if (mcpServer.semanticIndexer) {
+      console.error('[Rhythm Chamber MCP] Closing semantic indexer...');
+      try {
+        await mcpServer.semanticIndexer.close();
+        console.error('[Rhythm Chamber MCP] Semantic indexer closed');
+      } catch (error) {
+        console.error('[Rhythm Chamber MCP] Error closing indexer:', error.message);
+      }
+    }
+
     console.error('[Rhythm Chamber MCP] DEBUG: About to exit...');
     process.exit(0);
   };
@@ -604,6 +617,13 @@ process.on('uncaughtException', async error => {
         console.error('[Rhythm Chamber MCP] Error saving cache:', saveError.message);
       }
     }
+
+    // FIX: Close semantic indexer to release SQLite adapter
+    try {
+      await mcpServerInstance.semanticIndexer.close();
+    } catch (closeError) {
+      console.error('[Rhythm Chamber MCP] Error closing indexer:', closeError.message);
+    }
   }
 
   process.exit(1);
@@ -646,6 +666,13 @@ process.on('unhandledRejection', async (reason, promise) => {
       } else {
         console.error('[Rhythm Chamber MCP] Error saving cache:', saveError.message);
       }
+    }
+
+    // FIX: Close semantic indexer to release SQLite adapter
+    try {
+      await mcpServerInstance.semanticIndexer.close();
+    } catch (closeError) {
+      console.error('[Rhythm Chamber MCP] Error closing indexer:', closeError.message);
     }
   }
 
@@ -690,6 +717,13 @@ main().catch(async error => {
       } else {
         console.error('[Rhythm Chamber MCP] Error saving cache:', saveError.message);
       }
+    }
+
+    // FIX: Close semantic indexer to release SQLite adapter
+    try {
+      await mcpServerInstance.semanticIndexer.close();
+    } catch (closeError) {
+      console.error('[Rhythm Chamber MCP] Error closing indexer:', closeError.message);
     }
   }
 

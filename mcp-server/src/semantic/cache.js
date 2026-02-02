@@ -349,7 +349,7 @@ export class EmbeddingCache {
             }
           } catch (readError) {
             // Can't read lock file - try to delete and retry
-            console.warn(`[Cache] Corrupt lock file, removing and retrying`);
+            console.warn('[Cache] Corrupt lock file, removing and retrying');
             try {
               await unlink(lockFile);
             } catch (unlinkError) {

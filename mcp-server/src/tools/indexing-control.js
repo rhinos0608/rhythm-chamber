@@ -236,6 +236,18 @@ async function handleStatus(indexer, mcpServer) {
 
   lines.push('');
 
+  // FIX: Add memory metrics to status
+  const mem = process.memoryUsage();
+  const heapUsedMB = (mem.heapUsed / 1024 / 1024).toFixed(0);
+  const heapTotalMB = (mem.heapTotal / 1024 / 1024).toFixed(0);
+  const percentUsed = ((mem.heapUsed / mem.heapTotal) * 100).toFixed(1);
+
+  lines.push('## Memory');
+  lines.push(`- **Heap Used**: ${heapUsedMB}MB`);
+  lines.push(`- **Heap Total**: ${heapTotalMB}MB`);
+  lines.push(`- **Percent Used**: ${percentUsed}%`);
+  lines.push('');
+
   // Statistics
   lines.push('## Statistics');
   lines.push(`- **Files Discovered**: ${stats.filesDiscovered || 0}`);
@@ -257,11 +269,28 @@ async function handleStatus(indexer, mcpServer) {
 
   lines.push('');
 
-  // Cache status
-  const cacheStats = indexer.cache ? indexer.cache.getStats() : {};
-  if (cacheStats.fileCount !== undefined || stats.cacheFailures > 0) {
-    lines.push('## Cache');
+  // Cache and storage status
+  // FIX: Report from SQLite adapter when available, not in-memory cache
+  // The in-memory cache is cleared after indexing, but SQLite persists
+  const vectorStoreStats = indexer.vectorStore ? indexer.vectorStore.getStats() : {};
+  const adapterStats = indexer.vectorStore?.adapter ? indexer.vectorStore.adapter.getStats() : {};
+  const hasSqlite = indexer.vectorStore?.useSqlite && indexer.vectorStore?.adapter;
+
+  lines.push('## Storage');
+  if (hasSqlite) {
+    // SQLite is the primary storage
+    lines.push('- **Storage Type**: SQLite Database');
+    lines.push(`- **Vectors Stored**: ${vectorStoreStats.chunkCount || adapterStats.chunkCount || 0}`);
+    lines.push(`- **Dimension**: ${vectorStoreStats.dimension || adapterStats.dimension || 'unknown'}`);
+    if (adapterStats.memoryBytes) {
+      const sizeMB = (adapterStats.memoryBytes / 1024 / 1024).toFixed(2);
+      lines.push(`- **Database Size**: ${sizeMB} MB`);
+    }
+  } else {
+    // Report from in-memory cache (legacy mode)
+    const cacheStats = indexer.cache ? indexer.cache.getStats() : {};
     if (cacheStats.fileCount !== undefined) {
+      lines.push('- **Storage Type**: In-Memory Cache');
       lines.push(`- **Cached Files**: ${cacheStats.fileCount}`);
       if (cacheStats.chunkCount !== undefined) {
         lines.push(`- **Cached Chunks**: ${cacheStats.chunkCount}`);
@@ -270,34 +299,31 @@ async function handleStatus(indexer, mcpServer) {
         const sizeMB = (cacheStats.approximateSize / 1024 / 1024).toFixed(2);
         lines.push(`- **Cache Size**: ${sizeMB} MB`);
       }
-      if (cacheStats.dirty !== undefined) {
-        lines.push(`- **Dirty**: ${cacheStats.dirty ? 'Yes (needs save)' : 'No'}`);
-      }
     }
-    if (stats.cacheFailures > 0) {
-      const failureRate =
-        stats.filesIndexed > 0
-          ? ((stats.cacheFailures / stats.filesIndexed) * 100).toFixed(1)
-          : '0.0';
-
-      // Only show warning if failures are recent (< 1 hour ago)
-      const lastFailureTime = stats.lastCacheFailureTime || 0;
-      const failureAge = Date.now() - lastFailureTime;
-      const isRecent = failureAge < 3600000; // 1 hour in milliseconds
-
-      lines.push(
-        `- **Cache Failures**: ${stats.cacheFailures}/${stats.filesIndexed} (${failureRate}%)${isRecent ? ' ⚠️' : ''}`
-      );
-
-      if (isRecent) {
-        lines.push('- **Status**: Cache degradation detected - re-embedding required on restart');
-      } else {
-        const minutesAgo = Math.floor(failureAge / 60000);
-        lines.push(`- **Last Failure**: ${minutesAgo} minutes ago (resolved)`);
-      }
-    }
-    lines.push('');
   }
+
+  // Cache failures (if any)
+  if (stats.cacheFailures > 0) {
+    const failureRate =
+      stats.filesIndexed > 0
+        ? ((stats.cacheFailures / stats.filesIndexed) * 100).toFixed(1)
+        : '0.0';
+
+    // Only show warning if failures are recent (< 1 hour ago)
+    const lastFailureTime = stats.lastCacheFailureTime || 0;
+    const failureAge = Date.now() - lastFailureTime;
+    const isRecent = failureAge < 3600000; // 1 hour in milliseconds
+
+    lines.push(`- **Cache Failures**: ${stats.cacheFailures}/${stats.filesIndexed} (${failureRate}%)${isRecent ? ' ⚠️' : ''}`);
+
+    if (isRecent) {
+      lines.push('- **Status**: Cache degradation detected - re-embedding required on restart');
+    } else {
+      const minutesAgo = Math.floor(failureAge / 60000);
+      lines.push(`- **Last Failure**: ${minutesAgo} minutes ago (resolved)`);
+    }
+  }
+  lines.push('');
 
   // Current configuration
   if (indexer.patterns) {
@@ -314,20 +340,25 @@ async function handleStatus(indexer, mcpServer) {
   }
 
   // Vector store status
+  // FIX: Remove misleading comparison - SQLite is the source of truth
+  // The "expected" count was comparing session activity with persistent storage
   if (indexer.vectorStore) {
-    const vectorCount = indexer.vectorStore.chunkCount || 0;
-    const expectedCount = stats.chunksIndexed || 0;
-    const mismatch = vectorCount !== expectedCount;
+    const vectorStoreStats = indexer.vectorStore.getStats();
+    const vectorCount = vectorStoreStats.chunkCount || 0;
+    const memoryBytes = vectorStoreStats.memoryBytes || 0;
 
     lines.push('## Vector Store');
-    lines.push(
-      `- **Vectors**: ${vectorCount}${expectedCount > 0 ? ` (expected: ${expectedCount})` : ''}${mismatch ? ' ⚠️' : ''}`
-    );
-    if (mismatch && expectedCount > 0) {
-      lines.push(
-        `- **Status**: MISMATCH - ${expectedCount - vectorCount > 0 ? 'Some embeddings not stored' : 'More vectors than chunks indexed'}`
-      );
+    lines.push(`- **Vectors**: ${vectorCount}`);
+
+    if (memoryBytes > 0) {
+      const memoryMB = (memoryBytes / 1024 / 1024).toFixed(2);
+      lines.push(`- **Memory Usage**: ${memoryMB} MB`);
     }
+
+    if (vectorStoreStats.storageType) {
+      lines.push(`- **Storage**: ${vectorStoreStats.storageType}`);
+    }
+
     lines.push('');
   }
 

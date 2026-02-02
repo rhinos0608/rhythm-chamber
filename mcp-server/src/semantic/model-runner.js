@@ -260,68 +260,68 @@ export class SerializedModelRunner {
     try {
       // Process each file
       for (const filePath of files) {
-      try {
+        try {
         // Check if file is already cached and valid
-        const isValid = await cache.isFileValid(filePath);
-        if (isValid) {
-          const chunks = cache.getFileChunks(filePath);
+          const isValid = await cache.isFileValid(filePath);
+          if (isValid) {
+            const chunks = cache.getFileChunks(filePath);
+            chunksProcessed += chunks.length;
+            filesProcessed++;
+
+            this._notifyProgress(modelName, 'file-cached', {
+              filePath,
+              chunks: chunks.length,
+            });
+
+            continue;
+          }
+
+          // Read and chunk the file
+          const content = await this._readFile(filePath);
+
+          // Create chunker instance and chunk the file
+          const chunker = new CodeChunker();
+          const chunks = chunker.chunk(filePath, content);
+
+          // Invalidate old cache for this file
+          cache.invalidateFile(filePath);
+
+          // Generate embeddings for all chunks
+          const texts = chunks.map(c => c.text);
+          const embeddingsArray = await embeddings.getBatchEmbeddings(texts);
+
+          // Get file modification time
+          const fileStat = await this._getFileStat(filePath);
+
+          // Store in cache
+          await cache.storeFileChunks(filePath, chunks, fileStat.mtimeMs, embeddingsArray);
+
           chunksProcessed += chunks.length;
           filesProcessed++;
 
-          this._notifyProgress(modelName, 'file-cached', {
+          this._notifyProgress(modelName, 'file-processed', {
             filePath,
             chunks: chunks.length,
           });
 
-          continue;
+        } catch (error) {
+          errors.push({ file: filePath, error: error.message });
+          console.error(`[ModelRunner] Error processing ${filePath} with ${modelName}:`, error.message);
         }
-
-        // Read and chunk the file
-        const content = await this._readFile(filePath);
-
-        // Create chunker instance and chunk the file
-        const chunker = new CodeChunker();
-        const chunks = chunker.chunk(filePath, content);
-
-        // Invalidate old cache for this file
-        cache.invalidateFile(filePath);
-
-        // Generate embeddings for all chunks
-        const texts = chunks.map(c => c.text);
-        const embeddingsArray = await embeddings.getBatchEmbeddings(texts);
-
-        // Get file modification time
-        const fileStat = await this._getFileStat(filePath);
-
-        // Store in cache
-        await cache.storeFileChunks(filePath, chunks, fileStat.mtimeMs, embeddingsArray);
-
-        chunksProcessed += chunks.length;
-        filesProcessed++;
-
-        this._notifyProgress(modelName, 'file-processed', {
-          filePath,
-          chunks: chunks.length,
-        });
-
-      } catch (error) {
-        errors.push({ file: filePath, error: error.message });
-        console.error(`[ModelRunner] Error processing ${filePath} with ${modelName}:`, error.message);
       }
-    }
 
-    // Save cache for this model
-    await cache.save();
+      // Save cache for this model
+      await cache.save();
 
-    return {
-      success: true,
-      modelName,
-      chunksProcessed,
-      filesProcessed,
-      errors,
-      duration: Date.now() - task.startTime,
-      cacheStats: cache.getStats(),
-    };
+      return {
+        success: true,
+        modelName,
+        chunksProcessed,
+        filesProcessed,
+        errors,
+        duration: Date.now() - task.startTime,
+        cacheStats: cache.getStats(),
+      };
     } finally {
       // CRITICAL: Dispose embeddings instance to free memory
       // Transformers.js models can be 100MB-500MB each

@@ -381,7 +381,7 @@ async function initialize(onProgress = () => {}) {
             if (!quotaCheck.available) {
                 throw new Error(
                     `Insufficient storage for model download. Need ~25MB, but only ${quotaCheck.availableMB?.toFixed(2) || 'unknown'}MB available. ` +
-                    `Please free up space or use a different browser.`
+                    'Please free up space or use a different browser.'
                 );
             }
             onProgress(10);

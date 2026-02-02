@@ -123,7 +123,7 @@ export async function processMessageQueue() {
 
     // CRITICAL FIX #3: Track processing results and failed messages
     let processedCount = 0;
-    let failedMessages = [];
+    const failedMessages = [];
 
     try {
         while (messageQueue.length > 0) {

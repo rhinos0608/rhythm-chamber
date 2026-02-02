@@ -348,7 +348,7 @@ export class MarkdownChunker {
   _extractList(lines, startIdx) {
     const contentLines = [];
     let i = startIdx;
-    let listType = PATTERNS.unorderedList.test(lines[startIdx]) ? 'unordered' : 'ordered';
+    const listType = PATTERNS.unorderedList.test(lines[startIdx]) ? 'unordered' : 'ordered';
 
     while (i < lines.length) {
       const line = lines[i];
