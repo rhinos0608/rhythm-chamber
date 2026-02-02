@@ -228,6 +228,10 @@ export class HybridEmbeddings {
       }
     }
 
+    // CRITICAL FIX: Return accumulated results after successful batch processing
+    // This was missing, causing the function to always throw an error even when embeddings succeeded
+    return allResults;
+
     // All configured providers failed - try transformers as last resort fallback
     if (!this.providerPriority.includes('transformers') && TRANSFORMERS_CONFIG.enabled) {
       try {
