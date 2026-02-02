@@ -12,7 +12,9 @@
 
 import Database from 'better-sqlite3';
 import { getLoadablePath } from 'sqlite-vec';
-import { statSync } from 'fs';
+import { statSync, mkdirSync, unlinkSync, existsSync } from 'fs';
+import { dirname } from 'path';
+import { passesFilters as sharedPassesFilters } from './filters.js';
 
 /**
  * Default embedding dimension (nomic-embed-text-v1.5)
@@ -28,6 +30,7 @@ export class SqliteVectorAdapter {
     this._dbPath = null;
     this._dimension = DEFAULT_DIM;
     this._initialized = false;
+    this._statements = null; // CRITICAL FIX #3: Cache prepared statements
   }
 
   /**
@@ -44,6 +47,16 @@ export class SqliteVectorAdapter {
     this._dbPath = dbPath;
     this._dimension = dimension;
 
+    // HIGH FIX #7: Ensure parent directory exists before creating database
+    const parentDir = dirname(dbPath);
+    try {
+      mkdirSync(parentDir, { recursive: true });
+      console.log(`[SqliteAdapter] Ensured directory exists: ${parentDir}`);
+    } catch (mkdirError) {
+      // Directory might already exist or creation failed - try to continue
+      console.warn(`[SqliteAdapter] Directory creation warning: ${mkdirError.message}`);
+    }
+
     // Create database connection
     this._db = new Database(dbPath);
 
@@ -55,6 +68,9 @@ export class SqliteVectorAdapter {
 
     // Create vec0 virtual tables
     this._createTables();
+
+    // CRITICAL FIX #3: Prepare and cache statements for reuse
+    this._prepareStatements();
 
     this._initialized = true;
     console.log(`[SqliteAdapter] Initialized: ${dbPath} (dimension: ${dimension})`);
@@ -94,6 +110,48 @@ export class SqliteVectorAdapter {
   }
 
   /**
+   * Prepare and cache SQL statements for reuse
+   * CRITICAL FIX #3: Prevents statement leak and improves performance
+   * @private
+   */
+  _prepareStatements() {
+    this._statements = {
+      // Upsert statements
+      deleteEmbedding: this._db.prepare('DELETE FROM vec_chunks WHERE chunk_id = ?'),
+      insertEmbedding: this._db.prepare(
+        'INSERT INTO vec_chunks (chunk_id, embedding) VALUES (?, ?)'
+      ),
+      deleteMetadata: this._db.prepare('DELETE FROM chunk_metadata WHERE chunk_id = ?'),
+      insertMetadata: this._db.prepare(`
+        INSERT INTO chunk_metadata (
+          chunk_id, text, name, type, file, line, exported,
+          layer, context_before, context_after, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `),
+
+      // Get statements
+      getMetadata: this._db.prepare(`
+        SELECT
+          text, name, type, file, line, exported,
+          layer, context_before as contextBefore, context_after as contextAfter,
+          updated_at as updatedAt
+        FROM chunk_metadata
+        WHERE chunk_id = ?
+      `),
+      chunkExists: this._db.prepare('SELECT 1 FROM vec_chunks WHERE chunk_id = ?'),
+
+      // Delete statements
+      deleteChunkVec: this._db.prepare('DELETE FROM vec_chunks WHERE chunk_id = ?'),
+      deleteChunkMetadata: this._db.prepare('DELETE FROM chunk_metadata WHERE chunk_id = ?'),
+
+      // Stats statements
+      countChunks: this._db.prepare('SELECT COUNT(*) as count FROM vec_chunks'),
+    };
+
+    console.log('[SqliteAdapter] Prepared and cached SQL statements');
+  }
+
+  /**
    * Insert or update a chunk with embedding and metadata
    * @param {string} chunkId - Unique chunk identifier
    * @param {Float32Array|Array} embedding - Embedding vector
@@ -109,22 +167,16 @@ export class SqliteVectorAdapter {
       embedding = new Float32Array(embedding);
     }
 
+    // CRITICAL FIX #3: Use cached prepared statements instead of preparing each time
     // Use a transaction for atomic upsert
-    const transaction = this._db.transaction(() => {
-      // Insert or replace embedding
-      const insertEmbedding = this._db.prepare(
-        'INSERT OR REPLACE INTO vec_chunks (chunk_id, embedding) VALUES (?, ?)'
-      );
-      insertEmbedding.run(chunkId, embedding);
+    const upsertTransaction = this._db.transaction(() => {
+      // Delete existing if present
+      this._statements.deleteEmbedding.run(chunkId);
+      this._statements.deleteMetadata.run(chunkId);
 
-      // Insert or replace metadata
-      const insertMetadata = this._db.prepare(`
-        INSERT OR REPLACE INTO chunk_metadata (
-          chunk_id, text, name, type, file, line, exported,
-          layer, context_before, context_after, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      insertMetadata.run(
+      // Insert new data
+      this._statements.insertEmbedding.run(chunkId, embedding);
+      this._statements.insertMetadata.run(
         chunkId,
         metadata.text || null,
         metadata.name || null,
@@ -139,7 +191,7 @@ export class SqliteVectorAdapter {
       );
     });
 
-    transaction();
+    upsertTransaction();
   }
 
   /**
@@ -147,6 +199,9 @@ export class SqliteVectorAdapter {
    *
    * Uses a subquery approach to find nearest neighbors by computing
    * cosine distance between query embedding and all stored embeddings.
+   *
+   * HIGH FIX #8: Apply filters in application code using sharedPassesFilters()
+   * for consistency with Map version and to support complex filter logic.
    *
    * @param {Float32Array|Array} queryEmbedding - Query embedding vector
    * @param {Object} options - Search options
@@ -168,28 +223,8 @@ export class SqliteVectorAdapter {
     // cosine distance = 1 - cosine similarity
     const maxDistance = 1 - threshold;
 
-    // Build WHERE clause for filters
-    const conditions = [];
-    const params = [];
-
-    if (filters.chunkType) {
-      conditions.push('m.type = ?');
-      params.push(filters.chunkType);
-    }
-
-    if (filters.exportedOnly) {
-      conditions.push('m.exported = 1');
-    }
-
-    if (filters.layer) {
-      conditions.push('m.layer = ?');
-      params.push(filters.layer);
-    }
-
-    const whereClause = conditions.length > 0
-      ? 'AND ' + conditions.join(' AND ')
-      : '';
-
+    // HIGH FIX #8: Removed SQL-level filters for consistency with Map version
+    // Filters are now applied in application code using sharedPassesFilters()
     // KNN search using distance calculation with metadata JOIN
     // Fetches all data in a single query to avoid N+1 problem
     const query = `
@@ -214,15 +249,14 @@ export class SqliteVectorAdapter {
       ) v
       LEFT JOIN chunk_metadata m ON v.chunk_id = m.chunk_id
       WHERE v.distance < ?
-        ${whereClause}
       ORDER BY v.distance
       LIMIT ?
     `;
 
     const stmt = this._db.prepare(query);
-    const rows = stmt.all(queryEmbedding, maxDistance, ...params, limit);
+    const rows = stmt.all(queryEmbedding, maxDistance, limit * 10); // Fetch more to account for filtering
 
-    // Convert results to expected format
+    // Convert results to expected format and apply filters in application code
     const results = [];
     for (const row of rows) {
       const similarity = 1 - row.distance;
@@ -241,15 +275,21 @@ export class SqliteVectorAdapter {
           updatedAt: row.updatedAt,
           chunkId: row.chunk_id,
         };
-        results.push({
-          chunkId: row.chunk_id,
-          similarity,
-          metadata,
-        });
+
+        // HIGH FIX #8: Apply filters in application code using shared utility
+        if (sharedPassesFilters(metadata, filters)) {
+          results.push({
+            chunkId: row.chunk_id,
+            similarity,
+            metadata,
+          });
+        }
       }
     }
 
-    return results;
+    // Sort by similarity (descending) and limit results
+    results.sort((a, b) => b.similarity - a.similarity);
+    return results.slice(0, limit);
   }
 
   /**
@@ -267,10 +307,9 @@ export class SqliteVectorAdapter {
       return null;
     }
 
+    // CRITICAL FIX #3: Use cached prepared statement
     // Check if chunk exists in vec_chunks
-    const exists = this._db.prepare(
-      'SELECT 1 FROM vec_chunks WHERE chunk_id = ?'
-    ).get(chunkId);
+    const exists = this._statements.chunkExists.get(chunkId);
 
     return {
       chunkId,
@@ -286,14 +325,8 @@ export class SqliteVectorAdapter {
    * @returns {Object|null} Metadata object or null if not found
    */
   _getMetadata(chunkId) {
-    const row = this._db.prepare(`
-      SELECT
-        text, name, type, file, line, exported,
-        layer, context_before as contextBefore, context_after as contextAfter,
-        updated_at as updatedAt
-      FROM chunk_metadata
-      WHERE chunk_id = ?
-    `).get(chunkId);
+    // CRITICAL FIX #3: Use cached prepared statement
+    const row = this._statements.getMetadata.get(chunkId);
 
     if (!row) {
       return null;
@@ -324,14 +357,10 @@ export class SqliteVectorAdapter {
       throw new Error('SqliteAdapter not initialized');
     }
 
+    // CRITICAL FIX #3: Use cached prepared statements
     const transaction = this._db.transaction(() => {
-      const result = this._db.prepare(
-        'DELETE FROM vec_chunks WHERE chunk_id = ?'
-      ).run(chunkId);
-
-      this._db.prepare(
-        'DELETE FROM chunk_metadata WHERE chunk_id = ?'
-      ).run(chunkId);
+      const result = this._statements.deleteChunkVec.run(chunkId);
+      this._statements.deleteChunkMetadata.run(chunkId);
 
       return result.changes > 0;
     });
@@ -360,10 +389,9 @@ export class SqliteVectorAdapter {
       // Intentionally ignore - size will be 0
     }
 
+    // CRITICAL FIX #3: Use cached prepared statement
     // Get chunk count from database
-    const countResult = this._db.prepare(
-      'SELECT COUNT(*) as count FROM vec_chunks'
-    ).get();
+    const countResult = this._statements.countChunks.get();
 
     return {
       initialized: true,
@@ -376,9 +404,27 @@ export class SqliteVectorAdapter {
 
   /**
    * Close the database connection
+   * CRITICAL FIX #3: Finalize prepared statements to prevent memory leaks
    */
   close() {
     if (this._db) {
+      // Finalize all prepared statements before closing
+      if (this._statements) {
+        for (const [name, statement] of Object.entries(this._statements)) {
+          try {
+            if (statement && typeof statement.finalize === 'function') {
+              statement.finalize();
+            }
+          } catch (finalizeError) {
+            console.warn(
+              `[SqliteAdapter] Failed to finalize statement ${name}:`,
+              finalizeError.message
+            );
+          }
+        }
+        this._statements = null;
+      }
+
       this._db.close();
       this._db = null;
       this._initialized = false;
