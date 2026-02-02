@@ -752,6 +752,8 @@ export class VectorStore {
       useSqlite: this.useSqlite,
       memoryBytes: this._estimateMemoryUsage(),
       upgradeThreshold: this.upgradeThreshold,
+      // Always include dbSizeBytes for JSON safety (0 for Map storage)
+      dbSizeBytes: 0,
     };
 
     // Add SQLite-specific stats if using sqlite-vec
@@ -762,7 +764,7 @@ export class VectorStore {
         ...baseStats,
         storageType: 'sqlite-vec',
         dbPath: this.dbPath,
-        dbSizeBytes: adapterStats.dbSizeBytes,
+        dbSizeBytes: adapterStats.dbSizeBytes || 0,
         adapterReady: this.adapter.isInitialized,
       };
     }
