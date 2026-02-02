@@ -680,7 +680,7 @@ export class HybridEmbeddings {
     } catch (error) {
       // Distinguish AbortError (timeout) from other errors
       if (error.name === 'AbortError') {
-        throw new Error(`OpenRouter batch request timed out after 60000ms`);
+        throw new Error('OpenRouter batch request timed out after 60000ms');
       }
       throw error;
     } finally {
@@ -731,7 +731,7 @@ export class HybridEmbeddings {
     } catch (error) {
       // Distinguish AbortError (timeout) from other errors
       if (error.name === 'AbortError') {
-        throw new Error(`LM Studio request timed out after 30000ms`);
+        throw new Error('LM Studio request timed out after 30000ms');
       }
       throw error;
     } finally {
@@ -788,7 +788,7 @@ export class HybridEmbeddings {
     } catch (error) {
       // Distinguish AbortError (timeout) from other errors
       if (error.name === 'AbortError') {
-        throw new Error(`LM Studio batch request timed out after 60000ms`);
+        throw new Error('LM Studio batch request timed out after 60000ms');
       }
       throw error;
     } finally {

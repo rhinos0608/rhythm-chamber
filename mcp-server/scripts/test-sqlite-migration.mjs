@@ -8,7 +8,7 @@
  * Run with: node scripts/test-sqlite-migration.mjs
  */
 
-/* eslint-disable no-console, no-process-ex, no-empty */
+/* eslint-disable no-process-ex, no-empty */
 import { join } from 'path';
 import { existsSync, mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';

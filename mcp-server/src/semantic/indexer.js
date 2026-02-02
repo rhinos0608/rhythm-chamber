@@ -20,6 +20,8 @@ import { CodeChunker } from './chunker.js';
 import { MarkdownChunker } from './markdown-chunker.js';
 import { HybridEmbeddings } from './embeddings.js';
 import { VectorStore } from './vector-store.js';
+import { SqliteVectorAdapter } from './sqlite-adapter.js';
+import { createVectorAdapter } from './adapter-factory.js';
 import { DependencyGraph } from './dependency-graph.js';
 import { EmbeddingCache } from './cache.js';
 import { LexicalIndex } from './lexical-index.js';
@@ -94,6 +96,9 @@ export class CodeIndexer {
     this.queryExpander = new QueryExpander(this.dependencyGraph);
     // FIX: Query cache to reduce redundant embedding API calls
     this.queryCache = new SemanticQueryCache(options.queryCache);
+    // FIX: Maximum chunks limit to prevent OOM on large codebases
+    // Supports environment variable RC_MAX_CHUNKS (e.g., 10000 for limited indexing)
+    this.maxChunks = options.maxChunks || parseInt(process.env.RC_MAX_CHUNKS || '50000', 10);
 
     // Patterns
     this.patterns = options.patterns || DEFAULT_PATTERNS;
@@ -155,6 +160,9 @@ export class CodeIndexer {
       this.stats.filesIndexed = 0;
       this.stats.filesFromCache = 0;
     }
+
+    // FIX: Initialize and recover SQLite adapter if database exists
+    await this._initializeVectorStore();
 
     return true;
   }
@@ -319,6 +327,12 @@ export class CodeIndexer {
         let indexedCount = 0;
         const totalToIndex = toIndex.length;
 
+        // ENHANCED FIX: Configure batch size for event loop yielding
+        // Larger batches = better performance, but server appears "laggy"
+        // Smaller batches = more responsive, but slower overall indexing
+        const YIELD_BATCH_SIZE = parseInt(process.env.RC_YIELD_BATCH_SIZE || '1', 10);
+        console.error(`[Indexer] Yield batch size: ${YIELD_BATCH_SIZE} file(s) per event loop cycle`);
+
         // Skip progress logging if no files to index
         if (totalToIndex === 0) {
           console.error('[Indexer] No new files to index (all files cached)');
@@ -327,6 +341,14 @@ export class CodeIndexer {
           let lastProgressLog = 0;
 
           for (const filePath of toIndex) {
+            // Check if we've hit the chunk limit
+            if (this.stats.chunksIndexed >= this.maxChunks) {
+              console.warn(
+                `[Indexer] ⚠️  Reached maximum chunk limit (${this.maxChunks}). ` +
+                `Stopping indexing. Progress: ${this.stats.filesIndexed} files processed.`
+              );
+              break;
+            }
             // Check if we should stop
             if (!this._indexingInProgress) {
               console.error('[Indexer] Indexing stopped by user request');
@@ -349,12 +371,26 @@ export class CodeIndexer {
               lastProgressLog = indexedCount;
             }
 
+            // CRITICAL FIX: Yield after every file (or batch) to keep MCP server responsive
+            // This prevents Claude's client from killing the "unresponsive" server
+            // Without this, the server blocks during indexing and gets restarted at ~17% progress
+            if (indexedCount % YIELD_BATCH_SIZE === 0) {
+              await this._yield();
+            }
+
             // FIX: Periodic cache save every 10 files to prevent data loss on interruption
             // Moved OUTSIDE progress logging condition to ensure it fires consistently
             if (indexedCount % 10 === 0) {
               try {
+                // Yield before save to ensure server can process pending messages
+                await this._yield();
+
                 await this._saveCache();
                 console.error(`[Indexer] Checkpoint: Saved cache at ${indexedCount} files`);
+
+                // Yield after save to let server respond immediately
+                await this._yield();
+
                 // FIX: Track successful checkpoints
                 this.stats.checkpointSuccesses = (this.stats.checkpointSuccesses || 0) + 1;
                 this.stats.lastCheckpointTime = Date.now();
@@ -371,11 +407,11 @@ export class CodeIndexer {
               }
             }
 
-            // CRITICAL FIX: Clear in-memory cache every 100 files to prevent OOM
+            // CRITICAL FIX: Clear in-memory cache every 50 files to prevent OOM
             // The cache persists to disk, and we only need it for temporary buffering
             // VectorStore, DependencyGraph, and LexicalIndex are kept in memory
             // because they're needed for search after indexing completes
-            if (indexedCount % 100 === 0) {
+            if (indexedCount % 50 === 0) {
               const cacheSizeBefore = this.cache.embeddings.size;
               const vectorStoreStats = this.vectorStore.getStats();
               const depGraphStats = this.dependencyGraph.getStats();
@@ -397,6 +433,9 @@ export class CodeIndexer {
                 global.gc();
               }
               console.error(`[Indexer] Memory: Cleared ${cacheSizeBefore} cache embeddings at ${indexedCount} files`);
+
+              // CRITICAL: Yield after GC to let server respond
+              await this._yield();
             }
           }
         }
@@ -424,6 +463,19 @@ export class CodeIndexer {
         // Always clear indexing flag
         this._indexingInProgress = false;
         this._indexingPromise = null;
+
+        // FIX: Post-indexing cleanup to free memory
+        if (this.indexed && this.cache) {
+          const cacheSize = this.cache.embeddings.size;
+          this.cache.clear();
+
+          // Force garbage collection
+          if (global.gc) {
+            global.gc();
+          }
+
+          console.error(`[Indexer] Cleared ${cacheSize} cached embeddings after indexing`);
+        }
       }
     })();
 
@@ -440,6 +492,36 @@ export class CodeIndexer {
     const relPath = relative(this.projectRoot, filePath);
 
     try {
+      // CRITICAL: Check memory before indexing each file
+      // Prevents OOM crashes during large indexing operations
+      const mem = process.memoryUsage();
+      const heapUsedMB = mem.heapUsed / 1024 / 1024;
+      // FIX: Use fixed limit (6GB) instead of heapTotal (which is only ~131MB initially)
+      // The --max-old-space-size=8192 gives us 8GB, so use 6GB as safety limit
+      const heapLimitMB = 6144; // 6GB
+
+      // Warn at 75% of heap limit
+      if (heapUsedMB > heapLimitMB * 0.75) {
+        console.warn(`[Indexer] ⚠️  High memory usage: ${heapUsedMB.toFixed(0)}MB / ${heapLimitMB.toFixed(0)}MB`);
+
+        // Force garbage collection if available
+        if (global.gc) {
+          global.gc();
+          const newMem = process.memoryUsage();
+          console.warn(`[Indexer] After GC: ${(newMem.heapUsed / 1024 / 1024).toFixed(0)}MB`);
+        }
+      }
+
+      // Abort at 90% of heap limit
+      if (heapUsedMB > heapLimitMB * 0.90) {
+        throw new Error(
+          `Memory limit exceeded (${heapUsedMB.toFixed(0)}MB / ${heapLimitMB.toFixed(0)}MB). ` +
+          'Aborting indexing to prevent OOM crash. ' +
+          `Progress: ${this.stats.filesIndexed} files indexed. ` +
+          'Use --max-chunks flag to limit indexing scope.'
+        );
+      }
+
       // Invalidate old cache for this file FIRST
       // This ensures we don't have stale data if read fails
       this.cache.invalidateFile(relPath);
@@ -725,17 +807,99 @@ export class CodeIndexer {
   }
 
   /**
+   * Initialize VectorStore with adapter factory (SQLite or Memory fallback)
+   * Checks for existing database and recovers VectorStore state
+   * @private
+   */
+  async _initializeVectorStore() {
+    // CRITICAL FIX: Use adapter factory for automatic fallback
+    // This handles native module issues gracefully
+    if (!this.vectorStore.dbPath) {
+      console.error('[Indexer] No dbPath provided, using in-memory Map storage');
+      return;
+    }
+
+    const dbExists = existsSync(this.vectorStore.dbPath);
+    if (dbExists) {
+      console.error(`[Indexer] Found existing database: ${this.vectorStore.dbPath}`);
+    } else {
+      console.error(`[Indexer] Creating new database: ${this.vectorStore.dbPath}`);
+    }
+
+    // Use factory to create appropriate adapter (SQLite or Memory fallback)
+    try {
+      const { adapter, type } = await createVectorAdapter({
+        preferNative: true,
+        dbPath: this.vectorStore.dbPath,
+        dimension: this.vectorStore.dimension,
+      });
+
+      console.error(`[Indexer] Using ${type} adapter for vector storage`);
+
+      // Recover VectorStore state or enable adapter mode for fresh database
+      const stats = adapter.getStats();
+      const recovered = this.vectorStore.initialize({ adapter });
+
+      // CRITICAL FIX: Always use adapter when available, even if empty
+      // This ensures consistent storage behavior
+      if (!this.vectorStore.useSqlite) {
+        console.error(`[Indexer] Enabling ${type} adapter mode`);
+        this.vectorStore.adapter = adapter;
+        this.vectorStore.useSqlite = true;
+        this.vectorStore.chunkCount = stats.chunkCount || 0;
+        this.vectorStore.vectors.clear();
+        this.vectorStore.metadata.clear();
+      }
+
+      if (recovered && stats.chunkCount > 0) {
+        console.error(
+          `[Indexer] Successfully recovered ${stats.chunkCount} chunks from ${type} storage`
+        );
+      } else {
+        console.error(`[Indexer] ${type} adapter ready for new embeddings`);
+      }
+
+      // Log storage type for debugging
+      if (type === 'memory') {
+        console.warn('[Indexer] Note: Using in-memory storage (no persistence). ' +
+          'Set RC_FORCE_MEMORY_STORE=true to suppress this warning.');
+      }
+    } catch (error) {
+      console.error(`[Indexer] Failed to initialize vector adapter: ${error.message}`);
+      console.error('[Indexer] Falling back to basic Map storage');
+    }
+  }
+
+  /**
    * Load cached chunks with periodic yielding to maintain responsiveness
    * This prevents the MCP server from appearing "frozen" during cache loading
    */
   async _loadCachedChunks(filePaths) {
+    // CRITICAL FIX: Skip cache loading if SQLite already has the data
+    // This prevents double-loading and OOM crashes
+    if (this.vectorStore.useSqlite && this.vectorStore.adapter) {
+      const stats = this.vectorStore.adapter.getStats();
+      if (stats.chunkCount > 0) {
+        console.error(
+          `[Indexer] SQLite has ${stats.chunkCount} chunks, skipping cache load to prevent double-loading`
+        );
+        console.error(`[Indexer] Cache loading skipped: ${filePaths.length} files already in SQLite`);
+        return; // Skip entirely - SQLite is the source of truth
+      }
+    }
+
+    // CRITICAL FIX: Use streaming approach for lexical index to prevent OOM
+    // Instead of collecting all chunks in memory, index them in batches
+    const LEXICAL_BATCH_SIZE = 1000; // Index 1000 chunks at a time, then clear
     const chunksToIndexLexically = [];
     const totalFiles = filePaths.length;
     const progressInterval = Math.max(1, Math.floor(totalFiles / 10)); // Log ~10 progress updates
     let processedFiles = 0;
     let lastProgressLog = 0;
+    let totalChunksLexical = 0;
 
     console.error(`[Indexer] Loading ${totalFiles} cached files with progressive yielding...`);
+    console.error(`[Indexer] Using batch size ${LEXICAL_BATCH_SIZE} for lexical indexing to prevent OOM`);
 
     for (const relPath of filePaths) {
       try {
@@ -799,7 +963,7 @@ export class CodeIndexer {
               ...chunkData,
             });
 
-            // Collect chunk for lexical indexing
+            // Collect chunk for lexical indexing (with batch limit)
             chunksToIndexLexically.push({
               id: chunkId,
               text: chunkData.text,
@@ -807,6 +971,22 @@ export class CodeIndexer {
             });
 
             this.stats.chunksIndexed++;
+
+            // CRITICAL FIX: Index in batches and clear array to prevent OOM
+            // When we reach the batch size, index the current batch and clear
+            if (chunksToIndexLexically.length >= LEXICAL_BATCH_SIZE) {
+              this.lexicalIndex.index(chunksToIndexLexically);
+              totalChunksLexical += chunksToIndexLexically.length;
+              chunksToIndexLexically.length = 0; // Clear the array
+
+              // Yield after batch to let server respond
+              await this._yield();
+
+              // Force garbage collection if available to free memory
+              if (global.gc) {
+                global.gc();
+              }
+            }
           }
         }
 
@@ -827,7 +1007,7 @@ export class CodeIndexer {
         if (processedFiles - lastProgressLog >= progressInterval || processedFiles === totalFiles) {
           const progress = ((processedFiles / totalFiles) * 100).toFixed(1);
           console.error(
-            `[Indexer] Cache loading progress: ${processedFiles}/${totalFiles} files (${progress}%), ${this.stats.chunksIndexed} chunks`
+            `[Indexer] Cache loading progress: ${processedFiles}/${totalFiles} files (${progress}%), ${this.stats.chunksIndexed} chunks, ${totalChunksLexical} lexically indexed`
           );
           lastProgressLog = processedFiles;
         }
@@ -838,10 +1018,14 @@ export class CodeIndexer {
       }
     }
 
-    // Index all cached chunks in lexical index (batch operation)
+    // Index any remaining chunks in lexical index (final batch)
     if (chunksToIndexLexically.length > 0) {
       this.lexicalIndex.index(chunksToIndexLexically);
+      totalChunksLexical += chunksToIndexLexically.length;
+      chunksToIndexLexically.length = 0;
     }
+
+    console.error(`[Indexer] Lexical indexing complete: ${totalChunksLexical} chunks indexed`);
   }
 
   /**
@@ -1405,6 +1589,55 @@ export class CodeIndexer {
   }
 
   /**
+   * Close the indexer and release resources
+   * Closes SQLite adapter if active, stops watcher
+   */
+  async close() {
+    console.error('[Indexer] Closing indexer...');
+
+    // FIX: Dispose embeddings instance to free 100MB-500MB
+    if (this.embeddings && this.embeddings.transformersPipeline) {
+      try {
+        // Wait for any pending initialization
+        if (this.embeddings.initPromises) {
+          const promises = Array.from(this.embeddings.initPromises.values());
+          await Promise.allSettled(promises);
+          this.embeddings.initPromises.clear();
+        }
+
+        // Dispose the pipeline
+        await this.embeddings.transformersPipeline.dispose();
+        this.embeddings.transformersPipeline = null;
+        console.error('[Indexer] Disposed embeddings pipeline');
+      } catch (error) {
+        console.error(`[Indexer] Error disposing embeddings: ${error.message}`);
+      }
+    }
+
+    // Close SQLite adapter if active
+    if (this.vectorStore.adapter) {
+      try {
+        this.vectorStore.adapter.close();
+        console.error('[Indexer] Closed SQLite adapter');
+      } catch (error) {
+        console.error(`[Indexer] Error closing SQLite adapter: ${error.message}`);
+      }
+    }
+
+    // Stop file watcher if active
+    if (this.watcher) {
+      try {
+        await this.watcher.stop();
+        console.error('[Indexer] Stopped file watcher');
+      } catch (error) {
+        console.error(`[Indexer] Error stopping watcher: ${error.message}`);
+      }
+    }
+
+    console.error('[Indexer] Indexer closed');
+  }
+
+  /**
    * Export all index data
    */
   export() {
@@ -1422,11 +1655,13 @@ export class CodeIndexer {
    */
   _formatStats() {
     const stats = this.stats;
+    const mem = process.memoryUsage();
     return [
       `Files: ${stats.filesIndexed} indexed, ${stats.filesFromCache} from cache, ${stats.filesSkipped} skipped`,
       `Chunks: ${stats.chunksIndexed}`,
       `Source: ${stats.embeddingSource}`,
       `Time: ${(stats.indexTime / 1000).toFixed(2)}s`,
+      `Memory: ${(mem.heapUsed / 1024 / 1024).toFixed(0)}MB heap / ${(mem.heapTotal / 1024 / 1024).toFixed(0)}MB total`,
     ].join(', ');
   }
 

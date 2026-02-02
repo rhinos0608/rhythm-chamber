@@ -31,6 +31,7 @@ export class SqliteVectorAdapter {
     this._dimension = DEFAULT_DIM;
     this._initialized = false;
     this._statements = null; // CRITICAL FIX #3: Cache prepared statements
+    this.type = 'sqlite'; // Type identifier for adapter detection
   }
 
   /**
@@ -146,6 +147,11 @@ export class SqliteVectorAdapter {
 
       // Stats statements
       countChunks: this._db.prepare('SELECT COUNT(*) as count FROM vec_chunks'),
+
+      // Get files statement
+      getFiles: this._db.prepare(
+        'SELECT DISTINCT file FROM chunk_metadata WHERE file IS NOT NULL ORDER BY file'
+      ),
     };
 
     console.log('[SqliteAdapter] Prepared and cached SQL statements');
@@ -399,7 +405,36 @@ export class SqliteVectorAdapter {
       chunkCount: countResult?.count || 0,
       dimension: this._dimension,
       dbPath: this._dbPath,
+      storageType: 'sqlite',
     };
+  }
+
+  /**
+   * Get all unique files from metadata
+   * @returns {Array<string>} Array of unique file paths
+   */
+  getFiles() {
+    if (!this._initialized) {
+      return [];
+    }
+
+    const rows = this._statements.getFiles.all();
+    return rows.map(row => row.file);
+  }
+
+  /**
+   * Get chunks by file path
+   * @param {string} filePath - File path to get chunks for
+   * @returns {Array<Object>} Array of chunk IDs for the file
+   */
+  getChunksByFile(filePath) {
+    if (!this._initialized) {
+      return [];
+    }
+
+    const stmt = this._db.prepare('SELECT chunk_id FROM chunk_metadata WHERE file = ?');
+    const rows = stmt.all(filePath);
+    return rows.map(row => ({ chunkId: row.chunk_id }));
   }
 
   /**

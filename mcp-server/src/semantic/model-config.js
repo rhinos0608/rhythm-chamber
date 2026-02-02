@@ -190,12 +190,12 @@ export class ModelConfigManager {
         dimension,
         isCompatible: dimension === 768, // EMBEDDING_DIMENSION
         type: name.includes('jina') ? 'code' :
-              name.includes('gte') ? 'general' :
-              name.includes('nomic') ? 'code' : 'general',
+          name.includes('gte') ? 'general' :
+            name.includes('nomic') ? 'code' : 'general',
         provider: name.startsWith('Xenova/') ? 'transformers' :
-                   name.startsWith('jinaai/') ? 'transformers' :
-                   name.startsWith('text-embedding-') ? 'lmstudio' :
-                   name.includes('/') ? 'cloud' : 'local',
+          name.startsWith('jinaai/') ? 'transformers' :
+            name.startsWith('text-embedding-') ? 'lmstudio' :
+              name.includes('/') ? 'cloud' : 'local',
       };
     }
     return models;

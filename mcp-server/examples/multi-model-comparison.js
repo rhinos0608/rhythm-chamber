@@ -186,7 +186,7 @@ async function main() {
   }
 
   if (report.comparison.anomalies) {
-    console.error(`Anomaly Detection (threshold: 0.5):`);
+    console.error('Anomaly Detection (threshold: 0.5):');
     console.error(`  Total Chunks: ${report.comparison.anomalies.total}`);
     console.error(`  Anomalies Found: ${report.comparison.anomalies.anomaliesFound}`);
     console.error(`  Anomaly Rate: ${(report.comparison.anomalies.anomalyRate * 100).toFixed(1)}%`);

@@ -15,6 +15,28 @@
 export const EMBEDDING_DIMENSION = 768;
 
 // =============================================================================
+// VECTOR STORE CONFIGURATION
+// =============================================================================
+// Controls vector storage backend selection and fallback behavior.
+//
+// Environment variables:
+// - RC_PREFER_NATIVE_SQLITE: 'true' to prefer SQLite, 'false' to skip SQLite
+// - RC_FORCE_MEMORY_STORE: 'true' to force pure JavaScript memory storage
+//
+// Default behavior:
+// 1. Try SQLite with native better-sqlite3 + sqlite-vec (fast, persistent)
+// 2. Fall back to MemoryVectorAdapter if SQLite fails (pure JS, no persistence)
+//
+// Use cases for forcing memory mode:
+// - Native module compilation issues (version mismatches, missing build tools)
+// - CI/CD environments where compilation is problematic
+// - Smaller codebases (< 10k chunks) where O(n) search is acceptable
+export const VECTOR_STORE_CONFIG = {
+  preferNative: process.env.RC_PREFER_NATIVE_SQLITE !== 'false',
+  forceMemory: process.env.RC_FORCE_MEMORY_STORE === 'true',
+};
+
+// =============================================================================
 // EMBEDDING MODE
 // =============================================================================
 // 'local'  - Uses Transformers.js (primary) + LM Studio (fallback)
@@ -422,6 +444,9 @@ export const BM25_CONFIG = {
  * Default export for easy import
  */
 export default {
+  // Vector store configuration
+  VECTOR_STORE_CONFIG,
+
   // Embedding configuration (NEW)
   EMBEDDING_DIMENSION,
   EMBEDDING_MODE,

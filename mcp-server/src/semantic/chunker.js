@@ -665,17 +665,29 @@ export class CodeChunker {
     const endLine = node.loc.end.line;
     const classText = sourceCode.substring(node.start, node.end);
 
+    // Get JSDoc comment if present (for classes)
+    const jsDoc = this._extractJSDoc(sourceCode, node);
+
+    // Get context for better semantic understanding
+    const context = this._extractContext(lines, startLine, endLine);
+
     // Check if class is small enough to be a single chunk
     if (classText.length <= this.maxChunkSize) {
       const methods = this._extractClassMethods(node);
       const exports = this._extractClassExports(node);
 
+      // FIX: Include JSDoc and context in text for better semantic search
+      // This matches the pattern used for functions (lines 443-451)
+      const contextBeforeText = context.before ? `// Context before:\n${context.before}\n` : '';
+      const contextAfterText = context.after ? `\n// Context after:\n${context.after}` : '';
+      const textWithContext = contextBeforeText + (jsDoc ? jsDoc + '\n' : '') + classText + contextAfterText;
+
       chunks.push({
         id: this._generateChunkId('class', node.id.name, startLine),
         type: 'class',
         name: node.id.name,
-        text: classText,
-        context: this._extractContext(lines, startLine, endLine),
+        text: textWithContext,
+        context,
         metadata: {
           file: filePath,
           startLine,
@@ -695,12 +707,21 @@ export class CodeChunker {
 
     // Create a chunk for the class declaration (extends, etc.)
     const classDeclEnd = node.body.start;
+    const classDeclText = sourceCode.substring(node.start, classDeclEnd);
+
+    // FIX: Include JSDoc and context for class declaration too
+    const classDeclJsDoc = this._extractJSDoc(sourceCode, node);
+    const classDeclContext = this._extractContext(lines, startLine, node.loc.start.line + 1);
+    const classDeclContextBefore = classDeclContext.before ? `// Context before:\n${classDeclContext.before}\n` : '';
+    const classDeclContextAfter = classDeclContext.after ? `\n// Context after:\n${classDeclContext.after}` : '';
+    const classDeclTextWithContext = classDeclContextBefore + (classDeclJsDoc ? classDeclJsDoc + '\n' : '') + classDeclText + classDeclContextAfter;
+
     chunks.push({
       id: this._generateChunkId('class', node.id.name, startLine),
       type: 'class-declaration',
       name: node.id.name,
-      text: sourceCode.substring(node.start, classDeclEnd),
-      context: this._extractContext(lines, startLine, node.loc.start.line + 1),
+      text: classDeclTextWithContext,
+      context: classDeclContext,
       metadata: {
         file: filePath,
         startLine,

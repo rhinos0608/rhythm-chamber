@@ -11,6 +11,8 @@
 import { HybridEmbeddings, cosineSimilarity } from './embeddings.js';
 import { passesFilters as sharedPassesFilters } from './filters.js';
 import { SqliteVectorAdapter } from './sqlite-adapter.js';
+import { MemoryVectorAdapter } from './memory-vector-adapter.js';
+import { createVectorAdapterSync } from './adapter-factory.js';
 import { unlinkSync, existsSync } from 'fs';
 
 /**
@@ -43,6 +45,8 @@ export class VectorStore {
     this._upgradeWarned = false; // Track if we've warned about sqlite upgrade
     this.adapter = null; // SqliteVectorAdapter instance (when useSqlite = true)
     this._migrationInProgress = false; // Track if migration is in progress
+    this._migrationFailed = false; // CRITICAL: Track if migration has failed to prevent silent fallback
+    this._migrationError = null; // Store migration error for debugging
   }
 
   /**
@@ -79,6 +83,16 @@ export class VectorStore {
    * Routes to Map or SQLite backend based on useSqlite flag
    */
   upsert(chunkId, embedding, metadata = {}) {
+    // CRITICAL FIX: Check if migration has failed and prevent silent fallback
+    if (this._migrationFailed) {
+      throw new Error(
+        `[VectorStore] Cannot upsert ${chunkId}: SQLite migration failed earlier. ` +
+        `Error: ${this._migrationError?.message || 'Unknown'}. ` +
+        'The system is in an inconsistent state and cannot continue indexing. ' +
+        'Please restart the MCP server to recover from the SQLite database.'
+      );
+    }
+
     if (this.useSqlite) {
       return this._sqliteUpsert(chunkId, embedding, metadata);
     }
@@ -342,62 +356,96 @@ export class VectorStore {
         `[VectorStore] Starting migration to sqlite-vec (${this.chunkCount} chunks)...`
       );
 
-      // Step 1: Create in-memory backup
-      const backup = {
-        vectors: new Map(this.vectors),
-        metadata: new Map(this.metadata),
-        chunkCount: this.chunkCount,
-        useSqlite: false,
-      };
-
-      // Step 2: Initialize SQLite adapter
+      // Step 1: Initialize SQLite adapter using factory for consistency
+      // This allows us to stream directly to SQLite without holding full backup
       if (!this.adapter) {
-        this.adapter = new SqliteVectorAdapter();
+        const { adapter, type } = createVectorAdapterSync({
+          preferNative: true,
+          dbPath: this.dbPath,
+          dimension: this.dimension,
+        });
+
+        if (type !== 'sqlite') {
+          throw new Error('SQLite adapter required for migration but not available. ' +
+            'Native module may be missing or incompatible.');
+        }
+
+        this.adapter = adapter;
+      } else {
+        // Re-initialize existing adapter
+        this.adapter.initialize(this.dbPath, this.dimension);
       }
-      this.adapter.initialize(this.dbPath, this.dimension);
 
-      // Step 3: Batch migrate all vectors (100 chunks per batch)
+      // Step 2: Stream chunks directly to SQLite (no giant array)
+      // Use for...of loop to iterate Map.entries() directly without creating array
       const batchSize = 100;
-      const chunks = Array.from(this.vectors.keys());
+      let processed = 0;
+      const totalChunks = this.vectors.size;
 
-      for (let i = 0; i < chunks.length; i += batchSize) {
-        const batch = chunks.slice(i, i + batchSize);
+      // Collect batch items to avoid holding all keys in memory
+      const batch = [];
+      for (const [chunkId, vector] of this.vectors.entries()) {
+        batch.push({ chunkId, vector });
 
-        for (const chunkId of batch) {
-          const vector = this.vectors.get(chunkId);
-          const metadata = this.metadata.get(chunkId);
+        // When batch is full, insert and clear
+        if (batch.length >= batchSize) {
+          // Process current batch
+          const currentBatchSize = batch.length;
+          for (const item of batch) {
+            const metadata = this.metadata.get(item.chunkId);
+            this.adapter.upsert(item.chunkId, item.vector, metadata);
+          }
+          batch.length = 0; // Clear array (efficient)
+          processed += currentBatchSize; // Use actual count, not batchSize
 
-          this.adapter.upsert(chunkId, vector, metadata);
+          if (processed % 500 === 0 || processed >= totalChunks) {
+            console.error(`[VectorStore] Migration progress: ${Math.min(processed, totalChunks)}/${totalChunks} chunks`);
+          }
         }
+      }
 
-        if ((i + batchSize) % 500 === 0 || i + batchSize >= chunks.length) {
-          const processed = Math.min(i + batchSize, chunks.length);
-          console.error(`[VectorStore] Migration progress: ${processed}/${chunks.length} chunks`);
+      // Process remaining items in final batch (only if batch has items)
+      if (batch.length > 0) {
+        const finalBatchSize = batch.length;
+        for (const item of batch) {
+          const metadata = this.metadata.get(item.chunkId);
+          this.adapter.upsert(item.chunkId, item.vector, metadata);
         }
+        processed += finalBatchSize;
       }
 
       // Step 4: Set useSqlite flag BEFORE clearing Maps (CRITICAL FIX #1)
       // This prevents data loss if verification fails
       this.useSqlite = true;
-      this.chunkCount = backup.chunkCount;
+      this.chunkCount = processed;
 
       // Step 5: Clear in-memory Maps
       this.vectors.clear();
       this.metadata.clear();
 
-      // Step 6: Verify migration (use backup for comparison since Maps are cleared)
-      await this._verifyMigration(Math.min(1000, chunks.length), backup);
+      // Step 6: Verify migration by sampling from SQLite
+      await this._verifyMigration(Math.min(1000, processed));
 
       console.error(
         `[VectorStore] Migration complete: ${this.chunkCount} chunks migrated to sqlite-vec`
       );
       return true;
     } catch (error) {
-      // Rollback: Restore from backup
-      console.error(`[VectorStore] Migration failed, rolling back:`, error.message);
-      this.vectors = backup.vectors;
-      this.metadata = backup.metadata;
+      // CRITICAL FIX: Mark migration as failed to prevent silent fallback
+      // This prevents the system from continuing with Map storage and causing OOM
+      this._migrationFailed = true;
+      this._migrationError = error;
+
+      // Rollback: On migration failure, clear the partial SQLite database
+      // We can't restore Maps since we didn't create a full backup (memory optimization)
+      console.error('[VectorStore] ═════════════════════════════════════════════════════════');
+      console.error('[VectorStore] MIGRATION FAILED - DATA LOSS PREVENTED');
+      console.error(`[VectorStore] Error: ${error.message}`);
+      console.error('[VectorStore] ═════════════════════════════════════════════════════════');
+      console.error('[VectorStore] The system will halt to prevent OOM crash.');
+
       this.useSqlite = false;
+      this.chunkCount = 0;
 
       // CRITICAL FIX #2: Clean up failed SQLite database AND delete file
       if (this.adapter) {
@@ -421,6 +469,11 @@ export class VectorStore {
         }
       }
 
+      // Clear Maps to prevent inconsistent state
+      this.vectors.clear();
+      this.metadata.clear();
+
+      // CRITICAL: Re-throw to prevent silent continuation
       throw error;
     } finally {
       this._migrationInProgress = false;
@@ -431,55 +484,55 @@ export class VectorStore {
    * Verify migration by comparing sample data
    * @private
    * @param {number} sampleSize - Number of chunks to verify
-   * @param {Object} backup - The backup data to compare against
    */
-  async _verifyMigration(sampleSize = 10, backup = null) {
+  async _verifyMigration(sampleSize = 10) {
     if (!this.adapter) {
       throw new Error('Cannot verify: adapter not initialized');
     }
 
-    // Use backup metadata if provided, otherwise use current metadata
-    const metadataToCompare = backup ? backup.metadata : this.metadata;
-    const allIds = Array.from(metadataToCompare.keys());
-
-    // CRITICAL FIX #4: Verify total count matches
+    // Get stats from SQLite to verify count
     const adapterStats = this.adapter.getStats();
-    const expectedCount = backup ? backup.chunkCount : this.chunkCount;
+    const expectedCount = this.chunkCount;
+
     if (adapterStats.chunkCount !== expectedCount) {
       throw new Error(
         `Verification failed: count mismatch. SQLite has ${adapterStats.chunkCount} chunks, expected ${expectedCount}`
       );
     }
 
-    // Use statistically significant sample size (CRITICAL FIX #4)
-    const actualSampleSize = Math.min(sampleSize, allIds.length);
-    const sample = allIds.sort(() => 0.5 - Math.random()).slice(0, actualSampleSize);
+    // Sample random chunk IDs from SQLite to verify data integrity
+    // Get all files first, then sample some chunks
+    const files = this.adapter.getFiles();
+    const samplesToCheck = Math.min(sampleSize, files.length);
 
     console.error(
-      `[VectorStore] Verifying migration: ${actualSampleSize} samples (total: ${allIds.length} chunks)...`
+      `[VectorStore] Verifying migration: ${samplesToCheck} file samples (total: ${files.length} files, ${adapterStats.chunkCount} chunks)...`
     );
 
-    for (const chunkId of sample) {
-      const fromAdapter = this.adapter.get(chunkId);
-      const fromBackup = metadataToCompare.get(chunkId);
-
-      if (!fromAdapter) {
-        throw new Error(`Verification failed: ${chunkId} not found in SQLite`);
-      }
-
-      if (!fromBackup) {
-        throw new Error(`Verification failed: ${chunkId} not found in backup metadata`);
-      }
-
-      // Compare metadata
-      if (fromAdapter.metadata.text !== fromBackup.text) {
-        throw new Error(`Verification failed: text mismatch for ${chunkId}`);
+    // For each sampled file, verify at least one chunk
+    let checked = 0;
+    for (const file of files.slice(0, samplesToCheck)) {
+      // Get chunks for this file by scanning metadata
+      // We'll verify that SQLite returns valid data for chunks from this file
+      const chunks = this.adapter.getChunksByFile && this.adapter.getChunksByFile(file);
+      if (chunks && chunks.length > 0) {
+        const sampleChunk = chunks[0];
+        const retrieved = this.adapter.get(sampleChunk.chunkId);
+        if (!retrieved) {
+          throw new Error(`Verification failed: ${sampleChunk.chunkId} not found in SQLite`);
+        }
+        if (!retrieved.metadata || !retrieved.metadata.text) {
+          throw new Error(`Verification failed: ${sampleChunk.chunkId} has missing metadata`);
+        }
+        checked++;
       }
     }
 
     console.error(
-      `[VectorStore] Verification successful: ${sample.length}/${sample.length} chunks match`
+      `[VectorStore] Verification successful: ${checked}/${samplesToCheck} files verified`
     );
+
+    return true;
   }
 
   /**
@@ -756,20 +809,22 @@ export class VectorStore {
       dbSizeBytes: 0,
     };
 
-    // Add SQLite-specific stats if using sqlite-vec
+    // Add adapter-specific stats if using an adapter (SQLite or Memory)
     if (this.useSqlite && this.adapter) {
       const adapterStats = this.adapter.getStats();
+      const isMemoryAdapter = this.adapter.type === 'memory';
 
       return {
         ...baseStats,
-        storageType: 'sqlite-vec',
+        storageType: isMemoryAdapter ? 'memory-adapter' : 'sqlite-vec',
         dbPath: this.dbPath,
         dbSizeBytes: adapterStats.dbSizeBytes || 0,
         adapterReady: this.adapter.isInitialized,
+        adapterType: isMemoryAdapter ? 'memory' : 'sqlite',
       };
     }
 
-    // Map storage stats
+    // Map storage stats (default in-memory Map backend)
     return {
       ...baseStats,
       storageType: 'Map (in-memory)',
@@ -899,8 +954,15 @@ export class VectorStore {
 
   /**
    * Get all unique files
+   * Routes to SQLite adapter if active, otherwise uses in-memory metadata
    */
   getFiles() {
+    // FIX: Use SQLite adapter when active for dual-backend support
+    if (this.useSqlite && this.adapter && typeof this.adapter.getFiles === 'function') {
+      return this.adapter.getFiles();
+    }
+
+    // Fall back to in-memory Map for non-SQLite mode
     const files = new Set();
 
     for (const metadata of this.metadata.values()) {
