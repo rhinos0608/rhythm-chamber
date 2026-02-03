@@ -25,9 +25,9 @@ export const schema = {
       limit: {
         type: 'number',
         description: 'Maximum number of results to return',
-        default: 10,
+        default: 5,
         minimum: 1,
-        maximum: 50,
+        maximum: 20,
       },
       threshold: {
         type: 'number',
@@ -36,6 +36,18 @@ export const schema = {
         default: 0.3,
         minimum: 0,
         maximum: 1,
+      },
+      maxChars: {
+        type: 'number',
+        description: 'Maximum characters per code snippet (prevents OOM)',
+        default: 300,
+        minimum: 100,
+        maximum: 1000,
+      },
+      summaryMode: {
+        type: 'boolean',
+        description: 'Return compact summary instead of full code snippets',
+        default: true,
       },
       filters: {
         type: 'object',
@@ -75,7 +87,7 @@ export const schema = {
  * Handle tool execution
  */
 export const handler = async (args, projectRoot, indexer, server) => {
-  const { query, limit = 10, threshold = 0.3, filters = {} } = args;
+  const { query, limit = 5, threshold = 0.3, maxChars = 300, summaryMode = true, filters = {} } = args;
 
   // Check if indexer is available
   if (!indexer) {
@@ -203,7 +215,7 @@ The semantic search index is empty. This could mean:
       content: [
         {
           type: 'text',
-          text: formatResults(query, results, stats),
+          text: formatResults(query, results, stats, { maxChars, summaryMode }),
         },
       ],
       metadata: {
@@ -237,9 +249,16 @@ An error occurred while performing semantic search:
 };
 
 /**
- * Format search results
+ * Format search results with payload caps
+ * @param {string} query - Search query
+ * @param {Array} results - Search results
+ * @param {Object} stats - Index statistics
+ * @param {Object} options - Formatting options
+ * @param {number} options.maxChars - Max characters per snippet
+ * @param {boolean} options.summaryMode - Use compact summary format
  */
-function formatResults(query, results, stats) {
+function formatResults(query, results, stats, options = {}) {
+  const { maxChars = 300, summaryMode = true } = options;
   const lines = [];
 
   lines.push('# Semantic Search Results');
@@ -260,6 +279,21 @@ function formatResults(query, results, stats) {
     byFile.get(file).push(result);
   }
 
+  // SUMMARY MODE: Compact one-line per result format
+  if (summaryMode) {
+    lines.push('**Matches:**');
+    for (const result of results) {
+      const { chunkId, similarity, metadata } = result;
+      const location = metadata.startLine ? `:${metadata.startLine}` : '';
+      const exported = metadata.exported ? ' 📤' : '';
+      lines.push(
+        `- \`${metadata.name || 'unnamed'}\`${exported} ${formatSimilarity(similarity)} → ${metadata.file || 'unknown'}${location}`
+      );
+    }
+    return lines.join('\n');
+  }
+
+  // FULL MODE: Detailed output with code snippets (respecting maxChars)
   for (const [file, fileResults] of byFile.entries()) {
     lines.push(`## ${file}`);
     lines.push('');
@@ -285,39 +319,39 @@ function formatResults(query, results, stats) {
 
       lines.push('');
 
-      // Show context before (if available)
+      // Show context before (if available) - respect maxChars
       const contextBefore = result.metadata?.contextBefore;
       if (contextBefore && contextBefore.trim().length > 0) {
         lines.push('**Context (before):**');
         lines.push('```javascript');
-        lines.push(contextBefore.trim().substring(0, 300));
-        if (contextBefore.length > 300) {
+        lines.push(contextBefore.trim().substring(0, maxChars));
+        if (contextBefore.length > maxChars) {
           lines.push('...');
         }
         lines.push('```');
         lines.push('');
       }
 
-      // Show code snippet
+      // Show code snippet - respect maxChars
       const snippet = result.metadata?.text || '';
       if (snippet) {
         lines.push('**Code:**');
         lines.push('```javascript');
-        lines.push(snippet.substring(0, 500));
-        if (snippet.length > 500) {
+        lines.push(snippet.substring(0, maxChars));
+        if (snippet.length > maxChars) {
           lines.push('...');
         }
         lines.push('```');
         lines.push('');
       }
 
-      // Show context after (if available)
+      // Show context after (if available) - respect maxChars
       const contextAfter = result.metadata?.contextAfter;
       if (contextAfter && contextAfter.trim().length > 0) {
         lines.push('**Context (after):**');
         lines.push('```javascript');
-        lines.push(contextAfter.trim().substring(0, 300));
-        if (contextAfter.length > 300) {
+        lines.push(contextAfter.trim().substring(0, maxChars));
+        if (contextAfter.length > maxChars) {
           lines.push('...');
         }
         lines.push('```');

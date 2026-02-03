@@ -459,6 +459,18 @@ class RhythmChamberMCPServer {
 async function main() {
   console.error('[Rhythm Chamber MCP] Starting Rhythm Chamber MCP Server v0.1.0');
 
+  // OOM DIAGNOSTICS: Log actual runtime environment
+  const v8 = await import('v8');
+  const heapStats = v8.getHeapStatistics();
+  console.error('[Rhythm Chamber MCP] Runtime Diagnostics:', {
+    nodeVersion: process.version,
+    execPath: process.execPath,
+    execArgv: process.execArgv.join(' ') || '(none)',
+    nodeOptions: process.env.NODE_OPTIONS || '(not set)',
+    heapLimit: `${(heapStats.heap_size_limit / 1024 / 1024).toFixed(0)} MB`,
+    heapTotal: `${(process.memoryUsage().heapTotal / 1024 / 1024).toFixed(0)} MB`,
+  });
+
   const mcpServer = new RhythmChamberMCPServer();
 
   // Store instance globally for error handlers

@@ -152,9 +152,12 @@ export class ModelConfigManager {
     // Validate all models
     const invalid = models.filter(m => !MODEL_DIMENSIONS[m]);
     if (invalid.length > 0) {
+      // OOM FIX: Truncate error message to prevent unbounded growth from user input
+      const sampleInvalid = invalid.slice(0, 10);
+      const truncatedMsg = invalid.length > 10 ? ` and ${invalid.length - 10} more` : '';
       return {
         success: false,
-        error: `Unknown model(s): ${invalid.join(', ')}`,
+        error: `Unknown model(s): ${sampleInvalid.join(', ')}${truncatedMsg}`,
       };
     }
 

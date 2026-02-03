@@ -107,6 +107,18 @@ export class SqliteVectorAdapter {
       );
     `);
 
+    // Create file_index table for incremental resume support
+    // Tracks which files have been indexed and their modification times
+    this._db.exec(`
+      CREATE TABLE IF NOT EXISTS file_index (
+        file TEXT PRIMARY KEY,
+        mtime INTEGER NOT NULL,
+        chunk_count INTEGER NOT NULL DEFAULT 0,
+        indexed_at INTEGER NOT NULL,
+        model_version TEXT
+      );
+    `);
+
     console.log('[SqliteAdapter] Created vec0 tables');
   }
 
@@ -152,6 +164,31 @@ export class SqliteVectorAdapter {
       getFiles: this._db.prepare(
         'SELECT DISTINCT file FROM chunk_metadata WHERE file IS NOT NULL ORDER BY file'
       ),
+
+      // File index statements for incremental resume
+      getFileIndex: this._db.prepare(
+        'SELECT mtime, chunk_count, indexed_at, model_version FROM file_index WHERE file = ?'
+      ),
+      upsertFileIndex: this._db.prepare(`
+        INSERT INTO file_index (file, mtime, chunk_count, indexed_at, model_version)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(file) DO UPDATE SET
+          mtime = excluded.mtime,
+          chunk_count = excluded.chunk_count,
+          indexed_at = excluded.indexed_at,
+          model_version = excluded.model_version
+      `),
+      removeFileIndex: this._db.prepare('DELETE FROM file_index WHERE file = ?'),
+      getAllFileIndexes: this._db.prepare('SELECT file, mtime, chunk_count FROM file_index'),
+
+      // Batch delete statements for file cleanup
+      deleteVecChunksByFile: this._db.prepare(`
+        DELETE FROM vec_chunks
+        WHERE chunk_id IN (
+          SELECT chunk_id FROM chunk_metadata WHERE file = ?
+        )
+      `),
+      deleteMetadataByFile: this._db.prepare('DELETE FROM chunk_metadata WHERE file = ?'),
     };
 
     console.log('[SqliteAdapter] Prepared and cached SQL statements');
@@ -435,6 +472,129 @@ export class SqliteVectorAdapter {
     const stmt = this._db.prepare('SELECT chunk_id FROM chunk_metadata WHERE file = ?');
     const rows = stmt.all(filePath);
     return rows.map(row => ({ chunkId: row.chunk_id }));
+  }
+
+  /**
+   * Get file index state for incremental resume
+   * @param {string} filePath - File path to check
+   * @returns {Object|null} File index state {mtime, chunkCount, indexedAt, modelVersion} or null
+   */
+  getFileIndexState(filePath) {
+    if (!this._initialized) {
+      return null;
+    }
+
+    const row = this._statements.getFileIndex.get(filePath);
+    if (!row) {
+      return null;
+    }
+
+    return {
+      mtime: row.mtime,
+      chunkCount: row.chunk_count,
+      indexedAt: row.indexed_at,
+      modelVersion: row.model_version,
+    };
+  }
+
+  /**
+   * Update file index after successfully indexing a file
+   * @param {string} filePath - File path that was indexed
+   * @param {number} mtime - File modification time
+   * @param {number} chunkCount - Number of chunks indexed
+   * @param {string} modelVersion - Embedding model version
+   */
+  updateFileIndex(filePath, mtime, chunkCount, modelVersion) {
+    if (!this._initialized) {
+      console.warn(`[SqliteAdapter] Cannot update file index for ${filePath}: adapter not initialized`);
+      return;
+    }
+
+    // Validate and sanitize modelVersion
+    const version = typeof modelVersion === 'string' && modelVersion ? modelVersion : 'unknown';
+
+    this._statements.upsertFileIndex.run(filePath, mtime, chunkCount, Date.now(), version);
+  }
+
+  /**
+   * Remove file from index (when file is deleted or needs re-indexing)
+   * @param {string} filePath - File path to remove
+   */
+  removeFileIndex(filePath) {
+    if (!this._initialized) {
+      return;
+    }
+
+    this._statements.removeFileIndex.run(filePath);
+  }
+
+  /**
+   * Delete all chunks and metadata for a specific file (batch operation)
+   * More efficient than calling delete() for each chunk individually
+   * @param {string} filePath - File path to delete all chunks for
+   */
+  deleteChunksByFile(filePath) {
+    if (!this._initialized) {
+      return;
+    }
+
+    // Use cached prepared statements for parameter binding
+    // Use transaction for atomic batch delete
+    this._db.transaction(() => {
+      this._statements.deleteVecChunksByFile.run(filePath);
+      this._statements.deleteMetadataByFile.run(filePath);
+    })();
+
+    console.log(`[SqliteAdapter] Deleted all chunks for file: ${filePath}`);
+  }
+
+  /**
+   * Get all file indexes for resume progress tracking
+   * @returns {Array<Object>} Array of {file, mtime, chunkCount}
+   */
+  getAllFileIndexes() {
+    if (!this._initialized) {
+      return [];
+    }
+
+    const rows = this._statements.getAllFileIndexes.all();
+    return rows.map(row => ({
+      file: row.file,
+      mtime: row.mtime,
+      chunkCount: row.chunk_count,
+    }));
+  }
+
+  /**
+   * Clear the file index table (for force reindex)
+   * This removes all file tracking entries to force a complete reindex
+   */
+  clearFileIndex() {
+    if (!this._initialized) {
+      return;
+    }
+
+    this._db.exec('DELETE FROM file_index');
+    console.log('[SqliteAdapter] Cleared file_index table');
+  }
+
+  /**
+   * Clear all data (file_index, vec_chunks, chunk_metadata)
+   * Used for force reindex to start completely fresh
+   * Wrapped in transaction for atomicity
+   */
+  clearAll() {
+    if (!this._initialized) {
+      return;
+    }
+
+    // Wrap in transaction to ensure all deletes succeed atomically
+    this._db.transaction(() => {
+      this._db.exec('DELETE FROM file_index');
+      this._db.exec('DELETE FROM vec_chunks');
+      this._db.exec('DELETE FROM chunk_metadata');
+    })();
+    console.log('[SqliteAdapter] Cleared all tables (file_index, vec_chunks, chunk_metadata)');
   }
 
   /**

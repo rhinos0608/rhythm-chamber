@@ -511,6 +511,50 @@ function formatComplianceReport(results) {
   lines.push('- ❌ Never write directly from non-primary tabs');
   lines.push('');
 
+  // OOM FIX #3: Detect and prevent large joins that cause heap crashes
+  // The crash: ArrayPrototypeJoin with 4000+ violations causes OOM at 4GB
+  const MAX_JOIN_BYTES = 1_000_000; // 1MB threshold for safe join
+  const MAX_JOIN_LINES = 10000; // Fallback line count limit
+
+  const arrayLength = lines.length;
+  console.error(`[Validation] Pre-join check: ${arrayLength} lines in output array`);
+
+  if (arrayLength > MAX_JOIN_LINES) {
+    console.error(
+      `[Validation] ⚠️  Line count (${arrayLength}) exceeds limit (${MAX_JOIN_LINES}), truncating output`
+    );
+    lines.length = MAX_JOIN_LINES;
+    lines.push('');
+    lines.push(`... (output truncated: ${arrayLength - MAX_JOIN_LINES} additional lines omitted)`);
+    lines.push('');
+  }
+
+  // Sample first 100 lines to estimate total size
+  const SAMPLE_SIZE = Math.min(100, lines.length);
+  let sampleBytes = 0;
+  for (let i = 0; i < SAMPLE_SIZE; i++) {
+    sampleBytes += Buffer.byteLength(lines[i], 'utf8') + 1; // +1 for newline
+  }
+  const avgLineBytes = sampleBytes / SAMPLE_SIZE;
+  const projectedBytes = lines.length * (avgLineBytes + 1);
+
+  console.error(
+    `[Validation] Projected output size: ${(projectedBytes / 1024).toFixed(1)}KB ` +
+    `(avg line: ${avgLineBytes.toFixed(0)} bytes, ${lines.length} lines)`
+  );
+
+  if (projectedBytes > MAX_JOIN_BYTES) {
+    const maxSafeLines = Math.floor(MAX_JOIN_BYTES / (avgLineBytes + 1));
+    console.error(
+      `[Validation] ⚠️  Projected size (${(projectedBytes / 1024).toFixed(1)}KB) exceeds threshold ` +
+      `(${(MAX_JOIN_BYTES / 1024).toFixed(1)}KB), truncating to ${maxSafeLines} lines`
+    );
+    lines.length = maxSafeLines;
+    lines.push('');
+    lines.push(`... (output truncated to prevent OOM: ${arrayLength - maxSafeLines} lines omitted)`);
+    lines.push('');
+  }
+
   return lines.join('\n');
 }
 
