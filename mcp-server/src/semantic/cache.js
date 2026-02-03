@@ -15,7 +15,9 @@ import { Mutex } from 'async-mutex';
  * Current cache format version
  * Increment this when cache structure changes incompatibly
  */
-const CACHE_VERSION = 3; // v3: Metadata-only cache (vectors in SQLite, not JSON)
+// v3: supports metadata-only mode when SQLite is active (embeddings stored in DB).
+// In memory-mode (SQLite disabled/unavailable), embeddings are still persisted to JSON.
+const CACHE_VERSION = 3;
 
 /**
  * Default cache filename
@@ -160,11 +162,89 @@ export class EmbeddingCache {
         }
       }
 
-      // Restore embeddings
-      // METADATA-ONLY MODE (v3): Skip loading embeddings - they're in SQLite
-      // Cache only stores file metadata: mtime, chunkIds, counts
-      if (data.embeddings && Object.keys(data.embeddings).length > 0) {
-        console.warn(`[Cache] Skipping ${Object.keys(data.embeddings).length} cached embeddings (v3: using SQLite instead)`);
+      // Restore embeddings (optional)
+      if (data.embeddings) {
+        const totalCount = Object.keys(data.embeddings).length;
+
+        if (totalCount > 0) {
+          // Skip loading embeddings when SQLite is the source of truth.
+          if (this.sqliteActive) {
+            console.warn(
+              `[Cache] Skipping ${totalCount} cached embeddings (SQLite active - embeddings stored in DB)`
+            );
+          } else {
+            let loadedCount = 0;
+            let corruptedCount = 0;
+            let recoveredCount = 0;
+
+            for (const [chunkId, chunkData] of Object.entries(data.embeddings)) {
+              // JSON object keys are strings; keep our map keys normalized to string.
+              // Validate and convert embedding to Float32Array
+              if (chunkData.embedding) {
+                if (Array.isArray(chunkData.embedding)) {
+                  // Standard array format - convert to Float32Array
+                  chunkData.embedding = new Float32Array(chunkData.embedding);
+                } else if (
+                  typeof chunkData.embedding === 'object' &&
+                  !Array.isArray(chunkData.embedding)
+                ) {
+                  // Corrupted cache: object with numeric keys instead of array
+                  // This happens when Float32Array was serialized without Array.from()
+                  // RECOVERY: Convert object with numeric keys back to array
+                  const keys = Object.keys(chunkData.embedding);
+                  if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
+                    // Valid numeric keys - recover the embedding
+                    const maxIndex = Math.max(...keys.map(k => parseInt(k, 10)));
+                    const recovered = new Float32Array(maxIndex + 1);
+                    for (const [idx, val] of Object.entries(chunkData.embedding)) {
+                      recovered[parseInt(idx, 10)] = val;
+                    }
+                    chunkData.embedding = recovered;
+                    recoveredCount++;
+                  } else {
+                    // Truly corrupted - cannot recover
+                    corruptedCount++;
+                    delete data.embeddings[chunkId];
+                    continue;
+                  }
+                } else if (chunkData.embedding instanceof Float32Array) {
+                  // Already Float32Array (shouldn't happen from JSON but handle it)
+                  // Already in correct format, nothing to do
+                } else {
+                  console.warn(
+                    `[Cache] Unexpected embedding type for ${chunkId}: ${typeof chunkData.embedding}`
+                  );
+                  corruptedCount++;
+                  delete data.embeddings[chunkId];
+                  continue;
+                }
+              }
+
+              this.embeddings.set(String(chunkId), chunkData);
+              loadedCount++;
+            }
+
+            // Log recovery and corruption statistics for visibility
+            if (recoveredCount > 0) {
+              console.error(
+                `[Cache] Recovered ${recoveredCount} embeddings from object format (Float32Array serialization bug)`
+              );
+              this.dirty = true; // Mark dirty to save repaired cache
+            }
+            if (corruptedCount > 0) {
+              const corruptionRate = ((corruptedCount / totalCount) * 100).toFixed(1);
+              console.error(
+                `[Cache] WARNING: ${corruptedCount}/${totalCount} embeddings corrupted and discarded (${corruptionRate}%)`
+              );
+              console.error('[Cache] Corrupted embeddings will be regenerated on next indexing run');
+              this.dirty = true; // Mark dirty to save cleaned cache
+            }
+
+            console.error(
+              `[Cache] Loaded ${loadedCount} embeddings from cache${recoveredCount > 0 ? ` (${recoveredCount} recovered)` : ''}`
+            );
+          }
+        }
       }
 
       return true;
@@ -524,18 +604,48 @@ export class EmbeddingCache {
 
           await streamWrite('"embeddings":{');
 
-          // METADATA-ONLY MODE (v3): Never serialize embeddings to JSON
-          // Embeddings are stored in SQLite - cache only tracks file metadata
-          // This prevents OOM regardless of storage backend
-          console.error('[Cache] v3 metadata-only mode - skipping embedding serialization');
-          // Empty embeddings object - SQLite is the source of truth
+          if (this.sqliteActive) {
+            // METADATA-ONLY MODE: Never serialize embeddings to JSON when SQLite is active.
+            // The SQLite database is the source of truth for embeddings.
+            if (DEBUG_CACHE_SAVE) {
+              console.error('[Cache] SQLite active - skipping embedding serialization');
+            }
+          } else {
+            // Serialize embeddings to JSON (memory-mode / no SQLite persistence).
+            let wroteAny = false;
+            const EMBEDDINGS_BATCH_SIZE = 50;
+            let batchCount = 0;
+
+            for (const [chunkId, embData] of this.embeddings.entries()) {
+              const serializable = { ...embData };
+              if (serializable.embedding instanceof Float32Array) {
+                serializable.embedding = Array.from(serializable.embedding);
+              }
+
+              const prefix = wroteAny ? ',' : '';
+              wroteAny = true;
+
+              await streamWrite(
+                prefix + JSON.stringify(String(chunkId)) + ':' + JSON.stringify(serializable)
+              );
+
+              batchCount++;
+              if (batchCount >= EMBEDDINGS_BATCH_SIZE) {
+                batchCount = 0;
+                if (global.gc) {
+                  global.gc();
+                }
+                await new Promise(resolve => setTimeout(resolve, 0));
+              }
+            }
+          }
 
           // Close JSON document
           await streamWrite('}}');
           await streamEnd();
 
           const writeMs = Date.now() - writeStart;
-          console.error(`[Cache] Saved metadata-only cache (${Object.keys(data.files).length} files, ${writeMs}ms)`);
+          console.error(`[Cache] Saved cache (${Object.keys(data.files).length} files, ${writeMs}ms)`);
 
           // CRITICAL: Sync to disk to ensure data is actually written
           // FIX: Close the datasync handle BEFORE renaming to avoid filesystem issues
@@ -565,15 +675,19 @@ export class EmbeddingCache {
               await validationHandle.close();
 
               const headerStr = headerBuffer.toString('utf-8', 0, bytesRead);
-              // Extract version from header (format: {"version":"X","timestamp":...)
-              const versionMatch = headerStr.match(/"version":"([^"]+)"/);
+              // Extract version from header (format: {"version":3,...} or {"version":"3",...})
+              const versionMatch = headerStr.match(/"version"\s*:\s*(?:"([^"]+)"|(\d+))/);
               if (!versionMatch) {
                 throw new Error('Invalid cache structure after rename: missing version in header');
               }
 
-              const version = versionMatch[1];
+              const versionRaw = versionMatch[1] ?? versionMatch[2];
+              const versionNum = Number(versionRaw);
+              const version = Number.isFinite(versionNum) ? versionNum : versionRaw;
               if (version !== CACHE_VERSION) {
-                throw new Error(`Version mismatch after rename: ${version} vs ${CACHE_VERSION}`);
+                throw new Error(
+                  `Version mismatch after rename: ${String(version)} vs ${String(CACHE_VERSION)}`
+                );
               }
 
               // Verify files object starts (basic structure check)

@@ -311,6 +311,92 @@ export class MemoryVectorAdapter {
   get dimension() {
     return this._dimension;
   }
+
+  /**
+   * Get file index state for incremental resume (stub for API compatibility)
+   * Memory adapter doesn't persist, so always returns null
+   * @param {string} filePath - File path to check
+   * @returns {null} Always null (no persistent state)
+   */
+  getFileIndexState(filePath) {
+    // Memory adapter doesn't persist file index state
+    // Returning null ensures files will always be re-indexed
+    return null;
+  }
+
+  /**
+   * Update file index after successfully indexing a file (stub for API compatibility)
+   * Memory adapter doesn't persist, so this is a no-op
+   * @param {string} filePath - File path that was indexed
+   * @param {number} mtime - File modification time
+   * @param {number} chunkCount - Number of chunks indexed
+   * @param {string} modelVersion - Embedding model version
+   */
+  updateFileIndex(filePath, mtime, chunkCount, modelVersion) {
+    // No-op for memory adapter (no persistence)
+    // File index is only useful for incremental resume across restarts
+  }
+
+  /**
+   * Remove file from index (stub for API compatibility)
+   * @param {string} filePath - File path to remove
+   */
+  removeFileIndex(filePath) {
+    // No-op for memory adapter
+  }
+
+  /**
+   * Get all file indexes (stub for API compatibility)
+   * @returns {Array} Empty array (no persistent state)
+   */
+  getAllFileIndexes() {
+    // Memory adapter doesn't track file index state
+    return [];
+  }
+
+  /**
+   * Delete all chunks for a specific file (batch operation)
+   * More efficient than calling delete() for each chunk individually
+   * @param {string} filePath - File path to delete all chunks for
+   */
+  deleteChunksByFile(filePath) {
+    if (!this._initialized) {
+      return;
+    }
+
+    const chunksToDelete = [];
+    for (const [chunkId, metadata] of this._metadata.entries()) {
+      if (metadata.file === filePath) {
+        chunksToDelete.push(chunkId);
+      }
+    }
+
+    for (const chunkId of chunksToDelete) {
+      this._vectors.delete(chunkId);
+      this._metadata.delete(chunkId);
+    }
+
+    if (chunksToDelete.length > 0) {
+      console.log(`[MemoryAdapter] Deleted ${chunksToDelete.length} chunks for file: ${filePath}`);
+    }
+  }
+
+  /**
+   * Clear the file index (stub for API compatibility)
+   */
+  clearFileIndex() {
+    // No-op for memory adapter
+  }
+
+  /**
+   * Clear all data (file_index, vectors, metadata)
+   * Used for force reindex to start completely fresh
+   */
+  clearAll() {
+    this._vectors.clear();
+    this._metadata.clear();
+    console.log('[MemoryAdapter] Cleared all data');
+  }
 }
 
 /**

@@ -29,7 +29,8 @@ const CONFIG_FILE = join(process.env.RC_MCP_CACHE_DIR || join(__dirname, '../../
  * Default configuration
  */
 const DEFAULT_CONFIG = {
-  activeModel: 'Xenova/gte-base',
+  // Code-first default: better for semantic code search and avoids doc bias.
+  activeModel: 'jinaai/jina-embeddings-v2-base-code',
   comparisonModels: [],
   autoSwitch: false,
 };

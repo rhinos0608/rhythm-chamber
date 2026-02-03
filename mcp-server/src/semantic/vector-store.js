@@ -975,6 +975,11 @@ export class VectorStore {
    * Get chunks by file
    */
   getByFile(filePath) {
+    // SQLite backend: return chunk IDs from adapter (vectors/metadata can be fetched via get()).
+    if (this.useSqlite && this.adapter && typeof this.adapter.getChunksByFile === 'function') {
+      return this.adapter.getChunksByFile(filePath);
+    }
+
     const chunks = [];
 
     for (const [chunkId, metadata] of this.metadata.entries()) {
