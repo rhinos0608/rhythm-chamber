@@ -221,15 +221,23 @@ async function handleStop(indexer, mcpServer) {
  */
 async function handleStatus(indexer, mcpServer) {
   const isIndexing = indexer._indexingInProgress || false;
-  const stats = indexer.stats || {};
+  const stats = indexer.getStats ? indexer.getStats() : (indexer.stats || {});
   const vectorStoreStats = indexer.vectorStore ? indexer.vectorStore.getStats() : {};
   const adapterStats = indexer.vectorStore?.adapter ? indexer.vectorStore.adapter.getStats() : {};
+
+  // Prefer adapter-backed file counts when available (incremental resume can skip per-run stats)
+  const filesIndexed =
+    stats.filesIndexed ||
+    (indexer.vectorStore?.adapter &&
+    typeof indexer.vectorStore.adapter.getAllFileIndexes === 'function'
+      ? indexer.vectorStore.adapter.getAllFileIndexes().length
+      : 0);
 
   // Ultra-compact status response (one line format)
   const status = {
     indexing: isIndexing ? 'In Progress' : 'Idle',
     indexed: indexer.indexed ? 'Yes' : 'No',
-    filesIndexed: stats.filesIndexed || 0,
+    filesIndexed,
     chunksIndexed: stats.chunksIndexed || 0,
     vectorsStored: vectorStoreStats.chunkCount || adapterStats.chunkCount || 0,
     storageType: vectorStoreStats.storageType || (indexer.vectorStore?.useSqlite ? 'SQLite' : 'Memory'),
@@ -308,8 +316,19 @@ async function handleClearCache(indexer, mcpServer) {
   if (indexer.vectorStore) {
     indexer.vectorStore.clear();
   }
+  // If SQLite is active, clear persisted vectors too (otherwise the "cleared" index still returns stale results).
+  if (
+    indexer.vectorStore?.useSqlite &&
+    indexer.vectorStore.adapter &&
+    typeof indexer.vectorStore.adapter.clearAll === 'function'
+  ) {
+    indexer.vectorStore.adapter.clearAll();
+  }
   if (indexer.dependencyGraph) {
     indexer.dependencyGraph.clear();
+  }
+  if (indexer.lexicalIndex && typeof indexer.lexicalIndex.clear === 'function') {
+    indexer.lexicalIndex.clear();
   }
 
   console.error('[Indexing Control] Cache cleared');

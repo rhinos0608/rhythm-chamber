@@ -4,7 +4,7 @@
  */
 
 import { resolve } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, statSync } from 'fs';
 import { HNWAnalyzer } from '../analyzers/hnw-analyzer.js';
 import { FileScanner } from '../utils/file-scanner.js';
 import { logger } from '../utils/logger.js';
@@ -22,7 +22,7 @@ export const schema = {
       filePath: {
         type: 'string',
         description:
-          'Specific file to validate (optional - validates entire codebase if not provided)',
+          'Specific file or directory to validate (optional - validates entire codebase if not provided)',
       },
       checkViolations: {
         type: 'boolean',
@@ -127,12 +127,28 @@ async function validateHNWCompliance(
   const filesToValidate = [];
 
   if (filePath) {
-    // Validate specific file
+    // Validate specific file or directory
     const fullPath = resolve(projectRoot, filePath);
     if (!existsSync(fullPath)) {
       throw new Error(`File not found: ${filePath}`);
     }
-    filesToValidate.push(fullPath);
+    const stats = statSync(fullPath);
+    if (stats.isDirectory()) {
+      // Validate all JS/TS files under the directory.
+      await fileScanner.scanDirectory(fullPath, filesToValidate, {
+        includeTests: false,
+        includeNodeModules: false,
+        includeDist: false,
+      });
+      if (layer !== 'all') {
+        // Filter scanned files by layer when validating a directory.
+        const filtered = filesToValidate.filter(f => fileScanner.getFileLayer(f) === layer);
+        filesToValidate.length = 0;
+        filesToValidate.push(...filtered);
+      }
+    } else {
+      filesToValidate.push(fullPath);
+    }
   } else {
     // Validate all JavaScript files
     const jsFiles = await fileScanner.findJsFiles({
