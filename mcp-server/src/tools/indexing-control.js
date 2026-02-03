@@ -217,172 +217,33 @@ async function handleStop(indexer, mcpServer) {
 
 /**
  * Handle status action
+ * OOM FIX: Minimized response to reduce MCP serialization overhead
  */
 async function handleStatus(indexer, mcpServer) {
   const isIndexing = indexer._indexingInProgress || false;
   const stats = indexer.stats || {};
-  const hasError = indexer._indexingError;
-
-  const lines = ['# Indexing Status', ''];
-
-  // State
-  lines.push('## State');
-  lines.push(`- **Indexing**: ${isIndexing ? 'In Progress' : 'Idle'}`);
-  lines.push(`- **Indexed**: ${indexer.indexed ? 'Yes' : 'No'}`);
-
-  if (hasError) {
-    lines.push(`- **Last Error**: ${hasError.message || hasError}`);
-  }
-
-  lines.push('');
-
-  // FIX: Add memory metrics to status
-  const mem = process.memoryUsage();
-  const heapUsedMB = (mem.heapUsed / 1024 / 1024).toFixed(0);
-  const heapTotalMB = (mem.heapTotal / 1024 / 1024).toFixed(0);
-  const percentUsed = ((mem.heapUsed / mem.heapTotal) * 100).toFixed(1);
-
-  lines.push('## Memory');
-  lines.push(`- **Heap Used**: ${heapUsedMB}MB`);
-  lines.push(`- **Heap Total**: ${heapTotalMB}MB`);
-  lines.push(`- **Percent Used**: ${percentUsed}%`);
-  lines.push('');
-
-  // Statistics
-  lines.push('## Statistics');
-  lines.push(`- **Files Discovered**: ${stats.filesDiscovered || 0}`);
-  lines.push(`- **Files Indexed**: ${stats.filesIndexed || 0}`);
-  lines.push(`- **Files from Cache**: ${stats.filesFromCache || 0}`);
-  lines.push(`- **Files Skipped**: ${stats.filesSkipped || 0}`);
-  lines.push(`- **Chunks Indexed**: ${stats.chunksIndexed || 0}`);
-  lines.push(`- **Embedding Source**: ${stats.embeddingSource || 'unknown'}`);
-
-  if (stats.lastIndexed) {
-    const lastIndexed = new Date(stats.lastIndexed).toLocaleString();
-    lines.push(`- **Last Indexed**: ${lastIndexed}`);
-  }
-
-  if (stats.indexTime) {
-    const timeSeconds = (stats.indexTime / 1000).toFixed(2);
-    lines.push(`- **Index Time**: ${timeSeconds}s`);
-  }
-
-  lines.push('');
-
-  // Cache and storage status
-  // FIX: Report from SQLite adapter when available, not in-memory cache
-  // The in-memory cache is cleared after indexing, but SQLite persists
   const vectorStoreStats = indexer.vectorStore ? indexer.vectorStore.getStats() : {};
   const adapterStats = indexer.vectorStore?.adapter ? indexer.vectorStore.adapter.getStats() : {};
-  const hasSqlite = indexer.vectorStore?.useSqlite && indexer.vectorStore?.adapter;
 
-  lines.push('## Storage');
-  if (hasSqlite) {
-    // SQLite is the primary storage
-    lines.push('- **Storage Type**: SQLite Database');
-    lines.push(`- **Vectors Stored**: ${vectorStoreStats.chunkCount || adapterStats.chunkCount || 0}`);
-    lines.push(`- **Dimension**: ${vectorStoreStats.dimension || adapterStats.dimension || 'unknown'}`);
-    if (adapterStats.memoryBytes) {
-      const sizeMB = (adapterStats.memoryBytes / 1024 / 1024).toFixed(2);
-      lines.push(`- **Database Size**: ${sizeMB} MB`);
-    }
-  } else {
-    // Report from in-memory cache (legacy mode)
-    const cacheStats = indexer.cache ? indexer.cache.getStats() : {};
-    if (cacheStats.fileCount !== undefined) {
-      lines.push('- **Storage Type**: In-Memory Cache');
-      lines.push(`- **Cached Files**: ${cacheStats.fileCount}`);
-      if (cacheStats.chunkCount !== undefined) {
-        lines.push(`- **Cached Chunks**: ${cacheStats.chunkCount}`);
-      }
-      if (cacheStats.approximateSize !== undefined) {
-        const sizeMB = (cacheStats.approximateSize / 1024 / 1024).toFixed(2);
-        lines.push(`- **Cache Size**: ${sizeMB} MB`);
-      }
-    }
-  }
+  // Ultra-compact status response (one line format)
+  const status = {
+    indexing: isIndexing ? 'In Progress' : 'Idle',
+    indexed: indexer.indexed ? 'Yes' : 'No',
+    filesIndexed: stats.filesIndexed || 0,
+    chunksIndexed: stats.chunksIndexed || 0,
+    vectorsStored: vectorStoreStats.chunkCount || adapterStats.chunkCount || 0,
+    storageType: vectorStoreStats.storageType || (indexer.vectorStore?.useSqlite ? 'SQLite' : 'Memory'),
+    heapUsedMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+  };
 
-  // Cache failures (if any)
-  if (stats.cacheFailures > 0) {
-    const failureRate =
-      stats.filesIndexed > 0
-        ? ((stats.cacheFailures / stats.filesIndexed) * 100).toFixed(1)
-        : '0.0';
-
-    // Only show warning if failures are recent (< 1 hour ago)
-    const lastFailureTime = stats.lastCacheFailureTime || 0;
-    const failureAge = Date.now() - lastFailureTime;
-    const isRecent = failureAge < 3600000; // 1 hour in milliseconds
-
-    lines.push(`- **Cache Failures**: ${stats.cacheFailures}/${stats.filesIndexed} (${failureRate}%)${isRecent ? ' ⚠️' : ''}`);
-
-    if (isRecent) {
-      lines.push('- **Status**: Cache degradation detected - re-embedding required on restart');
-    } else {
-      const minutesAgo = Math.floor(failureAge / 60000);
-      lines.push(`- **Last Failure**: ${minutesAgo} minutes ago (resolved)`);
-    }
-  }
-  lines.push('');
-
-  // Current configuration
-  if (indexer.patterns) {
-    lines.push('## Configuration');
-    lines.push('**Patterns:**');
-    for (const pattern of indexer.patterns) {
-      lines.push(`- ${pattern}`);
-    }
-    lines.push('**Ignore Patterns:**');
-    for (const pattern of indexer.ignore || []) {
-      lines.push(`- ${pattern}`);
-    }
-    lines.push('');
-  }
-
-  // Vector store status
-  // FIX: Remove misleading comparison - SQLite is the source of truth
-  // The "expected" count was comparing session activity with persistent storage
-  if (indexer.vectorStore) {
-    const vectorStoreStats = indexer.vectorStore.getStats();
-    const vectorCount = vectorStoreStats.chunkCount || 0;
-    const memoryBytes = vectorStoreStats.memoryBytes || 0;
-
-    lines.push('## Vector Store');
-    lines.push(`- **Vectors**: ${vectorCount}`);
-
-    if (memoryBytes > 0) {
-      const memoryMB = (memoryBytes / 1024 / 1024).toFixed(2);
-      lines.push(`- **Memory Usage**: ${memoryMB} MB`);
-    }
-
-    if (vectorStoreStats.storageType) {
-      lines.push(`- **Storage**: ${vectorStoreStats.storageType}`);
-    }
-
-    lines.push('');
-  }
-
-  // Dependency graph status
-  if (indexer.dependencyGraph) {
-    // Count symbols from all relevant maps
-    const definitionCount = indexer.dependencyGraph.definitions?.size || 0;
-    const usageCount = indexer.dependencyGraph.usages?.size || 0;
-    const exportCount = indexer.dependencyGraph.exports?.size || 0;
-    const importCount = indexer.dependencyGraph.imports?.size || 0;
-    const symbolCount = definitionCount + usageCount + exportCount + importCount;
-
-    lines.push('## Dependency Graph');
-    lines.push(
-      `- **Symbols**: ${symbolCount} (definitions: ${definitionCount}, usages: ${usageCount}, exports: ${exportCount}, imports: ${importCount})`
-    );
-    lines.push('');
-  }
+  // Single-line text response to minimize serialization overhead
+  const text = `Indexing: ${status.indexing} | Indexed: ${status.indexed} | Files: ${status.filesIndexed} | Chunks: ${status.chunksIndexed} | Vectors: ${status.vectorsStored} | Storage: ${status.storageType} | Heap: ${status.heapUsedMB}MB`;
 
   return {
     content: [
       {
         type: 'text',
-        text: lines.join('\n'),
+        text: text,
       },
     ],
   };

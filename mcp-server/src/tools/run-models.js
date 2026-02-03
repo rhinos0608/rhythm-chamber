@@ -106,9 +106,12 @@ export async function handler(args, projectRoot) {
     // Validate model names against MODEL_DIMENSIONS registry
     const invalidModels = models.filter(m => !MODEL_DIMENSIONS[m]);
     if (invalidModels.length > 0) {
+      // OOM FIX: Truncate error message to prevent unbounded growth from user input
+      const sampleInvalid = invalidModels.slice(0, 10);
+      const truncatedMsg = invalidModels.length > 10 ? ` and ${invalidModels.length - 10} more` : '';
       const availableModels = Object.keys(MODEL_DIMENSIONS).slice(0, 10).join(', ');
       throw new Error(
-        `Unknown model(s): ${invalidModels.join(', ')}.\n` +
+        `Unknown model(s): ${sampleInvalid.join(', ')}${truncatedMsg}.\n` +
         `Available models: ${availableModels}...`
       );
     }

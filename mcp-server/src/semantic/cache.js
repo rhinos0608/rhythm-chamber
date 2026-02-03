@@ -15,7 +15,7 @@ import { Mutex } from 'async-mutex';
  * Current cache format version
  * Increment this when cache structure changes incompatibly
  */
-const CACHE_VERSION = 2; // Bumped from 1 to 2 for modelVersion tracking
+const CACHE_VERSION = 3; // v3: Metadata-only cache (vectors in SQLite, not JSON)
 
 /**
  * Default cache filename
@@ -35,6 +35,10 @@ export class EmbeddingCache {
     this.cacheFile = join(cacheDir, options.cacheFile || DEFAULT_CACHE_FILE);
     this.enabled = options.enabled !== false;
     this.compression = options.compression === true;
+
+    // OOM FIX: Flag to indicate SQLite is active (embeddings stored in DB, not JSON)
+    // When true, cache only stores file metadata, not embeddings
+    this.sqliteActive = options.sqliteActive === true;
 
     // In-memory cache (not LRU - full cache until invalidated)
     this.files = new Map(); // filePath -> { mtime, chunks[] }
@@ -157,76 +161,10 @@ export class EmbeddingCache {
       }
 
       // Restore embeddings
-      if (data.embeddings) {
-        let loadedCount = 0;
-        let corruptedCount = 0;
-        let recoveredCount = 0;
-        const totalCount = Object.keys(data.embeddings).length;
-
-        for (const [chunkId, chunkData] of Object.entries(data.embeddings)) {
-        // JSON object keys are strings; keep our map keys normalized to string.
-          // Validate and convert embedding to Float32Array
-          if (chunkData.embedding) {
-            if (Array.isArray(chunkData.embedding)) {
-              // Standard array format - convert to Float32Array
-              chunkData.embedding = new Float32Array(chunkData.embedding);
-            } else if (
-              typeof chunkData.embedding === 'object' &&
-              !Array.isArray(chunkData.embedding)
-            ) {
-              // Corrupted cache: object with numeric keys instead of array
-              // This happens when Float32Array was serialized without Array.from()
-              // RECOVERY: Convert object with numeric keys back to array
-              const keys = Object.keys(chunkData.embedding);
-              if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
-                // Valid numeric keys - recover the embedding
-                const maxIndex = Math.max(...keys.map(k => parseInt(k, 10)));
-                const recovered = new Float32Array(maxIndex + 1);
-                for (const [idx, val] of Object.entries(chunkData.embedding)) {
-                  recovered[parseInt(idx, 10)] = val;
-                }
-                chunkData.embedding = recovered;
-                recoveredCount++;
-              } else {
-                // Truly corrupted - cannot recover
-                corruptedCount++;
-                delete data.embeddings[chunkId];
-                continue;
-              }
-            } else if (chunkData.embedding instanceof Float32Array) {
-              // Already Float32Array (shouldn't happen from JSON but handle it)
-              // Already in correct format, nothing to do
-            } else {
-              console.warn(
-                `[Cache] Unexpected embedding type for ${chunkId}: ${typeof chunkData.embedding}`
-              );
-              corruptedCount++;
-              delete data.embeddings[chunkId];
-              continue;
-            }
-          }
-          this.embeddings.set(String(chunkId), chunkData);
-          loadedCount++;
-        }
-
-        // Log recovery and corruption statistics for visibility
-        if (recoveredCount > 0) {
-          console.error(
-            `[Cache] Recovered ${recoveredCount} embeddings from object format (Float32Array serialization bug)`
-          );
-          this.dirty = true; // Mark dirty to save repaired cache
-        }
-        if (corruptedCount > 0) {
-          const corruptionRate = ((corruptedCount / totalCount) * 100).toFixed(1);
-          console.error(
-            `[Cache] WARNING: ${corruptedCount}/${totalCount} embeddings corrupted and discarded (${corruptionRate}%)`
-          );
-          console.error('[Cache] Corrupted embeddings will be regenerated on next indexing run');
-          this.dirty = true; // Mark dirty to save cleaned cache
-        }
-        console.error(
-          `[Cache] Loaded ${loadedCount} embeddings from cache${recoveredCount > 0 ? ` (${recoveredCount} recovered)` : ''}`
-        );
+      // METADATA-ONLY MODE (v3): Skip loading embeddings - they're in SQLite
+      // Cache only stores file metadata: mtime, chunkIds, counts
+      if (data.embeddings && Object.keys(data.embeddings).length > 0) {
+        console.warn(`[Cache] Skipping ${Object.keys(data.embeddings).length} cached embeddings (v3: using SQLite instead)`);
       }
 
       return true;
@@ -557,66 +495,47 @@ export class EmbeddingCache {
           await streamWrite(`"timestamp":${JSON.stringify(data.timestamp)},`);
           await streamWrite(`"modelVersion":${JSON.stringify(data.modelVersion)},`);
 
-          // CRITICAL FIX: Yield before serializing large files object
-          // JSON.stringify(data.files) for 400+ files can block event loop for 200-500ms
-          // This causes stdio transport timeout and MCP disconnection
-          await new Promise(resolve => setTimeout(resolve, 0));
+          // OOM FIX: Stream files object in chunks instead of JSON.stringify
+          // JSON.stringify(data.files) for 400+ files creates massive string causing OOM
+          // We write the object incrementally to keep memory usage flat
+          const fileEntries = Object.entries(data.files);
+          await streamWrite('"files":{');
 
-          await streamWrite(`"files":${JSON.stringify(data.files)},`);
+          const BATCH_SIZE = 50; // Write 50 files at a time
+          for (let i = 0; i < fileEntries.length; i += BATCH_SIZE) {
+            const batch = fileEntries.slice(i, i + BATCH_SIZE);
+            const batchJson = batch.map(([key, value]) =>
+              `${JSON.stringify(key)}:${JSON.stringify(value)}`
+            ).join(',');
 
-          // Yield again after files serialization before embeddings loop
-          await new Promise(resolve => setTimeout(resolve, 0));
+            // Add comma separator between batches (except first batch)
+            if (i > 0) {
+              await streamWrite(',');
+            }
+            await streamWrite(batchJson);
+
+            // Yield between batches to prevent event loop blocking
+            if (i + BATCH_SIZE < fileEntries.length) {
+              await new Promise(resolve => setImmediate(resolve));
+            }
+          }
+
+          await streamWrite('},');
 
           await streamWrite('"embeddings":{');
 
-          // CRITICAL FIX: Iterate directly over embeddings to avoid memory bloat
-          // Don't create a snapshot Map - iterate and stream immediately
-          let wroteAny = false;
-          // CRITICAL FIX: Reduced from 100 to 50 for more frequent event loop yielding
-          // This prevents stdio transport timeout during large cache saves
-          const EMBEDDINGS_BATCH_SIZE = 50;
-          let batchCount = 0;
-
-          for (const [chunkId, embData] of this.embeddings.entries()) {
-            const serializable = { ...embData };
-            if (serializable.embedding instanceof Float32Array) {
-              serializable.embedding = Array.from(serializable.embedding);
-            }
-
-            const prefix = wroteAny ? ',' : '';
-            wroteAny = true;
-
-            await streamWrite(
-              prefix + JSON.stringify(String(chunkId)) + ':' + JSON.stringify(serializable)
-            );
-
-            batchCount++;
-            if (batchCount >= EMBEDDINGS_BATCH_SIZE) {
-              batchCount = 0;
-              // FIX: Force GC after each batch to free temporary Array.from() arrays
-              // Array.from() creates ~3MB temporary arrays per 100 embeddings
-              // Without GC hints, these accumulate and cause OOM for large codebases
-              if (global.gc) {
-                global.gc();
-              }
-              // Yield to event loop to keep MCP responsive.
-              await new Promise(resolve => setTimeout(resolve, 0));
-            }
-          }
+          // METADATA-ONLY MODE (v3): Never serialize embeddings to JSON
+          // Embeddings are stored in SQLite - cache only tracks file metadata
+          // This prevents OOM regardless of storage backend
+          console.error('[Cache] v3 metadata-only mode - skipping embedding serialization');
+          // Empty embeddings object - SQLite is the source of truth
 
           // Close JSON document
           await streamWrite('}}');
           await streamEnd();
 
           const writeMs = Date.now() - writeStart;
-          if (DEBUG_CACHE_SAVE) {
-            console.error('[Cache] DEBUG save(): wrote temp file (stream)', {
-              attempt: attempt + 1,
-              ms: writeMs,
-              tempFile,
-              chunks: chunkCount,
-            });
-          }
+          console.error(`[Cache] Saved metadata-only cache (${Object.keys(data.files).length} files, ${writeMs}ms)`);
 
           // CRITICAL: Sync to disk to ensure data is actually written
           // FIX: Close the datasync handle BEFORE renaming to avoid filesystem issues
@@ -635,15 +554,34 @@ export class EmbeddingCache {
             await rename(tempFile, this.cacheFile);
 
             // FIX: Post-rename validation to detect corruption immediately
+            // OOM FIX: Stream-read only the header instead of loading entire file
             // This catches issues like: partial writes, filesystem corruption, rename race conditions
+            // Without loading 400+ files into memory
             try {
-              const validation = JSON.parse(await readFile(this.cacheFile, 'utf-8'));
-              if (!validation.version || !validation.embeddings) {
-                throw new Error('Invalid cache structure after rename: missing version or embeddings');
+              // Read only first 4KB to extract header (version, timestamp, modelVersion)
+              const validationHandle = await open(this.cacheFile, 'r');
+              const headerBuffer = Buffer.alloc(4096);
+              const { bytesRead } = await validationHandle.read(headerBuffer, 0, 4096, 0);
+              await validationHandle.close();
+
+              const headerStr = headerBuffer.toString('utf-8', 0, bytesRead);
+              // Extract version from header (format: {"version":"X","timestamp":...)
+              const versionMatch = headerStr.match(/"version":"([^"]+)"/);
+              if (!versionMatch) {
+                throw new Error('Invalid cache structure after rename: missing version in header');
               }
-              if (validation.version !== CACHE_VERSION) {
-                throw new Error(`Version mismatch after rename: ${validation.version} vs ${CACHE_VERSION}`);
+
+              const version = versionMatch[1];
+              if (version !== CACHE_VERSION) {
+                throw new Error(`Version mismatch after rename: ${version} vs ${CACHE_VERSION}`);
               }
+
+              // Verify files object starts (basic structure check)
+              if (!headerStr.includes('"files":{')) {
+                throw new Error('Invalid cache structure after rename: missing files object');
+              }
+
+              console.error('[Cache] Header validation passed (stream-read)');
             } catch (validationError) {
               console.error('[Cache] CRITICAL: Validation failed after rename!', validationError.message);
               // Backup corrupted file for forensic analysis

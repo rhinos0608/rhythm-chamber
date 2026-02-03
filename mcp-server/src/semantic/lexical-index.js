@@ -79,16 +79,28 @@ export class LexicalIndex {
     this.k1 = options.k1 ?? DEFAULT_K1;
     this.b = options.b ?? DEFAULT_B;
 
+    // OOM FIX: Size limits to prevent unbounded Map growth
+    // With 13,000+ chunks, the nested termFreqs Map alone was ~65MB
+    this.maxDocuments = options.maxDocuments || 50000; // Max chunks to index
+    this.maxTerms = options.maxTerms || 100000; // Max unique terms across all documents
+
     // Index storage
     this.documents = new Map(); // chunkId -> { text, metadata, terms }
     this.termFreqs = new Map(); // chunkId -> Map(term -> frequency)
     this.docFreqs = new Map(); // term -> number of documents containing term
     this.docLengths = new Map(); // chunkId -> document length (term count)
 
+    // OOM FIX: Queue for FIFO eviction when limits reached
+    this.docQueue = []; // Track insertion order for document eviction
+
     // Statistics
     this.totalDocs = 0;
     this.avgDocLen = 0;
     this.totalTerms = 0;
+
+    // OOM FIX: Track evictions for monitoring
+    this.evictedDocs = 0;
+    this.evictedTerms = 0;
   }
 
   /**
@@ -121,6 +133,18 @@ export class LexicalIndex {
       return;
     }
 
+    // OOM FIX: Enforce maxDocuments limit with FIFO eviction
+    if (this.documents.size >= this.maxDocuments) {
+      // Evict oldest document (FIFO)
+      const evictId = this.docQueue.shift();
+      if (evictId) {
+        this._evictDocument(evictId);
+      }
+    }
+
+    // Check if this is a new document before we modify documents Map
+    const isNewDocument = !this.documents.has(id);
+
     // Calculate term frequencies
     const tfMap = new Map();
     for (const term of terms) {
@@ -134,6 +158,13 @@ export class LexicalIndex {
       terms,
     });
 
+    // OOM FIX: Track insertion order for FIFO eviction
+    // Only add to queue if this is a new document (not re-indexing)
+    // Prevents queue bloat from duplicate entries
+    if (isNewDocument) {
+      this.docQueue.push(id);
+    }
+
     // Store term frequencies
     this.termFreqs.set(id, tfMap);
 
@@ -142,7 +173,12 @@ export class LexicalIndex {
 
     // Update document frequencies
     for (const term of tfMap.keys()) {
-      this.docFreqs.set(term, (this.docFreqs.get(term) || 0) + 1);
+      // OOM FIX: Skip terms if we've exceeded maxTerms limit
+      // Only track terms that already exist in docFreqs, don't add brand new ones
+      const currentCount = this.docFreqs.get(term) || 0;
+      if (currentCount > 0 || this.docFreqs.size < this.maxTerms) {
+        this.docFreqs.set(term, currentCount + 1);
+      }
     }
 
     // Update statistics
@@ -509,6 +545,45 @@ export class LexicalIndex {
   }
 
   /**
+   * Evict a document from the index (OOM FIX)
+   * Removes document and updates term frequencies to free memory
+   * @param {string} chunkId - The chunk ID to evict
+   * @private
+   */
+  _evictDocument(chunkId) {
+    // Get document data before removal
+    const doc = this.documents.get(chunkId);
+    if (!doc) return;
+
+    const tfMap = this.termFreqs.get(chunkId);
+    if (tfMap) {
+      // Decrease document frequency for each term
+      for (const term of tfMap.keys()) {
+        const currentCount = this.docFreqs.get(term) || 0;
+        if (currentCount <= 1) {
+          this.docFreqs.delete(term);
+          this.evictedTerms++;
+        } else {
+          this.docFreqs.set(term, currentCount - 1);
+        }
+      }
+      this.termFreqs.delete(chunkId);
+    }
+
+    this.docLengths.delete(chunkId);
+    this.documents.delete(chunkId);
+
+    // OOM FIX: Also remove from docQueue to maintain synchronization
+    // Without this, the queue accumulates stale IDs, causing incorrect eviction behavior
+    const queueIdx = this.docQueue.indexOf(chunkId);
+    if (queueIdx !== -1) {
+      this.docQueue.splice(queueIdx, 1);
+    }
+
+    this.evictedDocs++;
+  }
+
+  /**
    * Clear all documents from the index
    */
   clear() {
@@ -516,9 +591,12 @@ export class LexicalIndex {
     this.termFreqs.clear();
     this.docFreqs.clear();
     this.docLengths.clear();
+    this.docQueue = []; // OOM FIX: Clear eviction queue
     this.totalDocs = 0;
     this.avgDocLen = 0;
     this.totalTerms = 0;
+    this.evictedDocs = 0; // OOM FIX: Reset eviction counters
+    this.evictedTerms = 0;
   }
 
   /**
@@ -529,11 +607,17 @@ export class LexicalIndex {
   getStats() {
     return {
       totalDocs: this.totalDocs,
+      documentCount: this.documents.size, // OOM FIX: Actual Map size
       totalTerms: this.totalTerms,
       avgDocLen: this.avgDocLen,
       uniqueTerms: this.docFreqs.size,
       k1: this.k1,
       b: this.b,
+      // OOM FIX: Include eviction stats
+      evictedDocs: this.evictedDocs,
+      evictedTerms: this.evictedTerms,
+      maxDocuments: this.maxDocuments,
+      maxTerms: this.maxTerms,
     };
   }
 

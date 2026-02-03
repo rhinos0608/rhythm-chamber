@@ -164,6 +164,9 @@ export class CodeIndexer {
     // FIX: Initialize and recover SQLite adapter if database exists
     await this._initializeVectorStore();
 
+    // OOM FIX #1: Log memory snapshot at startup
+    this.logMemorySnapshot('initialize');
+
     return true;
   }
 
@@ -289,6 +292,13 @@ export class CodeIndexer {
       this.lexicalIndex.clear();
       // Note: cache.clear() is NOT called - we just bypass it for validity checks
       // This allows cache to be rebuilt as files are re-indexed
+
+      // INCREMENTAL RESUME: Clear SQLite file index in force mode
+      // This ensures all files are re-indexed even if they haven't changed
+      if (this.vectorStore.useSqlite && this.vectorStore.adapter && this.vectorStore.adapter.clearAll) {
+        this.vectorStore.adapter.clearAll();
+        console.error('[Indexer] Cleared SQLite database for force reindex');
+      }
     }
 
     // Create indexing promise
@@ -298,16 +308,102 @@ export class CodeIndexer {
         const files = await this.discoverFiles();
         this.stats.filesDiscovered = files.length;
 
+        // INCREMENTAL RESUME: Check SQLite file index FIRST (before cache)
+        // This allows resuming from crashes even if cache is partial/corrupted
+        // Use normalized model name for comparison (strips provider prefix for backward compatibility)
+        const normalizedModelName = this.embeddings.getNormalizedModelName();
+        const sqliteIndexed = new Map(); // relPath -> mtime
+        const sqliteSkipped = [];
+        const deletedFiles = []; // Track files that were deleted since last index
+
+        if (this.vectorStore.useSqlite && this.vectorStore.adapter && !force) {
+          console.error('[Indexer] Checking SQLite file index for incremental resume...');
+
+          // DEFENSIVE: Check if adapter has getAllFileIndexes method (SqliteAdapter-specific)
+          if (typeof this.vectorStore.adapter.getAllFileIndexes !== 'function') {
+            console.warn('[Indexer] Adapter does not support getAllFileIndexes, skipping incremental resume');
+            // Fall through to full indexing
+          } else {
+            // First pass: detect deleted files that need cleanup
+            const indexedFiles = this.vectorStore.adapter.getAllFileIndexes();
+          const discoveredSet = new Set(files.map(f => relative(this.projectRoot, f)));
+
+          for (const indexedFile of indexedFiles) {
+            if (!discoveredSet.has(indexedFile.file)) {
+              // File was deleted from codebase
+              deletedFiles.push(indexedFile.file);
+            }
+          }
+
+          // Clean up deleted files
+          if (deletedFiles.length > 0) {
+            console.error(`[Indexer] Found ${deletedFiles.length} deleted files, cleaning up from SQLite`);
+            for (const deletedFile of deletedFiles) {
+              this.vectorStore.adapter.removeFileIndex(deletedFile);
+              // Use batch delete for efficiency (single transaction per file)
+              if (this.vectorStore.adapter.deleteChunksByFile) {
+                this.vectorStore.adapter.deleteChunksByFile(deletedFile);
+              } else {
+                // Fallback to individual deletes
+                const chunks = this.vectorStore.getByFile(deletedFile);
+                for (const chunk of chunks) {
+                  this.vectorStore.delete(chunk.chunkId);
+                  this.dependencyGraph.removeChunk(chunk.chunkId);
+                }
+              }
+            }
+          }
+
+          // Second pass: check which discovered files are already indexed
+          for (const absPath of files) {
+            const relPath = relative(this.projectRoot, absPath);
+            const indexState = this.vectorStore.adapter.getFileIndexState(relPath);
+
+            // Normalize both model versions for comparison (strip provider prefix)
+            // This handles both old format (bare model name) and new format (provider/model)
+            const storedModelVersion = indexState?.modelVersion?.includes('/')
+              ? indexState.modelVersion.split('/')[1]  // Extract "model" from "provider/model"
+              : indexState?.modelVersion;              // Already normalized (just "model")
+
+            if (indexState && storedModelVersion === normalizedModelName) {
+              // File is indexed, check if mtime still matches
+              try {
+                const currentStat = await stat(absPath);
+                // Use tolerance to account for filesystem mtime precision differences
+                // 100ms tolerance handles most cross-platform and network filesystem issues
+                const MTIME_TOLERANCE_MS = 100;
+                if (currentStat.mtimeMs <= indexState.mtime + MTIME_TOLERANCE_MS) {
+                  // File hasn't changed since indexing - skip it
+                  sqliteIndexed.set(relPath, indexState.mtime);
+                  sqliteSkipped.push(relPath);
+                }
+              } catch (statError) {
+                // File disappeared - remove from index
+                console.warn(`[Indexer] File ${relPath} disappeared, removing from index`);
+                this.vectorStore.adapter.removeFileIndex(relPath);
+              }
+            }
+          }
+          console.error(`[Indexer] SQLite: ${sqliteSkipped.length} files already indexed, skipping`);
+          }
+        }
+
+        // Check cache validity for remaining files
+        const remainingFiles = files.filter(absPath => {
+          const relPath = relative(this.projectRoot, absPath);
+          return !sqliteIndexed.has(relPath);
+        });
+
         // Check cache validity
         const validFiles = force
           ? new Map()
-          : await this.cache.checkFilesValid(files.map(f => relative(this.projectRoot, f)));
+          : await this.cache.checkFilesValid(remainingFiles.map(f => relative(this.projectRoot, f)));
 
         // Separate files to index vs cached
         const toIndex = [];
         const fromCache = [];
 
-        for (const absPath of files) {
+        for (const absPath of remainingFiles) {
           const relPath = relative(this.projectRoot, absPath);
           const isValid = validFiles.get(relPath);
 
@@ -318,7 +414,10 @@ export class CodeIndexer {
           }
         }
 
-        console.error(`[Indexer] ${toIndex.length} files to index, ${fromCache.length} from cache`);
+        // Count SQLite-skipped files as "from cache" for stats
+        this.stats.filesFromSqliteIndex = sqliteSkipped.length;
+
+        console.error(`[Indexer] ${toIndex.length} files to index, ${fromCache.length} from cache, ${sqliteSkipped.length} from SQLite index`);
 
         // Load cached chunks
         await this._loadCachedChunks(fromCache);
@@ -561,96 +660,126 @@ export class CodeIndexer {
         chunk.metadata.localId = localId;
       }
 
-      // Generate embeddings
-      const texts = chunks.map(c => c.text);
-      const embeddings = await this.embeddings.getBatchEmbeddings(texts);
-
-      // CRITICAL: Validate embeddings before processing
-      if (!Array.isArray(embeddings)) {
-        throw new Error(`getBatchEmbeddings returned non-array: ${typeof embeddings}`);
-      }
-
-      if (embeddings.length !== chunks.length) {
-        console.error(
-          `[Indexer] Embedding count mismatch for ${relPath}: expected ${chunks.length}, got ${embeddings.length}`
-        );
-        throw new Error(
-          `Embedding array length (${embeddings.length}) does not match chunks array length (${chunks.length})`
-        );
-      }
+      // OOM FIX #4: Process chunks in smaller batches to prevent memory spikes
+      // Files with 100+ chunks were causing memory accumulation before any cleanup
+      const BATCH_SIZE = 20;
 
       // Expected embedding dimension
       const expectedDim = this.embeddings.getDimension();
 
-      // Filter out invalid embeddings instead of failing entire file
-      const validChunks = [];
-      const validEmbeddings = [];
-      const invalidReasons = [];
+      // Accumulate valid chunks/embeddings across all batches
+      const allValidChunks = [];
+      const allValidEmbeddings = [];
+      const allInvalidReasons = [];
 
-      for (let i = 0; i < embeddings.length; i++) {
-        const emb = embeddings[i];
-        const chunkId = chunks[i]?.id || `chunk_${i}`;
+      // Process chunks in batches
+      for (let batchStart = 0; batchStart < chunks.length; batchStart += BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, chunks.length);
+        const batchChunks = chunks.slice(batchStart, batchEnd);
 
-        // Check 1: Not null/undefined
-        if (emb === undefined || emb === null) {
-          invalidReasons.push(`${chunkId}=null/undefined`);
-          continue;
+        // Generate embeddings for this batch only
+        const batchTexts = batchChunks.map(c => c.text);
+        const batchEmbeddings = await this.embeddings.getBatchEmbeddings(batchTexts);
+
+        // CRITICAL: Validate batch embeddings before processing
+        if (!Array.isArray(batchEmbeddings)) {
+          throw new Error(`getBatchEmbeddings returned non-array: ${typeof batchEmbeddings}`);
         }
 
-        // Check 2: Is Array or Float32Array
-        if (!Array.isArray(emb) && !(emb instanceof Float32Array)) {
-          invalidReasons.push(`${chunkId}=type:${typeof emb}`);
-          continue;
+        if (batchEmbeddings.length !== batchChunks.length) {
+          console.error(
+            `[Indexer] Embedding count mismatch for ${relPath} batch ${batchStart}-${batchEnd}: expected ${batchChunks.length}, got ${batchEmbeddings.length}`
+          );
+          throw new Error(
+            `Embedding array length (${batchEmbeddings.length}) does not match chunks array length (${batchChunks.length})`
+          );
         }
 
-        // Check 3: Correct dimension
-        if (emb.length !== expectedDim) {
-          invalidReasons.push(`${chunkId}=dim:${emb.length}(expected${expectedDim})`);
-          continue;
-        }
+        // Filter out invalid embeddings in this batch (same 5 checks as before)
+        for (let i = 0; i < batchEmbeddings.length; i++) {
+          const emb = batchEmbeddings[i];
+          const chunkId = batchChunks[i]?.id || `chunk_${batchStart + i}`;
 
-        // Check 4: No NaN/Infinity values (check all elements for data integrity)
-        let hasInvalidValue = false;
-        for (let j = 0; j < emb.length; j++) {
-          if (!Number.isFinite(emb[j])) {
-            invalidReasons.push(`${chunkId}=nonfinite@${j}`);
-            hasInvalidValue = true;
-            break;
+          // Check 1: Not null/undefined
+          if (emb === undefined || emb === null) {
+            if (allInvalidReasons.length < 100) {
+              allInvalidReasons.push(`${chunkId}=null/undefined`);
+            }
+            continue;
           }
-        }
-        if (hasInvalidValue) continue;
 
-        // Check 5: No all-zero embeddings (indicates generation failure)
-        // Check all elements for comprehensive validation (already iterating for NaN check above)
-        let sumSquares = 0;
-        for (let j = 0; j < emb.length; j++) {
-          sumSquares += emb[j] * emb[j];
-        }
-        // If embedding is essentially zero, reject it
-        if (sumSquares < 0.001) {
-          invalidReasons.push(`${chunkId}=zero_magnitude`);
-          continue;
+          // Check 2: Is Array or Float32Array
+          if (!Array.isArray(emb) && !(emb instanceof Float32Array)) {
+            if (allInvalidReasons.length < 100) {
+              allInvalidReasons.push(`${chunkId}=type:${typeof emb}`);
+            }
+            continue;
+          }
+
+          // Check 3: Correct dimension
+          if (emb.length !== expectedDim) {
+            if (allInvalidReasons.length < 100) {
+              allInvalidReasons.push(`${chunkId}=dim:${emb.length}(expected${expectedDim})`);
+            }
+            continue;
+          }
+
+          // Check 4: No NaN/Infinity values
+          let hasInvalidValue = false;
+          for (let j = 0; j < emb.length; j++) {
+            if (!Number.isFinite(emb[j])) {
+              if (allInvalidReasons.length < 100) {
+                allInvalidReasons.push(`${chunkId}=nonfinite@${j}`);
+              }
+              hasInvalidValue = true;
+              break;
+            }
+          }
+          if (hasInvalidValue) continue;
+
+          // Check 5: No all-zero embeddings
+          let sumSquares = 0;
+          for (let j = 0; j < emb.length; j++) {
+            sumSquares += emb[j] * emb[j];
+          }
+          if (sumSquares < 0.001) {
+            if (allInvalidReasons.length < 100) {
+              allInvalidReasons.push(`${chunkId}=zero_magnitude`);
+            }
+            continue;
+          }
+
+          // All checks passed - add to valid arrays
+          allValidChunks.push(batchChunks[i]);
+          allValidEmbeddings.push(emb);
         }
 
-        // All checks passed
-        validChunks.push(chunks[i]);
-        validEmbeddings.push(emb);
+        // Yield between batches to allow GC and event loop processing
+        // Note: batchTexts, batchEmbeddings, batchChunks go out of scope here
+        // V8's GC will collect them automatically without explicit nulling
+        if (batchEnd < chunks.length) {
+          await this._yield();
+        }
       }
 
       // Log validation results
-      const validCount = validChunks.length;
-      const invalidCount = invalidReasons.length;
+      const validCount = allValidChunks.length;
+      const invalidCount = allInvalidReasons.length;
 
       if (invalidCount > 0) {
+        const sampleReasons = allInvalidReasons.slice(0, 5);
+        const truncatedMsg = invalidCount > 5 ? ` and ${invalidCount - 5} more` : '';
         console.error(
-          `[Indexer] Filtered ${invalidCount} invalid embeddings for ${relPath}: ${invalidReasons.slice(0, 5).join(', ')}${invalidReasons.length > 5 ? '...' : ''}`
+          `[Indexer] Filtered ${invalidCount} invalid embeddings for ${relPath}: ${sampleReasons.join(', ')}${truncatedMsg}`
         );
       }
 
       // If ALL embeddings are invalid, then fail
       if (validCount === 0) {
+        const sampleReasons = allInvalidReasons.slice(0, 3);
+        const truncatedMsg = invalidCount > 3 ? ` and ${invalidCount - 3} more issues` : '';
         throw new Error(
-          `All ${chunks.length} embeddings for ${relPath} are invalid. Reasons: ${invalidReasons.slice(0, 3).join(', ')}`
+          `All ${chunks.length} embeddings for ${relPath} are invalid. Reasons: ${sampleReasons.join(', ')}${truncatedMsg}`
         );
       }
 
@@ -673,9 +802,9 @@ export class CodeIndexer {
       let vectorsStored = 0;
       let symbolsAdded = 0;
 
-      for (let i = 0; i < validChunks.length; i++) {
-        const chunk = validChunks[i];
-        const embedding = validEmbeddings[i];
+      for (let i = 0; i < allValidChunks.length; i++) {
+        const chunk = allValidChunks[i];
+        const embedding = allValidEmbeddings[i];
 
         try {
           // Add file path to chunk metadata
@@ -715,7 +844,7 @@ export class CodeIndexer {
 
       // Index chunks in lexical index (index only valid chunks that passed embedding validation)
       try {
-        this.lexicalIndex.index(validChunks);
+        this.lexicalIndex.index(allValidChunks);
       } catch (lexicalError) {
         console.error(`[Indexer] Lexical indexing failed for ${relPath}:`, lexicalError.message);
         // Non-critical, continue
@@ -732,7 +861,7 @@ export class CodeIndexer {
         let retryCount = 0;
         while (retryCount < maxRetries) {
           try {
-            await this.cache.storeFileChunks(relPath, validChunks, fileStat.mtimeMs, validEmbeddings);
+            await this.cache.storeFileChunks(relPath, allValidChunks, fileStat.mtimeMs, allValidEmbeddings);
             break; // Success - exit retry loop
           } catch (cacheError) {
             retryCount++;
@@ -769,10 +898,54 @@ export class CodeIndexer {
       // This counter was previously only updated at the end of indexAll()
       this.stats.filesIndexed++;
 
+      // INCREMENTAL RESUME: Update SQLite file index ONLY if all chunks stored successfully
+      // This prevents marking files as "indexed" when they have partial data
+      if (this.vectorStore.useSqlite && this.vectorStore.adapter) {
+        // Store normalized model name (without provider prefix) for backward compatibility
+        const modelVersion = this.embeddings.getNormalizedModelName();
+
+        if (vectorsStored === validCount) {
+          // All chunks stored successfully - safe to mark as indexed
+          this.vectorStore.adapter.updateFileIndex(relPath, fileStat.mtimeMs, vectorsStored, modelVersion);
+        } else if (vectorsStored > 0 && vectorsStored < validCount) {
+          // Partial failure - remove from index to force retry on next run
+          console.warn(
+            `[Indexer] Partial indexing for ${relPath}: ${vectorsStored}/${validCount} chunks, removing from file index to force retry`
+          );
+          this.vectorStore.adapter.removeFileIndex(relPath);
+        }
+        // If vectorsStored === 0, nothing was stored, don't update index
+      }
+
       console.error(
         `[Indexer] Indexed ${relPath} (${validCount} valid chunks, ${vectorsStored} vectors, ${symbolsAdded} symbols${!cacheSuccess ? ', CACHE FAILED' : ''})`
       );
+
+      // OOM FIX: Explicitly clean up large temporary objects to prevent memory accumulation
+      // These variables can hold large strings/arrays that accumulate across loop iterations
+      // Without explicit cleanup, V8's GC may not collect them fast enough
+      source = null;      // Large file content string (can be 100KB+)
+      chunks = null;      // Array of chunk objects with text properties
+      // Note: Batch variables (batchTexts, batchEmbeddings, batchChunks) go out of scope at end of loop
+      // allValidChunks, allValidEmbeddings, allInvalidReasons go out of scope here
     } catch (error) {
+      // INCREMENTAL RESUME: Remove from file index only for specific errors
+      // Don't remove for transient issues like cache failures or post-index errors
+      const shouldRemoveIndex =
+        error.code === 'ENOENT' || // File disappeared
+        error.code === 'EACCES' || // Permission denied
+        error.code === 'EISDIR' || // Tried to index directory
+        (error.message && (
+          error.message.includes('embedding') || // Embedding generation failed
+          error.message.includes('chunk') || // Chunk processing failed
+          error.message.includes('parsing') || // Parse error
+          error.message.includes('chunking') // Chunking error
+        ));
+
+      if (shouldRemoveIndex && this.vectorStore.useSqlite && this.vectorStore.adapter) {
+        this.vectorStore.adapter.removeFileIndex(relPath);
+      }
+
       if (error.code === 'ENOENT') {
         // File disappeared during indexing
         console.warn(`[Indexer] File disappeared during indexing: ${relPath}`);
@@ -857,6 +1030,19 @@ export class CodeIndexer {
         );
       } else {
         console.error(`[Indexer] ${type} adapter ready for new embeddings`);
+      }
+
+      // OOM FIX: Disable in-memory cache when SQLite is active
+      // SQLite is the source of truth for embeddings - cache duplication causes OOM
+      if (type === 'sqlite' && this.cache?.enabled) {
+        console.error('[Indexer] SQLite active - disabling in-memory cache to prevent OOM');
+        // Set flag so cache.save() skips embedding serialization
+        this.cache.sqliteActive = true;
+        // Clear any existing in-memory embeddings to free memory
+        if (this.cache.embeddings?.size > 0) {
+          console.error(`[Indexer] Cleared ${this.cache.embeddings.size} cached embeddings from memory`);
+          this.cache.embeddings.clear();
+        }
       }
 
       // Log storage type for debugging
@@ -1489,6 +1675,13 @@ export class CodeIndexer {
 
     const results = deduplicated.slice(0, limit);
 
+    // OOM FIX #1: Log memory snapshot after search for monitoring
+    // Only log periodically (every 10th search) to avoid spam, or if search was slow (>1s)
+    const searchDurationMs = perf.totalTime;
+    if (searchDurationMs > 1000 || Math.random() < 0.1) {
+      this.logMemorySnapshot(`search (${searchDurationMs}ms)`);
+    }
+
     // Attach performance metadata to results
     results.performance = perf;
     results.queryInfo = {
@@ -1656,13 +1849,80 @@ export class CodeIndexer {
   _formatStats() {
     const stats = this.stats;
     const mem = process.memoryUsage();
-    return [
+    const parts = [
       `Files: ${stats.filesIndexed} indexed, ${stats.filesFromCache} from cache, ${stats.filesSkipped} skipped`,
+    ];
+
+    // Add SQLite resume count if available
+    if (stats.filesFromSqliteIndex > 0) {
+      parts.push(`${stats.filesFromSqliteIndex} from SQLite index`);
+    }
+
+    parts.push(
       `Chunks: ${stats.chunksIndexed}`,
       `Source: ${stats.embeddingSource}`,
       `Time: ${(stats.indexTime / 1000).toFixed(2)}s`,
-      `Memory: ${(mem.heapUsed / 1024 / 1024).toFixed(0)}MB heap / ${(mem.heapTotal / 1024 / 1024).toFixed(0)}MB total`,
-    ].join(', ');
+      `Memory: ${(mem.heapUsed / 1024 / 1024).toFixed(0)}MB heap / ${(mem.heapTotal / 1024 / 1024).toFixed(0)}MB total`
+    );
+
+    return parts.join(', ');
+  }
+
+  /**
+   * OOM FIX #1: Log memory snapshot to identify biggest retained buckets
+   * Call at startup and after each tool call to track memory growth
+   * Returns object with all memory metrics for programmatic inspection
+   */
+  logMemorySnapshot(context = 'unknown') {
+    const mem = process.memoryUsage();
+    const heapUsedMB = (mem.heapUsed / 1024 / 1024).toFixed(1);
+    const heapTotalMB = (mem.heapTotal / 1024 / 1024).toFixed(1);
+    const externalMB = (mem.external / 1024 / 1024).toFixed(1);
+
+    // Get component-level cache sizes
+    const embeddingCacheSize = this.cache?.embeddings?.size ?? 0;
+    const hybridCacheStats = this.embeddings?.getCacheStats?.() ?? {};
+    const hybridCacheSize = hybridCacheStats.size ?? 0;
+    const vectorStoreStats = this.vectorStore?.getStats?.() ?? {};
+    const depGraphStats = this.dependencyGraph?.getStats?.() ?? {};
+    const lexicalStats = this.lexicalIndex?.getStats?.() ?? {};
+
+    // Calculate estimated memory usage for each component
+    const vectorStoreBytes = vectorStoreStats.memoryBytes ?? 0;
+    const vectorStoreMB = (vectorStoreBytes / 1024 / 1024).toFixed(1);
+    const chunkCount = vectorStoreStats.chunkCount ?? 0;
+
+    const depGraphSymbols = depGraphStats.symbols ?? 0;
+    const depGraphDefinitions = depGraphStats.definitions ?? 0;
+    const depGraphUsages = depGraphStats.usages ?? 0;
+
+    const lexicalDocs = lexicalStats.documentCount ?? lexicalStats.documents?.size ?? 0;
+
+    console.error(
+      `[Memory] Snapshot at "${context}":\n` +
+      `  Heap: ${heapUsedMB}MB used / ${heapTotalMB}MB total (external: ${externalMB}MB)\n` +
+      `  EmbeddingCache: ${embeddingCacheSize} chunks in memory\n` +
+      `  HybridEmbeddings: ${hybridCacheSize} cached (hits:${hybridCacheStats.hits ?? 0}, misses:${hybridCacheStats.misses ?? 0}, evicted:${hybridCacheStats.evicted ?? 0})\n` +
+      `  VectorStore: ${chunkCount} chunks (${vectorStoreMB}MB in ${this.vectorStore?.useSqlite ? 'SQLite' : 'memory'})\n` +
+      `  DependencyGraph: ${depGraphSymbols} symbols, ${depGraphDefinitions} definitions, ${depGraphUsages} usages\n` +
+      `  LexicalIndex: ${lexicalDocs} documents\n` +
+      `  Stats: ${this.stats?.chunksIndexed ?? 0} chunks indexed, ${this.stats?.filesIndexed ?? 0} files indexed`
+    );
+
+    // Return for programmatic use
+    return {
+      context,
+      timestamp: Date.now(),
+      heap: { used: heapUsedMB, total: heapTotalMB, external: externalMB },
+      caches: {
+        embeddingCache: embeddingCacheSize,
+        hybridCache: hybridCacheSize,
+        hybridStats: hybridCacheStats,
+      },
+      vectorStore: { chunkCount, memoryMB: vectorStoreMB },
+      dependencyGraph: { symbols: depGraphSymbols, definitions: depGraphDefinitions, usages: depGraphUsages },
+      lexicalIndex: { documents: lexicalDocs },
+    };
   }
 
   /**

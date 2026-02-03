@@ -97,8 +97,12 @@ export class HybridEmbeddings {
     this.lastCheck = 0;
     this.checkInterval = 30000; // Check availability every 30s
 
+    // OOM FIX #1: LRU cache with size limit to prevent unbounded growth
+    // Query embeddings were accumulating without limit, causing OOM crashes
+    this.maxCacheSize = 1000; // Maximum number of cached query embeddings
     this.cache = new Map();
-    this.cacheStats = { hits: 0, misses: 0 };
+    this.cacheQueue = []; // Track insertion order for LRU eviction
+    this.cacheStats = { hits: 0, misses: 0, evicted: 0 };
 
     // Track which provider was last used for embeddings
     this.lastUsedProvider = null;
@@ -162,9 +166,21 @@ export class HybridEmbeddings {
       const cached = this.cache.get(cacheKey);
       if (Date.now() - cached.timestamp < this.ttl) {
         this.cacheStats.hits++;
+        // OOM FIX #1: Move to end of queue (LRU update)
+        const idx = this.cacheQueue.indexOf(cacheKey);
+        if (idx !== -1) {
+          this.cacheQueue.splice(idx, 1);
+        }
+        this.cacheQueue.push(cacheKey);
         return cached.embedding;
       }
+      // OOM FIX: Also remove from queue when deleting due to TTL expiry
+      // Without this, stale entries accumulate in the queue, causing incorrect eviction
       this.cache.delete(cacheKey);
+      const qIdx = this.cacheQueue.indexOf(cacheKey);
+      if (qIdx !== -1) {
+        this.cacheQueue.splice(qIdx, 1);
+      }
     }
 
     this.cacheStats.misses++;
@@ -172,11 +188,20 @@ export class HybridEmbeddings {
     // Get embedding
     const embedding = await this._fetchEmbedding(text);
 
+    // OOM FIX #1: Enforce LRU limit before adding
+    if (this.cache.size >= this.maxCacheSize) {
+      // Evict oldest entry (LRU)
+      const evictKey = this.cacheQueue.shift();
+      this.cache.delete(evictKey);
+      this.cacheStats.evicted++;
+    }
+
     // Cache result with model-aware key
     this.cache.set(cacheKey, {
       embedding,
       timestamp: Date.now(),
     });
+    this.cacheQueue.push(cacheKey);
 
     return embedding;
   }
@@ -228,10 +253,6 @@ export class HybridEmbeddings {
       }
     }
 
-    // CRITICAL FIX: Return accumulated results after successful batch processing
-    // This was missing, causing the function to always throw an error even when embeddings succeeded
-    return allResults;
-
     // All configured providers failed - try transformers as last resort fallback
     if (!this.providerPriority.includes('transformers') && TRANSFORMERS_CONFIG.enabled) {
       try {
@@ -245,7 +266,10 @@ export class HybridEmbeddings {
     }
 
     // All providers failed
-    const errorSummary = errors.map(e => `${e.provider}: ${e.error}`).join('; ');
+    // OOM FIX: Truncate error messages to prevent unbounded string growth
+    const errorSummary = errors
+      .map(e => `${e.provider}: ${e.error?.slice(0, 200) || 'unknown error'}`)
+      .join('; ');
     throw new Error(`All embedding providers failed for batch: ${errorSummary}`);
   }
 
@@ -393,8 +417,22 @@ export class HybridEmbeddings {
    * Returns the actual source being used (dynamically detected)
    */
   getCurrentSource() {
-    // If we've used a provider, report it; otherwise default to 'unknown'
-    const source = this.lastUsedProvider || 'unknown';
+    // If we've used a provider, report it; otherwise infer from config
+    let source = this.lastUsedProvider;
+
+    // CRITICAL FIX: Before any embeddings are generated, infer the provider from mode/config
+    // This ensures getNormalizedModelName() returns the correct model for incremental resume
+    if (!source) {
+      // Check provider priority to determine which provider will be used
+      if (this.providerPriority.includes('lmstudio') && this.mode !== 'cloud') {
+        // LM Studio is configured and available
+        source = 'lmstudio';
+      } else if (this.providerPriority.includes('openrouter') && this.mode !== 'local') {
+        source = 'openrouter';
+      } else {
+        source = 'transformers';
+      }
+    }
 
     // Determine the model name based on which provider was used
     let model;
@@ -436,6 +474,16 @@ export class HybridEmbeddings {
     const source = this.getCurrentSource();
     // Return format: "provider/model" for unique identification
     return `${source.source}/${source.model}`;
+  }
+
+  /**
+   * Get normalized model name for comparison
+   * Strips provider prefix for backward compatibility with existing file_index entries
+   * Returns just the model name portion (e.g., "text-embedding-embeddinggemma-300m")
+   */
+  getNormalizedModelName() {
+    const source = this.getCurrentSource();
+    return source.model; // Return just the model name without provider prefix
   }
 
   /**
@@ -588,7 +636,10 @@ export class HybridEmbeddings {
     }
 
     // All providers failed
-    const errorSummary = errors.map(e => `${e.provider}: ${e.error}`).join('; ');
+    // OOM FIX: Truncate error messages to prevent unbounded string growth
+    const errorSummary = errors
+      .map(e => `${e.provider}: ${e.error?.slice(0, 200) || 'unknown error'}`)
+      .join('; ');
     throw new Error(`All embedding providers failed: ${errorSummary}`);
   }
 
