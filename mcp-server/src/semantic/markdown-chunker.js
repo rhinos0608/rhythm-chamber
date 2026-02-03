@@ -214,6 +214,16 @@ export class MarkdownChunker {
           i = endLine;
           continue;
         }
+        // Not a valid table (e.g., a single row without a separator). Treat as paragraph to
+        // ensure forward progress and avoid infinite loops on lines that match table patterns.
+        elements.push({
+          type: 'md-paragraph',
+          content: line,
+          startLine: lineNum,
+          endLine: lineNum,
+        });
+        i = endLine;
+        continue;
       }
 
       // Check for horizontal rule
@@ -263,6 +273,17 @@ export class MarkdownChunker {
 
       // Stop at code blocks (they should be separate chunks)
       if (PATTERNS.codeBlockFence.test(line)) {
+        break;
+      }
+
+      // Stop at other block-level elements that should be separate chunks
+      if (
+        PATTERNS.unorderedList.test(line) ||
+        PATTERNS.orderedList.test(line) ||
+        PATTERNS.blockquote.test(line) ||
+        PATTERNS.table.test(line) ||
+        PATTERNS.horizontalRule.test(line)
+      ) {
         break;
       }
 
@@ -361,6 +382,12 @@ export class MarkdownChunker {
           const nextLine = lines[i + 1];
           if (PATTERNS.unorderedList.test(nextLine) || PATTERNS.orderedList.test(nextLine)) {
             // Continuation after blank line
+            contentLines.push(line);
+            i++;
+            continue;
+          }
+          // Multi-paragraph list items: allow an indented continuation after a blank line.
+          if (/^[\s\t]{2,}/.test(nextLine)) {
             contentLines.push(line);
             i++;
             continue;
@@ -512,11 +539,26 @@ export class MarkdownChunker {
 
     // Calculate chunk size in lines (with overlap)
     const totalLines = contentLines.length;
-    const overlapLines = Math.max(1, Math.ceil(totalLines * this.overlapPercentage));
-    const chunkSize = Math.max(
-      this.minChunkSize,
-      Math.floor(this.maxChunkSize / (content.length / totalLines))
-    );
+    if (totalLines === 0) {
+      return chunks;
+    }
+
+    // Convert character-based limits to an approximate line count using average chars/line.
+    // This avoids unit mismatches (chars vs lines) and prevents infinite-loop overlap behavior.
+    const avgCharsPerLine = Math.max(1, content.length / totalLines);
+    const targetChunkLines = Math.max(1, Math.floor(this.maxChunkSize / avgCharsPerLine));
+    const minChunkLines = Math.max(1, Math.floor(this.minChunkSize / avgCharsPerLine));
+
+    let chunkSize = Math.max(minChunkLines, targetChunkLines);
+    chunkSize = Math.min(chunkSize, totalLines);
+
+    // Overlap is a percentage of the *chunk size*, not the entire document.
+    let overlapLines = Math.max(0, Math.floor(chunkSize * this.overlapPercentage));
+    overlapLines = Math.min(overlapLines, Math.max(0, chunkSize - 1));
+
+    const stepLines = Math.max(1, chunkSize - overlapLines);
+    const totalChunks =
+      totalLines <= chunkSize ? 1 : Math.ceil((totalLines - chunkSize) / stepLines) + 1;
 
     let chunkStart = 0;
     let chunkIndex = 0;
@@ -548,13 +590,18 @@ export class MarkdownChunker {
           ...this._extractElementMetadata(element),
           isSplit: true,
           chunkIndex,
-          totalChunks: Math.ceil(totalLines / chunkSize),
+          totalChunks,
         },
       });
 
-      // Move to next chunk with overlap
-      chunkStart = chunkEnd - overlapLines;
       chunkIndex++;
+
+      if (chunkEnd >= totalLines) {
+        break;
+      }
+
+      // Move to next chunk with overlap (ensured to make forward progress via stepLines)
+      chunkStart += stepLines;
     }
 
     return chunks;
