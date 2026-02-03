@@ -131,9 +131,13 @@ export class CodeIndexer {
   async initialize() {
     console.error('[Indexer] Initializing semantic search indexer...');
 
+    // Ensure embedding provider/model selection is resolved before we compute modelVersion and stats.
+    if (this.embeddings && typeof this.embeddings.initialize === 'function') {
+      await this.embeddings.initialize();
+    }
+
     // Initialize cache with model version for invalidation tracking
-    const modelInfo = this.embeddings.getModelInfo();
-    this.cache.setModelVersion(modelInfo.name);
+    this.cache.setModelVersion(this.embeddings.getModelVersion());
     await this.cache.initialize();
 
     // Load cached data if available
@@ -309,9 +313,9 @@ export class CodeIndexer {
         this.stats.filesDiscovered = files.length;
 
         // INCREMENTAL RESUME: Check SQLite file index FIRST (before cache)
-        // This allows resuming from crashes even if cache is partial/corrupted
-        // Use normalized model name for comparison (strips provider prefix for backward compatibility)
-        const normalizedModelName = this.embeddings.getNormalizedModelName();
+        // This allows resuming from crashes even if cache is partial/corrupted.
+        // Compare full model version (provider/model) to prevent mixing embedding spaces.
+        const currentModelVersion = this.embeddings.getModelVersion();
         const sqliteIndexed = new Map(); // relPath -> mtime
         const sqliteSkipped = [];
         const deletedFiles = []; // Track files that were deleted since last index
@@ -359,13 +363,9 @@ export class CodeIndexer {
             const relPath = relative(this.projectRoot, absPath);
             const indexState = this.vectorStore.adapter.getFileIndexState(relPath);
 
-            // Normalize both model versions for comparison (strip provider prefix)
-            // This handles both old format (bare model name) and new format (provider/model)
-            const storedModelVersion = indexState?.modelVersion?.includes('/')
-              ? indexState.modelVersion.split('/')[1]  // Extract "model" from "provider/model"
-              : indexState?.modelVersion;              // Already normalized (just "model")
+            const storedModelVersion = indexState?.modelVersion || null;
 
-            if (indexState && storedModelVersion === normalizedModelName) {
+            if (indexState && storedModelVersion === currentModelVersion) {
               // File is indexed, check if mtime still matches
               try {
                 const currentStat = await stat(absPath);
@@ -634,11 +634,11 @@ export class CodeIndexer {
       }
 
       // Read source
-      const source = await readFile(filePath, 'utf-8');
+      let source = await readFile(filePath, 'utf-8');
 
       // Route to appropriate chunker based on file extension
       const isMarkdown = this.markdownChunker.isSupported(relPath);
-      const chunks = isMarkdown
+      let chunks = isMarkdown
         ? this.markdownChunker.chunkSourceFile(source, relPath)
         : this.codeChunker.chunkSourceFile(source, relPath);
 
@@ -901,8 +901,8 @@ export class CodeIndexer {
       // INCREMENTAL RESUME: Update SQLite file index ONLY if all chunks stored successfully
       // This prevents marking files as "indexed" when they have partial data
       if (this.vectorStore.useSqlite && this.vectorStore.adapter) {
-        // Store normalized model name (without provider prefix) for backward compatibility
-        const modelVersion = this.embeddings.getNormalizedModelName();
+        // Store full model version (provider/model) to prevent mixing embedding spaces.
+        const modelVersion = this.embeddings.getModelVersion();
 
         if (vectorsStored === validCount) {
           // All chunks stored successfully - safe to mark as indexed
@@ -1312,7 +1312,12 @@ export class CodeIndexer {
    */
   async search(query, options = {}) {
     if (!this.indexed) {
-      throw new Error('Indexer not initialized. Call indexAll() first.');
+      // Allow searching when vectors already exist (e.g., SQLite has a populated index)
+      // even if this process hasn't completed a full indexAll() run yet.
+      const vectorCount = this.vectorStore?.getStats?.().chunkCount ?? 0;
+      if (!vectorCount) {
+        throw new Error('Indexer not initialized. Call indexAll() first.');
+      }
     }
 
     // CRITICAL FIX: Validate query parameter
@@ -1747,22 +1752,42 @@ export class CodeIndexer {
   /**
    * List indexed files
    */
-  listIndexedFiles() {
+  listIndexedFiles(options = {}) {
+    const { includeChunks = false } = options;
     const files = this.vectorStore.getFiles();
 
     return files.map(file => {
-      const chunks = this.vectorStore.getByFile(file);
-      const isValid = this.cache.files.get(file);
+      const isSqlite = Boolean(this.vectorStore.useSqlite && this.vectorStore.adapter);
+
+      // Prefer SQLite file_index for fast, accurate counts and mtimes when available.
+      const indexState =
+        isSqlite && typeof this.vectorStore.adapter.getFileIndexState === 'function'
+          ? this.vectorStore.adapter.getFileIndexState(file)
+          : null;
+
+      const chunkRefs = this.vectorStore.getByFile(file);
+      const chunkCount = indexState?.chunkCount ?? chunkRefs.length;
+
+      const cached = this.cache.files.get(file);
+      const lastModifiedMs = indexState?.mtime ?? cached?.mtime ?? null;
+      const lastModified = lastModifiedMs ? new Date(lastModifiedMs).toISOString() : null;
 
       return {
         file,
-        chunkCount: chunks.length,
-        lastModified: isValid ? new Date(isValid.mtime).toISOString() : null,
-        chunks: chunks.map(c => ({
-          id: c.chunkId,
-          type: c.metadata.type,
-          name: c.metadata.name,
-        })),
+        chunkCount,
+        lastModified,
+        chunks: includeChunks
+          ? chunkRefs.map(c => {
+              // In SQLite mode, getByFile returns only { chunkId }.
+              const chunkId = c.chunkId;
+              const stored = isSqlite ? this.vectorStore.get(chunkId) : c;
+              return {
+                id: chunkId,
+                type: stored?.metadata?.type || 'unknown',
+                name: stored?.metadata?.name || null,
+              };
+            })
+          : [],
       };
     });
   }
@@ -1771,9 +1796,41 @@ export class CodeIndexer {
    * Get indexing statistics
    */
   getStats() {
+    const vectorStoreStats = this.vectorStore.getStats();
+    const currentEmbedding = this.embeddings?.getCurrentSource
+      ? this.embeddings.getCurrentSource()
+      : null;
+
+    // When SQLite is active, the vector store can be populated even if this process
+    // didn't perform indexing in this run (incremental resume / skip path).
+    // Prefer adapter-backed counts so tools don't misleadingly report 0 files/chunks.
+    let indexedFiles = this.stats.filesIndexed || 0;
+    let indexedChunks = this.stats.chunksIndexed || 0;
+
+    if (this.vectorStore.useSqlite && this.vectorStore.adapter) {
+      if (
+        indexedFiles === 0 &&
+        typeof this.vectorStore.adapter.getAllFileIndexes === 'function'
+      ) {
+        try {
+          indexedFiles = this.vectorStore.adapter.getAllFileIndexes().length;
+        } catch {
+          // ignore - fall back to in-memory stats
+        }
+      }
+
+      if (indexedChunks === 0 && typeof vectorStoreStats.chunkCount === 'number') {
+        indexedChunks = vectorStoreStats.chunkCount;
+      }
+    }
+
     return {
       ...this.stats,
-      vectorStore: this.vectorStore.getStats(),
+      embeddingSource: currentEmbedding?.source || this.stats.embeddingSource,
+      embeddingModel: currentEmbedding?.model || null,
+      filesIndexed: indexedFiles,
+      chunksIndexed: indexedChunks,
+      vectorStore: vectorStoreStats,
       dependencyGraph: this.dependencyGraph.getStats(),
       cache: this.cache.getStats(),
       embeddings: this.embeddings.getCacheStats(),
