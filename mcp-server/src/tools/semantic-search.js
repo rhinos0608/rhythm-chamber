@@ -22,10 +22,17 @@ export const schema = {
         description:
           'Natural language query describing what you are looking for (e.g., "how are sessions created?", "authentication flow", "error handling for API calls")',
       },
+      scope: {
+        type: 'string',
+        enum: ['code', 'docs', 'all'],
+        description:
+          'Search scope. "code" excludes docs/coverage, "docs" searches docs only, "all" searches everything.',
+        default: 'code',
+      },
       limit: {
         type: 'number',
         description: 'Maximum number of results to return',
-        default: 5,
+        default: 10,
         minimum: 1,
         maximum: 20,
       },
@@ -33,21 +40,21 @@ export const schema = {
         type: 'number',
         description:
           'Minimum similarity threshold (0-1). Lower values return more results but may be less relevant.',
-        default: 0.3,
+        default: 0.25,
         minimum: 0,
         maximum: 1,
       },
       maxChars: {
         type: 'number',
         description: 'Maximum characters per code snippet (prevents OOM)',
-        default: 300,
+        default: 600,
         minimum: 100,
         maximum: 1000,
       },
       summaryMode: {
         type: 'boolean',
         description: 'Return compact summary instead of full code snippets',
-        default: true,
+        default: false,
       },
       filters: {
         type: 'object',
@@ -87,7 +94,15 @@ export const schema = {
  * Handle tool execution
  */
 export const handler = async (args, projectRoot, indexer, server) => {
-  const { query, limit = 5, threshold = 0.3, maxChars = 300, summaryMode = true, filters = {} } = args;
+  const {
+    query,
+    scope = 'code',
+    limit = 10,
+    threshold = 0.25,
+    maxChars = 600,
+    summaryMode = false,
+    filters = {},
+  } = args;
 
   // Check if indexer is available
   if (!indexer) {
@@ -117,31 +132,7 @@ was started with semantic search enabled.
 
   // Check if indexing is in progress
   const status = server?.getIndexingStatus ? server.getIndexingStatus() : { status: 'unknown' };
-  if (status.status === 'indexing') {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `# Indexing in Progress
-
-Semantic search is currently building the index. This may take a minute for the first run.
-
-**Status:**
-- Indexing files and generating embeddings...
-- Please wait and try again
-
-**Progress:**
-- Files discovered: ${status.stats?.filesDiscovered || 0}
-- Chunks indexed: ${status.stats?.chunksIndexed || 0}
-- Embedding source: ${status.stats?.embeddingSource || 'unknown'}
-
-**Tip:** The server remains ready for other tools during indexing.
-`,
-        },
-      ],
-      isError: false,
-    };
-  }
+  const indexingInProgress = status.status === 'indexing';
 
   // Check for indexing errors
   if (status.error) {
@@ -169,6 +160,32 @@ Semantic search encountered an error during indexing:
   // Check if indexing has been performed
   const stats = indexer.getStats();
   if (stats.vectorStore?.chunkCount === 0) {
+    if (indexingInProgress) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `# Indexing in Progress
+
+Semantic search is currently building the index. This may take a minute for the first run.
+
+**Status:**
+- Indexing files and generating embeddings...
+- Please wait and try again
+
+**Progress:**
+- Files discovered: ${status.stats?.filesDiscovered || 0}
+- Chunks indexed: ${status.stats?.chunksIndexed || 0}
+- Embedding source: ${status.stats?.embeddingSource || 'unknown'}
+
+**Tip:** The server remains ready for other tools during indexing.
+`,
+          },
+        ],
+        isError: false,
+      };
+    }
+
     return {
       content: [
         {
@@ -197,8 +214,20 @@ The semantic search index is empty. This could mean:
   }
 
   try {
+    // Apply search scope defaults when user didn't provide an explicit file selector.
+    // This avoids "docs/API.md dominates everything" for generic code queries.
+    const effectiveFilters = { ...filters };
+    if (!effectiveFilters.filePattern && !effectiveFilters.filePath && scope !== 'all') {
+      if (scope === 'docs') {
+        effectiveFilters.filePattern = '^docs/';
+      } else if (scope === 'code') {
+        // Exclude docs + coverage by default (code-first search).
+        effectiveFilters.filePattern = '^(?!docs/)(?!coverage/).*';
+      }
+    }
+
     // Perform semantic search
-    const results = await indexer.search(query, { limit, threshold, filters });
+    const results = await indexer.search(query, { limit, threshold, filters: effectiveFilters });
 
     if (results.length === 0) {
       return {
@@ -215,7 +244,13 @@ The semantic search index is empty. This could mean:
       content: [
         {
           type: 'text',
-          text: formatResults(query, results, stats, { maxChars, summaryMode }),
+          text: formatResults(query, results, stats, {
+            maxChars,
+            summaryMode,
+            note: indexingInProgress
+              ? 'Indexing is currently in progress; results may be incomplete.'
+              : null,
+          }),
         },
       ],
       metadata: {
@@ -258,11 +293,15 @@ An error occurred while performing semantic search:
  * @param {boolean} options.summaryMode - Use compact summary format
  */
 function formatResults(query, results, stats, options = {}) {
-  const { maxChars = 300, summaryMode = true } = options;
+  const { maxChars = 600, summaryMode = false, note = null } = options;
   const lines = [];
 
   lines.push('# Semantic Search Results');
   lines.push('');
+  if (note) {
+    lines.push(`> ${note}`);
+    lines.push('');
+  }
   lines.push(`**Query:** ${query}`);
   lines.push(`**Results:** ${results.length} matches`);
   lines.push(`**Index:** ${stats.vectorStore?.chunkCount || 0} chunks indexed`);
@@ -283,11 +322,12 @@ function formatResults(query, results, stats, options = {}) {
   if (summaryMode) {
     lines.push('**Matches:**');
     for (const result of results) {
-      const { chunkId, similarity, metadata } = result;
+      const { metadata } = result;
       const location = metadata.startLine ? `:${metadata.startLine}` : '';
       const exported = metadata.exported ? ' 📤' : '';
+      const score = formatResultScore(result);
       lines.push(
-        `- \`${metadata.name || 'unnamed'}\`${exported} ${formatSimilarity(similarity)} → ${metadata.file || 'unknown'}${location}`
+        `- \`${metadata.name || 'unnamed'}\`${exported} ${score} → ${metadata.file || 'unknown'}${location}`
       );
     }
     return lines.join('\n');
@@ -299,9 +339,11 @@ function formatResults(query, results, stats, options = {}) {
     lines.push('');
 
     for (const result of fileResults) {
-      const { chunkId, similarity, metadata } = result;
+      const { chunkId, metadata } = result;
+      const score = formatResultScore(result);
+      const fenceLang = getFenceLang(metadata);
 
-      lines.push(`### \`${metadata.name || 'unnamed'}\` ${formatSimilarity(similarity)}`);
+      lines.push(`### \`${metadata.name || 'unnamed'}\` ${score}`);
       lines.push('');
       lines.push(`**Chunk ID:** \`${chunkId}\``);
 
@@ -323,7 +365,7 @@ function formatResults(query, results, stats, options = {}) {
       const contextBefore = result.metadata?.contextBefore;
       if (contextBefore && contextBefore.trim().length > 0) {
         lines.push('**Context (before):**');
-        lines.push('```javascript');
+        lines.push(`\`\`\`${fenceLang}`);
         lines.push(contextBefore.trim().substring(0, maxChars));
         if (contextBefore.length > maxChars) {
           lines.push('...');
@@ -336,7 +378,7 @@ function formatResults(query, results, stats, options = {}) {
       const snippet = result.metadata?.text || '';
       if (snippet) {
         lines.push('**Code:**');
-        lines.push('```javascript');
+        lines.push(`\`\`\`${fenceLang}`);
         lines.push(snippet.substring(0, maxChars));
         if (snippet.length > maxChars) {
           lines.push('...');
@@ -349,7 +391,7 @@ function formatResults(query, results, stats, options = {}) {
       const contextAfter = result.metadata?.contextAfter;
       if (contextAfter && contextAfter.trim().length > 0) {
         lines.push('**Context (after):**');
-        lines.push('```javascript');
+        lines.push(`\`\`\`${fenceLang}`);
         lines.push(contextAfter.trim().substring(0, maxChars));
         if (contextAfter.length > maxChars) {
           lines.push('...');
@@ -400,6 +442,29 @@ function formatSimilarity(similarity) {
   } else {
     return `🔴 ${percent}%`;
   }
+}
+
+/**
+ * Format a result's score in a way that doesn't mislead users.
+ * Lexical-only (RRF) results have similarity=0 by design; label them explicitly.
+ */
+function formatResultScore(result) {
+  const similarity = result?.similarity;
+  if (typeof result?.rrfScore === 'number' && similarity === 0) {
+    return '🟣 lexical';
+  }
+  return formatSimilarity(similarity);
+}
+
+function getFenceLang(metadata = {}) {
+  const file = metadata.file || '';
+  const type = metadata.type || '';
+
+  if (file.endsWith('.md') || file.endsWith('.markdown') || String(type).startsWith('md-')) {
+    return 'markdown';
+  }
+
+  return 'javascript';
 }
 
 /**

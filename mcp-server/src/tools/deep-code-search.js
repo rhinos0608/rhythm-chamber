@@ -19,6 +19,13 @@ export const schema = {
         type: 'string',
         description: 'Natural language query or code symbol to search for',
       },
+      scope: {
+        type: 'string',
+        enum: ['code', 'docs', 'all'],
+        description:
+          'Search scope. "code" excludes docs/coverage, "docs" searches docs only, "all" searches everything.',
+        default: 'code',
+      },
       depth: {
         type: 'string',
         enum: ['quick', 'standard', 'thorough'],
@@ -32,6 +39,18 @@ export const schema = {
         minimum: 1,
         maximum: 50,
       },
+      includeSnippets: {
+        type: 'boolean',
+        description: 'Include a short code snippet for each match',
+        default: true,
+      },
+      maxChars: {
+        type: 'number',
+        description: 'Maximum characters per snippet',
+        default: 160,
+        minimum: 50,
+        maximum: 500,
+      },
     },
     required: ['query'],
   },
@@ -41,7 +60,14 @@ export const schema = {
  * Handle tool execution
  */
 export const handler = async (args, projectRoot, indexer, server) => {
-  const { query, depth = 'standard', limit = 10 } = args;
+  const {
+    query,
+    depth = 'standard',
+    limit = 10,
+    scope = 'code',
+    includeSnippets = true,
+    maxChars = 160,
+  } = args;
 
   console.error(`[deep_code_search] Starting ${depth} analysis for: ${query}`);
 
@@ -49,7 +75,9 @@ export const handler = async (args, projectRoot, indexer, server) => {
   const phases = [];
 
   // Phase 1: Semantic Search
-  phases.push(await phase1SemanticSearch(query, limit, indexer, depth));
+  phases.push(
+    await phase1SemanticSearch(query, limit, indexer, depth, { scope, includeSnippets, maxChars })
+  );
 
   // Phase 2: Related Chunks Analysis (using dependency graph)
   if (depth !== 'quick' && phases[0].results.length > 0 && indexer) {
@@ -80,7 +108,7 @@ export const handler = async (args, projectRoot, indexer, server) => {
 /**
  * Phase 1: Semantic Search
  */
-async function phase1SemanticSearch(query, limit, indexer, depth) {
+async function phase1SemanticSearch(query, limit, indexer, depth, options = {}) {
   const startTime = Date.now();
 
   if (!indexer) {
@@ -95,7 +123,19 @@ async function phase1SemanticSearch(query, limit, indexer, depth) {
 
   try {
     const threshold = depth === 'quick' ? 0.2 : depth === 'thorough' ? 0.4 : 0.3;
-    const results = await indexer.search(query, { limit, threshold });
+    const { scope = 'code', includeSnippets = true, maxChars = 160 } = options;
+
+    // Code-first default: avoid docs dominating results for generic queries.
+    const filters = {};
+    if (scope !== 'all') {
+      if (scope === 'docs') {
+        filters.filePattern = '^docs/';
+      } else if (scope === 'code') {
+        filters.filePattern = '^(?!docs/)(?!coverage/).*';
+      }
+    }
+
+    const results = await indexer.search(query, { limit, threshold, filters });
 
     return {
       phase: 'semantic',
@@ -103,11 +143,13 @@ async function phase1SemanticSearch(query, limit, indexer, depth) {
       results: results.map(r => ({
         chunkId: r.chunkId,
         similarity: r.similarity,
+        rrfScore: r.rrfScore,
         file: r.metadata?.file,
         type: r.metadata?.type,
         name: r.metadata?.name,
         lines: `${r.metadata?.startLine}-${r.metadata?.endLine}`,
         exported: r.metadata?.exported,
+        snippet: includeSnippets ? buildSnippet(r.metadata?.text || '', maxChars) : null,
       })),
       elapsed: Date.now() - startTime,
     };
@@ -201,12 +243,15 @@ function formatResults(phases, query, depth, elapsed) {
       lines.push('');
 
       for (const match of matches) {
-        const score = Math.round(match.similarity * 100);
-        const badge = score >= 80 ? '🟢' : score >= 60 ? '🟡' : score >= 40 ? '🟠' : '🔴';
-        lines.push(`- ${badge} **${match.name}** (L${match.lines}) - ${score}% similar`);
+        const { badge, label } = formatMatchScore(match);
+        lines.push(`- ${badge} **${match.name}** (L${match.lines}) - ${label}`);
 
         if (match.exported) {
           lines.push('  - Exported ✓');
+        }
+
+        if (match.snippet) {
+          lines.push(`  - Snippet: \`${sanitizeInlineCode(match.snippet)}\``);
         }
       }
 
@@ -289,6 +334,28 @@ function formatResults(phases, query, depth, elapsed) {
   lines.push('- `validate_hnw_compliance` - Check HNW architecture compliance');
 
   return lines.join('\n');
+}
+
+function formatMatchScore(match) {
+  if (typeof match?.rrfScore === 'number' && match.similarity === 0) {
+    return { badge: '🟣', label: 'lexical match' };
+  }
+
+  const score = Math.round((match?.similarity || 0) * 100);
+  const badge = score >= 80 ? '🟢' : score >= 60 ? '🟡' : score >= 40 ? '🟠' : '🔴';
+  return { badge, label: `${score}% similar` };
+}
+
+function buildSnippet(text, maxChars) {
+  const trimmed = String(text || '').trim().replace(/\s+/g, ' ');
+  if (!trimmed) return null;
+  if (trimmed.length <= maxChars) return trimmed;
+  return trimmed.slice(0, maxChars) + '…';
+}
+
+function sanitizeInlineCode(text) {
+  // Avoid breaking markdown inline-code fences.
+  return String(text || '').replace(/`/g, "'");
 }
 
 /**

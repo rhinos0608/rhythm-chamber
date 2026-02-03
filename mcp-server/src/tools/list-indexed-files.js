@@ -64,7 +64,7 @@ The semantic search indexer has not been initialized.
 
   try {
     // Get indexed files
-    const files = indexer.listIndexedFiles();
+    const files = indexer.listIndexedFiles({ includeChunks });
 
     if (files.length === 0) {
       return {
