@@ -9,9 +9,9 @@
  * - 'hybrid' : Transformers.js → LM Studio → OpenRouter
  *
  * PROVIDERS:
- * 1. Transformers.js (local, CPU-based, dynamic model selection)
- *    - Jina Code Embeddings v2 for code queries (SOTA on CoIR: 68.53%)
- *    - Xenova/gte-base for general queries (high quality)
+ * 1. Transformers.js (local, CPU-based, single-model per index)
+ *    - Uses a fixed model for both indexing and querying to avoid mixed embedding spaces.
+ *    - Default is code-first (Jina code embeddings v2); configurable via ModelConfigManager.
  * 2. LM Studio (local, GPU-accelerated, single model)
  * 3. OpenRouter (cloud, paid, fast)
  *    - Uses OpenAI text-embedding-3-small with configurable dimensions
@@ -111,6 +111,12 @@ export class HybridEmbeddings {
     // Store reference to model config for dynamic updates
     this.modelConfig = modelConfig;
 
+    // CRITICAL: A single vector index must not mix embedding models.
+    // Previously, Transformers.js dynamically switched between code/general models per chunk/query.
+    // That produces meaningless cosine similarities because vectors are from different spaces.
+    // We now use a single fixed Transformers.js model for both indexing and querying.
+    this.transformersFixedModel = options.transformersModel || null;
+
     console.error(
       `[Embeddings] Mode: ${this.mode}, Providers: ${this.providerPriority.join(' → ')}, Dimension: ${this.dimension}`
     );
@@ -154,12 +160,53 @@ export class HybridEmbeddings {
   }
 
   /**
+   * Initialize provider/model selection so model/version reporting is accurate before first use.
+   * This helps incremental indexing and avoids misleading "lmstudio" reporting when it's unavailable.
+   */
+  async initialize() {
+    if (this.lastUsedProvider) {
+      return;
+    }
+
+    for (const provider of this.providerPriority) {
+      switch (provider) {
+        case 'lmstudio':
+          if (
+            LMSTUDIO_CONFIG.enabled &&
+            !this.forceTransformers &&
+            (await this.isLMStudioAvailable())
+          ) {
+            this.lastUsedProvider = 'lmstudio';
+            this.lastUsedModel = this.modelName;
+            return;
+          }
+          break;
+
+        case 'openrouter':
+          if (OPENROUTER_CONFIG.enabled && this.openRouterApiKey) {
+            this.lastUsedProvider = 'openrouter';
+            this.lastUsedModel = this.openRouterModel;
+            return;
+          }
+          break;
+
+        case 'transformers':
+          if (TRANSFORMERS_CONFIG.enabled) {
+            this.lastUsedProvider = 'transformers';
+            this.lastUsedModel = this._getFixedTransformersModel();
+            return;
+          }
+          break;
+      }
+    }
+  }
+
+  /**
    * Get embedding for a single text
    */
   async getEmbedding(text) {
-    // Determine which model will be used before caching
-    const selectedModel = await this._selectModelForQuery(text);
-    const cacheKey = this.getCacheKey(text, selectedModel);
+    // Key the cache by the current model version (provider/model) to avoid cross-model cache pollution.
+    const cacheKey = this.getCacheKey(text, this.getModelVersion());
 
     // Check cache
     if (this.cache.has(cacheKey)) {
@@ -274,46 +321,37 @@ export class HybridEmbeddings {
   }
 
   /**
-   * Fetch batch embeddings using Transformers.js with model-aware batching
-   * Groups queries by type (code vs general) to use optimal models
+   * Fetch batch embeddings using Transformers.js with a single fixed model
+   * to keep a consistent embedding space for vector search.
    */
   async _fetchBatchWithTransformers(texts) {
     // Track that we're using transformers
     this.lastUsedProvider = 'transformers';
 
-    // Classify each query by its optimal model
-    const codeQueries = [];
-    const generalQueries = [];
+    // CRITICAL: Use a single model for the entire batch to keep a consistent embedding space.
+    // Mixing models inside the same vector index breaks cosine similarity.
+    const modelName = this._getFixedTransformersModel();
+    return await this._fetchBatchWithModel(texts, modelName);
+  }
 
-    for (let i = 0; i < texts.length; i++) {
-      if (this._isCodeQuery(texts[i])) {
-        codeQueries.push({ text: texts[i], index: i });
-      } else {
-        generalQueries.push({ text: texts[i], index: i });
-      }
+  /**
+   * Get the fixed Transformers.js model to use for this process.
+   * Prefers explicit option, then ModelConfigManager active model, otherwise code-first default.
+   * @private
+   */
+  _getFixedTransformersModel() {
+    const configured =
+      this.transformersFixedModel ||
+      (this.modelConfig && typeof this.modelConfig.getActiveModel === 'function'
+        ? this.modelConfig.getActiveModel()
+        : null);
+
+    if (configured && (configured.startsWith('Xenova/') || configured.startsWith('jinaai/'))) {
+      return configured;
     }
 
-    const results = new Array(texts.length);
-
-    // Process code queries with Jina model
-    if (codeQueries.length > 0) {
-      const codeEmbeddings = await this._fetchBatchWithModel(
-        codeQueries.map(q => q.text),
-        JINA_CODE_MODEL
-      );
-      codeQueries.forEach((q, i) => (results[q.index] = codeEmbeddings[i]));
-    }
-
-    // Process general queries with fallback model
-    if (generalQueries.length > 0) {
-      const generalEmbeddings = await this._fetchBatchWithModel(
-        generalQueries.map(q => q.text),
-        FALLBACK_MODEL
-      );
-      generalQueries.forEach((q, i) => (results[q.index] = generalEmbeddings[i]));
-    }
-
-    return results;
+    // Code-first default for a code search index.
+    return JINA_CODE_MODEL;
   }
 
   /**
@@ -333,6 +371,10 @@ export class HybridEmbeddings {
         this.initPromises.delete(this.transformersModel);
       }
     }
+
+    // Track that we're using Transformers.js for this batch (fixes incorrect model reporting)
+    this.lastUsedProvider = 'transformers';
+    this.lastUsedModel = modelName;
 
     // Process batch with the loaded model
     const results = [];
@@ -444,7 +486,7 @@ export class HybridEmbeddings {
         model = this.openRouterModel;
         break;
       case 'transformers':
-        model = this.transformersModel || FALLBACK_MODEL;
+        model = this.lastUsedModel || this._getFixedTransformersModel();
         break;
       default:
         model = FALLBACK_MODEL;
@@ -594,11 +636,9 @@ export class HybridEmbeddings {
    * Returns Jina Code Embeddings for code queries, general model otherwise
    */
   async _selectModelForQuery(query) {
-    // Check if query contains code patterns
-    if (this._isCodeQuery(query)) {
-      return JINA_CODE_MODEL;
-    }
-    return FALLBACK_MODEL;
+    // Kept for backward compatibility with older call sites.
+    // The system now uses a single fixed model for a consistent embedding space.
+    return this._getFixedTransformersModel();
   }
 
   /**
@@ -857,8 +897,12 @@ export class HybridEmbeddings {
    * Uses Jina Code Embeddings for code queries, general model otherwise
    */
   async _fetchEmbeddingTransformers(text) {
-    // Select appropriate model based on query content
-    const selectedModel = await this._selectModelForQuery(text);
+    // CRITICAL: Use a single fixed model to avoid mixing embedding spaces.
+    const selectedModel = this._getFixedTransformersModel();
+
+    // Track that we're using Transformers.js for this request (fixes incorrect model reporting)
+    this.lastUsedProvider = 'transformers';
+    this.lastUsedModel = selectedModel;
 
     // Reinitialize pipeline if a different model is needed
     if (!this.transformersPipeline || this.transformersModel !== selectedModel) {
@@ -1045,7 +1089,7 @@ export class HybridEmbeddings {
       dimension: this.getDimension(),
       type: source.isCodeSpecialized ? 'code-specialized' : 'general-purpose',
       fallbackAvailable: source.fallbackAvailable,
-      hasDynamicSelection: true, // Indicates support for per-query model selection
+      hasDynamicSelection: false,
     };
   }
 
@@ -1053,7 +1097,7 @@ export class HybridEmbeddings {
    * Check if the current model is code-specialized
    */
   isCodeSpecific() {
-    const model = this.transformersModel || FALLBACK_MODEL;
+    const model = this._getFixedTransformersModel();
     return model.includes('jina-embeddings-v2-base-code') || model.includes('jina-code');
   }
 }
