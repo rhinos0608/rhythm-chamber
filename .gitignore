@@ -61,3 +61,6 @@ test-circular-dep.js
 
 # Test wrapper JSON outputs
 .test-results/
+
+# MCP server node:test artifacts
+mcp-server/tests/.test-cache/
