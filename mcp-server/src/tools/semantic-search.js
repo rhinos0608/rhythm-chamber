@@ -46,7 +46,7 @@ export const schema = {
       },
       summaryMode: {
         type: 'boolean',
-        description: 'Return compact summary instead of full code snippets',
+        description: 'Return compact format with code previews (true) or detailed format with full context (false)',
         default: true,
       },
       filters: {
@@ -200,6 +200,27 @@ The semantic search index is empty. This could mean:
     // Perform semantic search
     const results = await indexer.search(query, { limit, threshold, filters });
 
+    // Defensive: Ensure results is an array
+    if (!Array.isArray(results)) {
+      console.error('[semantic_search] ERROR: indexer.search() did not return an array:', typeof results, results);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `# Internal Error
+
+Semantic search returned an invalid result type: \`${typeof results}\`
+
+**Expected:** Array
+**Got:** ${typeof results}
+
+This is a bug. Please report this issue.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
     if (results.length === 0) {
       return {
         content: [
@@ -255,7 +276,7 @@ An error occurred while performing semantic search:
  * @param {Object} stats - Index statistics
  * @param {Object} options - Formatting options
  * @param {number} options.maxChars - Max characters per snippet
- * @param {boolean} options.summaryMode - Use compact summary format
+ * @param {boolean} options.summaryMode - Compact format with code previews (true) or detailed format with full context (false)
  */
 function formatResults(query, results, stats, options = {}) {
   const { maxChars = 300, summaryMode = true } = options;
@@ -279,7 +300,8 @@ function formatResults(query, results, stats, options = {}) {
     byFile.get(file).push(result);
   }
 
-  // SUMMARY MODE: Compact one-line per result format
+  // SUMMARY MODE: Compact format with code previews
+  // CRITICAL: Include actual code content, not just document references
   if (summaryMode) {
     lines.push('**Matches:**');
     for (const result of results) {
@@ -289,8 +311,21 @@ function formatResults(query, results, stats, options = {}) {
       lines.push(
         `- \`${metadata.name || 'unnamed'}\`${exported} ${formatSimilarity(similarity)} → ${metadata.file || 'unknown'}${location}`
       );
+
+      // Add code preview - show actual content, not just reference
+      const snippet = metadata.text || '';
+      if (snippet && snippet.trim().length > 0) {
+        const preview = snippet.trim().substring(0, maxChars);
+        lines.push(`  \`\`\`javascript`);
+        lines.push(`  ${preview}`);
+        if (snippet.length > maxChars) {
+          lines.push(`  ...`);
+        }
+        lines.push(`  \`\`\``);
+      }
+      lines.push('');
     }
-    return lines.join('\n');
+    return lines.join('\n').trim();
   }
 
   // FULL MODE: Detailed output with code snippets (respecting maxChars)
