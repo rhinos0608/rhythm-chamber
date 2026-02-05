@@ -84,6 +84,7 @@ const DemoStorage = {
     /**
      * Initialize demo storage with safeguards
      */
+    // eslint-disable-next-line require-await
     async init() {
         if (this._initialized) return;
 
