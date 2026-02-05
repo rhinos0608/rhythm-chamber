@@ -563,7 +563,7 @@ async function confirmDeleteChat() {
 /**
  * Handle session rename
  */
-async function handleSessionRename(sessionId) {
+function handleSessionRename(sessionId) {
     // Guard against concurrent rename operations (RENDER GUARD FIX)
     if (renameInProgress) {
         console.warn('[SidebarController] Rename already in progress, ignoring duplicate request');

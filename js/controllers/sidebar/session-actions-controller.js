@@ -203,7 +203,7 @@ async function confirmDeleteChat() {
  * Handle session rename
  * @param {string} sessionId - Session ID to rename
  */
-async function handleSessionRename(sessionId) {
+function handleSessionRename(sessionId) {
     // Guard against concurrent rename operations (RENDER GUARD FIX)
     if (renameInProgress) {
         console.warn(
