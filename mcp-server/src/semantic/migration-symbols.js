@@ -43,11 +43,15 @@ export function migrateToV2(dbPath) {
       const hasRequiredColumns = tableInfo.some(col => col.name === 'qualified_name');
 
       if (hasRequiredColumns) {
-        console.warn('[Migration V2] Migration already completed (symbols table exists with correct schema)');
+        console.warn(
+          '[Migration V2] Migration already completed (symbols table exists with correct schema)'
+        );
         db.close();
         return { status: 'already_migrated', version: MIGRATION_VERSION };
       }
-      console.warn('[Migration V2] Symbols table exists but schema incomplete, re-running migration...');
+      console.warn(
+        '[Migration V2] Symbols table exists but schema incomplete, re-running migration...'
+      );
     }
 
     // Step 1: Create symbols table
@@ -141,7 +145,9 @@ export function migrateToV2(dbPath) {
     console.error('[Migration V2] Migration complete!');
     console.error(`[Migration V2] Duration: ${duration}ms`);
     console.error('[Migration V2] Created tables: symbols, symbols_fts, symbol_usages');
-    console.error('[Migration V2] Created indexes: idx_symbols_type, idx_symbols_file, idx_symbols_exported, idx_symbols_class, idx_usages_symbol');
+    console.error(
+      '[Migration V2] Created indexes: idx_symbols_type, idx_symbols_file, idx_symbols_exported, idx_symbols_class, idx_usages_symbol'
+    );
 
     db.close();
 
@@ -150,7 +156,13 @@ export function migrateToV2(dbPath) {
       version: MIGRATION_VERSION,
       duration,
       tables: ['symbols', 'symbols_fts', 'symbol_usages'],
-      indexes: ['idx_symbols_type', 'idx_symbols_file', 'idx_symbols_exported', 'idx_symbols_class', 'idx_usages_symbol'],
+      indexes: [
+        'idx_symbols_type',
+        'idx_symbols_file',
+        'idx_symbols_exported',
+        'idx_symbols_class',
+        'idx_usages_symbol',
+      ],
     };
   } catch (error) {
     console.error('[Migration V2] Migration failed:', error.message);
@@ -178,7 +190,9 @@ export function rollbackV2(dbPath) {
       usages: db.prepare('SELECT COUNT(*) as count FROM symbol_usages').get()?.count || 0,
     };
 
-    console.error(`[Rollback V2] Before: ${beforeStats.symbols} symbols, ${beforeStats.usages} usages`);
+    console.error(
+      `[Rollback V2] Before: ${beforeStats.symbols} symbols, ${beforeStats.usages} usages`
+    );
 
     // Drop tables
     console.error('[Rollback V2] Dropping symbol tables...');
@@ -193,7 +207,9 @@ export function rollbackV2(dbPath) {
 
     console.error('[Rollback V2] Rollback complete!');
     console.error(`[Rollback V2] Duration: ${duration}ms`);
-    console.error(`[Rollback V2] Deleted: ${beforeStats.symbols} symbols, ${beforeStats.usages} usages`);
+    console.error(
+      `[Rollback V2] Deleted: ${beforeStats.symbols} symbols, ${beforeStats.usages} usages`
+    );
 
     db.close();
 
@@ -223,10 +239,8 @@ export function getMigrationVersion(dbPath) {
     let result;
 
     try {
-      result = db
-        .prepare("SELECT value FROM _metadata WHERE key = 'migration_version'")
-        .get();
-    } catch (error) {
+      result = db.prepare("SELECT value FROM _metadata WHERE key = 'migration_version'").get();
+    } catch {
       // _metadata table doesn't exist, continue to pragma_user_config
     }
 
@@ -239,7 +253,7 @@ export function getMigrationVersion(dbPath) {
       result = db
         .prepare("SELECT value FROM pragma_user_config WHERE key = 'migration_version'")
         .get();
-    } catch (error) {
+    } catch {
       // pragma_user_config doesn't exist either
     }
 
@@ -294,12 +308,16 @@ export function populateSymbolsFromChunks(dbPath) {
 
   try {
     // Get all code chunks with symbol information
-    const chunks = db.prepare(`
+    const chunks = db
+      .prepare(
+        `
       SELECT chunk_id, text, name, type, file, line
       FROM chunk_metadata_code
       WHERE name IS NOT NULL
       AND type IN ('function', 'class', 'class-declaration', 'method', 'variable')
-    `).all();
+    `
+      )
+      .all();
 
     console.error(`[Migration V2] Found ${chunks.length} chunks to process`);
 
@@ -312,11 +330,13 @@ export function populateSymbolsFromChunks(dbPath) {
           // Determine if exported (check for 'export' in text)
           const exported = chunk.text && chunk.text.trim().startsWith('export') ? 1 : 0;
 
-          db.prepare(`
+          db.prepare(
+            `
             INSERT OR REPLACE INTO symbols
             (name, qualified_name, chunk_id, type, file, line, exported, async, static, class_name, definition_count)
             VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, NULL, 1)
-          `).run(
+          `
+          ).run(
             chunk.name,
             chunk.name, // qualified_name same as name initially
             chunk.chunk_id,
@@ -328,7 +348,10 @@ export function populateSymbolsFromChunks(dbPath) {
 
           populated++;
         } catch (error) {
-          console.error(`[Migration V2] Failed to populate chunk ${chunk.chunk_id}:`, error.message);
+          console.error(
+            `[Migration V2] Failed to populate chunk ${chunk.chunk_id}:`,
+            error.message
+          );
           failed++;
         }
       }

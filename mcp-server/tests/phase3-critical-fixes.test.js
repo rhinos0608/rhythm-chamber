@@ -106,9 +106,9 @@ describe('CRITICAL #1: SQL Injection in FTS5 Query Construction', () => {
 
       // Results should be well-formed
       results.forEach(result => {
-        assert.ok(result.hasOwnProperty('id'));
-        assert.ok(result.hasOwnProperty('chunkId'));
-        assert.ok(result.hasOwnProperty('text'));
+        assert.ok(Object.prototype.hasOwnProperty.call(result, 'id'));
+        assert.ok(Object.prototype.hasOwnProperty.call(result, 'chunkId'));
+        assert.ok(Object.prototype.hasOwnProperty.call(result, 'text'));
       });
     }
   });

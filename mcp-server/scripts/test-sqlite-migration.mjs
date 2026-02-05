@@ -10,15 +10,14 @@
  * Run with: node scripts/test-sqlite-migration.mjs
  */
 
-/* eslint-disable no-process-ex, no-empty */
+/* eslint-disable no-process-exit, no-empty */
 import { join } from 'path';
 import { existsSync, mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+// Suppress unused import warnings - these may be used in future test scenarios
+void mkdirSync;
+void tmpdir;
 
 // Import from mcp-server source
 import { VectorStore } from '../src/semantic/vector-store.js';
