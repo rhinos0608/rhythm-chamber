@@ -18,12 +18,9 @@ const LOCAL_EMBEDDING_DIMENSIONS = 384; // all-MiniLM-L6-v2 output dimension
 
 // Import ModuleRegistry for accessing dynamically loaded modules
 import { ModuleRegistry } from './module-registry.js';
-import { Patterns } from './patterns.js';
 import { Storage } from './storage.js';
-import { Crypto } from './security/crypto.js';
 import { OperationLock } from './operation-lock.js';
 import { safeJsonParse } from './utils/safe-json.js';
-import { ragChunkingService } from './rag/chunking-service.js';
 import { ragCheckpointManager } from './rag/checkpoint-manager.js';
 import { RAGWorkerPool } from './rag/rag-worker-pool.js';
 import { ragQueryService } from './rag/query-service.js';
@@ -206,7 +203,7 @@ function getConfigSync() {
             console.warn('[RAG] Failed to parse stored config:', parseError);
             return null;
         }
-    } catch (e) {
+    } catch {
         return null;
     }
 }
@@ -241,31 +238,6 @@ async function isStale() {
 
     const currentHash = await Storage.getDataHash?.();
     return currentHash !== config.dataHash;
-}
-
-/**
- * Get checkpoint for resume
- * @returns {Promise<Object|null>} Checkpoint data or null if not found
- */
-async function getCheckpoint() {
-    return await ragCheckpointManager.getCheckpoint();
-}
-
-/**
- * Save checkpoint for resume
- * @param {Object} data - Checkpoint data to save
- * @returns {Promise<void>}
- */
-async function saveCheckpoint(data) {
-    await ragCheckpointManager.saveCheckpoint(data);
-}
-
-/**
- * Clear checkpoint after completion
- * @returns {Promise<void>}
- */
-async function clearCheckpoint() {
-    await ragCheckpointManager.clearCheckpoint();
 }
 
 // ==========================================
@@ -308,33 +280,6 @@ async function getEmbeddingManifest() {
         totalChunksEmbedded: 0,
         version: 1,
     };
-}
-
-/**
- * Save the embedding manifest
- *
- * @param {Object} manifest - The manifest to save
- */
-async function saveEmbeddingManifest(manifest) {
-    const MANIFEST_KEY = 'rhythm_chamber_embedding_manifest';
-
-    manifest.updatedAt = Date.now();
-
-    // Save to unified storage
-    if (Storage.setConfig) {
-        try {
-            await Storage.setConfig(MANIFEST_KEY, manifest);
-        } catch (e) {
-            console.warn('[RAG] Failed to save manifest to unified storage:', e);
-        }
-    }
-
-    // Also save to localStorage for fallback
-    try {
-        localStorage.setItem(MANIFEST_KEY, JSON.stringify(manifest));
-    } catch (e) {
-        console.warn('[RAG] Failed to save manifest to localStorage:', e);
-    }
 }
 
 /**
@@ -444,42 +389,6 @@ function filterStreamsForIncremental(streams, incrementalInfo) {
 }
 
 /**
- * Update manifest after successful embedding
- *
- * @param {Array} embeddedChunks - Chunks that were successfully embedded
- */
-async function updateManifestAfterEmbedding(embeddedChunks) {
-    const manifest = await getEmbeddingManifest();
-
-    const monthsSet = new Set(manifest.embeddedMonths || []);
-    const artistsSet = new Set(manifest.embeddedArtists || []);
-
-    embeddedChunks.forEach(chunk => {
-        if (chunk.type === 'monthly_summary' && chunk.metadata?.month) {
-            monthsSet.add(chunk.metadata.month);
-        } else if (chunk.type === 'artist_profile' && chunk.metadata?.artist) {
-            artistsSet.add(chunk.metadata.artist);
-        }
-    });
-
-    const patternChunkCount = embeddedChunks.filter(
-        chunk => chunk.type === 'pattern_result' || chunk.type === 'pattern_summary'
-    ).length;
-
-    manifest.embeddedMonths = [...monthsSet];
-    manifest.embeddedArtists = [...artistsSet];
-    manifest.totalChunksEmbedded = (manifest.totalChunksEmbedded || 0) + embeddedChunks.length;
-    manifest.patternChunksEmbedded = (manifest.patternChunksEmbedded || 0) + patternChunkCount;
-    manifest.lastEmbeddedAt = Date.now();
-
-    await saveEmbeddingManifest(manifest);
-
-    console.log(
-        `[RAG] Updated manifest: ${monthsSet.size} months, ${artistsSet.size} artists embedded`
-    );
-}
-
-/**
  * Search for similar vectors (routes to local store)
  *
  * Delegates to RAGQueryService for query orchestration.
@@ -506,25 +415,6 @@ async function generateEmbeddings(onProgress = () => {}, options = {}, abortSign
 }
 
 /**
- * Create searchable chunks from streaming data
- * Groups data into meaningful segments for embedding
- *
- * Delegates to RAGChunkingService for focused chunking logic.
- *
- * PERFORMANCE: This is an async function that yields to the event loop
- * between batches to prevent UI freezing when processing large histories
- * (100k+ streams). This is the fallback when Web Worker is unavailable.
- *
- * @param {Array} streams - Streaming history data
- * @param {Function} onProgress - Optional progress callback
- * @returns {Promise<Array>} Chunks for embedding
- */
-async function createChunks(streams, onProgress = () => {}) {
-    // Delegate to chunking service
-    return await ragChunkingService.splitDocument(streams, onProgress);
-}
-
-/**
  * Clear all embeddings (local mode)
  */
 async function clearEmbeddings() {
@@ -544,7 +434,7 @@ async function clearEmbeddings() {
  * @param {AbortSignal} abortSignal - Optional signal to cancel operation
  * @returns {Promise<{success: boolean, chunksProcessed: number, mode: string}>}
  */
-async function generateLocalEmbeddings(onProgress = () => {}, options = {}, abortSignal = null) {
+async function generateLocalEmbeddings(onProgress = () => {}, _options = {}, abortSignal = null) {
     // PREMIUM GATE: Check semantic search access
     const { allowed } = await checkSemanticAccess();
     if (!allowed) {

@@ -13,7 +13,7 @@ import { StorageTransaction } from './storage/transaction/index.js';
 import { StorageMigration } from './storage/migration.js';
 import { ModuleRegistry } from './module-registry.js';
 import { EventBus } from './services/event-bus.js';
-import { WriteAheadLog, WalPriority } from './storage/write-ahead-log/index.js';
+import { WriteAheadLog } from './storage/write-ahead-log/index.js';
 import { ArchiveService } from './storage/archive-service.js';
 import { QuotaManager } from './storage/quota-manager.js';
 import { IndexedDBCore, STORES as INDEXEDDB_STORES } from './storage/indexeddb.js';
@@ -21,7 +21,6 @@ import { OperationLock } from './operation-lock.js';
 import { ProfileStorage } from './storage/profiles.js';
 import { ConfigAPI } from './storage/config-api.js';
 import { SyncManager } from './storage/sync-strategy.js';
-import { Crypto } from './security/crypto.js';
 import { STORAGE_EVENT_SCHEMAS } from './storage/storage-event-schemas.js';
 import { AutoRepairService } from './storage/auto-repair.js';
 
@@ -31,7 +30,6 @@ import {
     queuedOperation,
     isCriticalOperationInProgress,
     setPendingReload as setQueuePendingReload,
-    isReloadPending,
 } from './storage/operations/queue.js';
 import { assertWriteAllowed } from './storage/security.js';
 
@@ -96,26 +94,6 @@ function isAutoRepairEnabled() {
 }
 
 /**
- * Log a repair action
- * @param {string} issueType - Type of issue
- * @param {string} action - Action taken
- * @param {boolean} success - Whether repair succeeded
- * @param {*} details - Additional details
- */
-function logRepair(issueType, action, success, details = null) {
-    const entry = {
-        timestamp: new Date().toISOString(),
-        issueType,
-        action,
-        success,
-        details,
-    };
-    autoRepairService._logRepair(action, entry);
-    console.log(`[Storage] Repair ${success ? 'succeeded' : 'failed'}: ${issueType} - ${action}`);
-    EventBus.emit('storage:repair_action', entry);
-}
-
-/**
  * Get repair log
  * @param {Object} options - Query options
  * @param {number} [options.limit] - Maximum entries to return
@@ -142,17 +120,6 @@ function getRepairLog(options = {}) {
 function clearRepairLog() {
     autoRepairService.clearRepairLog();
     console.log('[Storage] Repair log cleared');
-}
-
-// ==========================================
-// Pending Reload Management
-// ==========================================
-
-/**
- * Set pending reload flag (delegates to operation queue)
- */
-function setPendingReload() {
-    setQueuePendingReload(true);
 }
 
 // ==========================================
@@ -657,7 +624,7 @@ const Storage = {
         return { repaired: false, reason: 'not_implemented', issues };
     },
 
-    async validateConsistency(options = {}) {
+    async validateConsistency(_options = {}) {
         const warnings = [];
         const fixes = [];
         try {
