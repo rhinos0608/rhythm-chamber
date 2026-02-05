@@ -40,18 +40,18 @@ const PremiumController = {
      * @param {Function} [onGranted] - Callback if access is granted
      * @returns {Promise<boolean>} True if user has access
      */
-    async checkFeatureAccess(feature, onGranted) {
+    checkFeatureAccess(feature, onGranted) {
         // Check if user has access
         if (Pricing.hasFeatureAccess(feature)) {
             if (typeof onGranted === 'function') {
                 onGranted();
             }
-            return true;
+            return Promise.resolve(true);
         }
 
         // No access - show upgrade modal
         this.showUpgradeModal(feature);
-        return false;
+        return Promise.resolve(false);
     },
 
     /**

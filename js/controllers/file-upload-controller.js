@@ -221,7 +221,7 @@ async function handleFileUpload(file) {
  * @param {File} file - File to process
  * @returns {Promise<void>}
  */
-async function processWithWorker(file) {
+function processWithWorker(file) {
     return new Promise((resolve, reject) => {
         // Create worker
         activeWorker = new Worker('js/parser-worker.js');
