@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* global console, process, setTimeout */
+
 /**
  * Test MCP Server Connection
  *
