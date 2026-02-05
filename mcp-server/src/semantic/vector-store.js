@@ -11,8 +11,7 @@
 import { HybridEmbeddings, cosineSimilarity } from './embeddings.js';
 import { passesFilters as sharedPassesFilters } from './filters.js';
 import { SqliteVectorAdapter } from './sqlite-adapter.js';
-import { MemoryVectorAdapter } from './memory-vector-adapter.js';
-import { createVectorAdapterSync } from './adapter-factory.js';
+import { SYMBOL_BOOST } from './config.js';
 import { unlinkSync, existsSync } from 'fs';
 
 /**
@@ -70,6 +69,10 @@ export class VectorStore {
         this.chunkCount = stats.chunkCount;
         this.vectors.clear();
         this.metadata.clear();
+        // CRITICAL FIX: Reset migration failure flag on successful recovery
+        // This allows upserts to continue after recovering from a previous failed migration
+        this._migrationFailed = false;
+        this._migrationError = null;
         console.warn('[VectorStore] Recovery complete: using SQLite backend');
         return true;
       }
@@ -201,8 +204,15 @@ export class VectorStore {
 
   /**
    * Batch upsert multiple vectors
+   * OOM FIX: Use adapter's batchUpsert when available for better performance
    */
   upsertBatch(items) {
+    if (this.useSqlite && this.adapter && typeof this.adapter.upsertBatch === 'function') {
+      // Use efficient batch upsert with single transaction
+      return this.adapter.upsertBatch(items);
+    }
+
+    // Fallback: individual upserts for Map backend or when adapter doesn't support batching
     for (const { chunkId, embedding, metadata } of items) {
       this.upsert(chunkId, embedding, metadata);
     }
@@ -356,20 +366,11 @@ export class VectorStore {
         `[VectorStore] Starting migration to sqlite-vec (${this.chunkCount} chunks)...`
       );
 
-      // Step 1: Initialize SQLite adapter using factory for consistency
+      // Step 1: Initialize SQLite adapter directly
       // This allows us to stream directly to SQLite without holding full backup
       if (!this.adapter) {
-        const { adapter, type } = createVectorAdapterSync({
-          preferNative: true,
-          dbPath: this.dbPath,
-          dimension: this.dimension,
-        });
-
-        if (type !== 'sqlite') {
-          throw new Error('SQLite adapter required for migration but not available. ' +
-            'Native module may be missing or incompatible.');
-        }
-
+        const adapter = new SqliteVectorAdapter();
+        adapter.initialize(this.dbPath, this.dimension);
         this.adapter = adapter;
       } else {
         // Re-initialize existing adapter
@@ -802,12 +803,28 @@ export class VectorStore {
         // FIX #8: Use multiplicative boost to avoid non-linear distortion
         // Old additive approach gave different boost at different similarity levels
         // New multiplicative approach: similarity * (1 + nameMatch * BOOST_FACTOR)
-        const NAME_BOOST_FACTOR = 0.2; // 20% max boost for perfect name match
+        // Use centralized configuration.
+        const NAME_BOOST_FACTOR = SYMBOL_BOOST.FACTOR;
+        const MIN_TEXT_LENGTH_FOR_NAME_BOOST = 50; // Avoid boosting headers / low-signal chunks
 
         const boosted = results.map(r => {
           const nameMatch = this._calculateNameMatch(queryTerms, r.metadata?.name || '');
 
-          if (nameMatch > 0) {
+          // Low-signal chunks (e.g. markdown headers) should not get name boosting.
+          const chunkType = r.metadata?.type;
+          const isMarkdownType = typeof chunkType === 'string' && chunkType.startsWith('md-');
+
+          const filePath = r.metadata?.file || '';
+          const isMarkdownFile =
+            typeof filePath === 'string' &&
+            /\.(md|markdown|mdown|mkd)$/i.test(filePath);
+
+          const isMarkdownChunk = isMarkdownType || isMarkdownFile;
+
+          const textLen = (r.metadata?.text || '').trim().length;
+          const eligibleForBoost = !isMarkdownChunk && textLen >= MIN_TEXT_LENGTH_FOR_NAME_BOOST;
+
+          if (nameMatch > 0 && eligibleForBoost) {
             // Multiplicative boost: applies proportionally regardless of base similarity
             const boostedSim = Math.min(1.0, r.similarity * (1 + nameMatch * NAME_BOOST_FACTOR));
             return {
