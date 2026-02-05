@@ -29,6 +29,13 @@ export const schema = {
           'Search scope. "code" excludes docs/coverage, "docs" searches docs only, "all" searches everything.',
         default: 'code',
       },
+      contentType: {
+        type: 'string',
+        enum: ['code', 'documentation', 'tests', 'all'],
+        description:
+          'Content type filter. "code" for source code (js/, mcp-server/src/), "documentation" for markdown docs (docs/, *.md), "tests" for test files, "all" for everything. More explicit than scope.',
+        default: 'all',
+      },
       limit: {
         type: 'number',
         description: 'Maximum number of results to return',
@@ -97,6 +104,7 @@ export const handler = async (args, projectRoot, indexer, server) => {
   const {
     query,
     scope = 'code',
+    contentType = 'all',
     limit = 10,
     threshold = 0.25,
     maxChars = 600,
@@ -214,10 +222,28 @@ The semantic search index is empty. This could mean:
   }
 
   try {
-    // Apply search scope defaults when user didn't provide an explicit file selector.
+    // Apply search scope and content type defaults when user didn't provide an explicit file selector.
     // This avoids "docs/API.md dominates everything" for generic code queries.
     const effectiveFilters = { ...filters };
-    if (!effectiveFilters.filePattern && !effectiveFilters.filePath && scope !== 'all') {
+
+    // Content type takes precedence over scope for explicit filtering
+    if (contentType !== 'all' && !effectiveFilters.filePattern && !effectiveFilters.filePath) {
+      switch (contentType) {
+        case 'documentation':
+          // Documentation: docs/ directory and root markdown files
+          effectiveFilters.filePattern = '^(docs/.*|[^/]+\.md)$';
+          break;
+        case 'code':
+          // Code: js/, mcp-server/src/, workers/, scripts/ - exclude docs and tests
+          effectiveFilters.filePattern = '^(js/|mcp-server/src/|workers/|scripts/)(?!.*\.test\.|.*\.spec\.)';
+          break;
+        case 'tests':
+          // Tests: tests/ directory and .test.js/.spec.js files
+          effectiveFilters.filePattern = '^(tests/|.*\.(test|spec)\.)';
+          break;
+      }
+    } else if (!effectiveFilters.filePattern && !effectiveFilters.filePath && scope !== 'all') {
+      // Legacy scope-based filtering (backward compatibility)
       if (scope === 'docs') {
         effectiveFilters.filePattern = '^docs/';
       } else if (scope === 'code') {

@@ -21,6 +21,12 @@ export const schema = {
         description: 'Filter by HNW architecture layer',
         default: 'all',
       },
+      contentType: {
+        type: 'string',
+        enum: ['all', 'code', 'documentation', 'tests'],
+        description: 'Filter by content type. "code" for js/, mcp-server/src/, "documentation" for docs/, *.md, "tests" for tests/',
+        default: 'all',
+      },
       includeChunks: {
         type: 'boolean',
         description: 'Include individual chunk details for each file',
@@ -40,7 +46,7 @@ export const schema = {
  * Handle tool execution
  */
 export const handler = async (args, projectRoot, indexer, server) => {
-  const { filter = 'all', includeChunks = false, format = 'summary' } = args;
+  const { filter = 'all', contentType = 'all', includeChunks = false, format = 'summary' } = args;
 
   // Check if indexer is available
   if (!indexer) {
@@ -86,10 +92,34 @@ ${formatStats(indexer.getStats())}
       };
     }
 
-    // Apply filter
+    // Apply HNW layer filter
     let filteredFiles = files;
     if (filter !== 'all') {
       filteredFiles = files.filter(f => f.file.includes(`/${filter}/`));
+    }
+
+    // Apply content type filter
+    if (contentType !== 'all') {
+      filteredFiles = filteredFiles.filter(f => {
+        const file = f.file;
+        switch (contentType) {
+          case 'documentation':
+            // Documentation: docs/ directory and root markdown files
+            return file.startsWith('docs/') || /^[^/]+\.md$/.test(file);
+          case 'code':
+            // Code: js/, mcp-server/src/, workers/, scripts/ - exclude tests
+            return (
+              /^(js\/|mcp-server\/src\/|workers\/|scripts\/)/.test(file) &&
+              !file.includes('.test.') &&
+              !file.includes('.spec.')
+            );
+          case 'tests':
+            // Tests: tests/ directory and .test.js/.spec.js files
+            return file.startsWith('tests/') || /\.(test|spec)\./.test(file);
+          default:
+            return true;
+        }
+      });
     }
 
     // Format output

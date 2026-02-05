@@ -26,6 +26,13 @@ export const schema = {
           'Search scope. "code" excludes docs/coverage, "docs" searches docs only, "all" searches everything.',
         default: 'code',
       },
+      contentType: {
+        type: 'string',
+        enum: ['code', 'documentation', 'tests', 'all'],
+        description:
+          'Content type filter. "code" for source code (js/, mcp-server/src/), "documentation" for markdown docs (docs/, *.md), "tests" for test files, "all" for everything. More explicit than scope.',
+        default: 'all',
+      },
       depth: {
         type: 'string',
         enum: ['quick', 'standard', 'thorough'],
@@ -65,6 +72,7 @@ export const handler = async (args, projectRoot, indexer, server) => {
     depth = 'standard',
     limit = 10,
     scope = 'code',
+    contentType = 'all',
     includeSnippets = true,
     maxChars = 160,
   } = args;
@@ -76,7 +84,7 @@ export const handler = async (args, projectRoot, indexer, server) => {
 
   // Phase 1: Semantic Search
   phases.push(
-    await phase1SemanticSearch(query, limit, indexer, depth, { scope, includeSnippets, maxChars })
+    await phase1SemanticSearch(query, limit, indexer, depth, { scope, contentType, includeSnippets, maxChars })
   );
 
   // Phase 2: Related Chunks Analysis (using dependency graph)
@@ -123,11 +131,24 @@ async function phase1SemanticSearch(query, limit, indexer, depth, options = {}) 
 
   try {
     const threshold = depth === 'quick' ? 0.2 : depth === 'thorough' ? 0.4 : 0.3;
-    const { scope = 'code', includeSnippets = true, maxChars = 160 } = options;
+    const { scope = 'code', contentType = 'all', includeSnippets = true, maxChars = 160 } = options;
 
-    // Code-first default: avoid docs dominating results for generic queries.
+    // Content type filtering with specific patterns
     const filters = {};
-    if (scope !== 'all') {
+    if (contentType !== 'all') {
+      switch (contentType) {
+        case 'documentation':
+          filters.filePattern = '^(docs/.*|[^/]+\.md)$';
+          break;
+        case 'code':
+          filters.filePattern = '^(js/|mcp-server/src/|workers/|scripts/)(?!.*\.test\.|.*\.spec\.)';
+          break;
+        case 'tests':
+          filters.filePattern = '^(tests/|.*\.(test|spec)\.)';
+          break;
+      }
+    } else if (scope !== 'all') {
+      // Legacy scope-based filtering (backward compatibility)
       if (scope === 'docs') {
         filters.filePattern = '^docs/';
       } else if (scope === 'code') {
