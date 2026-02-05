@@ -76,7 +76,8 @@ export async function initDatabase(options = {}) {
 
         request.onupgradeneeded = event => {
             const database = event.target.result;
-            runMigrations(database, event.oldVersion, event.newVersion);
+            const transaction = event.target.transaction;
+            runMigrations(database, event.oldVersion, event.newVersion, transaction);
         };
     });
 }

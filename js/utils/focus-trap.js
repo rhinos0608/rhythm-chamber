@@ -283,7 +283,17 @@ export function createFocusTrap(container, options = {}) {
      * Clean up the focus trap (permanently)
      */
     const destroy = () => {
-        deactivate();
+        // Always remove the event listener, even if not active
+        // deactivate() only removes it when isActive is true
+        if (keydownHandler) {
+            document.removeEventListener('keydown', keydownHandler, { capture: true });
+            keydownHandler = null;
+        }
+
+        // Update state
+        isActive = false;
+
+        // Clear focus history
         globalFocusHistory.clear();
     };
 

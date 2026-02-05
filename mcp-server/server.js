@@ -62,6 +62,10 @@ import {
   handler as semantic_search_handler,
 } from './src/tools/semantic-search.js';
 import {
+  schema as symbol_search_schema,
+  handler as symbol_search_handler,
+} from './src/tools/symbol-search.js';
+import {
   schema as deep_code_search_schema,
   handler as deep_code_search_handler,
 } from './src/tools/deep-code-search.js';
@@ -155,6 +159,7 @@ class RhythmChamberMCPServer {
       if (this.enableSemantic) {
         tools.push(
           semantic_search_schema,
+          symbol_search_schema,
           deep_code_search_schema,
           get_chunk_details_schema,
           list_indexed_files_schema,
@@ -210,6 +215,14 @@ class RhythmChamberMCPServer {
           // Semantic search tools
           case 'semantic_search':
             return await semantic_search_handler(
+              args,
+              this.projectRoot,
+              this.semanticIndexer,
+              this
+            );
+
+          case 'symbol_search':
+            return await symbol_search_handler(
               args,
               this.projectRoot,
               this.semanticIndexer,

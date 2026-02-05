@@ -1,7 +1,7 @@
 # Service Catalog
 
 > **Auto-generated** by docs-sync tool
-> **Generated:** 2026-01-31
+> **Generated:** 2026-02-05
 > **Total Services:** 94
 
 This catalog provides detailed information about all business logic services in the application.
@@ -16,7 +16,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/adaptive-circuit-breaker.js`
 
-**Lines:** 513
+**Lines:** 537
 
 **Named Exports:** 11
 
@@ -35,7 +35,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/battery-aware-mode-selector.js`
 
-**Lines:** 330
+**Lines:** 329
 
 **Named Exports:** 1
 
@@ -51,7 +51,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/cascading-abort-controller.js`
 
-**Lines:** 409
+**Lines:** 422
 
 **Named Exports:** 2
 
@@ -81,7 +81,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/config-loader.js`
 
-**Lines:** 892
+**Lines:** 906
 
 **Named Exports:** 1
 
@@ -97,7 +97,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/conversation-orchestrator.js`
 
-**Lines:** 287
+**Lines:** 369
 
 **Named Exports:** 1
 
@@ -114,7 +114,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/data-version.js`
 
-**Lines:** 224
+**Lines:** 223
 
 **Named Exports:** 1
 
@@ -131,7 +131,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/device-detection.js`
 
-**Lines:** 736
+**Lines:** 738
 
 **Named Exports:** 1
 
@@ -165,7 +165,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/error-recovery-coordinator.js`
 
-**Lines:** 172
+**Lines:** 179
 
 **Named Exports:** 7
 
@@ -200,7 +200,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/error-recovery/index.js`
 
-**Lines:** 189
+**Lines:** 199
 
 **Named Exports:** 9
 
@@ -219,7 +219,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/error-recovery/recovery-lock-manager.js`
 
-**Lines:** 328
+**Lines:** 337
 
 **Named Exports:** 1
 
@@ -231,7 +231,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/error-recovery/recovery-orchestration.js`
 
-**Lines:** 487
+**Lines:** 509
 
 **Named Exports:** 5
 
@@ -249,7 +249,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/error-recovery/recovery-strategies.js`
 
-**Lines:** 483
+**Lines:** 486
 
 **Named Exports:** 1
 
@@ -275,7 +275,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/event-bus/index.js`
 
-**Lines:** 570
+**Lines:** 595
 
 **Named Exports:** 1
 
@@ -292,7 +292,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/fallback-response-service.js`
 
-**Lines:** 166
+**Lines:** 171
 
 **Named Exports:** 1
 
@@ -324,7 +324,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/fallback/execution.js`
 
-**Lines:** 265
+**Lines:** 278
 
 **Named Exports:** 1
 
@@ -356,7 +356,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/fallback/health.js`
 
-**Lines:** 186
+**Lines:** 191
 
 **Named Exports:** 9
 
@@ -372,7 +372,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/fallback/index.js`
 
-**Lines:** 350
+**Lines:** 356
 
 **Named Exports:** 3
 
@@ -410,7 +410,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/function-calling-fallback.js`
 
-**Lines:** 629
+**Lines:** 679
 
 **Named Exports:** 12
 
@@ -426,7 +426,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/lamport-clock.js`
 
-**Lines:** 204
+**Lines:** 205
 
 **Named Exports:** 1
 
@@ -438,7 +438,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/lemon-squeezy-service.js`
 
-**Lines:** 913
+**Lines:** 930
 
 **Named Exports:** 1
 
@@ -473,7 +473,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/llm-api-orchestrator.js`
 
-**Lines:** 309
+**Lines:** 332
 
 **Named Exports:** 1
 
@@ -489,7 +489,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/llm-provider-routing-service.js`
 
-**Lines:** 141
+**Lines:** 145
 
 **Named Exports:** 1
 
@@ -501,7 +501,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/lock-policy-coordinator.js`
 
-**Lines:** 430
+**Lines:** 436
 
 **Named Exports:** 1
 
@@ -517,7 +517,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/message-error-handler.js`
 
-**Lines:** 216
+**Lines:** 229
 
 **Named Exports:** 1
 
@@ -529,7 +529,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/message-lifecycle-coordinator.js`
 
-**Lines:** 753
+**Lines:** 845
 
 **Named Exports:** 1
 
@@ -552,7 +552,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/message-operations.js`
 
-**Lines:** 498
+**Lines:** 576
 
 **Named Exports:** 1
 
@@ -583,7 +583,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/pattern-comparison.js`
 
-**Lines:** 363
+**Lines:** 361
 
 **Named Exports:** 1
 
@@ -599,7 +599,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/pattern-stream.js`
 
-**Lines:** 288
+**Lines:** 291
 
 **Named Exports:** 1
 
@@ -616,7 +616,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/performance-profiler.js`
 
-**Lines:** 1023
+**Lines:** 1048
 
 **Named Exports:** 7
 
@@ -630,7 +630,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/playlist-generator.js`
 
-**Lines:** 409
+**Lines:** 407
 
 **Named Exports:** 1
 
@@ -647,7 +647,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/playlist-service.js`
 
-**Lines:** 181
+**Lines:** 180
 
 **Named Exports:** 1
 
@@ -684,7 +684,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/premium-quota.js`
 
-**Lines:** 335
+**Lines:** 339
 
 **Named Exports:** 1
 
@@ -701,7 +701,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/profile-description-generator.js`
 
-**Lines:** 265
+**Lines:** 280
 
 **Named Exports:** 1
 
@@ -719,7 +719,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/profile-sharing.js`
 
-**Lines:** 335
+**Lines:** 327
 
 **Named Exports:** 1
 
@@ -737,7 +737,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/provider-circuit-breaker.js`
 
-**Lines:** 438
+**Lines:** 446
 
 **Named Exports:** 1
 
@@ -759,7 +759,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/provider-health-authority.js`
 
-**Lines:** 908
+**Lines:** 926
 
 **Named Exports:** 24
 
@@ -775,7 +775,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/provider-health-monitor.js`
 
-**Lines:** 586
+**Lines:** 587
 
 **Named Exports:** 3
 
@@ -798,7 +798,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/provider-notification-service.js`
 
-**Lines:** 512
+**Lines:** 517
 
 **Named Exports:** 3
 
@@ -817,7 +817,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/session-lock-manager.js`
 
-**Lines:** 324
+**Lines:** 359
 
 **Named Exports:** 1
 
@@ -835,7 +835,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/session-manager.js`
 
-**Lines:** 540
+**Lines:** 536
 
 **Named Exports:** 6
 
@@ -855,7 +855,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/session-manager/index.js`
 
-**Lines:** 432
+**Lines:** 421
 
 **Named Exports:** 13
 
@@ -876,7 +876,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/session-manager/session-lifecycle.js`
 
-**Lines:** 641
+**Lines:** 686
 
 **Named Exports:** 15
 
@@ -896,7 +896,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/session-manager/session-persistence.js`
 
-**Lines:** 287
+**Lines:** 299
 
 **Named Exports:** 7
 
@@ -915,7 +915,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/session-manager/session-state.js`
 
-**Lines:** 407
+**Lines:** 416
 
 **Named Exports:** 16
 
@@ -934,7 +934,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/state-machine-coordinator.js`
 
-**Lines:** 424
+**Lines:** 426
 
 **Named Exports:** 1
 
@@ -964,7 +964,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/storage-degradation/cleanup-strategies.js`
 
-**Lines:** 608
+**Lines:** 624
 
 **Named Exports:** 2
 
@@ -981,7 +981,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/storage-degradation/degradation-detector.js`
 
-**Lines:** 296
+**Lines:** 295
 
 **Named Exports:** 2
 
@@ -993,7 +993,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/storage-degradation/index.js`
 
-**Lines:** 423
+**Lines:** 429
 
 **Named Exports:** 3
 
@@ -1013,7 +1013,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/storage-degradation/tier-handlers.js`
 
-**Lines:** 539
+**Lines:** 548
 
 **Named Exports:** 1
 
@@ -1053,7 +1053,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/tab-coordination/constants.js`
 
-**Lines:** 65
+**Lines:** 68
 
 **Named Exports:** 5
 
@@ -1069,7 +1069,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/tab-coordination/index.js`
 
-**Lines:** 342
+**Lines:** 378
 
 **Named Exports:** 14
 
@@ -1095,7 +1095,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/tab-coordination/message-guards.js`
 
-**Lines:** 497
+**Lines:** 522
 
 **Named Exports:** 13
 
@@ -1111,7 +1111,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/tab-coordination/modules/authority.js`
 
-**Lines:** 219
+**Lines:** 223
 
 **Named Exports:** 9
 
@@ -1128,7 +1128,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/tab-coordination/modules/election.js`
 
-**Lines:** 284
+**Lines:** 287
 
 **Named Exports:** 13
 
@@ -1147,7 +1147,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/tab-coordination/modules/heartbeat.js`
 
-**Lines:** 196
+**Lines:** 192
 
 **Named Exports:** 10
 
@@ -1169,7 +1169,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/tab-coordination/modules/message-handler.js`
 
-**Lines:** 478
+**Lines:** 501
 
 **Named Exports:** 3
 
@@ -1195,7 +1195,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/tab-coordination/modules/message-queue.js`
 
-**Lines:** 122
+**Lines:** 247
 
 **Named Exports:** 8
 
@@ -1213,7 +1213,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/tab-coordination/modules/message-sender.js`
 
-**Lines:** 414
+**Lines:** 430
 
 **Named Exports:** 19
 
@@ -1280,7 +1280,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/tab-coordination/modules/sleep-detection.js`
 
-**Lines:** 65
+**Lines:** 69
 
 **Named Exports:** 1
 
@@ -1298,7 +1298,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/tab-coordination/modules/transport-creation.js`
 
-**Lines:** 82
+**Lines:** 80
 
 **Named Exports:** 2
 
@@ -1336,7 +1336,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/tab-coordination/timing.js`
 
-**Lines:** 133
+**Lines:** 140
 
 **Named Exports:** 8
 
@@ -1348,7 +1348,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/temporal-analysis.js`
 
-**Lines:** 430
+**Lines:** 440
 
 **Named Exports:** 1
 
@@ -1364,7 +1364,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/timeout-budget-manager.js`
 
-**Lines:** 627
+**Lines:** 638
 
 **Named Exports:** 3
 
@@ -1378,7 +1378,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/timeout-error.js`
 
-**Lines:** 413
+**Lines:** 408
 
 **Named Exports:** 5
 
@@ -1394,7 +1394,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/token-counting-service.js`
 
-**Lines:** 253
+**Lines:** 255
 
 **Named Exports:** 1
 
@@ -1406,7 +1406,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/tool-call-handling-service.js`
 
-**Lines:** 797
+**Lines:** 866
 
 **Named Exports:** 1
 
@@ -1426,7 +1426,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/tool-strategies/base-strategy.js`
 
-**Lines:** 174
+**Lines:** 176
 
 **Named Exports:** 1
 
@@ -1454,7 +1454,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/tool-strategies/intent-extraction-strategy.js`
 
-**Lines:** 177
+**Lines:** 193
 
 **Named Exports:** 1
 
@@ -1472,7 +1472,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/tool-strategies/native-strategy.js`
 
-**Lines:** 204
+**Lines:** 232
 
 **Named Exports:** 1
 
@@ -1490,7 +1490,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/tool-strategies/prompt-injection-strategy.js`
 
-**Lines:** 198
+**Lines:** 230
 
 **Named Exports:** 1
 
@@ -1508,7 +1508,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/turn-queue.js`
 
-**Lines:** 520
+**Lines:** 626
 
 **Named Exports:** 1
 
@@ -1528,7 +1528,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/vector-clock.js`
 
-**Lines:** 323
+**Lines:** 319
 
 **Named Exports:** 3
 
@@ -1540,7 +1540,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/wave-telemetry.js`
 
-**Lines:** 427
+**Lines:** 440
 
 **Named Exports:** 1
 
@@ -1557,7 +1557,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/wave-visualizer.js`
 
-**Lines:** 189
+**Lines:** 187
 
 **Named Exports:** 1
 
@@ -1569,7 +1569,7 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 
 **File:** `js/services/worker-coordinator.js`
 
-**Lines:** 585
+**Lines:** 591
 
 **Named Exports:** 1
 
@@ -1578,3 +1578,4 @@ Services encapsulate business logic and data processing. They follow the HNW arc
 **Functions:** 16
 
 ---
+

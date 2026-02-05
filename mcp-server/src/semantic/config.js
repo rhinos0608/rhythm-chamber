@@ -326,10 +326,10 @@ export const SYMBOL_BOOST = {
    * Multiplicative boost factor for symbol name matches
    * Applied as: similarity * (1 + nameMatch * FACTOR)
    *
-   * Default: 0.2 (20% max boost for perfect match)
-   * Range: 0.1-0.5
+   * Default: 0.05 (5% max boost for perfect match)
+   * Range: 0.01-0.2
    */
-  FACTOR: 0.2,
+  FACTOR: 0.05,
 
   /**
    * Score thresholds for different match types
@@ -441,6 +441,97 @@ export const BM25_CONFIG = {
 };
 
 /**
+ * Index Patterns Configuration
+ * Separate patterns for code and documentation files
+ */
+export const INDEX_PATTERNS = {
+  code: [
+    'js/**/*.js',
+    'tests/**/*.js',
+    'workers/**/*.js',
+    'scripts/**/*.js',
+    'ts/**/*.ts',
+    'tsx/**/*.tsx',
+    'jsx/**/*.jsx',
+    'mjs/**/*.mjs',
+    'cjs/**/*.cjs',
+  ],
+
+  docs: [
+    'docs/**/*.md',
+    '*.md',
+    'README.md',
+    'CONTRIBUTING.md',
+    'CLAUDE.md',
+    'SECURITY.md',
+    'AGENT_CONTEXT.md',
+    'ARCHITECTURE.md',
+    'API.md',
+    'CHANGELOG.md',
+    'LICENSE.md',
+    'INSTALL.md',
+    'GUIDE.md',
+    'TROUBLESHOOTING.md',
+  ],
+};
+
+/**
+ * Index Configuration per Content Type
+ * Different chunking and similarity thresholds for code vs docs
+ */
+export const INDEX_CONFIG = {
+  code: {
+    chunkSize: 4000,
+    overlap: 0.2,
+    threshold: 0.25, // Higher for code (more specific)
+    maxFileSize: 2 * 1024 * 1024, // 2MB
+  },
+
+  docs: {
+    chunkSize: 4000,
+    overlap: 0.2,
+    threshold: 0.28, // Lower for docs (more permissive)
+    maxFileSize: 2 * 1024 * 1024, // 2MB
+  },
+};
+
+/**
+ * File Extension Detection
+ * Utilities for determining file type
+ */
+export const FILE_EXTENSIONS = {
+  code: [
+    '.js', '.mjs', '.cjs',
+    '.ts', '.tsx', '.jsx',
+    '.json',
+  ],
+  docs: [
+    '.md', '.markdown',
+    '.mdown', '.mkd',
+  ],
+};
+
+/**
+ * Check if a file path is a code file
+ * @param {string} filePath - File path to check
+ * @returns {boolean} True if file is a code file
+ */
+export function isCodeFile(filePath) {
+  const ext = filePath.toLowerCase().slice(filePath.lastIndexOf('.'));
+  return FILE_EXTENSIONS.code.includes(ext);
+}
+
+/**
+ * Check if a file path is a documentation file
+ * @param {string} filePath - File path to check
+ * @returns {boolean} True if file is a documentation file
+ */
+export function isDocFile(filePath) {
+  const ext = filePath.toLowerCase().slice(filePath.lastIndexOf('.'));
+  return FILE_EXTENSIONS.docs.includes(ext);
+}
+
+/**
  * Default export for easy import
  */
 export default {
@@ -470,4 +561,11 @@ export default {
   QUERY_EXPANSION,
   CHUNKING,
   BM25_CONFIG,
+
+  // Index configuration (NEW - Phase 1)
+  INDEX_PATTERNS,
+  INDEX_CONFIG,
+  FILE_EXTENSIONS,
+  isCodeFile,
+  isDocFile,
 };

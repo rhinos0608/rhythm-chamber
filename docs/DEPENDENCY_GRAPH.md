@@ -1,7 +1,7 @@
 # Dependency Graph
 
 > **Auto-generated** by docs-sync tool
-> **Generated:** 2026-01-31
+> **Generated:** 2026-02-05
 
 ## Module Dependencies
 
@@ -33,7 +33,6 @@
 - `/Users/rhinesharar/rhythm-chamber/js/storage/profiles.js`
 - `/Users/rhinesharar/rhythm-chamber/js/storage/config-api.js`
 - `/Users/rhinesharar/rhythm-chamber/js/storage/sync-strategy.js`
-- `/Users/rhinesharar/rhythm-chamber/js/security/crypto.js`
 - `/Users/rhinesharar/rhythm-chamber/js/storage/storage-event-schemas.js`
 - `/Users/rhinesharar/rhythm-chamber/js/storage/auto-repair.js`
 - `/Users/rhinesharar/rhythm-chamber/js/storage/stores/index.js`
@@ -49,12 +48,9 @@
 ### js/rag.js
 
 - `/Users/rhinesharar/rhythm-chamber/js/module-registry.js`
-- `/Users/rhinesharar/rhythm-chamber/js/patterns.js`
 - `/Users/rhinesharar/rhythm-chamber/js/storage.js`
-- `/Users/rhinesharar/rhythm-chamber/js/security/crypto.js`
 - `/Users/rhinesharar/rhythm-chamber/js/operation-lock.js`
 - `/Users/rhinesharar/rhythm-chamber/js/utils/safe-json.js`
-- `/Users/rhinesharar/rhythm-chamber/js/rag/chunking-service.js`
 - `/Users/rhinesharar/rhythm-chamber/js/rag/checkpoint-manager.js`
 - `/Users/rhinesharar/rhythm-chamber/js/rag/rag-worker-pool.js`
 - `/Users/rhinesharar/rhythm-chamber/js/rag/query-service.js`
@@ -95,14 +91,7 @@
 - `/Users/rhinesharar/rhythm-chamber/js/utils/logger.js`
 - `/Users/rhinesharar/rhythm-chamber/js/security/crypto.js`
 - `/Users/rhinesharar/rhythm-chamber/js/services/config-loader.js`
-- `/Users/rhinesharar/rhythm-chamber/js/utils.js`
 - `/Users/rhinesharar/rhythm-chamber/js/module-registry.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/keys.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/indexeddb.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/config-api.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/migration.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/sync-strategy.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/profiles.js`
 - `/Users/rhinesharar/rhythm-chamber/js/storage.js`
 - `/Users/rhinesharar/rhythm-chamber/js/state/app-state.js`
 - `/Users/rhinesharar/rhythm-chamber/js/patterns.js`
@@ -121,48 +110,14 @@
 - `/Users/rhinesharar/rhythm-chamber/js/services/conversation-orchestrator.js`
 - `/Users/rhinesharar/rhythm-chamber/js/services/message-lifecycle-coordinator.js`
 - `/Users/rhinesharar/rhythm-chamber/js/cards.js`
-- `/Users/rhinesharar/rhythm-chamber/js/functions/utils/retry.js`
-- `/Users/rhinesharar/rhythm-chamber/js/functions/utils/validation.js`
-- `/Users/rhinesharar/rhythm-chamber/js/functions/schemas/data-queries.js`
-- `/Users/rhinesharar/rhythm-chamber/js/functions/schemas/template-queries.js`
-- `/Users/rhinesharar/rhythm-chamber/js/functions/schemas/analytics-queries.js`
-- `/Users/rhinesharar/rhythm-chamber/js/functions/executors/data-executors.js`
-- `/Users/rhinesharar/rhythm-chamber/js/functions/executors/template-executors.js`
-- `/Users/rhinesharar/rhythm-chamber/js/functions/executors/analytics-executors.js`
 - `/Users/rhinesharar/rhythm-chamber/js/functions/index.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/tab-coordination.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/session-manager.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/message-operations.js`
 - `/Users/rhinesharar/rhythm-chamber/js/services/worker-coordinator.js`
 - `/Users/rhinesharar/rhythm-chamber/js/services/event-bus.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/event-log-store.js`
 - `/Users/rhinesharar/rhythm-chamber/js/services/wave-telemetry.js`
-- `/Users/rhinesharar/rhythm-chamber/js/controllers/chat-ui-controller.js`
 - `/Users/rhinesharar/rhythm-chamber/js/controllers/sidebar-controller.js`
-- `/Users/rhinesharar/rhythm-chamber/js/controllers/view-controller.js`
-- `/Users/rhinesharar/rhythm-chamber/js/controllers/file-upload-controller.js`
-- `/Users/rhinesharar/rhythm-chamber/js/controllers/spotify-controller.js`
-- `/Users/rhinesharar/rhythm-chamber/js/controllers/demo-controller.js`
-- `/Users/rhinesharar/rhythm-chamber/js/controllers/reset-controller.js`
-- `/Users/rhinesharar/rhythm-chamber/js/demo-data.js`
-- `/Users/rhinesharar/rhythm-chamber/js/template-profiles.js`
-- `/Users/rhinesharar/rhythm-chamber/js/profile-synthesizer.js`
-- `/Users/rhinesharar/rhythm-chamber/js/operation-lock.js`
-- `/Users/rhinesharar/rhythm-chamber/js/payments.js`
-- `/Users/rhinesharar/rhythm-chamber/js/pricing.js`
 - `/Users/rhinesharar/rhythm-chamber/js/utils/retry-manager/retry-executor-core.js`
 - `/Users/rhinesharar/rhythm-chamber/js/utils/retry-manager/retry-monitoring.js`
 - `/Users/rhinesharar/rhythm-chamber/js/utils/adaptive-rate-limiter.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/quota-monitor.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/circuit-breaker.js`
-- `/Users/rhinesharar/rhythm-chamber/js/security/secure-token-store.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/data-version.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/function-calling-fallback.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/profile-description-generator.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/llm-provider-routing-service.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/token-counting-service.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/tool-call-handling-service.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/fallback-response-service.js`
 - `/Users/rhinesharar/rhythm-chamber/js/services/error-boundary.js`
 - `/Users/rhinesharar/rhythm-chamber/js/controllers/dev-panel-controller.js`
 
@@ -180,13 +135,8 @@
 ### js/chat.js
 
 - `/Users/rhinesharar/rhythm-chamber/js/utils/logger.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/tool-strategies/native-strategy.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/tool-strategies/prompt-injection-strategy.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/tool-strategies/intent-extraction-strategy.js`
 - `/Users/rhinesharar/rhythm-chamber/js/module-registry.js`
 - `/Users/rhinesharar/rhythm-chamber/js/services/config-loader.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/turn-queue.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/timeout-budget-manager.js`
 - `/Users/rhinesharar/rhythm-chamber/js/services/wave-telemetry.js`
 - `/Users/rhinesharar/rhythm-chamber/js/services/llm-provider-routing-service.js`
 - `/Users/rhinesharar/rhythm-chamber/js/services/token-counting-service.js`
@@ -197,12 +147,10 @@
 - `/Users/rhinesharar/rhythm-chamber/js/functions/index.js`
 - `/Users/rhinesharar/rhythm-chamber/js/services/message-operations.js`
 - `/Users/rhinesharar/rhythm-chamber/js/services/session-manager.js`
+- `/Users/rhinesharar/rhythm-chamber/js/services/event-bus.js`
 - `/Users/rhinesharar/rhythm-chamber/js/token-counter.js`
 - `/Users/rhinesharar/rhythm-chamber/js/prompts.js`
 - `/Users/rhinesharar/rhythm-chamber/js/storage.js`
-- `/Users/rhinesharar/rhythm-chamber/js/patterns.js`
-- `/Users/rhinesharar/rhythm-chamber/js/personality.js`
-- `/Users/rhinesharar/rhythm-chamber/js/parser.js`
 - `/Users/rhinesharar/rhythm-chamber/js/data-query.js`
 - `/Users/rhinesharar/rhythm-chamber/js/providers/provider-interface.js`
 - `/Users/rhinesharar/rhythm-chamber/js/settings.js`
@@ -223,25 +171,6 @@
 - `/Users/rhinesharar/rhythm-chamber/js/workers/pattern-worker-pool/worker-lifecycle.js`
 - `/Users/rhinesharar/rhythm-chamber/js/workers/pattern-worker-pool/pool-management.js`
 - `/Users/rhinesharar/rhythm-chamber/js/workers/pattern-worker-pool/task-distribution.js`
-
-### js/utils/validation.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/utils/validation/message-validator.js`
-- `/Users/rhinesharar/rhythm-chamber/js/utils/validation/regex-validator.js`
-- `/Users/rhinesharar/rhythm-chamber/js/utils/validation/schema-validator.js`
-- `/Users/rhinesharar/rhythm-chamber/js/utils/validation/format-validators.js`
-- `/Users/rhinesharar/rhythm-chamber/js/utils/validation/storage-validators.js`
-- `/Users/rhinesharar/rhythm-chamber/js/utils/validation/type-guards.js`
-
-### js/utils/parser.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/utils/html-escape.js`
-
-### js/utils/error-handling.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/utils/error-handling/error-classifier.js`
-- `/Users/rhinesharar/rhythm-chamber/js/utils/error-handling/error-formatter.js`
-- `/Users/rhinesharar/rhythm-chamber/js/utils/error-handling/error-recovery.js`
 
 ### js/vector-store/worker.js
 
@@ -280,9 +209,34 @@
 - `/Users/rhinesharar/rhythm-chamber/js/vector-store/search.js`
 - `/Users/rhinesharar/rhythm-chamber/js/vector-store/search-async.js`
 
+### js/vector-store/connection.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/vector-store/config.js`
+- `/Users/rhinesharar/rhythm-chamber/js/services/event-bus.js`
+- `/Users/rhinesharar/rhythm-chamber/js/storage/fallback-backend.js`
+
 ### js/vector-store/cache.js
 
 - `/Users/rhinesharar/rhythm-chamber/js/storage/lru-cache.js`
+
+### js/utils/validation.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/utils/validation/message-validator.js`
+- `/Users/rhinesharar/rhythm-chamber/js/utils/validation/regex-validator.js`
+- `/Users/rhinesharar/rhythm-chamber/js/utils/validation/schema-validator.js`
+- `/Users/rhinesharar/rhythm-chamber/js/utils/validation/format-validators.js`
+- `/Users/rhinesharar/rhythm-chamber/js/utils/validation/storage-validators.js`
+- `/Users/rhinesharar/rhythm-chamber/js/utils/validation/type-guards.js`
+
+### js/utils/parser.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/utils/html-escape.js`
+
+### js/utils/error-handling.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/utils/error-handling/error-classifier.js`
+- `/Users/rhinesharar/rhythm-chamber/js/utils/error-handling/error-formatter.js`
+- `/Users/rhinesharar/rhythm-chamber/js/utils/error-handling/error-recovery.js`
 
 ### js/storage/transactions.js
 
@@ -399,6 +353,28 @@
 - `/Users/rhinesharar/rhythm-chamber/js/utils/html-escape.js`
 - `/Users/rhinesharar/rhythm-chamber/js/storage/keys.js`
 - `/Users/rhinesharar/rhythm-chamber/js/services/event-bus.js`
+
+### js/rag/rag-worker-pool.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/rag/chunking-service.js`
+
+### js/rag/query-service.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/module-registry.js`
+
+### js/rag/lexical-index.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/rag/filters.js`
+- `/Users/rhinesharar/rhythm-chamber/js/rag/config.js`
+
+### js/rag/chunking-service.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/patterns.js`
+
+### js/rag/checkpoint-manager.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/storage.js`
+- `/Users/rhinesharar/rhythm-chamber/js/security/crypto.js`
 
 ### js/services/wave-telemetry.js
 
@@ -576,28 +552,6 @@
 - `/Users/rhinesharar/rhythm-chamber/js/services/event-bus.js`
 - `/Users/rhinesharar/rhythm-chamber/js/services/timeout-error.js`
 
-### js/rag/rag-worker-pool.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/rag/chunking-service.js`
-
-### js/rag/query-service.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/module-registry.js`
-
-### js/rag/lexical-index.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/rag/filters.js`
-- `/Users/rhinesharar/rhythm-chamber/js/rag/config.js`
-
-### js/rag/chunking-service.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/patterns.js`
-
-### js/rag/checkpoint-manager.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/storage.js`
-- `/Users/rhinesharar/rhythm-chamber/js/security/crypto.js`
-
 ### js/security/token-binding.js
 
 - `/Users/rhinesharar/rhythm-chamber/js/utils/common.js`
@@ -619,6 +573,53 @@
 
 - `/Users/rhinesharar/rhythm-chamber/js/utils/common.js`
 
+### js/providers/user-data-provider.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/providers/provider-base.js`
+- `/Users/rhinesharar/rhythm-chamber/js/storage.js`
+
+### js/providers/provider-interface.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/index.js`
+
+### js/providers/provider-base.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/services/event-bus.js`
+- `/Users/rhinesharar/rhythm-chamber/js/utils/validation.js`
+
+### js/providers/openrouter.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/utils/safe-json.js`
+
+### js/providers/openai-compatible.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/utils/safe-json.js`
+
+### js/providers/ollama-adapter.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/module-registry.js`
+
+### js/providers/lmstudio.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/utils/safe-json.js`
+
+### js/providers/gemini.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/utils/safe-json.js`
+
+### js/providers/demo-data-provider.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/providers/provider-base.js`
+- `/Users/rhinesharar/rhythm-chamber/js/demo-data.js`
+
+### js/providers/data-provider-interface.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/services/event-bus.js`
+
+### js/providers/capabilities.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/state/app-state.js`
+
 ### js/patterns/index.js
 
 - `/Users/rhinesharar/rhythm-chamber/js/patterns/pattern-extractors.js`
@@ -626,6 +627,45 @@
 - `/Users/rhinesharar/rhythm-chamber/js/patterns/pattern-transformers.js`
 - `/Users/rhinesharar/rhythm-chamber/js/patterns/pattern-matching.js`
 - `/Users/rhinesharar/rhythm-chamber/js/patterns/pattern-cache.js`
+
+### js/observability/observability-settings.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/storage.js`
+- `/Users/rhinesharar/rhythm-chamber/js/services/performance-profiler.js`
+- `/Users/rhinesharar/rhythm-chamber/js/observability/core-web-vitals.js`
+- `/Users/rhinesharar/rhythm-chamber/js/observability/metrics-exporter.js`
+- `/Users/rhinesharar/rhythm-chamber/js/utils/html-escape.js`
+- `/Users/rhinesharar/rhythm-chamber/js/controllers/observability-controller.js`
+
+### js/observability/metrics-exporter.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/services/performance-profiler.js`
+- `/Users/rhinesharar/rhythm-chamber/js/observability/core-web-vitals.js`
+- `/Users/rhinesharar/rhythm-chamber/js/observability/metrics-exporter/metrics-aggregator.js`
+- `/Users/rhinesharar/rhythm-chamber/js/observability/metrics-exporter/metrics-formatters.js`
+- `/Users/rhinesharar/rhythm-chamber/js/observability/metrics-exporter/export-strategies.js`
+
+### js/observability/init-observability.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/services/event-bus.js`
+- `/Users/rhinesharar/rhythm-chamber/js/observability/core-web-vitals.js`
+- `/Users/rhinesharar/rhythm-chamber/js/services/performance-profiler.js`
+- `/Users/rhinesharar/rhythm-chamber/js/observability/metrics-exporter.js`
+- `/Users/rhinesharar/rhythm-chamber/js/controllers/observability-controller.js`
+
+### js/observability/controller.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/services/performance-profiler.js`
+- `/Users/rhinesharar/rhythm-chamber/js/observability/core-web-vitals.js`
+- `/Users/rhinesharar/rhythm-chamber/js/observability/metrics-exporter.js`
+- `/Users/rhinesharar/rhythm-chamber/js/observability/ui/dashboard.js`
+- `/Users/rhinesharar/rhythm-chamber/js/observability/ui/tabs.js`
+- `/Users/rhinesharar/rhythm-chamber/js/observability/ui/actions.js`
+- `/Users/rhinesharar/rhythm-chamber/js/observability/updates/overview.js`
+- `/Users/rhinesharar/rhythm-chamber/js/observability/updates/vitals.js`
+- `/Users/rhinesharar/rhythm-chamber/js/observability/updates/performance.js`
+- `/Users/rhinesharar/rhythm-chamber/js/observability/updates/memory.js`
+- `/Users/rhinesharar/rhythm-chamber/js/observability/updates/exports.js`
 
 ### js/genre-enrichment/index.js
 
@@ -673,45 +713,6 @@
 - `/Users/rhinesharar/rhythm-chamber/js/genre-enrichment/genre-enrichment-data.js`
 - `/Users/rhinesharar/rhythm-chamber/js/genre-enrichment/genre-enrichment-cache.js`
 - `/Users/rhinesharar/rhythm-chamber/js/utils/logger.js`
-
-### js/observability/observability-settings.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/storage.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/performance-profiler.js`
-- `/Users/rhinesharar/rhythm-chamber/js/observability/core-web-vitals.js`
-- `/Users/rhinesharar/rhythm-chamber/js/observability/metrics-exporter.js`
-- `/Users/rhinesharar/rhythm-chamber/js/utils/html-escape.js`
-- `/Users/rhinesharar/rhythm-chamber/js/controllers/observability-controller.js`
-
-### js/observability/metrics-exporter.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/services/performance-profiler.js`
-- `/Users/rhinesharar/rhythm-chamber/js/observability/core-web-vitals.js`
-- `/Users/rhinesharar/rhythm-chamber/js/observability/metrics-exporter/metrics-aggregator.js`
-- `/Users/rhinesharar/rhythm-chamber/js/observability/metrics-exporter/metrics-formatters.js`
-- `/Users/rhinesharar/rhythm-chamber/js/observability/metrics-exporter/export-strategies.js`
-
-### js/observability/init-observability.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/services/event-bus.js`
-- `/Users/rhinesharar/rhythm-chamber/js/observability/core-web-vitals.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/performance-profiler.js`
-- `/Users/rhinesharar/rhythm-chamber/js/observability/metrics-exporter.js`
-- `/Users/rhinesharar/rhythm-chamber/js/controllers/observability-controller.js`
-
-### js/observability/controller.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/services/performance-profiler.js`
-- `/Users/rhinesharar/rhythm-chamber/js/observability/core-web-vitals.js`
-- `/Users/rhinesharar/rhythm-chamber/js/observability/metrics-exporter.js`
-- `/Users/rhinesharar/rhythm-chamber/js/observability/ui/dashboard.js`
-- `/Users/rhinesharar/rhythm-chamber/js/observability/ui/tabs.js`
-- `/Users/rhinesharar/rhythm-chamber/js/observability/ui/actions.js`
-- `/Users/rhinesharar/rhythm-chamber/js/observability/updates/overview.js`
-- `/Users/rhinesharar/rhythm-chamber/js/observability/updates/vitals.js`
-- `/Users/rhinesharar/rhythm-chamber/js/observability/updates/performance.js`
-- `/Users/rhinesharar/rhythm-chamber/js/observability/updates/memory.js`
-- `/Users/rhinesharar/rhythm-chamber/js/observability/updates/exports.js`
 
 ### js/functions/schema-registry.js
 
@@ -768,23 +769,6 @@
 - `/Users/rhinesharar/rhythm-chamber/js/services/event-bus.js`
 - `/Users/rhinesharar/rhythm-chamber/js/services/battery-aware-mode-selector.js`
 - `/Users/rhinesharar/rhythm-chamber/js/utils/html-escape.js`
-
-### js/constants/session.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/constants/limits.js`
-
-### js/constants/index.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/constants/limits.js`
-- `/Users/rhinesharar/rhythm-chamber/js/constants/delays.js`
-- `/Users/rhinesharar/rhythm-chamber/js/constants/priorities.js`
-- `/Users/rhinesharar/rhythm-chamber/js/constants/api.js`
-- `/Users/rhinesharar/rhythm-chamber/js/constants/percentages.js`
-- `/Users/rhinesharar/rhythm-chamber/js/constants/session.js`
-
-### js/bootstrap/bootstrap-manager.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/bootstrap/dependency-graph.js`
 
 ### js/controllers/view-controller.js
 
@@ -874,6 +858,44 @@
 
 - `/Users/rhinesharar/rhythm-chamber/js/artifacts/index.js`
 
+### js/bootstrap/bootstrap-manager.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/bootstrap/dependency-graph.js`
+
+### js/constants/session.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/constants/limits.js`
+
+### js/constants/index.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/constants/limits.js`
+- `/Users/rhinesharar/rhythm-chamber/js/constants/delays.js`
+- `/Users/rhinesharar/rhythm-chamber/js/constants/priorities.js`
+- `/Users/rhinesharar/rhythm-chamber/js/constants/api.js`
+- `/Users/rhinesharar/rhythm-chamber/js/constants/percentages.js`
+- `/Users/rhinesharar/rhythm-chamber/js/constants/session.js`
+
+### js/artifacts/validation.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/utils/logger.js`
+- `/Users/rhinesharar/rhythm-chamber/js/artifacts/artifact-spec.js`
+
+### js/artifacts/renderer.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/utils/logger.js`
+- `/Users/rhinesharar/rhythm-chamber/js/artifacts/artifact-spec.js`
+
+### js/artifacts/index.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/utils/logger.js`
+- `/Users/rhinesharar/rhythm-chamber/js/artifacts/artifact-spec.js`
+- `/Users/rhinesharar/rhythm-chamber/js/artifacts/validation.js`
+- `/Users/rhinesharar/rhythm-chamber/js/artifacts/renderer.js`
+
+### js/artifacts/artifact-spec.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/utils/logger.js`
+
 ### js/app/index.js
 
 - `/Users/rhinesharar/rhythm-chamber/js/security/crypto.js`
@@ -911,74 +933,6 @@
 - `/Users/rhinesharar/rhythm-chamber/js/profile-synthesizer.js`
 - `/Users/rhinesharar/rhythm-chamber/js/services/lemon-squeezy-service.js`
 - `/Users/rhinesharar/rhythm-chamber/js/app/di-container.js`
-
-### js/artifacts/validation.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/utils/logger.js`
-- `/Users/rhinesharar/rhythm-chamber/js/artifacts/artifact-spec.js`
-
-### js/artifacts/renderer.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/utils/logger.js`
-- `/Users/rhinesharar/rhythm-chamber/js/artifacts/artifact-spec.js`
-
-### js/artifacts/index.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/utils/logger.js`
-- `/Users/rhinesharar/rhythm-chamber/js/artifacts/artifact-spec.js`
-- `/Users/rhinesharar/rhythm-chamber/js/artifacts/validation.js`
-- `/Users/rhinesharar/rhythm-chamber/js/artifacts/renderer.js`
-
-### js/artifacts/artifact-spec.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/utils/logger.js`
-
-### js/providers/user-data-provider.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/providers/provider-base.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage.js`
-
-### js/providers/provider-interface.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/index.js`
-
-### js/providers/provider-base.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/services/event-bus.js`
-- `/Users/rhinesharar/rhythm-chamber/js/utils/validation.js`
-
-### js/providers/openrouter.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/utils/safe-json.js`
-
-### js/providers/openai-compatible.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/utils/safe-json.js`
-
-### js/providers/ollama-adapter.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/module-registry.js`
-
-### js/providers/lmstudio.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/utils/safe-json.js`
-
-### js/providers/gemini.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/utils/safe-json.js`
-
-### js/providers/demo-data-provider.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/providers/provider-base.js`
-- `/Users/rhinesharar/rhythm-chamber/js/demo-data.js`
-
-### js/providers/data-provider-interface.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/services/event-bus.js`
-
-### js/providers/capabilities.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/state/app-state.js`
 
 ### js/workers/pattern-worker-pool/worker-lifecycle.js
 
@@ -1028,6 +982,18 @@
 - `/Users/rhinesharar/rhythm-chamber/js/utils/retry-manager/retry-executor-core.js`
 - `/Users/rhinesharar/rhythm-chamber/js/utils/retry-manager/retry-executor-patterns.js`
 
+### js/utils/validation/storage-validators.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/utils/validation/schema-validator.js`
+
+### js/utils/validation/schema-validator.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/utils/validation/regex-validator.js`
+
+### js/utils/validation/message-validator.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/utils/crypto-hashing.js`
+
 ### js/utils/error-handling/error-recovery.js
 
 - `/Users/rhinesharar/rhythm-chamber/js/utils/error-handling/error-classifier.js`
@@ -1042,17 +1008,56 @@
 
 - `/Users/rhinesharar/rhythm-chamber/js/utils/error-handling/error-sanitizer.js`
 
-### js/utils/validation/storage-validators.js
+### js/storage/transaction/two-phase-commit.js
 
-- `/Users/rhinesharar/rhythm-chamber/js/utils/validation/schema-validator.js`
+- `/Users/rhinesharar/rhythm-chamber/js/storage/transaction/transaction-state.js`
+- `/Users/rhinesharar/rhythm-chamber/js/storage/transaction/compensation-logger.js`
+- `/Users/rhinesharar/rhythm-chamber/js/storage/indexeddb.js`
 
-### js/utils/validation/schema-validator.js
+### js/storage/transaction/transaction-state.js
 
-- `/Users/rhinesharar/rhythm-chamber/js/utils/validation/regex-validator.js`
+- `/Users/rhinesharar/rhythm-chamber/js/services/event-bus.js`
 
-### js/utils/validation/message-validator.js
+### js/storage/transaction/index.js
 
-- `/Users/rhinesharar/rhythm-chamber/js/utils/crypto-hashing.js`
+- `/Users/rhinesharar/rhythm-chamber/js/storage/transaction/transactional-resource.js`
+- `/Users/rhinesharar/rhythm-chamber/js/storage/transaction/transaction-state.js`
+- `/Users/rhinesharar/rhythm-chamber/js/storage/transaction/compensation-logger.js`
+- `/Users/rhinesharar/rhythm-chamber/js/storage/transaction/two-phase-commit.js`
+
+### js/storage/transaction/compensation-logger.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/storage/indexeddb.js`
+- `/Users/rhinesharar/rhythm-chamber/js/storage/transaction/transaction-state.js`
+
+### js/storage/stores/streams.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/storage/indexeddb.js`
+- `/Users/rhinesharar/rhythm-chamber/js/storage/security.js`
+- `/Users/rhinesharar/rhythm-chamber/js/storage/operations/queue.js`
+- `/Users/rhinesharar/rhythm-chamber/js/storage/stores/registry.js`
+
+### js/storage/stores/sessions.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/storage/indexeddb.js`
+- `/Users/rhinesharar/rhythm-chamber/js/storage/operations/queue.js`
+- `/Users/rhinesharar/rhythm-chamber/js/storage/stores/registry.js`
+
+### js/storage/stores/registry.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/storage/indexeddb/config.js`
+
+### js/storage/stores/chunks.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/storage/indexeddb.js`
+- `/Users/rhinesharar/rhythm-chamber/js/storage/operations/queue.js`
+- `/Users/rhinesharar/rhythm-chamber/js/storage/stores/registry.js`
+
+### js/storage/stores/artifacts.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/storage/indexeddb.js`
+- `/Users/rhinesharar/rhythm-chamber/js/storage/operations/queue.js`
+- `/Users/rhinesharar/rhythm-chamber/js/storage/stores/registry.js`
 
 ### js/storage/write-ahead-log/write-queue.js
 
@@ -1126,28 +1131,6 @@
 - `/Users/rhinesharar/rhythm-chamber/js/storage/write-ahead-log/persistence.js`
 - `/Users/rhinesharar/rhythm-chamber/js/storage/write-ahead-log/operation-executor.js`
 
-### js/storage/transaction/two-phase-commit.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/storage/transaction/transaction-state.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/transaction/compensation-logger.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/indexeddb.js`
-
-### js/storage/transaction/transaction-state.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/services/event-bus.js`
-
-### js/storage/transaction/index.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/storage/transaction/transactional-resource.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/transaction/transaction-state.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/transaction/compensation-logger.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/transaction/two-phase-commit.js`
-
-### js/storage/transaction/compensation-logger.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/storage/indexeddb.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/transaction/transaction-state.js`
-
 ### js/storage/indexeddb/migrations.js
 
 - `/Users/rhinesharar/rhythm-chamber/js/storage/indexeddb/config.js`
@@ -1158,6 +1141,7 @@
 - `/Users/rhinesharar/rhythm-chamber/js/storage/indexeddb/connection.js`
 - `/Users/rhinesharar/rhythm-chamber/js/storage/fallback-backend.js`
 - `/Users/rhinesharar/rhythm-chamber/js/services/vector-clock.js`
+- `/Users/rhinesharar/rhythm-chamber/js/utils/common.js`
 
 ### js/storage/indexeddb/index.js
 
@@ -1183,35 +1167,6 @@
 
 - `/Users/rhinesharar/rhythm-chamber/js/services/tab-coordination.js`
 - `/Users/rhinesharar/rhythm-chamber/js/storage/indexeddb/config.js`
-
-### js/storage/stores/streams.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/storage/indexeddb.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/security.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/operations/queue.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/stores/registry.js`
-
-### js/storage/stores/sessions.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/storage/indexeddb.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/operations/queue.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/stores/registry.js`
-
-### js/storage/stores/registry.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/storage/indexeddb/config.js`
-
-### js/storage/stores/chunks.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/storage/indexeddb.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/operations/queue.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/stores/registry.js`
-
-### js/storage/stores/artifacts.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/storage/indexeddb.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/operations/queue.js`
-- `/Users/rhinesharar/rhythm-chamber/js/storage/stores/registry.js`
 
 ### js/services/tool-strategies/prompt-injection-strategy.js
 
@@ -1310,6 +1265,27 @@
 - `/Users/rhinesharar/rhythm-chamber/js/services/wave-telemetry.js`
 - `/Users/rhinesharar/rhythm-chamber/js/storage/event-log-store.js`
 
+### js/services/error-recovery/recovery-strategies.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/services/error-recovery/constants.js`
+
+### js/services/error-recovery/recovery-orchestration.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/services/error-recovery/constants.js`
+
+### js/services/error-recovery/index.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/services/error-recovery/recovery-strategies.js`
+- `/Users/rhinesharar/rhythm-chamber/js/services/error-recovery/recovery-orchestration.js`
+- `/Users/rhinesharar/rhythm-chamber/js/services/error-recovery/recovery-lock-manager.js`
+- `/Users/rhinesharar/rhythm-chamber/js/services/error-recovery/constants.js`
+
+### js/services/error-recovery/constants.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/constants/priorities.js`
+- `/Users/rhinesharar/rhythm-chamber/js/constants/api.js`
+- `/Users/rhinesharar/rhythm-chamber/js/constants/limits.js`
+
 ### js/services/fallback/priority.js
 
 - `/Users/rhinesharar/rhythm-chamber/js/services/provider-health-authority.js`
@@ -1338,26 +1314,57 @@
 
 - `/Users/rhinesharar/rhythm-chamber/js/services/provider-health-authority.js`
 
-### js/services/error-recovery/recovery-strategies.js
+### js/providers/interface/routing.js
 
-- `/Users/rhinesharar/rhythm-chamber/js/services/error-recovery/constants.js`
+- `/Users/rhinesharar/rhythm-chamber/js/utils/timeout-wrapper.js`
+- `/Users/rhinesharar/rhythm-chamber/js/services/provider-health-authority.js`
+- `/Users/rhinesharar/rhythm-chamber/js/module-registry.js`
+- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/config.js`
+- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/retry.js`
+- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/errors.js`
+- `/Users/rhinesharar/rhythm-chamber/js/providers/openrouter.js`
+- `/Users/rhinesharar/rhythm-chamber/js/providers/lmstudio.js`
+- `/Users/rhinesharar/rhythm-chamber/js/providers/gemini.js`
+- `/Users/rhinesharar/rhythm-chamber/js/providers/openai-compatible.js`
 
-### js/services/error-recovery/recovery-orchestration.js
+### js/providers/interface/retry.js
 
-- `/Users/rhinesharar/rhythm-chamber/js/services/error-recovery/constants.js`
+- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/config.js`
 
-### js/services/error-recovery/index.js
+### js/providers/interface/provider-config.js
 
-- `/Users/rhinesharar/rhythm-chamber/js/services/error-recovery/recovery-strategies.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/error-recovery/recovery-orchestration.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/error-recovery/recovery-lock-manager.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/error-recovery/constants.js`
+- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/config.js`
 
-### js/services/error-recovery/constants.js
+### js/providers/interface/index.js
 
-- `/Users/rhinesharar/rhythm-chamber/js/constants/priorities.js`
-- `/Users/rhinesharar/rhythm-chamber/js/constants/api.js`
-- `/Users/rhinesharar/rhythm-chamber/js/constants/limits.js`
+- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/config.js`
+- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/retry.js`
+- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/errors.js`
+- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/provider-config.js`
+- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/routing.js`
+- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/health-checks.js`
+- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/availability.js`
+
+### js/providers/interface/health-checks.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/settings.js`
+- `/Users/rhinesharar/rhythm-chamber/js/services/config-loader.js`
+- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/config.js`
+- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/errors.js`
+
+### js/providers/interface/availability.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/settings.js`
+- `/Users/rhinesharar/rhythm-chamber/js/services/config-loader.js`
+- `/Users/rhinesharar/rhythm-chamber/js/module-registry.js`
+
+### js/observability/ui/dashboard.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/services/performance-profiler.js`
+
+### js/observability/ui/actions.js
+
+- `/Users/rhinesharar/rhythm-chamber/js/observability/metrics-exporter.js`
 
 ### js/observability/updates/vitals.js
 
@@ -1376,14 +1383,6 @@
 - `/Users/rhinesharar/rhythm-chamber/js/services/performance-profiler.js`
 
 ### js/observability/updates/exports.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/observability/metrics-exporter.js`
-
-### js/observability/ui/dashboard.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/services/performance-profiler.js`
-
-### js/observability/ui/actions.js
 
 - `/Users/rhinesharar/rhythm-chamber/js/observability/metrics-exporter.js`
 
@@ -1456,50 +1455,6 @@
 - `/Users/rhinesharar/rhythm-chamber/js/controllers/sidebar/session-actions-controller.js`
 - `/Users/rhinesharar/rhythm-chamber/js/controllers/chat-ui-controller.js`
 - `/Users/rhinesharar/rhythm-chamber/js/utils/html-escape.js`
-
-### js/providers/interface/routing.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/utils/timeout-wrapper.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/provider-health-authority.js`
-- `/Users/rhinesharar/rhythm-chamber/js/module-registry.js`
-- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/config.js`
-- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/retry.js`
-- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/errors.js`
-- `/Users/rhinesharar/rhythm-chamber/js/providers/openrouter.js`
-- `/Users/rhinesharar/rhythm-chamber/js/providers/lmstudio.js`
-- `/Users/rhinesharar/rhythm-chamber/js/providers/gemini.js`
-- `/Users/rhinesharar/rhythm-chamber/js/providers/openai-compatible.js`
-
-### js/providers/interface/retry.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/config.js`
-
-### js/providers/interface/provider-config.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/config.js`
-
-### js/providers/interface/index.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/config.js`
-- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/retry.js`
-- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/errors.js`
-- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/provider-config.js`
-- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/routing.js`
-- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/health-checks.js`
-- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/availability.js`
-
-### js/providers/interface/health-checks.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/settings.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/config-loader.js`
-- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/config.js`
-- `/Users/rhinesharar/rhythm-chamber/js/providers/interface/errors.js`
-
-### js/providers/interface/availability.js
-
-- `/Users/rhinesharar/rhythm-chamber/js/settings.js`
-- `/Users/rhinesharar/rhythm-chamber/js/services/config-loader.js`
-- `/Users/rhinesharar/rhythm-chamber/js/module-registry.js`
 
 ### js/storage/indexeddb/operations/write.js
 
@@ -1598,3 +1553,4 @@
 
 - `/Users/rhinesharar/rhythm-chamber/js/services/event-bus.js`
 - `/Users/rhinesharar/rhythm-chamber/js/services/tab-coordination/constants.js`
+

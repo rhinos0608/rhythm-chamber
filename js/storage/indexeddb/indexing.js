@@ -11,9 +11,68 @@ import { initDatabase } from './connection.js';
 import { isUsingFallback, activateFallback } from './connection.js';
 import { FallbackBackend } from '../fallback-backend.js';
 import { VectorClock } from '../../services/vector-clock.js';
+import { deepClone } from '../../utils/common.js';
 
 // Module-level VectorClock for write tracking
 const writeVectorClock = new VectorClock();
+
+// ==========================================
+// Fallback Transaction Atomicity Helpers
+// ==========================================
+
+/**
+ * Capture current state of a store for potential rollback
+ * @param {string} storeName - Store name
+ * @returns {Promise<Object>} Deep clone of current store state
+ * @private
+ */
+async function captureStoreState(storeName) {
+    const allData = await FallbackBackend.getAll(storeName);
+    // Deep clone to prevent reference sharing
+    return deepClone(allData);
+}
+
+/**
+ * Rollback store to previous state after transaction failure
+ * @param {string} storeName - Store name
+ * @param {Object} previousState - State to restore
+ * @param {Array} operationsLog - Log of attempted operations
+ * @returns {Promise<void>}
+ * @private
+ */
+async function rollbackStoreState(storeName, previousState, operationsLog) {
+    try {
+        // For array-based stores (streams, chunks, embeddings), restore entire state
+        if (storeName === 'streams' || storeName === 'chunks' || storeName === 'embeddings') {
+            await FallbackBackend.clear(storeName);
+            if (Array.isArray(previousState) && previousState.length > 0) {
+                // Restore each item
+                for (const item of previousState) {
+                    await FallbackBackend.put(storeName, item);
+                }
+            }
+        } else {
+            // For key-value stores, clear and restore previous entries
+            await FallbackBackend.clear(storeName);
+            if (Array.isArray(previousState)) {
+                for (const item of previousState) {
+                    if (item && (item.id || item.key)) {
+                        await FallbackBackend.put(storeName, item);
+                    }
+                }
+            }
+        }
+
+        console.log(`[IndexedDB] Rollback completed for ${storeName}, restored ${Array.isArray(previousState) ? previousState.length : 0} items`);
+    } catch (rollbackError) {
+        // If rollback fails, we have a serious problem - log extensively
+        console.error(`[IndexedDB] CRITICAL: Rollback failed for ${storeName}:`, rollbackError);
+        console.error('[IndexedDB] Operations log:', operationsLog);
+        console.error('[IndexedDB] Previous state:', previousState);
+        // Re-throw so caller knows data may be inconsistent
+        throw new Error(`Rollback failed: ${rollbackError.message}. Data may be in inconsistent state.`);
+    }
+}
 
 /**
  * Get records using an index with cursor (for sorted results)
@@ -110,7 +169,8 @@ export async function atomicUpdate(storeName, key, modifier) {
                 // CRITICAL FIX for Issue #4: Deep clone currentValue before passing to modifier
                 // This prevents the modifier from mutating the original object in-place
                 // before throwing, which would leave the caller seeing a partially mutated object
-                const clonedValue = JSON.parse(JSON.stringify(currentValue));
+                // Using deepClone instead of JSON.parse/stringify to preserve Date objects and undefined values
+                const clonedValue = deepClone(currentValue);
 
                 // CRITICAL FIX for Issue #2: Wrap modifier in try-catch
                 // If modifier throws, explicitly abort the transaction
@@ -192,6 +252,12 @@ export async function atomicUpdate(storeName, key, modifier) {
  * Execute a transaction with multiple operations
  * FALLBACK: Uses FallbackBackend when IndexedDB is unavailable
  *
+ * IMPORTANT: Fallback mode provides BEST-EFFORT atomicity:
+ * - All operations are validated before execution (pre-flight checks)
+ * - If any operation fails, all previous operations are rolled back
+ * - Rollback restores data to state before transaction started
+ * - This is NOT true ACID atomicity but prevents partial updates
+ *
  * @param {string} storeName - Store name
  * @param {string} mode - Transaction mode ('readonly' or 'readwrite')
  * @param {function} operations - Function receiving store, returns array of ops
@@ -200,27 +266,60 @@ export async function atomicUpdate(storeName, key, modifier) {
 export async function transaction(storeName, mode, operations) {
     // Use fallback if active
     if (isUsingFallback()) {
-        // Fallback doesn't support transactions - execute operations directly
-        // This provides basic functionality but not atomicity
+        // FALLBACK ATOMICITY IMPLEMENTATION
+        // Since FallbackBackend doesn't support true transactions, we implement
+        // a two-phase commit with rollback capability:
         //
-        // CRITICAL FIX: Create a wrapper object that mimics IDBObjectStore interface
-        // by binding the storeName to FallbackBackend methods. This ensures the
-        // operations callback can use the same API as IndexedDB objectStore.
+        // Phase 1: Capture current state for potential rollback
+        // Phase 2: Execute operations with error tracking
+        // Phase 3: On failure, restore captured state (rollback)
+
+        // Phase 1: Capture pre-transaction state for rollback
+        const preTransactionState = await captureStoreState(storeName);
+        const operationsLog = [];
+
+        // Create a wrapper that tracks operations for potential rollback
         const fallbackStore = {
-            put: data => FallbackBackend.put(storeName, data),
+            put: async data => {
+                const key = data.id || data.key || 'default';
+                operationsLog.push({ type: 'put', key, data });
+                return FallbackBackend.put(storeName, data);
+            },
             get: key => FallbackBackend.get(storeName, key),
-            delete: key => FallbackBackend.delete(storeName, key),
-            clear: () => FallbackBackend.clear(storeName),
+            delete: async key => {
+                operationsLog.push({ type: 'delete', key });
+                return FallbackBackend.delete(storeName, key);
+            },
+            clear: async () => {
+                operationsLog.push({ type: 'clear' });
+                return FallbackBackend.clear(storeName);
+            },
         };
 
-        return new Promise(resolve => {
-            try {
-                operations(fallbackStore);
-            } catch (e) {
-                console.warn('[IndexedDB] Fallback transaction operation failed:', e);
+        try {
+            // Phase 2: Execute operations
+            const result = operations(fallbackStore);
+
+            // Handle both sync and async operations
+            if (result && typeof result.then === 'function') {
+                await result;
             }
-            resolve();
-        });
+
+            // Success - no rollback needed
+            return;
+        } catch (error) {
+            // Phase 3: Rollback on failure
+            console.error(
+                `[IndexedDB] Fallback transaction failed, rolling back ${operationsLog.length} operations:`
+            );
+
+            await rollbackStoreState(storeName, preTransactionState, operationsLog);
+
+            // Re-throw so caller knows transaction failed
+            throw new Error(
+                `Fallback transaction failed and rolled back: ${error.message}`
+            );
+        }
     }
 
     try {

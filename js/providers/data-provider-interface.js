@@ -82,6 +82,7 @@ const DataProviderContract = {
      * Check if provider is ready to serve data
      * @returns {Promise<boolean>}
      */
+    // eslint-disable-next-line require-await
     isReady: async () => {
         throw new Error('Must implement isReady()');
     },
@@ -90,6 +91,7 @@ const DataProviderContract = {
      * Get streaming history
      * @returns {Promise<Stream[]>}
      */
+    // eslint-disable-next-line require-await
     getStreams: async () => {
         throw new Error('Must implement getStreams()');
     },
@@ -98,6 +100,7 @@ const DataProviderContract = {
      * Get detected patterns
      * @returns {Promise<Patterns|null>}
      */
+    // eslint-disable-next-line require-await
     getPatterns: async () => {
         throw new Error('Must implement getPatterns()');
     },
@@ -106,6 +109,7 @@ const DataProviderContract = {
      * Get personality result
      * @returns {Promise<Personality|null>}
      */
+    // eslint-disable-next-line require-await
     getPersonality: async () => {
         throw new Error('Must implement getPersonality()');
     },
@@ -114,6 +118,7 @@ const DataProviderContract = {
      * Get summary data
      * @returns {Promise<Object|null>}
      */
+    // eslint-disable-next-line require-await
     getSummary: async () => {
         throw new Error('Must implement getSummary()');
     },
@@ -122,6 +127,7 @@ const DataProviderContract = {
      * Get stream count
      * @returns {Promise<number>}
      */
+    // eslint-disable-next-line require-await
     getStreamCount: async () => {
         throw new Error('Must implement getStreamCount()');
     },
@@ -163,11 +169,11 @@ function getProvider(type) {
  * @param {DataProviderType} type - Provider type to switch to
  * @returns {Promise<boolean>} Success status
  */
-async function switchProvider(type) {
+function switchProvider(type) {
     const provider = providerRegistry.get(type);
     if (!provider) {
         console.error(`[DataProvider] Unknown provider type: ${type}`);
-        return false;
+        return Promise.resolve(false);
     }
 
     // Re-validate provider against contract before switching
@@ -177,7 +183,7 @@ async function switchProvider(type) {
         console.error(
             `[DataProvider] Invalid provider "${type}" missing methods: ${missing.join(', ')}`
         );
-        return false;
+        return Promise.resolve(false);
     }
 
     const previousType = currentProviderType;
@@ -191,7 +197,7 @@ async function switchProvider(type) {
     });
 
     console.log(`[DataProvider] Switched to provider: ${type}`);
-    return true;
+    return Promise.resolve(true);
 }
 
 /**
@@ -221,11 +227,11 @@ function getCurrentType() {
  * Get streams from current provider
  * @returns {Promise<Stream[]>}
  */
-async function getStreams() {
+function getStreams() {
     const provider = getCurrentProvider();
     if (!provider) {
         console.warn('[DataProvider] No provider available');
-        return [];
+        return Promise.resolve([]);
     }
     return provider.getStreams();
 }
@@ -234,9 +240,9 @@ async function getStreams() {
  * Get patterns from current provider
  * @returns {Promise<Patterns|null>}
  */
-async function getPatterns() {
+function getPatterns() {
     const provider = getCurrentProvider();
-    if (!provider) return null;
+    if (!provider) return Promise.resolve(null);
     return provider.getPatterns();
 }
 
@@ -244,9 +250,9 @@ async function getPatterns() {
  * Get personality from current provider
  * @returns {Promise<Personality|null>}
  */
-async function getPersonality() {
+function getPersonality() {
     const provider = getCurrentProvider();
-    if (!provider) return null;
+    if (!provider) return Promise.resolve(null);
     return provider.getPersonality();
 }
 
@@ -254,9 +260,9 @@ async function getPersonality() {
  * Get summary from current provider
  * @returns {Promise<Object|null>}
  */
-async function getSummary() {
+function getSummary() {
     const provider = getCurrentProvider();
-    if (!provider) return null;
+    if (!provider) return Promise.resolve(null);
     return provider.getSummary();
 }
 
@@ -264,9 +270,9 @@ async function getSummary() {
  * Get stream count from current provider
  * @returns {Promise<number>}
  */
-async function getStreamCount() {
+function getStreamCount() {
     const provider = getCurrentProvider();
-    if (!provider) return 0;
+    if (!provider) return Promise.resolve(0);
     return provider.getStreamCount();
 }
 
@@ -274,9 +280,9 @@ async function getStreamCount() {
  * Check if current provider is ready
  * @returns {Promise<boolean>}
  */
-async function isReady() {
+function isReady() {
     const provider = getCurrentProvider();
-    if (!provider) return false;
+    if (!provider) return Promise.resolve(false);
     return provider.isReady();
 }
 

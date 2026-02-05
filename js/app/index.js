@@ -986,7 +986,7 @@ async function validateExistingLicense() {
  * Load saved settings from localStorage into AppState
  * Ensures user preferences (max tokens, etc.) are applied on startup
  */
-async function loadSavedSettings() {
+function loadSavedSettings() {
     try {
         const saved = localStorage.getItem('rhythm_chamber_settings');
         if (!saved) {
@@ -1158,7 +1158,7 @@ async function init() {
     bindFileUpload();
 
     // Load saved settings into AppState
-    await loadSavedSettings();
+    loadSavedSettings();
 
     // Restore view state from persisted data
     await restoreViewState();

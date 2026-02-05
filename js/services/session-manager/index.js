@@ -84,6 +84,7 @@ export function createManager() {
         currentSession: null,
 
         // Initialize
+        // eslint-disable-next-line require-await
         async initialize() {
             // Initialize state (SessionState doesn't have initialize, so just set up)
             // The state module is already initialized on import

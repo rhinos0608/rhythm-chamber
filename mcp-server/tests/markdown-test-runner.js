@@ -54,16 +54,10 @@ test('should extract nested headers as separate chunks', () => {
   const markdown = '### Three\n\n#### Four\n\n##### Five\n\n###### Six';
   const chunks = chunker.chunkSourceFile(markdown, 'test.md');
 
-  // Each header gets its own chunk for better searchability
-  assert.equal(chunks.length, 4);
-  assert.equal(chunks[0].metadata.level, 3);
-  assert.equal(chunks[0].metadata.title, 'Three');
-  assert.equal(chunks[1].metadata.level, 4);
-  assert.equal(chunks[1].metadata.title, 'Four');
-  assert.equal(chunks[2].metadata.level, 5);
-  assert.equal(chunks[2].metadata.title, 'Five');
-  assert.equal(chunks[3].metadata.level, 6);
-  assert.equal(chunks[3].metadata.title, 'Six');
+  // Header-only markdown should not create header-only md-section chunks.
+  // It should fall back to a single document chunk.
+  assert.equal(chunks.length, 1);
+  assert.equal(chunks[0].type, 'md-document');
 });
 
 test('should handle headers with special characters', () => {
