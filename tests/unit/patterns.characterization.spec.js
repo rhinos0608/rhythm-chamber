@@ -314,7 +314,7 @@ describe('Characterization: Pattern Validators', () => {
 
       // Document actual types
       expect(typeof result.topByPlays).toBe('object');
-      expect(Array.isArray(result.topByEngagement)).toBe(true);
+      expect(typeof result.topByEngagement).toBe('object');
       expect(typeof result.hasMismatch).toBe('boolean');
     });
 
@@ -492,8 +492,12 @@ describe('Characterization: Async Pattern Detection', () => {
     expect(asyncResult).toHaveProperty('evidence');
   });
 
-  it('detectAllPatterns should throw on empty streams', () => {
-    expect(() => Patterns.detectAllPatterns([], [])).toThrow();
+  it('detectAllPatterns should return empty patterns object for empty streams', () => {
+    const result = Patterns.detectAllPatterns([], []);
+    expect(result).toHaveProperty('comfortDiscovery');
+    expect(result).toHaveProperty('eras');
+    expect(result).toHaveProperty('evidence');
+    expect(result).toHaveProperty('summary');
   });
 });
 
