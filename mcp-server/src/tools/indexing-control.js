@@ -111,9 +111,12 @@ export async function handler(args, projectRoot, semanticIndexer, mcpServer) {
  * Handle start action
  */
 async function handleStart(indexer, mcpServer, patterns, ignore, force) {
-  // Check if indexing is already in progress (only check indexer flag now)
-  const isIndexing = indexer._indexingInProgress || false;
-  if (isIndexing) {
+  // RACE CONDITION FIX: Don't check _indexingInProgress here.
+  // indexAll() has its own internal concurrency check at line 331 that atomically
+  // checks and sets the flag. Checking here creates a TOCTOU race condition.
+  // If indexing is in progress, indexAll() will return the existing promise.
+  // We check _indexingPromise instead as it's set after indexAll() starts.
+  if (indexer._indexingPromise) {
     return {
       content: [
         {
@@ -182,9 +185,10 @@ async function handleStart(indexer, mcpServer, patterns, ignore, force) {
  * Handle stop action
  */
 async function handleStop(indexer, mcpServer) {
-  const isIndexing = indexer._indexingInProgress || false;
-
-  if (!isIndexing) {
+  // RACE CONDITION FIX: Check _indexingPromise for active indexing
+  // _indexingInProgress is managed internally by indexAll() and shouldn't be
+  // read directly by external code.
+  if (!indexer._indexingPromise) {
     return {
       content: [
         {
@@ -195,7 +199,14 @@ async function handleStop(indexer, mcpServer) {
     };
   }
 
-  // Set flag to stop indexing (indexer only - server flags removed)
+  // RACE CONDITION FIX: Use a separate _stopRequested flag instead of
+  // directly manipulating _indexingInProgress. The indexer checks this flag
+  // in its loop (line 544) to cooperatively stop. _indexingInProgress is
+  // managed by indexAll() and cleared in its finally block - external code
+  // should not modify it.
+  indexer._stopRequested = true;
+  // Also set _indexingInProgress to false for backward compatibility with
+  // the cooperative stop check in the indexer loop (line 544)
   indexer._indexingInProgress = false;
 
   // Note: We can't actually cancel the promise, but the indexer can check the flag
@@ -220,7 +231,10 @@ async function handleStop(indexer, mcpServer) {
  * OOM FIX: Minimized response to reduce MCP serialization overhead
  */
 async function handleStatus(indexer, mcpServer) {
-  const isIndexing = indexer._indexingInProgress || false;
+  // RACE CONDITION FIX: Use _indexingPromise to determine if indexing is active
+  // _indexingInProgress is managed internally by indexAll() and may be cleared
+  // in the finally block before the promise is fully resolved.
+  const isIndexing = !!indexer._indexingPromise;
   const stats = indexer.stats || {};
   const vectorStoreStats = indexer.vectorStore ? indexer.vectorStore.getStats() : {};
   const adapterStats = indexer.vectorStore?.adapter ? indexer.vectorStore.adapter.getStats() : {};
@@ -253,7 +267,8 @@ async function handleStatus(indexer, mcpServer) {
  * Handle clear_cache action
  */
 async function handleClearCache(indexer, mcpServer) {
-  const isIndexing = indexer._indexingInProgress || false;
+  // RACE CONDITION FIX: Use _indexingPromise to check for active indexing
+  const isIndexing = !!indexer._indexingPromise;
 
   if (isIndexing) {
     return {

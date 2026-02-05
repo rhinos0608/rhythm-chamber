@@ -144,7 +144,6 @@ export class SqliteVectorAdapter {
   _prepareStatements() {
     this._statements = {
       // Upsert statements (vec_chunks uses rowid, handled inline)
-      deleteMetadata: this._db.prepare('DELETE FROM chunk_metadata WHERE chunk_id = ?'),
       insertMetadata: this._db.prepare(`
         INSERT INTO chunk_metadata (
           chunk_id, vec_rowid, text, name, type, file, line, exported,
@@ -162,6 +161,11 @@ export class SqliteVectorAdapter {
         WHERE chunk_id = ?
       `),
       chunkExists: this._db.prepare('SELECT 1 FROM chunk_metadata WHERE chunk_id = ?'),
+
+      // Insert embedding statement (needed for upsert)
+      insertEmbedding: this._db.prepare(
+        'INSERT INTO vec_chunks (embedding) VALUES (?)'
+      ),
 
       // Delete statements
       deleteChunkVec: this._db.prepare('DELETE FROM vec_chunks WHERE rowid = ?'),
@@ -267,17 +271,28 @@ export class SqliteVectorAdapter {
       embedding = new Float32Array(embedding);
     }
 
-    // CRITICAL FIX #3: Use cached prepared statements instead of preparing each time
     // Use a transaction for atomic upsert
+    // Follows same pattern as _processSubBatch: get old rowid, delete old, insert new
     const upsertTransaction = this._db.transaction(() => {
-      // Delete existing if present
-      this._statements.deleteEmbedding.run(chunkId);
-      this._statements.deleteMetadata.run(chunkId);
+      // Check if chunk already exists and get its vec_rowid
+      const oldMeta = this._statements.getMetadata.get(chunkId);
 
-      // Insert new data
-      this._statements.insertEmbedding.run(chunkId, embedding);
+      // Delete old embedding from vec_chunks if it existed
+      if (oldMeta && oldMeta.vec_rowid) {
+        this._statements.deleteChunkVec.run(oldMeta.vec_rowid);
+      }
+
+      // Delete old metadata
+      this._statements.deleteChunkMetadata.run(chunkId);
+
+      // Insert new embedding into vec_chunks and get back the rowid
+      const vecResult = this._statements.insertEmbedding.run(embedding);
+      const newRowId = vecResult.lastInsertRowid;
+
+      // Insert new metadata with vec_rowid
       this._statements.insertMetadata.run(
         chunkId,
+        newRowId,
         metadata.text || null,
         metadata.name || null,
         metadata.type || null,
@@ -375,8 +390,8 @@ export class SqliteVectorAdapter {
         }
 
         // Delete old metadata
-        failedOperation = 'deleteMetadata';
-        this._statements.deleteMetadata.run(chunkId);
+        failedOperation = 'deleteChunkMetadata';
+        this._statements.deleteChunkMetadata.run(chunkId);
 
         // Insert new embedding into vec_chunks and get back the rowid
         failedOperation = 'insertEmbedding';
@@ -594,10 +609,19 @@ export class SqliteVectorAdapter {
       throw new Error('SqliteAdapter not initialized');
     }
 
-    // CRITICAL FIX #3: Use cached prepared statements
+    // Use cached prepared statements
+    // Must get vec_rowid first since vec_chunks uses rowid, not chunk_id
     const transaction = this._db.transaction(() => {
-      const result = this._statements.deleteChunkVec.run(chunkId);
-      this._statements.deleteChunkMetadata.run(chunkId);
+      // Get the vec_rowid first
+      const meta = this._statements.getMetadata.get(chunkId);
+
+      // Delete from vec_chunks using rowid if found
+      if (meta && meta.vec_rowid) {
+        this._statements.deleteChunkVec.run(meta.vec_rowid);
+      }
+
+      // Delete from metadata
+      const result = this._statements.deleteChunkMetadata.run(chunkId);
 
       return result.changes > 0;
     });

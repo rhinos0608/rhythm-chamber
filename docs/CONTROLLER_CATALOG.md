@@ -1,7 +1,7 @@
 # Controller Catalog
 
 > **Auto-generated** by docs-sync tool
-> **Generated:** 2026-01-31
+> **Generated:** 2026-02-05
 > **Total Controllers:** 21
 
 This catalog provides detailed information about all UI controllers in the application.
@@ -32,7 +32,7 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/chat-input-manager.js`
 
-**Lines:** 139
+**Lines:** 148
 
 **Named Exports:** 1
 
@@ -44,7 +44,7 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/chat-ui-controller.js`
 
-**Lines:** 80
+**Lines:** 79
 
 **Named Exports:** 1
 
@@ -64,7 +64,7 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/custom-profile-controller.js`
 
-**Lines:** 414
+**Lines:** 425
 
 **Named Exports:** 1
 
@@ -81,7 +81,7 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/demo-controller.js`
 
-**Lines:** 788
+**Lines:** 805
 
 **Named Exports:** 1
 
@@ -101,7 +101,7 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/dev-panel-controller.js`
 
-**Lines:** 326
+**Lines:** 331
 
 **Named Exports:** 1
 
@@ -119,7 +119,7 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/file-upload-controller.js`
 
-**Lines:** 542
+**Lines:** 550
 
 **Named Exports:** 1
 
@@ -135,7 +135,7 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/message-actions.js`
 
-**Lines:** 251
+**Lines:** 258
 
 **Named Exports:** 1
 
@@ -179,7 +179,7 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/premium-controller.js`
 
-**Lines:** 459
+**Lines:** 466
 
 **Named Exports:** 1
 
@@ -199,7 +199,7 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/reset-controller.js`
 
-**Lines:** 371
+**Lines:** 379
 
 **Named Exports:** 1
 
@@ -215,7 +215,7 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/sidebar-controller.js`
 
-**Lines:** 771
+**Lines:** 779
 
 **Named Exports:** 1
 
@@ -272,7 +272,7 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/sidebar/session-actions-controller.js`
 
-**Lines:** 369
+**Lines:** 371
 
 **Named Exports:** 1
 
@@ -294,7 +294,7 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/sidebar/session-list-controller.js`
 
-**Lines:** 251
+**Lines:** 250
 
 **Named Exports:** 1
 
@@ -312,7 +312,7 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/sidebar/state-controller.js`
 
-**Lines:** 211
+**Lines:** 213
 
 **Named Exports:** 1
 
@@ -331,7 +331,7 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/spotify-controller.js`
 
-**Lines:** 340
+**Lines:** 349
 
 **Named Exports:** 1
 
@@ -343,7 +343,7 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/streaming-message-handler.js`
 
-**Lines:** 450
+**Lines:** 470
 
 **Named Exports:** 1
 
@@ -362,7 +362,7 @@ Controllers manage UI components and user interactions. Each controller is respo
 
 **File:** `js/controllers/view-controller.js`
 
-**Lines:** 520
+**Lines:** 531
 
 **Named Exports:** 1
 
@@ -376,3 +376,4 @@ Controllers manage UI components and user interactions. Each controller is respo
 - `js/controllers/sidebar-controller.js`
 
 ---
+

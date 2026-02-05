@@ -81,6 +81,22 @@ export class FileWatcher {
 
     // Periodic stats timer
     this.statsTimer = null;
+
+    /**
+     * Reschedule counter for exponential backoff
+     * Tracks how many times batch processing has been rescheduled to prevent infinite loops
+     * Note: This is effectively protected by coalesceTimer - only one _processChangeQueue
+     * can run at a time because the timer is cleared before processing begins
+     * @type {number}
+     */
+    this._rescheduleCount = 0;
+
+    /**
+     * Maximum number of reschedules before forcing batch processing
+     * Prevents infinite reschedule loops when indexing takes too long
+     * @type {number}
+     */
+    this._maxReschedules = 10;
   }
 
   /**
@@ -92,9 +108,9 @@ export class FileWatcher {
       return;
     }
 
-    console.error('[FileWatcher] Starting file watcher daemon...');
-    console.error(`[FileWatcher] Project root: ${this.projectRoot}`);
-    console.error(`[FileWatcher] Patterns: ${this.indexer.patterns.join(', ')}`);
+    console.log('[FileWatcher] Starting file watcher daemon...');
+    console.log(`[FileWatcher] Project root: ${this.projectRoot}`);
+    console.log(`[FileWatcher] Patterns: ${this.indexer.patterns.join(', ')}`);
 
     this.running = true;
     this.paused = false;
@@ -103,7 +119,7 @@ export class FileWatcher {
     try {
       await this._initializeWatcher();
       this._startStatsTimer();
-      console.error('[FileWatcher] File watcher started successfully');
+      console.log('[FileWatcher] File watcher started successfully');
     } catch (error) {
       this.running = false;
       console.error('[FileWatcher] Failed to start:', error);
@@ -119,7 +135,7 @@ export class FileWatcher {
       return;
     }
 
-    console.error('[FileWatcher] Stopping file watcher...');
+    console.log('[FileWatcher] Stopping file watcher...');
     this.paused = true;
 
     // Clear debounce timers
@@ -136,7 +152,7 @@ export class FileWatcher {
 
     // Process remaining queue
     if (this.changeQueue.size > 0) {
-      console.error(`[FileWatcher] Processing ${this.changeQueue.size} remaining changes...`);
+      console.log(`[FileWatcher] Processing ${this.changeQueue.size} remaining changes...`);
       await this._processChangeQueue();
     }
 
@@ -155,7 +171,7 @@ export class FileWatcher {
     this.running = false;
     this.nextProcessTime = null;
 
-    console.error('[FileWatcher] File watcher stopped');
+    console.log('[FileWatcher] File watcher stopped');
   }
 
   /**
@@ -219,15 +235,30 @@ export class FileWatcher {
       .on('change', path => this._handleFileEvent('change', path))
       .on('unlink', path => this._handleFileEvent('unlink', path))
       .on('error', error => this._handleError(error, 'chokidar'))
-      .on('ready', () => console.error('[FileWatcher] Ready for changes'));
+      .on('ready', () => console.log('[FileWatcher] Ready for changes'));
   }
 
   /**
    * Handle file events (add/change/unlink)
+   *
+   * Safeguards:
+   * - SAFEGUARD #1: Skips cache directory files (.mcp-cache/) to prevent infinite loops
+   * - Validates file matches configured patterns before processing
+   *
+   * @param {string} event - Event type ('add', 'change', 'unlink')
+   * @param {string} path - Relative file path
    * @private
    */
   _handleFileEvent(event, path) {
     if (!this.running || this.paused) {
+      return;
+    }
+
+    // SAFEGUARD #1: Hard-coded cache directory check
+    // Even if pattern matching fails, explicitly skip cache directory
+    // Normalize path for case-insensitive comparison (handles Windows backslashes too)
+    const normalizedPath = path.toLowerCase().replace(/\\/g, '/');
+    if (normalizedPath.includes('.mcp-cache/')) {
       return;
     }
 
@@ -247,6 +278,12 @@ export class FileWatcher {
 
   /**
    * Check if a file path matches any of the configured patterns
+   *
+   * Converts glob patterns to regex and tests the file path.
+   * Supports standard glob syntax: ** (any depth), * (single level), ? (single char)
+   *
+   * @param {string} filePath - Relative file path to check
+   * @returns {boolean} True if path matches any configured pattern
    * @private
    */
   _matchesPattern(filePath) {
@@ -325,6 +362,13 @@ export class FileWatcher {
 
   /**
    * Process all changes in the queue as a batch
+   *
+   * Safeguards:
+   * - SAFEGUARD #4: Prevents concurrent indexing by checking _indexingInProgress flag
+   * - SAFEGUARD #5: Prevents concurrent reindexing by checking _reindexInProgress flag
+   * - Exponential backoff with max retry limit (10) to prevent infinite reschedule loops
+   * - Files that don't exist are removed from index (orphan cleanup)
+   *
    * @private
    */
   async _processChangeQueue() {
@@ -334,7 +378,46 @@ export class FileWatcher {
       return;
     }
 
-    console.error(`[FileWatcher] Processing batch of ${this.changeQueue.size} files...`);
+    // SAFEGUARD #4: Check if indexing is already in progress
+    // This prevents concurrent reindexing which could cause race conditions
+    if (this.indexer._indexingInProgress) {
+      this._rescheduleCount++;
+      if (this._rescheduleCount > this._maxReschedules) {
+        console.warn(`[FileWatcher] Max reschedules (${this._maxReschedules}) exceeded, forcing batch processing`);
+        // Don't reset counter here - will be reset after successful processing
+      } else {
+        const delay = this.options.coalesceWindow * Math.min(this._rescheduleCount, 5);
+        console.warn(`[FileWatcher] Delaying batch: full indexing in progress (${this.changeQueue.size} files queued, reschedule ${this._rescheduleCount}/${this._maxReschedules}, delay ${delay}ms)`);
+        this.coalesceTimer = setTimeout(() => {
+          this._processChangeQueue();
+        }, delay);
+        this.nextProcessTime = Date.now() + delay;
+        return;
+      }
+    }
+
+    // SAFEGUARD #5: Check if reindexing is already in progress
+    // The reindexFiles method has its own locking, but early exit prevents queue buildup
+    if (this.indexer._reindexInProgress) {
+      this._rescheduleCount++;
+      if (this._rescheduleCount > this._maxReschedules) {
+        console.warn(`[FileWatcher] Max reschedules (${this._maxReschedules}) exceeded, forcing batch processing`);
+        // Don't reset counter here - will be reset after successful processing
+      } else {
+        const delay = this.options.coalesceWindow * Math.min(this._rescheduleCount, 5);
+        console.warn(`[FileWatcher] Delaying batch: reindexing in progress (${this.changeQueue.size} files queued, reschedule ${this._rescheduleCount}/${this._maxReschedules}, delay ${delay}ms)`);
+        this.coalesceTimer = setTimeout(() => {
+          this._processChangeQueue();
+        }, delay);
+        this.nextProcessTime = Date.now() + delay;
+        return;
+      }
+    }
+
+    // Reset reschedule counter on successful processing (only once, after both safeguards pass)
+    this._rescheduleCount = 0;
+
+    console.log(`[FileWatcher] Processing batch of ${this.changeQueue.size} files...`);
 
     // Get all files to process
     const filesToProcess = Array.from(this.changeQueue.keys());
@@ -359,7 +442,7 @@ export class FileWatcher {
     try {
       // Handle deletions
       if (toDelete.length > 0) {
-        console.error(`[FileWatcher] Removing ${toDelete.length} deleted files from index...`);
+        console.log(`[FileWatcher] Removing ${toDelete.length} deleted files from index...`);
         const failedDeletions = [];
 
         for (const relPath of toDelete) {
@@ -375,7 +458,7 @@ export class FileWatcher {
               this.indexer.dependencyGraph.removeChunk(chunk.chunkId);
             }
 
-            console.error(`[FileWatcher] Removed ${chunks.length} chunks for ${relPath}`);
+            console.log(`[FileWatcher] Removed ${chunks.length} chunks for ${relPath}`);
           } catch (error) {
             console.warn(`[FileWatcher] Failed to invalidate ${relPath}: ${error.message}`);
             this.stats.errors++;
@@ -401,7 +484,7 @@ export class FileWatcher {
 
       // Handle reindexing
       if (toReindex.length > 0) {
-        console.error(`[FileWatcher] Reindexing ${toReindex.length} files...`);
+        console.log(`[FileWatcher] Reindexing ${toReindex.length} files...`);
         const result = await this.indexer.reindexFiles(toReindex);
         this.stats.totalFilesReindexed += result.reindexed;
       }
@@ -410,7 +493,7 @@ export class FileWatcher {
       await this.indexer._saveCache();
 
       this.stats.batchesProcessed++;
-      console.error(
+      console.log(
         `[FileWatcher] Batch complete: ${toReindex.length} reindexed, ${toDelete.length} removed`
       );
 

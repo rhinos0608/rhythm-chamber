@@ -44,14 +44,17 @@ import {
  */
 const DEFAULT_PATTERNS = [
   'js/**/*.js',
+  'js/**/*.ts',
+  'js/**/*.tsx',
+  'js/**/*.mtsx',
   'tests/**/*.js',
+  'tests/**/*.ts',
   'workers/**/*.js',
   'workers/**/*.mjs',
   'scripts/**/*.js',
   'scripts/**/*.mjs',
   'docs/**/*.md',
   'coverage/**/*.js',
-  'coverage/**/*.html',
 ];
 
 /**
@@ -117,6 +120,9 @@ export class CodeIndexer {
     this._indexingInProgress = false; // Track if indexing is currently running
     this._indexingError = null; // Track any indexing errors
     this._indexingPromise = null; // Track current indexing operation
+    this._stopRequested = false; // Flag for cooperative stop signal from external code
+    this._reindexInProgress = false; // Track if reindexing is in progress (used by file-watcher.js SAFEGUARD #5)
+    this._reindexPromise = null; // Promise for current reindexing operation
     this.stats = {
       filesDiscovered: 0,
       filesIndexed: 0,
@@ -340,6 +346,7 @@ export class CodeIndexer {
     // Set indexing flags
     this._indexingInProgress = true;
     this._indexingError = null;
+    this._stopRequested = false; // Reset stop flag at start of new indexing operation
 
     // FIX: Reset stats at start of indexAll to prevent accumulation across runs
     // This ensures stats accurately reflect THIS indexing run, not cumulative totals
@@ -535,8 +542,11 @@ export class CodeIndexer {
               );
               break;
             }
-            // Check if we should stop
-            if (!this._indexingInProgress) {
+            // Check if we should stop (either _indexingInProgress is false OR _stopRequested is true)
+            // RACE CONDITION FIX: Check both flags for backward compatibility.
+            // External code should set _stopRequested=true, but may also set _indexingInProgress=false
+            // for the cooperative stop check. We check both to handle either approach.
+            if (!this._indexingInProgress || this._stopRequested) {
               console.error('[Indexer] Indexing stopped by user request');
               break;
             }
@@ -661,6 +671,7 @@ export class CodeIndexer {
         // Always clear indexing flag
         this._indexingInProgress = false;
         this._indexingPromise = null;
+        this._stopRequested = false; // Reset stop flag when indexing completes
 
         // FIX: Post-indexing cleanup to free memory
         if (this.indexed && this.cache) {

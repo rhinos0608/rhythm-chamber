@@ -1,7 +1,7 @@
 # Utility Reference
 
 > **Auto-generated** by docs-sync tool
-> **Generated:** 2026-01-31
+> **Generated:** 2026-02-05
 > **Total Utilities:** 35
 
 This reference provides detailed information about all utility modules in the application.
@@ -16,7 +16,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/adaptive-rate-limiter.js`
 
-**Lines:** 387
+**Lines:** 391
 
 **Named Exports:** 11
 
@@ -30,7 +30,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/common.js`
 
-**Lines:** 353
+**Lines:** 354
 
 **Named Exports:** 12
 
@@ -42,7 +42,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/concurrency/lock-manager.js`
 
-**Lines:** 493
+**Lines:** 511
 
 **Named Exports:** 7
 
@@ -86,7 +86,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/error-handling.js`
 
-**Lines:** 141
+**Lines:** 137
 
 **Named Exports:** 26
 
@@ -120,7 +120,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/error-handling/error-formatter.js`
 
-**Lines:** 114
+**Lines:** 112
 
 **Named Exports:** 3
 
@@ -137,7 +137,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/error-handling/error-recovery.js`
 
-**Lines:** 254
+**Lines:** 257
 
 **Named Exports:** 7
 
@@ -166,7 +166,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/focus-trap.js`
 
-**Lines:** 437
+**Lines:** 445
 
 **Named Exports:** 3
 
@@ -182,13 +182,13 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/html-escape.js`
 
-**Lines:** 190
+**Lines:** 215
 
 **Named Exports:** 6
 
 **Default Exports:** 1
 
-**Functions:** 6
+**Functions:** 7
 
 ---
 
@@ -196,7 +196,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/input-validation.js`
 
-**Lines:** 398
+**Lines:** 410
 
 **Named Exports:** 1
 
@@ -210,7 +210,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/logger.js`
 
-**Lines:** 316
+**Lines:** 318
 
 **Named Exports:** 12
 
@@ -222,7 +222,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/parser.js`
 
-**Lines:** 106
+**Lines:** 105
 
 **Named Exports:** 1
 
@@ -240,7 +240,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/resilient-retry.js`
 
-**Lines:** 436
+**Lines:** 454
 
 **Named Exports:** 15
 
@@ -280,7 +280,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/retry-manager/index.js`
 
-**Lines:** 198
+**Lines:** 217
 
 **Named Exports:** 43
 
@@ -301,7 +301,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/retry-manager/retry-config.js`
 
-**Lines:** 245
+**Lines:** 260
 
 **Named Exports:** 5
 
@@ -313,7 +313,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/retry-manager/retry-executor-core.js`
 
-**Lines:** 305
+**Lines:** 309
 
 **Named Exports:** 4
 
@@ -332,7 +332,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/retry-manager/retry-executor-patterns.js`
 
-**Lines:** 274
+**Lines:** 286
 
 **Named Exports:** 11
 
@@ -350,7 +350,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/retry-manager/retry-monitoring.js`
 
-**Lines:** 267
+**Lines:** 281
 
 **Named Exports:** 10
 
@@ -368,7 +368,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/retry-manager/retry-strategies.js`
 
-**Lines:** 196
+**Lines:** 193
 
 **Named Exports:** 14
 
@@ -384,7 +384,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/safe-json.js`
 
-**Lines:** 183
+**Lines:** 191
 
 **Named Exports:** 5
 
@@ -410,7 +410,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/stream-buffer.js`
 
-**Lines:** 202
+**Lines:** 216
 
 **Named Exports:** 2
 
@@ -426,7 +426,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/timeout-wrapper.js`
 
-**Lines:** 259
+**Lines:** 254
 
 **Named Exports:** 8
 
@@ -461,7 +461,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/validation/format-validators.js`
 
-**Lines:** 235
+**Lines:** 243
 
 **Named Exports:** 4
 
@@ -499,7 +499,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/validation/schema-validator.js`
 
-**Lines:** 279
+**Lines:** 281
 
 **Named Exports:** 4
 
@@ -515,7 +515,7 @@ Utilities are shared helper functions and modules used across the application.
 
 **File:** `js/utils/validation/storage-validators.js`
 
-**Lines:** 202
+**Lines:** 199
 
 **Named Exports:** 4
 
@@ -538,3 +538,4 @@ Utilities are shared helper functions and modules used across the application.
 **Functions:** 7
 
 ---
+
