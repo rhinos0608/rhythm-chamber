@@ -100,7 +100,7 @@ integrityChecks.forEach(({ name, query }) => {
 
 console.log('\n=== Migration Status ===\n');
 
-const migrationStmt = db.prepare(`SELECT value FROM _metadata WHERE key='migration_version'`);
+const migrationStmt = db.prepare('SELECT value FROM _metadata WHERE key=\'migration_version\'');
 const migration = migrationStmt.get();
 console.log(`Migration version: ${migration ? migration.value : 'Not found'}`);
 

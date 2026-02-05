@@ -413,65 +413,65 @@ export class CodeIndexer {
           } else {
             // First pass: detect deleted files that need cleanup
             const indexedFiles = this.vectorStore.adapter.getAllFileIndexes();
-          const discoveredSet = new Set(files.map(f => relative(this.projectRoot, f)));
+            const discoveredSet = new Set(files.map(f => relative(this.projectRoot, f)));
 
-          for (const indexedFile of indexedFiles) {
-            if (!discoveredSet.has(indexedFile.file)) {
+            for (const indexedFile of indexedFiles) {
+              if (!discoveredSet.has(indexedFile.file)) {
               // File was deleted from codebase
-              deletedFiles.push(indexedFile.file);
+                deletedFiles.push(indexedFile.file);
+              }
             }
-          }
 
-          // Clean up deleted files
-          if (deletedFiles.length > 0) {
-            console.error(`[Indexer] Found ${deletedFiles.length} deleted files, cleaning up from SQLite`);
-            for (const deletedFile of deletedFiles) {
-              this.vectorStore.adapter.removeFileIndex(deletedFile);
-              // Use batch delete for efficiency (single transaction per file)
-              if (this.vectorStore.adapter.deleteChunksByFile) {
-                this.vectorStore.adapter.deleteChunksByFile(deletedFile);
-              } else {
+            // Clean up deleted files
+            if (deletedFiles.length > 0) {
+              console.error(`[Indexer] Found ${deletedFiles.length} deleted files, cleaning up from SQLite`);
+              for (const deletedFile of deletedFiles) {
+                this.vectorStore.adapter.removeFileIndex(deletedFile);
+                // Use batch delete for efficiency (single transaction per file)
+                if (this.vectorStore.adapter.deleteChunksByFile) {
+                  this.vectorStore.adapter.deleteChunksByFile(deletedFile);
+                } else {
                 // Fallback to individual deletes
-                const chunks = this.vectorStore.getByFile(deletedFile);
-                for (const chunk of chunks) {
-                  this.vectorStore.delete(chunk.chunkId);
-                  this.dependencyGraph.removeChunk(chunk.chunkId);
+                  const chunks = this.vectorStore.getByFile(deletedFile);
+                  for (const chunk of chunks) {
+                    this.vectorStore.delete(chunk.chunkId);
+                    this.dependencyGraph.removeChunk(chunk.chunkId);
+                  }
                 }
               }
             }
-          }
 
-          // Second pass: check which discovered files are already indexed
-          for (const absPath of files) {
-            const relPath = relative(this.projectRoot, absPath);
-            const indexState = this.vectorStore.adapter.getFileIndexState(relPath);
+            // Second pass: check which discovered files are already indexed
+            for (const absPath of files) {
+              const relPath = relative(this.projectRoot, absPath);
+              const indexState = this.vectorStore.adapter.getFileIndexState(relPath);
 
-            // Normalize both model versions for comparison (strip provider prefix)
-            // This handles both old format (bare model name) and new format (provider/model)
-            const storedModelVersion = indexState?.modelVersion?.includes('/')
-              ? indexState.modelVersion.split('/')[1]  // Extract "model" from "provider/model"
-              : indexState?.modelVersion;              // Already normalized (just "model")
+              // Normalize both model versions for comparison (strip provider prefix)
+              // This handles both old format (bare model name) and new format (provider/model)
+              const storedModelVersion = indexState?.modelVersion?.includes('/')
+                ? indexState.modelVersion.split('/')[1]  // Extract "model" from "provider/model"
+                : indexState?.modelVersion;              // Already normalized (just "model")
 
-            if (indexState && storedModelVersion === normalizedModelName) {
+              if (indexState && storedModelVersion === normalizedModelName) {
               // File is indexed, check if mtime still matches
-              try {
-                const currentStat = await stat(absPath);
-                // Use tolerance to account for filesystem mtime precision differences
-                // 100ms tolerance handles most cross-platform and network filesystem issues
-                const MTIME_TOLERANCE_MS = 100;
-                if (currentStat.mtimeMs <= indexState.mtime + MTIME_TOLERANCE_MS) {
+                try {
+                  const currentStat = await stat(absPath);
+                  // Use tolerance to account for filesystem mtime precision differences
+                  // 100ms tolerance handles most cross-platform and network filesystem issues
+                  const MTIME_TOLERANCE_MS = 100;
+                  if (currentStat.mtimeMs <= indexState.mtime + MTIME_TOLERANCE_MS) {
                   // File hasn't changed since indexing - skip it
-                  sqliteIndexed.set(relPath, indexState.mtime);
-                  sqliteSkipped.push(relPath);
-                }
-              } catch (statError) {
+                    sqliteIndexed.set(relPath, indexState.mtime);
+                    sqliteSkipped.push(relPath);
+                  }
+                } catch (statError) {
                 // File disappeared - remove from index
-                console.warn(`[Indexer] File ${relPath} disappeared, removing from index`);
-                this.vectorStore.adapter.removeFileIndex(relPath);
+                  console.warn(`[Indexer] File ${relPath} disappeared, removing from index`);
+                  this.vectorStore.adapter.removeFileIndex(relPath);
+                }
               }
             }
-          }
-          console.error(`[Indexer] SQLite: ${sqliteSkipped.length} files already indexed, skipping`);
+            console.error(`[Indexer] SQLite: ${sqliteSkipped.length} files already indexed, skipping`);
           }
         }
 

@@ -365,7 +365,7 @@ export class SymbolIndex extends DependencyGraph {
     } catch (error) {
       // Ignore duplicate errors (primary key constraint)
       if (!error.message.includes('UNIQUE')) {
-        console.error(`[SymbolIndex] Error tracking usage:`, error.message);
+        console.error('[SymbolIndex] Error tracking usage:', error.message);
       }
     }
   }
@@ -407,7 +407,7 @@ export class SymbolIndex extends DependencyGraph {
     const wildcardCount = (sanitized.match(/\*/g) || []).length;
     if (wildcardCount > 3) {
       // Too many wildcards, truncate
-      let parts = sanitized.split('*');
+      const parts = sanitized.split('*');
       sanitized = parts.slice(0, 4).join('*') + (parts.length > 4 ? '*' : '');
     }
 
@@ -463,16 +463,16 @@ export class SymbolIndex extends DependencyGraph {
 
     // Add filters
     if (type) {
-      sql += ` AND s.type = ?`;
+      sql += ' AND s.type = ?';
       params.push(type);
     }
 
     if (file) {
-      sql += ` AND s.file = ?`;
+      sql += ' AND s.file = ?';
       params.push(file);
     }
 
-    sql += ` LIMIT ?`;
+    sql += ' LIMIT ?';
     params.push(limit);
 
     try {
@@ -575,7 +575,7 @@ export class SymbolIndex extends DependencyGraph {
     let failedCount = 0;
     const errors = [];
 
-    const transaction = this._db.transaction((symbolList) => {
+    const transaction = this._db.transaction(symbolList => {
       for (const symbol of symbolList) {
         try {
           this._statements.insertSymbol.run(

@@ -141,7 +141,7 @@ describe('Symbol Index Integration (Phase 2)', () => {
       const ftsTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='symbols_fts'").get();
       assert.ok(ftsTable, 'symbols_fts table should exist');
 
-    db.close();
+      db.close();
     });
   });
 
@@ -247,7 +247,7 @@ describe('Symbol Index Integration (Phase 2)', () => {
       const count = db.prepare('SELECT COUNT(*) as count FROM symbols').get();
       assert.ok(count.count > 0, 'Should have symbols in database');
 
-    db.close();
+      db.close();
     });
 
     it('should reload symbols on restart', async () => {

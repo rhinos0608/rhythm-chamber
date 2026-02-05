@@ -600,7 +600,7 @@ export class MultiIndexAdapter {
    */
   updateFileIndex(filePath, mtime, chunkCount, modelVersion) {
     if (!this._initialized) {
-      console.warn(`[MultiIndexAdapter] Cannot update file index: adapter not initialized`);
+      console.warn('[MultiIndexAdapter] Cannot update file index: adapter not initialized');
       return;
     }
     this.codeAdapter.updateFileIndex(filePath, mtime, chunkCount, modelVersion);

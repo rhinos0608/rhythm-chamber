@@ -316,12 +316,12 @@ function formatResults(query, results, stats, options = {}) {
       const snippet = metadata.text || '';
       if (snippet && snippet.trim().length > 0) {
         const preview = snippet.trim().substring(0, maxChars);
-        lines.push(`  \`\`\`javascript`);
+        lines.push('  ```javascript');
         lines.push(`  ${preview}`);
         if (snippet.length > maxChars) {
-          lines.push(`  ...`);
+          lines.push('  ...');
         }
-        lines.push(`  \`\`\``);
+        lines.push('  ```');
       }
       lines.push('');
     }
