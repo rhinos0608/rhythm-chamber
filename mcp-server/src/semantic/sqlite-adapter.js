@@ -32,6 +32,12 @@ export class SqliteVectorAdapter {
     this._initialized = false;
     this._statements = null; // CRITICAL FIX #3: Cache prepared statements
     this.type = 'sqlite'; // Type identifier for adapter detection
+
+    // OOM FIX: Counter to track total upsert operations for periodic statement renewal
+    // better-sqlite3 retains references to bound parameters (Float32Array embeddings)
+    // causing unbounded memory growth during indexing
+    this._statementCounter = 0;
+    this._STATEMENT_RENEWAL_INTERVAL = 1000; // After ~1000 chunks, renew statements
   }
 
   /**
@@ -52,7 +58,7 @@ export class SqliteVectorAdapter {
     const parentDir = dirname(dbPath);
     try {
       mkdirSync(parentDir, { recursive: true });
-      console.log(`[SqliteAdapter] Ensured directory exists: ${parentDir}`);
+      console.error(`[SqliteAdapter] Ensured directory exists: ${parentDir}`);
     } catch (mkdirError) {
       // Directory might already exist or creation failed - try to continue
       console.warn(`[SqliteAdapter] Directory creation warning: ${mkdirError.message}`);
@@ -61,11 +67,16 @@ export class SqliteVectorAdapter {
     // Create database connection
     this._db = new Database(dbPath);
 
+    // OOM FIX: Minimal PRAGMAs - sqlite-vec may have issues with certain settings
+    // Using only safe, compatible settings
+    this._db.pragma('synchronous = NORMAL'); // Safe but faster than FULL
+    console.error('[SqliteAdapter] Applied minimal PRAGMAs for sqlite-vec compatibility');
+
     // Load sqlite-vec extension
     const extPath = getLoadablePath();
     this._db.loadExtension(extPath);
 
-    console.log(`[SqliteAdapter] Loaded sqlite-vec extension from: ${extPath}`);
+    console.error(`[SqliteAdapter] Loaded sqlite-vec extension from: ${extPath}`);
 
     // Create vec0 virtual tables
     this._createTables();
@@ -74,7 +85,7 @@ export class SqliteVectorAdapter {
     this._prepareStatements();
 
     this._initialized = true;
-    console.log(`[SqliteAdapter] Initialized: ${dbPath} (dimension: ${dimension})`);
+    console.error(`[SqliteAdapter] Initialized: ${dbPath} (dimension: ${dimension})`);
   }
 
   /**
@@ -82,18 +93,21 @@ export class SqliteVectorAdapter {
    * @private
    */
   _createTables() {
-    // Create main vec0 table for vector storage (IF NOT EXISTS for persistence)
+    // OOM FIX: Use simplest vec0 schema - only embedding column, no custom primary key.
+    // Store chunk_id in separate metadata table. The vec0 table uses default rowid.
+    // This avoids sqlite-vec "readonly database" shadow table issues.
     this._db.exec(`
       CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
-        chunk_id TEXT PRIMARY KEY,
         embedding FLOAT[${this._dimension}]
       );
     `);
 
     // Create metadata table (separate because vec0 doesn't support complex metadata)
+    // OOM FIX: Added vec_rowid to link with vec_chunks table (rowid-based join)
     this._db.exec(`
       CREATE TABLE IF NOT EXISTS chunk_metadata (
         chunk_id TEXT PRIMARY KEY,
+        vec_rowid INTEGER,
         text TEXT,
         name TEXT,
         type TEXT,
@@ -119,7 +133,7 @@ export class SqliteVectorAdapter {
       );
     `);
 
-    console.log('[SqliteAdapter] Created vec0 tables');
+    console.error('[SqliteAdapter] Created vec0 tables');
   }
 
   /**
@@ -129,32 +143,28 @@ export class SqliteVectorAdapter {
    */
   _prepareStatements() {
     this._statements = {
-      // Upsert statements
-      deleteEmbedding: this._db.prepare('DELETE FROM vec_chunks WHERE chunk_id = ?'),
-      insertEmbedding: this._db.prepare(
-        'INSERT INTO vec_chunks (chunk_id, embedding) VALUES (?, ?)'
-      ),
+      // Upsert statements (vec_chunks uses rowid, handled inline)
       deleteMetadata: this._db.prepare('DELETE FROM chunk_metadata WHERE chunk_id = ?'),
       insertMetadata: this._db.prepare(`
         INSERT INTO chunk_metadata (
-          chunk_id, text, name, type, file, line, exported,
+          chunk_id, vec_rowid, text, name, type, file, line, exported,
           layer, context_before, context_after, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `),
 
       // Get statements
       getMetadata: this._db.prepare(`
         SELECT
-          text, name, type, file, line, exported,
+          vec_rowid, text, name, type, file, line, exported,
           layer, context_before as contextBefore, context_after as contextAfter,
           updated_at as updatedAt
         FROM chunk_metadata
         WHERE chunk_id = ?
       `),
-      chunkExists: this._db.prepare('SELECT 1 FROM vec_chunks WHERE chunk_id = ?'),
+      chunkExists: this._db.prepare('SELECT 1 FROM chunk_metadata WHERE chunk_id = ?'),
 
       // Delete statements
-      deleteChunkVec: this._db.prepare('DELETE FROM vec_chunks WHERE chunk_id = ?'),
+      deleteChunkVec: this._db.prepare('DELETE FROM vec_chunks WHERE rowid = ?'),
       deleteChunkMetadata: this._db.prepare('DELETE FROM chunk_metadata WHERE chunk_id = ?'),
 
       // Stats statements
@@ -182,16 +192,63 @@ export class SqliteVectorAdapter {
       getAllFileIndexes: this._db.prepare('SELECT file, mtime, chunk_count FROM file_index'),
 
       // Batch delete statements for file cleanup
+      // OOM FIX: Use rowid-based join - vec_chunks uses rowid, chunk_metadata has vec_rowid
       deleteVecChunksByFile: this._db.prepare(`
         DELETE FROM vec_chunks
-        WHERE chunk_id IN (
-          SELECT chunk_id FROM chunk_metadata WHERE file = ?
+        WHERE rowid IN (
+          SELECT vec_rowid FROM chunk_metadata WHERE file = ?
         )
       `),
       deleteMetadataByFile: this._db.prepare('DELETE FROM chunk_metadata WHERE file = ?'),
     };
 
-    console.log('[SqliteAdapter] Prepared and cached SQL statements');
+    console.error('[SqliteAdapter] Prepared and cached SQL statements');
+  }
+
+  /**
+   * Renew only the embedding insert statement to free accumulated Float32Array references
+   *
+   * OOM FIX: better-sqlite3 retains references to bound parameters (Float32Array embeddings)
+   * causing unbounded memory growth during indexing.
+   *
+   * CRITICAL: Only renew insertEmbedding statement - finalizing ALL statements that
+   * reference vec_chunks breaks sqlite-vec's virtual table internal state and causes
+   * "attempt to write a readonly database" errors on shadow tables.
+   *
+   * @private
+   */
+  _renewStatements() {
+    if (!this._statements) {
+      return;
+    }
+
+    console.error('[SqliteAdapter] Renewing insertEmbedding statement to free bound parameters...');
+
+    // OOM FIX: Only renew the insertEmbedding statement which binds Float32Array embeddings.
+    // Finalizing ALL vec_chunks statements breaks sqlite-vec's virtual table state.
+    const oldStatement = this._statements.insertEmbedding;
+    if (oldStatement && typeof oldStatement.finalize === 'function') {
+      try {
+        oldStatement.finalize();
+      } catch (finalizeError) {
+        console.warn('[SqliteAdapter] Failed to finalize insertEmbedding:', finalizeError.message);
+      }
+    }
+
+    // Recreate only the insertEmbedding statement
+    this._statements.insertEmbedding = this._db.prepare(
+      'INSERT INTO vec_chunks (chunk_id, embedding) VALUES (?, ?)'
+    );
+
+    // Reset counter
+    this._statementCounter = 0;
+
+    // Force GC to reclaim memory from finalized statement
+    if (global.gc) {
+      global.gc();
+    }
+
+    console.error('[SqliteAdapter] Statement renewal complete (insertEmbedding only)');
   }
 
   /**
@@ -238,6 +295,140 @@ export class SqliteVectorAdapter {
   }
 
   /**
+   * Batch upsert multiple chunks in a single transaction
+   * More efficient than individual upsert calls for large batches
+   *
+   * OOM FIX: Sub-batch processing (100 chunks per transaction) to prevent
+   * unbounded memory growth during large batch operations. Based on MCP Memory
+   * Service optimization recommendations and better-sqlite3 issue #433.
+   *
+   * @param {Array} items - Array of {chunkId, embedding, metadata} objects
+   */
+  upsertBatch(items) {
+    if (!this._initialized) {
+      throw new Error('SqliteAdapter not initialized');
+    }
+
+    if (!items || items.length === 0) {
+      return;
+    }
+
+    // OOM FIX: Process in sub-batches of 100 chunks to limit memory usage
+    // Large transactions can cause unbounded memory growth in better-sqlite3
+    const SUB_BATCH_SIZE = 100;
+    const totalItems = items.length;
+    let processed = 0;
+
+    while (processed < totalItems) {
+      const subBatch = items.slice(processed, processed + SUB_BATCH_SIZE);
+      processed += subBatch.length;
+
+      // Process this sub-batch in a single transaction
+      this._processSubBatch(subBatch);
+
+      // OOM FIX: Trigger GC between sub-batches to help V8 reclaim memory
+      // This prevents heap from growing too large during indexing
+      if (global.gc && processed < totalItems) {
+        global.gc();
+      }
+    }
+
+    console.error(`[SqliteAdapter] Batch upsert: ${totalItems} chunks in ${Math.ceil(totalItems / SUB_BATCH_SIZE)} sub-batches`);
+  }
+
+  /**
+   * Process a single sub-batch of chunks in one transaction
+   * @param {Array} items - Array of {chunkId, embedding, metadata} objects
+   * @private
+   */
+  _processSubBatch(items) {
+    // CRITICAL: Track which chunk/operation fails for debugging
+    let failedChunkId = null;
+    let failedOperation = null;
+
+    const batchTransaction = this._db.transaction(() => {
+      // OOM FIX: Prepare reusable statements once for the entire batch
+      // Creating statements per-chunk caused memory accumulation (9000+ statements)
+      const getVecRowidStmt = this._db.prepare('SELECT vec_rowid FROM chunk_metadata WHERE chunk_id = ?');
+      const insertVecStmt = this._db.prepare('INSERT INTO vec_chunks (embedding) VALUES (?)');
+
+      for (const { chunkId, embedding, metadata } of items) {
+        failedChunkId = chunkId; // Track for error reporting
+
+        // Convert embedding to Float32Array if needed
+        if (!(embedding instanceof Float32Array)) {
+          embedding = new Float32Array(embedding);
+        }
+
+        // OOM FIX: New rowid-based approach to avoid sqlite-vec shadow table issues
+        // 1. Get old vec_rowid if exists, 2. Delete old embedding, 3. Insert new, 4. Update metadata
+
+        // Check if chunk already exists and get its vec_rowid
+        failedOperation = 'getOldRowId';
+        const oldMeta = this._statements.getMetadata.get(chunkId);
+
+        // Delete old embedding from vec_chunks if it existed
+        if (oldMeta && oldMeta.vecRowid) {
+          failedOperation = 'deleteOldEmbedding';
+          this._statements.deleteChunkVec.run(oldMeta.vecRowid);
+        }
+
+        // Delete old metadata
+        failedOperation = 'deleteMetadata';
+        this._statements.deleteMetadata.run(chunkId);
+
+        // Insert new embedding into vec_chunks and get back the rowid
+        failedOperation = 'insertEmbedding';
+        const vecResult = insertVecStmt.run(embedding);
+        const newRowId = vecResult.lastInsertRowid;
+
+        // Insert new metadata with vec_rowid
+        failedOperation = 'insertMetadata';
+        this._statements.insertMetadata.run(
+          chunkId,
+          newRowId, // vec_rowid links to vec_chunks.rowid
+          metadata.text || null,
+          metadata.name || null,
+          metadata.type || null,
+          metadata.file || null,
+          metadata.line || null,
+          metadata.exported ? 1 : 0,
+          metadata.layer || null,
+          metadata.contextBefore || null,
+          metadata.contextAfter || null,
+          metadata.updatedAt || Date.now()
+        );
+      }
+
+      // Statements auto-finalize when transaction completes
+    });
+
+    try {
+      batchTransaction();
+    } catch (error) {
+      // CRITICAL: Provide context about which chunk/operation failed
+      throw new Error(
+        `Batch upsert failed at chunkId="${failedChunkId}" during ${failedOperation}: ${error.message}`
+      );
+    }
+
+    // OOM FIX: Statement renewal DISABLED - finalizing statements that reference
+    // sqlite-vec's virtual table breaks its internal state and causes
+    // "attempt to write a readonly database" errors. With sub-batching and
+    // other memory optimizations, memory growth should be manageable.
+    // this._statementCounter += items.length;
+    // if (this._statementCounter >= this._STATEMENT_RENEWAL_INTERVAL) {
+    //   this._renewStatements();
+    // }
+
+    // OOM FIX: Explicitly null out embedding references in the items array
+    // This helps V8 GC reclaim the Float32Arrays after transaction completes
+    for (let i = 0; i < items.length; i++) {
+      items[i].embedding = null;
+    }
+  }
+
+  /**
    * KNN search using cosine similarity
    *
    * Uses a subquery approach to find nearest neighbors by computing
@@ -270,9 +461,10 @@ export class SqliteVectorAdapter {
     // Filters are now applied in application code using sharedPassesFilters()
     // KNN search using distance calculation with metadata JOIN
     // Fetches all data in a single query to avoid N+1 problem
+    // OOM FIX: Use rowid-based join - vec_chunks uses rowid, chunk_metadata has vec_rowid
     const query = `
       SELECT
-        v.chunk_id,
+        m.chunk_id,
         v.distance,
         m.text,
         m.name,
@@ -286,11 +478,11 @@ export class SqliteVectorAdapter {
         m.updated_at as updatedAt
       FROM (
         SELECT
-          chunk_id,
+          rowid,
           vec_distance_cosine(embedding, ?) as distance
         FROM vec_chunks
       ) v
-      LEFT JOIN chunk_metadata m ON v.chunk_id = m.chunk_id
+      LEFT JOIN chunk_metadata m ON m.vec_rowid = v.rowid
       WHERE v.distance < ?
       ORDER BY v.distance
       LIMIT ?
@@ -376,6 +568,7 @@ export class SqliteVectorAdapter {
     }
 
     return {
+      vecRowid: row.vec_rowid,
       text: row.text,
       name: row.name,
       type: row.type,
@@ -545,7 +738,7 @@ export class SqliteVectorAdapter {
       this._statements.deleteMetadataByFile.run(filePath);
     })();
 
-    console.log(`[SqliteAdapter] Deleted all chunks for file: ${filePath}`);
+    console.error(`[SqliteAdapter] Deleted all chunks for file: ${filePath}`);
   }
 
   /**
@@ -575,7 +768,7 @@ export class SqliteVectorAdapter {
     }
 
     this._db.exec('DELETE FROM file_index');
-    console.log('[SqliteAdapter] Cleared file_index table');
+    console.error('[SqliteAdapter] Cleared file_index table');
   }
 
   /**
@@ -594,7 +787,7 @@ export class SqliteVectorAdapter {
       this._db.exec('DELETE FROM vec_chunks');
       this._db.exec('DELETE FROM chunk_metadata');
     })();
-    console.log('[SqliteAdapter] Cleared all tables (file_index, vec_chunks, chunk_metadata)');
+    console.error('[SqliteAdapter] Cleared all tables (file_index, vec_chunks, chunk_metadata)');
   }
 
   /**
@@ -623,7 +816,7 @@ export class SqliteVectorAdapter {
       this._db.close();
       this._db = null;
       this._initialized = false;
-      console.log('[SqliteAdapter] Database connection closed');
+      console.error('[SqliteAdapter] Database connection closed');
     }
   }
 

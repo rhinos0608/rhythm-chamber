@@ -42,7 +42,9 @@ export class EmbeddingCache {
 
     // In-memory cache (not LRU - full cache until invalidated)
     this.files = new Map(); // filePath -> { mtime, chunks[] }
-    this.embeddings = new HybridEmbeddingMap();
+    // OOM FIX: Limit cache size to prevent unbounded memory growth
+    // Even in metadata-only mode, storing text+metadata for 10000+ chunks uses significant memory
+    this.embeddings = new HybridEmbeddingMap(5000); // Max 5000 chunk metadata entries
 
     // Model version tracking for cache invalidation
     this.modelVersion = options.modelVersion || null;
@@ -504,15 +506,19 @@ export class EmbeddingCache {
           const BATCH_SIZE = 50; // Write 50 files at a time
           for (let i = 0; i < fileEntries.length; i += BATCH_SIZE) {
             const batch = fileEntries.slice(i, i + BATCH_SIZE);
-            const batchJson = batch.map(([key, value]) =>
-              `${JSON.stringify(key)}:${JSON.stringify(value)}`
-            ).join(',');
 
+            // OOM FIX: Write entries individually to avoid .join() creating large strings
             // Add comma separator between batches (except first batch)
             if (i > 0) {
               await streamWrite(',');
             }
-            await streamWrite(batchJson);
+
+            // OOM FIX: Build batch string first, then write once to minimize string allocations
+            // Individual writes would create many small strings causing heap fragmentation
+            const batchStrings = batch.map(([key, value]) =>
+              `${JSON.stringify(key)}:${JSON.stringify(value)}`
+            );
+            await streamWrite(batchStrings.join(','));
 
             // Yield between batches to prevent event loop blocking
             if (i + BATCH_SIZE < fileEntries.length) {
@@ -565,13 +571,14 @@ export class EmbeddingCache {
               await validationHandle.close();
 
               const headerStr = headerBuffer.toString('utf-8', 0, bytesRead);
-              // Extract version from header (format: {"version":"X","timestamp":...)
-              const versionMatch = headerStr.match(/"version":"([^"]+)"/);
+              // Extract version from header (format: {"version":X,"timestamp":...)
+              // CRITICAL FIX: Version is written as number, not string. Use \d+ to match numeric value.
+              const versionMatch = headerStr.match(/"version":(\d+)/);
               if (!versionMatch) {
                 throw new Error('Invalid cache structure after rename: missing version in header');
               }
 
-              const version = versionMatch[1];
+              const version = parseInt(versionMatch[1], 10);
               if (version !== CACHE_VERSION) {
                 throw new Error(`Version mismatch after rename: ${version} vs ${CACHE_VERSION}`);
               }
@@ -856,6 +863,7 @@ export class EmbeddingCache {
       };
 
       // Only store embedding if it's valid (non-null and has elements)
+      // OOM FIX: When SQLite is active, don't store embeddings in memory - they're in the database
       if (embeddings[i] && embeddings[i].length > 0) {
         // FIX: Validate embedding type to prevent silent data corruption
         const emb = embeddings[i];
@@ -866,9 +874,13 @@ export class EmbeddingCache {
           throw new Error(`Empty embedding at index ${i} for chunk ${chunkId}`);
         }
 
-        // Store as Float32Array in memory to minimize heap usage.
-        // save() will convert Float32Array → Array for JSON serialization.
-        embeddingData.embedding = emb instanceof Float32Array ? emb : new Float32Array(emb);
+        // METADATA-ONLY MODE (v3): When SQLite is active, embeddings are stored in the database,
+        // not in the in-memory cache. This prevents unbounded heap growth during indexing.
+        if (!this.sqliteActive) {
+          // Store as Float32Array in memory to minimize heap usage.
+          // save() will convert Float32Array → Array for JSON serialization.
+          embeddingData.embedding = emb instanceof Float32Array ? emb : new Float32Array(emb);
+        }
       }
       // If embedding is missing/invalid, don't set the field - getChunkEmbedding will return null
 
@@ -1003,18 +1015,58 @@ export class EmbeddingCache {
 
 /**
  * Hybrid embedding map that handles Float32Array serialization
+ * OOM FIX: Added LRU eviction to prevent unbounded memory growth
+ * Uses Map for O(1) access order tracking instead of array splice/indexOf
  */
 class HybridEmbeddingMap {
-  constructor() {
+  constructor(maxSize = 5000) {
     this.map = new Map();
+    this.accessOrder = new Map(); // OOM FIX: Use Map instead of array for O(1) operations
+    this.maxSize = maxSize; // Maximum number of entries to store
+    this._accessCount = 0; // Counter for LRU tracking
   }
 
   set(key, value) {
+    // OOM FIX: Enforce size limit with LRU eviction
+    if (this.map.size >= this.maxSize && !this.map.has(key)) {
+      // Evict oldest entry (the one with smallest access count)
+      let oldestKey = null;
+      let oldestCount = Infinity;
+      for (const [k, count] of this.accessOrder.entries()) {
+        if (count < oldestCount) {
+          oldestCount = count;
+          oldestKey = k;
+        }
+      }
+      if (oldestKey) {
+        this.map.delete(oldestKey);
+        this.accessOrder.delete(oldestKey);
+      }
+    }
+
+    // Update access order - always increment count (or reset to current max + 1 if very large)
+    this._accessCount++;
+    if (this._accessCount > 1000000) {
+      // Reset all counts to prevent integer overflow
+      const newCount = 1;
+      for (const k of this.accessOrder.keys()) {
+        this.accessOrder.set(k, newCount++);
+      }
+      this._accessCount = newCount;
+    }
+    this.accessOrder.set(key, this._accessCount);
+
     this.map.set(key, value);
   }
 
   get(key) {
-    return this.map.get(key);
+    const value = this.map.get(key);
+    if (value !== undefined) {
+      // OOM FIX: Update access count (most recently used)
+      this._accessCount++;
+      this.accessOrder.set(key, this._accessCount);
+    }
+    return value;
   }
 
   has(key) {
@@ -1022,11 +1074,15 @@ class HybridEmbeddingMap {
   }
 
   delete(key) {
+    // OOM FIX: Remove from access order Map
+    this.accessOrder.delete(key);
     return this.map.delete(key);
   }
 
   clear() {
     this.map.clear();
+    this.accessOrder.clear();
+    this._accessCount = 0;
   }
 
   entries() {

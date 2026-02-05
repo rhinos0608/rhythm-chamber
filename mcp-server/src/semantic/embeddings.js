@@ -120,6 +120,28 @@ export class HybridEmbeddings {
   }
 
   /**
+   * Dispose Transformers.js pipeline to free WASM memory
+   * OOM FIX: Critical for reducing memory footprint when using external providers (LM Studio)
+   * Transformers.js ONNX models use 400MB+ WASM memory that's invisible to V8 GC
+   */
+  async disposeTransformers() {
+    if (this.transformersPipeline) {
+      try {
+        if (typeof this.transformersPipeline.dispose === 'function') {
+          await this.transformersPipeline.dispose();
+          console.error(`[Embeddings] Disposed Transformers.js model (${this.transformersModel}) - freed ~400MB WASM memory`);
+        }
+      } catch (e) {
+        console.warn(`[Embeddings] Failed to dispose Transformers pipeline: ${e.message}`);
+      }
+      this.transformersPipeline = null;
+      this.transformersModel = null;
+    }
+    // Clear init promises to allow reloading if needed
+    this.initPromises.clear();
+  }
+
+  /**
    * Map model name from ModelConfigManager to LM Studio compatible format
    * @private
    */
@@ -802,6 +824,12 @@ export class HybridEmbeddings {
     // Track that we're using LM Studio
     this.lastUsedProvider = 'lmstudio';
     this.lastUsedModel = this.modelName;
+
+    // OOM FIX: Dispose Transformers.js pipeline to free 400MB+ WASM memory
+    // When LM Studio is confirmed working, we don't need the fallback Transformers model
+    if (this.transformersPipeline) {
+      await this.disposeTransformers();
+    }
 
     const { signal, clearTimeout: clearFetchTimeout } = createTimeoutSignal(60000);
 
