@@ -145,6 +145,16 @@ export class MarkdownChunker {
         const level = headerMatch[1].length;
         const title = headerMatch[2].trim();
         const { content, endLine } = this._extractSectionContent(lines, i);
+
+        // If the "section" has no body content beyond the header line, skip it.
+        // Header-only chunks tend to dominate semantic search without adding value.
+        const contentLines = content.split('\n');
+        const hasBodyContent = contentLines.slice(1).some(l => l.trim().length > 0);
+        if (!hasBodyContent) {
+          i = endLine;
+          continue;
+        }
+
         elements.push({
           type: 'md-section',
           level,
@@ -528,6 +538,18 @@ export class MarkdownChunker {
       const chunkStartLine = startLine + chunkStart;
       const chunkEndLine = startLine + chunkEnd - 1;
 
+      // Move to next chunk with overlap
+      // CRITICAL FIX: Ensure chunkStart always advances to prevent infinite loop
+      // When overlapLines >= (chunkEnd - chunkStart), the loop would never advance
+      const actualOverlap = Math.min(overlapLines, chunkEnd - chunkStart - 1);
+      const nextChunkStart = chunkEnd - actualOverlap;
+
+      // Skip empty trailing chunks (e.g. when a section ends with blank lines)
+      if (chunkText.trim().length === 0) {
+        chunkStart = nextChunkStart;
+        continue;
+      }
+
       // Extract context for this chunk
       const context = this._extractContext(lines, chunkStartLine, chunkEndLine);
 
@@ -552,8 +574,7 @@ export class MarkdownChunker {
         },
       });
 
-      // Move to next chunk with overlap
-      chunkStart = chunkEnd - overlapLines;
+      chunkStart = nextChunkStart;
       chunkIndex++;
     }
 
