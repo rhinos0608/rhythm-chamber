@@ -80,16 +80,9 @@ if (safeModeReason === null) {
 // ==========================================
 
 // Core utilities (no dependencies)
-import { Utils } from './utils.js';
 import { ModuleRegistry } from './module-registry.js';
 
 // Storage layer (foundation for everything)
-import { STORAGE_KEYS } from './storage/keys.js';
-import { IndexedDBCore, STORES } from './storage/indexeddb.js';
-import { ConfigAPI } from './storage/config-api.js';
-import { StorageMigration } from './storage/migration.js';
-import { SyncStrategy } from './storage/sync-strategy.js';
-import { ProfileStorage } from './storage/profiles.js';
 import { Storage } from './storage.js';
 
 // State management
@@ -133,43 +126,19 @@ import { MessageLifecycleCoordinator } from './services/message-lifecycle-coordi
 import { Cards } from './cards.js';
 
 // Function calling system
-import { FunctionRetry } from './functions/utils/retry.js';
-import { FunctionValidation } from './functions/utils/validation.js';
-import { DataQuerySchemas } from './functions/schemas/data-queries.js';
-import { TemplateQuerySchemas } from './functions/schemas/template-queries.js';
-import { AnalyticsQuerySchemas } from './functions/schemas/analytics-queries.js';
-import { DataExecutors } from './functions/executors/data-executors.js';
-import { TemplateExecutors } from './functions/executors/template-executors.js';
-import { AnalyticsExecutors } from './functions/executors/analytics-executors.js';
 import { Functions } from './functions/index.js';
 
 // Services
-import { TabCoordinator } from './services/tab-coordination.js';
-import { SessionManager } from './services/session-manager.js';
-import { MessageOperations } from './services/message-operations.js';
 import { WorkerCoordinator } from './services/worker-coordinator.js';
 import { EventBus } from './services/event-bus.js';
-import { EventLogStore } from './storage/event-log-store.js';
 import { WaveTelemetry } from './services/wave-telemetry.js';
 
 // Controllers
-import { ChatUIController } from './controllers/chat-ui-controller.js';
 import { SidebarController } from './controllers/sidebar-controller.js';
-import { ViewController } from './controllers/view-controller.js';
-import { FileUploadController } from './controllers/file-upload-controller.js';
-import { SpotifyController } from './controllers/spotify-controller.js';
-import { DemoController } from './controllers/demo-controller.js';
-import { ResetController } from './controllers/reset-controller.js';
 
 // Demo and template profiles
-import { DemoData } from './demo-data.js';
-import { TemplateProfileStore, TemplateProfileStoreClass } from './template-profiles.js';
-import { ProfileSynthesizer, ProfileSynthesizerClass } from './profile-synthesizer.js';
 
 // Utility modules
-import { OperationLock } from './operation-lock.js';
-import { Payments } from './payments.js';
-import { Pricing } from './pricing.js';
 import { setDefaultEventBus as setRetryExecutorEventBus } from './utils/retry-manager/retry-executor-core.js';
 import { setDefaultEventBus as setRetryMonitoringEventBus } from './utils/retry-manager/retry-monitoring.js';
 import { setDefaultEventBus as setAdaptiveRateLimiterEventBus } from './utils/adaptive-rate-limiter.js';
@@ -177,16 +146,6 @@ import { setDefaultEventBus as setAdaptiveRateLimiterEventBus } from './utils/ad
 // Premium controller (lazy import - only loaded when needed for upgrade modals)
 
 // New feature modules (robustness and security enhancements)
-import { QuotaMonitor } from './storage/quota-monitor.js';
-import { CircuitBreaker } from './services/circuit-breaker.js';
-import { SecureTokenStore } from './security/secure-token-store.js';
-import { DataVersion } from './services/data-version.js';
-import { FunctionCallingFallback } from './services/function-calling-fallback.js';
-import { ProfileDescriptionGenerator } from './services/profile-description-generator.js';
-import { LLMProviderRoutingService } from './services/llm-provider-routing-service.js';
-import { TokenCountingService } from './services/token-counting-service.js';
-import { ToolCallHandlingService } from './services/tool-call-handling-service.js';
-import { FallbackResponseService } from './services/fallback-response-service.js';
 import { ErrorBoundary, installGlobalErrorHandler } from './services/error-boundary.js';
 
 // ==========================================
@@ -227,117 +186,6 @@ function initializeWaveTelemetry() {
  * Uses DOM element creation instead of innerHTML for XSS safety
  * @param {string} reason - Why security check failed
  */
-function showSecurityError(reason) {
-    // EDGE CASE FIX: Prevent race condition with DOM ready state
-    // If DOM is already loaded and content exists, we need to be more careful
-    // about clearing content to avoid removing valid content in Safe Mode
-
-    const showError = () => {
-        const container = document.querySelector('.app-main') || document.body;
-        const existingSecurityError = container.querySelector('.security-error');
-
-        // Return early if security error already exists to prevent duplicates
-        if (existingSecurityError) {
-            return;
-        }
-
-        container.innerHTML = ''; // Clear existing content
-
-        // Create container div
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'security-error';
-        errorDiv.style.cssText = `
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 60vh;
-            text-align: center;
-            padding: 2rem;
-        `;
-
-        // Icon
-        const icon = document.createElement('div');
-        icon.style.cssText = 'font-size: 4rem; margin-bottom: 1rem;';
-        icon.textContent = '🔒';
-        errorDiv.appendChild(icon);
-
-        // Title
-        const title = document.createElement('h2');
-        title.style.cssText = 'color: var(--danger, #dc3545); margin-bottom: 1rem;';
-        title.textContent = 'Security Check Failed';
-        errorDiv.appendChild(title);
-
-        // Message
-        const message = document.createElement('p');
-        message.style.cssText =
-            'max-width: 500px; margin-bottom: 1.5rem; color: var(--text-muted, #6c757d);';
-        message.textContent = reason;
-        errorDiv.appendChild(message);
-
-        // Common causes box
-        const causesBox = document.createElement('div');
-        causesBox.style.cssText = `
-            background: var(--bg-tertiary, #f8f9fa);
-            padding: 1rem;
-            border-radius: 8px;
-            max-width: 500px;
-            text-align: left;
-        `;
-
-        const causesTitle = document.createElement('p');
-        causesTitle.style.marginBottom = '0.5rem';
-        // SAFE: Using textContent with styled element instead of innerHTML
-        causesTitle.textContent = 'Common causes:';
-        causesTitle.style.fontWeight = 'bold';
-        causesBox.appendChild(causesTitle);
-
-        const causesList = document.createElement('ul');
-        causesList.style.cssText = 'margin: 0; padding-left: 1.5rem;';
-        [
-            'Page loaded in an iframe',
-            'Non-secure protocol (must use HTTPS, localhost, or file://)',
-            'Browser security features disabled',
-        ].forEach(cause => {
-            const li = document.createElement('li');
-            li.textContent = cause;
-            causesList.appendChild(li);
-        });
-        causesBox.appendChild(causesList);
-        errorDiv.appendChild(causesBox);
-
-        // Retry button - using addEventListener instead of onclick
-        const retryBtn = document.createElement('button');
-        retryBtn.style.cssText = `
-            margin-top: 1.5rem;
-            padding: 0.75rem 1.5rem;
-            background: var(--accent, #6f42c1);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 1rem;
-        `;
-        retryBtn.textContent = 'Retry';
-        retryBtn.addEventListener('click', () => location.reload());
-        errorDiv.appendChild(retryBtn);
-
-        container.appendChild(errorDiv);
-    };
-
-    // EDGE CASE FIX: Use requestAnimationFrame to ensure DOM is fully ready
-    // This prevents a flash of incorrect content when security check fails
-    // after DOM is loaded but before styles are applied
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            requestAnimationFrame(showError);
-        });
-    } else {
-        // DOM is ready, but use requestAnimationFrame to ensure
-        // we're rendering at the right time in the frame cycle
-        requestAnimationFrame(showError);
-    }
-}
 
 /**
  * Show generic loading error
