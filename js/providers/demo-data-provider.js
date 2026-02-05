@@ -35,6 +35,7 @@ export class DemoDataProvider extends ProviderBase {
      * Demo is always ready (pre-computed data)
      * @returns {Promise<boolean>}
      */
+    // eslint-disable-next-line require-await
     async isReady() {
         const demoData = getDemoData();
         return this.validateReadiness(demoData);
@@ -44,6 +45,7 @@ export class DemoDataProvider extends ProviderBase {
      * Get demo streaming history
      * @returns {Promise<Array>}
      */
+    // eslint-disable-next-line require-await
     async getStreams() {
         const demoData = getDemoData();
         if (!this.validateReadiness(demoData)) {
@@ -71,6 +73,7 @@ export class DemoDataProvider extends ProviderBase {
      * Get pre-computed demo patterns
      * @returns {Promise<Object>}
      */
+    // eslint-disable-next-line require-await
     async getPatterns() {
         const demoData = getDemoData();
         if (!this.validateReadiness(demoData)) {
@@ -87,6 +90,7 @@ export class DemoDataProvider extends ProviderBase {
      * Get pre-computed demo personality
      * @returns {Promise<Object>}
      */
+    // eslint-disable-next-line require-await
     async getPersonality() {
         const demoData = getDemoData();
         if (!this.validateReadiness(demoData)) {
@@ -102,6 +106,7 @@ export class DemoDataProvider extends ProviderBase {
      * Get demo summary
      * @returns {Promise<Object>}
      */
+    // eslint-disable-next-line require-await
     async getSummary() {
         const demoData = getDemoData();
         if (!this.validateReadiness(demoData)) {
@@ -124,6 +129,7 @@ export class DemoDataProvider extends ProviderBase {
      * Get demo stream count
      * @returns {Promise<number>}
      */
+    // eslint-disable-next-line require-await
     async getStreamCount() {
         const demoData = getDemoData();
         if (!this.validateReadiness(demoData)) {
