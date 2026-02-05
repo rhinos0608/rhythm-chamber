@@ -275,11 +275,9 @@ function _safeRegexTest(str, pattern) {
 
     try {
         const result = regex.test(str);
-        clearTimeout(timeoutId);
         return result;
-    } catch (error) {
+    } finally {
         clearTimeout(timeoutId);
-        throw error;
     }
 }
 

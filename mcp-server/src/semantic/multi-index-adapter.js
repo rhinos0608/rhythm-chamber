@@ -62,6 +62,9 @@ export class MultiIndexAdapter {
     // Prepare docs adapter statements
     this._prepareDocsStatements();
 
+    // CRITICAL FIX: Mark docs adapter as initialized so single upserts work
+    this.docsAdapter._initialized = true;
+
     this._initialized = true;
     console.error(`[MultiIndexAdapter] Initialized: ${dbPath} (dimension: ${dimension})`);
   }
@@ -141,7 +144,9 @@ export class MultiIndexAdapter {
       `),
       deleteMetadataByFile: this._sharedDb.prepare('DELETE FROM chunk_metadata_docs WHERE file = ?'),
       // CRITICAL FIX: Cache INSERT statement to prevent memory leak
+      // Also provide insertEmbedding alias for sqlite-adapter compatibility
       insertVec: this._sharedDb.prepare('INSERT INTO vec_chunks_docs (embedding) VALUES (?)'),
+      insertEmbedding: this._sharedDb.prepare('INSERT INTO vec_chunks_docs (embedding) VALUES (?)'),
     };
 
     console.error('[MultiIndexAdapter] Prepared docs statements');
@@ -687,14 +692,12 @@ export class MultiIndexAdapter {
 
   /**
    * Close the database connection
-   * CRITICAL FIX: Now properly closes code adapter which finalizes its statements
+   * CRITICAL FIX: Finalize docs statements BEFORE closing code adapter to avoid
+   * "database already closed" errors. The shared DB is closed by codeAdapter.close().
    */
   close() {
     if (this._sharedDb) {
-      // Close code adapter first (this finalizes code adapter statements)
-      this.codeAdapter.close();
-
-      // Finalize docs statements
+      // CRITICAL: Finalize docs statements FIRST, before closing the shared DB
       if (this.docsAdapter._statements) {
         for (const [name, statement] of Object.entries(this.docsAdapter._statements)) {
           try {
@@ -711,7 +714,14 @@ export class MultiIndexAdapter {
         this.docsAdapter._statements = null;
       }
 
-      // Don't close shared DB (code adapter already did)
+      // Clear docsAdapter's DB reference so it doesn't try to close it again
+      this.docsAdapter._db = null;
+      this.docsAdapter._initialized = false;
+
+      // Close code adapter last (this closes the shared DB and finalizes code statements)
+      this.codeAdapter.close();
+
+      // Clear all references
       this._sharedDb = null;
       this._initialized = false;
       console.error('[MultiIndexAdapter] Database connection closed');
