@@ -18,15 +18,17 @@ import { existsSync } from 'fs';
 
 import { CodeChunker } from './chunker.js';
 import { MarkdownChunker } from './markdown-chunker.js';
+import { TypeScriptChunker } from './typescript-chunker.js';
 import { HybridEmbeddings } from './embeddings.js';
 import { VectorStore } from './vector-store.js';
 import { SqliteVectorAdapter } from './sqlite-adapter.js';
 import { createVectorAdapter } from './adapter-factory.js';
-import { DependencyGraph } from './dependency-graph.js';
+import { SymbolIndex } from './symbol-index.js';
 import { EmbeddingCache } from './cache.js';
 import { LexicalIndex } from './lexical-index.js';
 import { QueryExpander } from './query-expander.js';
 import { SemanticQueryCache } from './query-cache.js';
+import { migrateToV2, getMigrationVersion } from './migration-symbols.js';
 // FIX #13: Import centralized configuration for all magic numbers
 import {
   TYPE_PRIORITY,
@@ -42,7 +44,6 @@ import {
  */
 const DEFAULT_PATTERNS = [
   'js/**/*.js',
-  'mcp-server/**/*.js',
   'tests/**/*.js',
   'workers/**/*.js',
   'workers/**/*.mjs',
@@ -79,6 +80,7 @@ export class CodeIndexer {
     // Components
     this.codeChunker = new CodeChunker(options.chunker);
     this.markdownChunker = new MarkdownChunker(options.markdownChunker);
+    this.typeScriptChunker = new TypeScriptChunker(options.typescriptChunker);
     this.embeddings = new HybridEmbeddings(options.embeddings);
     // Pass embedding dimension and dbPath to vector store
     this.vectorStore = new VectorStore({
@@ -86,7 +88,8 @@ export class CodeIndexer {
       dimension: this.embeddings.getDimension(),
       dbPath: join(this.cacheDir, 'vectors.db'),
     });
-    this.dependencyGraph = new DependencyGraph();
+    // Phase 2: Use SymbolIndex instead of DependencyGraph
+    this.dependencyGraph = new SymbolIndex(join(this.cacheDir, 'vectors.db'));
     // Pass modelVersion to cache for proper invalidation when model changes
     this.cache = new EmbeddingCache(this.cacheDir, {
       enabled: options.cache !== false,
@@ -99,6 +102,9 @@ export class CodeIndexer {
     // FIX: Maximum chunks limit to prevent OOM on large codebases
     // Supports environment variable RC_MAX_CHUNKS (e.g., 10000 for limited indexing)
     this.maxChunks = options.maxChunks || parseInt(process.env.RC_MAX_CHUNKS || '50000', 10);
+
+    // CRITICAL FIX #2: Prevent concurrent SymbolIndex initialization
+    this._symbolInitializing = false;
 
     // Patterns
     this.patterns = options.patterns || DEFAULT_PATTERNS;
@@ -127,14 +133,39 @@ export class CodeIndexer {
 
   /**
    * Initialize the indexer
+   * @throws {Error} If embeddings or cache initialization fails
    */
   async initialize() {
     console.error('[Indexer] Initializing semantic search indexer...');
 
+    // CRITICAL FIX #3: Validate embeddings state before proceeding
+    try {
+      // Check if embeddings has initialize method
+      if (typeof this.embeddings.initialize === 'function') {
+        await this.embeddings.initialize();
+        console.error('[Indexer] Embeddings initialized successfully');
+      }
+
+      // Validate embeddings is in valid state
+      const modelInfo = this.embeddings.getModelInfo();
+      if (!modelInfo || !modelInfo.name) {
+        throw new Error('[Indexer] Embeddings not in valid state: missing model info');
+      }
+    } catch (error) {
+      console.error('[Indexer] Embeddings initialization failed:', error.message);
+      throw new Error(`[Indexer] Failed to initialize embeddings: ${error.message}`);
+    }
+
     // Initialize cache with model version for invalidation tracking
-    const modelInfo = this.embeddings.getModelInfo();
-    this.cache.setModelVersion(modelInfo.name);
-    await this.cache.initialize();
+    try {
+      const modelInfo = this.embeddings.getModelInfo();
+      this.cache.setModelVersion(modelInfo.name);
+      await this.cache.initialize();
+      console.error('[Indexer] Cache initialized successfully');
+    } catch (error) {
+      console.error('[Indexer] Cache initialization failed:', error.message);
+      throw new Error(`[Indexer] Failed to initialize cache: ${error.message}`);
+    }
 
     // Load cached data if available
     const stats = this.cache.getStats();
@@ -164,10 +195,60 @@ export class CodeIndexer {
     // FIX: Initialize and recover SQLite adapter if database exists
     await this._initializeVectorStore();
 
+    // Phase 2: Initialize SymbolIndex and run migration
+    await this._initializeSymbolIndex();
+
     // OOM FIX #1: Log memory snapshot at startup
     this.logMemorySnapshot('initialize');
 
     return true;
+  }
+
+  /**
+   * Initialize SymbolIndex with migration
+   * @private
+   */
+  async _initializeSymbolIndex() {
+    // CRITICAL FIX #2: Prevent concurrent initialization
+    if (this._symbolInitializing) {
+      console.warn('[Indexer] SymbolIndex initialization already in progress, skipping');
+      return;
+    }
+
+    this._symbolInitializing = true;
+
+    try {
+      const dbPath = join(this.cacheDir, 'vectors.db');
+
+      console.error('[Indexer] Initializing SymbolIndex (Phase 2)...');
+
+      // Check current migration version
+      const currentVersion = getMigrationVersion(dbPath);
+      console.error(`[Indexer] Current migration version: ${currentVersion}`);
+
+      // Run migration if needed
+      if (currentVersion < 2) {
+        console.error('[Indexer] Running Phase 2 migration for symbol tracking...');
+        try {
+          migrateToV2(dbPath);
+          console.error('[Indexer] Phase 2 migration completed successfully');
+        } catch (error) {
+          console.error('[Indexer] Phase 2 migration failed:', error.message);
+          // Continue anyway - SymbolIndex will handle missing tables gracefully
+        }
+      }
+
+      // Initialize SymbolIndex
+      try {
+        this.dependencyGraph.initialize(dbPath);
+        console.error('[Indexer] SymbolIndex initialized successfully');
+      } catch (error) {
+        console.error('[Indexer] SymbolIndex initialization failed:', error.message);
+        // Continue anyway - will fallback to in-memory mode
+      }
+    } finally {
+      this._symbolInitializing = false;
+    }
   }
 
   /**
@@ -217,11 +298,17 @@ export class CodeIndexer {
       }
     }
 
-    // Explicit filter: skip vendor files (fix for glob ignore not working consistently)
+    // Explicit filter: skip vendor files and problematic auto-generated docs
     const discovered = Array.from(allFiles).filter(file => {
-      const shouldSkip = file.includes('/vendor/') || file.includes('\\vendor\\');
+      // Skip vendor files (minified libraries)
+      const isVendor = file.includes('/vendor/') || file.includes('\\vendor\\');
+      // Skip auto-generated files that cause OOM (too large, low value for search)
+      const isAutoGenerated = file.includes('DEPENDENCY_GRAPH.md') ||
+                             file.includes('SERVICE_CATALOG.md');
+      const shouldSkip = isVendor || isAutoGenerated;
       if (shouldSkip) {
-        console.error(`[Indexer] Skipping vendor file: ${file}`);
+        const reason = isVendor ? 'vendor file' : 'auto-generated file (too large)';
+        console.error(`[Indexer] Skipping ${reason}: ${file}`);
       }
       return !shouldSkip;
     });
@@ -527,6 +614,18 @@ export class CodeIndexer {
               );
 
               this.cache.clear();
+
+              // OOM FIX: Also clear DependencyGraph and LexicalIndex periodically
+              // These indices accumulate data (symbols, usages, documents) that cause OOM
+              // Since we use SQLite for storage, we can rebuild these on-demand
+              const depStats = this.dependencyGraph.getStats();
+              const lexDocs = this.lexicalIndex.documents.size;
+              if (depStats.symbols > 10000 || lexDocs > 5000) {
+                console.error(`[Indexer] Memory: Clearing ${depStats.symbols} symbols and ${lexDocs} documents at ${indexedCount} files`);
+                this.dependencyGraph.clear();
+                this.lexicalIndex.clear();
+              }
+
               // Force garbage collection to free memory immediately
               if (global.gc) {
                 global.gc();
@@ -591,10 +690,19 @@ export class CodeIndexer {
     const relPath = relative(this.projectRoot, filePath);
 
     try {
-      // CRITICAL: Check memory before indexing each file
-      // Prevents OOM crashes during large indexing operations
+      // CRASH DEBUGGING: Log file being indexed with memory snapshot
       const mem = process.memoryUsage();
       const heapUsedMB = mem.heapUsed / 1024 / 1024;
+      const rssMB = mem.rss / 1024 / 1024;
+      const fileIndex = this.stats.filesIndexed;
+      console.error(
+        `[Indexer] [CRASH-DEBUG] ========== STARTING FILE #${fileIndex + 1} ==========`
+      );
+      console.error(`[Indexer] [CRASH-DEBUG] File: ${relPath}`);
+      console.error(`[Indexer] [CRASH-DEBUG] Memory: heap=${heapUsedMB.toFixed(1)}MB, rss=${rssMB.toFixed(1)}MB`);
+
+      // CRITICAL: Check memory before indexing each file
+      // Prevents OOM crashes during large indexing operations
       // FIX: Use fixed limit (6GB) instead of heapTotal (which is only ~131MB initially)
       // The --max-old-space-size=8192 gives us 8GB, so use 6GB as safety limit
       const heapLimitMB = 6144; // 6GB
@@ -633,19 +741,89 @@ export class CodeIndexer {
         return;
       }
 
+      // CRASH GUARDRAIL #1: Skip files over 2MB to prevent OOM
+      const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
+      if (fileStat.size > MAX_FILE_SIZE_BYTES) {
+        console.warn(`[Indexer] 🛡️  Skipping large file (${(fileStat.size / 1024 / 1024).toFixed(1)}MB > 2MB limit): ${relPath}`);
+        this.stats.filesSkipped++;
+        return;
+      }
+
+      // CRASH GUARDRAIL #2: Skip minified bundles and build artifacts
+      const skipPatterns = [
+        /\.min\.js$/i,           // minified JavaScript
+        /\.min\.css$/i,          // minified CSS
+        /\/dist\//i,             // dist/ directories
+        /\/build\//i,            // build/ directories
+        /\/out\//i,              // out/ directories (TypeScript)
+        /\/\.next\//i,           // Next.js build output
+        /\/\.nuxt\//i,           // Nuxt.js build output
+        /bundle\.js$/i,          // bundle files
+        /chunk\.js$/i,           // chunk files
+        /vendor\.js$/i,           // vendor bundles
+      ];
+      const shouldSkip = skipPatterns.some(pattern => pattern.test(relPath));
+      if (shouldSkip) {
+        console.warn(`[Indexer] 🛡️  Skipping build artifact: ${relPath}`);
+        this.stats.filesSkipped++;
+        return;
+      }
+
+      // CRASH DEBUGGING: Log file size
+      const fileSizeKB = fileStat.size / 1024;
+      console.error(`[Indexer] [CRASH-DEBUG] File size: ${fileSizeKB.toFixed(1)}KB (${fileStat.size} bytes)`);
+
       // Read source
-      const source = await readFile(filePath, 'utf-8');
+      let source = await readFile(filePath, 'utf-8');
+
+      // CRASH DEBUGGING: Log source text size
+      const sourceTextLen = source.length;
+      console.error(`[Indexer] [CRASH-DEBUG] Source text length: ${sourceTextLen} chars`);
 
       // Route to appropriate chunker based on file extension
       const isMarkdown = this.markdownChunker.isSupported(relPath);
-      const chunks = isMarkdown
-        ? this.markdownChunker.chunkSourceFile(source, relPath)
-        : this.codeChunker.chunkSourceFile(source, relPath);
+      const isTypeScript = this.typeScriptChunker.isSupported(relPath);
+
+      let chunks;
+      if (isMarkdown) {
+        chunks = this.markdownChunker.chunkSourceFile(source, relPath);
+      } else if (isTypeScript) {
+        // Phase 2: Use TypeScriptChunker for .ts/.tsx files
+        chunks = this.typeScriptChunker.chunkSourceFile(source, relPath);
+      } else {
+        chunks = this.codeChunker.chunkSourceFile(source, relPath);
+      }
 
       if (chunks.length === 0) {
         console.error(`[Indexer] No chunks generated for ${relPath}`);
         return;
       }
+
+      // Drop extremely low-signal markdown chunks (e.g. tiny fragments)
+      // to prevent them dominating search results.
+      if (isMarkdown) {
+        const MIN_MARKDOWN_CHUNK_TEXT_LENGTH = 50;
+        chunks = chunks.filter(c => (c.text || '').trim().length >= MIN_MARKDOWN_CHUNK_TEXT_LENGTH);
+
+        if (chunks.length === 0) {
+          console.error(`[Indexer] All markdown chunks filtered as low-signal for ${relPath}`);
+          return;
+        }
+      }
+
+      // CRASH GUARDRAIL #3: Cap chunks per file to prevent OOM from massive files
+      // Large markdown files (e.g., DEPENDENCY_GRAPH.md with 1600 lines) can generate
+      // hundreds of chunks, causing memory spikes. Lower limit prevents OOM crashes.
+      const MAX_CHUNKS_PER_FILE = 200;
+      if (chunks.length > MAX_CHUNKS_PER_FILE) {
+        console.warn(
+          `[Indexer] 🛡️  File has too many chunks (${chunks.length} > ${MAX_CHUNKS_PER_FILE} limit), truncating: ${relPath}`
+        );
+        chunks.length = MAX_CHUNKS_PER_FILE;
+      }
+
+      // CRASH DEBUGGING: Log chunk count
+      console.error(`[Indexer] [CRASH-DEBUG] Chunks generated: ${chunks.length}`);
 
       // CRITICAL: Add file path prefix to chunk IDs to ensure uniqueness across files
       // Without this, chunks with the same local ID (e.g., function_init_L232) from
@@ -766,6 +944,10 @@ export class CodeIndexer {
       const validCount = allValidChunks.length;
       const invalidCount = allInvalidReasons.length;
 
+      // CRASH DEBUGGING: Log memory after embeddings
+      const memAfterEmbed = process.memoryUsage();
+      console.error(`[Indexer] [CRASH-DEBUG] After embeddings: heap=${(memAfterEmbed.heapUsed / 1024 / 1024).toFixed(1)}MB, valid=${validCount}, invalid=${invalidCount}`);
+
       if (invalidCount > 0) {
         const sampleReasons = allInvalidReasons.slice(0, 5);
         const truncatedMsg = invalidCount > 5 ? ` and ${invalidCount - 5} more` : '';
@@ -802,11 +984,18 @@ export class CodeIndexer {
       let vectorsStored = 0;
       let symbolsAdded = 0;
 
-      for (let i = 0; i < allValidChunks.length; i++) {
-        const chunk = allValidChunks[i];
-        const embedding = allValidEmbeddings[i];
+      // OOM FIX: Process storage in smaller batches to reduce memory spike
+      // Instead of storing all chunks at once, batch them for vector store operations
+      const STORAGE_BATCH_SIZE = 50;
+      for (let batchStart = 0; batchStart < allValidChunks.length; batchStart += STORAGE_BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + STORAGE_BATCH_SIZE, allValidChunks.length);
 
-        try {
+        // Prepare batch items for vector store
+        const batchItems = [];
+        for (let i = batchStart; i < batchEnd; i++) {
+          const chunk = allValidChunks[i];
+          const embedding = allValidEmbeddings[i];
+
           // Add file path to chunk metadata
           chunk.metadata.file = relPath;
 
@@ -822,19 +1011,37 @@ export class CodeIndexer {
             chunk.metadata.contextAfter = chunk.context.after;
           }
 
-          // Store in vector store
-          this.vectorStore.upsert(chunk.id, embedding, chunk.metadata);
-          vectorsStored++;
+          batchItems.push({ chunkId: chunk.id, embedding, metadata: chunk.metadata });
+        }
 
-          // Add to dependency graph
-          this.dependencyGraph.addChunk(chunk);
-          symbolsAdded++;
-        } catch (storeError) {
-          console.error(
-            `[Indexer] Failed to store chunk ${chunk.id} from ${relPath}:`,
-            storeError.message
-          );
-          // Continue with next chunk instead of failing entire file
+        // Use batch upsert for better performance
+        if (batchItems.length > 0) {
+          if (this.vectorStore.useSqlite && this.vectorStore.adapter?.upsertBatch) {
+            this.vectorStore.adapter.upsertBatch(batchItems);
+            vectorsStored += batchItems.length;
+          } else {
+            // Fallback to individual upserts
+            for (const item of batchItems) {
+              this.vectorStore.upsert(item.chunkId, item.embedding, item.metadata);
+            }
+            vectorsStored += batchItems.length;
+          }
+        }
+
+        // Add to dependency graph (can't be batched easily)
+        for (let i = batchStart; i < batchEnd; i++) {
+          const chunk = allValidChunks[i];
+          try {
+            this.dependencyGraph.addChunk(chunk);
+            symbolsAdded++;
+          } catch (depError) {
+            console.error(`[Indexer] Failed to add chunk ${chunk.id} to dependency graph:`, depError.message);
+          }
+        }
+
+        // Yield between storage batches to allow GC
+        if (batchEnd < allValidChunks.length) {
+          await this._yield();
         }
       }
 
@@ -921,6 +1128,13 @@ export class CodeIndexer {
         `[Indexer] Indexed ${relPath} (${validCount} valid chunks, ${vectorsStored} vectors, ${symbolsAdded} symbols${!cacheSuccess ? ', CACHE FAILED' : ''})`
       );
 
+      // CRASH DEBUGGING: Log completion with final memory snapshot
+      const memFinal = process.memoryUsage();
+      console.error(`[Indexer] [CRASH-DEBUG] ========== COMPLETED FILE #${this.stats.filesIndexed} ==========`);
+      console.error(`[Indexer] [CRASH-DEBUG] Final memory: heap=${(memFinal.heapUsed / 1024 / 1024).toFixed(1)}MB, rss=${(memFinal.rss / 1024 / 1024).toFixed(1)}MB`);
+      console.error(`[Indexer] [CRASH-DEBUG] Stored: ${vectorsStored} vectors, ${symbolsAdded} symbols`);
+      console.error('');  // Empty line for readability
+
       // OOM FIX: Explicitly clean up large temporary objects to prevent memory accumulation
       // These variables can hold large strings/arrays that accumulate across loop iterations
       // Without explicit cleanup, V8's GC may not collect them fast enough
@@ -928,6 +1142,15 @@ export class CodeIndexer {
       chunks = null;      // Array of chunk objects with text properties
       // Note: Batch variables (batchTexts, batchEmbeddings, batchChunks) go out of scope at end of loop
       // allValidChunks, allValidEmbeddings, allInvalidReasons go out of scope here
+
+      // OOM FIX: Force GC after each file when processing small batches
+      // When processing <50 files, the periodic GC at % 50 never triggers
+      // This prevents heap fragmentation from accumulating across files
+      if (global.gc) {
+        global.gc();
+        const memAfterGC = process.memoryUsage();
+        console.error(`[Indexer] [MEMORY] After GC: heap=${(memAfterGC.heapUsed / 1024 / 1024).toFixed(1)}MB`);
+      }
     } catch (error) {
       // INCREMENTAL RESUME: Remove from file index only for specific errors
       // Don't remove for transient issues like cache failures or post-index errors
@@ -1511,7 +1734,8 @@ export class CodeIndexer {
     perf.vectorSearchTime = Date.now() - vectorSearchStart;
 
     // Hybrid search: combine vector and lexical results using RRF
-    let finalResults;
+    // Initialize with vectorResults to ensure finalResults is always defined
+    let finalResults = vectorResults;
 
     if (useHybrid) {
       try {
@@ -1573,11 +1797,9 @@ export class CodeIndexer {
           '[Indexer] Lexical search failed, falling back to vector-only:',
           error.message
         );
-        finalResults = vectorResults;
+        // finalResults already set to vectorResults above
       }
-    } else {
-      finalResults = vectorResults;
-    }
+    }  // End of if (useHybrid)
 
     // FIX #13: Use centralized type priority configuration
     const typePriority = TYPE_PRIORITY;
@@ -1595,10 +1817,21 @@ export class CodeIndexer {
             ? r.rrfScore * RRF_CONFIG.SCALING // RRF: max ~0.02 * 5000 = 100
             : r.similarity * 100; // Similarity: max 1.0 * 100 = 100
 
-        let rankScore = baseScore + (typePriority[r.metadata?.type] || 0);
+        const chunkType = r.metadata?.type;
+        const isMarkdownType = typeof chunkType === 'string' && chunkType.startsWith('md-');
+
+        const filePath = r.metadata?.file || '';
+        const isMarkdownFile =
+          typeof filePath === 'string' &&
+          /\.(md|markdown|mdown|mkd)$/i.test(filePath);
+
+        const isMarkdownChunk = isMarkdownType || isMarkdownFile;
+
+        let rankScore = baseScore + (typePriority[chunkType] || 0);
 
         // Exact symbol name match bonus: +50
-        if (r.metadata?.name && queryLower === r.metadata.name.toLowerCase()) {
+        // Symbol heuristics should not apply to markdown heading names.
+        if (!isMarkdownChunk && r.metadata?.name && queryLower === r.metadata.name.toLowerCase()) {
           rankScore += 50;
         }
 
@@ -1610,7 +1843,8 @@ export class CodeIndexer {
         // FIX #11: Call frequency bonus using sqrt scaling to prevent domination
         // Old: Math.floor(usages/10) could give +100, overwhelming semantic relevance
         // New: Sqrt scaling provides meaningful bonus progression: 1-9 calls=0, 10-99 calls=1-3, 100-999 calls=3-9, 1000+=10-20 (capped)
-        if (r.metadata?.name) {
+        // Symbol heuristics should not apply to markdown heading names.
+        if (!isMarkdownChunk && r.metadata?.name) {
           const symbolName = r.metadata.name;
           let usages = [];
 
