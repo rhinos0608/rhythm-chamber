@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+/* global console, process, setInterval, Buffer, clearInterval */
+
 /**
  * Crash Log Monitor
  *

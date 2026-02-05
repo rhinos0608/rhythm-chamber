@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* global console, process, setTimeout */
+
 /**
  * Check Indexing Status
  *
@@ -8,7 +10,7 @@
 
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, statSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -34,7 +36,7 @@ async function main() {
   for (const file of cacheFiles) {
     const path = join(cacheDir, file);
     if (existsSync(path)) {
-      const stats = require('fs').statSync(path);
+      const stats = statSync(path);
       const sizeKB = (stats.size / 1024).toFixed(2);
       console.log(`  ✓ ${file}: ${sizeKB} KB`);
     } else {
@@ -76,7 +78,7 @@ async function main() {
       console.log(`  Database exists: ${dbExists ? 'Yes' : 'No'}`);
 
       if (dbExists) {
-        const dbStats = require('fs').statSync(vectorStoreStats.dbPath);
+        const dbStats = statSync(vectorStoreStats.dbPath);
         const dbSizeMB = (dbStats.size / 1024 / 1024).toFixed(2);
         console.log(`  Database Size: ${dbSizeMB} MB`);
       }
