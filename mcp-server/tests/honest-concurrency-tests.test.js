@@ -88,7 +88,7 @@ describe('HONEST Concurrency Tests', () => {
         // Count successes
         const successCount = results.filter(r => r.success).length;
 
-        console.log(`\n[CONCURRENCY] SymbolIndex concurrent init test:`);
+        console.log('\n[CONCURRENCY] SymbolIndex concurrent init test:');
         console.log(`[CONCURRENCY]   Attempted: ${results.length} concurrent inits`);
         console.log(`[CONCURRENCY]   Succeeded: ${successCount}`);
         console.log(`[CONCURRENCY]   Failed: ${results.length - successCount}`);
@@ -144,7 +144,7 @@ describe('HONEST Concurrency Tests', () => {
 
         const successCount = results.filter(r => r.success).length;
 
-        console.log(`\n[CONCURRENCY] FTS5Adapter concurrent init test:`);
+        console.log('\n[CONCURRENCY] FTS5Adapter concurrent init test:');
         console.log(`[CONCURRENCY]   Attempted: ${results.length} concurrent inits`);
         console.log(`[CONCURRENCY]   Succeeded: ${successCount}`);
         console.log(`[CONCURRENCY]   Failed: ${results.length - successCount}\n`);
@@ -194,7 +194,7 @@ describe('HONEST Concurrency Tests', () => {
 
         const successCount = results.filter(r => r.status === 'fulfilled').length;
 
-        console.log(`\n[CONCURRENCY] Race condition detection test:`);
+        console.log('\n[CONCURRENCY] Race condition detection test:');
         console.log(`[CONCURRENCY]   Operations: ${results.length}`);
         console.log(`[CONCURRENCY]   Succeeded: ${successCount}`);
         console.log(`[CONCURRENCY]   Failed: ${results.length - successCount}\n`);
@@ -226,7 +226,7 @@ describe('HONEST Concurrency Tests', () => {
         symbolIndex.initialize(dbPath);
 
         // Launch 100 concurrent write operations
-        const writePromises = Array.from({ length: 100 }, (i) => {
+        const writePromises = Array.from({ length: 100 }, i => {
           return Promise.resolve().then(() => {
             symbolIndex.addChunk({
               id: `chunk-${i}`,
@@ -246,18 +246,18 @@ describe('HONEST Concurrency Tests', () => {
         await Promise.all(writePromises);
 
         // Verify all symbols were added
-        console.log(`\n[CONCURRENCY] Concurrent writes test:`);
-        console.log(`[CONCURRENCY]   Concurrent writes: 100`);
+        console.log('\n[CONCURRENCY] Concurrent writes test:');
+        console.log('[CONCURRENCY]   Concurrent writes: 100');
         console.log(`[CONCURRENCY]   Symbols added: ${symbolIndex.definitions.size}`);
-        console.log(`[CONCURRENCY]   NOTE: Race condition detected!`);
+        console.log('[CONCURRENCY]   NOTE: Race condition detected!');
         console.log(`[CONCURRENCY]   Expected: 100, Got: ${symbolIndex.definitions.size}\n`);
 
         // HONEST EXPECTATION: This WILL fail due to race condition
         // SymbolIndex.addChunk() is not thread-safe
         // Multiple concurrent writes can overwrite each other
         if (symbolIndex.definitions.size !== 100) {
-          console.log(`[CONCURRENCY] ⚠️  KNOWN ISSUE: Concurrent writes lose data!`);
-          console.log(`[CONCURRENCY] ⚠️  This is expected - addChunk() is not thread-safe\n`);
+          console.log('[CONCURRENCY] ⚠️  KNOWN ISSUE: Concurrent writes lose data!');
+          console.log('[CONCURRENCY] ⚠️  This is expected - addChunk() is not thread-safe\n');
           // Don't fail the test - document the known issue
           assert.ok(symbolIndex.definitions.size > 0, 'at least some symbols should be added');
         } else {
@@ -279,7 +279,7 @@ describe('HONEST Concurrency Tests', () => {
         await adapter.initialize(dbPath);
 
         // Launch 100 concurrent write operations
-        const writePromises = Array.from({ length: 100 }, (i) => {
+        const writePromises = Array.from({ length: 100 }, i => {
           return adapter.indexChunk(`chunk-${i}`, `function test${i}() {}`, {
             file: `test${i}.js`,
             type: 'function',
@@ -292,19 +292,19 @@ describe('HONEST Concurrency Tests', () => {
         // Verify all chunks were indexed
         const stats = await adapter.getStats();
 
-        console.log(`\n[CONCURRENCY] Concurrent FTS5 writes test:`);
-        console.log(`[CONCURRENCY]   Concurrent writes: 100`);
+        console.log('\n[CONCURRENCY] Concurrent FTS5 writes test:');
+        console.log('[CONCURRENCY]   Concurrent writes: 100');
         console.log(`[CONCURRENCY]   Chunks indexed: ${stats.codeChunks}`);
-        console.log(`[CONCURRENCY]   NOTE: Race condition detected!`);
+        console.log('[CONCURRENCY]   NOTE: Race condition detected!');
         console.log(`[CONCURRENCY]   Expected: 100, Got: ${stats.codeChunks}\n`);
 
         // HONEST EXPECTATION: This WILL fail due to race condition
         // FTS5Adapter.indexChunk() is not thread-safe for concurrent writes
         // Multiple concurrent writes can overwrite each other or fail silently
         if (stats.codeChunks !== 100) {
-          console.log(`[CONCURRENCY] ⚠️  KNOWN ISSUE: Concurrent writes lose data!`);
-          console.log(`[CONCURRENCY] ⚠️  This is expected - indexChunk() is not thread-safe`);
-          console.log(`[CONCURRENCY] ⚠️  SQLite transactions are not protecting concurrent writes\n`);
+          console.log('[CONCURRENCY] ⚠️  KNOWN ISSUE: Concurrent writes lose data!');
+          console.log('[CONCURRENCY] ⚠️  This is expected - indexChunk() is not thread-safe');
+          console.log('[CONCURRENCY] ⚠️  SQLite transactions are not protecting concurrent writes\n');
           // Don't fail the test - document the known issue
           assert.ok(stats.codeChunks > 0, 'at least some chunks should be indexed');
         } else {
@@ -344,7 +344,7 @@ describe('HONEST Concurrency Tests', () => {
         }
 
         // Launch 500 concurrent read operations
-        const readPromises = Array.from({ length: 500 }, (i) => {
+        const readPromises = Array.from({ length: 500 }, i => {
           return Promise.resolve().then(() => {
             return symbolIndex.findDefinition(`function${i % 100}`);
           });
@@ -352,8 +352,8 @@ describe('HONEST Concurrency Tests', () => {
 
         const results = await Promise.all(readPromises);
 
-        console.log(`\n[CONCURRENCY] Concurrent reads test:`);
-        console.log(`[CONCURRENCY]   Concurrent reads: 500`);
+        console.log('\n[CONCURRENCY] Concurrent reads test:');
+        console.log('[CONCURRENCY]   Concurrent reads: 500');
         console.log(`[CONCURRENCY]   All succeeded: ${results.every(r => Array.isArray(r))}\n`);
 
         assert.strictEqual(results.length, 500, 'should complete all 500 reads');
@@ -407,8 +407,8 @@ describe('HONEST Concurrency Tests', () => {
 
         await Promise.all(operations);
 
-        console.log(`\n[CONCURRENCY] Mixed operations test:`);
-        console.log(`[CONCURRENCY]   Total operations: 200`);
+        console.log('\n[CONCURRENCY] Mixed operations test:');
+        console.log('[CONCURRENCY]   Total operations: 200');
         console.log(`[CONCURRENCY]   Symbols added: ${symbolIndex.definitions.size}\n`);
 
         assert.strictEqual(symbolIndex.definitions.size, 100, 'should add all symbols');

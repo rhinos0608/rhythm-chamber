@@ -160,7 +160,7 @@ async function _performSymbolSearch(
 ) {
   const startTime = Date.now();
   let symbols = [];
-  let usages = [];
+  const usages = [];
 
   // Route to appropriate search method
   if (depGraph.searchSymbols && typeof depGraph.searchSymbols === 'function') {
@@ -362,7 +362,7 @@ function _formatResults(symbols, usages, query, searchMode, symbolType, duration
 
   // Add usages if requested
   if (usages.length > 0) {
-    output += `\n## Call Graph (Usages)\n\n`;
+    output += '\n## Call Graph (Usages)\n\n';
     output += `Found ${usages.length} usage(s):\n\n`;
 
     // Group by symbol

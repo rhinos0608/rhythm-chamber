@@ -169,7 +169,7 @@ export class HybridSearchEngine {
     const allResults = [...vectorResults, ...keywordResults];
     for (const result of allResults) {
       if (!validateResult(result)) {
-        throw new Error(`[HybridSearchEngine] Invalid result structure: missing required field (chunkId or id)`);
+        throw new Error('[HybridSearchEngine] Invalid result structure: missing required field (chunkId or id)');
       }
     }
 

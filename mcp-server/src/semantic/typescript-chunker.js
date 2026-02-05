@@ -147,7 +147,7 @@ export class TypeScriptChunker extends CodeChunker {
     const chunks = [];
 
     traverse.default(ast, {
-      TSInterfaceDeclaration: (path) => {
+      TSInterfaceDeclaration: path => {
         const node = path.node;
         const id = node.id;
 
@@ -261,7 +261,7 @@ export class TypeScriptChunker extends CodeChunker {
     const chunks = [];
 
     traverse.default(ast, {
-      TSTypeAliasDeclaration: (path) => {
+      TSTypeAliasDeclaration: path => {
         const node = path.node;
         const id = node.id;
 
@@ -307,7 +307,7 @@ export class TypeScriptChunker extends CodeChunker {
     const chunks = [];
 
     traverse.default(ast, {
-      TSEnumDeclaration: (path) => {
+      TSEnumDeclaration: path => {
         const node = path.node;
         const id = node.id;
 
@@ -366,7 +366,7 @@ export class TypeScriptChunker extends CodeChunker {
 
     traverse.default(ast, {
       // Function declarations
-      FunctionDeclaration: (path) => {
+      FunctionDeclaration: path => {
         const node = path.node;
         const id = node.id;
 
@@ -403,7 +403,7 @@ export class TypeScriptChunker extends CodeChunker {
       },
 
       // Arrow functions assigned to variables
-      VariableDeclarator: (path) => {
+      VariableDeclarator: path => {
         const node = path.node;
         const id = node.id;
 
@@ -448,7 +448,7 @@ export class TypeScriptChunker extends CodeChunker {
     const chunks = [];
 
     traverse.default(ast, {
-      ClassDeclaration: (path) => {
+      ClassDeclaration: path => {
         const node = path.node;
         const id = node.id;
 
@@ -513,7 +513,7 @@ export class TypeScriptChunker extends CodeChunker {
     const chunks = [];
 
     traverse.default(ast, {
-      ImportDeclaration: (path) => {
+      ImportDeclaration: path => {
         const node = path.node;
         const startLine = node.loc?.start.line || 0;
         const endLine = node.loc?.end.line || startLine;
@@ -553,7 +553,7 @@ export class TypeScriptChunker extends CodeChunker {
     const chunks = [];
 
     traverse.default(ast, {
-      ExportNamedDeclaration: (path) => {
+      ExportNamedDeclaration: path => {
         const node = path.node;
         const startLine = node.loc?.start.line || 0;
         const endLine = node.loc?.end.line || startLine;
@@ -581,7 +581,7 @@ export class TypeScriptChunker extends CodeChunker {
         });
       },
 
-      ExportDefaultDeclaration: (path) => {
+      ExportDefaultDeclaration: path => {
         const node = path.node;
         const startLine = node.loc?.start.line || 0;
         const endLine = node.loc?.end.line || startLine;

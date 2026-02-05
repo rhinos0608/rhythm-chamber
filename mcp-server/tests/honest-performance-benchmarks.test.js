@@ -108,7 +108,7 @@ describe('HONEST Performance Benchmarks', () => {
 
       try {
         // Index 1000 chunks (representative of small-medium production)
-        console.log(`[PERF] Indexing 1000 chunks to disk...`);
+        console.log('[PERF] Indexing 1000 chunks to disk...');
         const indexStart = performance.now();
         for (let i = 0; i < 1000; i++) {
           await adapter.indexChunk(`chunk-${i}`, `function testFunction${i}() { return ${i}; }`, {
@@ -129,15 +129,15 @@ describe('HONEST Performance Benchmarks', () => {
 
         const percentiles = calculatePercentiles(latencies);
 
-        console.log(`\n[PERF] FTS5 Search Performance (1000 chunks, disk DB):`);
+        console.log('\n[PERF] FTS5 Search Performance (1000 chunks, disk DB):');
         console.log(`[PERF]   Mean: ${percentiles.mean.toFixed(2)}ms`);
         console.log(`[PERF]   p50: ${percentiles.p50.toFixed(2)}ms`);
         console.log(`[PERF]   p95: ${percentiles.p95.toFixed(2)}ms`);
         console.log(`[PERF]   p99: ${percentiles.p99.toFixed(2)}ms`);
         console.log(`[PERF]   Min: ${percentiles.min.toFixed(2)}ms`);
         console.log(`[PERF]   Max: ${percentiles.max.toFixed(2)}ms`);
-        console.log(`[PERF] ⚠️  WARM CACHE ONLY - Production will be 100-1000x SLOWER`);
-        console.log(`[PERF] ⚠️  Expected production p95: 10-100ms with 10,000+ chunks\n`);
+        console.log('[PERF] ⚠️  WARM CACHE ONLY - Production will be 100-1000x SLOWER');
+        console.log('[PERF] ⚠️  Expected production p95: 10-100ms with 10,000+ chunks\n');
 
         // Verify database is on disk
         assert.ok(existsSync(dbPath), 'database file should exist on disk');
@@ -151,37 +151,37 @@ describe('HONEST Performance Benchmarks', () => {
     });
 
     it('should explain why cold cache testing is not possible', async () => {
-      console.log(`\n[PERF] ══════════════════════════════════════════════════════════`);
-      console.log(`[PERF] COLD CACHE TESTING - WHY IT'S NOT POSSIBLE HERE`);
-      console.log(`[PERF] ══════════════════════════════════════════════════════════`);
-      console.log(`[PERF]`);
-      console.log(`[PERF] COLD CACHE = First search after OS restart, disk cache empty`);
-      console.log(`[PERF] WARM CACHE = Subsequent searches, OS caches data in RAM`);
-      console.log(`[PERF]`);
-      console.log(`[PERF] THE PROBLEM: Cannot test true cold cache because:`);
-      console.log(`[PERF]   1. Closing DB doesn't clear OS disk cache`);
-      console.log(`[PERF]   2. macOS/Windows/Linux aggressively cache files in RAM`);
-      console.log(`[PERF]   3. "Cold cache" tests just measure warm cache`);
-      console.log(`[PERF]   4. True cold cache requires PROCESS RESTART`);
-      console.log(`[PERF]`);
-      console.log(`[PERF] PREVIOUS "COLD CACHE" TEST WAS FAKE:`);
-      console.log(`[PERF]   - Closed and reopened DB`);
-      console.log(`[PERF]   - OS cache still warm in RAM`);
-      console.log(`[PERF]   - Measured same as warm cache`);
-      console.log(`[PERF]   - This was DISHONEST`);
-      console.log(`[PERF]`);
-      console.log(`[PERF] HOW TO TEST TRUE COLD CACHE (Manual):`);
-      console.log(`[PERF]   1. Run indexing script to create DB`);
-      console.log(`[PERF]   2. Restart computer (clear OS cache)`);
-      console.log(`[PERF]   3. Run first query immediately`);
-      console.log(`[PERF]   4. Measure latency`);
-      console.log(`[PERF]`);
-      console.log(`[PERF] EXPECTED COLD CACHE PERFORMANCE (HONEST ESTIMATE):`);
-      console.log(`[PERF]   - FTS5 first search: 50-500ms (disk I/O from SSD)`);
-      console.log(`[PERF]   - Subsequent searches: 0.06-0.08ms (from RAM cache)`);
-      console.log(`[PERF]   - Ratio: 1000x difference between cold and warm`);
-      console.log(`[PERF]`);
-      console.log(`[PERF] ══════════════════════════════════════════════════════════\n`);
+      console.log('\n[PERF] ══════════════════════════════════════════════════════════');
+      console.log('[PERF] COLD CACHE TESTING - WHY IT\'S NOT POSSIBLE HERE');
+      console.log('[PERF] ══════════════════════════════════════════════════════════');
+      console.log('[PERF]');
+      console.log('[PERF] COLD CACHE = First search after OS restart, disk cache empty');
+      console.log('[PERF] WARM CACHE = Subsequent searches, OS caches data in RAM');
+      console.log('[PERF]');
+      console.log('[PERF] THE PROBLEM: Cannot test true cold cache because:');
+      console.log('[PERF]   1. Closing DB doesn\'t clear OS disk cache');
+      console.log('[PERF]   2. macOS/Windows/Linux aggressively cache files in RAM');
+      console.log('[PERF]   3. "Cold cache" tests just measure warm cache');
+      console.log('[PERF]   4. True cold cache requires PROCESS RESTART');
+      console.log('[PERF]');
+      console.log('[PERF] PREVIOUS "COLD CACHE" TEST WAS FAKE:');
+      console.log('[PERF]   - Closed and reopened DB');
+      console.log('[PERF]   - OS cache still warm in RAM');
+      console.log('[PERF]   - Measured same as warm cache');
+      console.log('[PERF]   - This was DISHONEST');
+      console.log('[PERF]');
+      console.log('[PERF] HOW TO TEST TRUE COLD CACHE (Manual):');
+      console.log('[PERF]   1. Run indexing script to create DB');
+      console.log('[PERF]   2. Restart computer (clear OS cache)');
+      console.log('[PERF]   3. Run first query immediately');
+      console.log('[PERF]   4. Measure latency');
+      console.log('[PERF]');
+      console.log('[PERF] EXPECTED COLD CACHE PERFORMANCE (HONEST ESTIMATE):');
+      console.log('[PERF]   - FTS5 first search: 50-500ms (disk I/O from SSD)');
+      console.log('[PERF]   - Subsequent searches: 0.06-0.08ms (from RAM cache)');
+      console.log('[PERF]   - Ratio: 1000x difference between cold and warm');
+      console.log('[PERF]');
+      console.log('[PERF] ══════════════════════════════════════════════════════════\n');
 
       assert.ok(true, 'cold cache explanation provided');
     });
@@ -195,7 +195,7 @@ describe('HONEST Performance Benchmarks', () => {
 
       try {
         // Add 1000 symbols
-        console.log(`[PERF] Adding 1000 symbols...`);
+        console.log('[PERF] Adding 1000 symbols...');
         const addStart = performance.now();
         for (let i = 0; i < 1000; i++) {
           symbolIndex.addChunk({
@@ -227,7 +227,7 @@ describe('HONEST Performance Benchmarks', () => {
 
         const percentiles = calculatePercentiles(latencies);
 
-        console.log(`\n[PERF] Symbol Lookup Performance (1000 symbols, disk DB):`);
+        console.log('\n[PERF] Symbol Lookup Performance (1000 symbols, disk DB):');
         console.log(`[PERF]   Mean: ${percentiles.mean.toFixed(2)}ms`);
         console.log(`[PERF]   p50: ${percentiles.p50.toFixed(2)}ms`);
         console.log(`[PERF]   p95: ${percentiles.p95.toFixed(2)}ms`);
@@ -254,7 +254,7 @@ describe('HONEST Performance Benchmarks', () => {
 
       try {
         // Index 500 chunks
-        console.log(`[PERF] Indexing 500 chunks...`);
+        console.log('[PERF] Indexing 500 chunks...');
         for (let i = 0; i < 500; i++) {
           await ftsAdapter.indexChunk(`chunk-${i}`, `function test${i}() { return ${i}; }`, {
             file: `test${i}.js`,
@@ -290,7 +290,7 @@ describe('HONEST Performance Benchmarks', () => {
 
         const percentiles = calculatePercentiles(latencies);
 
-        console.log(`\n[PERF] Hybrid Search Performance (500 chunks, disk DB):`);
+        console.log('\n[PERF] Hybrid Search Performance (500 chunks, disk DB):');
         console.log(`[PERF]   Mean: ${percentiles.mean.toFixed(2)}ms`);
         console.log(`[PERF]   p50: ${percentiles.p50.toFixed(2)}ms`);
         console.log(`[PERF]   p95: ${percentiles.p95.toFixed(2)}ms`);
