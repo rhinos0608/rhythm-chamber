@@ -40,11 +40,10 @@ describe('MarkdownChunker', () => {
       const markdown = '### Three\n\n#### Four\n\n##### Five\n\n###### Six';
       const chunks = getChunker().chunkSourceFile(markdown, 'test.md');
 
-      assert.equal(chunks.length, 4);
-      assert.equal(chunks[0].metadata.level, 3);
-      assert.equal(chunks[1].metadata.level, 4);
-      assert.equal(chunks[2].metadata.level, 5);
-      assert.equal(chunks[3].metadata.level, 6);
+      // Header-only markdown should not create header-only md-section chunks.
+      // It should fall back to a single document chunk.
+      assert.equal(chunks.length, 1);
+      assert.equal(chunks[0].type, 'md-document');
     });
 
     it('should handle headers with special characters', () => {
@@ -67,10 +66,10 @@ describe('MarkdownChunker', () => {
       const markdown = '# First\n\n## Second\n\n### Third';
       const chunks = getChunker().chunkSourceFile(markdown, 'test.md');
 
-      assert.equal(chunks.length, 3);
-      chunks.forEach(chunk => {
-        assert.equal(chunk.type, 'md-section');
-      });
+      // Header-only markdown should not create header-only md-section chunks.
+      // It should fall back to a single document chunk.
+      assert.equal(chunks.length, 1);
+      assert.equal(chunks[0].type, 'md-document');
     });
   });
 
@@ -402,7 +401,7 @@ describe('MarkdownChunker', () => {
     });
 
     it('should follow naming convention', () => {
-      const markdown = '# Test Section';
+      const markdown = '# Test Section\n\nContent';
       const chunks = getChunker().chunkSourceFile(markdown, 'test.md');
 
       assert.ok(chunks[0].id.startsWith('md-section_'));
@@ -410,7 +409,7 @@ describe('MarkdownChunker', () => {
     });
 
     it('should sanitize special characters in IDs', () => {
-      const markdown = '# Title with @#$% special chars!';
+      const markdown = '# Title with @#$% special chars!\n\nContent';
       const chunks = getChunker().chunkSourceFile(markdown, 'test.md');
 
       // ID should have special chars replaced
@@ -450,7 +449,7 @@ describe('MarkdownChunker', () => {
     });
 
     it('should include level for section metadata', () => {
-      const markdown = '## Test Section';
+      const markdown = '## Test Section\n\nContent';
       const chunks = getChunker().chunkSourceFile(markdown, 'test.md');
 
       assert.equal(chunks[0].metadata.level, 2);
@@ -580,7 +579,9 @@ const x = 42;
       const markdown = '# Title\n\n## Subtitle';
       const chunks = getChunker().chunkSourceFile(markdown, 'test.md');
 
-      assert.equal(chunks.length, 2);
+      // No body text anywhere; should fall back to a single document chunk.
+      assert.equal(chunks.length, 1);
+      assert.equal(chunks[0].type, 'md-document');
     });
 
     it('should handle code blocks at end of file without newline', () => {
