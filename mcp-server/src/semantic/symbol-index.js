@@ -399,7 +399,7 @@ export class SymbolIndex extends DependencyGraph {
     let sanitized = query
       .replace(/'/g, '') // Remove single quotes (not allowed in FTS5)
       .replace(/\\/g, '') // Remove backslashes (escape character)
-      .replace(/[\[\]]/g, '') // Remove bracket expressions
+      .replace(/[[\]]/g, '') // Remove bracket expressions
       .replace(/\{/g, '') // Remove NEAR operators
       .replace(/"/g, ''); // Remove double quotes (not allowed in FTS5)
 
@@ -550,7 +550,9 @@ export class SymbolIndex extends DependencyGraph {
 
     // Enforce batch limit to prevent OOM
     if (symbols.length > BATCH_LIMIT) {
-      console.warn(`[SymbolIndex] Batch size ${symbols.length} exceeds limit ${BATCH_LIMIT}, chunking`);
+      console.warn(
+        `[SymbolIndex] Batch size ${symbols.length} exceeds limit ${BATCH_LIMIT}, chunking`
+      );
 
       let inserted = 0;
       for (let i = 0; i < symbols.length; i += BATCH_LIMIT) {
@@ -559,7 +561,9 @@ export class SymbolIndex extends DependencyGraph {
         inserted += chunk.length;
       }
 
-      console.error(`[SymbolIndex] Bulk inserted ${inserted} symbols in ${Math.ceil(symbols.length / BATCH_LIMIT)} batches`);
+      console.error(
+        `[SymbolIndex] Bulk inserted ${inserted} symbols in ${Math.ceil(symbols.length / BATCH_LIMIT)} batches`
+      );
       return;
     }
 
@@ -607,7 +611,9 @@ export class SymbolIndex extends DependencyGraph {
 
       // Log summary if there were failures
       if (failedCount > 0) {
-        console.warn(`[SymbolIndex] Bulk insert completed with ${failedCount}/${symbols.length} failures`);
+        console.warn(
+          `[SymbolIndex] Bulk insert completed with ${failedCount}/${symbols.length} failures`
+        );
         if (errors.length <= 5) {
           console.warn('[SymbolIndex] Failed symbols:', errors);
         }
@@ -704,14 +710,17 @@ export class SymbolIndex extends DependencyGraph {
       async: row.async === 1,
       static: row.static === 1,
       className: row.class_name,
-      parameters: row.parameters ? (() => {
-        try {
-          return JSON.parse(row.parameters);
-        } catch (error) {
-          console.warn('[SymbolIndex] Failed to parse parameters:', error.message);
-          return [];
-        }
-      })() : [],
+      // eslint-disable-next-line indent
+      parameters: row.parameters
+        ? (() => {
+          try {
+            return JSON.parse(row.parameters);
+          } catch (error) {
+            console.warn('[SymbolIndex] Failed to parse parameters:', error.message);
+            return [];
+          }
+        })()
+        : [],
       signature: row.signature,
       parentChunkId: row.parent_chunk_id,
     }));

@@ -233,7 +233,8 @@ export class MultiIndexAdapter {
         // CRITICAL FIX: Use cached statement instead of preparing new one
         const insertVecStmt = this.docsAdapter._statements.insertVec;
 
-        for (const { chunkId, embedding, metadata } of subBatch) {
+        for (const { chunkId, embedding: embeddingRaw, metadata } of subBatch) {
+          let embedding = embeddingRaw;
           if (!(embedding instanceof Float32Array)) {
             embedding = new Float32Array(embedding);
           }

@@ -444,7 +444,8 @@ export class FTS5Adapter {
    * @private
    */
   async _searchCode(query, options = {}) {
-    const { limit = 20, chunkType = null } = options;
+    const { limit = 20, chunkType: chunkTypeOption = null } = options;
+    let chunkType = chunkTypeOption;
 
     try {
       // Sanitize query to prevent SQL injection
@@ -489,7 +490,8 @@ export class FTS5Adapter {
    * @private
    */
   async _searchDocs(query, options = {}) {
-    const { limit = 20, chunkType = null } = options;
+    const { limit = 20, chunkType: chunkTypeOption = null } = options;
+    let chunkType = chunkTypeOption;
 
     try {
       // Sanitize query to prevent SQL injection

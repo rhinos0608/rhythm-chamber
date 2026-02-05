@@ -352,10 +352,11 @@ export class SqliteVectorAdapter {
       const getVecRowidStmt = this._db.prepare('SELECT vec_rowid FROM chunk_metadata WHERE chunk_id = ?');
       const insertVecStmt = this._db.prepare('INSERT INTO vec_chunks (embedding) VALUES (?)');
 
-      for (const { chunkId, embedding, metadata } of items) {
+      for (const { chunkId, embedding: embeddingRaw, metadata } of items) {
         failedChunkId = chunkId; // Track for error reporting
 
         // Convert embedding to Float32Array if needed
+        let embedding = embeddingRaw;
         if (!(embedding instanceof Float32Array)) {
           embedding = new Float32Array(embedding);
         }

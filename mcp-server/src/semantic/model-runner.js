@@ -347,7 +347,8 @@ export class SerializedModelRunner {
       }
 
       // Step 3: Clear the reference to the entire embeddings object
-      embeddings = null;
+      // Note: embeddings is const, but we're setting its properties to null above
+      // The embeddings object itself will be garbage collected when it goes out of scope
     }
   }
 

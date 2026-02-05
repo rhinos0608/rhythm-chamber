@@ -229,7 +229,7 @@ export class QueryRouter {
    * @private
    */
   _isFilePath(query) {
-    return /[\/\\]/.test(query) && (/\.[a-z]{2,4}$/i.test(query) || /[\/\\]$/.test(query));
+    return /[/\\]/.test(query) && (/\.[a-z]{2,4}$/i.test(query) || /[/\\]$/.test(query));
   }
 
   /**
@@ -237,7 +237,7 @@ export class QueryRouter {
    * @private
    */
   _isCodeIdentifier(query) {
-    return /^[a-zA-Z_][a-zA-Z0-9_\.]*$/.test(query) && /\w{2,}/.test(query);
+    return /^[a-zA-Z_][a-zA-Z0-9_.]*$/.test(query) && /\w{2,}/.test(query);
   }
 
   /**
@@ -249,7 +249,8 @@ export class QueryRouter {
     if (words.length < 3) return false; // Too short
 
     // Check for question words
-    const questionWords = /\b(how|what|when|where|why|who|which|can|could|should|would|is|are|do|does)\b/i;
+    const questionWords =
+      /\b(how|what|when|where|why|who|which|can|could|should|would|is|are|do|does)\b/i;
     return questionWords.test(query);
   }
 

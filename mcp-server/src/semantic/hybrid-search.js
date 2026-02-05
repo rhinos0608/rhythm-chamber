@@ -101,10 +101,16 @@ export class HybridSearchEngine {
 
     // Log failures for monitoring
     if (results[0].status === 'rejected') {
-      console.warn('[HybridSearchEngine] Vector search failed, continuing with keyword results:', results[0].reason?.message);
+      console.warn(
+        '[HybridSearchEngine] Vector search failed, continuing with keyword results:',
+        results[0].reason?.message
+      );
     }
     if (results[1].status === 'rejected') {
-      console.warn('[HybridSearchEngine] Keyword search failed, continuing with vector results:', results[1].reason?.message);
+      console.warn(
+        '[HybridSearchEngine] Keyword search failed, continuing with vector results:',
+        results[1].reason?.message
+      );
     }
 
     // RRF merging with result limit
@@ -169,7 +175,9 @@ export class HybridSearchEngine {
     const allResults = [...vectorResults, ...keywordResults];
     for (const result of allResults) {
       if (!validateResult(result)) {
-        throw new Error('[HybridSearchEngine] Invalid result structure: missing required field (chunkId or id)');
+        throw new Error(
+          '[HybridSearchEngine] Invalid result structure: missing required field (chunkId or id)'
+        );
       }
     }
 
@@ -288,13 +296,16 @@ export class HybridSearchEngine {
       isExactMatch: /^["'].*["']$/.test(trimmed),
 
       // Code identifier (camelCase, snake_case, dot.notation)
-      isCodeIdentifier: /^[a-zA-Z_][a-zA-Z0-9_\.]*$/.test(trimmed) && /\w{2,}/.test(trimmed),
+      isCodeIdentifier: /^[a-zA-Z_][a-zA-Z0-9_.]*$/.test(trimmed) && /\w{2,}/.test(trimmed),
 
       // Natural language question
-      isNaturalLanguage: /\b(how|what|when|where|why|who|which|can|could|should|would|is|are|do|does)\b/i.test(query),
+      isNaturalLanguage:
+        /\b(how|what|when|where|why|who|which|can|could|should|would|is|are|do|does)\b/i.test(
+          query
+        ),
 
       // File path
-      isFilePath: /[\/\\]/.test(query) && /\.[a-z]{2,4}$/i.test(query),
+      isFilePath: /[/\\]/.test(query) && /\.[a-z]{2,4}$/i.test(query),
     };
   }
 

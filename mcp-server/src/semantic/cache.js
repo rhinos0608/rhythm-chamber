@@ -1048,7 +1048,7 @@ class HybridEmbeddingMap {
     this._accessCount++;
     if (this._accessCount > 1000000) {
       // Reset all counts to prevent integer overflow
-      const newCount = 1;
+      let newCount = 1;
       for (const k of this.accessOrder.keys()) {
         this.accessOrder.set(k, newCount++);
       }

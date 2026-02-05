@@ -137,7 +137,9 @@ async function processNext() {
             // Defer to next event loop to allow stack to clear
             setTimeout(() => {
                 deferredProcessingPending = false;
-                processNext().catch(e => console.error('[TurnQueue] Deferred processing failed:', e));
+                processNext().catch(e =>
+                    console.error('[TurnQueue] Deferred processing failed:', e)
+                );
             }, 100);
         }
         return;
@@ -231,7 +233,9 @@ async function processNext() {
     } finally {
         // CRITICAL FIX: Reset counter when queue drains and prevent negative counter
         if (queue.length === 0 && recursionDepth > 0) {
-            console.log(`[TurnQueue] Queue drained, resetting recursion depth from ${recursionDepth} to 0`);
+            console.log(
+                `[TurnQueue] Queue drained, resetting recursion depth from ${recursionDepth} to 0`
+            );
             recursionDepth = 0;
 
             // CRITICAL: Don't decrement - we already reset
@@ -239,35 +243,40 @@ async function processNext() {
             currentTurn = null;
             isProcessing = false;
 
-            // CRITICAL: Return early since queue is empty - no more work to do
+            // Queue is empty - no more work to do
             // Don't call processNext() here - it will be called when new items arrive
-            return;
-        }
+        } else if (queue.length > 0) {
+            // Only reach here if queue has items
+            // Always reset processing flag, even if an error occurred
+            // This ensures the queue doesn't get stuck in a processing state
+            currentTurn = null;
+            isProcessing = false;
 
-        // Only reach here if queue has items
-        // Always reset processing flag, even if an error occurred
-        // This ensures the queue doesn't get stuck in a processing state
-        currentTurn = null;
-        isProcessing = false;
-
-        // Check if we need to defer to next tick to prevent stack overflow
-        if (recursionDepth >= MAX_RECURSION_DEPTH) {
-            recursionDepth--;
-            if (!deferredProcessingPending) {
-                deferredProcessingPending = true;
-                console.warn('[TurnQueue] Max recursion depth in finally, deferring to next tick');
-                setTimeout(() => {
-                    deferredProcessingPending = false;
-                    processNext().catch(e => console.error('[TurnQueue] Deferred failed:', e));
-                }, 100);
+            // Check if we need to defer to next tick to prevent stack overflow
+            if (recursionDepth >= MAX_RECURSION_DEPTH) {
+                recursionDepth--;
+                if (!deferredProcessingPending) {
+                    deferredProcessingPending = true;
+                    console.warn(
+                        '[TurnQueue] Max recursion depth in finally, deferring to next tick'
+                    );
+                    setTimeout(() => {
+                        deferredProcessingPending = false;
+                        processNext().catch(e => console.error('[TurnQueue] Deferred failed:', e));
+                    }, 100);
+                }
+            } else {
+                recursionDepth--;
+                // FIX M3: Direct call instead of setTimeout
+                // The isProcessing check at the top of processNext() prevents re-entry race conditions
+                // This ensures deterministic sequencing without setTimeout's timing uncertainty
+                // Error handling is done by the promise chain of each individual turn
+                processNext().catch(e => console.error('[TurnQueue] Next turn failed:', e));
             }
         } else {
-            recursionDepth--;
-            // FIX M3: Direct call instead of setTimeout
-            // The isProcessing check at the top of processNext() prevents re-entry race conditions
-            // This ensures deterministic sequencing without setTimeout's timing uncertainty
-            // Error handling is done by the promise chain of each individual turn
-            processNext().catch(e => console.error('[TurnQueue] Next turn failed:', e));
+            // Edge case: recursionDepth already 0
+            currentTurn = null;
+            isProcessing = false;
         }
     }
 }

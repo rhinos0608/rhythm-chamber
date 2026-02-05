@@ -619,10 +619,11 @@ export class MarkdownChunker {
         return 'Quote';
       case 'md-table':
         return 'Table';
-      case 'md-paragraph':
+      case 'md-paragraph': {
         // Use first few words as name
         const firstLine = element.content.split('\n')[0];
         return firstLine.substring(0, 40) + (firstLine.length > 40 ? '...' : '');
+      }
       default:
         return 'Content';
     }
