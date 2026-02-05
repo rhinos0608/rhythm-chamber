@@ -26,6 +26,22 @@
  *   // Safe usage with innerHTML:
  *   element.innerHTML = `<div>${escapeHtml(userInput)}</div>`;
  */
+
+/**
+ * String-based HTML escape for environments without DOM (Web Workers)
+ *
+ * @param {string} text - Text to escape
+ * @returns {string} Escaped text
+ */
+function escapeHtmlString(text) {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 export function escapeHtml(text) {
     // Handle null/undefined/non-string inputs
     if (text == null) {
@@ -35,11 +51,16 @@ export function escapeHtml(text) {
     // Coerce to string
     const str = String(text);
 
-    // Use DOM-based escaping for most reliable results
+    // Use DOM-based escaping when available (main thread)
     // This handles all HTML entities correctly including Unicode
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+    if (typeof document !== 'undefined') {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    // Fallback to string-based escaping for Web Workers
+    return escapeHtmlString(str);
 }
 
 /**
@@ -168,12 +189,16 @@ export function sanitizeHtml(html) {
 
     const str = String(html);
 
-    // Create a temporary div and let the browser parse the HTML
-    const temp = document.createElement('div');
-    temp.innerHTML = str;
+    // Use DOM-based sanitization when available (main thread)
+    if (typeof document !== 'undefined') {
+        const temp = document.createElement('div');
+        temp.innerHTML = str;
+        return temp.textContent || temp.innerText || '';
+    }
 
-    // Extract and return only text content
-    return temp.textContent || temp.innerText || '';
+    // Fallback to regex-based tag stripping for Web Workers
+    // This removes HTML tags by replacing <...> with empty string
+    return str.replace(/<[^>]*>/g, '');
 }
 
 // Export a default for convenience

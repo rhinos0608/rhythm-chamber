@@ -13,3 +13,8 @@ node_modules/
 # Build outputs
 dist/
 build/
+
+# ChromaDB (not used in sqlite-vec branch)
+chroma-data/
+docker-compose.yml
+scripts/chroma-setup.sh

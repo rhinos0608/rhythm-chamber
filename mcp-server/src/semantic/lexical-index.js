@@ -152,8 +152,10 @@ export class LexicalIndex {
     }
 
     // Store document
+    // OOM FIX: Don't store text in memory - it's already in VectorStore/SQLite
+    // Storing text for 13,000+ chunks would be ~100MB of duplicated data
     this.documents.set(id, {
-      text,
+      // text removed - retrieve from VectorStore when needed
       metadata: { ...metadata, chunkId: id },
       terms,
     });
@@ -591,11 +593,11 @@ export class LexicalIndex {
     this.termFreqs.clear();
     this.docFreqs.clear();
     this.docLengths.clear();
-    this.docQueue = []; // OOM FIX: Clear eviction queue
+    this.docQueue = []; // Clear FIFO eviction queue (array-based)
     this.totalDocs = 0;
     this.avgDocLen = 0;
     this.totalTerms = 0;
-    this.evictedDocs = 0; // OOM FIX: Reset eviction counters
+    this.evictedDocs = 0;
     this.evictedTerms = 0;
   }
 

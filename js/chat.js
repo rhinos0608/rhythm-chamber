@@ -21,18 +21,8 @@ import { createLogger } from './utils/logger.js';
 
 const logger = createLogger('Chat');
 
-// Tool Strategy imports (ToolStrategy pattern for function calling)
-import { NativeToolStrategy } from './services/tool-strategies/native-strategy.js';
-import { PromptInjectionStrategy } from './services/tool-strategies/prompt-injection-strategy.js';
-import { IntentExtractionStrategy } from './services/tool-strategies/intent-extraction-strategy.js';
 import { ModuleRegistry } from './module-registry.js';
 import { ConfigLoader } from './services/config-loader.js';
-
-// Turn serialization import
-import { TurnQueue } from './services/turn-queue.js';
-
-// Timeout budget import
-import { TimeoutBudget } from './services/timeout-budget-manager.js';
 
 // Wave telemetry import for LLM call timing
 import { WaveTelemetry } from './services/wave-telemetry.js';
@@ -65,9 +55,6 @@ import { Prompts } from './prompts.js';
 import { Storage } from './storage.js';
 
 // Phase 4 modules: Analysis & Processing
-import { Patterns } from './patterns.js';
-import { Personality } from './personality.js';
-import { Parser } from './parser.js';
 import { DataQuery } from './data-query.js';
 
 // Provider imports
@@ -79,8 +66,6 @@ import { ConversationOrchestrator } from './services/conversation-orchestrator.j
 import { MessageLifecycleCoordinator } from './services/message-lifecycle-coordinator.js';
 
 // HNW Fix: Timeout constants to prevent cascade failures
-const CHAT_API_TIMEOUT_MS = 60000; // 60 second timeout for cloud API calls
-const LOCAL_LLM_TIMEOUT_MS = 90000; // 90 second timeout for local LLM providers
 const CHAT_FUNCTION_TIMEOUT_MS = 30000; // 30 second timeout for function execution
 
 // Chat-specific state is now managed by ConversationOrchestrator
@@ -256,19 +241,10 @@ async function handleStorageUpdate(event) {
 }
 
 /**
- * Save conversation to IndexedDB (debounced)
- * Delegates to SessionManager
- * @returns {Promise<void>}
- */
-async function saveConversation() {
-    await SessionManager.saveConversation();
-}
-
-/**
  * Flush pending save asynchronously
  * Delegates to SessionManager
  */
-async function flushPendingSaveAsync() {
+function flushPendingSaveAsync() {
     return SessionManager.flushPendingSaveAsync();
 }
 
@@ -285,23 +261,15 @@ function emergencyBackupSync() {
  * Recover emergency backup on load
  * Delegates to SessionManager (called automatically in SessionManager.init())
  */
-async function recoverEmergencyBackup() {
+function recoverEmergencyBackup() {
     return SessionManager.recoverEmergencyBackup();
-}
-
-/**
- * Save current session to IndexedDB immediately
- * Delegates to SessionManager
- */
-async function saveCurrentSession() {
-    return SessionManager.saveCurrentSession();
 }
 
 /**
  * Create a new session
  * Delegates to SessionManager
  */
-async function createNewSession(initialMessages = []) {
+function createNewSession(initialMessages = []) {
     return SessionManager.createNewSession(initialMessages);
 }
 
@@ -309,7 +277,7 @@ async function createNewSession(initialMessages = []) {
  * Load a session by ID
  * Delegates to SessionManager
  */
-async function loadSession(sessionId) {
+function loadSession(sessionId) {
     return SessionManager.loadSession(sessionId);
 }
 
@@ -317,7 +285,7 @@ async function loadSession(sessionId) {
  * Switch to a different session
  * Delegates to SessionManager
  */
-async function switchSession(sessionId) {
+function switchSession(sessionId) {
     return SessionManager.switchSession(sessionId);
 }
 
@@ -325,7 +293,7 @@ async function switchSession(sessionId) {
  * Get all sessions for sidebar display
  * Delegates to SessionManager
  */
-async function listSessions() {
+function listSessions() {
     return SessionManager.listSessions();
 }
 
@@ -333,7 +301,7 @@ async function listSessions() {
  * Delete a session by ID
  * Delegates to SessionManager
  */
-async function deleteSessionById(sessionId) {
+function deleteSessionById(sessionId) {
     return SessionManager.deleteSessionById(sessionId);
 }
 
@@ -341,7 +309,7 @@ async function deleteSessionById(sessionId) {
  * Rename a session
  * Delegates to SessionManager
  */
-async function renameSession(sessionId, newTitle) {
+function renameSession(sessionId, newTitle) {
     return SessionManager.renameSession(sessionId, newTitle);
 }
 
@@ -437,35 +405,35 @@ function requireCoordinator(coordinatorName, coordinator) {
 // ES Module export
 export const Chat = {
     initChat,
-    sendMessage: async (...args) => {
+    sendMessage: (...args) => {
         const coordinator = requireCoordinator(
             'MessageLifecycleCoordinator',
             MessageLifecycleCoordinator
         );
         return coordinator.sendMessage(...args);
     },
-    regenerateLastResponse: async (...args) => {
+    regenerateLastResponse: (...args) => {
         const coordinator = requireCoordinator(
             'MessageLifecycleCoordinator',
             MessageLifecycleCoordinator
         );
         return coordinator.regenerateLastResponse(...args);
     },
-    deleteMessage: async (...args) => {
+    deleteMessage: (...args) => {
         const coordinator = requireCoordinator(
             'MessageLifecycleCoordinator',
             MessageLifecycleCoordinator
         );
         return coordinator.deleteMessage(...args);
     },
-    editMessage: async (...args) => {
+    editMessage: (...args) => {
         const coordinator = requireCoordinator(
             'MessageLifecycleCoordinator',
             MessageLifecycleCoordinator
         );
         return coordinator.editMessage(...args);
     },
-    clearHistory: async (...args) => {
+    clearHistory: (...args) => {
         const coordinator = requireCoordinator(
             'MessageLifecycleCoordinator',
             MessageLifecycleCoordinator
@@ -473,7 +441,7 @@ export const Chat = {
         return coordinator.clearHistory(...args);
     },
     clearConversation,
-    getHistory: async (...args) => {
+    getHistory: (...args) => {
         const coordinator = requireCoordinator(
             'MessageLifecycleCoordinator',
             MessageLifecycleCoordinator

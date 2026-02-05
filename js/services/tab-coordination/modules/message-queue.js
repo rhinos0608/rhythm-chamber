@@ -112,7 +112,9 @@ export async function processMessageQueue() {
             // Defer to next event loop to allow stack to clear
             setTimeout(() => {
                 deferredProcessingPending = false;
-                processMessageQueue().catch(e => console.error('[MessageQueue] Deferred processing failed:', e));
+                processMessageQueue().catch(e =>
+                    console.error('[MessageQueue] Deferred processing failed:', e)
+                );
             }, 100);
         }
         return;
@@ -137,7 +139,7 @@ export async function processMessageQueue() {
                 failedMessages.push({
                     msg: queued.msg,
                     error: sendError,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
                 });
             }
         }
@@ -156,7 +158,7 @@ export async function processMessageQueue() {
                     .then(({ EventBus }) => {
                         EventBus.emit('messagequeue:send_failed', {
                             failedCount: failedMessages.length,
-                            messages: failedMessages
+                            messages: failedMessages,
                         });
                     })
                     .catch(emitError => {
@@ -169,37 +171,47 @@ export async function processMessageQueue() {
     } finally {
         // CRITICAL FIX: Reset counter when queue drains and prevent negative counter
         if (messageQueue.length === 0 && recursionDepth > 0) {
-            console.log(`[MessageQueue] Queue drained, resetting recursion depth from ${recursionDepth} to 0`);
+            console.log(
+                `[MessageQueue] Queue drained, resetting recursion depth from ${recursionDepth} to 0`
+            );
             recursionDepth = 0;
 
             // CRITICAL: Don't decrement - we already reset
             // Also clear the isProcessingQueue flag
             isProcessingQueue = false;
 
-            // CRITICAL: Return early since queue is empty - no more work to do
+            // Queue is empty - no more work to do
             // Don't call processMessageQueue() here - it will be called when new items arrive
-            return;
-        }
+        } else if (messageQueue.length > 0) {
+            // Only reach here if queue has items
+            isProcessingQueue = false;
 
-        // Only reach here if queue has items
-        isProcessingQueue = false;
-
-        // Check if we need to defer to next tick to prevent stack overflow
-        if (recursionDepth >= MAX_RECURSION_DEPTH) {
-            recursionDepth--;
-            if (!deferredProcessingPending) {
-                deferredProcessingPending = true;
-                console.warn('[MessageQueue] Max recursion depth in finally, deferring to next tick');
-                setTimeout(() => {
-                    deferredProcessingPending = false;
-                    processMessageQueue().catch(e => console.error('[MessageQueue] Deferred failed:', e));
-                }, 100);
+            // Check if we need to defer to next tick to prevent stack overflow
+            if (recursionDepth >= MAX_RECURSION_DEPTH) {
+                recursionDepth--;
+                if (!deferredProcessingPending) {
+                    deferredProcessingPending = true;
+                    console.warn(
+                        '[MessageQueue] Max recursion depth in finally, deferring to next tick'
+                    );
+                    setTimeout(() => {
+                        deferredProcessingPending = false;
+                        processMessageQueue().catch(e =>
+                            console.error('[MessageQueue] Deferred failed:', e)
+                        );
+                    }, 100);
+                }
+            } else {
+                recursionDepth--;
+                // RACE CONDITION FIX: Continue processing if messages were added during processing
+                // This ensures the queue is drained completely before returning
+                processMessageQueue().catch(e =>
+                    console.error('[MessageQueue] Next batch failed:', e)
+                );
             }
         } else {
-            recursionDepth--;
-            // RACE CONDITION FIX: Continue processing if messages were added during processing
-            // This ensures the queue is drained completely before returning
-            processMessageQueue().catch(e => console.error('[MessageQueue] Next batch failed:', e));
+            // Edge case: recursionDepth already 0
+            isProcessingQueue = false;
         }
     }
 }

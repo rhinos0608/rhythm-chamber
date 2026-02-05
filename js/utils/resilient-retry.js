@@ -176,7 +176,10 @@ export class RetryContext {
     }
 
     get shouldRetry() {
-        return this.attempt <= this.maxRetries && isRetryable(this.lastError);
+        // Fixed off-by-one error - use < instead of <=
+        // With maxRetries=3, we allow attempts 0,1,2 (3 attempts total)
+        // Previously: <= allowed 0,1,2,3 (4 attempts - one extra retry)
+        return this.attempt < this.maxRetries && isRetryable(this.lastError);
     }
 
     get elapsedTime() {

@@ -16,6 +16,9 @@ const SYMBOL_TYPES = {
   PARAMETER: 'parameter',
   IMPORT: 'import',
   EXPORT: 'export',
+  INTERFACE: 'interface',
+  TYPE_ALIAS: 'type-alias',
+  ENUM: 'enum',
 };
 
 /**
@@ -85,6 +88,15 @@ export class DependencyGraph {
         break;
       case 'export':
         this._addExportChunk(chunk);
+        break;
+      case 'interface':
+        this._addInterface(chunk);
+        break;
+      case 'type-alias':
+        this._addTypeAlias(chunk);
+        break;
+      case 'enum':
+        this._addEnum(chunk);
         break;
       default:
         this._addGenericChunk(chunk);
@@ -691,6 +703,69 @@ export class DependencyGraph {
     this.chunkSymbols.delete(chunkId);
 
     return true;
+  }
+
+  /**
+   * Add an interface to the graph
+   */
+  _addInterface(chunk) {
+    const { id, name, metadata } = chunk;
+
+    this._addDefinition(name, id, {
+      type: SYMBOL_TYPES.INTERFACE,
+      file: metadata.file,
+      exported: metadata.exported,
+    });
+
+    if (metadata.exported) {
+      this._addExport(metadata.file, name, id);
+    }
+  }
+
+  /**
+   * Add a type alias to the graph
+   */
+  _addTypeAlias(chunk) {
+    const { id, name, metadata } = chunk;
+
+    this._addDefinition(name, id, {
+      type: SYMBOL_TYPES.TYPE_ALIAS,
+      file: metadata.file,
+      exported: metadata.exported,
+    });
+
+    if (metadata.exported) {
+      this._addExport(metadata.file, name, id);
+    }
+  }
+
+  /**
+   * Add an enum to the graph
+   */
+  _addEnum(chunk) {
+    const { id, name, metadata } = chunk;
+
+    this._addDefinition(name, id, {
+      type: SYMBOL_TYPES.ENUM,
+      file: metadata.file,
+      exported: metadata.exported,
+    });
+
+    if (metadata.exported) {
+      this._addExport(metadata.file, name, id);
+    }
+
+    // Track enum members as symbols
+    if (metadata.members) {
+      for (const member of metadata.members) {
+        const memberId = `${id}_${member.name}`;
+        this._addDefinition(`${name}.${member.name}`, memberId, {
+          type: SYMBOL_TYPES.ENUM,
+          file: metadata.file,
+          enumName: name,
+        });
+      }
+    }
   }
 
   /**

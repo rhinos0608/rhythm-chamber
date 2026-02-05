@@ -83,36 +83,38 @@ export async function handler(args, projectRoot) {
           };
         }
 
-        const result = config.setActiveModel(model);
-        if (!result.success) {
+        {
+          const result = config.setActiveModel(model);
+          if (!result.success) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify(result, null, 2),
+                },
+              ],
+              isError: true,
+            };
+          }
+
           return {
             content: [
               {
                 type: 'text',
-                text: JSON.stringify(result, null, 2),
+                text: JSON.stringify(
+                  {
+                    message: `Active model set to ${model}`,
+                    ...result,
+                  },
+                  null,
+                  2
+                ),
               },
             ],
-            isError: true,
           };
         }
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  message: `Active model set to ${model}`,
-                  ...result,
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
-
-      case 'get_active':
+      case 'get_active': {
         const activeModel = config.getActiveModel();
         const availableModels = config.getAvailableModels();
 
@@ -132,8 +134,9 @@ export async function handler(args, projectRoot) {
             },
           ],
         };
+      }
 
-      case 'list_available':
+      case 'list_available': {
         const allModels = config.getAvailableModels();
 
         // Group by provider
@@ -161,6 +164,7 @@ export async function handler(args, projectRoot) {
             },
           ],
         };
+      }
 
       case 'set_comparison':
         if (!models || models.length === 0) {
@@ -179,36 +183,38 @@ export async function handler(args, projectRoot) {
           };
         }
 
-        const comparisonResult = config.setComparisonModels(models);
-        if (!comparisonResult.success) {
+        {
+          const comparisonResult = config.setComparisonModels(models);
+          if (!comparisonResult.success) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify(comparisonResult, null, 2),
+                },
+              ],
+              isError: true,
+            };
+          }
+
           return {
             content: [
               {
                 type: 'text',
-                text: JSON.stringify(comparisonResult, null, 2),
+                text: JSON.stringify(
+                  {
+                    message: `Comparison models set: ${models.join(', ')}`,
+                    ...comparisonResult,
+                  },
+                  null,
+                  2
+                ),
               },
             ],
-            isError: true,
           };
         }
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  message: `Comparison models set: ${models.join(', ')}`,
-                  ...comparisonResult,
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
-
-      case 'get_comparison':
+      case 'get_comparison': {
         const comparisonModels = config.getComparisonModels();
 
         return {
@@ -229,6 +235,7 @@ export async function handler(args, projectRoot) {
             },
           ],
         };
+      }
 
       case 'reset':
         config.reset();

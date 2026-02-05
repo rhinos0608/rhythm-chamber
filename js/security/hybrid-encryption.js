@@ -39,9 +39,9 @@ const HASH_ALGORITHM = 'SHA-256';
  * @param {boolean} extractable - Whether the private key should be extractable
  * @returns {Promise<CryptoKeyPair>} RSA-OAEP key pair
  */
-async function generateKeyPair(extractable = false) {
+function generateKeyPair(extractable = false) {
     if (!crypto?.subtle) {
-        throw new Error('[HybridEncryption] Web Crypto API not available');
+        return Promise.reject(new Error('[HybridEncryption] Web Crypto API not available'));
     }
 
     return crypto.subtle.generateKey(
@@ -80,9 +80,9 @@ async function exportPublicKey(publicKey) {
  * @param {string} base64Key - Base64-encoded public key
  * @returns {Promise<CryptoKey>} Imported public key
  */
-async function importPublicKey(base64Key) {
+function importPublicKey(base64Key) {
     if (typeof base64Key !== 'string' || !base64Key) {
-        throw new Error('[HybridEncryption] Invalid public key format');
+        return Promise.reject(new Error('[HybridEncryption] Invalid public key format'));
     }
 
     const binaryString = atob(base64Key);
@@ -125,9 +125,9 @@ async function exportPrivateKey(privateKey) {
  * @param {boolean} extractable - Whether the imported key should be extractable
  * @returns {Promise<CryptoKey>} Imported private key
  */
-async function importPrivateKey(base64Key, extractable = false) {
+function importPrivateKey(base64Key, extractable = false) {
     if (typeof base64Key !== 'string' || !base64Key) {
-        throw new Error('[HybridEncryption] Invalid private key format');
+        return Promise.reject(new Error('[HybridEncryption] Invalid private key format'));
     }
 
     const binaryString = atob(base64Key);
@@ -153,7 +153,7 @@ async function importPrivateKey(base64Key, extractable = false) {
  * Generate a random AES-GCM key
  * @returns {Promise<CryptoKey>} AES-GCM key
  */
-async function generateAESKey() {
+function generateAESKey() {
     return crypto.subtle.generateKey(
         {
             name: AES_ALGORITHM,

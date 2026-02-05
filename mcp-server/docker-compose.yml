@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  chromadb:
+    image: chromadb/chroma:0.5.23
+    container_name: rhythm-chamber-chroma
+    ports:
+      - "8000:8000"
+    volumes:
+      # Bind mount for persistent data (survives container recreation)
+      - ./chroma-data:/chroma/chroma
+    environment:
+      - CHROMA_SERVER_AUTH_PROVIDER=chromadb.auth.token.TokenAuthServerProvider
+      - CHROMA_SERVER_AUTH_CREDENTIALS=
+      - CHROMA_SERVER_AUTH_CREDENTIALS_FILE=
+      - ANONYMOUS_ACCESS=true
+      - PERSIST_DIRECTORY=/chroma/chroma
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# NOTE: Using bind mount (./chroma-data) instead of named volume
+# Data persists in local directory and can be backed up easily

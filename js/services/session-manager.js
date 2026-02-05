@@ -97,7 +97,7 @@ export class SessionManager {
      * @public
      * @returns {Promise<void>}
      */
-    static async init() {
+    static init() {
         return this.initialize();
     }
 
